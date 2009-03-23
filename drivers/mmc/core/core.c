@@ -61,6 +61,7 @@
 /* The max erase timeout, used when host->max_busy_timeout isn't specified */
 #define MMC_ERASE_TIMEOUT_MS	(60 * 1000) /* 60 s */
 
+static struct workqueue_struct *workqueue;
 static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
 
 /*
@@ -80,7 +81,15 @@ static int mmc_schedule_delayed_work(struct delayed_work *work,
 	 * executed simultaneously. Second, the queue becomes frozen when
 	 * userspace becomes frozen during system PM.
 	 */
-	return queue_delayed_work(system_freezable_wq, work, delay);
+	return queue_delayed_work(workqueue, work, delay);
+}
+
+/*
+ * Internal function. Flush all scheduled work from the MMC work queue.
+ */
+static void mmc_flush_scheduled_work(void)
+{
+	flush_workqueue(workqueue);
 }
 
 #ifdef CONFIG_FAIL_MMC_REQUEST
@@ -3046,6 +3055,10 @@ static int __init mmc_init(void)
 {
 	int ret;
 
+	workqueue = alloc_ordered_workqueue("kmmcd", 0);
+	if (!workqueue)
+		return -ENOMEM;
+
 	ret = mmc_register_bus();
 	if (ret)
 		return ret;
@@ -3064,6 +3077,9 @@ unregister_host_class:
 	mmc_unregister_host_class();
 unregister_bus:
 	mmc_unregister_bus();
+destroy_workqueue:
+	destroy_workqueue(workqueue);
+
 	return ret;
 }
 
@@ -3072,6 +3088,7 @@ static void __exit mmc_exit(void)
 	sdio_unregister_bus();
 	mmc_unregister_host_class();
 	mmc_unregister_bus();
+	destroy_workqueue(workqueue);
 }
 
 subsys_initcall(mmc_init);

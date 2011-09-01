@@ -37,6 +37,7 @@ Currently, these files are in /proc/sys/vm:
 - dirty_writeback_centisecs
 - drop_caches
 - extfrag_threshold
+- extra_free_kbytes
 - hugetlb_shm_group
 - laptop_mode
 - legacy_va_layout
@@ -119,21 +120,6 @@ all zones are compacted such that free memory is available in contiguous
 blocks where possible. This can be important for example in the allocation of
 huge pages although processes will also directly compact memory as required.
 
-compaction_proactiveness
-========================
-
-This tunable takes a value in the range [0, 100] with a default value of
-20. This tunable determines how aggressively compaction is done in the
-background. Setting it to 0 disables proactive compaction.
-
-Note that compaction has a non-trivial system-wide impact as pages
-belonging to different processes are moved around, which could also lead
-to latency spikes in unsuspecting applications. The kernel employs
-various heuristics to avoid wasting CPU cycles if it detects that
-proactive compaction is not being effective.
-
-Be careful when setting it to extreme values like 100, as that may
-cause excessive background compaction activity.
 
 compact_unevictable_allowed
 ===========================
@@ -304,6 +290,21 @@ OOM killer because some writers (e.g. direct block device writes) can
 only use the low memory and they can fill it up with dirty data without
 any throttling.
 
+
+extra_free_kbytes
+
+This parameter tells the VM to keep extra free memory between the threshold
+where background reclaim (kswapd) kicks in, and the threshold where direct
+reclaim (by allocating processes) kicks in.
+
+This is useful for workloads that require low latency memory allocations
+and have a bounded burstiness in memory allocations, for example a
+realtime application that receives and transmits network traffic
+(causing in-kernel memory allocations) with a maximum total message burst
+size of 200MB may need 200MB of extra free memory to avoid direct reclaim
+related latencies.
+
+==============================================================
 
 hugetlb_shm_group
 =================
@@ -598,7 +599,7 @@ trimming of allocations is initiated.
 
 The default value is 1.
 
-See Documentation/admin-guide/mm/nommu-mmap.rst for more information.
+See Documentation/nommu-mmap.txt for more information.
 
 
 numa_zonelist_order

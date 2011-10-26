@@ -985,6 +985,7 @@ static int mmc_blk_cmd_error(struct request *req, const char *name, int error,
 		}
 
 		/* Otherwise abort the command */
+		pr_err("%s: not retrying timeout\n", req->rq_disk->disk_name);
 		return ERR_ABORT;
 
 	default:

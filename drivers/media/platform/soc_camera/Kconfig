@@ -17,6 +17,13 @@ config SOC_CAMERA_PLATFORM
 	help
 	  This is a generic SoC camera platform driver, useful for testing
 
+config SOC_CAMERA_IMX_IPUV3_TESTGEN
+	tristate "Freescale i.MX5/6 IPUv3 Test Image Generator support"
+	depends on SOC_CAMERA
+	help
+	  This is a fixed SoC camera platform driver for the test image
+	  generator integrated into IPUv3.
+
 config VIDEO_MX3
 	tristate "i.MX3x Camera Sensor Interface driver"
 	depends on VIDEO_DEV && MX3_IPU && SOC_CAMERA

@@ -4,6 +4,7 @@ obj-$(CONFIG_SOC_CAMERA_SCALE_CROP)	+= soc_scale_crop.o
 # a platform subdevice driver stub, allowing to support cameras by adding a
 # couple of callback functions to the board code
 obj-$(CONFIG_SOC_CAMERA_PLATFORM)	+= soc_camera_platform.o
+obj-$(CONFIG_SOC_CAMERA_IMX_IPUV3_TESTGEN) += imx-ipuv3-testgen.o
 
 # soc-camera host drivers have to be linked after camera drivers
 obj-$(CONFIG_VIDEO_ATMEL_ISI)		+= atmel-isi.o

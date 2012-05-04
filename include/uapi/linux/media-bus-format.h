@@ -47,6 +47,7 @@
 #define MEDIA_BUS_FMT_RGB888_2X12_BE		0x100b
 #define MEDIA_BUS_FMT_RGB888_2X12_LE		0x100c
 #define MEDIA_BUS_FMT_ARGB8888_1X32		0x100d
+#define MEDIA_BUS_FMT_RGB888_4X8_PADHI		0x100d	// strange ...
 
 /* YUV (including grey) - next is	0x2024 */
 #define MEDIA_BUS_FMT_Y8_1X8			0x2001

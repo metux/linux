@@ -382,6 +382,15 @@ static const struct soc_mbus_lookup mbus_fmt[] = {
 		.order			= SOC_MBUS_ORDER_LE,
 		.layout			= SOC_MBUS_LAYOUT_PACKED,
 	},
+}, {
+	.code = MEDIA_BUS_FMT_RGB888_4X8_PADHI,
+	.fmt = {
+		.fourcc			= V4L2_PIX_FMT_RGB32,
+		.name			= "RGB 32bit",
+		.bits_per_sample	= 8,
+		.packing		= SOC_MBUS_PACKING_4X8_PADHI,
+		.order			= SOC_MBUS_ORDER_LE,
+	},
 },
 };
 
@@ -411,6 +420,9 @@ int soc_mbus_samples_per_pixel(const struct soc_mbus_pixelfmt *mf,
 		*numerator = 0;
 		*denominator = 1;
 		return 0;
+	case SOC_MBUS_PACKING_4X8_PADHI:
+		*numerator = 4;
+		*denominator = 1;
 	}
 	return -EINVAL;
 }
@@ -433,6 +445,7 @@ s32 soc_mbus_bytes_per_line(u32 width, const struct soc_mbus_pixelfmt *mf)
 	case SOC_MBUS_PACKING_VARIABLE:
 		return 0;
 	case SOC_MBUS_PACKING_EXTEND32:
+	case SOC_MBUS_PACKING_4X8_PADHI:
 		return width * 4;
 	}
 	return -EINVAL;

@@ -201,6 +201,8 @@ struct pwm_device *devm_of_pwm_get(struct device *dev, struct device_node *np,
 void devm_pwm_put(struct device *dev, struct pwm_device *pwm);
 
 bool pwm_can_sleep(struct pwm_device *pwm);
+struct pwm_device *of_pwm_simple_xlate(struct pwm_chip *pc,
+				       const struct of_phandle_args *args);
 #else
 static inline int pwm_set_chip_data(struct pwm_device *pwm, void *data)
 {

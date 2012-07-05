@@ -157,7 +157,7 @@ of_pwm_xlate_with_flags(struct pwm_chip *pc, const struct of_phandle_args *args)
 }
 EXPORT_SYMBOL_GPL(of_pwm_xlate_with_flags);
 
-static struct pwm_device *
+struct pwm_device *
 of_pwm_simple_xlate(struct pwm_chip *pc, const struct of_phandle_args *args)
 {
 	struct pwm_device *pwm;
@@ -176,6 +176,7 @@ of_pwm_simple_xlate(struct pwm_chip *pc, const struct of_phandle_args *args)
 
 	return pwm;
 }
+EXPORT_SYMBOL(of_pwm_simple_xlate);
 
 static void of_pwmchip_add(struct pwm_chip *chip)
 {

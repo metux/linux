@@ -38,6 +38,7 @@
 #define MX3_PWMCR_DOZEEN		(1 << 24)
 #define MX3_PWMCR_WAITEN		(1 << 23)
 #define MX3_PWMCR_DBGEN			(1 << 22)
+#define MX3_PWMCR_POUTC_INVERT		(1 << 18)
 #define MX3_PWMCR_CLKSRC_IPG_HIGH	(2 << 16)
 #define MX3_PWMCR_CLKSRC_IPG		(1 << 16)
 #define MX3_PWMCR_SWR			(1 << 3)
@@ -52,6 +53,7 @@ struct imx_chip {
 	struct clk	*clk_ipg;
 
 	void __iomem	*mmio_base;
+	unsigned int	flags;
 
 	struct pwm_chip	chip;
 
@@ -60,7 +62,11 @@ struct imx_chip {
 	void (*set_enable)(struct pwm_chip *chip, bool enable);
 };
 
-#define to_imx_chip(chip)	container_of(chip, struct imx_chip, chip)
+enum imx_pwm_flags {
+	IMX_PWM_INVERT = (1 << 0),
+};
+
+#define to_imx_chip(_chip)	container_of(_chip, struct imx_chip, chip)
 
 static int imx_pwm_config_v1(struct pwm_chip *chip,
 		struct pwm_device *pwm, int duty_ns, int period_ns)
@@ -179,6 +185,9 @@ static int imx_pwm_config_v2(struct pwm_chip *chip,
 	if (enable)
 		cr |= MX3_PWMCR_EN;
 
+	if (imx->flags & IMX_PWM_INVERT)
+		cr |= MX3_PWMCR_POUTC_INVERT;
+
 	writel(cr, imx->mmio_base + MX3_PWMCR);
 
 	return 0;
@@ -262,6 +271,20 @@ static struct imx_pwm_data imx_pwm_data_v2 = {
 	.set_enable = imx_pwm_set_enable_v2,
 };
 
+static struct pwm_device *imx_pwm_xlate(struct pwm_chip *pc,
+				       const struct of_phandle_args *args)
+{
+	struct imx_chip *imx = to_imx_chip(pc);
+	struct pwm_device *pwm = of_pwm_simple_xlate(pc, args);
+
+	if (IS_ERR(pwm))
+		return pwm;
+
+	imx->flags = args->args[2];
+
+	return pwm;
+}
+
 static const struct of_device_id imx_pwm_dt_ids[] = {
 	{ .compatible = "fsl,imx1-pwm", .data = &imx_pwm_data_v1, },
 	{ .compatible = "fsl,imx27-pwm", .data = &imx_pwm_data_v2, },
@@ -304,6 +327,8 @@ static int imx_pwm_probe(struct platform_device *pdev)
 	imx->chip.base = -1;
 	imx->chip.npwm = 1;
 	imx->chip.can_sleep = true;
+	imx->chip.of_xlate = imx_pwm_xlate;
+	imx->chip.of_pwm_n_cells = 3;
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	imx->mmio_base = devm_ioremap_resource(&pdev->dev, r);

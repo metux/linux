@@ -20,6 +20,7 @@ Optional properties:
 - external-vbus-divider: enables off-chip resistor divider for Vbus
 - maximum-speed: limit the maximum connection speed to "full-speed".
 - tpl-support: TPL (Targeted Peripheral List) feature for targeted hosts
+- force-full-speed: limit the maximum connection speed to full-speed
 
 Examples:
 usb@02184000 { /* USB OTG */
@@ -32,4 +33,5 @@ usb@02184000 { /* USB OTG */
 	external-vbus-divider;
 	maximum-speed = "full-speed";
 	tpl-support;
+	force-full-speed;
 };

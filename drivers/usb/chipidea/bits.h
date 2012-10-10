@@ -58,6 +58,7 @@
 #define PORTSC_PFSC           BIT(24)
 #define PORTSC_PTS(d)						\
 	(u32)((((d) & 0x3) << 30) | (((d) & 0x4) ? BIT(25) : 0))
+#define PORTSC_PFSC           BIT(24)
 #define PORTSC_PTW            BIT(28)
 #define PORTSC_STS            BIT(29)
 

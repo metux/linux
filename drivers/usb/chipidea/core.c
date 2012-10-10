@@ -293,6 +293,11 @@ static void hw_phymode_configure(struct ci_hdrc *ci)
 		return;
 	}
 
+	if (of_property_read_bool(ci->dev->of_node, "force-full-speed")) {
+		portsc |= PORTSC_PFSC;
+		lpm |= DEVLC_PFSC;
+	}
+
 	if (ci->hw_bank.lpm) {
 		hw_write(ci, OP_DEVLC, DEVLC_PTS(7) | DEVLC_PTW, lpm);
 		if (sts)

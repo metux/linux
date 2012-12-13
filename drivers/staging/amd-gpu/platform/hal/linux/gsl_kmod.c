@@ -802,14 +802,10 @@ static int gpu_probe(struct platform_device *pdev)
     int ret = -ENODEV;
     struct resource *res;
     struct device *dev;
-    struct mxc_gpu_platform_data *pdata;
 
-    pdata = pdev->dev.platform_data;
-    if (pdata) {
-	z160_version = pdata->z160_revision;
-	gpu_reserved_mem = pdata->reserved_mem_base;
-	gpu_reserved_mem_size = pdata->reserved_mem_size;
-    }
+    /* FIXME, only for >= IMX_CHIP_REVISION_2_0 */
+    z160_version = 1;
+
     setup_gpu_mem(pdev);
 
     for(i = 0; i < 2; i++){

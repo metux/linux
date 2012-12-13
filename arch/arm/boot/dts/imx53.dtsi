@@ -171,6 +171,22 @@
 			};
 		};
 
+		gpu2d: gpu@20000000 {
+			compatible = "amd,z160";
+			reg = <0x20000000 0x1000>;
+			interrupts = <84>;
+			clocks = <&clks 163>;
+		};
+
+		gpu3d: gpu@30000000 {
+			compatible = "amd,z430";
+			reg = <0x30000000 0x30000>;
+			interrupts = <12>;
+			clocks = <&clks 162>, <&clks 164>;
+			clock-names = "gpu", "garb";
+			gmem = <&gmem>;
+		};
+
 		aips@50000000 { /* AIPS1 */
 			compatible = "fsl,aips-bus", "simple-bus";
 			#address-cells = <1>;
@@ -785,6 +801,12 @@
 		pmu {
 			compatible = "arm,cortex-a8-pmu";
 			interrupts = <77>;
+		};
+
+		gmem: sram@f8020000 {
+			compatible = "mmio-sram";
+			reg = <0xf8020000 0x40000>;
+			clocks = <&clks 164>; /* GARB */
 		};
 	};
 };

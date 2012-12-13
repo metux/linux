@@ -799,6 +799,7 @@ static int setup_gpu_mem(struct platform_device *pdev)
 static int gpu_probe(struct platform_device *pdev)
 {
     int i;
+    int ret = -ENODEV;
     struct resource *res;
     struct device *dev;
     struct mxc_gpu_platform_data *pdata;
@@ -872,16 +873,17 @@ static int gpu_probe(struct platform_device *pdev)
 
     if (gpu_3d_irq > 0)
     {
-	if (request_irq(gpu_3d_irq, z430_irq_handler, 0, "ydx", NULL) < 0) {
+        ret = request_irq(gpu_3d_irq, z430_irq_handler, 0, "ydx", NULL);
+	if (ret < 0) {
 	    printk(KERN_ERR "%s: request_irq error\n", __func__);
-	    gpu_3d_irq = 0;
-	    goto request_irq_error;
+	    return ret;
 	}
     }
 
     if (gpu_2d_irq > 0)
     {
-	if (request_irq(gpu_2d_irq, z160_irq_handler, 0, "g12", NULL) < 0) {
+        ret = request_irq(gpu_2d_irq, z160_irq_handler, 0, "g12", NULL);	
+	if (ret < 0) {
 	    printk(KERN_ERR "DO NOT use uio_pdrv_genirq kernel module for X acceleration!\n");
 	    gpu_2d_irq = 0;
 	}
@@ -898,6 +900,7 @@ static int gpu_probe(struct platform_device *pdev)
     if (gsl_kmod_major <= 0)
     {
         pr_err("%s: register_chrdev error\n", __func__);
+	ret = gsl_kmod_major;
         goto register_chrdev_error;
     }
 
@@ -906,6 +909,7 @@ static int gpu_probe(struct platform_device *pdev)
     if (IS_ERR(gsl_kmod_class))
     {
         pr_err("%s: class_create error\n", __func__);
+	ret = PTR_ERR(gsl_kmod_class);
         goto class_create_error;
     }
 
@@ -938,7 +942,7 @@ kgsl_driver_init_error:
 	free_irq(gpu_3d_irq, NULL);
     }
 request_irq_error:
-    return 0;   // TODO: return proper error code
+    return ret;
 }
 
 static int gpu_remove(struct platform_device *pdev)

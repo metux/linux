@@ -25,6 +25,7 @@
 #include "gsl_kmod_cleanup.h"
 #include "gsl_linux_map.h"
 
+#include <linux/clk.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -39,9 +40,9 @@
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 
-#include <mach/mxc_gpu.h>
 
 int gpu_2d_irq, gpu_3d_irq;
+struct clk *clk_2d, *clk_3d, *clk_garb;
 
 phys_addr_t gpu_2d_regbase;
 int gpu_2d_regsize;
@@ -817,6 +818,24 @@ static int gpu_probe(struct platform_device *pdev)
                 gmem_size = res->end - res->start + 1;
             }
         }
+    }
+
+    clk_2d = devm_clk_get(&pdev->dev, "2d");
+    if (IS_ERR(clk_2d)) {
+	dev_err(&pdev->dev, "failed to request 2d clock");
+	return PTR_ERR(clk_2d);
+    }
+
+    clk_3d = devm_clk_get(&pdev->dev, "3d");
+    if (IS_ERR(clk_3d)) {
+	dev_err(&pdev->dev, "failed to request 3d clock");
+	return PTR_ERR(clk_3d);
+    }
+
+    clk_garb = devm_clk_get(&pdev->dev, "garb");
+    if (IS_ERR(clk_garb)) {
+	dev_warn(&pdev->dev, "could not request garb clock");
+	clk_garb = NULL;
     }
 
     if (gpu_3d_irq > 0)

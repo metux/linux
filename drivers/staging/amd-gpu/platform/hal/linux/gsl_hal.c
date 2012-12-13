@@ -49,6 +49,7 @@ extern int gmem_size;
 extern phys_addr_t gpu_reserved_mem;
 extern int gpu_reserved_mem_size;
 extern int gpu_2d_irq, gpu_3d_irq;
+extern struct clk *clk_2d, *clk_3d, *clk_garb;
 
 
 KGSLHAL_API int
@@ -486,19 +487,17 @@ kgsl_hal_setpowerstate(gsl_deviceid_t device_id, int state, unsigned int value)
 	gsl_device_t *device = &gsl_driver.device[device_id-1];
 	struct clk *gpu_clk = NULL;
 	struct clk *garb_clk = NULL;
-	struct clk *emi_garb_clk = NULL;
 
 	/* unreferenced formal parameters */
 	(void) value;
 
 	switch (device_id) {
 	case GSL_DEVICE_G12:
-		gpu_clk = clk_get(0, "gpu2d_clk");
+		gpu_clk = clk_2d;
 		break;
 	case GSL_DEVICE_YAMATO:
-		gpu_clk = clk_get(0, "gpu3d_clk");
-		garb_clk = clk_get(0, "garb_clk");
-		emi_garb_clk = clk_get(0, "emi_garb_clk");
+		gpu_clk = clk_3d;
+		garb_clk = clk_garb;
 		break;
 	default:
 		return GSL_FAILURE_DEVICEERROR;
@@ -512,12 +511,9 @@ kgsl_hal_setpowerstate(gsl_deviceid_t device_id, int state, unsigned int value)
 	case GSL_PWRFLAGS_CLK_ON:
 		break;
 	case GSL_PWRFLAGS_POWER_ON:
-		clk_enable(gpu_clk);
+		clk_prepare_enable(gpu_clk);
 		if (garb_clk) {
-			clk_enable(garb_clk);
-		}
-		if (emi_garb_clk) {
-			clk_enable(emi_garb_clk);
+			clk_prepare_enable(garb_clk);
 		}
 		kgsl_device_autogate_init(&gsl_driver.device[device_id-1]);
 		break;
@@ -528,12 +524,9 @@ kgsl_hal_setpowerstate(gsl_deviceid_t device_id, int state, unsigned int value)
 			return GSL_FAILURE_DEVICEERROR;
 		}
 		kgsl_device_autogate_exit(&gsl_driver.device[device_id-1]);
-		clk_disable(gpu_clk);
+		clk_disable_unprepare(gpu_clk);
 		if (garb_clk) {
-			clk_disable(garb_clk);
-		}
-		if (emi_garb_clk) {
-			clk_disable(emi_garb_clk);
+			clk_disable_unprepare(garb_clk);
 		}
 		break;
 	default:
@@ -547,16 +540,14 @@ KGSLHAL_API int kgsl_clock(gsl_deviceid_t dev, int enable)
 {
 	struct clk *gpu_clk = NULL;
 	struct clk *garb_clk = NULL;
-	struct clk *emi_garb_clk = NULL;
 
 	switch (dev) {
 	case GSL_DEVICE_G12:
-		gpu_clk = clk_get(0, "gpu2d_clk");
+		gpu_clk = clk_2d;
 		break;
 	case GSL_DEVICE_YAMATO:
-		gpu_clk = clk_get(0, "gpu3d_clk");
-		garb_clk = clk_get(0, "garb_clk");
-		emi_garb_clk = clk_get(0, "emi_garb_clk");
+		gpu_clk = clk_3d;
+		garb_clk = clk_garb;
 		break;
 	default:
 		printk(KERN_ERR "GPU device %d is invalid!\n", dev);
@@ -569,20 +560,14 @@ KGSLHAL_API int kgsl_clock(gsl_deviceid_t dev, int enable)
 	}
 
 	if (enable) {
-		clk_enable(gpu_clk);
+		clk_prepare_enable(gpu_clk);
 		if (garb_clk) {
-		    clk_enable(garb_clk);
-		}
-		if (emi_garb_clk) {
-		    clk_enable(emi_garb_clk);
+		    clk_prepare_enable(garb_clk);
 		}
 	} else {
-		clk_disable(gpu_clk);
+		clk_disable_unprepare(gpu_clk);
 		if (garb_clk) {
-		    clk_disable(garb_clk);
-		}
-		if (emi_garb_clk) {
-		    clk_disable(emi_garb_clk);
+		    clk_disable_unprepare(garb_clk);
 		}
 	}
 

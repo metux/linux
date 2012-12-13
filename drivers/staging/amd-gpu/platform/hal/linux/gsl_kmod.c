@@ -39,6 +39,9 @@
 #include <linux/platform_device.h>
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
+#include <linux/of.h>
+
+#include <linux/memblock.h>
 
 
 int gpu_2d_irq, gpu_3d_irq;
@@ -765,6 +768,34 @@ static irqreturn_t z430_irq_handler(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+static int setup_gpu_mem(struct platform_device *pdev)
+{
+	struct property *prop;
+	size_t size;
+	const __be32 *values;
+
+	prop = of_find_property(pdev->dev.of_node, "mem", &size);
+	if (!prop) {
+		dev_err(&pdev->dev, "no gpu memory found\n");
+		return -ENODEV;
+	}
+
+	values = prop->value;
+
+	if (size < 8) {
+		dev_err(&pdev->dev, "failed to parse \"carveout\" property\n");
+		return -EOVERFLOW;
+	}
+
+	gpu_reserved_mem = be32_to_cpup(values++);
+	gpu_reserved_mem_size = be32_to_cpup(values++);
+
+	memblock_free(gpu_reserved_mem, gpu_reserved_mem_size);
+	memblock_remove(gpu_reserved_mem, gpu_reserved_mem_size);
+
+	return 0;
+}
+
 static int gpu_probe(struct platform_device *pdev)
 {
     int i;
@@ -778,6 +809,7 @@ static int gpu_probe(struct platform_device *pdev)
 	gpu_reserved_mem = pdata->reserved_mem_base;
 	gpu_reserved_mem_size = pdata->reserved_mem_size;
     }
+    setup_gpu_mem(pdev);
 
     for(i = 0; i < 2; i++){
         res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
@@ -970,11 +1002,23 @@ static int gpu_resume(struct platform_device *pdev)
 #define	gpu_resume	NULL
 #endif /* !CONFIG_PM */
 
+#ifdef CONFIG_OF
+static struct of_device_id gpu_dt_ids[] = {
+	{ .compatible = "amd,z160" },
+	{ .compatible = "amd,z430" },
+	{ .compatible = "fsl,imx53-gpu" },
+	{},
+};
+#else
+#define gpu_dt_ids NULL
+#endif
+
 /*! Driver definition
  */
 static struct platform_driver gpu_driver = {
     .driver = {
         .name = "mxc_gpu",
+        .of_match_table = gpu_dt_ids,
         },
     .probe = gpu_probe,
     .remove = gpu_remove,

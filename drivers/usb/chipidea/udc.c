@@ -691,6 +691,11 @@ __acquires(ci->lock)
 {
 	int retval;
 
+	if (ci->gadget.speed != USB_SPEED_UNKNOWN) {
+		if (ci->driver)
+			ci->driver->disconnect(&ci->gadget);
+	}
+
 	spin_unlock(&ci->lock);
 	if (ci->gadget.speed != USB_SPEED_UNKNOWN)
 		usb_gadget_udc_reset(&ci->gadget, ci->driver);

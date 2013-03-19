@@ -256,6 +256,7 @@
 				clocks = <&clks IMX5_CLK_USBOH3_GATE>;
 				fsl,usbmisc = <&usbmisc 0>;
 				fsl,usbphy = <&usbphy0>;
+				phy_type = "utmi";
 				status = "disabled";
 			};
 

@@ -16,6 +16,7 @@ enum wp_types {
 	ESDHC_WP_NONE,		/* no WP, neither controller nor gpio */
 	ESDHC_WP_CONTROLLER,	/* mmc controller internal WP */
 	ESDHC_WP_GPIO,		/* external gpio pin for WP */
+	ESDHC_WP_GPIO_LOW,	/* external gpio pin for WP, low active */
 };
 
 enum cd_types {

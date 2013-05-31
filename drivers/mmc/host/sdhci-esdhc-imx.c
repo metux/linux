@@ -652,6 +652,7 @@ static unsigned int esdhc_pltfm_get_ro(struct sdhci_host *host)
 
 	switch (boarddata->wp_type) {
 	case ESDHC_WP_GPIO:
+	case ESDHC_WP_GPIO_LOW:
 		return mmc_gpio_get_ro(host->mmc);
 	case ESDHC_WP_CONTROLLER:
 		return !(readl(host->ioaddr + SDHCI_PRESENT_STATE) &
@@ -867,6 +868,7 @@ sdhci_esdhc_imx_probe_dt(struct platform_device *pdev,
 			 struct esdhc_platform_data *boarddata)
 {
 	struct device_node *np = pdev->dev.of_node;
+	enum of_gpio_flags flags;
 
 	if (!np)
 		return -ENODEV;
@@ -884,9 +886,13 @@ sdhci_esdhc_imx_probe_dt(struct platform_device *pdev,
 	if (gpio_is_valid(boarddata->cd_gpio))
 		boarddata->cd_type = ESDHC_CD_GPIO;
 
-	boarddata->wp_gpio = of_get_named_gpio(np, "wp-gpios", 0);
-	if (gpio_is_valid(boarddata->wp_gpio))
-		boarddata->wp_type = ESDHC_WP_GPIO;
+	boarddata->wp_gpio = of_get_named_gpio_flags(np, "wp-gpios", 0, &flags);
+	if (gpio_is_valid(boarddata->wp_gpio)) {
+		if (!(flags & OF_GPIO_ACTIVE_LOW))
+			boarddata->wp_type = ESDHC_WP_GPIO_LOW;
+		else
+			boarddata->wp_type = ESDHC_WP_GPIO;
+	}
 
 	of_property_read_u32(np, "bus-width", &boarddata->max_bus_width);
 
@@ -1010,14 +1016,16 @@ static int sdhci_esdhc_imx_probe(struct platform_device *pdev)
 	}
 
 	/* write_protect */
-	if (boarddata->wp_type == ESDHC_WP_GPIO) {
+	if (boarddata->wp_type == ESDHC_WP_GPIO ||
+	    boarddata->wp_type == ESDHC_WP_GPIO_LOW) {
 		err = mmc_gpio_request_ro(host->mmc, boarddata->wp_gpio);
 		if (err) {
 			dev_err(mmc_dev(host->mmc),
 				"failed to request write-protect gpio!\n");
 			goto disable_clk;
 		}
-		host->mmc->caps2 |= MMC_CAP2_RO_ACTIVE_HIGH;
+		if (boarddata->wp_type == ESDHC_WP_GPIO)
+			host->mmc->caps2 |= MMC_CAP2_RO_ACTIVE_HIGH;
 	}
 
 	/* card_detect */

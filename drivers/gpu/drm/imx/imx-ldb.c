@@ -151,6 +151,13 @@ static void imx_ldb_set_clock(struct imx_ldb *ldb, int mux, int chno,
 	dev_dbg(ldb->dev, "%s after: %ld\n", __func__,
 			clk_get_rate(ldb->clk[chno]));
 
+	/*
+	 * In split mode, do not try to set the di0 parent clock to ldb_di1,
+	 * or the di1 parent clock to ldb_di0, which is not possible on i.MX53.
+	 */
+	if ((ldb->ldb_ctrl & LDB_SPLIT_MODE_EN) && (mux != chno))
+		return;
+
 	/* set display clock mux to LDB input clock */
 	ret = clk_set_parent(ldb->clk_sel[mux], ldb->clk[chno]);
 	if (ret)

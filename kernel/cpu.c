@@ -30,6 +30,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpuhp.h>
 
+#include <trace/events/sched.h>
+
 #include "smpboot.h"
 
 /**
@@ -924,6 +926,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	hasdied = prev_state != st->state && st->state == CPUHP_OFFLINE;
 out:
 	cpu_hotplug_done();
+	trace_sched_cpu_hotplug(cpu, err, 0);
 	/* This post dead nonsense must die */
 	if (!ret && hasdied)
 		cpu_notify_nofail(CPU_POST_DEAD, cpu);
@@ -1057,6 +1060,8 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	ret = cpuhp_up_callbacks(cpu, st, target);
 out:
 	cpu_hotplug_done();
+	trace_sched_cpu_hotplug(cpu, ret, 1);
+
 	return ret;
 }
 

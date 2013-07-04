@@ -43,7 +43,6 @@
 
 #include <linux/memblock.h>
 
-
 int gpu_2d_irq, gpu_3d_irq;
 struct clk *clk_2d, *clk_3d, *clk_garb;
 
@@ -770,6 +769,7 @@ static irqreturn_t z430_irq_handler(int irq, void *dev_id)
 
 static int setup_gpu_mem(struct platform_device *pdev)
 {
+	struct device_node *np;
 	struct property *prop;
 	size_t size;
 	const __be32 *values;
@@ -793,71 +793,96 @@ static int setup_gpu_mem(struct platform_device *pdev)
 	memblock_free(gpu_reserved_mem, gpu_reserved_mem_size);
 	memblock_remove(gpu_reserved_mem, gpu_reserved_mem_size);
 
+	np = of_parse_phandle(pdev->dev.of_node, "gmem", 0);
+	if (!np) {
+		dev_err(&pdev->dev, "no gmem found\n");
+		return -ENOMEM;
+	}
+
+	prop = of_find_property(np, "reg", &size);
+	if (!prop) {
+		dev_err(&pdev->dev, "no gpu memory found\n");
+		return -ENODEV;
+	}
+
+	values = prop->value;
+
+	gmem_size = be32_to_cpup(++values);
+
 	return 0;
 }
 
-static int gpu_probe(struct platform_device *pdev)
+static int z160_probe(struct platform_device *pdev)
 {
-    int i;
-    int ret = -ENODEV;
-    struct resource *res;
-    struct device *dev;
+	struct resource *res;
+	int ret;
 
-    /* FIXME, only for >= IMX_CHIP_REVISION_2_0 */
-    z160_version = 1;
+	/* FIXME, only for >= IMX_CHIP_REVISION_2_0 */
+	z160_version = 1;
 
-    setup_gpu_mem(pdev);
+	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+	if (!res) {
+		dev_err(&pdev->dev, "unable to get irq\n");
+		return -ENODEV;
+	}
+	gpu_2d_irq = res->start;
 
-    for(i = 0; i < 2; i++){
-        res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
-        if (!res) {
-            if (i == 0) {
-                printk(KERN_ERR "gpu: unable to get gpu irq\n");
-                return -ENODEV;
-            } else {
-                break;
-            }
-        }
-        if(strcmp(res->name, "gpu_2d_irq") == 0){
-            gpu_2d_irq = res->start;
-        }else if(strcmp(res->name, "gpu_3d_irq") == 0){
-            gpu_3d_irq = res->start;
-        }
-    }
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		gpu_2d_regbase = 0;
+		gpu_2d_regsize = 0;
+		return -ENODEV;
+	}
+	gpu_2d_regbase = res->start;
+	gpu_2d_regsize = res->end - res->start + 1;
 
-    for (i = 0; i < 3; i++) {
-        res = platform_get_resource(pdev, IORESOURCE_MEM, i);
-        if (!res) {
-            gpu_2d_regbase = 0;
-            gpu_2d_regsize = 0;
-            gpu_3d_regbase = 0;
-            gpu_2d_regsize = 0;
-            gmem_size = 0;
-            gpu_reserved_mem = 0;
-            gpu_reserved_mem_size = 0;
-            break;
-        }else{
-            if(strcmp(res->name, "gpu_2d_registers") == 0){
-                gpu_2d_regbase = res->start;
-                gpu_2d_regsize = res->end - res->start + 1;
-            }else if(strcmp(res->name, "gpu_3d_registers") == 0){
-                gpu_3d_regbase = res->start;
-                gpu_3d_regsize = res->end - res->start + 1;
-            }else if(strcmp(res->name, "gpu_graphics_mem") == 0){
-                gmem_size = res->end - res->start + 1;
-            }
-        }
-    }
+	clk_2d = devm_clk_get(&pdev->dev, NULL);
+	if (IS_ERR(clk_2d)) {
+		dev_err(&pdev->dev, "failed to request clock");
+		return PTR_ERR(clk_2d);
+	}
 
-    clk_2d = devm_clk_get(&pdev->dev, "2d");
-    if (IS_ERR(clk_2d)) {
-	dev_err(&pdev->dev, "failed to request 2d clock");
-	return PTR_ERR(clk_2d);
-    }
+	ret = devm_request_irq(&pdev->dev, gpu_2d_irq, z160_irq_handler, 0,
+			       "g12", NULL);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "failed to request irq\n");
+		gpu_2d_irq = 0;
+		return ret;
+	}
 
-    clk_3d = devm_clk_get(&pdev->dev, "3d");
+	return 0;
+}
+
+static int z430_probe(struct platform_device *pdev)
+{
+	int ret = -ENODEV;
+	struct resource *res;
+	struct device *dev;
+
+	setup_gpu_mem(pdev);
+
+	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+	if (!res) {
+		dev_err(&pdev->dev, "unable to get irq\n");
+		return -ENODEV;
+	}
+	gpu_3d_irq = res->start;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		gpu_3d_regbase = 0;
+		gpu_3d_regsize = 0;
+		gpu_reserved_mem = 0;
+		gpu_reserved_mem_size = 0;
+		gmem_size = 0;
+		return -ENODEV;
+	}
+	gpu_3d_regbase = res->start;
+	gpu_3d_regsize = res->end - res->start + 1;
+
+    clk_3d = devm_clk_get(&pdev->dev, "gpu");
     if (IS_ERR(clk_3d)) {
-	dev_err(&pdev->dev, "failed to request 3d clock");
+	dev_err(&pdev->dev, "failed to request gpu clock");
 	return PTR_ERR(clk_3d);
     }
 
@@ -873,15 +898,6 @@ static int gpu_probe(struct platform_device *pdev)
 	if (ret < 0) {
 	    printk(KERN_ERR "%s: request_irq error\n", __func__);
 	    return ret;
-	}
-    }
-
-    if (gpu_2d_irq > 0)
-    {
-        ret = request_irq(gpu_2d_irq, z160_irq_handler, 0, "g12", NULL);	
-	if (ret < 0) {
-	    printk(KERN_ERR "DO NOT use uio_pdrv_genirq kernel module for X acceleration!\n");
-	    gpu_2d_irq = 0;
 	}
     }
 
@@ -931,17 +947,20 @@ register_chrdev_error:
 
 kgsl_driver_init_error:
     kgsl_driver_close();
-    if (gpu_2d_irq > 0) {
-	free_irq(gpu_2d_irq, NULL);
-    }
     if (gpu_3d_irq > 0) {
 	free_irq(gpu_3d_irq, NULL);
     }
-request_irq_error:
     return ret;
 }
 
-static int gpu_remove(struct platform_device *pdev)
+static int z160_remove(struct platform_device *pdev)
+{
+	free_irq(gpu_2d_irq, NULL);
+
+	return 0;
+}
+
+static int z430_remove(struct platform_device *pdev)
 {
     device_destroy(gsl_kmod_class, MKDEV(gsl_kmod_major, 0));
     class_destroy(gsl_kmod_class);
@@ -952,88 +971,106 @@ static int gpu_remove(struct platform_device *pdev)
         free_irq(gpu_3d_irq, NULL);
     }
 
-    if (gpu_2d_irq)
-    {
-        free_irq(gpu_2d_irq, NULL);
-    }
-
     kgsl_driver_close();
     return 0;
 }
 
 #ifdef CONFIG_PM
-static int gpu_suspend(struct platform_device *pdev, pm_message_t state)
+static int z160_suspend(struct platform_device *pdev, pm_message_t state)
 {
-    int              i;
-    gsl_powerprop_t  power;
+	gsl_powerprop_t power;
 
-    power.flags = GSL_PWRFLAGS_POWER_OFF;
-    for (i = 0; i < GSL_DEVICE_MAX; i++)
-    {
-        kgsl_device_setproperty(
-                        (gsl_deviceid_t) (i+1),
-                        GSL_PROP_DEVICE_POWER,
-                        &power,
-                        sizeof(gsl_powerprop_t));
-    }   
-
-    return 0;
+	power.flags = GSL_PWRFLAGS_POWER_OFF;
+        kgsl_device_setproperty(GSL_DEVICE_G12, GSL_PROP_DEVICE_POWER,
+				&power, sizeof(power));
+	return 0;
 }
 
-static int gpu_resume(struct platform_device *pdev)
+static int z160_resume(struct platform_device *pdev)
 {
-    int              i;
-    gsl_powerprop_t  power;
+	gsl_powerprop_t  power;
 
-    power.flags = GSL_PWRFLAGS_POWER_ON;
-    for (i = 0; i < GSL_DEVICE_MAX; i++)
-    {
-        kgsl_device_setproperty(
-                        (gsl_deviceid_t) (i+1),
-                        GSL_PROP_DEVICE_POWER,
-                        &power,
-                        sizeof(gsl_powerprop_t));
-    }   
+	power.flags = GSL_PWRFLAGS_POWER_ON;
+	kgsl_device_setproperty(GSL_DEVICE_YAMATO, GSL_PROP_DEVICE_POWER,
+				&power, sizeof(power));
+	return 0;
+}
 
-    return 0;
+static int z430_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	gsl_powerprop_t power;
+
+	power.flags = GSL_PWRFLAGS_POWER_OFF;
+        kgsl_device_setproperty(GSL_DEVICE_YAMATO, GSL_PROP_DEVICE_POWER,
+				&power, sizeof(power));
+	return 0;
+}
+
+static int z430_resume(struct platform_device *pdev)
+{
+	gsl_powerprop_t  power;
+
+	power.flags = GSL_PWRFLAGS_POWER_ON;
+	kgsl_device_setproperty(GSL_DEVICE_YAMATO, GSL_PROP_DEVICE_POWER,
+				&power, sizeof(power));
+	return 0;
 }
 #else
-#define	gpu_suspend	NULL
-#define	gpu_resume	NULL
+#define	z160_suspend	NULL
+#define	z160_resume	NULL
+#define	z430_suspend	NULL
+#define	z430_resume	NULL
 #endif /* !CONFIG_PM */
 
 #ifdef CONFIG_OF
-static struct of_device_id gpu_dt_ids[] = {
+static struct of_device_id z160_dt_ids[] = {
 	{ .compatible = "amd,z160" },
+	{},
+};
+
+static struct of_device_id z430_dt_ids[] = {
 	{ .compatible = "amd,z430" },
-	{ .compatible = "fsl,imx53-gpu" },
 	{},
 };
 #else
-#define gpu_dt_ids NULL
+#define z160_dt_ids NULL
+#define z430_dt_ids NULL
 #endif
 
 /*! Driver definition
  */
-static struct platform_driver gpu_driver = {
-    .driver = {
-        .name = "mxc_gpu",
-        .of_match_table = gpu_dt_ids,
-        },
-    .probe = gpu_probe,
-    .remove = gpu_remove,
-    .suspend = gpu_suspend,
-    .resume = gpu_resume,
+static struct platform_driver z430_driver = {
+	.driver = {
+		.name = "amd_z430",
+		.of_match_table = z430_dt_ids,
+	},
+	.probe = z430_probe,
+	.remove = z430_remove,
+	.suspend = z430_suspend,
+	.resume = z430_resume,
+};
+
+static struct platform_driver z160_driver = {
+	.driver = {
+		.name = "amd_z160",
+		.of_match_table = z160_dt_ids,
+	},
+	.probe = z160_probe,
+	.remove = z160_remove,
+	.suspend = z160_suspend,
+	.resume = z160_resume,
 };
 
 static int __init gsl_kmod_init(void)
 {
-     return platform_driver_register(&gpu_driver);
+	platform_driver_register(&z160_driver);
+	return platform_driver_register(&z430_driver);
 }
 
 static void __exit gsl_kmod_exit(void)
 {
-     platform_driver_unregister(&gpu_driver);
+	platform_driver_unregister(&z430_driver);
+	platform_driver_unregister(&z160_driver);
 }
 
 module_init(gsl_kmod_init);

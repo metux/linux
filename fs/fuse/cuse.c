@@ -184,10 +184,16 @@ static long cuse_file_compat_ioctl(struct file *file, unsigned int cmd,
 	return fuse_do_ioctl(file, cmd, arg, flags);
 }
 
+static int fake_mmap(struct file *file, struct vm_area_struct * vma)
+{
+	return 0;
+}
+
 static const struct file_operations cuse_frontend_fops = {
 	.owner			= THIS_MODULE,
 	.read			= cuse_read,
 	.write			= cuse_write,
+	.mmap			= fake_mmap,
 	.open			= cuse_open,
 	.release		= cuse_release,
 	.unlocked_ioctl		= cuse_file_ioctl,

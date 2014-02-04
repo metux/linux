@@ -125,7 +125,6 @@ typedef struct _gsl_shmemconfig_t
 typedef struct _gsl_hal_t {
      gsl_memregion_t z160_regspace;
      gsl_memregion_t z430_regspace;
-     gsl_memregion_t memchunk;
      gsl_memregion_t memspace[GSL_SHMEM_MAX_APERTURES];
      unsigned int has_z160;
      unsigned int has_z430;

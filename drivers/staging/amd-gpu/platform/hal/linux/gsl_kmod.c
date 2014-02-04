@@ -51,8 +51,6 @@ int gpu_2d_regsize;
 phys_addr_t gpu_3d_regbase;
 int gpu_3d_regsize;
 int gmem_size;
-phys_addr_t gpu_reserved_mem;
-int gpu_reserved_mem_size;
 int z160_version;
 
 static ssize_t gsl_kmod_read(struct file *fd, char __user *buf, size_t len, loff_t *ptr);
@@ -774,25 +772,6 @@ static int setup_gpu_mem(struct platform_device *pdev)
 	size_t size;
 	const __be32 *values;
 
-	prop = of_find_property(pdev->dev.of_node, "mem", &size);
-	if (!prop) {
-		dev_err(&pdev->dev, "no gpu memory found\n");
-		return -ENODEV;
-	}
-
-	values = prop->value;
-
-	if (size < 8) {
-		dev_err(&pdev->dev, "failed to parse \"carveout\" property\n");
-		return -EOVERFLOW;
-	}
-
-	gpu_reserved_mem = be32_to_cpup(values++);
-	gpu_reserved_mem_size = be32_to_cpup(values++);
-
-	memblock_free(gpu_reserved_mem, gpu_reserved_mem_size);
-	memblock_remove(gpu_reserved_mem, gpu_reserved_mem_size);
-
 	np = of_parse_phandle(pdev->dev.of_node, "gmem", 0);
 	if (!np) {
 		dev_err(&pdev->dev, "no gmem found\n");
@@ -872,8 +851,6 @@ static int z430_probe(struct platform_device *pdev)
 	if (!res) {
 		gpu_3d_regbase = 0;
 		gpu_3d_regsize = 0;
-		gpu_reserved_mem = 0;
-		gpu_reserved_mem_size = 0;
 		gmem_size = 0;
 		return -ENODEV;
 	}

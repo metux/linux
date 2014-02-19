@@ -473,9 +473,9 @@ static inline int hibernate_quiet_exec(int (*func)(void *data), void *data) {
 #endif /* CONFIG_HIBERNATION */
 
 #ifdef CONFIG_HIBERNATION_SNAPSHOT_DEV
-int is_hibernate_resume_dev(dev_t dev);
+int is_hibernate_resume_dev(const struct inode *);
 #else
-static inline int is_hibernate_resume_dev(dev_t dev) { return 0; }
+static inline int is_hibernate_resume_dev(const struct inode *i) { return 0; }
 #endif
 
 /* Hibernation and suspend events */
@@ -517,6 +517,7 @@ extern bool pm_get_wakeup_count(unsigned int *count, bool block);
 extern bool pm_save_wakeup_count(unsigned int count);
 extern void pm_wakep_autosleep_enabled(bool set);
 extern void pm_print_active_wakeup_sources(void);
+extern void pm_get_active_wakeup_sources(char *pending_sources, size_t max);
 
 extern void lock_system_sleep(void);
 extern void unlock_system_sleep(void);

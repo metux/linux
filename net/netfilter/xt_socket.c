@@ -144,7 +144,7 @@ static bool xt_socket_sk_is_transparent(struct sock *sk)
 	}
 }
 
-static struct sock *xt_socket_lookup_slow_v4(struct net *net,
+struct sock *xt_socket_lookup_slow_v4(struct net *net,
 					     const struct sk_buff *skb,
 					     const struct net_device *indev)
 {
@@ -215,6 +215,7 @@ static struct sock *xt_socket_lookup_slow_v4(struct net *net,
 
 	return sk;
 }
+EXPORT_SYMBOL(xt_socket_lookup_slow_v4);
 
 static bool
 socket_match(const struct sk_buff *skb, struct xt_action_param *par,
@@ -350,7 +351,7 @@ xt_socket_get_sock_v6(struct net *net, struct sk_buff *skb, int doff,
 	return NULL;
 }
 
-static struct sock *xt_socket_lookup_slow_v6(struct net *net,
+struct sock *xt_socket_lookup_slow_v6(struct net *net,
 					     const struct sk_buff *skb,
 					     const struct net_device *indev)
 {
@@ -403,6 +404,7 @@ static struct sock *xt_socket_lookup_slow_v6(struct net *net,
 
 	return sk;
 }
+EXPORT_SYMBOL(xt_socket_lookup_slow_v6);
 
 static bool
 socket_mt6_v1_v2_v3(const struct sk_buff *skb, struct xt_action_param *par)

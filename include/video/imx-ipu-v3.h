@@ -317,7 +317,8 @@ int ipu_ic_task_init(struct ipu_ic *ic,
 		     int in_width, int in_height,
 		     int out_width, int out_height,
 		     enum ipu_color_space in_cs,
-		     enum ipu_color_space out_cs);
+		     enum ipu_color_space out_cs,
+		     u32 rsc);
 int ipu_ic_task_graphics_init(struct ipu_ic *ic,
 			      enum ipu_color_space in_g_cs,
 			      bool galpha_en, u32 galpha,
@@ -362,5 +363,18 @@ struct ipu_client_platformdata {
 	int dmfc;
 	int dma[2];
 };
+
+enum ipu_image_scale_ctrl {
+	IPU_IMAGE_SCALE_ROUND_DOWN,
+	IPU_IMAGE_SCALE_PIXELPERFECT,
+	IPU_IMAGE_SCALE_ROUND_UP,
+};
+
+int ipu_image_convert(struct ipu_soc *ipu, struct ipu_image *in, struct ipu_image *out,
+		void (*complete)(void *ctx, int err), void *ctx,
+		enum ipu_image_scale_ctrl ctrl);
+int ipu_image_deinterlace_convert(struct ipu_soc *ipu, struct ipu_image *in_p,
+		struct ipu_image *in, struct ipu_image *in_n, struct ipu_image *out,
+		void (*complete)(void *ctx, int err), void *complete_context);
 
 #endif /* __DRM_IPU_H__ */

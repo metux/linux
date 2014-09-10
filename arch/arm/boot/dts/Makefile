@@ -374,6 +374,7 @@ dtb-$(CONFIG_SOC_IMX6Q) += \
 	imx6dl-nit6xlite.dtb \
 	imx6dl-nitrogen6x.dtb \
 	imx6dl-phytec-pbab01.dtb \
+	imx6dl-phytec-phyboard-subra.dtb \
 	imx6dl-rex-basic.dtb \
 	imx6dl-riotboard.dtb \
 	imx6dl-sabreauto.dtb \
@@ -428,6 +429,7 @@ dtb-$(CONFIG_SOC_IMX6Q) += \
 	imx6q-novena.dtb \
 	imx6q-phytec-phycard-imx6-rdk.dtb \
 	imx6q-phytec-pbab01.dtb \
+	imx6q-phytec-phyboard-subra.dtb \
 	imx6q-phytec-phyboard-alcor.dtb \
 	imx6q-rex-pro.dtb \
 	imx6q-sabreauto.dtb \

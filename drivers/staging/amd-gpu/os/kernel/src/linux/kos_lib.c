@@ -494,7 +494,7 @@ kos_event_reset(oshandle_t a_event)
     struct completion *comp = (struct completion *)a_event;
 
     KOS_ASSERT(comp);
-    INIT_COMPLETION(*comp);
+    reinit_completion(comp);
     return (OS_SUCCESS);
 }
 

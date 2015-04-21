@@ -374,6 +374,7 @@ dtb-$(CONFIG_SOC_IMX6Q) += \
 	imx6dl-nit6xlite.dtb \
 	imx6dl-nitrogen6x.dtb \
 	imx6dl-phytec-pbab01.dtb \
+	imx6dl-phytec-pbab01-nonor.dtb \
 	imx6dl-phytec-phyboard-subra.dtb \
 	imx6dl-phytec-phyboard-subra-wifi.dtb \
 	imx6dl-rex-basic.dtb \

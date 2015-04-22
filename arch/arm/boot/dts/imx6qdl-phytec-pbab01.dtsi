@@ -192,6 +192,7 @@
 
 &usbotg {
 	status = "okay";
+	dr_mode = "peripheral";
 };
 
 &usdhc2 {

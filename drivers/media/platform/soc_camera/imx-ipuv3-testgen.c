@@ -16,6 +16,7 @@
 #include <linux/videodev2.h>
 #include <media/v4l2-subdev.h>
 #include <media/soc_camera.h>
+#include <uapi/linux/v4l2-mediabus.h>
 
 struct ipu_testgen_priv {
 	struct v4l2_subdev subdev;
@@ -36,7 +37,7 @@ static int ipu_testgen_fill_fmt(struct v4l2_subdev *sd,
 				struct v4l2_mbus_framefmt *mf)
 {
 	/* width and height are limited only by interface capabilities */
-	mf->code	= V4L2_MBUS_FMT_FIXED;
+	mf->code	= MEDIA_BUS_FMT_FIXED;
 	mf->colorspace	= V4L2_COLORSPACE_SRGB;
 	mf->field	= 0;
 
@@ -46,13 +47,13 @@ static int ipu_testgen_fill_fmt(struct v4l2_subdev *sd,
 static struct v4l2_subdev_core_ops ipu_testgen_subdev_core_ops;
 
 static int ipu_testgen_enum_fmt(struct v4l2_subdev *sd, unsigned int index,
-				enum v4l2_mbus_pixelcode *code)
+				u32 *code)
 {
 	if (index)
 		return -EINVAL;
 
-	/* V4L2_MBUS_FMT_FIXED is code for enabling the test image generator */
-	*code = V4L2_MBUS_FMT_FIXED;
+	/* MEDIA_BUS_FMT_FIXED is code for enabling the test image generator */
+	*code = MEDIA_BUS_FMT_FIXED;
 	return 0;
 }
 

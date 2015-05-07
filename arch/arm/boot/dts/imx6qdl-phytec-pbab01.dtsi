@@ -12,6 +12,10 @@
 #include <dt-bindings/sound/fsl-imx-audmux.h>
 
 / {
+	aliases {
+		rtc0 = &i2c_rtc;
+	};
+
 	chosen {
 		linux,stdout-path = &uart4;
 	};
@@ -146,7 +150,7 @@
 		reg = <0x41>;
 	};
 
-	rtc@51 {
+	i2c_rtc:rtc@51 {
 		compatible = "nxp,rtc8564";
 		reg = <0x51>;
 	};

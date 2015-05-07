@@ -19,6 +19,11 @@
 		reg = <0x10000000 0x80000000>;
 	};
 
+	aliases {
+		rtc1 = &pmic;
+		rtc2 = &snvs_rtc;
+	};
+
 	regulators {
 		compatible = "simple-bus";
 		#address-cells = <1>;
@@ -130,7 +135,7 @@
 		reg = <0x50>;
 	};
 
-	pmic@58 {
+	pmic: pmic@58 {
 		compatible = "dlg,da9063";
 		reg = <0x58>;
 		interrupt-parent = <&gpio2>;

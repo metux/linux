@@ -210,11 +210,11 @@
 	imx6q-phytec-pfla02 {
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
-				MX6QDL_PAD_EIM_D23__GPIO3_IO23 0x80000000
-				MX6QDL_PAD_DISP0_DAT3__GPIO4_IO24 0x80000000 /* SPI NOR chipselect */
-				MX6QDL_PAD_SD4_DAT1__GPIO2_IO09  0x80000000 /* PMIC interrupt */
-				MX6QDL_PAD_ENET_TXD0__GPIO1_IO30 0x80000000 /* Green LED */
-				MX6QDL_PAD_EIM_EB3__GPIO2_IO31 0x80000000 /* Red LED */
+				MX6QDL_PAD_EIM_D23__GPIO3_IO23		0x80000000
+				MX6QDL_PAD_DISP0_DAT3__GPIO4_IO24	0x80000000 /* SPI NOR chipselect */
+				MX6QDL_PAD_SD4_DAT1__GPIO2_IO09		0x80000000 /* PMIC interrupt */
+				MX6QDL_PAD_ENET_TXD0__GPIO1_IO30	0x80000000 /* Green LED */
+				MX6QDL_PAD_EIM_EB3__GPIO2_IO31		0x80000000 /* Red LED */
 			>;
 		};
 
@@ -298,7 +298,7 @@
 		};
 
 		pinctrl_pcie: pciegrp {
-			fsl,pins = <MX6QDL_PAD_DI0_PIN15__GPIO4_IO17  0x80000000>;
+			fsl,pins = <MX6QDL_PAD_DI0_PIN15__GPIO4_IO17	0x80000000>;
 		};
 
 		pinctrl_uart3: uart3grp {
@@ -355,8 +355,8 @@
 
 		pinctrl_usdhc3_cdwp: usdhc3cdwp {
 			fsl,pins = <
-				MX6QDL_PAD_ENET_RXD0__GPIO1_IO27 0x80000000
-				MX6QDL_PAD_ENET_TXD1__GPIO1_IO29 0x80000000
+				MX6QDL_PAD_ENET_RXD0__GPIO1_IO27	0x80000000
+				MX6QDL_PAD_ENET_TXD1__GPIO1_IO29	0x80000000
 			>;
 		};
 
@@ -428,7 +428,7 @@
 &usdhc3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usdhc3
-		     &pinctrl_usdhc3_cdwp>;
+			&pinctrl_usdhc3_cdwp>;
 	cd-gpios = <&gpio1 27 GPIO_ACTIVE_LOW>;
 	wp-gpios = <&gpio1 29 GPIO_ACTIVE_HIGH>;
 	status = "disabled";

@@ -4528,9 +4528,6 @@ static inline void hrtick_update(struct rq *rq)
 }
 #endif
 
-static unsigned long capacity_orig_of(int cpu);
-static int cpu_util(int cpu);
-
 static void update_capacity_of(int cpu)
 {
 	unsigned long req_cap;
@@ -4979,15 +4976,6 @@ static unsigned long target_load(int cpu, int type)
 	return max(rq->cpu_load[type-1], total);
 }
 
-static unsigned long capacity_of(int cpu)
-{
-	return cpu_rq(cpu)->cpu_capacity;
-}
-
-static unsigned long capacity_orig_of(int cpu)
-{
-	return cpu_rq(cpu)->cpu_capacity_orig;
-}
 
 static unsigned long cpu_avg_load_per_task(int cpu)
 {

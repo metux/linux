@@ -563,6 +563,8 @@ struct governor_attr {
 			 size_t count);
 };
 
+extern struct cpufreq_governor cpufreq_gov_sched;
+
 /*********************************************************************
  *                     FREQUENCY TABLE HELPERS                       *
  *********************************************************************/

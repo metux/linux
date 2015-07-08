@@ -30,6 +30,9 @@ static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool)
 
 	if (!page)
 		return NULL;
+
+	ion_page_pool_alloc_set_cache_policy(pool, page);
+
 	if (!pool->cached)
 		ion_pages_sync_for_device(NULL, page, PAGE_SIZE << pool->order,
 					  DMA_BIDIRECTIONAL);
@@ -39,6 +42,7 @@ static void *ion_page_pool_alloc_pages(struct ion_page_pool *pool)
 static void ion_page_pool_free_pages(struct ion_page_pool *pool,
 				     struct page *page)
 {
+	ion_page_pool_free_set_cache_policy(pool, page);
 	__free_pages(page, pool->order);
 }
 
@@ -102,6 +106,11 @@ void ion_page_pool_free(struct ion_page_pool *pool, struct page *page)
 	ret = ion_page_pool_add(pool, page);
 	if (ret)
 		ion_page_pool_free_pages(pool, page);
+}
+
+void ion_page_pool_free_immediate(struct ion_page_pool *pool, struct page *page)
+{
+	ion_page_pool_free_pages(pool, page);
 }
 
 static int ion_page_pool_total(struct ion_page_pool *pool, bool high)

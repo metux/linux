@@ -532,6 +532,12 @@ struct dl_rq {
 
 #ifdef CONFIG_SMP
 
+struct max_cpu_capacity {
+	raw_spinlock_t lock;
+	unsigned long val;
+	int cpu;
+};
+
 /*
  * We add the notion of a root-domain which will be used to define per-domain
  * variables. Each exclusive cpuset essentially defines an island domain by
@@ -570,7 +576,7 @@ struct root_domain {
 	struct cpupri cpupri;
 
 	/* Maximum cpu capacity in the system. */
-	unsigned long max_cpu_capacity;
+	struct max_cpu_capacity max_cpu_capacity;
 };
 
 extern struct root_domain def_root_domain;
@@ -1386,6 +1392,8 @@ static inline void sched_update_tick_dependency(struct rq *rq)
 #else
 static inline void sched_update_tick_dependency(struct rq *rq) { }
 #endif
+
+extern void init_max_cpu_capacity(struct max_cpu_capacity *mcc);
 
 static inline void add_nr_running(struct rq *rq, unsigned count)
 {

@@ -2894,6 +2894,9 @@ static inline void update_load_avg(struct sched_entity *se, int update_tg)
 		cpufreq_update_util(rq_clock(rq),
 				    min(cfs_rq->avg.util_avg, max), max);
 	}
+
+	if (entity_is_task(se))
+		trace_sched_load_avg_task(task_of(se), &se->avg);
 }
 
 static void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se)

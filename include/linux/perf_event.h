@@ -1270,6 +1270,7 @@ extern int perf_cpu_time_max_percent_handler(struct ctl_table *table, int write,
 int perf_event_max_stack_handler(struct ctl_table *table, int write,
 				 void __user *buffer, size_t *lenp, loff_t *ppos);
 
+<<<<<<< our_perf.h
 /* Access to perf_event_open(2) syscall. */
 #define PERF_SECURITY_OPEN		0
 
@@ -1279,6 +1280,14 @@ int perf_event_max_stack_handler(struct ctl_table *table, int write,
 #define PERF_SECURITY_TRACEPOINT	3
 
 static inline int perf_is_paranoid(void)
+=======
+static inline bool perf_paranoid_any(void)
+{
+	return sysctl_perf_event_paranoid > 2;
+}
+
+static inline bool perf_paranoid_tracepoint_raw(void)
+>>>>>>> their_perf.h
 {
 	return sysctl_perf_event_paranoid > -1;
 }

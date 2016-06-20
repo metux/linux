@@ -419,7 +419,6 @@ el1_irq:
 	bl	trace_hardirqs_off
 #endif
 
-	get_thread_info tsk
 	irq_handler
 
 #ifdef CONFIG_PREEMPT

@@ -130,6 +130,15 @@ static inline void check_object_size(const void *ptr, unsigned long n,
 { }
 #endif /* CONFIG_HARDENED_USERCOPY */
 
+#ifndef CONFIG_HAVE_ARCH_WITHIN_STACK_FRAMES
+static inline int arch_within_stack_frames(const void * const stack,
+					   const void * const stackend,
+					   const void *obj, unsigned long len)
+{
+	return 0;
+}
+#endif
+
 #endif	/* __KERNEL__ */
 
 #endif /* _LINUX_THREAD_INFO_H */

@@ -51,6 +51,7 @@
 unsigned int sysctl_sched_latency = 6000000ULL;
 unsigned int normalized_sysctl_sched_latency = 6000000ULL;
 
+unsigned int sysctl_sched_cstate_aware = 1;
 /*
  * The initial- and re-scaling of tunables is configurable
  * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
@@ -6205,19 +6206,62 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 {
 	struct sched_domain *sd;
 	int i;
+	int best_idle = -1;
+	int best_idle_cstate = -1;
+	int best_idle_capacity = INT_MAX;
 
-	if (idle_cpu(target))
-		return target;
+	if (!sysctl_sched_cstate_aware) {
+		if (idle_cpu(target))
+			return target;
 
-	/*
-	 * If the previous cpu is cache affine and idle, don't be stupid.
-	 */
-	if (prev != target && cpus_share_cache(prev, target) && idle_cpu(prev))
-		return prev;
+		/*
+		 * If the previous cpu is cache affine and idle, don't be stupid.
+		 */
+		if (prev != target && cpus_share_cache(prev, target) && idle_cpu(prev))
+			return prev;
+	}
 
 	sd = rcu_dereference(per_cpu(sd_llc, target));
 	if (!sd)
 		return target;
+
+	if (sysctl_sched_cstate_aware) {
+		i = task_cpu(p);
+		for_each_lower_domain(sd) {
+			sg = sd->groups;
+			do {
+				if (!cpumask_intersects(sched_group_cpus(sg),
+							tsk_cpus_allowed(p)))
+					goto next;
+
+				for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg)) {
+					struct rq *rq = cpu_rq(i);
+					int idle_idx = idle_get_state_idx(rq);
+					unsigned long new_usage = boosted_task_util(p);
+					unsigned long capacity_orig = capacity_orig_of(i);
+					if (new_usage > capacity_orig || !idle_cpu(i))
+						goto next;
+
+					if (i == target && new_usage <= capacity_curr_of(target))
+						return target;
+
+					if (best_idle < 0 || (idle_idx < best_idle_cstate && capacity_orig <= best_idle_capacity)) {
+						best_idle = i;
+						best_idle_cstate = idle_idx;
+						best_idle_capacity = capacity_orig;
+					}
+				}
+next:
+				sg = sg->next;
+			} while (sg != sd->groups);
+		}
+		if (best_idle > 0)
+			target = best_idle;
+
+		return target;
+	}
+
+	/* not cstate aware */
 
 	i = select_idle_core(p, sd, target);
 	if ((unsigned)i < nr_cpumask_bits)
@@ -6234,7 +6278,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	return target;
 }
 
-<<<<<<< 3846f3041dcc6e72355ff1ea0b20406e9c0002ab
 static inline int task_util(struct task_struct *p)
 {
 	return p->se.avg.util_avg;

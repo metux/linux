@@ -8,6 +8,7 @@
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #endif
+#include "walt.h"
 
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
@@ -51,11 +52,18 @@ void irqtime_account_irq(struct task_struct *curr)
 {
 	s64 delta;
 	int cpu;
+#ifdef CONFIG_SCHED_WALT
+	u64 wallclock;
+	bool account = true;
+#endif
 
 	if (!sched_clock_irqtime)
 		return;
 
 	cpu = smp_processor_id();
+#ifdef CONFIG_SCHED_WALT
+	wallclock = sched_clock_cpu(cpu);
+#endif
 	delta = sched_clock_cpu(cpu) - __this_cpu_read(irq_start_time);
 	__this_cpu_add(irq_start_time, delta);
 
@@ -70,8 +78,16 @@ void irqtime_account_irq(struct task_struct *curr)
 		__this_cpu_add(cpu_hardirq_time, delta);
 	else if (in_serving_softirq() && curr != this_cpu_ksoftirqd())
 		__this_cpu_add(cpu_softirq_time, delta);
+#ifdef CONFIG_SCHED_WALT
+	else
+		account = false;
+#endif
 
 	irq_time_write_end();
+#ifdef CONFIG_SCHED_WALT
+	if (account)
+		walt_account_irqtime(cpu, curr, delta, wallclock);
+#endif
 }
 EXPORT_SYMBOL_GPL(irqtime_account_irq);
 

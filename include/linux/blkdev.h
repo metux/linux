@@ -198,6 +198,9 @@ struct request {
 
 	/* for bidi */
 	struct request *next_rq;
+
+	ktime_t			lat_hist_io_start;
+	int			lat_hist_enabled;
 };
 
 static inline unsigned short req_get_ioprio(struct request *req)

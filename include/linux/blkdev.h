@@ -196,6 +196,9 @@ struct request {
 
 	/* for bidi */
 	struct request *next_rq;
+
+	ktime_t			lat_hist_io_start;
+	int			lat_hist_enabled;
 };
 
 #define REQ_OP_SHIFT (8 * sizeof(u64) - REQ_OP_BITS)

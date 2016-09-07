@@ -101,6 +101,7 @@ static void udp_dump(struct udp_table *table, struct sk_buff *skb,
 	bool net_admin = netlink_net_capable(cb->skb, CAP_NET_ADMIN);
 	struct net *net = sock_net(skb->sk);
 	int num, s_num, slot, s_slot;
+	bool net_admin = netlink_net_capable(cb->skb, CAP_NET_ADMIN);
 
 	s_slot = cb->args[0];
 	num = s_num = cb->args[1];

@@ -30,7 +30,6 @@
 #include <linux/poll.h>
 #include <linux/wait.h>
 #include <linux/memcontrol.h>
-#include <linux/security.h>
 
 #include "inotify.h"
 #include "../fdinfo.h"
@@ -46,6 +45,8 @@ struct kmem_cache *inotify_inode_mark_cachep __read_mostly;
 
 #include <linux/sysctl.h>
 
+static int zero;
+
 struct ctl_table inotify_table[] = {
 	{
 		.procname	= "max_user_instances",
@@ -53,7 +54,7 @@ struct ctl_table inotify_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
+		.extra1		= &zero,
 	},
 	{
 		.procname	= "max_user_watches",
@@ -61,7 +62,7 @@ struct ctl_table inotify_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
+		.extra1		= &zero,
 	},
 	{
 		.procname	= "max_queued_events",
@@ -69,23 +70,21 @@ struct ctl_table inotify_table[] = {
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO
+		.extra1		= &zero
 	},
 	{ }
 };
 #endif /* CONFIG_SYSCTL */
 
-static inline __u32 inotify_arg_to_mask(struct inode *inode, u32 arg)
+static inline __u32 inotify_arg_to_mask(u32 arg)
 {
 	__u32 mask;
 
 	/*
-	 * Everything should accept their own ignored and should receive events
-	 * when the inode is unmounted.  All directories care about children.
+	 * everything should accept their own ignored, cares about children,
+	 * and should receive events when the inode is unmounted
 	 */
-	mask = (FS_IN_IGNORED | FS_UNMOUNT);
-	if (S_ISDIR(inode->i_mode))
-		mask |= FS_EVENT_ON_CHILD;
+	mask = (FS_IN_IGNORED | FS_EVENT_ON_CHILD | FS_UNMOUNT);
 
 	/* mask off the flags used to open the fd */
 	mask |= (arg & (IN_ALL_EVENTS | IN_ONESHOT | IN_EXCL_UNLINK));
@@ -334,8 +333,7 @@ static const struct file_operations inotify_fops = {
 /*
  * find_inode - resolve a user-given path to a specific inode
  */
-static int inotify_find_inode(const char __user *dirname, struct path *path,
-						unsigned int flags, __u64 mask)
+static int inotify_find_inode(const char __user *dirname, struct path *path, unsigned flags)
 {
 	int error;
 
@@ -343,16 +341,9 @@ static int inotify_find_inode(const char __user *dirname, struct path *path,
 	if (error)
 		return error;
 	/* you can only watch an inode if you have read permissions on it */
-	error = inode_permission(path->dentry->d_inode, MAY_READ);
-	if (error) {
-		path_put(path);
-		return error;
-	}
-	error = security_path_notify(path, mask,
-				FSNOTIFY_OBJ_TYPE_INODE);
+	error = inode_permission2(path->mnt, path->dentry->d_inode, MAY_READ);
 	if (error)
 		path_put(path);
-
 	return error;
 }
 
@@ -492,8 +483,8 @@ void inotify_ignored_and_remove_idr(struct fsnotify_mark *fsn_mark,
 					   fsn_mark);
 
 	/* Queue ignore event for the watch */
-	inotify_handle_event(group, FS_IN_IGNORED, NULL, FSNOTIFY_EVENT_NONE,
-			     NULL, NULL, 0, &iter_info);
+	inotify_handle_event(group, NULL, FS_IN_IGNORED, NULL,
+			     FSNOTIFY_EVENT_NONE, NULL, 0, &iter_info);
 
 	i_mark = container_of(fsn_mark, struct inotify_inode_mark, fsn_mark);
 	/* remove this mark from the idr */
@@ -514,7 +505,7 @@ static int inotify_update_existing_watch(struct fsnotify_group *group,
 	int create = (arg & IN_MASK_CREATE);
 	int ret;
 
-	mask = inotify_arg_to_mask(inode, arg);
+	mask = inotify_arg_to_mask(arg);
 
 	fsn_mark = fsnotify_find_mark(&inode->i_fsnotify_marks, group);
 	if (!fsn_mark)
@@ -567,7 +558,7 @@ static int inotify_new_watch(struct fsnotify_group *group,
 	struct idr *idr = &group->inotify_data.idr;
 	spinlock_t *idr_lock = &group->inotify_data.idr_lock;
 
-	mask = inotify_arg_to_mask(inode, arg);
+	mask = inotify_arg_to_mask(arg);
 
 	tmp_i_mark = kmem_cache_alloc(inotify_inode_mark_cachep, GFP_KERNEL);
 	if (unlikely(!tmp_i_mark))
@@ -637,7 +628,7 @@ static struct fsnotify_group *inotify_new_group(unsigned int max_events)
 		return ERR_PTR(-ENOMEM);
 	}
 	group->overflow_event = &oevent->fse;
-	fsnotify_init_event(group->overflow_event, 0);
+	fsnotify_init_event(group->overflow_event, NULL);
 	oevent->mask = FS_Q_OVERFLOW;
 	oevent->wd = -1;
 	oevent->sync_cookie = 0;
@@ -744,8 +735,7 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	if (mask & IN_ONLYDIR)
 		flags |= LOOKUP_DIRECTORY;
 
-	ret = inotify_find_inode(pathname, &path, flags,
-			(mask & IN_ALL_EVENTS));
+	ret = inotify_find_inode(pathname, &path, flags);
 	if (ret)
 		goto fput_and_out;
 

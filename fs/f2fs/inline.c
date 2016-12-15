@@ -12,7 +12,7 @@
 
 #include "f2fs.h"
 #include "node.h"
-#include <trace/events/f2fs.h>
+#include <trace/events/android_fs.h>
 
 bool f2fs_may_inline_data(struct inode *inode)
 {
@@ -86,14 +86,29 @@ int f2fs_read_inline_data(struct inode *inode, struct page *page)
 {
 	struct page *ipage;
 
+	if (trace_android_fs_dataread_start_enabled()) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_dataread_start(inode, page_offset(page),
+						PAGE_SIZE, current->pid,
+						path, current->comm);
+	}
+
 	ipage = f2fs_get_node_page(F2FS_I_SB(inode), inode->i_ino);
 	if (IS_ERR(ipage)) {
+		trace_android_fs_dataread_end(inode, page_offset(page),
+					      PAGE_SIZE);
 		unlock_page(page);
 		return PTR_ERR(ipage);
 	}
 
 	if (!f2fs_has_inline_data(inode)) {
 		f2fs_put_page(ipage, 1);
+		trace_android_fs_dataread_end(inode, page_offset(page),
+					      PAGE_SIZE);
 		return -EAGAIN;
 	}
 
@@ -105,6 +120,8 @@ int f2fs_read_inline_data(struct inode *inode, struct page *page)
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
 	f2fs_put_page(ipage, 1);
+	trace_android_fs_dataread_end(inode, page_offset(page),
+				      PAGE_SIZE);
 	unlock_page(page);
 	return 0;
 }
@@ -254,7 +271,7 @@ int f2fs_write_inline_data(struct inode *inode, struct page *page)
 	return 0;
 }
 
-int f2fs_recover_inline_data(struct inode *inode, struct page *npage)
+bool f2fs_recover_inline_data(struct inode *inode, struct page *npage)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct f2fs_inode *ri = NULL;
@@ -276,8 +293,7 @@ int f2fs_recover_inline_data(struct inode *inode, struct page *npage)
 			ri && (ri->i_inline & F2FS_INLINE_DATA)) {
 process_inline:
 		ipage = f2fs_get_node_page(sbi, inode->i_ino);
-		if (IS_ERR(ipage))
-			return PTR_ERR(ipage);
+		f2fs_bug_on(sbi, IS_ERR(ipage));
 
 		f2fs_wait_on_page_writeback(ipage, NODE, true, true);
 
@@ -290,25 +306,21 @@ process_inline:
 
 		set_page_dirty(ipage);
 		f2fs_put_page(ipage, 1);
-		return 1;
+		return true;
 	}
 
 	if (f2fs_has_inline_data(inode)) {
 		ipage = f2fs_get_node_page(sbi, inode->i_ino);
-		if (IS_ERR(ipage))
-			return PTR_ERR(ipage);
+		f2fs_bug_on(sbi, IS_ERR(ipage));
 		f2fs_truncate_inline_inode(inode, ipage, 0);
 		clear_inode_flag(inode, FI_INLINE_DATA);
 		f2fs_put_page(ipage, 1);
 	} else if (ri && (ri->i_inline & F2FS_INLINE_DATA)) {
-		int ret;
-
-		ret = f2fs_truncate_blocks(inode, 0, false);
-		if (ret)
-			return ret;
+		if (f2fs_truncate_blocks(inode, 0, false))
+			return false;
 		goto process_inline;
 	}
-	return 0;
+	return false;
 }
 
 struct f2fs_dir_entry *f2fs_find_in_inline_dir(struct inode *dir,
@@ -782,7 +794,6 @@ int f2fs_inline_data_fiemap(struct inode *inode,
 	byteaddr += (char *)inline_data_addr(inode, ipage) -
 					(char *)F2FS_INODE(ipage);
 	err = fiemap_fill_next_extent(fieinfo, start, byteaddr, ilen, flags);
-	trace_f2fs_fiemap(inode, start, byteaddr, ilen, flags, err);
 out:
 	f2fs_put_page(ipage, 1);
 	return err;

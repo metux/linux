@@ -30,4 +30,7 @@ entitled "GNU Free Documentation License".
     mediactl/media-controller
     cec/cec-api
     gen-errors
+
+    glossary
+
     fdl-appendix

@@ -10,8 +10,8 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-#include <include/dt-bindings/gpio/gpio.h>
-#include <include/dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	regulators {

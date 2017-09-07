@@ -1801,6 +1801,7 @@ static struct tty_driver *tty_lookup_driver(dev_t device, struct file *filp,
 
 	switch (device) {
 #ifdef CONFIG_VT
+	/* /dev/tty */
 	case MKDEV(TTY_MAJOR, 0): {
 		extern struct tty_driver *console_driver;
 		driver = tty_driver_kref_get(console_driver);
@@ -1808,18 +1809,23 @@ static struct tty_driver *tty_lookup_driver(dev_t device, struct file *filp,
 		break;
 	}
 #endif
+	/* /dev/console */
 	case MKDEV(TTYAUX_MAJOR, 1): {
 		struct tty_driver *console_driver = console_device(index);
 		if (console_driver) {
 			driver = tty_driver_kref_get(console_driver);
+
 			if (driver && filp) {
 				/* Don't let /dev/console block */
 				filp->f_flags |= O_NONBLOCK;
 				break;
 			}
 		}
+
+		pr_warn("no console tty - driver missing or device disabled in DT ?");
 		return ERR_PTR(-ENODEV);
 	}
+	/* /dev/tty* */
 	default:
 		driver = get_tty_driver(device, index);
 		if (!driver)

@@ -2080,12 +2080,8 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	 * messages to tell when the card is present.
 	 */
 
-	if (card->host->dev_index < 0) /* default: not used by driver */
-		snprintf(md->disk->disk_name, sizeof(md->disk->disk_name),
-			 "mmcblk%u%s", md->name_idx, subname ? subname : "");
-	else
-		snprintf(md->disk->disk_name, sizeof(md->disk->disk_name),
-			 "mmcblk%u%s", card->host->dev_index, subname ? subname : "");
+	snprintf(md->disk->disk_name, sizeof(md->disk->disk_name),
+		 "mmcblk%u%s", card->host->index, subname ? subname : "");
 
 	if (mmc_card_mmc(card))
 		blk_queue_logical_block_size(md->queue.queue,

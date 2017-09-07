@@ -22,7 +22,7 @@
 		rtc2 = &snvs_rtc;
 	};
 
-	memory {
+	memory@0 {
 		reg = <0x0 0x0>; /* will be filled by bootloader */
 	};
 

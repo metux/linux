@@ -174,9 +174,6 @@
 		clock-names = "camera0-clk";
 
 		clock-output-names = "camera0-clk";
-
-		camera@0 {
-		};
 	};
 };
 

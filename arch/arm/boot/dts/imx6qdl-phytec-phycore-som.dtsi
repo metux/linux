@@ -22,8 +22,12 @@
 		rtc2 = &snvs_rtc;
 	};
 
-	memory@0 {
-		reg = <0x0 0x0>; /* will be filled by bootloader */
+	chosen { };
+
+	memory {
+		/* reg = <0x0 0x0>; */ /* will be filled by bootloader */
+		device_type = "memory";
+		reg = <0x10000000 0x40000000>;
 	};
 
 	gpio_leds_som: somleds {

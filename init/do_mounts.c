@@ -390,6 +390,8 @@ void __init mount_block_root(char *name, int flags)
 	const char *b = name;
 #endif
 
+	printk("mount_block_root: %s\n", name);
+
 	get_fs_names(fs_names);
 retry:
 	for (p = fs_names; *p; p += strlen(p)+1) {
@@ -511,6 +513,8 @@ void __init change_floppy(char *fmt, ...)
 
 void __init mount_root(void)
 {
+	printk("mount_root(): entering\n");
+
 #ifdef CONFIG_ROOT_NFS
 	if (ROOT_DEV == Root_NFS) {
 		if (mount_nfs_root())
@@ -534,11 +538,14 @@ void __init mount_root(void)
 #endif
 #ifdef CONFIG_BLOCK
 	{
+		printk("mount_root(): creating /dev/root for blockdev\n");
 		int err = create_dev("/dev/root", ROOT_DEV);
 
 		if (err < 0)
 			pr_emerg("Failed to create /dev/root: %d\n", err);
+		printk("mount_root(): mounting /dev/root\n");
 		mount_block_root("/dev/root", root_mountflags);
+		printk("mount_root(): done\n");
 	}
 #endif
 }
@@ -549,6 +556,8 @@ void __init mount_root(void)
 void __init prepare_namespace(void)
 {
 	int is_floppy;
+
+	printk("prepare_namespace: entering\n");
 
 	if (root_delay) {
 		printk(KERN_INFO "Waiting %d sec before mounting root device...\n",
@@ -563,20 +572,25 @@ void __init prepare_namespace(void)
 	 * For example, it is not atypical to wait 5 seconds here
 	 * for the touchpad of a laptop to initialize.
 	 */
+	printk("prepare_namespace: waiting for device probe\n");
 	wait_for_device_probe();
 
+	printk("prepare_namespace: calling md_run_setup()\n");
 	md_run_setup();
 
 	if (saved_root_name[0]) {
+		printk("prepare_namespace: got saved_root_name: %s\n", saved_root_name);
 		root_device_name = saved_root_name;
 		if (!strncmp(root_device_name, "mtd", 3) ||
 		    !strncmp(root_device_name, "ubi", 3)) {
+			printk("prepare_namespace: calling mount_block_root: %s\n", root_device_name);
 			mount_block_root(root_device_name, root_mountflags);
 			goto out;
 		}
 		ROOT_DEV = name_to_dev_t(root_device_name);
 		if (strncmp(root_device_name, "/dev/", 5) == 0)
 			root_device_name += 5;
+		printk("prepare_namespace: root_device_name=%s\n", root_device_name);
 	}
 
 	if (initrd_load())
@@ -598,6 +612,7 @@ void __init prepare_namespace(void)
 		ROOT_DEV = Root_RAM0;
 
 	mount_root();
+	printk("prepare_namespace: mount_root() DONE\n");
 out:
 	devtmpfs_mount("dev");
 	sys_mount(".", "/", NULL, MS_MOVE, NULL);

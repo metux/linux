@@ -909,13 +909,18 @@ static void __init do_initcalls(void)
  */
 static void __init do_basic_setup(void)
 {
+	printk("do_basic_setup()\n");
 	cpuset_init_smp();
 	shmem_init();
+	printk("do_basic_setup() calling driver_init()\n");
 	driver_init();
 	init_irq_proc();
+	printk("do_basic_setup() calling do_ctors()\n");
 	do_ctors();
 	usermodehelper_enable();
+	printk("do_basic_setup() calling do_initcalls()\n");
 	do_initcalls();
+	printk("do_basic_setup() done\n");
 }
 
 static void __init do_pre_smp_initcalls(void)
@@ -939,6 +944,7 @@ void __init load_default_modules(void)
 
 static int run_init_process(const char *init_filename)
 {
+	printk("run_init_process: %s\n", init_filename);
 	argv_init[0] = init_filename;
 	return do_execve(getname_kernel(init_filename),
 		(const char __user *const __user *)argv_init,
@@ -948,6 +954,8 @@ static int run_init_process(const char *init_filename)
 static int try_to_run_init_process(const char *init_filename)
 {
 	int ret;
+
+	printk("try_to_run_init_process: %s\n", init_filename);
 
 	ret = run_init_process(init_filename);
 
@@ -990,23 +998,35 @@ static int __ref kernel_init(void *unused)
 {
 	int ret;
 
+	printk("kernel_init()\n");
+
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
+	printk("kernel_init(): waiting for __init code\n");
 	async_synchronize_full();
+	printk("kernel_init(): calling ftrace_free_init_mem\n");
 	ftrace_free_init_mem();
+	printk("kernel_init(): calling free_init_mem\n");
 	free_initmem();
+	printk("kernel_init(): calling mark_readonly\n");
 	mark_readonly();
+	printk("kernel_init(): setting system state\n");
 	system_state = SYSTEM_RUNNING;
+	printk("kernel_init(): calling numa_default_policy\n");
 	numa_default_policy();
 
+	printk("kernel_init(): calling rcu_end_inkernel_boot\n");
 	rcu_end_inkernel_boot();
 
 	if (ramdisk_execute_command) {
+		printk("kernel_init(): got ramdisk_execute_command: %s\n", ramdisk_execute_command);
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
 			return 0;
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
+	} else {
+		printk("kernel_init(): no ramdisk_execute_command\n");
 	}
 
 	/*
@@ -1016,6 +1036,7 @@ static int __ref kernel_init(void *unused)
 	 * trying to recover a really broken machine.
 	 */
 	if (execute_command) {
+		printk("kernel_init(): got execute_command: %s\n", execute_command);
 		ret = run_init_process(execute_command);
 		if (!ret)
 			return 0;
@@ -1034,10 +1055,14 @@ static int __ref kernel_init(void *unused)
 
 static noinline void __init kernel_init_freeable(void)
 {
+	printk("kernal_init_freeable: entering\n");
+
 	/*
 	 * Wait until kthreadd is all set-up.
 	 */
 	wait_for_completion(&kthreadd_done);
+
+	printk("kernal_init_freeable: kthreadd_done\n");
 
 	/* Now the scheduler is fully set up and can do blocking allocations */
 	gfp_allowed_mask = __GFP_BITS_MASK;
@@ -1063,7 +1088,11 @@ static noinline void __init kernel_init_freeable(void)
 
 	page_alloc_init_late();
 
+	printk("kernal_init_freeable: do_basic_setup\n");
+
 	do_basic_setup();
+
+	printk("kernal_init_freeable: trying to open console\n");
 
 	/* Open the /dev/console on the rootfs, this should never fail */
 	if (sys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
@@ -1080,6 +1109,7 @@ static noinline void __init kernel_init_freeable(void)
 		ramdisk_execute_command = "/init";
 
 	if (sys_access((const char __user *) ramdisk_execute_command, 0) != 0) {
+		pr_info("kernal_init_freeable: no ramdisk command - calling prepare_namespace()\n");
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}

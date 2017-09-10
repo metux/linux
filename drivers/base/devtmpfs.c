@@ -349,11 +349,17 @@ int devtmpfs_mount(const char *mntdir)
 {
 	int err;
 
-	if (!mount_dev)
-		return 0;
+	printk("devtmpfs_mount()\n");
 
-	if (!thread)
+	if (!mount_dev) {
+		printk("devtmpfs_mount(): not mount_dev\n");
 		return 0;
+	}
+
+	if (!thread) {
+		printk("devtmpfs_mount(): not thread\n");
+		return 0;
+	}
 
 	err = sys_mount("devtmpfs", (char *)mntdir, "devtmpfs", MS_SILENT, NULL);
 	if (err)

@@ -778,15 +778,12 @@ void free_tcmmem(void)
 
 void free_initmem(void)
 {
-	printk("free_initmem() enter\n");
 	fix_kernmem_perms();
 	free_tcmmem();
 
-	printk("call poison_init_mem\n");
 	poison_init_mem(__init_begin, __init_end - __init_begin);
 	if (!machine_is_integrator() && !machine_is_cintegrator())
 		free_initmem_default(-1);
-	printk("free_initmem() finish\n");
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD

@@ -1798,28 +1798,47 @@ static struct tty_driver *tty_lookup_driver(dev_t device, struct file *filp,
 {
 	struct tty_driver *driver;
 
+	printk("tty_lookup_driver: dev=%lX\n", device);
+
 	switch (device) {
 #ifdef CONFIG_VT
+	/* /dev/tty */
 	case MKDEV(TTY_MAJOR, 0): {
+		printk("/dev/tty requested\n");
 		extern struct tty_driver *console_driver;
 		driver = tty_driver_kref_get(console_driver);
 		*index = fg_console;
 		break;
 	}
 #endif
+	/* /dev/console */
 	case MKDEV(TTYAUX_MAJOR, 1): {
+		printk("/dev/console requested\n");
 		struct tty_driver *console_driver = console_device(index);
 		if (console_driver) {
+			printk("got tty_driver for current console device\n");
 			driver = tty_driver_kref_get(console_driver);
+			if (driver)
+				printk("--> alloced driver\n");
+			else
+				printk("--> failed alloc driver\n");
+
+			if (filp == NULL)
+				printk("--> no filp\n");
+
 			if (driver && filp) {
 				/* Don't let /dev/console block */
 				filp->f_flags |= O_NONBLOCK;
 				break;
 			}
+		} else {
+			printk("--> failed to get current console\n");
 		}
 		return ERR_PTR(-ENODEV);
 	}
+	/* /dev/tty* */
 	default:
+		printk("other /dev/tty* requested\n");
 		driver = get_tty_driver(device, index);
 		if (!driver)
 			return ERR_PTR(-ENODEV);

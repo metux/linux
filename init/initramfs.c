@@ -608,6 +608,8 @@ static void __init clean_rootfs(void)
 
 static int __init populate_rootfs(void)
 {
+	printk("populate_rootfs()\n");
+
 	/* Load the built in initramfs */
 	char *err = unpack_to_rootfs(__initramfs_start, __initramfs_size);
 	if (err)

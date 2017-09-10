@@ -1055,6 +1055,8 @@ static int __ref kernel_init(void *unused)
 
 static noinline void __init kernel_init_freeable(void)
 {
+	int ret;
+
 	printk("kernal_init_freeable: entering\n");
 
 	/*
@@ -1095,8 +1097,9 @@ static noinline void __init kernel_init_freeable(void)
 	printk("kernal_init_freeable: trying to open console\n");
 
 	/* Open the /dev/console on the rootfs, this should never fail */
-	if (sys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
-		pr_err("Warning: unable to open an initial console.\n");
+	ret = sys_open((const char __user *) "/dev/console", O_RDWR, 0);
+	if (ret < 0)
+		pr_err("Warning: unable to open an initial console: %d\n", ret);
 
 	(void) sys_dup(0);
 	(void) sys_dup(0);

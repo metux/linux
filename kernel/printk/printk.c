@@ -2343,15 +2343,27 @@ struct tty_driver *console_device(int *index)
 	struct console *c;
 	struct tty_driver *driver = NULL;
 
+	printk("printk: console_device()\n");
+
 	console_lock();
 	for_each_console(c) {
-		if (!c->device)
+		printk("printk: per console\n");
+		if (!c->device) {
+			printk("--> con has no device\n");
 			continue;
+		}
 		driver = c->device(c, index);
-		if (driver)
+		if (driver) {
+			printk("--> got driver\n");
 			break;
+		}
+		printk("--> device has no driver\n");
 	}
 	console_unlock();
+	if (driver)
+		printk("==> got a driver\n");
+	else
+		printk("==> no driver\n");
 	return driver;
 }
 

@@ -29,6 +29,8 @@ static int __init default_rootfs(void)
 {
 	int err;
 
+	pr_info("default_rootfs: initialize simple rootfs w/o initramfs\n");
+
 	err = sys_mkdir((const char __user __force *) "/dev", 0755);
 	if (err < 0)
 		goto out;
@@ -42,6 +44,8 @@ static int __init default_rootfs(void)
 	err = sys_mkdir((const char __user __force *) "/root", 0700);
 	if (err < 0)
 		goto out;
+
+	pr_info("default_rootfs: done\n");
 
 	return 0;
 

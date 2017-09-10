@@ -60,7 +60,7 @@
 	};
 
 	soc {
-		gpu@00130000 {
+		gpu@130000 {
 			compatible = "fsl,imx6dl-gpu", "fsl,imx6q-gpu";
 			reg = <0x00130000 0x4000>, <0x00134000 0x4000>,
 			      <0x0 0x0>;
@@ -79,7 +79,7 @@
 			power-domains = <&gpc 1>;
 		};
 
-		ocram: sram@00900000 {
+		ocram: sram@900000 {
 			compatible = "mmio-sram";
 			reg = <0x00900000 0x20000>;
 			clocks = <&clks IMX6QDL_CLK_OCRAM>;

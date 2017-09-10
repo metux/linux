@@ -2084,6 +2084,9 @@ static int serial_imx_probe(struct platform_device *pdev)
 	struct resource *res;
 	int txirq, rxirq, rtsirq;
 
+	printk("serial_imx_probe() ...\n");
+	dev_info(&pdev->dev, "probing device ...\n");
+
 	sport = devm_kzalloc(&pdev->dev, sizeof(*sport), GFP_KERNEL);
 	if (!sport)
 		return -ENOMEM;
@@ -2091,13 +2094,17 @@ static int serial_imx_probe(struct platform_device *pdev)
 	ret = serial_imx_probe_dt(sport, pdev);
 	if (ret > 0)
 		serial_imx_probe_pdata(sport, pdev);
-	else if (ret < 0)
+	else if (ret < 0) {
+		dev_info(&pdev->dev, "probe dt/pdata failed %d\n", ret);
 		return ret;
+	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(base))
+	if (IS_ERR(base)) {
+		dev_info(&pdev->dev, "devm_ioremap_resource() failed: %d\n", ret);
 		return PTR_ERR(base);
+	}
 
 	rxirq = platform_get_irq(pdev, 0);
 	txirq = platform_get_irq(pdev, 1);
@@ -2120,8 +2127,11 @@ static int serial_imx_probe(struct platform_device *pdev)
 	sport->timer.data     = (unsigned long)sport;
 
 	sport->gpios = mctrl_gpio_init(&sport->port, 0);
-	if (IS_ERR(sport->gpios))
+	if (IS_ERR(sport->gpios)) {
+		ret = PTR_ERR(sport->gpios);
+		dev_err(&pdev->dev, "failed to get gpios: %d\n", ret);
 		return PTR_ERR(sport->gpios);
+	}
 
 	sport->clk_ipg = devm_clk_get(&pdev->dev, "ipg");
 	if (IS_ERR(sport->clk_ipg)) {
@@ -2218,12 +2228,18 @@ static int serial_imx_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, sport);
 
-	return uart_add_one_port(&imx_reg, &sport->port);
+	printk("serial_imx_probe() ...\n");
+
+	ret = uart_add_one_port(&imx_reg, &sport->port);
+	printk(" --> ret=%d\n", ret);
+	return ret;
 }
 
 static int serial_imx_remove(struct platform_device *pdev)
 {
 	struct imx_port *sport = platform_get_drvdata(pdev);
+
+	printk("serial_imx_remove()\n");
 
 	return uart_remove_one_port(&imx_reg, &sport->port);
 }
@@ -2368,6 +2384,8 @@ static struct platform_driver serial_imx_driver = {
 static int __init imx_serial_init(void)
 {
 	int ret = uart_register_driver(&imx_reg);
+
+	printk("imx_serial_init()\n");
 
 	if (ret)
 		return ret;

@@ -19,7 +19,7 @@
 #include "imx6qdl-phytec-peb-wlbt-01.dtsi"
 
 / {
-	model = "Phytec phyBOARD-MIRA Quad Carrier-Board with eMMC";
+	model = "Phytec phyBOARD-MIRA Quad Carrier-Board with eMMC (new)";
 	compatible = "phytec,imx6q-pbac06", "phytec,imx6qdl-pcm058", "fsl,imx6q";
 
 	aliases {

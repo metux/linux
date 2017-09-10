@@ -101,11 +101,15 @@ void __init imx_register_uart_clocks(struct clk ** const clks[])
 
 static int __init imx_clk_disable_uart(void)
 {
-	if (imx_keep_uart_clocks && imx_uart_clocks) {
+//	if (imx_keep_uart_clocks && imx_uart_clocks) {
+	if (0) {
+		printk("disabling uart clocks\n");
 		int i;
 
 		for (i = 0; imx_uart_clocks[i]; i++)
 			clk_disable_unprepare(*imx_uart_clocks[i]);
+	} else {
+		printk("not disabling uart clocks\n");
 	}
 
 	return 0;

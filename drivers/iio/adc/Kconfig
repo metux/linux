@@ -891,4 +891,15 @@ config XILINX_XADC
 	  The driver can also be build as a module. If so, the module will be called
 	  xilinx-xadc.
 
+config MEDHA_DPC_DAQ_ADC
+	tristate "Medha Railway DPC ADC driver"
+	depends on OF
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Driver for the ADC in Medha DPC product line DAQ / engine diagnostics modules.
+	  3 sigma-delta 24bit-ADCs with sampling rate up to 300kHz.
+
+	  Only enable this if you're dealing Medha's distributed power control systems.
+
 endmenu

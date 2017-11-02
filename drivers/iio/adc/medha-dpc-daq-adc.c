@@ -11,6 +11,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/input.h>
@@ -38,6 +39,7 @@ struct medha_dpc_daq_adc_channel {
 };
 
 struct adc_device {
+	uint32_t __iomem			*base;
 	struct completion			done;
 	struct medha_dpc_daq_adc_channel	chan[MAX_CHAN];
 	struct platform_device			*pdev;
@@ -126,6 +128,44 @@ static const struct iio_chan_spec adc_channels[3] = {
 	},
 };
 
+#define FIFO_SLEEP_MIN  100000
+#define FIFO_SLEEP_MAX  200000
+
+static int cmd_write_op(void *data, u64 value)
+{
+	struct platform_device *pdev = data;
+	struct iio_dev *iiodev = platform_get_drvdata(pdev);
+	struct adc_device *priv = iio_priv(iiodev);
+
+	dev_info(&pdev->dev, "debug command: %lld\n", value);
+
+	if (priv->pdev != pdev) {
+		dev_err(&pdev->dev, "pdev mismatch\n");
+		return -EFAULT;
+	}
+
+	switch (value) {
+		case 1:
+			dev_info(&pdev->dev, "trying looptest\n");
+			dev_info(&pdev->dev, "writing to test reg\n");
+			priv->base[256] = 0x9988;
+			dev_info(&pdev->dev, "done\n");
+		break;
+	}
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(cmd_fops, NULL, cmd_write_op, "%llu\n");
+
+static int adc_debugfs_init(struct platform_device *pdev)
+{
+	struct dentry *dbg_dir = debugfs_create_dir("medha-adc", NULL);
+	debugfs_create_file("cmd", 0222, dbg_dir, pdev, &cmd_fops);
+	//pdata->debugfs_dentry = dbg_dir;
+	return 0;
+}
+
 static int adc_driver_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -152,6 +192,7 @@ static int adc_driver_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, iiodev);
 
 	priv = iio_priv(iiodev);
+	priv->base = base;
 	priv->pdev = pdev;
 	priv->chan[0].irq_a = platform_get_irq_byname(pdev, "adc0-0");
 	priv->chan[0].irq_b = platform_get_irq_byname(pdev, "adc0-1");
@@ -181,6 +222,8 @@ static int adc_driver_probe(struct platform_device *pdev)
 
 	if ((ret = iio_device_register(iiodev)))
 		goto err_unregister;
+
+	adc_debugfs_init(pdev);
 
 	return 0;
 

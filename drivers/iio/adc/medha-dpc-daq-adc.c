@@ -38,6 +38,13 @@
 
 #define MAX_CHAN	3
 
+#define FIFO_SLEEP_MIN	100000
+#define FIFO_SLEEP_MAX	200000
+
+enum {
+	ADC_REG_LOOP = 256
+};
+
 struct adc_channel {
 	int id;
 	int addr;
@@ -135,13 +142,6 @@ static const struct iio_chan_spec adc_channels[3] = {
 	},
 };
 
-#define FIFO_SLEEP_MIN  100000
-#define FIFO_SLEEP_MAX  200000
-
-enum {
-    ADC_REG_LOOP = 256
-};
-
 static void adc_reg_set(struct adc_device *adc, int reg, u32 val)
 {
 	adc->base[reg] = val;
@@ -152,22 +152,27 @@ static u16 adc_reg_get(struct adc_device *adc, int reg)
 	return (adc->base[reg] & 0xFFFF);
 }
 
-static int looptest(struct platform_device *pdev)
+static int looptest(struct platform_device *pdev, u16 val)
 {
 	struct iio_dev *iiodev = platform_get_drvdata(pdev);
 	struct adc_device *adc = iio_priv(iiodev);
 	u16 readback;
 
-	dev_info(&pdev->dev, "trying looptest\n");
-	dev_info(&pdev->dev, "writing to test reg\n");
-//	adc->base[ADC_REG_LOOP] = 0x9988;
-	adc_reg_set(adc, ADC_REG_LOOP, 0x9988);
-	dev_info(&pdev->dev, "done\n");
-//	u16 readback = adc->base[ADC_REG_LOOP];
+	adc_reg_set(adc, ADC_REG_LOOP, val);
 	readback = adc_reg_get(adc, ADC_REG_LOOP);
-	dev_info(&pdev->dev, "got back: 0x%04X\n", readback);
+
+	if (readback == (~val))
+		dev_info(&pdev->dev, "looptest: OK   0x%04X => 0x%04X\n", val, readback);
+	else
+		dev_info(&pdev->dev, "looptest: FAIL 0x%04X => 0x%04X\n", val, readback);
 
 	return 0;
+}
+
+static int loop_write_op(void *data, u64 value)
+{
+	struct platform_device *pdev = data;
+	return looptest(pdev, value & 0xFFFF);
 }
 
 static int cmd_write_op(void *data, u64 value)
@@ -177,18 +182,20 @@ static int cmd_write_op(void *data, u64 value)
 	dev_info(&pdev->dev, "debug command: %lld\n", value);
 
 	switch (value) {
-		case 1:	return looptest(pdev);
+		case 1:	return looptest(pdev, 0x9988);
 	}
 
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(cmd_fops, NULL, cmd_write_op, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(dbg_cmd_fops,  NULL, cmd_write_op,  "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(dbg_loop_fops, NULL, loop_write_op, "%llu\n");
 
 static int adc_debugfs_init(struct platform_device *pdev)
 {
 	struct dentry *dbg_dir = debugfs_create_dir("medha-adc", NULL);
-	debugfs_create_file("cmd", 0222, dbg_dir, pdev, &cmd_fops);
+	debugfs_create_file("cmd",  0222, dbg_dir, pdev, &dbg_cmd_fops);
+	debugfs_create_file("loop", 0222, dbg_dir, pdev, &dbg_loop_fops);
 	//pdata->debugfs_dentry = dbg_dir;
 	return 0;
 }

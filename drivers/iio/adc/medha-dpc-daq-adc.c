@@ -29,9 +29,16 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/triggered_buffer.h>
 
+#define IRQ_ADC0_BUF0	"adc0-0"
+#define IRQ_ADC0_BUF1	"adc0-1"
+#define IRQ_ADC1_BUF0	"adc1-0"
+#define IRQ_ADC1_BUF1	"adc1-1"
+#define IRQ_ADC2_BUF0	"adc2-0"
+#define IRQ_ADC2_BUF1	"adc2-1"
+
 #define MAX_CHAN	3
 
-struct medha_dpc_daq_adc_channel {
+struct adc_channel {
 	int id;
 	int addr;
 	int irq_a;
@@ -39,10 +46,10 @@ struct medha_dpc_daq_adc_channel {
 };
 
 struct adc_device {
-	uint32_t __iomem			*base;
-	struct completion			done;
-	struct medha_dpc_daq_adc_channel	chan[MAX_CHAN];
-	struct platform_device			*pdev;
+	uint32_t __iomem	*base;
+	struct completion	done;
+	struct adc_channel	chan[MAX_CHAN];
+	struct platform_device	*pdev;
 };
 
 irqreturn_t trigger_handler(int irq, void *dev_id)
@@ -81,8 +88,8 @@ static int adc_read_raw(struct iio_dev *idev,
 }
 
 static const struct iio_info adc_info = {
-	.driver_module = THIS_MODULE,
-	.read_raw = &adc_read_raw,
+	.driver_module	= THIS_MODULE,
+	.read_raw	= &adc_read_raw,
 };
 
 // BIT(IIO_CHAN_INFO_RAW)|BIT(IIO_CHAN_INFO_SCALE)
@@ -131,26 +138,46 @@ static const struct iio_chan_spec adc_channels[3] = {
 #define FIFO_SLEEP_MIN  100000
 #define FIFO_SLEEP_MAX  200000
 
+enum {
+    ADC_REG_LOOP = 256
+};
+
+static void adc_reg_set(struct adc_device *adc, int reg, u32 val)
+{
+	adc->base[reg] = val;
+}
+
+static u16 adc_reg_get(struct adc_device *adc, int reg)
+{
+	return (adc->base[reg] & 0xFFFF);
+}
+
+static int looptest(struct platform_device *pdev)
+{
+	struct iio_dev *iiodev = platform_get_drvdata(pdev);
+	struct adc_device *adc = iio_priv(iiodev);
+	u16 readback;
+
+	dev_info(&pdev->dev, "trying looptest\n");
+	dev_info(&pdev->dev, "writing to test reg\n");
+//	adc->base[ADC_REG_LOOP] = 0x9988;
+	adc_reg_set(adc, ADC_REG_LOOP, 0x9988);
+	dev_info(&pdev->dev, "done\n");
+//	u16 readback = adc->base[ADC_REG_LOOP];
+	readback = adc_reg_get(adc, ADC_REG_LOOP);
+	dev_info(&pdev->dev, "got back: 0x%04X\n", readback);
+
+	return 0;
+}
+
 static int cmd_write_op(void *data, u64 value)
 {
 	struct platform_device *pdev = data;
-	struct iio_dev *iiodev = platform_get_drvdata(pdev);
-	struct adc_device *priv = iio_priv(iiodev);
 
 	dev_info(&pdev->dev, "debug command: %lld\n", value);
 
-	if (priv->pdev != pdev) {
-		dev_err(&pdev->dev, "pdev mismatch\n");
-		return -EFAULT;
-	}
-
 	switch (value) {
-		case 1:
-			dev_info(&pdev->dev, "trying looptest\n");
-			dev_info(&pdev->dev, "writing to test reg\n");
-			priv->base[256] = 0x9988;
-			dev_info(&pdev->dev, "done\n");
-		break;
+		case 1:	return looptest(pdev);
 	}
 
 	return 0;
@@ -171,11 +198,10 @@ static int adc_driver_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct iio_dev *iiodev;
 	struct adc_device *priv;
-	struct resource *res;
-	void __iomem *base;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&pdev->dev, res);
+	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	void __iomem *base = devm_ioremap_resource(&pdev->dev, res);
+
 	if (IS_ERR(base)) {
 		dev_err(&pdev->dev, "adc_driver_probe() failed to get iomem\n");
 		return PTR_ERR(base);
@@ -194,12 +220,12 @@ static int adc_driver_probe(struct platform_device *pdev)
 	priv = iio_priv(iiodev);
 	priv->base = base;
 	priv->pdev = pdev;
-	priv->chan[0].irq_a = platform_get_irq_byname(pdev, "adc0-0");
-	priv->chan[0].irq_b = platform_get_irq_byname(pdev, "adc0-1");
-	priv->chan[1].irq_a = platform_get_irq_byname(pdev, "adc1-0");
-	priv->chan[1].irq_b = platform_get_irq_byname(pdev, "adc1-1");
-	priv->chan[2].irq_a = platform_get_irq_byname(pdev, "adc2-0");
-	priv->chan[2].irq_b = platform_get_irq_byname(pdev, "adc2-1");
+	priv->chan[0].irq_a = platform_get_irq_byname(pdev, IRQ_ADC0_BUF0);
+	priv->chan[0].irq_b = platform_get_irq_byname(pdev, IRQ_ADC0_BUF1);
+	priv->chan[1].irq_a = platform_get_irq_byname(pdev, IRQ_ADC1_BUF0);
+	priv->chan[1].irq_b = platform_get_irq_byname(pdev, IRQ_ADC1_BUF1);
+	priv->chan[2].irq_a = platform_get_irq_byname(pdev, IRQ_ADC2_BUF0);
+	priv->chan[2].irq_b = platform_get_irq_byname(pdev, IRQ_ADC2_BUF1);
 
 	dev_info(&pdev->dev, "IRQs: %d %d %d %d %d %d\n",
 		priv->chan[0].irq_a,
@@ -240,7 +266,7 @@ static const struct of_device_id adc_dt_match[] = {
 
 static struct platform_driver adc_driver = {
 	.driver		= {
-		.name   = "medha,m337decc-02-adc",
+		.name   = "m337decc-02-adc",
 		.of_match_table = of_match_ptr(adc_dt_match),
 	},
 };
@@ -249,4 +275,4 @@ module_platform_driver_probe(adc_driver, adc_driver_probe);
 MODULE_AUTHOR("Enrico Weigelt, metux IT consule <info@metux.net>");
 MODULE_DESCRIPTION("ADC driver for Medha Railway DPC DAQ/diagnostics module");
 MODULE_LICENSE("GPL v3");
-MODULE_ALIAS("platform:medha-dpc-daq-adc");
+MODULE_ALIAS("platform:m337decc-02-adc");

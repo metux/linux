@@ -29,31 +29,38 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/triggered_buffer.h>
 
-#define IRQ_ADC0_BUF0	"adc0-0"
-#define IRQ_ADC0_BUF1	"adc0-1"
-#define IRQ_ADC1_BUF0	"adc1-0"
-#define IRQ_ADC1_BUF1	"adc1-1"
-#define IRQ_ADC2_BUF0	"adc2-0"
-#define IRQ_ADC2_BUF1	"adc2-1"
+#define IRQ_ADC0_PING	"adc0-0"
+#define IRQ_ADC0_PONG	"adc0-1"
+#define IRQ_ADC1_PING	"adc1-0"
+#define IRQ_ADC1_PONG	"adc1-1"
+#define IRQ_ADC2_PING	"adc2-0"
+#define IRQ_ADC2_PONG	"adc2-1"
 
 #define MAX_CHAN	3
 
 #define FIFO_SLEEP_MIN	100000
 #define FIFO_SLEEP_MAX	200000
 
+/** FPGA-side register numbers. need to multiply by 4 for cpu-side offset **/
 enum {
-	ADC_REG_LOOP = 256
+	REG_MCLK	= 128,
+	REG_RESET	= 129,
+	REG_TEST	= 256,
+	REG_ADC0_PING	= 4,
+	REG_ADC0_PONG	= 5,
+	REG_ADC1_PING	= 8,
+	REG_ADC1_PONG	= 9,
+	REG_ADC2_PING	= 12,
+	REG_ADC2_PONG	= 13,
 };
 
 struct adc_channel {
-	int id;
-	int addr;
-	int irq_a;
-	int irq_b;
+	int irq_ping;
+	int irq_pong;
 };
 
 struct adc_device {
-	uint32_t __iomem	*base;
+	void __iomem		*base;
 	struct completion	done;
 	struct adc_channel	chan[MAX_CHAN];
 	struct platform_device	*pdev;
@@ -70,9 +77,6 @@ static int adc_read_raw(struct iio_dev *idev,
 			struct iio_chan_spec const *chan,
 			int *val, int *val2, long mask)
 {
-/*	struct adc_device *st = iio_priv(idev);
-	int ret; */
-
 	*val = 23;
 	*val2 = 66;
 
@@ -142,14 +146,14 @@ static const struct iio_chan_spec adc_channels[3] = {
 	},
 };
 
-static void adc_reg_set(struct adc_device *adc, int reg, u32 val)
+static inline void adc_reg_set(struct adc_device *adc, int reg, u16 val)
 {
-	adc->base[reg] = val;
+	iowrite16(val, adc->base + reg*4);
 }
 
-static u16 adc_reg_get(struct adc_device *adc, int reg)
+static inline u16 adc_reg_get(struct adc_device *adc, int reg)
 {
-	return (adc->base[reg] & 0xFFFF);
+	return ioread16(adc->base + reg*4);
 }
 
 static int looptest(struct platform_device *pdev, u16 val)
@@ -157,14 +161,32 @@ static int looptest(struct platform_device *pdev, u16 val)
 	struct iio_dev *iiodev = platform_get_drvdata(pdev);
 	struct adc_device *adc = iio_priv(iiodev);
 	u16 readback;
+	u16 inv = ~val & 0xFFFF;
 
-	adc_reg_set(adc, ADC_REG_LOOP, val);
-	readback = adc_reg_get(adc, ADC_REG_LOOP);
+	adc_reg_set(adc, REG_TEST, val);
+	msleep(50);
+	readback = adc_reg_get(adc, REG_TEST);
+	readback = adc_reg_get(adc, REG_TEST);
+	readback = adc_reg_get(adc, REG_TEST);
+	readback = adc_reg_get(adc, REG_TEST);
 
-	if (readback == (~val))
-		dev_info(&pdev->dev, "looptest: OK   0x%04X => 0x%04X\n", val, readback);
+	if (readback == inv)
+		dev_info(&pdev->dev, "looptest A: OK   w 0x%04X r 0x%04X\n", val, readback);
 	else
-		dev_info(&pdev->dev, "looptest: FAIL 0x%04X => 0x%04X\n", val, readback);
+		dev_info(&pdev->dev, "looptest A: FAIL w 0x%04X r 0x%04X e 0x%04X\n", val, readback, inv);
+/*
+	adc_reg_set(adc, ADC_REG_TEST*2, val);
+	msleep(100);
+	readback = adc_reg_get(adc, ADC_REG_TEST*2);
+	readback = adc_reg_get(adc, ADC_REG_TEST*2);
+	readback = adc_reg_get(adc, ADC_REG_TEST*2);
+	readback = adc_reg_get(adc, ADC_REG_TEST*2);
+
+	if (readback == inv)
+		dev_info(&pdev->dev, "looptest B: OK   w 0x%04X r 0x%04X\n", val, readback);
+	else
+		dev_info(&pdev->dev, "looptest B: FAIL w 0x%04X r 0x%04X e 0x%04X\n", val, readback, inv);
+*/
 
 	return 0;
 }
@@ -209,6 +231,13 @@ static int adc_driver_probe(struct platform_device *pdev)
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	void __iomem *base = devm_ioremap_resource(&pdev->dev, res);
 
+	if (res->flags & IORESOURCE_CACHEABLE)
+		dev_info(&pdev->dev, "resource cachable\n");
+	else
+		dev_info(&pdev->dev, "resource not cachable\n");
+
+	dev_info(&pdev->dev, "mapped iospace: %pR\n", res);
+
 	if (IS_ERR(base)) {
 		dev_err(&pdev->dev, "adc_driver_probe() failed to get iomem\n");
 		return PTR_ERR(base);
@@ -227,20 +256,20 @@ static int adc_driver_probe(struct platform_device *pdev)
 	priv = iio_priv(iiodev);
 	priv->base = base;
 	priv->pdev = pdev;
-	priv->chan[0].irq_a = platform_get_irq_byname(pdev, IRQ_ADC0_BUF0);
-	priv->chan[0].irq_b = platform_get_irq_byname(pdev, IRQ_ADC0_BUF1);
-	priv->chan[1].irq_a = platform_get_irq_byname(pdev, IRQ_ADC1_BUF0);
-	priv->chan[1].irq_b = platform_get_irq_byname(pdev, IRQ_ADC1_BUF1);
-	priv->chan[2].irq_a = platform_get_irq_byname(pdev, IRQ_ADC2_BUF0);
-	priv->chan[2].irq_b = platform_get_irq_byname(pdev, IRQ_ADC2_BUF1);
+	priv->chan[0].irq_ping = platform_get_irq_byname(pdev, IRQ_ADC0_PING);
+	priv->chan[0].irq_pong = platform_get_irq_byname(pdev, IRQ_ADC0_PONG);
+	priv->chan[1].irq_ping = platform_get_irq_byname(pdev, IRQ_ADC1_PING);
+	priv->chan[1].irq_pong = platform_get_irq_byname(pdev, IRQ_ADC1_PONG);
+	priv->chan[2].irq_ping = platform_get_irq_byname(pdev, IRQ_ADC2_PING);
+	priv->chan[2].irq_pong = platform_get_irq_byname(pdev, IRQ_ADC2_PONG);
 
 	dev_info(&pdev->dev, "IRQs: %d %d %d %d %d %d\n",
-		priv->chan[0].irq_a,
-		priv->chan[0].irq_b,
-		priv->chan[1].irq_a,
-		priv->chan[1].irq_b,
-		priv->chan[2].irq_a,
-		priv->chan[2].irq_b);
+		priv->chan[0].irq_ping,
+		priv->chan[0].irq_pong,
+		priv->chan[1].irq_ping,
+		priv->chan[1].irq_pong,
+		priv->chan[2].irq_ping,
+		priv->chan[2].irq_pong);
 
 	iiodev->dev.parent = &pdev->dev;
 	iiodev->dev.of_node = pdev->dev.of_node;

@@ -31,11 +31,16 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
 
+#include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
+
 
 #define MAX_CHAN	3
-
-#define FIFO_SLEEP_MIN	100000
-#define FIFO_SLEEP_MAX	200000
+#define CHUNK_SIZE	2048
 
 /** FPGA-side register numbers. need to multiply by 4 for cpu-side offset **/
 enum {
@@ -50,23 +55,48 @@ enum {
 	REG_ADC2_PONG	= 13,
 };
 
-struct _irq_names {
-	const char* ping;
-	const char* pong;
+enum {
+	SAMPLE_RATE_50K		= 0,
+	SAMPLE_RATE_100K	= 1,
+	SAMPLE_RATE_150K	= 2,
+	SAMPLE_RATE_200K	= 3,
+	SAMPLE_RATE_250K	= 4,
+	SAMPLE_RATE_300K	= 5,
+	SAMPLE_RATE_350K	= 6,
+	SAMPLE_RATE_400K	= 7,
+	SAMPLE_RATE_450K	= 8,
+	SAMPLE_RATE_500K	= 9,
 };
 
-static const struct _irq_names irq_names[MAX_CHAN] = {
+struct adc_chan_spec {
+	const char* dev_name;
+	const char* irq_name_ping;
+	const char* irq_name_pong;
+	int reg_ping;
+	int reg_pong;
+};
+
+static const struct adc_chan_spec chan_spec[MAX_CHAN] = {
 	{
-		.ping = "adc0-0",
-		.pong = "adc0-1",
+		.irq_name_ping = "adc0-0",
+		.irq_name_pong = "adc0-1",
+		.dev_name = "m337decc-adc0",
+		.reg_ping = REG_ADC0_PING,
+		.reg_pong = REG_ADC0_PONG,
 	},
 	{
-		.ping = "adc1-0",
-		.pong = "adc1-1",
+		.irq_name_ping = "adc1-0",
+		.irq_name_pong = "adc1-1",
+		.dev_name = "m337decc-adc1",
+		.reg_ping = REG_ADC1_PING,
+		.reg_pong = REG_ADC1_PONG,
 	},
 	{
-		.ping = "adc2-0",
-		.pong = "adc2-1",
+		.irq_name_ping = "adc2-0",
+		.irq_name_pong = "adc2-1",
+		.dev_name = "m337decc-adc2",
+		.reg_ping = REG_ADC2_PING,
+		.reg_pong = REG_ADC2_PONG,
 	},
 };
 
@@ -85,36 +115,6 @@ struct adc_device {
 	struct platform_device	*pdev;
 };
 
-static int adc_read_raw(struct iio_dev *idev,
-			struct iio_chan_spec const *chan,
-			int *val, int *val2, long mask)
-{
-	*val = 23;
-	*val2 = 66;
-
-	printk(KERN_INFO "adc_read_raw\n");
-	switch (mask) {
-		case IIO_CHAN_INFO_RAW:
-			printk(KERN_INFO " == IIO_CHAN_INFO_RAW\n");
-			return IIO_VAL_INT;
-		break;
-		case IIO_CHAN_INFO_SCALE:
-			printk(KERN_INFO " == IIO_CHAN_INFO_SCALE\n");
-			return IIO_VAL_FRACTIONAL_LOG2;
-		break;
-		default:
-			printk(KERN_INFO " == default\n");
-		break;
-	}
-
-	return -EINVAL;
-}
-
-static const struct iio_info adc_info = {
-	.driver_module	= THIS_MODULE,
-	.read_raw	= &adc_read_raw,
-};
-
 // BIT(IIO_CHAN_INFO_RAW)|BIT(IIO_CHAN_INFO_SCALE)
 static const struct iio_chan_spec adc_channels = {
 	.type				= IIO_VOLTAGE,
@@ -130,80 +130,6 @@ static const struct iio_chan_spec adc_channels = {
 	},
 };
 
-static irqreturn_t irq_handler(int irq, void *private)
-{
-//	printk(KERN_INFO "medha irq_handler: %d\n", irq);
-//	disable_irq(irq);
-//	return IRQ_HANDLED;
-	return IRQ_WAKE_THREAD;
-}
-
-static irqreturn_t irq_worker(int irq, void *private)
-{
-	struct iio_dev *iiodev = private;
-//	struct adc_channel *adc_chan = iio_priv(iiodev);
-
-	dev_info(&iiodev->dev, "IRQ worker:%d\n", irq);
-
-//	int i, k, fifo1count, read;
-//	u16 *data = adc_dev->data;
-
-/*
-	fifo1count = tiadc_readl(adc_dev, REG_FIFO1CNT);
-	for (k = 0; k < fifo1count; k = k + i) {
-                for (i = 0; i < (indio_dev->scan_bytes)/2; i++) {
-                        read = tiadc_readl(adc_dev, REG_FIFO1);
-                        data[i] = read & FIFOREAD_DATA_MASK;
-                }
-                iio_push_to_buffers(indio_dev, (u8 *) data);
-        }
-*/
-//        tiadc_writel(adc_dev, REG_IRQSTATUS, IRQENB_FIFO1THRES);
-//        tiadc_writel(adc_dev, REG_IRQENABLE, IRQENB_FIFO1THRES);
-
-	return IRQ_HANDLED;
-}
-
-/*
-static int tiadc_buffer_preenable(struct iio_dev *indio_dev)
-{
-	// Flush FIFO. Needed in corner cases in simultaneous tsc/adc use
-	return 0;
-}
-
-static int tiadc_buffer_postenable(struct iio_dev *indio_dev)
-{
-	// 2do: enable sampling
-	return 0;
-}
-
-static int tiadc_buffer_predisable(struct iio_dev *indio_dev)
-{
-	// 2do: stop recording
-	//adc_dev->buffer_en_ch_steps = 0;
-	//adc_dev->total_ch_enabled = 0;
-
-	// Flush FIFO of leftover data in the time it takes to disable adc
-	// 2do: send reset signal
-	return 0;
-}
-
-static int adc_buffer_postdisable(struct iio_dev *indio_dev)
-{
-	// tiadc_step_config(indio_dev);
-	return 0;
-}
-*/
-
-/*
-static const struct iio_buffer_setup_ops adc_buffer_setup_ops = {
-	.preenable = &adc_buffer_preenable,
-	.postenable = &adc_buffer_postenable,
-	.predisable = &adc_buffer_predisable,
-	.postdisable = &adc_buffer_postdisable,
-};
-*/
-
 static inline void adc_reg_set(struct adc_device *adc, int reg, u16 val)
 {
 	iowrite16(val, adc->base + reg*4);
@@ -214,18 +140,261 @@ static inline u16 adc_reg_get(struct adc_device *adc, int reg)
 	return ioread16(adc->base + reg*4);
 }
 
+static void adc_start(struct adc_device *adc)
+{
+	dev_info(&adc->pdev->dev, "starting ADC\n");
+	adc_reg_set(adc, REG_RESET, 1);
+}
+
+static void adc_stop(struct adc_device *adc)
+{
+	dev_info(&adc->pdev->dev, "stopping ADC\n");
+	adc_reg_set(adc, REG_RESET, 0);
+}
+
+static inline struct adc_channel *iio_adc_channel(struct iio_dev *indio_dev)
+{
+	return iio_priv(indio_dev);
+}
+
+static inline struct adc_device *iio_adc_device(struct iio_dev *indio_dev)
+{
+	return iio_adc_channel(indio_dev)->adc_dev;
+}
+
+static inline struct adc_device *pdev_to_adc(struct platform_device *pdev)
+{
+	return platform_get_drvdata(pdev);
+}
+
+static int adc_set_sample_rate(struct adc_device *adc, int rate)
+{
+	u16 r;
+	dev_info(&adc->pdev->dev, "setting sample rate: %d\n", rate);
+	switch (rate) {
+		case  50000:	r=0;	break;
+		case 100000:	r=1;	break;
+		case 150000:	r=2;	break;
+		case 200000:	r=3;	break;
+		case 250000:	r=4;	break;
+		case 300000:	r=5;	break;
+		case 350000:	r=6;	break;
+		case 400000:	r=7;	break;
+		case 450000:	r=8;	break;
+		case 500000:	r=9;	break;
+		default:
+			dev_err(&adc->pdev->dev, "unsupported sampling rate: %d\n", rate);
+			return -EINVAL;
+	}
+	adc_reg_set(adc, REG_MCLK, r);
+	return 0;
+}
+
+static int adc_get_sample_rate(struct adc_device *adc)
+{
+	u16 r = adc_reg_get(adc, REG_MCLK);
+	switch (r) {
+		case 0:	return  50000;
+		case 1:	return 100000;
+		case 2:	return 150000;
+		case 3:	return 200000;
+		case 4:	return 250000;
+		case 5:	return 300000;
+		case 6:	return 350000;
+		case 7:	return 400000;
+		case 8:	return 450000;
+		case 9:	return 500000;
+	}
+	dev_err(&adc->pdev->dev, "illegal sampling rate: %d\n", r);
+	return 0;
+}
+
+static ssize_t adc_write_frequency(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf,
+				   size_t len)
+{
+	struct adc_device *adc_dev = iio_adc_device(dev_to_iio_dev(dev));
+	int ret;
+	u16 val;
+
+	if ((ret = kstrtou16(buf, 10, &val)))
+		return ret;
+
+	if ((ret = adc_set_sample_rate(adc_dev, val)))
+		return ret;
+
+	return len;
+}
+
+static ssize_t adc_read_frequency(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct adc_device *adc_dev = iio_adc_device(dev_to_iio_dev(dev));
+	return sprintf(buf, "%d\n", adc_get_sample_rate(adc_dev));
+}
+
+static IIO_CONST_ATTR(sampling_frequency_available,"50000 100000 150000 200000 250000 300000 350000 400000 450000 500000");
+static IIO_DEV_ATTR_SAMP_FREQ(0644, adc_read_frequency, adc_write_frequency);
+
+static struct attribute *adc_attributes[] = {
+	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
+	&iio_dev_attr_sampling_frequency.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group adc_attribute_group = {
+	.attrs = adc_attributes
+};
+
+static irqreturn_t irq_handler(int irq, void *private)
+{
+//	printk(KERN_INFO "medha irq_handler: %d\n", irq);
+//	disable_irq(irq);
+//	return IRQ_HANDLED;
+	return IRQ_WAKE_THREAD;
+}
+
+static int adc_read_raw(struct iio_dev *iiodev,
+			struct iio_chan_spec const *chan,
+			int *val, int *val2, long mask)
+{
+	*val = 23;
+	*val2 = 66;
+
+	switch (mask) {
+		case IIO_CHAN_INFO_RAW:
+			dev_info(&iiodev->dev, "read_raw: IIO_CHAN_INFO_RAW\n");
+			return IIO_VAL_INT;
+		break;
+		case IIO_CHAN_INFO_SCALE:
+			dev_info(&iiodev->dev, "read_raw: IIO_CHAN_INFO_SCALE\n");
+			return IIO_VAL_FRACTIONAL_LOG2;
+		break;
+		case IIO_CHAN_INFO_SAMP_FREQ:
+			dev_info(&iiodev->dev, "read_raw: IIO_CHAN_INFO_SAMP_FREQ\n");
+			return IIO_VAL_INT;
+		default:
+			dev_info(&iiodev->dev, "read_raw: unhandled mask: %ld\n", mask);
+			return -EINVAL;
+		break;
+	}
+
+	return -EINVAL;
+}
+
+// FIXME: that affects all devices !
+static int adc_write_raw(struct iio_dev *iiodev,
+		     struct iio_chan_spec const *chan,
+		     int val, int val2, long mask)
+{
+	struct adc_device *adc_dev = iio_adc_device(iiodev);
+
+	switch (mask) {
+		case IIO_CHAN_INFO_SAMP_FREQ:
+			dev_info(&iiodev->dev, "setting sample freq at %d: val=%d val2=%d\n", -1, val, val2);
+			adc_set_sample_rate(adc_dev, val);
+			return 0;
+
+		case IIO_CHAN_INFO_SCALE:
+			dev_info(&iiodev->dev, "setting scale %d: val=%d val2=%d\n", -1, val, val2);
+			return 0;
+	}
+
+	return -EINVAL;
+}
+
+static irqreturn_t irq_worker(int irq, void *private)
+{
+	struct iio_dev *iiodev = private;
+	struct adc_channel *adc_chan = iio_adc_channel(iiodev);
+	int reg = 0;
+	int x;
+	int ch = adc_chan->ch;
+
+	dev_info(&iiodev->dev, "IRQ worker: %d on ch %d\n", irq, ch);
+	if (adc_chan == NULL) {
+		dev_err(&iiodev->dev, "adc_chan IS NULL !\n");
+		return IRQ_HANDLED;
+	}
+
+	/* find out for which ADC / buf we're acting */
+	if (irq == adc_chan->irq_ping) {
+		dev_info(&iiodev->dev, " ping buffer\n");
+		reg = chan_spec[ch].reg_ping;
+	}
+	else if (irq == adc_chan->irq_pong) {
+		dev_info(&iiodev->dev, " pong buffer\n");
+		reg = chan_spec[ch].reg_pong;
+	}
+	else {
+		dev_err(&iiodev->dev, " unknown buffer\n");
+		return IRQ_HANDLED;
+	}
+
+	for (x=0; x<CHUNK_SIZE; x++) {
+		dev_info(&iiodev->dev, "reading sample #%d\n", x);
+		// FIXME: need to care about upper 16 bit ...
+		u32 sample1 = adc_reg_get(adc_chan->adc_dev, reg);
+		iio_push_to_buffers(iiodev, &sample1);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static int adc_buffer_preenable(struct iio_dev *iiodev)
+{
+	// Flush FIFO. Needed in corner cases in simultaneous tsc/adc use
+	dev_info(&iiodev->dev, "adc_buffer_preenable\n");
+	return 0;
+}
+
+static int adc_buffer_postenable(struct iio_dev *iiodev)
+{
+	// 2do: enable sampling
+	dev_info(&iiodev->dev, "adc_buffer_postenable\n");
+	return 0;
+}
+
+static int adc_buffer_predisable(struct iio_dev *iiodev)
+{
+	// 2do: stop recording
+	//adc_dev->buffer_en_ch_steps = 0;
+	//adc_dev->total_ch_enabled = 0;
+
+	// Flush FIFO of leftover data in the time it takes to disable adc
+	// 2do: send reset signal
+	dev_info(&iiodev->dev, "adc_buffer_predisable\n");
+	return 0;
+}
+
+static int adc_buffer_postdisable(struct iio_dev *iiodev)
+{
+	// tiadc_step_config(indio_dev);
+	dev_info(&iiodev->dev, "adc_buffer_postdisable\n");
+	return 0;
+}
+
+static const struct iio_buffer_setup_ops adc_buffer_setup_ops = {
+	.preenable = &adc_buffer_preenable,
+	.postenable = &adc_buffer_postenable,
+	.predisable = &adc_buffer_predisable,
+	.postdisable = &adc_buffer_postdisable,
+};
+
 static int looptest(struct platform_device *pdev, u16 val)
 {
-	struct adc_device *adc = platform_get_drvdata(pdev);
+	struct adc_device *adc_dev = pdev_to_adc(pdev);
 	u16 readback;
 	u16 inv = ~val & 0xFFFF;
 
-	adc_reg_set(adc, REG_TEST, val);
+	adc_reg_set(adc_dev, REG_TEST, val);
 	msleep(50);
-	readback = adc_reg_get(adc, REG_TEST);
-	readback = adc_reg_get(adc, REG_TEST);
-	readback = adc_reg_get(adc, REG_TEST);
-	readback = adc_reg_get(adc, REG_TEST);
+	readback = adc_reg_get(adc_dev, REG_TEST);
+	readback = adc_reg_get(adc_dev, REG_TEST);
+	readback = adc_reg_get(adc_dev, REG_TEST);
+	readback = adc_reg_get(adc_dev, REG_TEST);
 
 	if (readback == inv)
 		dev_info(&pdev->dev, "looptest A: OK   w 0x%04X r 0x%04X\n", val, readback);
@@ -241,16 +410,35 @@ static int loop_write_op(void *data, u64 value)
 	return looptest(pdev, value & 0xFFFF);
 }
 
+static int debugfs_samplerate_set(void *data, u64 value)
+{
+	struct platform_device *pdev = data;
+	struct adc_device *adc_dev = pdev_to_adc(pdev);
+	dev_info(&pdev->dev, "sr_set: %lld\n", value);
+	return adc_set_sample_rate(adc_dev, (int)value);
+}
+
+static int debugfs_samplerate_get(void *data, u64 *value)
+{
+	struct platform_device *pdev = data;
+	struct adc_device *adc_dev = pdev_to_adc(pdev);
+	*value = adc_get_sample_rate(adc_dev);
+	dev_info(&pdev->dev, "sr_get: %lld\n", *value);
+	return 0;
+}
+
 static int cmd_write_op(void *data, u64 value)
 {
 	struct platform_device *pdev = data;
-	struct iio_dev *iiodev = platform_get_drvdata(pdev);
+	struct adc_device *adc_dev = platform_get_drvdata(pdev);
 
 	dev_info(&pdev->dev, "debug command: %lld\n", value);
 
 	switch (value) {
 		case 1:	return looptest(pdev, 0x9988);
-		case 2: irq_worker(666, iiodev); break;
+//		case 2: irq_worker(666, iiodev); break;
+		case 3: adc_start(adc_dev); break;
+		case 4: adc_stop(adc_dev); break;
 	}
 
 	return 0;
@@ -258,15 +446,24 @@ static int cmd_write_op(void *data, u64 value)
 
 DEFINE_SIMPLE_ATTRIBUTE(dbg_cmd_fops,  NULL, cmd_write_op,  "%llu\n");
 DEFINE_SIMPLE_ATTRIBUTE(dbg_loop_fops, NULL, loop_write_op, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(dbg_sr_fops,   debugfs_samplerate_get, debugfs_samplerate_set, "%llu\n");
 
 static int adc_debugfs_init(struct platform_device *pdev)
 {
 	struct dentry *dbg_dir = debugfs_create_dir("medha-adc", NULL);
 	debugfs_create_file("cmd",  0222, dbg_dir, pdev, &dbg_cmd_fops);
 	debugfs_create_file("loop", 0222, dbg_dir, pdev, &dbg_loop_fops);
+	debugfs_create_file("samplerate", 0777, dbg_dir, pdev, &dbg_sr_fops);
 	//pdata->debugfs_dentry = dbg_dir;
 	return 0;
 }
+
+static const struct iio_info adc_info = {
+	.driver_module	= THIS_MODULE,
+	.read_raw	= &adc_read_raw,
+	.write_raw	= &adc_write_raw,
+	.attrs		= &adc_attribute_group
+};
 
 static int setup_device(struct platform_device *pdev, struct adc_device *adc_dev, int ch)
 {
@@ -287,22 +484,22 @@ static int setup_device(struct platform_device *pdev, struct adc_device *adc_dev
 		return -ENOMEM;
 	}
 
-	ch_priv = iio_priv(iiodev);
+	ch_priv = iio_adc_channel(iiodev);
 
 	ch_priv->ch = ch;
-	ch_priv->irq_ping = platform_get_irq_byname(pdev, irq_names[ch].ping);
-//	ch_priv->irq_pong = platform_get_irq_byname(pdev, irq_names[ch].pong);
+	ch_priv->irq_ping = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_ping);
+//	ch_priv->irq_pong = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_pong);
 	dev_info(&iiodev->dev, "IRQs: CH %d -> %d %d\n", ch, ch_priv->irq_ping, ch_priv->irq_pong);
 
 	iiodev->info = &adc_info;
 	iiodev->dev.parent = &pdev->dev;
 	iiodev->dev.of_node = pdev->dev.of_node;
-	iiodev->name = platform_get_device_id(pdev)->name;		// FIXME
+	iiodev->name = chan_spec[ch].dev_name;
 	iiodev->modes = INDIO_DIRECT_MODE /*INDIO_BUFFER_HARDWARE*/;
 	iiodev->channels = &adc_channels;
 	iiodev->num_channels = 1;
 	iiodev->info = &adc_info;
-//	iiodev->setup_ops = setup_ops;
+	iiodev->setup_ops = &adc_buffer_setup_ops;
 	iiodev->modes |= INDIO_BUFFER_SOFTWARE;
 
 	if (!(fifo = devm_iio_kfifo_allocate(&iiodev->dev))) {

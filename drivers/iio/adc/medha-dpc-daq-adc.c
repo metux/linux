@@ -30,6 +30,7 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/kfifo_buf.h>
+#include <linux/spinlock.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -107,12 +108,18 @@ struct adc_channel {
 	int irq_ping;
 	int irq_pong;
 	struct adc_device *adc_dev;
+	int step;
+	s64 timestamp;
+	spinlock_t lock;
 };
 
 struct adc_device {
 	void __iomem		*base;
 	struct iio_dev		*iio_dev[MAX_CHAN];
+	struct adc_channel	*adc_chan[MAX_CHAN];
 	struct platform_device	*pdev;
+	int			enable_count;
+	spinlock_t		lock;
 };
 
 // BIT(IIO_CHAN_INFO_RAW)|BIT(IIO_CHAN_INFO_SCALE)
@@ -140,21 +147,79 @@ static inline u16 adc_reg_get(struct adc_device *adc, int reg)
 	return ioread16(adc->base + reg*4);
 }
 
-static void adc_start(struct adc_device *adc)
+static inline u16 adc_reg_get32(struct adc_device *adc, int reg)
 {
-	dev_info(&adc->pdev->dev, "starting ADC\n");
-	adc_reg_set(adc, REG_RESET, 1);
-}
-
-static void adc_stop(struct adc_device *adc)
-{
-	dev_info(&adc->pdev->dev, "stopping ADC\n");
-	adc_reg_set(adc, REG_RESET, 0);
+	return ioread32(adc->base + reg*4);
 }
 
 static inline struct adc_channel *iio_adc_channel(struct iio_dev *indio_dev)
 {
 	return iio_priv(indio_dev);
+}
+
+static void adc_reset_step(struct adc_device *adc_dev)
+{
+	int x;
+	for (x=0; x<MAX_CHAN; x++) {
+		if (adc_dev == NULL) {
+			printk(KERN_ERR "adc_reset_step: adc_dev=NULL\n");
+			return;
+		}
+		if (adc_dev->adc_chan[x]==NULL) {
+			printk(KERN_ERR "adc_reset_step: adc_chan[%d]=NULL\n", x);
+			return;
+		}
+		spin_lock_bh(&adc_dev->adc_chan[x]->lock);
+		adc_dev->adc_chan[x]->step = 0;
+		spin_unlock_bh(&adc_dev->adc_chan[x]->lock);
+	}
+}
+
+static int adc_start(struct adc_device *adc_dev)
+{
+	int cnt;
+
+	dev_info(&adc_dev->pdev->dev, "starting ADC\n");
+	spin_lock_bh(&adc_dev->lock);
+
+	if (unlikely(adc_dev->enable_count < 0))
+		adc_dev->enable_count = 0;
+
+	if (!adc_dev->enable_count) {
+		adc_reg_set(adc_dev, REG_RESET, 1);
+		adc_reset_step(adc_dev);
+	}
+
+	cnt = adc_dev->enable_count++;
+
+	spin_unlock_bh(&adc_dev->lock);
+
+	dev_info(&adc_dev->pdev->dev, "start: new enable_count=%d\n", cnt);
+	return 0;
+}
+
+static int adc_stop(struct adc_device *adc_dev)
+{
+	int cnt;
+	dev_info(&adc_dev->pdev->dev, "stopping ADC\n");
+
+	spin_lock_bh(&adc_dev->lock);
+
+	if (unlikely(adc_dev->enable_count < 0))
+		adc_dev->enable_count = 0;
+
+	if (adc_dev->enable_count) {
+		adc_reg_set(adc_dev, REG_RESET, 0);
+		adc_reset_step(adc_dev);
+	}
+
+	cnt = adc_dev->enable_count--;
+
+	spin_unlock_bh(&adc_dev->lock);
+
+	dev_info(&adc_dev->pdev->dev, "stop: new enable count=%d\n", cnt);
+
+	return 0;
 }
 
 static inline struct adc_device *iio_adc_device(struct iio_dev *indio_dev)
@@ -248,15 +313,15 @@ static const struct attribute_group adc_attribute_group = {
 	.attrs = adc_attributes
 };
 
-static irqreturn_t irq_handler(int irq, void *private)
+static irqreturn_t medha_adc_irq_handler(int irq, void *private)
 {
-//	printk(KERN_INFO "medha irq_handler: %d\n", irq);
-//	disable_irq(irq);
-//	return IRQ_HANDLED;
+	struct iio_dev *indio_dev = private;
+	struct adc_channel *adc_chan = iio_adc_channel(indio_dev);
+	adc_chan->timestamp = iio_get_time_ns(indio_dev);
 	return IRQ_WAKE_THREAD;
 }
 
-static int adc_read_raw(struct iio_dev *iiodev,
+static int adc_read_raw(struct iio_dev *indio_dev,
 			struct iio_chan_spec const *chan,
 			int *val, int *val2, long mask)
 {
@@ -265,18 +330,18 @@ static int adc_read_raw(struct iio_dev *iiodev,
 
 	switch (mask) {
 		case IIO_CHAN_INFO_RAW:
-			dev_info(&iiodev->dev, "read_raw: IIO_CHAN_INFO_RAW\n");
+			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_RAW\n");
 			return IIO_VAL_INT;
 		break;
 		case IIO_CHAN_INFO_SCALE:
-			dev_info(&iiodev->dev, "read_raw: IIO_CHAN_INFO_SCALE\n");
+			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SCALE\n");
 			return IIO_VAL_FRACTIONAL_LOG2;
 		break;
 		case IIO_CHAN_INFO_SAMP_FREQ:
-			dev_info(&iiodev->dev, "read_raw: IIO_CHAN_INFO_SAMP_FREQ\n");
+			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SAMP_FREQ\n");
 			return IIO_VAL_INT;
 		default:
-			dev_info(&iiodev->dev, "read_raw: unhandled mask: %ld\n", mask);
+			dev_info(&indio_dev->dev, "read_raw: unhandled mask: %ld\n", mask);
 			return -EINVAL;
 		break;
 	}
@@ -285,102 +350,124 @@ static int adc_read_raw(struct iio_dev *iiodev,
 }
 
 // FIXME: that affects all devices !
-static int adc_write_raw(struct iio_dev *iiodev,
+static int adc_write_raw(struct iio_dev *indio_dev,
 		     struct iio_chan_spec const *chan,
 		     int val, int val2, long mask)
 {
-	struct adc_device *adc_dev = iio_adc_device(iiodev);
+	struct adc_device *adc_dev = iio_adc_device(indio_dev);
 
 	switch (mask) {
 		case IIO_CHAN_INFO_SAMP_FREQ:
-			dev_info(&iiodev->dev, "setting sample freq at %d: val=%d val2=%d\n", -1, val, val2);
+			dev_info(&indio_dev->dev, "setting sample freq at %d: val=%d val2=%d\n", -1, val, val2);
 			adc_set_sample_rate(adc_dev, val);
 			return 0;
 
 		case IIO_CHAN_INFO_SCALE:
-			dev_info(&iiodev->dev, "setting scale %d: val=%d val2=%d\n", -1, val, val2);
+			dev_info(&indio_dev->dev, "setting scale %d: val=%d val2=%d\n", -1, val, val2);
 			return 0;
 	}
 
 	return -EINVAL;
 }
 
-static irqreturn_t irq_worker(int irq, void *private)
+static irqreturn_t medha_adc_irq_worker(int irq, void *private)
 {
-	struct iio_dev *iiodev = private;
-	struct adc_channel *adc_chan = iio_adc_channel(iiodev);
+	struct iio_dev *indio_dev = private;
+	struct adc_channel *adc_chan = iio_adc_channel(indio_dev);
 	int reg = 0;
 	int x;
 	int ch = adc_chan->ch;
+	char *bufn = "<none>";
 
-	dev_info(&iiodev->dev, "IRQ worker: %d on ch %d\n", irq, ch);
+//	dev_info(&indio_dev->dev, "IRQ worker: %d on ch %d\n", irq, ch);
 	if (adc_chan == NULL) {
-		dev_err(&iiodev->dev, "adc_chan IS NULL !\n");
+		dev_err(&indio_dev->dev, "adc_chan IS NULL !\n");
 		return IRQ_HANDLED;
 	}
 
 	/* find out for which ADC / buf we're acting */
+/*
 	if (irq == adc_chan->irq_ping) {
-		dev_info(&iiodev->dev, " ping buffer\n");
+		dev_info(&indio_dev->dev, " ping buffer\n");
 		reg = chan_spec[ch].reg_ping;
+		bufn = "ping";
 	}
 	else if (irq == adc_chan->irq_pong) {
-		dev_info(&iiodev->dev, " pong buffer\n");
+		dev_info(&indio_dev->dev, " pong buffer\n");
 		reg = chan_spec[ch].reg_pong;
+		bufn = "pong";
 	}
 	else {
-		dev_err(&iiodev->dev, " unknown buffer\n");
+		dev_err(&indio_dev->dev, " unknown buffer\n");
 		return IRQ_HANDLED;
+	}
+*/
+	spin_lock_bh(&adc_chan->lock);
+
+	/* HACK: count pingpong ourselves */
+	if (adc_chan->step == 0) {
+		dev_info(&indio_dev->dev, " XX ping buffer ch %d\n", ch);
+		reg = chan_spec[ch].reg_ping;
+		bufn = "ping";
+	}
+	else {
+		dev_info(&indio_dev->dev, " YY pong buffer ch %d\n", ch);
+		reg = chan_spec[ch].reg_pong;
+		bufn = "pong";
 	}
 
 	for (x=0; x<CHUNK_SIZE; x++) {
-		dev_info(&iiodev->dev, "reading sample #%d\n", x);
+		u32 sample;
 		// FIXME: need to care about upper 16 bit ...
-		u32 sample1 = adc_reg_get(adc_chan->adc_dev, reg);
-		iio_push_to_buffers(iiodev, &sample1);
+		sample = adc_reg_get32(adc_chan->adc_dev, reg);
+//		dev_info(&indio_dev->dev, "sample32 @%d %s #%d = %X\n", ch, bufn, x, sample);
+		iio_push_to_buffers(indio_dev, &sample);
 	}
+
+	adc_chan->step = (adc_chan->step ? 0 : 1);
+
+	spin_unlock_bh(&adc_chan->lock);
 
 	return IRQ_HANDLED;
 }
 
-static int adc_buffer_preenable(struct iio_dev *iiodev)
+static int medha_adc_buffer_preenable(struct iio_dev *indio_dev)
 {
-	// Flush FIFO. Needed in corner cases in simultaneous tsc/adc use
-	dev_info(&iiodev->dev, "adc_buffer_preenable\n");
+//	struct adc_device *adc_dev = iio_adc_device(indio_dev);
+	dev_info(&indio_dev->dev, "medha_adc_buffer_preenable\n");
+	// FIXME: fixup broken sampling rate ?
+	// FIXME: do a loop test ?
 	return 0;
 }
 
-static int adc_buffer_postenable(struct iio_dev *iiodev)
+static int medha_adc_buffer_postenable(struct iio_dev *indio_dev)
 {
-	// 2do: enable sampling
-	dev_info(&iiodev->dev, "adc_buffer_postenable\n");
+	struct adc_device *adc_dev = iio_adc_device(indio_dev);
+	dev_info(&indio_dev->dev, "medha_adc_buffer_postenable\n");
+	adc_start(adc_dev);
 	return 0;
 }
 
-static int adc_buffer_predisable(struct iio_dev *iiodev)
+static int medha_adc_buffer_predisable(struct iio_dev *indio_dev)
 {
-	// 2do: stop recording
-	//adc_dev->buffer_en_ch_steps = 0;
-	//adc_dev->total_ch_enabled = 0;
-
-	// Flush FIFO of leftover data in the time it takes to disable adc
-	// 2do: send reset signal
-	dev_info(&iiodev->dev, "adc_buffer_predisable\n");
+	struct adc_device *adc_dev = iio_adc_device(indio_dev);
+	dev_info(&indio_dev->dev, "medha_adc_buffer_predisable\n");
+	adc_stop(adc_dev);
 	return 0;
 }
 
-static int adc_buffer_postdisable(struct iio_dev *iiodev)
+static int medha_adc_buffer_postdisable(struct iio_dev *indio_dev)
 {
-	// tiadc_step_config(indio_dev);
-	dev_info(&iiodev->dev, "adc_buffer_postdisable\n");
+//	struct adc_device *adc_dev = iio_adc_device(indio_dev);
+	dev_info(&indio_dev->dev, "medha_adc_buffer_postdisable\n");
 	return 0;
 }
 
 static const struct iio_buffer_setup_ops adc_buffer_setup_ops = {
-	.preenable = &adc_buffer_preenable,
-	.postenable = &adc_buffer_postenable,
-	.predisable = &adc_buffer_predisable,
-	.postdisable = &adc_buffer_postdisable,
+	.preenable	= &medha_adc_buffer_preenable,
+	.postenable	= &medha_adc_buffer_postenable,
+	.predisable	= &medha_adc_buffer_predisable,
+	.postdisable	= &medha_adc_buffer_postdisable,
 };
 
 static int looptest(struct platform_device *pdev, u16 val)
@@ -410,23 +497,6 @@ static int loop_write_op(void *data, u64 value)
 	return looptest(pdev, value & 0xFFFF);
 }
 
-static int debugfs_samplerate_set(void *data, u64 value)
-{
-	struct platform_device *pdev = data;
-	struct adc_device *adc_dev = pdev_to_adc(pdev);
-	dev_info(&pdev->dev, "sr_set: %lld\n", value);
-	return adc_set_sample_rate(adc_dev, (int)value);
-}
-
-static int debugfs_samplerate_get(void *data, u64 *value)
-{
-	struct platform_device *pdev = data;
-	struct adc_device *adc_dev = pdev_to_adc(pdev);
-	*value = adc_get_sample_rate(adc_dev);
-	dev_info(&pdev->dev, "sr_get: %lld\n", *value);
-	return 0;
-}
-
 static int cmd_write_op(void *data, u64 value)
 {
 	struct platform_device *pdev = data;
@@ -436,7 +506,6 @@ static int cmd_write_op(void *data, u64 value)
 
 	switch (value) {
 		case 1:	return looptest(pdev, 0x9988);
-//		case 2: irq_worker(666, iiodev); break;
 		case 3: adc_start(adc_dev); break;
 		case 4: adc_stop(adc_dev); break;
 	}
@@ -446,14 +515,12 @@ static int cmd_write_op(void *data, u64 value)
 
 DEFINE_SIMPLE_ATTRIBUTE(dbg_cmd_fops,  NULL, cmd_write_op,  "%llu\n");
 DEFINE_SIMPLE_ATTRIBUTE(dbg_loop_fops, NULL, loop_write_op, "%llu\n");
-DEFINE_SIMPLE_ATTRIBUTE(dbg_sr_fops,   debugfs_samplerate_get, debugfs_samplerate_set, "%llu\n");
 
 static int adc_debugfs_init(struct platform_device *pdev)
 {
 	struct dentry *dbg_dir = debugfs_create_dir("medha-adc", NULL);
 	debugfs_create_file("cmd",  0222, dbg_dir, pdev, &dbg_cmd_fops);
 	debugfs_create_file("loop", 0222, dbg_dir, pdev, &dbg_loop_fops);
-	debugfs_create_file("samplerate", 0777, dbg_dir, pdev, &dbg_sr_fops);
 	//pdata->debugfs_dentry = dbg_dir;
 	return 0;
 }
@@ -465,71 +532,75 @@ static const struct iio_info adc_info = {
 	.attrs		= &adc_attribute_group
 };
 
-static int setup_device(struct platform_device *pdev, struct adc_device *adc_dev, int ch)
+static int medha_adc_setup_device(struct platform_device *pdev, struct adc_device *adc_dev, int ch)
 {
 	int ret = 0;
-	struct iio_dev *iiodev;
+	struct iio_dev *indio_dev;
 	struct adc_channel *ch_priv;
 	struct iio_buffer *fifo;
 
 	if (ch >= MAX_CHAN) {
-		dev_err(&pdev->dev, "setup_device() invalid channel number: %d\n", ch);
+		dev_err(&pdev->dev, "medha_adc_setup_device() invalid channel number: %d\n", ch);
 		return -EINVAL;
 	}
 
 	dev_info(&pdev->dev, "initializing channel %d\n", ch);
 
-	if (!(iiodev = devm_iio_device_alloc(&pdev->dev, sizeof(struct adc_channel)))) {
+	if (!(indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(struct adc_channel)))) {
 		dev_err(&pdev->dev, "failed to allocate iio device\n");
 		return -ENOMEM;
 	}
 
-	ch_priv = iio_adc_channel(iiodev);
+	ch_priv = iio_adc_channel(indio_dev);
 
 	ch_priv->ch = ch;
+	ch_priv->adc_dev = adc_dev;
 	ch_priv->irq_ping = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_ping);
 //	ch_priv->irq_pong = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_pong);
-	dev_info(&iiodev->dev, "IRQs: CH %d -> %d %d\n", ch, ch_priv->irq_ping, ch_priv->irq_pong);
+	spin_lock_init(&ch_priv->lock);
+	dev_info(&indio_dev->dev, "IRQs: CH %d -> %d %d\n", ch, ch_priv->irq_ping, ch_priv->irq_pong);
 
-	iiodev->info = &adc_info;
-	iiodev->dev.parent = &pdev->dev;
-	iiodev->dev.of_node = pdev->dev.of_node;
-	iiodev->name = chan_spec[ch].dev_name;
-	iiodev->modes = INDIO_DIRECT_MODE /*INDIO_BUFFER_HARDWARE*/;
-	iiodev->channels = &adc_channels;
-	iiodev->num_channels = 1;
-	iiodev->info = &adc_info;
-	iiodev->setup_ops = &adc_buffer_setup_ops;
-	iiodev->modes |= INDIO_BUFFER_SOFTWARE;
+	adc_dev->adc_chan[ch] = ch_priv;
 
-	if (!(fifo = devm_iio_kfifo_allocate(&iiodev->dev))) {
+	indio_dev->info = &adc_info;
+	indio_dev->dev.parent = &pdev->dev;
+	indio_dev->dev.of_node = pdev->dev.of_node;
+	indio_dev->name = chan_spec[ch].dev_name;
+	indio_dev->modes = INDIO_DIRECT_MODE /*INDIO_BUFFER_HARDWARE*/;
+	indio_dev->channels = &adc_channels;
+	indio_dev->num_channels = 1;
+	indio_dev->info = &adc_info;
+	indio_dev->setup_ops = &adc_buffer_setup_ops;
+	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;
+
+	if (!(fifo = devm_iio_kfifo_allocate(&indio_dev->dev))) {
 		ret = -ENOMEM;
 		goto err_free_dev;
 	}
 
-	iio_device_attach_buffer(iiodev, fifo);
+	iio_device_attach_buffer(indio_dev, fifo);
 
-	if ((ret = iio_device_register(iiodev)))
+	if ((ret = iio_device_register(indio_dev)))
 		goto err_free_dev;
 
 	if ((ret = devm_request_threaded_irq(
-				   &iiodev->dev,
+				   &indio_dev->dev,
 				   ch_priv->irq_ping,
-				   irq_handler /* NULL */,
-				   irq_worker,
+				   medha_adc_irq_handler,
+				   medha_adc_irq_worker,
 				   IRQF_ONESHOT,
-				   iiodev->name,
-				   iiodev)))
+				   indio_dev->name,
+				   indio_dev)))
 		goto err_free_dev;
 
-	adc_dev->iio_dev[ch] = iiodev;
+	adc_dev->iio_dev[ch] = indio_dev;
 
-	dev_info(&iiodev->dev, "registered channel: %d\n", ch);
+	dev_info(&indio_dev->dev, "registered channel: %d\n", ch);
 
 	return 0;
 
 err_free_dev:
-	iio_device_free(iiodev);
+	iio_device_free(indio_dev);
 
 	return ret;
 }
@@ -546,6 +617,8 @@ static int adc_driver_probe(struct platform_device *pdev)
 	adc_dev->base = devm_ioremap_resource(
 		&pdev->dev,
 		platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	adc_dev->enable_count = 0;
+	spin_lock_init(&adc_dev->lock);
 
 	if (IS_ERR(adc_dev->base)) {
 		dev_err(&pdev->dev, "adc_driver_probe() failed to get iomem\n");
@@ -554,9 +627,9 @@ static int adc_driver_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, adc_dev);
 
-	setup_device(pdev, adc_dev, 0);
-	setup_device(pdev, adc_dev, 1);
-	setup_device(pdev, adc_dev, 2);
+	medha_adc_setup_device(pdev, adc_dev, 0);
+	medha_adc_setup_device(pdev, adc_dev, 1);
+	medha_adc_setup_device(pdev, adc_dev, 2);
 
 	adc_debugfs_init(pdev);
 

@@ -108,7 +108,6 @@ struct adc_channel {
 	int irq_ping;
 	int irq_pong;
 	struct adc_device *adc_dev;
-	int step;
 	s64 timestamp;
 	spinlock_t lock;
 };
@@ -157,24 +156,6 @@ static inline struct adc_channel *iio_adc_channel(struct iio_dev *indio_dev)
 	return iio_priv(indio_dev);
 }
 
-static void adc_reset_step(struct adc_device *adc_dev)
-{
-	int x;
-	for (x=0; x<MAX_CHAN; x++) {
-		if (adc_dev == NULL) {
-			printk(KERN_ERR "adc_reset_step: adc_dev=NULL\n");
-			return;
-		}
-		if (adc_dev->adc_chan[x]==NULL) {
-			printk(KERN_ERR "adc_reset_step: adc_chan[%d]=NULL\n", x);
-			return;
-		}
-		spin_lock_bh(&adc_dev->adc_chan[x]->lock);
-		adc_dev->adc_chan[x]->step = 0;
-		spin_unlock_bh(&adc_dev->adc_chan[x]->lock);
-	}
-}
-
 static int adc_start(struct adc_device *adc_dev)
 {
 	int cnt;
@@ -187,7 +168,6 @@ static int adc_start(struct adc_device *adc_dev)
 
 	if (!adc_dev->enable_count) {
 		adc_reg_set(adc_dev, REG_RESET, 1);
-		adc_reset_step(adc_dev);
 	}
 
 	cnt = adc_dev->enable_count++;
@@ -210,7 +190,6 @@ static int adc_stop(struct adc_device *adc_dev)
 
 	if (adc_dev->enable_count) {
 		adc_reg_set(adc_dev, REG_RESET, 0);
-		adc_reset_step(adc_dev);
 	}
 
 	cnt = adc_dev->enable_count--;
@@ -386,7 +365,6 @@ static irqreturn_t medha_adc_irq_worker(int irq, void *private)
 	}
 
 	/* find out for which ADC / buf we're acting */
-/*
 	if (irq == adc_chan->irq_ping) {
 		dev_info(&indio_dev->dev, " ping buffer\n");
 		reg = chan_spec[ch].reg_ping;
@@ -398,23 +376,11 @@ static irqreturn_t medha_adc_irq_worker(int irq, void *private)
 		bufn = "pong";
 	}
 	else {
-		dev_err(&indio_dev->dev, " unknown buffer\n");
+		dev_err(&indio_dev->dev, " unknown irq/buffer\n");
 		return IRQ_HANDLED;
 	}
-*/
-	spin_lock_bh(&adc_chan->lock);
 
-	/* HACK: count pingpong ourselves */
-	if (adc_chan->step == 0) {
-		dev_info(&indio_dev->dev, " XX ping buffer ch %d\n", ch);
-		reg = chan_spec[ch].reg_ping;
-		bufn = "ping";
-	}
-	else {
-		dev_info(&indio_dev->dev, " YY pong buffer ch %d\n", ch);
-		reg = chan_spec[ch].reg_pong;
-		bufn = "pong";
-	}
+	spin_lock_bh(&adc_chan->lock);
 
 	for (x=0; x<CHUNK_SIZE; x++) {
 		u32 sample;
@@ -423,8 +389,6 @@ static irqreturn_t medha_adc_irq_worker(int irq, void *private)
 //		dev_info(&indio_dev->dev, "sample32 @%d %s #%d = %X\n", ch, bufn, x, sample);
 		iio_push_to_buffers(indio_dev, &sample);
 	}
-
-	adc_chan->step = (adc_chan->step ? 0 : 1);
 
 	spin_unlock_bh(&adc_chan->lock);
 
@@ -556,7 +520,7 @@ static int medha_adc_setup_device(struct platform_device *pdev, struct adc_devic
 	ch_priv->ch = ch;
 	ch_priv->adc_dev = adc_dev;
 	ch_priv->irq_ping = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_ping);
-//	ch_priv->irq_pong = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_pong);
+	ch_priv->irq_pong = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_pong);
 	spin_lock_init(&ch_priv->lock);
 	dev_info(&indio_dev->dev, "IRQs: CH %d -> %d %d\n", ch, ch_priv->irq_ping, ch_priv->irq_pong);
 

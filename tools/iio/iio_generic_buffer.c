@@ -83,9 +83,9 @@ void print1byte(uint8_t input, struct iio_channel_info *info)
 	if (info->is_signed) {
 		int8_t val = (int8_t)(input << (8 - info->bits_used)) >>
 			     (8 - info->bits_used);
-		printf("%05f ", ((float)val + info->offset) * info->scale);
+		printf("A1 %05f ", ((float)val + info->offset) * info->scale);
 	} else {
-		printf("%05f ", ((float)input + info->offset) * info->scale);
+		printf("A2 %05f ", ((float)input + info->offset) * info->scale);
 	}
 }
 
@@ -106,9 +106,9 @@ void print2byte(uint16_t input, struct iio_channel_info *info)
 	if (info->is_signed) {
 		int16_t val = (int16_t)(input << (16 - info->bits_used)) >>
 			      (16 - info->bits_used);
-		printf("%05f ", ((float)val + info->offset) * info->scale);
+		printf("B1 %05f ", ((float)val + info->offset) * info->scale);
 	} else {
-		printf("%05f ", ((float)input + info->offset) * info->scale);
+		printf("B2 %05f ", ((float)input + info->offset) * info->scale);
 	}
 }
 
@@ -129,9 +129,9 @@ void print4byte(uint32_t input, struct iio_channel_info *info)
 	if (info->is_signed) {
 		int32_t val = (int32_t)(input << (32 - info->bits_used)) >>
 			      (32 - info->bits_used);
-		printf("%05f ", ((float)val + info->offset) * info->scale);
+		printf("C1 %05f (%05f)", ((float)val + info->offset) * info->scale, info->scale);
 	} else {
-		printf("%05f ", ((float)input + info->offset) * info->scale);
+		printf("C2 %05f (%05f)", ((float)input + info->offset) * info->scale, info->scale);
 	}
 }
 
@@ -154,12 +154,12 @@ void print8byte(uint64_t input, struct iio_channel_info *info)
 			      (64 - info->bits_used);
 		/* special case for timestamp */
 		if (info->scale == 1.0f && info->offset == 0.0f)
-			printf("%" PRId64 " ", val);
+			printf("D1 %" PRId64 " ", val);
 		else
-			printf("%05f ",
+			printf("D2 %05f ",
 			       ((float)val + info->offset) * info->scale);
 	} else {
-		printf("%05f ", ((float)input + info->offset) * info->scale);
+		printf("D3 %05f ", ((float)input + info->offset) * info->scale);
 	}
 }
 

@@ -69,7 +69,7 @@ enum {
 	SAMPLE_RATE_500K	= 9,
 };
 
-struct adc_chan_spec {
+struct m337decc_chan_spec {
 	const char* dev_name;
 	const char* irq_name_ping;
 	const char* irq_name_pong;
@@ -77,7 +77,7 @@ struct adc_chan_spec {
 	int reg_pong;
 };
 
-static const struct adc_chan_spec chan_spec[MAX_CHAN] = {
+static const struct m337decc_chan_spec chan_spec[MAX_CHAN] = {
 	{
 		.irq_name_ping = "adc0-0",
 		.irq_name_pong = "adc0-1",
@@ -101,62 +101,61 @@ static const struct adc_chan_spec chan_spec[MAX_CHAN] = {
 	},
 };
 
-struct adc_device;
+struct m337decc_device;
 
-struct adc_channel {
+struct m337decc_channel {
 	int ch;
 	int irq_ping;
 	int irq_pong;
-	struct adc_device *adc_dev;
+	struct m337decc_device *adc_dev;
 	s64 timestamp;
 	spinlock_t lock;
 };
 
-struct adc_device {
+struct m337decc_device {
 	void __iomem		*base;
 	struct iio_dev		*iio_dev[MAX_CHAN];
-	struct adc_channel	*adc_chan[MAX_CHAN];
+	struct m337decc_channel	*adc_chan[MAX_CHAN];
 	struct platform_device	*pdev;
 	int			enable_count;
 	spinlock_t		lock;
 };
 
-// BIT(IIO_CHAN_INFO_RAW)|BIT(IIO_CHAN_INFO_SCALE)
-static const struct iio_chan_spec adc_channels = {
+static const struct iio_chan_spec m337decc_channels = {
 	.type				= IIO_VOLTAGE,
 	.info_mask_separate		= BIT(IIO_CHAN_INFO_RAW),
-	.info_mask_shared_by_type	= BIT(IIO_CHAN_INFO_SCALE),
+	.info_mask_shared_by_type	= BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_SAMP_FREQ),
 	.indexed			= 1,
 	.channel			= 0,
 	.scan_index			= 0,
 	.scan_type			= {
-		.sign		= 'u',
+		.sign		= 's',
 		.realbits	= 24,
 		.storagebits	= 32,
 	},
 };
 
-static inline void adc_reg_set(struct adc_device *adc, int reg, u16 val)
+static inline void m337decc_reg_set(struct m337decc_device *adc, int reg, u16 val)
 {
 	iowrite16(val, adc->base + reg*4);
 }
 
-static inline u16 adc_reg_get(struct adc_device *adc, int reg)
+static inline u16 m337decc_reg_get(struct m337decc_device *adc, int reg)
 {
 	return ioread16(adc->base + reg*4);
 }
 
-static inline u16 adc_reg_get32(struct adc_device *adc, int reg)
+static inline u16 m337dec_reg_get32(struct m337decc_device *adc, int reg)
 {
 	return ioread32(adc->base + reg*4);
 }
 
-static inline struct adc_channel *iio_adc_channel(struct iio_dev *indio_dev)
+static inline struct m337decc_channel *iio_m337decc_channel(struct iio_dev *indio_dev)
 {
 	return iio_priv(indio_dev);
 }
 
-static int adc_start(struct adc_device *adc_dev)
+static int m337decc_start(struct m337decc_device *adc_dev)
 {
 	int cnt;
 
@@ -167,7 +166,7 @@ static int adc_start(struct adc_device *adc_dev)
 		adc_dev->enable_count = 0;
 
 	if (!adc_dev->enable_count) {
-		adc_reg_set(adc_dev, REG_RESET, 1);
+		m337decc_reg_set(adc_dev, REG_RESET, 1);
 	}
 
 	cnt = adc_dev->enable_count++;
@@ -178,7 +177,7 @@ static int adc_start(struct adc_device *adc_dev)
 	return 0;
 }
 
-static int adc_stop(struct adc_device *adc_dev)
+static int m337decc_stop(struct m337decc_device *adc_dev)
 {
 	int cnt;
 	dev_info(&adc_dev->pdev->dev, "stopping ADC\n");
@@ -189,7 +188,7 @@ static int adc_stop(struct adc_device *adc_dev)
 		adc_dev->enable_count = 0;
 
 	if (adc_dev->enable_count) {
-		adc_reg_set(adc_dev, REG_RESET, 0);
+		m337decc_reg_set(adc_dev, REG_RESET, 0);
 	}
 
 	cnt = adc_dev->enable_count--;
@@ -201,17 +200,17 @@ static int adc_stop(struct adc_device *adc_dev)
 	return 0;
 }
 
-static inline struct adc_device *iio_adc_device(struct iio_dev *indio_dev)
+static inline struct m337decc_device *iio_m337decc_device(struct iio_dev *indio_dev)
 {
-	return iio_adc_channel(indio_dev)->adc_dev;
+	return iio_m337decc_channel(indio_dev)->adc_dev;
 }
 
-static inline struct adc_device *pdev_to_adc(struct platform_device *pdev)
+static inline struct m337decc_device *pdev_to_adc(struct platform_device *pdev)
 {
 	return platform_get_drvdata(pdev);
 }
 
-static int adc_set_sample_rate(struct adc_device *adc, int rate)
+static int m337decc_set_sample_rate(struct m337decc_device *adc, int rate)
 {
 	u16 r;
 	dev_info(&adc->pdev->dev, "setting sample rate: %d\n", rate);
@@ -230,13 +229,13 @@ static int adc_set_sample_rate(struct adc_device *adc, int rate)
 			dev_err(&adc->pdev->dev, "unsupported sampling rate: %d\n", rate);
 			return -EINVAL;
 	}
-	adc_reg_set(adc, REG_MCLK, r);
+	m337decc_reg_set(adc, REG_MCLK, r);
 	return 0;
 }
 
-static int adc_get_sample_rate(struct adc_device *adc)
+static int m337decc_get_sample_rate(struct m337decc_device *adc)
 {
-	u16 r = adc_reg_get(adc, REG_MCLK);
+	u16 r = m337decc_reg_get(adc, REG_MCLK);
 	switch (r) {
 		case 0:	return  50000;
 		case 1:	return 100000;
@@ -253,92 +252,100 @@ static int adc_get_sample_rate(struct adc_device *adc)
 	return 0;
 }
 
-static ssize_t adc_write_frequency(struct device *dev,
-				   struct device_attribute *attr,
-				   const char *buf,
-				   size_t len)
+static ssize_t m337decc_write_frequency(struct device *dev,
+				        struct device_attribute *attr,
+				        const char *buf,
+				        size_t len)
 {
-	struct adc_device *adc_dev = iio_adc_device(dev_to_iio_dev(dev));
+	struct m337decc_device *adc_dev = iio_m337decc_device(dev_to_iio_dev(dev));
 	int ret;
 	u16 val;
 
 	if ((ret = kstrtou16(buf, 10, &val)))
 		return ret;
 
-	if ((ret = adc_set_sample_rate(adc_dev, val)))
+	if ((ret = m337decc_set_sample_rate(adc_dev, val)))
 		return ret;
 
 	return len;
 }
 
-static ssize_t adc_read_frequency(struct device *dev,
-				  struct device_attribute *attr,
-				  char *buf)
+static ssize_t m337decc_read_frequency(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
 {
-	struct adc_device *adc_dev = iio_adc_device(dev_to_iio_dev(dev));
-	return sprintf(buf, "%d\n", adc_get_sample_rate(adc_dev));
+	struct m337decc_device *adc_dev = iio_m337decc_device(dev_to_iio_dev(dev));
+	return sprintf(buf, "%d\n", m337decc_get_sample_rate(adc_dev));
 }
 
 static IIO_CONST_ATTR(sampling_frequency_available,"50000 100000 150000 200000 250000 300000 350000 400000 450000 500000");
-static IIO_DEV_ATTR_SAMP_FREQ(0644, adc_read_frequency, adc_write_frequency);
+static IIO_DEV_ATTR_SAMP_FREQ(0644, m337decc_read_frequency, m337decc_write_frequency);
 
-static struct attribute *adc_attributes[] = {
+static struct attribute *m337decc_attributes[] = {
 	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
 	&iio_dev_attr_sampling_frequency.dev_attr.attr,
 	NULL
 };
 
-static const struct attribute_group adc_attribute_group = {
-	.attrs = adc_attributes
+static const struct attribute_group m337decc_attribute_group = {
+	.attrs = m337decc_attributes
 };
 
-static irqreturn_t medha_adc_irq_handler(int irq, void *private)
+static irqreturn_t m337decc_irq_handler(int irq, void *private)
 {
 	struct iio_dev *indio_dev = private;
-	struct adc_channel *adc_chan = iio_adc_channel(indio_dev);
+	struct m337decc_channel *adc_chan = iio_m337decc_channel(indio_dev);
 	adc_chan->timestamp = iio_get_time_ns(indio_dev);
 	return IRQ_WAKE_THREAD;
 }
 
-static int adc_read_raw(struct iio_dev *indio_dev,
-			struct iio_chan_spec const *chan,
-			int *val, int *val2, long mask)
+/*
+   scale: -2.5 .. +2.5V
+*/
+#define MAX_UVOLT	2500000
+#define MAX_VALUE	0x7fffff
+#define SCALE_INTEGER	0
+#define SCALE_MICRO	(MAX_UVOLT/MAX_VALUE)
+
+static int m337decc_read_raw(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan,
+			     int *val,
+			     int *val2,
+			     long mask)
 {
-	*val = 23;
-	*val2 = 66;
+	struct m337decc_device *adc_dev = iio_m337decc_device(indio_dev);
 
 	switch (mask) {
-		case IIO_CHAN_INFO_RAW:
-			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_RAW\n");
-			return IIO_VAL_INT;
-		break;
 		case IIO_CHAN_INFO_SCALE:
-			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SCALE\n");
-			return IIO_VAL_FRACTIONAL_LOG2;
-		break;
+			*val = SCALE_INTEGER;
+			*val2 = SCALE_MICRO;
+			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SCALE: %d:%d\n", *val, *val2);
+			return IIO_VAL_INT_PLUS_MICRO;
+
 		case IIO_CHAN_INFO_SAMP_FREQ:
 			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SAMP_FREQ\n");
+			*val = m337decc_get_sample_rate(adc_dev);
+			*val2 = 0;
 			return IIO_VAL_INT;
-		default:
-			dev_info(&indio_dev->dev, "read_raw: unhandled mask: %ld\n", mask);
-			return -EINVAL;
-		break;
 	}
 
+	dev_info(&indio_dev->dev, "read_raw: unhandled mask: %ld\n", mask);
 	return -EINVAL;
 }
 
 // FIXME: that affects all devices !
-static int adc_write_raw(struct iio_dev *indio_dev,
-		     struct iio_chan_spec const *chan,
-		     int val, int val2, long mask)
+static int m337decc_write_raw(struct iio_dev *indio_dev,
+			      struct iio_chan_spec const *chan,
+			      int val,
+			      int val2,
+			      long mask)
 {
-	struct adc_device *adc_dev = iio_adc_device(indio_dev);
+	struct m337decc_device *adc_dev = iio_m337decc_device(indio_dev);
 
 	switch (mask) {
 		case IIO_CHAN_INFO_SAMP_FREQ:
 			dev_info(&indio_dev->dev, "setting sample freq at %d: val=%d val2=%d\n", -1, val, val2);
-			adc_set_sample_rate(adc_dev, val);
+			m337decc_set_sample_rate(adc_dev, val);
 			return 0;
 
 		case IIO_CHAN_INFO_SCALE:
@@ -349,29 +356,30 @@ static int adc_write_raw(struct iio_dev *indio_dev,
 	return -EINVAL;
 }
 
-static irqreturn_t medha_adc_irq_worker(int irq, void *private)
+static irqreturn_t m337decc_irq_worker(int irq, void *private)
 {
 	struct iio_dev *indio_dev = private;
-	struct adc_channel *adc_chan = iio_adc_channel(indio_dev);
+	struct m337decc_channel *adc_chan = iio_m337decc_channel(indio_dev);
 	int reg = 0;
 	int x;
 	int ch = adc_chan->ch;
 	char *bufn = "<none>";
 
-//	dev_info(&indio_dev->dev, "IRQ worker: %d on ch %d\n", irq, ch);
 	if (adc_chan == NULL) {
 		dev_err(&indio_dev->dev, "adc_chan IS NULL !\n");
 		return IRQ_HANDLED;
 	}
 
+	spin_lock_bh(&adc_chan->lock);
+
 	/* find out for which ADC / buf we're acting */
 	if (irq == adc_chan->irq_ping) {
-		dev_info(&indio_dev->dev, " ping buffer\n");
+		dev_dbg(&indio_dev->dev, "chan %d ping buffer\n", ch);
 		reg = chan_spec[ch].reg_ping;
 		bufn = "ping";
 	}
 	else if (irq == adc_chan->irq_pong) {
-		dev_info(&indio_dev->dev, " pong buffer\n");
+		dev_dbg(&indio_dev->dev, "chan %d pong buffer\n", ch);
 		reg = chan_spec[ch].reg_pong;
 		bufn = "pong";
 	}
@@ -380,72 +388,69 @@ static irqreturn_t medha_adc_irq_worker(int irq, void *private)
 		return IRQ_HANDLED;
 	}
 
-	spin_lock_bh(&adc_chan->lock);
-
 	for (x=0; x<CHUNK_SIZE; x++) {
-		u32 sample;
-		// FIXME: need to care about upper 16 bit ...
-		sample = adc_reg_get32(adc_chan->adc_dev, reg);
-//		dev_info(&indio_dev->dev, "sample32 @%d %s #%d = %X\n", ch, bufn, x, sample);
-		iio_push_to_buffers(indio_dev, &sample);
+		u32 sample1 = m337decc_reg_get(adc_chan->adc_dev, reg);
+		u32 sample2 = m337decc_reg_get(adc_chan->adc_dev, reg);
+		u32 sample3 = sample1 + (sample2 << 16);
+		iio_push_to_buffers(indio_dev, &sample3);
 	}
 
 	spin_unlock_bh(&adc_chan->lock);
 
+	dev_info(&indio_dev->dev, "chan %d finished %s\n", ch, bufn);
+
 	return IRQ_HANDLED;
 }
 
-static int medha_adc_buffer_preenable(struct iio_dev *indio_dev)
+static int m337decc_buffer_preenable(struct iio_dev *indio_dev)
 {
-//	struct adc_device *adc_dev = iio_adc_device(indio_dev);
-	dev_info(&indio_dev->dev, "medha_adc_buffer_preenable\n");
+	dev_info(&indio_dev->dev, "m337decc_buffer_preenable\n");
 	// FIXME: fixup broken sampling rate ?
 	// FIXME: do a loop test ?
 	return 0;
 }
 
-static int medha_adc_buffer_postenable(struct iio_dev *indio_dev)
+static int m337decc_buffer_postenable(struct iio_dev *indio_dev)
 {
-	struct adc_device *adc_dev = iio_adc_device(indio_dev);
-	dev_info(&indio_dev->dev, "medha_adc_buffer_postenable\n");
-	adc_start(adc_dev);
+	struct m337decc_device *adc_dev = iio_m337decc_device(indio_dev);
+	dev_info(&indio_dev->dev, "m337decc_buffer_postenable\n");
+	m337decc_start(adc_dev);
 	return 0;
 }
 
-static int medha_adc_buffer_predisable(struct iio_dev *indio_dev)
+static int m337decc_buffer_predisable(struct iio_dev *indio_dev)
 {
-	struct adc_device *adc_dev = iio_adc_device(indio_dev);
-	dev_info(&indio_dev->dev, "medha_adc_buffer_predisable\n");
-	adc_stop(adc_dev);
+	struct m337decc_device *adc_dev = iio_m337decc_device(indio_dev);
+	dev_info(&indio_dev->dev, "m337decc_buffer_predisable\n");
+	m337decc_stop(adc_dev);
 	return 0;
 }
 
-static int medha_adc_buffer_postdisable(struct iio_dev *indio_dev)
+static int m337decc_buffer_postdisable(struct iio_dev *indio_dev)
 {
-//	struct adc_device *adc_dev = iio_adc_device(indio_dev);
-	dev_info(&indio_dev->dev, "medha_adc_buffer_postdisable\n");
+	dev_info(&indio_dev->dev, "m337decc_buffer_postdisable\n");
 	return 0;
 }
 
-static const struct iio_buffer_setup_ops adc_buffer_setup_ops = {
-	.preenable	= &medha_adc_buffer_preenable,
-	.postenable	= &medha_adc_buffer_postenable,
-	.predisable	= &medha_adc_buffer_predisable,
-	.postdisable	= &medha_adc_buffer_postdisable,
+static const struct iio_buffer_setup_ops m337decc_buffer_setup_ops = {
+	.preenable	= &m337decc_buffer_preenable,
+	.postenable	= &m337decc_buffer_postenable,
+	.predisable	= &m337decc_buffer_predisable,
+	.postdisable	= &m337decc_buffer_postdisable,
 };
 
-static int looptest(struct platform_device *pdev, u16 val)
+static int m337decc_looptest(struct platform_device *pdev, u16 val)
 {
-	struct adc_device *adc_dev = pdev_to_adc(pdev);
+	struct m337decc_device *adc_dev = pdev_to_adc(pdev);
 	u16 readback;
 	u16 inv = ~val & 0xFFFF;
 
-	adc_reg_set(adc_dev, REG_TEST, val);
+	m337decc_reg_set(adc_dev, REG_TEST, val);
 	msleep(50);
-	readback = adc_reg_get(adc_dev, REG_TEST);
-	readback = adc_reg_get(adc_dev, REG_TEST);
-	readback = adc_reg_get(adc_dev, REG_TEST);
-	readback = adc_reg_get(adc_dev, REG_TEST);
+	readback = m337decc_reg_get(adc_dev, REG_TEST);
+	readback = m337decc_reg_get(adc_dev, REG_TEST);
+	readback = m337decc_reg_get(adc_dev, REG_TEST);
+	readback = m337decc_reg_get(adc_dev, REG_TEST);
 
 	if (readback == inv)
 		dev_info(&pdev->dev, "looptest A: OK   w 0x%04X r 0x%04X\n", val, readback);
@@ -458,20 +463,20 @@ static int looptest(struct platform_device *pdev, u16 val)
 static int loop_write_op(void *data, u64 value)
 {
 	struct platform_device *pdev = data;
-	return looptest(pdev, value & 0xFFFF);
+	return m337decc_looptest(pdev, value & 0xFFFF);
 }
 
 static int cmd_write_op(void *data, u64 value)
 {
 	struct platform_device *pdev = data;
-	struct adc_device *adc_dev = platform_get_drvdata(pdev);
+	struct m337decc_device *adc_dev = platform_get_drvdata(pdev);
 
 	dev_info(&pdev->dev, "debug command: %lld\n", value);
 
 	switch (value) {
-		case 1:	return looptest(pdev, 0x9988);
-		case 3: adc_start(adc_dev); break;
-		case 4: adc_stop(adc_dev); break;
+		case 1:	return m337decc_looptest(pdev, 0x9988);
+		case 3: m337decc_start(adc_dev); break;
+		case 4: m337decc_stop(adc_dev); break;
 	}
 
 	return 0;
@@ -480,7 +485,7 @@ static int cmd_write_op(void *data, u64 value)
 DEFINE_SIMPLE_ATTRIBUTE(dbg_cmd_fops,  NULL, cmd_write_op,  "%llu\n");
 DEFINE_SIMPLE_ATTRIBUTE(dbg_loop_fops, NULL, loop_write_op, "%llu\n");
 
-static int adc_debugfs_init(struct platform_device *pdev)
+static int m337decc_debugfs_init(struct platform_device *pdev)
 {
 	struct dentry *dbg_dir = debugfs_create_dir("medha-adc", NULL);
 	debugfs_create_file("cmd",  0222, dbg_dir, pdev, &dbg_cmd_fops);
@@ -489,52 +494,52 @@ static int adc_debugfs_init(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct iio_info adc_info = {
+static const struct iio_info m337decc_info = {
 	.driver_module	= THIS_MODULE,
-	.read_raw	= &adc_read_raw,
-	.write_raw	= &adc_write_raw,
-	.attrs		= &adc_attribute_group
+	.read_raw	= &m337decc_read_raw,
+	.write_raw	= &m337decc_write_raw,
+	.attrs		= &m337decc_attribute_group
 };
 
-static int medha_adc_setup_device(struct platform_device *pdev, struct adc_device *adc_dev, int ch)
+static int m337decc_setup_device(struct platform_device *pdev, struct m337decc_device *adc_dev, int ch)
 {
 	int ret = 0;
 	struct iio_dev *indio_dev;
-	struct adc_channel *ch_priv;
+	struct m337decc_channel *ch_priv;
 	struct iio_buffer *fifo;
 
 	if (ch >= MAX_CHAN) {
-		dev_err(&pdev->dev, "medha_adc_setup_device() invalid channel number: %d\n", ch);
+		dev_err(&pdev->dev, "m337decc_setup_device() invalid channel number: %d\n", ch);
 		return -EINVAL;
 	}
 
-	dev_info(&pdev->dev, "initializing channel %d\n", ch);
+	dev_dbg(&pdev->dev, "initializing channel %d\n", ch);
 
-	if (!(indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(struct adc_channel)))) {
+	if (!(indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(struct m337decc_channel)))) {
 		dev_err(&pdev->dev, "failed to allocate iio device\n");
 		return -ENOMEM;
 	}
 
-	ch_priv = iio_adc_channel(indio_dev);
+	ch_priv = iio_m337decc_channel(indio_dev);
 
 	ch_priv->ch = ch;
 	ch_priv->adc_dev = adc_dev;
 	ch_priv->irq_ping = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_ping);
 	ch_priv->irq_pong = platform_get_irq_byname(pdev, chan_spec[ch].irq_name_pong);
 	spin_lock_init(&ch_priv->lock);
-	dev_info(&indio_dev->dev, "IRQs: CH %d -> %d %d\n", ch, ch_priv->irq_ping, ch_priv->irq_pong);
+	dev_dbg(&indio_dev->dev, "IRQs: CH %d -> %d %d\n", ch, ch_priv->irq_ping, ch_priv->irq_pong);
 
 	adc_dev->adc_chan[ch] = ch_priv;
 
-	indio_dev->info = &adc_info;
+	indio_dev->info = &m337decc_info;
 	indio_dev->dev.parent = &pdev->dev;
 	indio_dev->dev.of_node = pdev->dev.of_node;
 	indio_dev->name = chan_spec[ch].dev_name;
 	indio_dev->modes = INDIO_DIRECT_MODE /*INDIO_BUFFER_HARDWARE*/;
-	indio_dev->channels = &adc_channels;
+	indio_dev->channels = &m337decc_channels;
 	indio_dev->num_channels = 1;
-	indio_dev->info = &adc_info;
-	indio_dev->setup_ops = &adc_buffer_setup_ops;
+	indio_dev->info = &m337decc_info;
+	indio_dev->setup_ops = &m337decc_buffer_setup_ops;
 	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;
 
 	if (!(fifo = devm_iio_kfifo_allocate(&indio_dev->dev))) {
@@ -547,14 +552,22 @@ static int medha_adc_setup_device(struct platform_device *pdev, struct adc_devic
 	if ((ret = iio_device_register(indio_dev)))
 		goto err_free_dev;
 
-	if ((ret = devm_request_threaded_irq(
-				   &indio_dev->dev,
-				   ch_priv->irq_ping,
-				   medha_adc_irq_handler,
-				   medha_adc_irq_worker,
-				   IRQF_ONESHOT,
-				   indio_dev->name,
-				   indio_dev)))
+	if ((ret = devm_request_threaded_irq(&indio_dev->dev,
+					     ch_priv->irq_ping,
+					     m337decc_irq_handler,
+					     m337decc_irq_worker,
+					     IRQF_ONESHOT,
+					     indio_dev->name,
+					     indio_dev)))
+		goto err_free_dev;
+
+	if ((ret = devm_request_threaded_irq(&indio_dev->dev,
+					     ch_priv->irq_pong,
+					     m337decc_irq_handler,
+					     m337decc_irq_worker,
+					     IRQF_ONESHOT,
+					     indio_dev->name,
+					     indio_dev)))
 		goto err_free_dev;
 
 	adc_dev->iio_dev[ch] = indio_dev;
@@ -569,13 +582,13 @@ err_free_dev:
 	return ret;
 }
 
-static int adc_driver_probe(struct platform_device *pdev)
+static int m337decc_driver_probe(struct platform_device *pdev)
 {
-	struct adc_device *adc_dev = devm_kzalloc(&pdev->dev, sizeof(struct adc_device), GFP_KERNEL);
-	if (adc_dev == NULL) {
-		dev_err(&pdev->dev, "failed to allocate memory\n");
+	struct m337decc_device *adc_dev = devm_kzalloc(&pdev->dev,
+						       sizeof(struct m337decc_device),
+						       GFP_KERNEL);
+	if (adc_dev == NULL)
 		return -ENOMEM;
-	}
 
 	adc_dev->pdev = pdev;
 	adc_dev->base = devm_ioremap_resource(
@@ -585,33 +598,33 @@ static int adc_driver_probe(struct platform_device *pdev)
 	spin_lock_init(&adc_dev->lock);
 
 	if (IS_ERR(adc_dev->base)) {
-		dev_err(&pdev->dev, "adc_driver_probe() failed to get iomem\n");
+		dev_err(&pdev->dev, "m337decc_driver_probe() failed to get iomem\n");
 		return PTR_ERR(adc_dev->base);
 	}
 
 	platform_set_drvdata(pdev, adc_dev);
 
-	medha_adc_setup_device(pdev, adc_dev, 0);
-	medha_adc_setup_device(pdev, adc_dev, 1);
-	medha_adc_setup_device(pdev, adc_dev, 2);
+	m337decc_setup_device(pdev, adc_dev, 0);
+	m337decc_setup_device(pdev, adc_dev, 1);
+	m337decc_setup_device(pdev, adc_dev, 2);
 
-	adc_debugfs_init(pdev);
+	m337decc_debugfs_init(pdev);
 
 	return 0;
 }
 
-static const struct of_device_id adc_dt_match[] = {
+static const struct of_device_id m337decc_dt_match[] = {
 	{ .compatible = "medha,m337decc-02-adc" },
 	{ }
 };
 
-static struct platform_driver adc_driver = {
+static struct platform_driver m337decc_driver = {
 	.driver		= {
-		.name   = "m337decc-02-adc",
-		.of_match_table = of_match_ptr(adc_dt_match),
+		.name		= "m337decc-02-adc",
+		.of_match_table	= of_match_ptr(m337decc_dt_match),
 	},
 };
-module_platform_driver_probe(adc_driver, adc_driver_probe);
+module_platform_driver_probe(m337decc_driver, m337decc_driver_probe);
 
 MODULE_AUTHOR("Enrico Weigelt, metux IT consule <info@metux.net>");
 MODULE_DESCRIPTION("ADC driver for Medha Railway DPC DAQ/diagnostics module");

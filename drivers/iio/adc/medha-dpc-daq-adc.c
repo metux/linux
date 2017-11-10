@@ -42,18 +42,19 @@
 
 #define MAX_CHAN	3
 #define CHUNK_SIZE	2048
+#define REG_SZ		2
 
 /** FPGA-side register numbers. need to multiply by 4 for cpu-side offset **/
 enum {
-	REG_MCLK	= 128,
-	REG_RESET	= 129,
-	REG_TEST	= 256,
-	REG_ADC0_PING	= 4,
-	REG_ADC0_PONG	= 5,
-	REG_ADC1_PING	= 8,
-	REG_ADC1_PONG	= 9,
-	REG_ADC2_PING	= 12,
-	REG_ADC2_PONG	= 13,
+	REG_MCLK	= 256,
+	REG_RESET	= 258,
+	REG_TEST	= 512,
+	REG_ADC0_PING	= 8,
+	REG_ADC0_PONG	= 10,
+	REG_ADC1_PING	= 16,
+	REG_ADC1_PONG	= 18,
+	REG_ADC2_PING	= 24,
+	REG_ADC2_PONG	= 26,
 };
 
 enum {
@@ -137,17 +138,17 @@ static const struct iio_chan_spec m337decc_channels = {
 
 static inline void m337decc_reg_set(struct m337decc_device *adc, int reg, u16 val)
 {
-	iowrite16(val, adc->base + reg*4);
+	iowrite16(val, adc->base + reg*REG_SZ);
 }
 
 static inline u16 m337decc_reg_get(struct m337decc_device *adc, int reg)
 {
-	return ioread16(adc->base + reg*4);
+	return ioread16(adc->base + reg*REG_SZ);
 }
 
 static inline u16 m337dec_reg_get32(struct m337decc_device *adc, int reg)
 {
-	return ioread32(adc->base + reg*4);
+	return ioread32(adc->base + reg*REG_SZ);
 }
 
 static inline struct m337decc_channel *iio_m337decc_channel(struct iio_dev *indio_dev)

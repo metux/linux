@@ -5,9 +5,9 @@
  * Copyright (C) 2017 Enrico Weigelt, metux IT consult <info@metux.net>
  *                    JAQUET Technology Group AG
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 3 as
- *  published by the Free Software Foundation.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
  */
 
 #include <linux/types.h>

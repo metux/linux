@@ -301,11 +301,10 @@ static irqreturn_t m337decc_irq_handler(int irq, void *private)
 
 /*
    scale: -2.5 .. +2.5V
+   1 step = 2.5V / 2^23 ~ 298nV
 */
-#define MAX_UVOLT	2500000
-#define MAX_VALUE	0x7fffff
 #define SCALE_INTEGER	0
-#define SCALE_MICRO	(MAX_UVOLT/MAX_VALUE)
+#define SCALE_NANO	298
 
 static int m337decc_read_raw(struct iio_dev *indio_dev,
 			     struct iio_chan_spec const *chan,
@@ -318,9 +317,9 @@ static int m337decc_read_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 		case IIO_CHAN_INFO_SCALE:
 			*val = SCALE_INTEGER;
-			*val2 = SCALE_MICRO;
+			*val2 = SCALE_NANO;
 			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SCALE: %d:%d\n", *val, *val2);
-			return IIO_VAL_INT_PLUS_MICRO;
+			return IIO_VAL_INT_PLUS_NANO;
 
 		case IIO_CHAN_INFO_SAMP_FREQ:
 			dev_info(&indio_dev->dev, "read_raw: IIO_CHAN_INFO_SAMP_FREQ\n");

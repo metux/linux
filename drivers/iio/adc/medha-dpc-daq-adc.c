@@ -44,7 +44,7 @@
 #define CHUNK_SIZE	2048
 #define REG_SZ		2
 
-/** FPGA-side register numbers. need to multiply by 4 for cpu-side offset **/
+/** FPGA-side register numbers. need to multiply by REG_SZ for cpu-side offset **/
 enum {
 	REG_MCLK	= 256,
 	REG_RESET	= 258,
@@ -146,9 +146,11 @@ static inline u16 m337decc_reg_get(struct m337decc_device *adc, int reg)
 	return ioread16(adc->base + reg*REG_SZ);
 }
 
-static inline u16 m337dec_reg_get32(struct m337decc_device *adc, int reg)
+static inline u32 m337decc_reg_get32(struct m337decc_device *adc, int reg)
 {
-	return ioread32(adc->base + reg*REG_SZ);
+	u32* ptr = adc->base + reg*REG_SZ;
+	return *ptr;
+//	return ioread32(adc->base + reg*REG_SZ);
 }
 
 static inline struct m337decc_channel *iio_m337decc_channel(struct iio_dev *indio_dev)
@@ -364,6 +366,7 @@ static irqreturn_t m337decc_irq_worker(int irq, void *private)
 	int x;
 	int ch = adc_chan->ch;
 	char *bufn = "<none>";
+	u32 dump_buf[CHUNK_SIZE];
 
 	if (adc_chan == NULL) {
 		dev_err(&indio_dev->dev, "adc_chan IS NULL !\n");
@@ -389,15 +392,17 @@ static irqreturn_t m337decc_irq_worker(int irq, void *private)
 	}
 
 	for (x=0; x<CHUNK_SIZE; x++) {
-		u32 sample1 = m337decc_reg_get(adc_chan->adc_dev, reg);
-		u32 sample2 = m337decc_reg_get(adc_chan->adc_dev, reg);
-		u32 sample3 = sample1 + (sample2 << 16);
-		iio_push_to_buffers(indio_dev, &sample3);
+		u32 sample1 = m337decc_reg_get32(adc_chan->adc_dev, reg);
+		dump_buf[x] = sample1;
+//		msleep(50);
+//		dev_info(&indio_dev->dev, "CH %d retrieved: %8X\n", ch, sample1);
+		iio_push_to_buffers(indio_dev, &sample1);
 	}
 
 	spin_unlock_bh(&adc_chan->lock);
 
 	dev_info(&indio_dev->dev, "chan %d finished %s\n", ch, bufn);
+//	print_hex_dump_bytes("BUF dump: ", DUMP_PREFIX_OFFSET, dump_buf, sizeof(dump_buf)/4);
 
 	return IRQ_HANDLED;
 }

@@ -127,6 +127,7 @@ void print4byte(uint32_t input, struct iio_channel_info *info)
 	input >>= info->shift;
 	input &= info->mask;
 	if (info->is_signed) {
+		printf("bits_used=%d\n", info->bits_used);
 		int32_t val = (int32_t)(input << (32 - info->bits_used)) >>
 			      (32 - info->bits_used);
 		printf("C1 %05f (%05f)", ((float)val + info->offset) * info->scale, info->scale);

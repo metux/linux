@@ -366,12 +366,16 @@ static irqreturn_t m337decc_irq_worker(int irq, void *private)
 	int x;
 	int ch = adc_chan->ch;
 	char *bufn = "<none>";
-	u32 dump_buf[CHUNK_SIZE];
+//	u32 *dump_buf;
 
 	if (adc_chan == NULL) {
 		dev_err(&indio_dev->dev, "adc_chan IS NULL !\n");
 		return IRQ_HANDLED;
 	}
+
+//	dump_buf = devm_kzalloc(&indio_dev->dev,
+//				sizeof(u32) * CHUNK_SIZE,
+//				GFP_KERNEL);
 
 	spin_lock_bh(&adc_chan->lock);
 
@@ -393,7 +397,7 @@ static irqreturn_t m337decc_irq_worker(int irq, void *private)
 
 	for (x=0; x<CHUNK_SIZE; x++) {
 		u32 sample1 = m337decc_reg_get32(adc_chan->adc_dev, reg);
-		dump_buf[x] = sample1;
+//		dump_buf[x] = sample1;
 //		msleep(50);
 //		dev_info(&indio_dev->dev, "CH %d retrieved: %8X\n", ch, sample1);
 		iio_push_to_buffers(indio_dev, &sample1);
@@ -402,7 +406,10 @@ static irqreturn_t m337decc_irq_worker(int irq, void *private)
 	spin_unlock_bh(&adc_chan->lock);
 
 	dev_info(&indio_dev->dev, "chan %d finished %s\n", ch, bufn);
-//	print_hex_dump_bytes("BUF dump: ", DUMP_PREFIX_OFFSET, dump_buf, sizeof(dump_buf)/4);
+//	char textbuf[128];
+//	snprintf(textbuf, sizeof(textbuf), "BUF %d %s: ", ch, bufn);
+//	print_hex_dump_bytes(textbuf, DUMP_PREFIX_OFFSET, dump_buf, sizeof(u32)*CHUNK_SIZE);
+//	devm_kfree(&indio_dev->dev, dump_buf);
 
 	return IRQ_HANDLED;
 }

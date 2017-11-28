@@ -30,10 +30,6 @@
 # Error out on error
 set -e
 
-LD="$1"
-KBUILD_LDFLAGS="$2"
-LDFLAGS_vmlinux="$3"
-
 # Nice output in kbuild format
 # Will be supressed by "make -s"
 info()
@@ -41,6 +37,30 @@ info()
 	if [ "${quiet}" != "silent_" ]; then
 		printf "  %-7s %s\n" "${1}" "${2}"
 	fi
+}
+
+# If CONFIG_LTO_CLANG is selected, collect generated symbol versions into
+# .tmp_symversions
+modversions()
+{
+	if [ -z "${CONFIG_LTO_CLANG}" ]; then
+		return
+	fi
+	if [ -z "${CONFIG_MODVERSIONS}" ]; then
+		return
+	fi
+
+	rm -f .tmp_symversions
+
+	for a in ${KBUILD_VMLINUX_OBJS} ${KBUILD_VMLINUX_LIBS}; do
+		for o in $(${AR} t $a); do
+			if [ -f ${o}.symversions ]; then
+				cat ${o}.symversions >> .tmp_symversions
+			fi
+		done
+	done
+
+	echo "-T .tmp_symversions"
 }
 
 # Link of vmlinux.o used for section mismatch analysis
@@ -56,30 +76,15 @@ modpost_link()
 		${KBUILD_VMLINUX_LIBS}				\
 		--end-group"
 
-	${LD} ${KBUILD_LDFLAGS} -r -o ${1} ${objects}
-}
-
-objtool_link()
-{
-	local objtoolopt;
-
-	if [ -n "${CONFIG_VMLINUX_VALIDATION}" ]; then
-		objtoolopt="check"
-		if [ -z "${CONFIG_FRAME_POINTER}" ]; then
-			objtoolopt="${objtoolopt} --no-fp"
-		fi
-		if [ -n "${CONFIG_GCOV_KERNEL}" ]; then
-			objtoolopt="${objtoolopt} --no-unreachable"
-		fi
-		if [ -n "${CONFIG_RETPOLINE}" ]; then
-			objtoolopt="${objtoolopt} --retpoline"
-		fi
-		if [ -n "${CONFIG_X86_SMAP}" ]; then
-			objtoolopt="${objtoolopt} --uaccess"
-		fi
-		info OBJTOOL ${1}
-		tools/objtool/objtool ${objtoolopt} ${1}
+	if [ -n "${CONFIG_LTO_CLANG}" ]; then
+		# This might take a while, so indicate that we're doing
+		# an LTO link
+		info LTO ${1}
+	else
+		info LD ${1}
 	fi
+
+	${LD} ${KBUILD_LDFLAGS} -r -o ${1} $(modversions) ${objects}
 }
 
 # Link of vmlinux
@@ -90,29 +95,31 @@ vmlinux_link()
 	local lds="${objtree}/${KBUILD_LDS}"
 	local output=${1}
 	local objects
-	local strip_debug
 
 	info LD ${output}
 
 	# skip output file argument
 	shift
 
-	# The kallsyms linking does not need debug symbols included.
-	if [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
-		strip_debug=-Wl,--strip-debug
-	fi
-
 	if [ "${SRCARCH}" != "um" ]; then
-		objects="--whole-archive			\
-			${KBUILD_VMLINUX_OBJS}			\
-			--no-whole-archive			\
-			--start-group				\
-			${KBUILD_VMLINUX_LIBS}			\
-			--end-group				\
-			${@}"
+		if [ -n "${CONFIG_LTO_CLANG}" ]; then
+			# Use vmlinux.o instead of performing the slow LTO
+			# link again.
+			objects="--whole-archive		\
+				vmlinux.o 			\
+				--no-whole-archive		\
+				${@}"
+		else
+			objects="--whole-archive		\
+				${KBUILD_VMLINUX_OBJS}		\
+				--no-whole-archive		\
+				--start-group			\
+				${KBUILD_VMLINUX_LIBS}		\
+				--end-group			\
+				${@}"
+		fi
 
 		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux}	\
-			${strip_debug#-Wl,}			\
 			-o ${output}				\
 			-T ${lds} ${objects}
 	else
@@ -125,7 +132,6 @@ vmlinux_link()
 			${@}"
 
 		${CC} ${CFLAGS_vmlinux}				\
-			${strip_debug}				\
 			-o ${output}				\
 			-Wl,-T,${lds}				\
 			${objects}				\
@@ -140,38 +146,37 @@ vmlinux_link()
 gen_btf()
 {
 	local pahole_ver
+	local bin_arch
 
 	if ! [ -x "$(command -v ${PAHOLE})" ]; then
-		echo >&2 "BTF: ${1}: pahole (${PAHOLE}) is not available"
+		info "BTF" "${1}: pahole (${PAHOLE}) is not available"
 		return 1
 	fi
 
 	pahole_ver=$(${PAHOLE} --version | sed -E 's/v([0-9]+)\.([0-9]+)/\1\2/')
-	if [ "${pahole_ver}" -lt "116" ]; then
-		echo >&2 "BTF: ${1}: pahole version $(${PAHOLE} --version) is too old, need at least v1.16"
+	if [ "${pahole_ver}" -lt "113" ]; then
+		info "BTF" "${1}: pahole version $(${PAHOLE} --version) is too old, need at least v1.13"
 		return 1
 	fi
 
-	vmlinux_link ${1}
-
 	info "BTF" ${2}
+	vmlinux_link ${1}
 	LLVM_OBJCOPY=${OBJCOPY} ${PAHOLE} -J ${1}
 
-	# Create ${2} which contains just .BTF section but no symbols. Add
-	# SHF_ALLOC because .BTF will be part of the vmlinux image. --strip-all
-	# deletes all symbols including __start_BTF and __stop_BTF, which will
-	# be redefined in the linker script. Add 2>/dev/null to suppress GNU
-	# objcopy warnings: "empty loadable segment detected at ..."
-	${OBJCOPY} --only-section=.BTF --set-section-flags .BTF=alloc,readonly \
-		--strip-all ${1} ${2} 2>/dev/null
-	# Change e_type to ET_REL so that it can be used to link final vmlinux.
-	# Unlike GNU ld, lld does not allow an ET_EXEC input.
-	printf '\1' | dd of=${2} conv=notrunc bs=1 seek=16 status=none
+	# dump .BTF section into raw binary file to link with final vmlinux
+	bin_arch=$(LANG=C ${OBJDUMP} -f ${1} | grep architecture | \
+		cut -d, -f1 | cut -d' ' -f2)
+	bin_format=$(LANG=C ${OBJDUMP} -f ${1} | grep 'file format' | \
+		awk '{print $4}')
+	${OBJCOPY} --dump-section .BTF=.btf.vmlinux.bin ${1} 2>/dev/null
+	${OBJCOPY} -I binary -O ${bin_format} -B ${bin_arch} \
+		--rename-section .data=.BTF .btf.vmlinux.bin ${2}
 }
 
-# Create ${2} .S file with all symbols from the ${1} object file
+# Create ${2} .o file with all symbols from the ${1} object file
 kallsyms()
 {
+	info KSYM ${2}
 	local kallsymopt;
 
 	if [ -n "${CONFIG_KALLSYMS_ALL}" ]; then
@@ -186,8 +191,13 @@ kallsyms()
 		kallsymopt="${kallsymopt} --base-relative"
 	fi
 
-	info KSYMS ${2}
-	${NM} -n ${1} | scripts/kallsyms ${kallsymopt} > ${2}
+	local aflags="${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL}               \
+		      ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS}"
+
+	local afile="`basename ${2} .o`.S"
+
+	${NM} -n ${1} | scripts/kallsyms ${kallsymopt} > ${afile}
+	${CC} ${aflags} -c -o ${2} ${afile}
 }
 
 # Perform one step in kallsyms generation, including temporary linking of
@@ -195,17 +205,11 @@ kallsyms()
 kallsyms_step()
 {
 	kallsymso_prev=${kallsymso}
-	kallsyms_vmlinux=.tmp_vmlinux.kallsyms${1}
-	kallsymso=${kallsyms_vmlinux}.o
-	kallsyms_S=${kallsyms_vmlinux}.S
+	kallsymso=.tmp_kallsyms${1}.o
+	kallsyms_vmlinux=.tmp_vmlinux${1}
 
 	vmlinux_link ${kallsyms_vmlinux} "${kallsymso_prev}" ${btf_vmlinux_bin_o}
-	kallsyms ${kallsyms_vmlinux} ${kallsyms_S}
-
-	info AS ${kallsyms_S}
-	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} \
-	      ${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL} \
-	      -c -o ${kallsymso} ${kallsyms_S}
+	kallsyms ${kallsyms_vmlinux} ${kallsymso}
 }
 
 # Create map file with all symbols from ${1}
@@ -215,9 +219,9 @@ mksysmap()
 	${CONFIG_SHELL} "${srctree}/scripts/mksysmap" ${1} ${2}
 }
 
-sorttable()
+sortextable()
 {
-	${objtree}/scripts/sorttable ${1}
+	${objtree}/scripts/sortextable ${1}
 }
 
 # Delete output files in case of error
@@ -225,6 +229,8 @@ cleanup()
 {
 	rm -f .btf.*
 	rm -f .tmp_System.map
+	rm -f .tmp_kallsyms*
+	rm -f .tmp_symversions
 	rm -f .tmp_vmlinux*
 	rm -f System.map
 	rm -f vmlinux
@@ -245,6 +251,8 @@ on_signals()
 }
 trap on_signals HUP INT QUIT TERM
 
+#
+#
 # Use "make V=1" to debug this script
 case "${KBUILD_VERBOSE}" in
 *1*)
@@ -271,30 +279,21 @@ else
 fi;
 
 # final build of init/
-${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init need-builtin=1
+${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init
 
 #link vmlinux.o
-info LD vmlinux.o
 modpost_link vmlinux.o
-objtool_link vmlinux.o
 
 # modpost vmlinux.o to check for section mismatches
 ${MAKE} -f "${srctree}/scripts/Makefile.modpost" MODPOST_VMLINUX=1
 
 info MODINFO modules.builtin.modinfo
 ${OBJCOPY} -j .modinfo -O binary vmlinux.o modules.builtin.modinfo
-info GEN modules.builtin
-# The second line aids cases where multiple modules share the same object.
-tr '\0' '\n' < modules.builtin.modinfo | sed -n 's/^[[:alnum:]:_]*\.file=//p' |
-	tr ' ' '\n' | uniq | sed -e 's:^:kernel/:' -e 's/$/.ko/' > modules.builtin
 
 btf_vmlinux_bin_o=""
 if [ -n "${CONFIG_DEBUG_INFO_BTF}" ]; then
-	btf_vmlinux_bin_o=.btf.vmlinux.bin.o
-	if ! gen_btf .tmp_vmlinux.btf $btf_vmlinux_bin_o ; then
-		echo >&2 "Failed to generate BTF for vmlinux"
-		echo >&2 "Try to disable CONFIG_DEBUG_INFO_BTF"
-		exit 1
+	if gen_btf .tmp_vmlinux.btf .btf.vmlinux.bin.o ; then
+		btf_vmlinux_bin_o=.btf.vmlinux.bin.o
 	fi
 fi
 
@@ -340,18 +339,9 @@ fi
 
 vmlinux_link vmlinux "${kallsymso}" ${btf_vmlinux_bin_o}
 
-# fill in BTF IDs
-if [ -n "${CONFIG_DEBUG_INFO_BTF}" -a -n "${CONFIG_BPF}" ]; then
-	info BTFIDS vmlinux
-	${RESOLVE_BTFIDS} vmlinux
-fi
-
-if [ -n "${CONFIG_BUILDTIME_TABLE_SORT}" ]; then
-	info SORTTAB vmlinux
-	if ! sorttable vmlinux; then
-		echo >&2 Failed to sort kernel tables
-		exit 1
-	fi
+if [ -n "${CONFIG_BUILDTIME_EXTABLE_SORT}" ]; then
+	info SORTEX vmlinux
+	sortextable vmlinux
 fi
 
 info SYSMAP System.map

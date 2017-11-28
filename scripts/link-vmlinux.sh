@@ -39,6 +39,30 @@ info()
 	fi
 }
 
+# If CONFIG_LTO_CLANG is selected, collect generated symbol versions into
+# .tmp_symversions
+modversions()
+{
+	if [ -z "${CONFIG_LTO_CLANG}" ]; then
+		return
+	fi
+	if [ -z "${CONFIG_MODVERSIONS}" ]; then
+		return
+	fi
+
+	rm -f .tmp_symversions
+
+	for a in ${KBUILD_VMLINUX_OBJS} ${KBUILD_VMLINUX_LIBS}; do
+		for o in $(${AR} t $a); do
+			if [ -f ${o}.symversions ]; then
+				cat ${o}.symversions >> .tmp_symversions
+			fi
+		done
+	done
+
+	echo "-T .tmp_symversions"
+}
+
 # Link of vmlinux.o used for section mismatch analysis
 # ${1} output file
 modpost_link()
@@ -52,28 +76,51 @@ modpost_link()
 		${KBUILD_VMLINUX_LIBS}				\
 		--end-group"
 
-	${LD} ${KBUILD_LDFLAGS} -r -o ${1} ${objects}
+	if [ -n "${CONFIG_LTO_CLANG}" ]; then
+		# This might take a while, so indicate that we're doing
+		# an LTO link
+		info LTO ${1}
+	else
+		info LD ${1}
+	fi
+
+	${LD} ${KBUILD_LDFLAGS} -r -o ${1} $(modversions) ${objects}
 }
 
 # Link of vmlinux
-# ${1} - optional extra .o files
-# ${2} - output file
+# ${1} - output file
+# ${2}, ${3}, ... - optional extra .o files
 vmlinux_link()
 {
-	info LD ${2}
 	local lds="${objtree}/${KBUILD_LDS}"
+	local output=${1}
 	local objects
 
-	if [ "${SRCARCH}" != "um" ]; then
-		objects="--whole-archive			\
-			${KBUILD_VMLINUX_OBJS}			\
-			--no-whole-archive			\
-			--start-group				\
-			${KBUILD_VMLINUX_LIBS}			\
-			--end-group				\
-			${1}"
+	info LD ${output}
 
-		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux} -o ${2}	\
+	# skip output file argument
+	shift
+
+	if [ "${SRCARCH}" != "um" ]; then
+		if [ -n "${CONFIG_LTO_CLANG}" ]; then
+			# Use vmlinux.o instead of performing the slow LTO
+			# link again.
+			objects="--whole-archive		\
+				vmlinux.o 			\
+				--no-whole-archive		\
+				${@}"
+		else
+			objects="--whole-archive		\
+				${KBUILD_VMLINUX_OBJS}		\
+				--no-whole-archive		\
+				--start-group			\
+				${KBUILD_VMLINUX_LIBS}		\
+				--end-group			\
+				${@}"
+		fi
+
+		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux}	\
+			-o ${output}				\
 			-T ${lds} ${objects}
 	else
 		objects="-Wl,--whole-archive			\
@@ -82,9 +129,10 @@ vmlinux_link()
 			-Wl,--start-group			\
 			${KBUILD_VMLINUX_LIBS}			\
 			-Wl,--end-group				\
-			${1}"
+			${@}"
 
-		${CC} ${CFLAGS_vmlinux} -o ${2}			\
+		${CC} ${CFLAGS_vmlinux}				\
+			-o ${output}				\
 			-Wl,-T,${lds}				\
 			${objects}				\
 			-lutil -lrt -lpthread
@@ -93,23 +141,36 @@ vmlinux_link()
 }
 
 # generate .BTF typeinfo from DWARF debuginfo
+# ${1} - vmlinux image
+# ${2} - file to dump raw BTF data into
 gen_btf()
 {
-	local pahole_ver;
+	local pahole_ver
+	local bin_arch
 
 	if ! [ -x "$(command -v ${PAHOLE})" ]; then
 		info "BTF" "${1}: pahole (${PAHOLE}) is not available"
-		return 0
+		return 1
 	fi
 
 	pahole_ver=$(${PAHOLE} --version | sed -E 's/v([0-9]+)\.([0-9]+)/\1\2/')
 	if [ "${pahole_ver}" -lt "113" ]; then
 		info "BTF" "${1}: pahole version $(${PAHOLE} --version) is too old, need at least v1.13"
-		return 0
+		return 1
 	fi
 
-	info "BTF" ${1}
+	info "BTF" ${2}
+	vmlinux_link ${1}
 	LLVM_OBJCOPY=${OBJCOPY} ${PAHOLE} -J ${1}
+
+	# dump .BTF section into raw binary file to link with final vmlinux
+	bin_arch=$(LANG=C ${OBJDUMP} -f ${1} | grep architecture | \
+		cut -d, -f1 | cut -d' ' -f2)
+	bin_format=$(LANG=C ${OBJDUMP} -f ${1} | grep 'file format' | \
+		awk '{print $4}')
+	${OBJCOPY} --dump-section .BTF=.btf.vmlinux.bin ${1} 2>/dev/null
+	${OBJCOPY} -I binary -O ${bin_format} -B ${bin_arch} \
+		--rename-section .data=.BTF .btf.vmlinux.bin ${2}
 }
 
 # Create ${2} .o file with all symbols from the ${1} object file
@@ -147,7 +208,7 @@ kallsyms_step()
 	kallsymso=.tmp_kallsyms${1}.o
 	kallsyms_vmlinux=.tmp_vmlinux${1}
 
-	vmlinux_link "${kallsymso_prev}" ${kallsyms_vmlinux}
+	vmlinux_link ${kallsyms_vmlinux} "${kallsymso_prev}" ${btf_vmlinux_bin_o}
 	kallsyms ${kallsyms_vmlinux} ${kallsymso}
 }
 
@@ -166,8 +227,10 @@ sortextable()
 # Delete output files in case of error
 cleanup()
 {
+	rm -f .btf.*
 	rm -f .tmp_System.map
 	rm -f .tmp_kallsyms*
+	rm -f .tmp_symversions
 	rm -f .tmp_vmlinux*
 	rm -f System.map
 	rm -f vmlinux
@@ -219,7 +282,6 @@ fi;
 ${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init
 
 #link vmlinux.o
-info LD vmlinux.o
 modpost_link vmlinux.o
 
 # modpost vmlinux.o to check for section mismatches
@@ -227,6 +289,13 @@ ${MAKE} -f "${srctree}/scripts/Makefile.modpost" MODPOST_VMLINUX=1
 
 info MODINFO modules.builtin.modinfo
 ${OBJCOPY} -j .modinfo -O binary vmlinux.o modules.builtin.modinfo
+
+btf_vmlinux_bin_o=""
+if [ -n "${CONFIG_DEBUG_INFO_BTF}" ]; then
+	if gen_btf .tmp_vmlinux.btf .btf.vmlinux.bin.o ; then
+		btf_vmlinux_bin_o=.btf.vmlinux.bin.o
+	fi
+fi
 
 kallsymso=""
 kallsymso_prev=""
@@ -268,11 +337,7 @@ if [ -n "${CONFIG_KALLSYMS}" ]; then
 	fi
 fi
 
-vmlinux_link "${kallsymso}" vmlinux
-
-if [ -n "${CONFIG_DEBUG_INFO_BTF}" ]; then
-	gen_btf vmlinux
-fi
+vmlinux_link vmlinux "${kallsymso}" ${btf_vmlinux_bin_o}
 
 if [ -n "${CONFIG_BUILDTIME_EXTABLE_SORT}" ]; then
 	info SORTEX vmlinux

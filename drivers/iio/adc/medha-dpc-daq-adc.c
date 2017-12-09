@@ -39,6 +39,7 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 
+#define __TIMESTAMP
 
 #define MAX_CHAN	3
 #define CHUNK_SIZE	2048
@@ -122,18 +123,23 @@ struct m337decc_device {
 	spinlock_t		lock;
 };
 
-static const struct iio_chan_spec m337decc_channels = {
-	.type				= IIO_VOLTAGE,
-	.info_mask_separate		= BIT(IIO_CHAN_INFO_RAW),
-	.info_mask_shared_by_type	= BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_SAMP_FREQ),
-	.indexed			= 1,
-	.channel			= 0,
-	.scan_index			= 0,
-	.scan_type			= {
-		.sign		= 's',
-		.realbits	= 24,
-		.storagebits	= 32,
+static const struct iio_chan_spec m337decc_channels[] = {
+	{
+		.type				= IIO_VOLTAGE,
+		.info_mask_separate		= BIT(IIO_CHAN_INFO_RAW),
+		.info_mask_shared_by_type	= BIT(IIO_CHAN_INFO_SCALE) | BIT(IIO_CHAN_INFO_SAMP_FREQ),
+		.indexed			= 1,
+		.channel			= 0,
+		.scan_index			= 0,
+		.scan_type			= {
+			.sign		= 's',
+			.realbits	= 24,
+			.storagebits	= 32,
+		},
 	},
+#ifdef __TIMESTAMP
+	IIO_CHAN_SOFT_TIMESTAMP(1),
+#endif
 };
 
 static inline void m337decc_reg_set(struct m337decc_device *adc, int reg, u16 val)
@@ -400,7 +406,13 @@ static irqreturn_t m337decc_irq_worker(int irq, void *private)
 //		dump_buf[x] = sample1;
 //		msleep(50);
 //		dev_info(&indio_dev->dev, "CH %d retrieved: %8X\n", ch, sample1);
+#ifdef __TIMESTAMP
+		iio_push_to_buffers_with_timestamp(indio_dev,
+						   &sample1,
+						   iio_get_time_ns(indio_dev));
+#else
 		iio_push_to_buffers(indio_dev, &sample1);
+#endif
 	}
 
 	spin_unlock_bh(&adc_chan->lock);
@@ -548,8 +560,8 @@ static int m337decc_setup_device(struct platform_device *pdev, struct m337decc_d
 	indio_dev->dev.of_node = pdev->dev.of_node;
 	indio_dev->name = chan_spec[ch].dev_name;
 	indio_dev->modes = INDIO_DIRECT_MODE /*INDIO_BUFFER_HARDWARE*/;
-	indio_dev->channels = &m337decc_channels;
-	indio_dev->num_channels = 1;
+	indio_dev->channels = m337decc_channels;
+	indio_dev->num_channels = ARRAY_SIZE(m337decc_channels);
 	indio_dev->info = &m337decc_info;
 	indio_dev->setup_ops = &m337decc_buffer_setup_ops;
 	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;

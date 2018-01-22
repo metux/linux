@@ -732,6 +732,8 @@ struct inode {
 	void			*i_private; /* fs or device private pointer */
 } __randomize_layout;
 
+struct timespec64 timestamp_truncate(struct timespec64 t, struct inode *inode);
+
 static inline unsigned int i_blocksize(const struct inode *node)
 {
 	return (1 << node->i_blkbits);

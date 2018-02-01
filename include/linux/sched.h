@@ -18,7 +18,6 @@
 #include <linux/mutex.h>
 #include <linux/plist.h>
 #include <linux/hrtimer.h>
-#include <linux/irqflags.h>
 #include <linux/seccomp.h>
 #include <linux/nodemask.h>
 #include <linux/rcupdate.h>
@@ -32,7 +31,6 @@
 #include <linux/task_io_accounting.h>
 #include <linux/posix-timers.h>
 #include <linux/rseq.h>
-#include <linux/seqlock.h>
 #include <linux/kcsan.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
@@ -63,7 +61,6 @@ struct sighand_struct;
 struct signal_struct;
 struct task_delay_info;
 struct task_group;
-struct io_uring_task;
 
 /*
  * Task state bitmask. NOTE! These bits are also
@@ -157,24 +154,24 @@ struct io_uring_task;
  *
  *   for (;;) {
  *	set_current_state(TASK_UNINTERRUPTIBLE);
- *	if (CONDITION)
- *	   break;
+ *	if (!need_sleep)
+ *		break;
  *
  *	schedule();
  *   }
  *   __set_current_state(TASK_RUNNING);
  *
  * If the caller does not need such serialisation (because, for instance, the
- * CONDITION test and condition change and wakeup are under the same lock) then
+ * condition test and condition change and wakeup are under the same lock) then
  * use __set_current_state().
  *
  * The above is typically ordered against the wakeup, which does:
  *
- *   CONDITION = 1;
+ *   need_sleep = false;
  *   wake_up_state(p, TASK_UNINTERRUPTIBLE);
  *
- * where wake_up_state()/try_to_wake_up() executes a full memory barrier before
- * accessing p->state.
+ * where wake_up_state() executes a full memory barrier before accessing the
+ * task state.
  *
  * Wakeup will do: if (@state & p->state) p->state = TASK_RUNNING, that is,
  * once it observes the TASK_UNINTERRUPTIBLE store the waking CPU can issue a
@@ -377,7 +374,7 @@ struct util_est {
  * For cfs_rq, they are the aggregated values of all runnable and blocked
  * sched_entities.
  *
- * The load/runnable/util_avg doesn't directly factor frequency scaling and CPU
+ * The load/runnable/util_avg doesn't direcly factor frequency scaling and CPU
  * capacity scaling. The scaling is done through the rq_clock_pelt that is used
  * for computing those signals (see update_rq_clock_pelt())
  *
@@ -552,6 +549,7 @@ struct sched_dl_entity {
 	 * overruns.
 	 */
 	unsigned int			dl_throttled      : 1;
+	unsigned int			dl_boosted        : 1;
 	unsigned int			dl_yielded        : 1;
 	unsigned int			dl_non_contending : 1;
 	unsigned int			dl_overrun	  : 1;
@@ -570,15 +568,6 @@ struct sched_dl_entity {
 	 * time.
 	 */
 	struct hrtimer inactive_timer;
-
-#ifdef CONFIG_RT_MUTEXES
-	/*
-	 * Priority Inheritance. When a DEADLINE scheduling entity is boosted
-	 * pi_se points to the donor, otherwise points to the dl_se it belongs
-	 * to (the original one/itself).
-	 */
-	struct sched_dl_entity *pi_se;
-#endif
 };
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -697,15 +686,9 @@ struct task_struct {
 	struct sched_dl_entity		dl;
 
 #ifdef CONFIG_UCLAMP_TASK
-	/*
-	 * Clamp values requested for a scheduling entity.
-	 * Must be updated with task_rq_lock() held.
-	 */
+	/* Clamp values requested for a scheduling entity */
 	struct uclamp_se		uclamp_req[UCLAMP_CNT];
-	/*
-	 * Effective clamp values used for a scheduling entity.
-	 * Must be updated with task_rq_lock() held.
-	 */
+	/* Effective clamp values used for a scheduling entity */
 	struct uclamp_se		uclamp[UCLAMP_CNT];
 #endif
 
@@ -778,6 +761,7 @@ struct task_struct {
 	unsigned			sched_reset_on_fork:1;
 	unsigned			sched_contributes_to_load:1;
 	unsigned			sched_migrated:1;
+	unsigned			sched_remote_wakeup:1;
 #ifdef CONFIG_PSI
 	unsigned			sched_psi_wake_requeue:1;
 #endif
@@ -786,21 +770,6 @@ struct task_struct {
 	unsigned			:0;
 
 	/* Unserialized, strictly 'current' */
-
-	/*
-	 * This field must not be in the scheduler word above due to wakelist
-	 * queueing no longer being serialized by p->on_cpu. However:
-	 *
-	 * p->XXX = X;			ttwu()
-	 * schedule()			  if (p->on_rq && ..) // false
-	 *   smp_mb__after_spinlock();	  if (smp_load_acquire(&p->on_cpu) && //true
-	 *   deactivate_task()		      ttwu_queue_wakelist())
-	 *     p->on_rq = 0;			p->sched_remote_wakeup = Y;
-	 *
-	 * guarantees all stores of 'current' are visible before
-	 * ->sched_remote_wakeup gets used, so it can be in this word.
-	 */
-	unsigned			sched_remote_wakeup:1;
 
 	/* Bit to tell LSMs we're in execve(): */
 	unsigned			in_execve:1;
@@ -888,6 +857,10 @@ struct task_struct {
 	u64				stimescaled;
 #endif
 	u64				gtime;
+#ifdef CONFIG_CPU_FREQ_TIMES
+	u64				*time_in_state;
+	unsigned int			max_state;
+#endif
 	struct prev_cputime		prev_cputime;
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
 	struct vtime			vtime;
@@ -912,10 +885,6 @@ struct task_struct {
 
 	/* Empty if CONFIG_POSIX_CPUTIMERS=n */
 	struct posix_cputimers		posix_cputimers;
-
-#ifdef CONFIG_POSIX_CPU_TIMERS_TASK_WORK
-	struct posix_cputimers_work	posix_cputimers_work;
-#endif
 
 	/* Process credentials: */
 
@@ -957,10 +926,6 @@ struct task_struct {
 
 	/* Open file information: */
 	struct files_struct		*files;
-
-#ifdef CONFIG_IO_URING
-	struct io_uring_task		*io_uring;
-#endif
 
 	/* Namespaces: */
 	struct nsproxy			*nsproxy;
@@ -1019,9 +984,19 @@ struct task_struct {
 #endif
 
 #ifdef CONFIG_TRACE_IRQFLAGS
-	struct irqtrace_events		irqtrace;
+	unsigned int			irq_events;
 	unsigned int			hardirq_threaded;
+	unsigned long			hardirq_enable_ip;
+	unsigned long			hardirq_disable_ip;
+	unsigned int			hardirq_enable_event;
+	unsigned int			hardirq_disable_event;
+	int				hardirqs_enabled;
+	int				hardirq_context;
 	u64				hardirq_chain_key;
+	unsigned long			softirq_disable_ip;
+	unsigned long			softirq_enable_ip;
+	unsigned int			softirq_disable_event;
+	unsigned int			softirq_enable_event;
 	int				softirqs_enabled;
 	int				softirq_context;
 	int				irq_config;
@@ -1035,7 +1010,7 @@ struct task_struct {
 	struct held_lock		held_locks[MAX_LOCK_DEPTH];
 #endif
 
-#if defined(CONFIG_UBSAN) && !defined(CONFIG_UBSAN_TRAP)
+#ifdef CONFIG_UBSAN
 	unsigned int			in_ubsan;
 #endif
 
@@ -1081,7 +1056,7 @@ struct task_struct {
 	/* Protected by ->alloc_lock: */
 	nodemask_t			mems_allowed;
 	/* Seqence number to catch updates: */
-	seqcount_spinlock_t		mems_allowed_seq;
+	seqcount_t			mems_allowed_seq;
 	int				cpuset_mem_spread_rotor;
 	int				cpuset_slab_spread_rotor;
 #endif
@@ -1222,16 +1197,8 @@ struct task_struct {
 #ifdef CONFIG_KASAN
 	unsigned int			kasan_depth;
 #endif
-
 #ifdef CONFIG_KCSAN
 	struct kcsan_ctx		kcsan_ctx;
-#ifdef CONFIG_TRACE_IRQFLAGS
-	struct irqtrace_events		kcsan_save_irqtrace;
-#endif
-#endif
-
-#if IS_ENABLED(CONFIG_KUNIT)
-	struct kunit			*kunit_test;
 #endif
 
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
@@ -1339,8 +1306,6 @@ struct task_struct {
 #endif
 
 #ifdef CONFIG_X86_MCE
-	void __user			*mce_vaddr;
-	__u64				mce_kflags;
 	u64				mce_addr;
 	__u64				mce_ripv : 1,
 					mce_whole_page : 1,
@@ -1522,10 +1487,9 @@ extern struct pid *cad_pid;
 /*
  * Per process flags
  */
-#define PF_VCPU			0x00000001	/* I'm a virtual CPU */
 #define PF_IDLE			0x00000002	/* I am an IDLE thread */
 #define PF_EXITING		0x00000004	/* Getting shut down */
-#define PF_IO_WORKER		0x00000010	/* Task is an IO worker */
+#define PF_VCPU			0x00000010	/* I'm a virtual CPU */
 #define PF_WQ_WORKER		0x00000020	/* I'm a workqueue worker */
 #define PF_FORKNOEXEC		0x00000040	/* Forked but didn't exec */
 #define PF_MCE_PROCESS		0x00000080      /* Process policy on mce errors */
@@ -1546,9 +1510,11 @@ extern struct pid *cad_pid;
 #define PF_KTHREAD		0x00200000	/* I am a kernel thread */
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
 #define PF_SWAPWRITE		0x00800000	/* Allowed to write to swap */
+#define PF_UMH			0x02000000	/* I'm an Usermodehelper process */
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_mask */
 #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
 #define PF_MEMALLOC_NOCMA	0x10000000	/* All allocation request will have _GFP_MOVABLE cleared */
+#define PF_IO_WORKER		0x20000000	/* Task is an IO worker */
 #define PF_FREEZER_SKIP		0x40000000	/* Freezer should not count it as freezable */
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
 
@@ -1686,9 +1652,6 @@ extern int idle_cpu(int cpu);
 extern int available_idle_cpu(int cpu);
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);
-extern void sched_set_fifo(struct task_struct *p);
-extern void sched_set_fifo_low(struct task_struct *p);
-extern void sched_set_normal(struct task_struct *p, int nice);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);
 extern int sched_setattr_nocheck(struct task_struct *, const struct sched_attr *);
 extern struct task_struct *idle_task(int cpu);
@@ -1699,7 +1662,7 @@ extern struct task_struct *idle_task(int cpu);
  *
  * Return: 1 if @p is an idle task. 0 otherwise.
  */
-static __always_inline bool is_idle_task(const struct task_struct *p)
+static inline bool is_idle_task(const struct task_struct *p)
 {
 	return !!(p->flags & PF_IDLE);
 }
@@ -2056,6 +2019,14 @@ static inline void rseq_execve(struct task_struct *t)
 
 #endif
 
+void __exit_umh(struct task_struct *tsk);
+
+static inline void exit_umh(struct task_struct *tsk)
+{
+	if (unlikely(tsk->flags & PF_UMH))
+		__exit_umh(tsk);
+}
+
 #ifdef CONFIG_DEBUG_RSEQ
 
 void rseq_syscall(struct pt_regs *regs);
@@ -2077,8 +2048,6 @@ const struct sched_avg *sched_trace_rq_avg_dl(struct rq *rq);
 const struct sched_avg *sched_trace_rq_avg_irq(struct rq *rq);
 
 int sched_trace_rq_cpu(struct rq *rq);
-int sched_trace_rq_cpu_capacity(struct rq *rq);
-int sched_trace_rq_nr_running(struct rq *rq);
 
 const struct cpumask *sched_trace_rd_span(struct root_domain *rd);
 

@@ -519,7 +519,7 @@ static int m337decc_debugfs_init(struct platform_device *pdev)
 }
 
 static const struct iio_info m337decc_info = {
-	.driver_module	= THIS_MODULE,
+//	.driver_module	= THIS_MODULE,
 	.read_raw	= &m337decc_read_raw,
 	.write_raw	= &m337decc_write_raw,
 	.attrs		= &m337decc_attribute_group

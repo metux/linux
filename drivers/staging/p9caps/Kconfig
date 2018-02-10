@@ -1,0 +1,11 @@
+config PLAN9CAPS
+	tristate "Plan 9 capability device"
+	default n
+	select CRYPTO_HMAC
+	select CRYPTO_SHA1
+	help
+	  This module implements the Plan 9 capability devices
+	  /dev/caphash and /dev/capuse
+
+	  To compile this driver as a module, choose
+	  M here: the module will be called p9caps.

@@ -3,6 +3,7 @@
 
 obj-y				+= media/
 obj-y				+= typec/
+obj-$(CONFIG_PLAN9CAPS)		+= p9caps/
 obj-$(CONFIG_IRDA)		+= irda/net/
 obj-$(CONFIG_IRDA)		+= irda/drivers/
 obj-$(CONFIG_PRISM2_USB)	+= wlan-ng/

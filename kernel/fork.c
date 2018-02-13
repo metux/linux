@@ -2423,6 +2423,65 @@ bad_unshare_out:
 }
 
 /*
+ *	enable Plan9 features
+ */
+SYSCALL_DEFINE1(p9_enter, int, flags)
+{
+	if (IS_ENABLED(CONFIG_PLAN9_NS)) {
+		const unsigned long unshare_flags = CLONE_NEWNS | CLONE_FS;
+		struct fs_struct *new_fs = NULL;
+		struct nsproxy *new_nsproxy = NULL;
+		int err = 0;
+
+		pr_info("p9: entering P9 mode\n");
+
+		/*
+		 * #1: disable suid for the process and its child
+		 * #2: unshare the mnt namespace
+		 * #3: allow mount operations w/o CAP_SYS_ADMIN
+		 */
+
+		if ((err = unshare_fs(unshare_flags, &new_fs))) {
+			pr_err("unshare_fs() failed: %d\n", err);
+			goto out_err;
+		}
+
+		if (!new_fs) {
+			pr_info("hmm ... new_fs() is NULL\n");
+			new_fs = current->fs;
+		}
+
+		new_nsproxy = create_new_namespaces(unshare_flags, current,
+						    current_user_ns(), new_fs);
+		if (IS_ERR(new_nsproxy)) {
+			pr_err("create_new_namespaces() failed: %d\n", err);
+			err = PTR_ERR(new_nsproxy);
+			goto out_err;
+		}
+
+		pr_info("switching task namespaces\n");
+
+		switch_task_namespaces(current, new_nsproxy);
+
+		pr_info("switching task fs_struct\n");
+
+		switch_task_fs(current, new_fs);
+
+		pr_info("p9_enter() DONE\n");
+
+		return 0;
+
+out_err:
+		free_fs_struct(new_fs);
+		return err;
+	}
+	else
+	{
+		printk(KERN_INFO "p9_enter() Plan9 namespaces not supported\n");
+	}
+}
+
+/*
  *	Helper to unshare the files of the current task.
  *	We don't want to expose copy_files internals to
  *	the exec layer of the kernel.

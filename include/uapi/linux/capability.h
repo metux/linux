@@ -366,8 +366,10 @@ struct vfs_ns_cap_data {
 
 #define CAP_AUDIT_READ		37
 
+/* Allow creating own mount namespace via clone() or unshare() */
+#define CAP_CREATENS         38
 
-#define CAP_LAST_CAP         CAP_AUDIT_READ
+#define CAP_LAST_CAP         CAP_CREATENS
 
 #define cap_valid(x) ((x) >= 0 && (x) <= CAP_LAST_CAP)
 

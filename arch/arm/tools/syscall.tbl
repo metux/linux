@@ -412,3 +412,7 @@
 395	common	pkey_alloc		sys_pkey_alloc
 396	common	pkey_free		sys_pkey_free
 397	common	statx			sys_statx
+900	common	p9_enter		sys_p9_enter
+901	common	p9_mount		sys_p9_mount
+902	common	p9_bind			sys_p9_bind
+903	common	p9_umount		sys_p9_umount

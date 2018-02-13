@@ -17,6 +17,7 @@ struct mnt_namespace {
 	u64 event;
 	unsigned int		mounts; /* # of mounts in the namespace */
 	unsigned int		pending_mounts;
+	unsigned char		deny_setuid;	/* global switch for denying suid flag in the whole namespace */
 } __randomize_layout;
 
 struct mnt_pcp {

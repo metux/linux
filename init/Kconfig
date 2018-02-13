@@ -932,6 +932,13 @@ config NET_NS
 	  Allow user space to create what appear to be multiple instances
 	  of the network stack.
 
+config PLAN9_NS
+	bool "Plan9 type namespaces"
+	default n
+	help
+	  Allow special process mode where unprivileged processes to manipulate
+	  their own filesystem namespace at will and fork new namespaces.
+
 endif # NAMESPACES
 
 config SCHED_AUTOGROUP

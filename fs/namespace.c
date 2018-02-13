@@ -3032,6 +3032,78 @@ struct dentry *mount_subtree(struct vfsmount *mnt, const char *name)
 }
 EXPORT_SYMBOL(mount_subtree);
 
+SYSCALL_DEFINE4(p9_mount, int, fd, char __user *, old, int, flag, char __user *, aname)
+{
+	int ret = 0;
+	char* k_old = NULL;
+	char* k_aname = NULL;
+
+	k_old = copy_mount_string(old);
+	ret = PTR_ERR(k_old);
+	if (IS_ERR(k_old))
+		goto out_type;
+
+	k_aname = copy_mount_string(aname);
+	ret = PTR_ERR(k_aname);
+	if (IS_ERR(k_aname))
+		goto out_type;
+
+	printk(KERN_INFO "p9_mount: fd=%d old=\"%s\" flag=%d aname=\"%s\"\n", fd, k_old, flag, k_aname);
+
+out_type:
+	kfree(k_old);
+	kfree(k_aname);
+	return ret;
+}
+
+SYSCALL_DEFINE2(p9_umount, char __user *, name, char __user *, old)
+{
+	int ret = 0;
+	char* k_old = NULL;
+	char* k_name = NULL;
+
+	k_old = copy_mount_string(old);
+	ret = PTR_ERR(k_old);
+	if (IS_ERR(k_old))
+		goto out_type;
+
+	k_name = copy_mount_string(name);
+	ret = PTR_ERR(k_name);
+	if (IS_ERR(k_name))
+		goto out_type;
+
+	printk(KERN_INFO "p9_mount: name=\"%s\" old=\"%s\"\n", k_name, k_old);
+
+out_type:
+	kfree(k_old);
+	kfree(k_name);
+	return ret;
+}
+
+SYSCALL_DEFINE3(p9_bind, char __user *, name, char __user *, old, int, flag)
+{
+	int ret = 0;
+	char* k_old = NULL;
+	char* k_name = NULL;
+
+	k_old = copy_mount_string(old);
+	ret = PTR_ERR(k_old);
+	if (IS_ERR(k_old))
+		goto out_type;
+
+	k_name = copy_mount_string(name);
+	ret = PTR_ERR(k_name);
+	if (IS_ERR(k_name))
+		goto out_type;
+
+	printk(KERN_INFO "p9_mount: name=\"%s\" flag=%d old=\"%s\"\n", k_name, flag, k_old);
+
+out_type:
+	kfree(k_old);
+	kfree(k_name);
+	return ret;
+}
+
 SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		char __user *, type, unsigned long, flags, void __user *, data)
 {

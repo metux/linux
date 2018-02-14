@@ -23,6 +23,7 @@ extern void set_fs_pwd(struct fs_struct *, const struct path *);
 extern struct fs_struct *copy_fs_struct(struct fs_struct *);
 extern void free_fs_struct(struct fs_struct *);
 extern int unshare_fs_struct(void);
+extern int switch_task_fs(struct task_struct *tsk, struct fs_struct *new_fs);
 
 static inline void get_fs_root(struct fs_struct *fs, struct path *root)
 {

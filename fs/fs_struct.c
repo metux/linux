@@ -110,6 +110,24 @@ void exit_fs(struct task_struct *tsk)
 	}
 }
 
+int switch_task_fs(struct task_struct *tsk, struct fs_struct *new_fs)
+{
+	struct fs_struct *old_fs;
+
+	if (unlikely(!tsk || !new_fs))
+		return -EFAULT;
+
+	task_lock(tsk);
+	old_fs = tsk->fs;
+	tsk->fs = new_fs;
+	task_unlock(tsk);
+
+	unref_fs_struct(old_fs);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(switch_task_fs);
+
 struct fs_struct *copy_fs_struct(struct fs_struct *old)
 {
 	struct fs_struct *fs = kmem_cache_alloc(fs_cachep, GFP_KERNEL);

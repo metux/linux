@@ -2421,8 +2421,7 @@ bad_unshare_cleanup_fd:
 		put_files_struct(new_fd);
 
 bad_unshare_cleanup_fs:
-	if (new_fs)
-		free_fs_struct(new_fs);
+	free_fs_struct(new_fs);
 
 bad_unshare_out:
 	return err;

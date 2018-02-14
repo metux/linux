@@ -2314,7 +2314,7 @@ static int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp
  */
 SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
 {
-	struct fs_struct *fs, *new_fs = NULL;
+	struct fs_struct *new_fs = NULL;
 	struct files_struct *fd, *new_fd = NULL;
 	struct cred *new_cred = NULL;
 	struct nsproxy *new_nsproxy = NULL;
@@ -2386,14 +2386,9 @@ SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
 		task_lock(current);
 
 		if (new_fs) {
-			fs = current->fs;
-			spin_lock(&fs->lock);
+			unref_fs_struct(current->fs);
 			current->fs = new_fs;
-			if (--fs->users)
-				new_fs = NULL;
-			else
-				new_fs = fs;
-			spin_unlock(&fs->lock);
+			new_fs = NULL;
 		}
 
 		if (new_fd) {

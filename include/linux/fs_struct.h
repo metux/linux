@@ -40,6 +40,17 @@ static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 	spin_unlock(&fs->lock);
 }
 
+static inline void unref_fs_struct(struct fs_struct *fs)
+{
+	spin_lock(&fs->lock);
+	if (--fs->users) {
+		spin_unlock(&fs->lock);
+		return;
+	}
+	spin_unlock(&fs->lock);
+	free_fs_struct(fs);
+}
+
 extern bool current_chrooted(void);
 
 #endif /* _LINUX_FS_STRUCT_H */

@@ -16,10 +16,11 @@
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_ptrauth.h>
 
-#define CPU_XREG_OFFSET(x)	(CPU_USER_PT_REGS + 8*x)
-#define CPU_SP_EL0_OFFSET	(CPU_XREG_OFFSET(30) + 8)
+#define CPU_GP_REG_OFFSET(x)	(CPU_GP_REGS + x)
+#define CPU_XREG_OFFSET(x)	CPU_GP_REG_OFFSET(CPU_USER_PT_REGS + 8*x)
 
 	.text
+	.pushsection	.hyp.text, "ax"
 
 /*
  * We treat x18 as callee-saved as the host may use it as a platform
@@ -46,21 +47,11 @@
 	ldp	x29, lr,  [\ctxt, #CPU_XREG_OFFSET(29)]
 .endm
 
-.macro save_sp_el0 ctxt, tmp
-	mrs	\tmp,	sp_el0
-	str	\tmp,	[\ctxt, #CPU_SP_EL0_OFFSET]
-.endm
-
-.macro restore_sp_el0 ctxt, tmp
-	ldr	\tmp,	  [\ctxt, #CPU_SP_EL0_OFFSET]
-	msr	sp_el0, \tmp
-.endm
-
 /*
  * u64 __guest_enter(struct kvm_vcpu *vcpu,
  *		     struct kvm_cpu_context *host_ctxt);
  */
-SYM_FUNC_START(__guest_enter)
+ENTRY(__guest_enter)
 	// x0: vcpu
 	// x1: host context
 	// x2-x17: clobbered by macros
@@ -68,9 +59,6 @@ SYM_FUNC_START(__guest_enter)
 
 	// Store the host regs
 	save_callee_saved_regs x1
-
-	// Save the host's sp_el0
-	save_sp_el0	x1, x2
 
 	// Now the host state is stored if we have a pending RAS SError it must
 	// affect the host. If any asynchronous exception is pending we defer
@@ -95,9 +83,6 @@ alternative_else_nop_endif
 	// when this feature is enabled for kernel code.
 	ptrauth_switch_to_guest x29, x0, x1, x2
 
-	// Restore the guest's sp_el0
-	restore_sp_el0 x29, x0
-
 	// Restore guest regs x0-x17
 	ldp	x0, x1,   [x29, #CPU_XREG_OFFSET(0)]
 	ldp	x2, x3,   [x29, #CPU_XREG_OFFSET(2)]
@@ -115,8 +100,9 @@ alternative_else_nop_endif
 	// Do not touch any register after this!
 	eret
 	sb
+ENDPROC(__guest_enter)
 
-SYM_INNER_LABEL(__guest_exit, SYM_L_GLOBAL)
+ENTRY(__guest_exit)
 	// x0: return code
 	// x1: vcpu
 	// x2-x29,lr: vcpu regs
@@ -145,9 +131,6 @@ SYM_INNER_LABEL(__guest_exit, SYM_L_GLOBAL)
 	// Store the guest regs x18-x29, lr
 	save_callee_saved_regs x1
 
-	// Store the guest's sp_el0
-	save_sp_el0	x1, x2
-
 	get_host_ctxt	x2, x3
 
 	// Macro ptrauth_switch_to_guest format:
@@ -156,9 +139,6 @@ SYM_INNER_LABEL(__guest_exit, SYM_L_GLOBAL)
 	// as it may cause Pointer Authentication key signing mismatch errors
 	// when this feature is enabled for kernel code.
 	ptrauth_switch_to_host x1, x2, x3, x4, x5
-
-	// Restore the hosts's sp_el0
-	restore_sp_el0 x2, x3
 
 	// Now restore the host regs
 	restore_callee_saved_regs x2
@@ -196,26 +176,23 @@ alternative_endif
 	// This is our single instruction exception window. A pending
 	// SError is guaranteed to occur at the earliest when we unmask
 	// it, and at the latest just after the ISB.
+	.global	abort_guest_exit_start
 abort_guest_exit_start:
 
 	isb
 
+	.global	abort_guest_exit_end
 abort_guest_exit_end:
 
 	msr	daifset, #4	// Mask aborts
-	ret
 
-	_kvm_extable	abort_guest_exit_start, 9997f
-	_kvm_extable	abort_guest_exit_end, 9997f
-9997:
-	msr	daifset, #4	// Mask aborts
-	mov	x0, #(1 << ARM_EXIT_WITH_SERROR_BIT)
-
-	// restore the EL1 exception context so that we can report some
-	// information. Merge the exception code with the SError pending bit.
+	// If the exception took place, restore the EL1 exception
+	// context so that we can report some information.
+	// Merge the exception code with the SError pending bit.
+	tbz	x0, #ARM_EXIT_WITH_SERROR_BIT, 1f
 	msr	elr_el2, x2
 	msr	esr_el2, x3
 	msr	spsr_el2, x4
 	orr	x0, x0, x5
 1:	ret
-SYM_FUNC_END(__guest_enter)
+ENDPROC(__guest_exit)

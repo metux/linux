@@ -14,8 +14,6 @@
 #include <asm/alternative.h>
 #include <asm/assembler.h>
 #include <asm/asm-offsets.h>
-#include <asm/asm_pointer_auth.h>
-#include <asm/bug.h>
 #include <asm/cpufeature.h>
 #include <asm/errno.h>
 #include <asm/esr.h>
@@ -24,7 +22,6 @@
 #include <asm/mmu.h>
 #include <asm/processor.h>
 #include <asm/ptrace.h>
-#include <asm/scs.h>
 #include <asm/thread_info.h>
 #include <asm/asm-uaccess.h>
 #include <asm/unistd.h>
@@ -63,24 +60,23 @@
 	.macro kernel_ventry, el, label, regsize = 64
 	.align 7
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-	.if	\el == 0
 alternative_if ARM64_UNMAP_KERNEL_AT_EL0
+	.if	\el == 0
 	.if	\regsize == 64
 	mrs	x30, tpidrro_el0
 	msr	tpidrro_el0, xzr
 	.else
 	mov	x30, xzr
 	.endif
-alternative_else_nop_endif
 	.endif
+alternative_else_nop_endif
 #endif
 
 	sub	sp, sp, #S_FRAME_SIZE
 #ifdef CONFIG_VMAP_STACK
 	/*
 	 * Test whether the SP has overflowed, without corrupting a GPR.
-	 * Task and IRQ stacks are aligned so that SP & (1 << THREAD_SHIFT)
-	 * should always be zero.
+	 * Task and IRQ stacks are aligned to (1 << THREAD_SHIFT).
 	 */
 	add	sp, sp, x0			// sp' = sp + x0
 	sub	x0, sp, x0			// x0' = sp' - x0 = (sp + x0) - x0 = sp
@@ -127,10 +123,8 @@ alternative_else_nop_endif
 	add	\dst, \dst, #(\sym - .entry.tramp.text)
 	.endm
 
-	/*
-	 * This macro corrupts x0-x3. It is the caller's duty  to save/restore
-	 * them if required.
-	 */
+	// This macro corrupts x0-x3. It is the caller's duty
+	// to save/restore them if required.
 	.macro	apply_ssbd, state, tmp1, tmp2
 #ifdef CONFIG_ARM64_SSBD
 alternative_cb	arm64_enable_wa2_handling
@@ -172,21 +166,16 @@ alternative_cb_end
 	.if	\el == 0
 	clear_gp_regs
 	mrs	x21, sp_el0
-	ldr_this_cpu	tsk, __entry_task, x20
-	msr	sp_el0, tsk
-
-	/*
-	 * Ensure MDSCR_EL1.SS is clear, since we can unmask debug exceptions
-	 * when scheduling.
-	 */
-	ldr	x19, [tsk, #TSK_TI_FLAGS]
-	disable_step_tsk x19, x20
+	ldr_this_cpu	tsk, __entry_task, x20	// Ensure MDSCR_EL1.SS is clear,
+	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
+	disable_step_tsk x19, x20		// exceptions when scheduling.
 
 	apply_ssbd 1, x22, x23
 
-	ptrauth_keys_install_kernel tsk, x20, x22, x23
-
-	scs_load tsk, x20
+#ifdef CONFIG_SHADOW_CALL_STACK
+	ldr	x18, [tsk, #TSK_TI_SCS]		// Restore shadow call stack
+	str	xzr, [tsk, #TSK_TI_SCS]		// Limit visibility of saved SCS
+#endif
 	.else
 	add	x21, sp, #S_FRAME_SIZE
 	get_current_task tsk
@@ -214,9 +203,28 @@ alternative_cb_end
 	add	x29, sp, #S_STACKFRAME
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
-alternative_if_not ARM64_HAS_PAN
-	bl	__swpan_entry_el\el
+	/*
+	 * Set the TTBR0 PAN bit in SPSR. When the exception is taken from
+	 * EL0, there is no need to check the state of TTBR0_EL1 since
+	 * accesses are always enabled.
+	 * Note that the meaning of this bit differs from the ARMv8.1 PAN
+	 * feature as all TTBR0_EL1 accesses are disabled, not just those to
+	 * user mappings.
+	 */
+alternative_if ARM64_HAS_PAN
+	b	1f				// skip TTBR0 PAN
 alternative_else_nop_endif
+
+	.if	\el != 0
+	mrs	x21, ttbr0_el1
+	tst	x21, #TTBR_ASID_MASK		// Check for the reserved ASID
+	orr	x23, x23, #PSR_PAN_BIT		// Set the emulated PAN in the saved SPSR
+	b.eq	1f				// TTBR0 access already disabled
+	and	x23, x23, #~PSR_PAN_BIT		// Clear the emulated PAN in the saved SPSR
+	.endif
+
+	__uaccess_ttbr0_disable x21
+1:
 #endif
 
 	stp	x22, x23, [sp, #S_PC]
@@ -225,6 +233,13 @@ alternative_else_nop_endif
 	.if	\el == 0
 	mov	w21, #NO_SYSCALL
 	str	w21, [sp, #S_SYSCALLNO]
+	.endif
+
+	/*
+	 * Set sp_el0 to current thread_info.
+	 */
+	.if	\el == 0
+	msr	sp_el0, tsk
 	.endif
 
 	/* Save pmr */
@@ -258,10 +273,8 @@ alternative_else_nop_endif
 alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	ldr	x20, [sp, #S_PMR_SAVE]
 	msr_s	SYS_ICC_PMR_EL1, x20
-	mrs_s	x21, SYS_ICC_CTLR_EL1
-	tbz	x21, #6, .L__skip_pmr_sync\@	// Check for ICC_CTLR_EL1.PMHE
-	dsb	sy				// Ensure priority change is seen by redistributor
-.L__skip_pmr_sync\@:
+	/* Ensure priority change is seen by redistributor */
+	dsb	sy
 alternative_else_nop_endif
 
 	ldp	x21, x22, [sp, #S_PC]		// load ELR, SPSR
@@ -269,10 +282,41 @@ alternative_else_nop_endif
 	ct_user_enter
 	.endif
 
+#ifdef CONFIG_SHADOW_CALL_STACK
+	.if	\el == 0
+	str	x18, [tsk, #TSK_TI_SCS]		// Save shadow call stack
+	.endif
+#endif
+
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
-alternative_if_not ARM64_HAS_PAN
-	bl	__swpan_exit_el\el
+	/*
+	 * Restore access to TTBR0_EL1. If returning to EL0, no need for SPSR
+	 * PAN bit checking.
+	 */
+alternative_if ARM64_HAS_PAN
+	b	2f				// skip TTBR0 PAN
 alternative_else_nop_endif
+
+	.if	\el != 0
+	tbnz	x22, #22, 1f			// Skip re-enabling TTBR0 access if the PSR_PAN_BIT is set
+	.endif
+
+	__uaccess_ttbr0_enable x0, x1
+
+	.if	\el == 0
+	/*
+	 * Enable errata workarounds only if returning to user. The only
+	 * workaround currently required for TTBR0_EL1 changes are for the
+	 * Cavium erratum 27456 (broadcast TLBI instructions may cause I-cache
+	 * corruption).
+	 */
+	bl	post_ttbr_update_workaround
+	.endif
+1:
+	.if	\el != 0
+	and	x22, x22, #~PSR_PAN_BIT		// ARMv8.0 CPUs do not understand this bit
+	.endif
+2:
 #endif
 
 	.if	\el == 0
@@ -292,11 +336,21 @@ alternative_if ARM64_WORKAROUND_845719
 alternative_else_nop_endif
 #endif
 3:
-	scs_save tsk, x0
-
-	/* No kernel C function calls after this as user keys are set. */
-	ptrauth_keys_install_user tsk, x0, x1, x2
-
+#ifdef CONFIG_ARM64_ERRATUM_1418040
+alternative_if_not ARM64_WORKAROUND_1418040
+	b	4f
+alternative_else_nop_endif
+	/*
+	 * if (x22.mode32 == cntkctl_el1.el0vcten)
+	 *     cntkctl_el1.el0vcten = ~cntkctl_el1.el0vcten
+	 */
+	mrs	x1, cntkctl_el1
+	eon	x0, x1, x22, lsr #3
+	tbz	x0, #1, 4f
+	eor	x1, x1, #2	// ARCH_TIMER_USR_VCT_ACCESS_EN
+	msr	cntkctl_el1, x1
+4:
+#endif
 	apply_ssbd 0, x0, x1
 	.endif
 
@@ -323,11 +377,11 @@ alternative_else_nop_endif
 	.if	\el == 0
 alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-	bne	4f
+	bne	5f
 	msr	far_el1, x30
 	tramp_alias	x30, tramp_exit_native
 	br	x30
-4:
+5:
 	tramp_alias	x30, tramp_exit_compat
 	br	x30
 #endif
@@ -337,53 +391,10 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	sb
 	.endm
 
-#ifdef CONFIG_ARM64_SW_TTBR0_PAN
-	/*
-	 * Set the TTBR0 PAN bit in SPSR. When the exception is taken from
-	 * EL0, there is no need to check the state of TTBR0_EL1 since
-	 * accesses are always enabled.
-	 * Note that the meaning of this bit differs from the ARMv8.1 PAN
-	 * feature as all TTBR0_EL1 accesses are disabled, not just those to
-	 * user mappings.
-	 */
-SYM_CODE_START_LOCAL(__swpan_entry_el1)
-	mrs	x21, ttbr0_el1
-	tst	x21, #TTBR_ASID_MASK		// Check for the reserved ASID
-	orr	x23, x23, #PSR_PAN_BIT		// Set the emulated PAN in the saved SPSR
-	b.eq	1f				// TTBR0 access already disabled
-	and	x23, x23, #~PSR_PAN_BIT		// Clear the emulated PAN in the saved SPSR
-SYM_INNER_LABEL(__swpan_entry_el0, SYM_L_LOCAL)
-	__uaccess_ttbr0_disable x21
-1:	ret
-SYM_CODE_END(__swpan_entry_el1)
-
-	/*
-	 * Restore access to TTBR0_EL1. If returning to EL0, no need for SPSR
-	 * PAN bit checking.
-	 */
-SYM_CODE_START_LOCAL(__swpan_exit_el1)
-	tbnz	x22, #22, 1f			// Skip re-enabling TTBR0 access if the PSR_PAN_BIT is set
-	__uaccess_ttbr0_enable x0, x1
-1:	and	x22, x22, #~PSR_PAN_BIT		// ARMv8.0 CPUs do not understand this bit
-	ret
-SYM_CODE_END(__swpan_exit_el1)
-
-SYM_CODE_START_LOCAL(__swpan_exit_el0)
-	__uaccess_ttbr0_enable x0, x1
-	/*
-	 * Enable errata workarounds only if returning to user. The only
-	 * workaround currently required for TTBR0_EL1 changes are for the
-	 * Cavium erratum 27456 (broadcast TLBI instructions may cause I-cache
-	 * corruption).
-	 */
-	b	post_ttbr_update_workaround
-SYM_CODE_END(__swpan_exit_el0)
-#endif
-
 	.macro	irq_stack_entry
 	mov	x19, sp			// preserve the original sp
 #ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x24, scs_sp		// preserve the original shadow stack
+	mov	x20, x18		// preserve the original shadow stack
 #endif
 
 	/*
@@ -405,7 +416,7 @@ SYM_CODE_END(__swpan_exit_el0)
 
 #ifdef CONFIG_SHADOW_CALL_STACK
 	/* also switch to the irq shadow stack */
-	adr_this_cpu scs_sp, irq_shadow_call_stack, x26
+	ldr_this_cpu x18, irq_shadow_call_stack_ptr, x26
 #endif
 
 9998:
@@ -413,13 +424,12 @@ SYM_CODE_END(__swpan_exit_el0)
 
 	/*
 	 * The callee-saved regs (x19-x29) should be preserved between
-	 * irq_stack_entry and irq_stack_exit, but note that kernel_entry
-	 * uses x20-x23 to store data for later use.
+	 * irq_stack_entry and irq_stack_exit.
 	 */
 	.macro	irq_stack_exit
 	mov	sp, x19
 #ifdef CONFIG_SHADOW_CALL_STACK
-	mov	scs_sp, x24
+	mov	x18, x20
 #endif
 	.endm
 
@@ -477,7 +487,7 @@ alternative_endif
 	.pushsection ".entry.text", "ax"
 
 	.align	11
-SYM_CODE_START(vectors)
+ENTRY(vectors)
 	kernel_ventry	1, sync_invalid			// Synchronous EL1t
 	kernel_ventry	1, irq_invalid			// IRQ EL1t
 	kernel_ventry	1, fiq_invalid			// FIQ EL1t
@@ -504,7 +514,7 @@ SYM_CODE_START(vectors)
 	kernel_ventry	0, fiq_invalid, 32		// FIQ 32-bit EL0
 	kernel_ventry	0, error_invalid, 32		// Error 32-bit EL0
 #endif
-SYM_CODE_END(vectors)
+END(vectors)
 
 #ifdef CONFIG_VMAP_STACK
 	/*
@@ -546,57 +556,124 @@ __bad_stack:
 	ASM_BUG()
 	.endm
 
-SYM_CODE_START_LOCAL(el0_sync_invalid)
+el0_sync_invalid:
 	inv_entry 0, BAD_SYNC
-SYM_CODE_END(el0_sync_invalid)
+ENDPROC(el0_sync_invalid)
 
-SYM_CODE_START_LOCAL(el0_irq_invalid)
+el0_irq_invalid:
 	inv_entry 0, BAD_IRQ
-SYM_CODE_END(el0_irq_invalid)
+ENDPROC(el0_irq_invalid)
 
-SYM_CODE_START_LOCAL(el0_fiq_invalid)
+el0_fiq_invalid:
 	inv_entry 0, BAD_FIQ
-SYM_CODE_END(el0_fiq_invalid)
+ENDPROC(el0_fiq_invalid)
 
-SYM_CODE_START_LOCAL(el0_error_invalid)
+el0_error_invalid:
 	inv_entry 0, BAD_ERROR
-SYM_CODE_END(el0_error_invalid)
+ENDPROC(el0_error_invalid)
 
 #ifdef CONFIG_COMPAT
-SYM_CODE_START_LOCAL(el0_fiq_invalid_compat)
+el0_fiq_invalid_compat:
 	inv_entry 0, BAD_FIQ, 32
-SYM_CODE_END(el0_fiq_invalid_compat)
+ENDPROC(el0_fiq_invalid_compat)
 #endif
 
-SYM_CODE_START_LOCAL(el1_sync_invalid)
+el1_sync_invalid:
 	inv_entry 1, BAD_SYNC
-SYM_CODE_END(el1_sync_invalid)
+ENDPROC(el1_sync_invalid)
 
-SYM_CODE_START_LOCAL(el1_irq_invalid)
+el1_irq_invalid:
 	inv_entry 1, BAD_IRQ
-SYM_CODE_END(el1_irq_invalid)
+ENDPROC(el1_irq_invalid)
 
-SYM_CODE_START_LOCAL(el1_fiq_invalid)
+el1_fiq_invalid:
 	inv_entry 1, BAD_FIQ
-SYM_CODE_END(el1_fiq_invalid)
+ENDPROC(el1_fiq_invalid)
 
-SYM_CODE_START_LOCAL(el1_error_invalid)
+el1_error_invalid:
 	inv_entry 1, BAD_ERROR
-SYM_CODE_END(el1_error_invalid)
+ENDPROC(el1_error_invalid)
 
 /*
  * EL1 mode handlers.
  */
 	.align	6
-SYM_CODE_START_LOCAL_NOALIGN(el1_sync)
+el1_sync:
 	kernel_entry 1
-	mov	x0, sp
-	bl	el1_sync_handler
+	mrs	x1, esr_el1			// read the syndrome register
+	lsr	x24, x1, #ESR_ELx_EC_SHIFT	// exception class
+	cmp	x24, #ESR_ELx_EC_DABT_CUR	// data abort in EL1
+	b.eq	el1_da
+	cmp	x24, #ESR_ELx_EC_IABT_CUR	// instruction abort in EL1
+	b.eq	el1_ia
+	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
+	b.eq	el1_undef
+	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
+	b.eq	el1_pc
+	cmp	x24, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL1
+	b.eq	el1_undef
+	cmp	x24, #ESR_ELx_EC_BREAKPT_CUR	// debug exception in EL1
+	b.ge	el1_dbg
+	b	el1_inv
+
+el1_ia:
+	/*
+	 * Fall through to the Data abort case
+	 */
+el1_da:
+	/*
+	 * Data abort handling
+	 */
+	mrs	x3, far_el1
+	inherit_daif	pstate=x23, tmp=x2
+	untagged_addr	x0, x3
+	mov	x2, sp				// struct pt_regs
+	bl	do_mem_abort
+
 	kernel_exit 1
-SYM_CODE_END(el1_sync)
+el1_pc:
+	/*
+	 * PC alignment exception handling. We don't handle SP alignment faults,
+	 * since we will have hit a recursive exception when trying to push the
+	 * initial pt_regs.
+	 */
+	mrs	x0, far_el1
+	inherit_daif	pstate=x23, tmp=x2
+	mov	x2, sp
+	bl	do_sp_pc_abort
+	ASM_BUG()
+el1_undef:
+	/*
+	 * Undefined instruction
+	 */
+	inherit_daif	pstate=x23, tmp=x2
+	mov	x0, sp
+	bl	do_undefinstr
+	kernel_exit 1
+el1_dbg:
+	/*
+	 * Debug exception handling
+	 */
+	cmp	x24, #ESR_ELx_EC_BRK64		// if BRK64
+	cinc	x24, x24, eq			// set bit '0'
+	tbz	x24, #0, el1_inv		// EL1 only
+	gic_prio_kentry_setup tmp=x3
+	mrs	x0, far_el1
+	mov	x2, sp				// struct pt_regs
+	bl	do_debug_exception
+	kernel_exit 1
+el1_inv:
+	// TODO: add support for undefined instructions in kernel mode
+	inherit_daif	pstate=x23, tmp=x2
+	mov	x0, sp
+	mov	x2, x1
+	mov	x1, #BAD_SYNC
+	bl	bad_mode
+	ASM_BUG()
+ENDPROC(el1_sync)
 
 	.align	6
-SYM_CODE_START_LOCAL_NOALIGN(el1_irq)
+el1_irq:
 	kernel_entry 1
 	gic_prio_irq_setup pmr=x20, tmp=x1
 	enable_da_f
@@ -614,7 +691,7 @@ SYM_CODE_START_LOCAL_NOALIGN(el1_irq)
 
 	irq_handler
 
-#ifdef CONFIG_PREEMPTION
+#ifdef CONFIG_PREEMPT
 	ldr	x24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
 alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	/*
@@ -651,42 +728,224 @@ alternative_else_nop_endif
 #endif
 
 	kernel_exit 1
-SYM_CODE_END(el1_irq)
+ENDPROC(el1_irq)
 
 /*
  * EL0 mode handlers.
  */
 	.align	6
-SYM_CODE_START_LOCAL_NOALIGN(el0_sync)
+el0_sync:
 	kernel_entry 0
-	mov	x0, sp
-	bl	el0_sync_handler
-	b	ret_to_user
-SYM_CODE_END(el0_sync)
+	mrs	x25, esr_el1			// read the syndrome register
+	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
+	cmp	x24, #ESR_ELx_EC_SVC64		// SVC in 64-bit state
+	b.eq	el0_svc
+	cmp	x24, #ESR_ELx_EC_DABT_LOW	// data abort in EL0
+	b.eq	el0_da
+	cmp	x24, #ESR_ELx_EC_IABT_LOW	// instruction abort in EL0
+	b.eq	el0_ia
+	cmp	x24, #ESR_ELx_EC_FP_ASIMD	// FP/ASIMD access
+	b.eq	el0_fpsimd_acc
+	cmp	x24, #ESR_ELx_EC_SVE		// SVE access
+	b.eq	el0_sve_acc
+	cmp	x24, #ESR_ELx_EC_FP_EXC64	// FP/ASIMD exception
+	b.eq	el0_fpsimd_exc
+	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
+	ccmp	x24, #ESR_ELx_EC_WFx, #4, ne
+	b.eq	el0_sys
+	cmp	x24, #ESR_ELx_EC_SP_ALIGN	// stack alignment exception
+	b.eq	el0_sp
+	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
+	b.eq	el0_pc
+	cmp	x24, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL0
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_BREAKPT_LOW	// debug exception in EL0
+	b.ge	el0_dbg
+	b	el0_inv
 
 #ifdef CONFIG_COMPAT
 	.align	6
-SYM_CODE_START_LOCAL_NOALIGN(el0_sync_compat)
+el0_sync_compat:
 	kernel_entry 0, 32
+	mrs	x25, esr_el1			// read the syndrome register
+	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
+	cmp	x24, #ESR_ELx_EC_SVC32		// SVC in 32-bit state
+	b.eq	el0_svc_compat
+	cmp	x24, #ESR_ELx_EC_DABT_LOW	// data abort in EL0
+	b.eq	el0_da
+	cmp	x24, #ESR_ELx_EC_IABT_LOW	// instruction abort in EL0
+	b.eq	el0_ia
+	cmp	x24, #ESR_ELx_EC_FP_ASIMD	// FP/ASIMD access
+	b.eq	el0_fpsimd_acc
+	cmp	x24, #ESR_ELx_EC_FP_EXC32	// FP/ASIMD exception
+	b.eq	el0_fpsimd_exc
+	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
+	b.eq	el0_pc
+	cmp	x24, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL0
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_CP15_32	// CP15 MRC/MCR trap
+	b.eq	el0_cp15
+	cmp	x24, #ESR_ELx_EC_CP15_64	// CP15 MRRC/MCRR trap
+	b.eq	el0_cp15
+	cmp	x24, #ESR_ELx_EC_CP14_MR	// CP14 MRC/MCR trap
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_CP14_LS	// CP14 LDC/STC trap
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_CP14_64	// CP14 MRRC/MCRR trap
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_BREAKPT_LOW	// debug exception in EL0
+	b.ge	el0_dbg
+	b	el0_inv
+el0_svc_compat:
+	gic_prio_kentry_setup tmp=x1
 	mov	x0, sp
-	bl	el0_sync_compat_handler
+	bl	el0_svc_compat_handler
 	b	ret_to_user
-SYM_CODE_END(el0_sync_compat)
 
 	.align	6
-SYM_CODE_START_LOCAL_NOALIGN(el0_irq_compat)
+el0_irq_compat:
 	kernel_entry 0, 32
 	b	el0_irq_naked
-SYM_CODE_END(el0_irq_compat)
 
-SYM_CODE_START_LOCAL_NOALIGN(el0_error_compat)
+el0_error_compat:
 	kernel_entry 0, 32
 	b	el0_error_naked
-SYM_CODE_END(el0_error_compat)
+
+el0_cp15:
+	/*
+	 * Trapped CP15 (MRC, MCR, MRRC, MCRR) instructions
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_cp15instr
+	b	ret_to_user
 #endif
 
+el0_da:
+	/*
+	 * Data abort handling
+	 */
+	mrs	x26, far_el1
+	ct_user_exit_irqoff
+	enable_daif
+	untagged_addr	x0, x26
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_mem_abort
+	b	ret_to_user
+el0_ia:
+	/*
+	 * Instruction abort handling
+	 */
+	mrs	x26, far_el1
+	gic_prio_kentry_setup tmp=x0
+	ct_user_exit_irqoff
+	enable_da_f
+#ifdef CONFIG_TRACE_IRQFLAGS
+	bl	trace_hardirqs_off
+#endif
+	mov	x0, x26
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_el0_ia_bp_hardening
+	b	ret_to_user
+el0_fpsimd_acc:
+	/*
+	 * Floating Point or Advanced SIMD access
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_fpsimd_acc
+	b	ret_to_user
+el0_sve_acc:
+	/*
+	 * Scalable Vector Extension access
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_sve_acc
+	b	ret_to_user
+el0_fpsimd_exc:
+	/*
+	 * Floating Point, Advanced SIMD or SVE exception
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_fpsimd_exc
+	b	ret_to_user
+el0_sp:
+	ldr	x26, [sp, #S_SP]
+	b	el0_sp_pc
+el0_pc:
+	mrs	x26, far_el1
+el0_sp_pc:
+	/*
+	 * Stack or PC alignment exception handling
+	 */
+	gic_prio_kentry_setup tmp=x0
+	ct_user_exit_irqoff
+	enable_da_f
+#ifdef CONFIG_TRACE_IRQFLAGS
+	bl	trace_hardirqs_off
+#endif
+	mov	x0, x26
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_sp_pc_abort
+	b	ret_to_user
+el0_undef:
+	/*
+	 * Undefined instruction
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, sp
+	bl	do_undefinstr
+	b	ret_to_user
+el0_sys:
+	/*
+	 * System instructions, for trapped cache maintenance instructions
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_sysinstr
+	b	ret_to_user
+el0_dbg:
+	/*
+	 * Debug exception handling
+	 */
+	tbnz	x24, #0, el0_inv		// EL0 only
+	mrs	x24, far_el1
+	gic_prio_kentry_setup tmp=x3
+	ct_user_exit_irqoff
+	mov	x0, x24
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_debug_exception
+	enable_da_f
+	b	ret_to_user
+el0_inv:
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, sp
+	mov	x1, #BAD_SYNC
+	mov	x2, x25
+	bl	bad_el0_sync
+	b	ret_to_user
+ENDPROC(el0_sync)
+
 	.align	6
-SYM_CODE_START_LOCAL_NOALIGN(el0_irq)
+el0_irq:
 	kernel_entry 0
 el0_irq_naked:
 	gic_prio_irq_setup pmr=x20, tmp=x0
@@ -708,9 +967,9 @@ el0_irq_naked:
 	bl	trace_hardirqs_on
 #endif
 	b	ret_to_user
-SYM_CODE_END(el0_irq)
+ENDPROC(el0_irq)
 
-SYM_CODE_START_LOCAL(el1_error)
+el1_error:
 	kernel_entry 1
 	mrs	x1, esr_el1
 	gic_prio_kentry_setup tmp=x2
@@ -718,9 +977,9 @@ SYM_CODE_START_LOCAL(el1_error)
 	mov	x0, sp
 	bl	do_serror
 	kernel_exit 1
-SYM_CODE_END(el1_error)
+ENDPROC(el1_error)
 
-SYM_CODE_START_LOCAL(el0_error)
+el0_error:
 	kernel_entry 0
 el0_error_naked:
 	mrs	x25, esr_el1
@@ -732,23 +991,7 @@ el0_error_naked:
 	bl	do_serror
 	enable_da_f
 	b	ret_to_user
-SYM_CODE_END(el0_error)
-
-/*
- * "slow" syscall return path.
- */
-SYM_CODE_START_LOCAL(ret_to_user)
-	disable_daif
-	gic_prio_kentry_setup tmp=x3
-	ldr	x1, [tsk, #TSK_TI_FLAGS]
-	and	x2, x1, #_TIF_WORK_MASK
-	cbnz	x2, work_pending
-finish_ret_to_user:
-	enable_step_tsk x1, x2
-#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
-	bl	stackleak_erase
-#endif
-	kernel_exit 0
+ENDPROC(el0_error)
 
 /*
  * Ok, we need to do extra processing, enter the slow path.
@@ -761,7 +1004,33 @@ work_pending:
 #endif
 	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for single-step
 	b	finish_ret_to_user
-SYM_CODE_END(ret_to_user)
+/*
+ * "slow" syscall return path.
+ */
+ret_to_user:
+	disable_daif
+	gic_prio_kentry_setup tmp=x3
+	ldr	x1, [tsk, #TSK_TI_FLAGS]
+	and	x2, x1, #_TIF_WORK_MASK
+	cbnz	x2, work_pending
+finish_ret_to_user:
+	enable_step_tsk x1, x2
+#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
+	bl	stackleak_erase
+#endif
+	kernel_exit 0
+ENDPROC(ret_to_user)
+
+/*
+ * SVC handler.
+ */
+	.align	6
+el0_svc:
+	gic_prio_kentry_setup tmp=x1
+	mov	x0, sp
+	bl	el0_svc_handler
+	b	ret_to_user
+ENDPROC(el0_svc)
 
 	.popsection				// .entry.text
 
@@ -845,7 +1114,7 @@ alternative_else_nop_endif
 	.endm
 
 	.align	11
-SYM_CODE_START_NOALIGN(tramp_vectors)
+ENTRY(tramp_vectors)
 	.space	0x400
 
 	tramp_ventry
@@ -857,24 +1126,24 @@ SYM_CODE_START_NOALIGN(tramp_vectors)
 	tramp_ventry	32
 	tramp_ventry	32
 	tramp_ventry	32
-SYM_CODE_END(tramp_vectors)
+END(tramp_vectors)
 
-SYM_CODE_START(tramp_exit_native)
+ENTRY(tramp_exit_native)
 	tramp_exit
-SYM_CODE_END(tramp_exit_native)
+END(tramp_exit_native)
 
-SYM_CODE_START(tramp_exit_compat)
+ENTRY(tramp_exit_compat)
 	tramp_exit	32
-SYM_CODE_END(tramp_exit_compat)
+END(tramp_exit_compat)
 
 	.ltorg
 	.popsection				// .entry.tramp.text
 #ifdef CONFIG_RANDOMIZE_BASE
 	.pushsection ".rodata", "a"
 	.align PAGE_SHIFT
-SYM_DATA_START(__entry_tramp_data_start)
+	.globl	__entry_tramp_data_start
+__entry_tramp_data_start:
 	.quad	vectors
-SYM_DATA_END(__entry_tramp_data_start)
 	.popsection				// .rodata
 #endif /* CONFIG_RANDOMIZE_BASE */
 #endif /* CONFIG_UNMAP_KERNEL_AT_EL0 */
@@ -887,7 +1156,7 @@ SYM_DATA_END(__entry_tramp_data_start)
  * Previous and next are guaranteed not to be the same.
  *
  */
-SYM_FUNC_START(cpu_switch_to)
+ENTRY(cpu_switch_to)
 	mov	x10, #THREAD_CPU_CONTEXT
 	add	x8, x0, x10
 	mov	x9, sp
@@ -908,24 +1177,26 @@ SYM_FUNC_START(cpu_switch_to)
 	ldr	lr, [x8]
 	mov	sp, x9
 	msr	sp_el0, x1
-	ptrauth_keys_install_kernel x1, x8, x9, x10
-	scs_save x0, x8
-	scs_load x1, x8
+#ifdef CONFIG_SHADOW_CALL_STACK
+	str	x18, [x0, #TSK_TI_SCS]
+	ldr	x18, [x1, #TSK_TI_SCS]
+	str	xzr, [x1, #TSK_TI_SCS]		// limit visibility of saved SCS
+#endif
 	ret
-SYM_FUNC_END(cpu_switch_to)
+ENDPROC(cpu_switch_to)
 NOKPROBE(cpu_switch_to)
 
 /*
  * This is how we return from a fork.
  */
-SYM_CODE_START(ret_from_fork)
+ENTRY(ret_from_fork)
 	bl	schedule_tail
 	cbz	x19, 1f				// not a kernel thread
 	mov	x0, x20
 	blr	x19
 1:	get_current_task tsk
 	b	ret_to_user
-SYM_CODE_END(ret_from_fork)
+ENDPROC(ret_from_fork)
 NOKPROBE(ret_from_fork)
 
 #ifdef CONFIG_ARM_SDE_INTERFACE
@@ -954,7 +1225,7 @@ NOKPROBE(ret_from_fork)
  */
 .ltorg
 .pushsection ".entry.tramp.text", "ax"
-SYM_CODE_START(__sdei_asm_entry_trampoline)
+ENTRY(__sdei_asm_entry_trampoline)
 	mrs	x4, ttbr1_el1
 	tbz	x4, #USER_ASID_BIT, 1f
 
@@ -976,7 +1247,7 @@ SYM_CODE_START(__sdei_asm_entry_trampoline)
 	ldr	x4, =__sdei_asm_handler
 #endif
 	br	x4
-SYM_CODE_END(__sdei_asm_entry_trampoline)
+ENDPROC(__sdei_asm_entry_trampoline)
 NOKPROBE(__sdei_asm_entry_trampoline)
 
 /*
@@ -986,22 +1257,21 @@ NOKPROBE(__sdei_asm_entry_trampoline)
  * x2: exit_mode
  * x4: struct sdei_registered_event argument from registration time.
  */
-SYM_CODE_START(__sdei_asm_exit_trampoline)
+ENTRY(__sdei_asm_exit_trampoline)
 	ldr	x4, [x4, #(SDEI_EVENT_INTREGS + S_ORIG_ADDR_LIMIT)]
 	cbnz	x4, 1f
 
 	tramp_unmap_kernel	tmp=x4
 
 1:	sdei_handler_exit exit_mode=x2
-SYM_CODE_END(__sdei_asm_exit_trampoline)
+ENDPROC(__sdei_asm_exit_trampoline)
 NOKPROBE(__sdei_asm_exit_trampoline)
 	.ltorg
 .popsection		// .entry.tramp.text
 #ifdef CONFIG_RANDOMIZE_BASE
 .pushsection ".rodata", "a"
-SYM_DATA_START(__sdei_asm_trampoline_next_handler)
+__sdei_asm_trampoline_next_handler:
 	.quad	__sdei_asm_handler
-SYM_DATA_END(__sdei_asm_trampoline_next_handler)
 .popsection		// .rodata
 #endif /* CONFIG_RANDOMIZE_BASE */
 #endif /* CONFIG_UNMAP_KERNEL_AT_EL0 */
@@ -1019,7 +1289,7 @@ SYM_DATA_END(__sdei_asm_trampoline_next_handler)
  * follow SMC-CC. We save (or retrieve) all the registers as the handler may
  * want them.
  */
-SYM_CODE_START(__sdei_asm_handler)
+ENTRY(__sdei_asm_handler)
 	stp     x2, x3, [x1, #SDEI_EVENT_INTREGS + S_PC]
 	stp     x4, x5, [x1, #SDEI_EVENT_INTREGS + 16 * 2]
 	stp     x6, x7, [x1, #SDEI_EVENT_INTREGS + 16 * 3]
@@ -1039,16 +1309,13 @@ SYM_CODE_START(__sdei_asm_handler)
 
 	mov	x19, x1
 
-#if defined(CONFIG_VMAP_STACK) || defined(CONFIG_SHADOW_CALL_STACK)
-	ldrb	w4, [x19, #SDEI_EVENT_PRIORITY]
-#endif
-
 #ifdef CONFIG_VMAP_STACK
 	/*
 	 * entry.S may have been using sp as a scratch register, find whether
 	 * this is a normal or critical event and switch to the appropriate
 	 * stack for this CPU.
 	 */
+	ldrb	w4, [x19, #SDEI_EVENT_PRIORITY]
 	cbnz	w4, 1f
 	ldr_this_cpu dst=x5, sym=sdei_stack_normal_ptr, tmp=x6
 	b	2f
@@ -1056,15 +1323,6 @@ SYM_CODE_START(__sdei_asm_handler)
 2:	mov	x6, #SDEI_STACK_SIZE
 	add	x5, x5, x6
 	mov	sp, x5
-#endif
-
-#ifdef CONFIG_SHADOW_CALL_STACK
-	/* Use a separate shadow call stack for normal and critical events */
-	cbnz	w4, 3f
-	adr_this_cpu dst=scs_sp, sym=sdei_shadow_call_stack_normal, tmp=x6
-	b	4f
-3:	adr_this_cpu dst=scs_sp, sym=sdei_shadow_call_stack_critical, tmp=x6
-4:
 #endif
 
 	/*
@@ -1114,6 +1372,6 @@ alternative_else_nop_endif
 	tramp_alias	dst=x5, sym=__sdei_asm_exit_trampoline
 	br	x5
 #endif
-SYM_CODE_END(__sdei_asm_handler)
+ENDPROC(__sdei_asm_handler)
 NOKPROBE(__sdei_asm_handler)
 #endif /* CONFIG_ARM_SDE_INTERFACE */

@@ -43,7 +43,9 @@
 #include <asm/kvm_mmu.h>
 #include <asm/mmu_context.h>
 #include <asm/numa.h>
+#include <asm/pgalloc.h>
 #include <asm/processor.h>
+#include <asm/scs.h>
 #include <asm/smp_plat.h>
 #include <asm/sections.h>
 #include <asm/tlbflush.h>
@@ -151,7 +153,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 			break;
 		}
 		pr_crit("CPU%u: may not have shut down cleanly\n", cpu);
-		fallthrough;
+		/* Fall through */
 	case CPU_STUCK_IN_KERNEL:
 		pr_crit("CPU%u: is stuck in kernel\n", cpu);
 		if (status & CPU_STUCK_REASON_52_BIT_VA)
@@ -360,6 +362,9 @@ void cpu_die(void)
 	unsigned int cpu = smp_processor_id();
 	const struct cpu_operations *ops = get_cpu_ops(cpu);
 
+	/* Save the shadow stack pointer before exiting the idle task */
+	scs_save(current);
+
 	idle_task_exit();
 
 	local_daif_mask();
@@ -566,7 +571,7 @@ acpi_map_gic_cpu_interface(struct acpi_madt_generic_interrupt *processor)
 		return;
 
 	/* map the logical cpu id to cpu MPIDR */
-	set_cpu_logical_map(cpu_count, hwid);
+	cpu_logical_map(cpu_count) = hwid;
 
 	cpu_madt_gicc[cpu_count] = *processor;
 
@@ -680,7 +685,7 @@ static void __init of_parse_and_init_cpus(void)
 			goto next;
 
 		pr_debug("cpu logical map 0x%llx\n", hwid);
-		set_cpu_logical_map(cpu_count, hwid);
+		cpu_logical_map(cpu_count) = hwid;
 
 		early_map_cpu_to_node(cpu_count, of_node_to_nid(dn));
 next:
@@ -721,7 +726,7 @@ void __init smp_init_cpus(void)
 	for (i = 1; i < nr_cpu_ids; i++) {
 		if (cpu_logical_map(i) != INVALID_HWID) {
 			if (smp_cpu_setup(i))
-				set_cpu_logical_map(i, INVALID_HWID);
+				cpu_logical_map(i) = INVALID_HWID;
 		}
 	}
 }

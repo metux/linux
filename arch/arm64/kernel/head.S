@@ -12,9 +12,7 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/irqchip/arm-gic-v3.h>
-#include <linux/pgtable.h>
 
-#include <asm/asm_pointer_auth.h>
 #include <asm/assembler.h>
 #include <asm/boot.h>
 #include <asm/ptrace.h>
@@ -27,6 +25,7 @@
 #include <asm/kvm_arm.h>
 #include <asm/memory.h>
 #include <asm/pgtable-hwdef.h>
+#include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/scs.h>
 #include <asm/smp.h>
@@ -36,10 +35,14 @@
 
 #include "efi-header.S"
 
-#define __PHYS_OFFSET	KERNEL_START
+#define __PHYS_OFFSET	(KERNEL_START - TEXT_OFFSET)
 
-#if (PAGE_OFFSET & 0x1fffff) != 0
+#if (TEXT_OFFSET & 0xfff) != 0
+#error TEXT_OFFSET must be at least 4KB aligned
+#elif (PAGE_OFFSET & 0x1fffff) != 0
 #error PAGE_OFFSET must be at least 2MB aligned
+#elif TEXT_OFFSET > 0x1fffff
+#error TEXT_OFFSET must be less than 2MB
 #endif
 
 /*
@@ -51,7 +54,7 @@
  *   x0 = physical address to the FDT blob.
  *
  * This code is mostly position independent so you call this at
- * __pa(PAGE_OFFSET).
+ * __pa(PAGE_OFFSET + TEXT_OFFSET).
  *
  * Note that the callee-saved registers are used for storing variables
  * that are useful before the MMU is enabled. The allocations are described
@@ -68,12 +71,12 @@ _head:
 	 * its opcode forms the magic "MZ" signature required by UEFI.
 	 */
 	add	x13, x18, #0x16
-	b	primary_entry
+	b	stext
 #else
-	b	primary_entry			// branch to kernel start, magic
+	b	stext				// branch to kernel start, magic
 	.long	0				// reserved
 #endif
-	.quad	0				// Image load offset from start of RAM, little-endian
+	le64sym	_kernel_offset_le		// Image load offset from start of RAM, little-endian
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
@@ -96,13 +99,14 @@ pe_header:
 	 * primary lowlevel boot path:
 	 *
 	 *  Register   Scope                      Purpose
-	 *  x21        primary_entry() .. start_kernel()        FDT pointer passed at boot in x0
-	 *  x23        primary_entry() .. start_kernel()        physical misalignment/KASLR offset
-	 *  x28        __create_page_tables()                   callee preserved temp register
-	 *  x19/x20    __primary_switch()                       callee preserved temp registers
-	 *  x24        __primary_switch() .. relocate_kernel()  current RELR displacement
+	 *  x21        stext() .. start_kernel()  FDT pointer passed at boot in x0
+	 *  x23        stext() .. start_kernel()  physical misalignment/KASLR offset
+	 *  x28        __create_page_tables()     callee preserved temp register
+	 *  x19/x20    __primary_switch()         callee preserved temp registers
+	 *  x24        __primary_switch() .. relocate_kernel()
+	 *                                        current RELR displacement
 	 */
-SYM_CODE_START(primary_entry)
+SYM_CODE_START(stext)
 	bl	preserve_boot_args
 	bl	el2_setup			// Drop to EL1, w0=cpu_boot_mode
 	adrp	x23, __PHYS_OFFSET
@@ -115,9 +119,10 @@ SYM_CODE_START(primary_entry)
 	 * On return, the CPU will be ready for the MMU to be turned on and
 	 * the TCR will have been set.
 	 */
+	mov	x0, #ARM64_CPU_BOOT_PRIMARY
 	bl	__cpu_setup			// initialise processor
 	b	__primary_switch
-SYM_CODE_END(primary_entry)
+SYM_CODE_END(stext)
 
 /*
  * Preserve the arguments passed by the bootloader in x0 .. x3
@@ -378,7 +383,7 @@ SYM_FUNC_START_LOCAL(__create_page_tables)
 	 * Map the kernel image (starting with PHYS_OFFSET).
 	 */
 	adrp	x0, init_pg_dir
-	mov_q	x5, KIMAGE_VADDR		// compile time __va(_text)
+	mov_q	x5, KIMAGE_VADDR + TEXT_OFFSET	// compile time __va(_text)
 	add	x5, x5, x23			// add KASLR displacement
 	mov	x4, PTRS_PER_PGD
 	adrp	x6, _end			// runtime __pa(_end)
@@ -390,19 +395,13 @@ SYM_FUNC_START_LOCAL(__create_page_tables)
 
 	/*
 	 * Since the page tables have been populated with non-cacheable
-	 * accesses (MMU disabled), invalidate those tables again to
-	 * remove any speculatively loaded cache lines.
+	 * accesses (MMU disabled), invalidate the idmap and swapper page
+	 * tables again to remove any speculatively loaded cache lines.
 	 */
-	dmb	sy
-
 	adrp	x0, idmap_pg_dir
-	adrp	x1, idmap_pg_end
-	sub	x1, x1, x0
-	bl	__inval_dcache_area
-
-	adrp	x0, init_pg_dir
 	adrp	x1, init_pg_end
 	sub	x1, x1, x0
+	dmb	sy
 	bl	__inval_dcache_area
 
 	ret	x28
@@ -419,10 +418,6 @@ SYM_FUNC_START_LOCAL(__primary_switched)
 	adr_l	x5, init_task
 	msr	sp_el0, x5			// Save thread_info
 
-#ifdef CONFIG_ARM64_PTR_AUTH
-	__ptrauth_keys_init_cpu	x5, x6, x7, x8
-#endif
-
 	adr_l	x8, vectors			// load VBAR_EL1 with virtual
 	msr	vbar_el1, x8			// vector table address
 	isb
@@ -431,7 +426,7 @@ SYM_FUNC_START_LOCAL(__primary_switched)
 	mov	x29, sp
 
 #ifdef CONFIG_SHADOW_CALL_STACK
-	adr_l	scs_sp, init_shadow_call_stack	// Set shadow call stack
+	adr_l	x18, init_shadow_call_stack	// Set shadow call stack
 #endif
 
 	str_l	x21, __fdt_pointer, x5		// Save FDT pointer
@@ -470,7 +465,7 @@ SYM_FUNC_END(__primary_switched)
 
 	.pushsection ".rodata", "a"
 SYM_DATA_START(kimage_vaddr)
-	.quad		_text
+	.quad		_text - TEXT_OFFSET
 SYM_DATA_END(kimage_vaddr)
 EXPORT_SYMBOL(kimage_vaddr)
 	.popsection
@@ -727,6 +722,7 @@ SYM_FUNC_START_LOCAL(secondary_startup)
 	 * Common entry point for secondary CPUs.
 	 */
 	bl	__cpu_secondary_check52bitva
+	mov	x0, #ARM64_CPU_BOOT_SECONDARY
 	bl	__cpu_setup			// initialise processor
 	adrp	x1, swapper_pg_dir
 	bl	__enable_mmu
@@ -746,14 +742,12 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	ldr	x2, [x0, #CPU_BOOT_TASK]
 	cbz	x2, __secondary_too_slow
 	msr	sp_el0, x2
-	scs_load x2, x3
+#ifdef CONFIG_SHADOW_CALL_STACK
+	ldr	x18, [x2, #TSK_TI_SCS]		// set shadow call stack
+	str	xzr, [x2, #TSK_TI_SCS]		// limit visibility of saved SCS
+#endif
 	mov	x29, #0
 	mov	x30, #0
-
-#ifdef CONFIG_ARM64_PTR_AUTH
-	ptrauth_keys_init_cpu x2, x3, x4, x5
-#endif
-
 	b	secondary_start_kernel
 SYM_FUNC_END(__secondary_switched)
 

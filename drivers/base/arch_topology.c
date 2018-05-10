@@ -21,26 +21,19 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 
-bool topology_scale_freq_invariant(void)
-{
-	return cpufreq_supports_freq_invariance() ||
-	       arch_freq_counters_available(cpu_online_mask);
-}
-
-__weak bool arch_freq_counters_available(const struct cpumask *cpus)
+__weak bool arch_freq_counters_available(struct cpumask *cpus)
 {
 	return false;
 }
 DEFINE_PER_CPU(unsigned long, freq_scale) = SCHED_CAPACITY_SCALE;
+DEFINE_PER_CPU(unsigned long, max_cpu_freq);
+DEFINE_PER_CPU(unsigned long, max_freq_scale) = SCHED_CAPACITY_SCALE;
 
-void topology_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
-			     unsigned long max_freq)
+void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
+			 unsigned long max_freq)
 {
 	unsigned long scale;
 	int i;
-
-	if (WARN_ON_ONCE(!cur_freq || !max_freq))
-		return;
 
 	/*
 	 * If the use of counters for FIE is enabled, just return as we don't
@@ -52,8 +45,29 @@ void topology_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
 
 	scale = (cur_freq << SCHED_CAPACITY_SHIFT) / max_freq;
 
-	for_each_cpu(i, cpus)
+	for_each_cpu(i, cpus) {
 		per_cpu(freq_scale, i) = scale;
+		per_cpu(max_cpu_freq, i) = max_freq;
+	}
+}
+
+void arch_set_max_freq_scale(struct cpumask *cpus,
+			     unsigned long policy_max_freq)
+{
+	unsigned long scale, max_freq;
+	int cpu = cpumask_first(cpus);
+
+	if (cpu > nr_cpu_ids)
+		return;
+
+	max_freq = per_cpu(max_cpu_freq, cpu);
+	if (!max_freq)
+		return;
+
+	scale = (policy_max_freq << SCHED_CAPACITY_SHIFT) / max_freq;
+
+	for_each_cpu(cpu, cpus)
+		per_cpu(max_freq_scale, cpu) = scale;
 }
 
 DEFINE_PER_CPU(unsigned long, cpu_scale) = SCHED_CAPACITY_SCALE;
@@ -63,24 +77,13 @@ void topology_set_cpu_scale(unsigned int cpu, unsigned long capacity)
 	per_cpu(cpu_scale, cpu) = capacity;
 }
 
-DEFINE_PER_CPU(unsigned long, thermal_pressure);
-
-void topology_set_thermal_pressure(const struct cpumask *cpus,
-			       unsigned long th_pressure)
-{
-	int cpu;
-
-	for_each_cpu(cpu, cpus)
-		WRITE_ONCE(per_cpu(thermal_pressure, cpu), th_pressure);
-}
-
 static ssize_t cpu_capacity_show(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
 {
 	struct cpu *cpu = container_of(dev, struct cpu, dev);
 
-	return sysfs_emit(buf, "%lu\n", topology_get_cpu_scale(cpu->dev.id));
+	return sprintf(buf, "%lu\n", topology_get_cpu_scale(cpu->dev.id));
 }
 
 static void update_topology_flags_workfn(struct work_struct *work);

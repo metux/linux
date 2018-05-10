@@ -127,7 +127,7 @@ struct cpufreq_policy {
 
 	 /* Cached frequency lookup from cpufreq_driver_resolve_freq. */
 	unsigned int cached_target_freq;
-	unsigned int cached_resolved_idx;
+	int cached_resolved_idx;
 
 	/* Synchronization for frequency transitions */
 	bool			transition_ongoing; /* Tracks transition status */
@@ -576,22 +576,6 @@ unsigned int cpufreq_driver_resolve_freq(struct cpufreq_policy *policy,
 unsigned int cpufreq_policy_transition_delay_us(struct cpufreq_policy *policy);
 int cpufreq_register_governor(struct cpufreq_governor *governor);
 void cpufreq_unregister_governor(struct cpufreq_governor *governor);
-int cpufreq_start_governor(struct cpufreq_policy *policy);
-void cpufreq_stop_governor(struct cpufreq_policy *policy);
-
-#define cpufreq_governor_init(__governor)			\
-static int __init __governor##_init(void)			\
-{								\
-	return cpufreq_register_governor(&__governor);	\
-}								\
-core_initcall(__governor##_init)
-
-#define cpufreq_governor_exit(__governor)			\
-static void __exit __governor##_exit(void)			\
-{								\
-	return cpufreq_unregister_governor(&__governor);	\
-}								\
-module_exit(__governor##_exit)
 
 struct cpufreq_governor *cpufreq_default_governor(void);
 struct cpufreq_governor *cpufreq_fallback_governor(void);
@@ -956,8 +940,8 @@ static inline int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 	case CPUFREQ_RELATION_C:
 		return cpufreq_table_find_index_c(policy, target_freq);
 	default:
-		WARN_ON_ONCE(1);
-		return 0;
+		pr_err("%s: Invalid relation: %d\n", __func__, relation);
+		return -EINVAL;
 	}
 }
 
@@ -1008,6 +992,8 @@ extern unsigned int arch_freq_get_on_cpu(int cpu);
 
 extern void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
 				unsigned long max_freq);
+extern void arch_set_max_freq_scale(struct cpumask *cpus,
+				    unsigned long policy_max_freq);
 
 /* the following are really really optional */
 extern struct freq_attr cpufreq_freq_attr_scaling_available_freqs;

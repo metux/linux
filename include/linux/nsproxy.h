@@ -36,8 +36,12 @@ struct nsproxy {
 	struct pid_namespace *pid_ns_for_children;
 	struct net 	     *net_ns;
 	struct cgroup_namespace *cgroup_ns;
+	int flags;
 };
 extern struct nsproxy init_nsproxy;
+
+#define NSPROXY_NOSUID		1
+#define NSPROXY_PLAN9_MOUNT	2
 
 /*
  * the namespaces access rules are:

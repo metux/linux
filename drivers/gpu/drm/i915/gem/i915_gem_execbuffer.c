@@ -12,7 +12,6 @@
 #include <drm/drm_syncobj.h>
 #include <drm/i915_drm.h>
 
-#include "display/intel_display_types.h"
 #include "display/intel_frontbuffer.h"
 
 #include "gem/i915_gem_ioctls.h"
@@ -21,9 +20,10 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 
-#include "i915_gem_ioctls.h"
+#include "i915_drv.h"
 #include "i915_gem_clflush.h"
 #include "i915_gem_context.h"
+#include "i915_gem_ioctls.h"
 #include "i915_trace.h"
 
 enum {
@@ -296,7 +296,8 @@ static inline u64 gen8_noncanonical_addr(u64 address)
 
 static inline bool eb_use_cmdparser(const struct i915_execbuffer *eb)
 {
-	return intel_engine_needs_cmd_parser(eb->engine) && eb->batch_len;
+	return intel_engine_requires_cmd_parser(eb->engine) ||
+		(intel_engine_using_cmd_parser(eb->engine) && eb->batch_len);
 }
 
 static int eb_create(struct i915_execbuffer *eb)
@@ -735,63 +736,6 @@ static int eb_select_context(struct i915_execbuffer *eb)
 	return 0;
 }
 
-static struct i915_request *__eb_wait_for_ring(struct intel_ring *ring)
-{
-	struct i915_request *rq;
-
-	/*
-	 * Completely unscientific finger-in-the-air estimates for suitable
-	 * maximum user request size (to avoid blocking) and then backoff.
-	 */
-	if (intel_ring_update_space(ring) >= PAGE_SIZE)
-		return NULL;
-
-	/*
-	 * Find a request that after waiting upon, there will be at least half
-	 * the ring available. The hysteresis allows us to compete for the
-	 * shared ring and should mean that we sleep less often prior to
-	 * claiming our resources, but not so long that the ring completely
-	 * drains before we can submit our next request.
-	 */
-	list_for_each_entry(rq, &ring->request_list, ring_link) {
-		if (__intel_ring_space(rq->postfix,
-				       ring->emit, ring->size) > ring->size / 2)
-			break;
-	}
-	if (&rq->ring_link == &ring->request_list)
-		return NULL; /* weird, we will check again later for real */
-
-	return i915_request_get(rq);
-}
-
-static int eb_wait_for_ring(const struct i915_execbuffer *eb)
-{
-	struct i915_request *rq;
-	int ret = 0;
-
-	/*
-	 * Apply a light amount of backpressure to prevent excessive hogs
-	 * from blocking waiting for space whilst holding struct_mutex and
-	 * keeping all of their resources pinned.
-	 */
-
-	rq = __eb_wait_for_ring(eb->context->ring);
-	if (rq) {
-		mutex_unlock(&eb->i915->drm.struct_mutex);
-
-		if (i915_request_wait(rq,
-				      I915_WAIT_INTERRUPTIBLE,
-				      MAX_SCHEDULE_TIMEOUT) < 0)
-			ret = -EINTR;
-
-		i915_request_put(rq);
-
-		mutex_lock(&eb->i915->drm.struct_mutex);
-	}
-
-	return ret;
-}
-
 static int eb_lookup_vmas(struct i915_execbuffer *eb)
 {
 	struct radix_tree_root *handles_vma = &eb->gem_context->handles_vma;
@@ -1081,6 +1025,9 @@ static void *reloc_iomap(struct drm_i915_gem_object *obj,
 		struct i915_vma *vma;
 		int err;
 
+		if (i915_gem_object_is_tiled(obj))
+			return ERR_PTR(-EINVAL);
+
 		if (use_cpu_reloc(cache, obj))
 			return NULL;
 
@@ -1092,8 +1039,8 @@ static void *reloc_iomap(struct drm_i915_gem_object *obj,
 
 		vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0,
 					       PIN_MAPPABLE |
-					       PIN_NONBLOCK |
-					       PIN_NONFAULT);
+					       PIN_NONBLOCK /* NOWARN */ |
+					       PIN_NOEVICT);
 		if (IS_ERR(vma)) {
 			memset(&cache->node, 0, sizeof(cache->node));
 			err = drm_mm_insert_node_in_range
@@ -1104,12 +1051,6 @@ static void *reloc_iomap(struct drm_i915_gem_object *obj,
 			if (err) /* no inactive aperture space, use cpu reloc */
 				return NULL;
 		} else {
-			err = i915_vma_put_fence(vma);
-			if (err) {
-				i915_vma_unpin(vma);
-				return ERR_PTR(err);
-			}
-
 			cache->node.start = vma->node.start;
 			cache->node.mm = (void *)vma;
 		}
@@ -2017,7 +1958,35 @@ static int i915_reset_gen7_sol_offsets(struct i915_request *rq)
 	return 0;
 }
 
-static struct i915_vma *eb_parse(struct i915_execbuffer *eb, bool is_master)
+static struct i915_vma *
+shadow_batch_pin(struct i915_execbuffer *eb, struct drm_i915_gem_object *obj)
+{
+	struct drm_i915_private *dev_priv = eb->i915;
+	struct i915_vma * const vma = *eb->vma;
+	struct i915_address_space *vm;
+	u64 flags;
+
+	/*
+	 * PPGTT backed shadow buffers must be mapped RO, to prevent
+	 * post-scan tampering
+	 */
+	if (CMDPARSER_USES_GGTT(dev_priv)) {
+		flags = PIN_GLOBAL;
+		vm = &dev_priv->ggtt.vm;
+		eb->batch_flags |= I915_DISPATCH_SECURE;
+	} else if (vma->vm->has_read_only) {
+		flags = PIN_USER;
+		vm = vma->vm;
+		i915_gem_object_set_readonly(obj);
+	} else {
+		DRM_DEBUG("Cannot prevent post-scan tampering without RO capable vm\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	return i915_gem_object_pin(obj, vm, NULL, 0, 0, flags);
+}
+
+static struct i915_vma *eb_parse(struct i915_execbuffer *eb)
 {
 	struct intel_engine_pool_node *pool;
 	struct i915_vma *vma;
@@ -2031,17 +2000,23 @@ static struct i915_vma *eb_parse(struct i915_execbuffer *eb, bool is_master)
 				      eb->batch->obj,
 				      pool->obj,
 				      eb->batch_start_offset,
-				      eb->batch_len,
-				      is_master);
+				      eb->batch_len);
 	if (err) {
-		if (err == -EACCES) /* unhandled chained batch */
+		/*
+		 * Unsafe GGTT-backed buffers can still be submitted safely
+		 * as non-secure.
+		 * For PPGTT backing however, we have no choice but to forcibly
+		 * reject unsafe buffers
+		 */
+		if (CMDPARSER_USES_GGTT(eb->i915) && (err == -EACCES))
+			/* Execute original buffer non-secure */
 			vma = NULL;
 		else
 			vma = ERR_PTR(err);
 		goto err;
 	}
 
-	vma = i915_gem_object_ggtt_pin(pool->obj, NULL, 0, 0, 0);
+	vma = shadow_batch_pin(eb, pool->obj);
 	if (IS_ERR(vma))
 		goto err;
 
@@ -2050,6 +2025,10 @@ static struct i915_vma *eb_parse(struct i915_execbuffer *eb, bool is_master)
 		__EXEC_OBJECT_HAS_PIN | __EXEC_OBJECT_HAS_REF;
 	vma->exec_flags = &eb->flags[eb->buffer_count];
 	eb->buffer_count++;
+
+	eb->batch_start_offset = 0;
+	eb->batch = vma;
+	/* eb->batch_len unchanged */
 
 	vma->private = pool;
 	return vma;
@@ -2062,8 +2041,13 @@ err:
 static void
 add_to_client(struct i915_request *rq, struct drm_file *file)
 {
-	rq->file_priv = file->driver_priv;
-	list_add_tail(&rq->client_link, &rq->file_priv->mm.request_list);
+	struct drm_i915_file_private *file_priv = file->driver_priv;
+
+	rq->file_priv = file_priv;
+
+	spin_lock(&file_priv->mm.lock);
+	list_add_tail(&rq->client_link, &file_priv->mm.request_list);
+	spin_unlock(&file_priv->mm.lock);
 }
 
 static int eb_submit(struct i915_execbuffer *eb)
@@ -2103,6 +2087,12 @@ static int eb_submit(struct i915_execbuffer *eb)
 	return 0;
 }
 
+static int num_vcs_engines(const struct drm_i915_private *i915)
+{
+	return hweight64(INTEL_INFO(i915)->engine_mask &
+			 GENMASK_ULL(VCS0 + I915_MAX_VCS - 1, VCS0));
+}
+
 /*
  * Find one BSD ring to dispatch the corresponding BSD command.
  * The engine index is returned.
@@ -2115,8 +2105,8 @@ gen8_dispatch_bsd_engine(struct drm_i915_private *dev_priv,
 
 	/* Check whether the file_priv has already selected one ring. */
 	if ((int)file_priv->bsd_engine < 0)
-		file_priv->bsd_engine = atomic_fetch_xor(1,
-			 &dev_priv->mm.bsd_engine_dispatch_index);
+		file_priv->bsd_engine =
+			get_random_int() % num_vcs_engines(dev_priv);
 
 	return file_priv->bsd_engine;
 }
@@ -2129,8 +2119,73 @@ static const enum intel_engine_id user_ring_map[] = {
 	[I915_EXEC_VEBOX]	= VECS0
 };
 
-static int eb_pin_context(struct i915_execbuffer *eb, struct intel_context *ce)
+static struct i915_request *eb_throttle(struct intel_context *ce)
 {
+	struct intel_ring *ring = ce->ring;
+	struct intel_timeline *tl = ce->timeline;
+	struct i915_request *rq;
+
+	/*
+	 * Completely unscientific finger-in-the-air estimates for suitable
+	 * maximum user request size (to avoid blocking) and then backoff.
+	 */
+	if (intel_ring_update_space(ring) >= PAGE_SIZE)
+		return NULL;
+
+	/*
+	 * Find a request that after waiting upon, there will be at least half
+	 * the ring available. The hysteresis allows us to compete for the
+	 * shared ring and should mean that we sleep less often prior to
+	 * claiming our resources, but not so long that the ring completely
+	 * drains before we can submit our next request.
+	 */
+	list_for_each_entry(rq, &tl->requests, link) {
+		if (rq->ring != ring)
+			continue;
+
+		if (__intel_ring_space(rq->postfix,
+				       ring->emit, ring->size) > ring->size / 2)
+			break;
+	}
+	if (&rq->link == &tl->requests)
+		return NULL; /* weird, we will check again later for real */
+
+	return i915_request_get(rq);
+}
+
+static int
+__eb_pin_context(struct i915_execbuffer *eb, struct intel_context *ce)
+{
+	int err;
+
+	if (likely(atomic_inc_not_zero(&ce->pin_count)))
+		return 0;
+
+	err = mutex_lock_interruptible(&eb->i915->drm.struct_mutex);
+	if (err)
+		return err;
+
+	err = __intel_context_do_pin(ce);
+	mutex_unlock(&eb->i915->drm.struct_mutex);
+
+	return err;
+}
+
+static void
+__eb_unpin_context(struct i915_execbuffer *eb, struct intel_context *ce)
+{
+	if (likely(atomic_add_unless(&ce->pin_count, -1, 1)))
+		return;
+
+	mutex_lock(&eb->i915->drm.struct_mutex);
+	intel_context_unpin(ce);
+	mutex_unlock(&eb->i915->drm.struct_mutex);
+}
+
+static int __eb_pin_engine(struct i915_execbuffer *eb, struct intel_context *ce)
+{
+	struct intel_timeline *tl;
+	struct i915_request *rq;
 	int err;
 
 	/*
@@ -2146,7 +2201,7 @@ static int eb_pin_context(struct i915_execbuffer *eb, struct intel_context *ce)
 	 * GGTT space, so do this first before we reserve a seqno for
 	 * ourselves.
 	 */
-	err = intel_context_pin(ce);
+	err = __eb_pin_context(eb, ce);
 	if (err)
 		return err;
 
@@ -2158,23 +2213,43 @@ static int eb_pin_context(struct i915_execbuffer *eb, struct intel_context *ce)
 	 * until the timeline is idle, which in turn releases the wakeref
 	 * taken on the engine, and the parent device.
 	 */
-	err = intel_context_timeline_lock(ce);
-	if (err)
+	tl = intel_context_timeline_lock(ce);
+	if (IS_ERR(tl)) {
+		err = PTR_ERR(tl);
 		goto err_unpin;
+	}
 
 	intel_context_enter(ce);
-	intel_context_timeline_unlock(ce);
+	rq = eb_throttle(ce);
+
+	intel_context_timeline_unlock(tl);
+
+	if (rq) {
+		if (i915_request_wait(rq,
+				      I915_WAIT_INTERRUPTIBLE,
+				      MAX_SCHEDULE_TIMEOUT) < 0) {
+			i915_request_put(rq);
+			err = -EINTR;
+			goto err_exit;
+		}
+
+		i915_request_put(rq);
+	}
 
 	eb->engine = ce->engine;
 	eb->context = ce;
 	return 0;
 
+err_exit:
+	mutex_lock(&tl->mutex);
+	intel_context_exit(ce);
+	intel_context_timeline_unlock(tl);
 err_unpin:
-	intel_context_unpin(ce);
+	__eb_unpin_context(eb, ce);
 	return err;
 }
 
-static void eb_unpin_context(struct i915_execbuffer *eb)
+static void eb_unpin_engine(struct i915_execbuffer *eb)
 {
 	struct intel_context *ce = eb->context;
 	struct intel_timeline *tl = ce->timeline;
@@ -2183,7 +2258,7 @@ static void eb_unpin_context(struct i915_execbuffer *eb)
 	intel_context_exit(ce);
 	mutex_unlock(&tl->mutex);
 
-	intel_context_unpin(ce);
+	__eb_unpin_context(eb, ce);
 }
 
 static unsigned int
@@ -2201,7 +2276,7 @@ eb_select_legacy_ring(struct i915_execbuffer *eb,
 		return -1;
 	}
 
-	if (user_ring_id == I915_EXEC_BSD && HAS_ENGINE(i915, VCS1)) {
+	if (user_ring_id == I915_EXEC_BSD && num_vcs_engines(i915) > 1) {
 		unsigned int bsd_idx = args->flags & I915_EXEC_BSD_MASK;
 
 		if (bsd_idx == I915_EXEC_BSD_DEFAULT) {
@@ -2228,9 +2303,9 @@ eb_select_legacy_ring(struct i915_execbuffer *eb,
 }
 
 static int
-eb_select_engine(struct i915_execbuffer *eb,
-		 struct drm_file *file,
-		 struct drm_i915_gem_execbuffer2 *args)
+eb_pin_engine(struct i915_execbuffer *eb,
+	      struct drm_file *file,
+	      struct drm_i915_gem_execbuffer2 *args)
 {
 	struct intel_context *ce;
 	unsigned int idx;
@@ -2245,7 +2320,7 @@ eb_select_engine(struct i915_execbuffer *eb,
 	if (IS_ERR(ce))
 		return PTR_ERR(ce);
 
-	err = eb_pin_context(eb, ce);
+	err = __eb_pin_engine(eb, ce);
 	intel_context_put(ce);
 
 	return err;
@@ -2387,6 +2462,7 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 		       struct drm_i915_gem_exec_object2 *exec,
 		       struct drm_syncobj **fences)
 {
+	struct drm_i915_private *i915 = to_i915(dev);
 	struct i915_execbuffer eb;
 	struct dma_fence *in_fence = NULL;
 	struct dma_fence *exec_fence = NULL;
@@ -2398,7 +2474,7 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 	BUILD_BUG_ON(__EXEC_OBJECT_INTERNAL_FLAGS &
 		     ~__EXEC_OBJECT_UNKNOWN_FLAGS);
 
-	eb.i915 = to_i915(dev);
+	eb.i915 = i915;
 	eb.file = file;
 	eb.args = args;
 	if (DBG_FORCE_RELOC || !(args->flags & I915_EXEC_NO_RELOC))
@@ -2418,8 +2494,15 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 
 	eb.batch_flags = 0;
 	if (args->flags & I915_EXEC_SECURE) {
+		if (INTEL_GEN(i915) >= 11)
+			return -ENODEV;
+
+		/* Return -EPERM to trigger fallback code on old binaries. */
+		if (!HAS_SECURE_BATCHES(i915))
+			return -EPERM;
+
 		if (!drm_is_current_master(file) || !capable(CAP_SYS_ADMIN))
-		    return -EPERM;
+			return -EPERM;
 
 		eb.batch_flags |= I915_DISPATCH_SECURE;
 	}
@@ -2463,16 +2546,12 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 	if (unlikely(err))
 		goto err_destroy;
 
-	err = i915_mutex_lock_interruptible(dev);
-	if (err)
+	err = eb_pin_engine(&eb, file, args);
+	if (unlikely(err))
 		goto err_context;
 
-	err = eb_select_engine(&eb, file, args);
-	if (unlikely(err))
-		goto err_unlock;
-
-	err = eb_wait_for_ring(&eb); /* may temporarily drop struct_mutex */
-	if (unlikely(err))
+	err = i915_mutex_lock_interruptible(dev);
+	if (err)
 		goto err_engine;
 
 	err = eb_relocate(&eb);
@@ -2503,25 +2582,10 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 	if (eb_use_cmdparser(&eb)) {
 		struct i915_vma *vma;
 
-		vma = eb_parse(&eb, drm_is_current_master(file));
+		vma = eb_parse(&eb);
 		if (IS_ERR(vma)) {
 			err = PTR_ERR(vma);
 			goto err_vma;
-		}
-
-		if (vma) {
-			/*
-			 * Batch parsed and accepted:
-			 *
-			 * Set the DISPATCH_SECURE bit to remove the NON_SECURE
-			 * bit from MI_BATCH_BUFFER_START commands issued in
-			 * the dispatch_execbuffer implementations. We
-			 * specifically don't want that set on batches the
-			 * command parser has accepted.
-			 */
-			eb.batch_flags |= I915_DISPATCH_SECURE;
-			eb.batch_start_offset = 0;
-			eb.batch = vma;
 		}
 	}
 
@@ -2630,10 +2694,9 @@ err_batch_unpin:
 err_vma:
 	if (eb.exec)
 		eb_release_vmas(&eb);
-err_engine:
-	eb_unpin_context(&eb);
-err_unlock:
 	mutex_unlock(&dev->struct_mutex);
+err_engine:
+	eb_unpin_engine(&eb);
 err_context:
 	i915_gem_context_put(eb.gem_context);
 err_destroy:

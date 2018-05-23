@@ -442,10 +442,10 @@ static ssize_t node_read_meminfo(struct device *dev,
 		       nid, K(i.sharedram),
 		       nid, sum_zone_node_page_state(nid, NR_KERNEL_STACK_KB),
 #ifdef CONFIG_SHADOW_CALL_STACK
-		       nid, sum_zone_node_page_state(nid, NR_KERNEL_SCS_KB),
+		       nid, sum_zone_node_page_state(nid, NR_KERNEL_SCS_BYTES) / 1024,
 #endif
 		       nid, K(sum_zone_node_page_state(nid, NR_PAGETABLE)),
-		       nid, 0UL,
+		       nid, K(node_page_state(pgdat, NR_UNSTABLE_NFS)),
 		       nid, K(sum_zone_node_page_state(nid, NR_BOUNCE)),
 		       nid, K(node_page_state(pgdat, NR_WRITEBACK_TEMP)),
 		       nid, K(sreclaimable +

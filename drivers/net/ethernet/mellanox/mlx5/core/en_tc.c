@@ -1412,16 +1412,61 @@ static struct mlx5_fc *mlx5e_tc_get_counter(struct mlx5e_tc_flow *flow)
 		return flow->nic_attr->counter;
 }
 
+static struct mlx5e_encap_entry *
+mlx5e_get_next_valid_encap(struct mlx5e_neigh_hash_entry *nhe,
+			   struct mlx5e_encap_entry *e)
+{
+	struct mlx5e_encap_entry *next = NULL;
+
+retry:
+	rcu_read_lock();
+
+	/* find encap with non-zero reference counter value */
+	for (next = e ?
+		     list_next_or_null_rcu(&nhe->encap_list,
+					   &e->encap_list,
+					   struct mlx5e_encap_entry,
+					   encap_list) :
+		     list_first_or_null_rcu(&nhe->encap_list,
+					    struct mlx5e_encap_entry,
+					    encap_list);
+	     next;
+	     next = list_next_or_null_rcu(&nhe->encap_list,
+					  &next->encap_list,
+					  struct mlx5e_encap_entry,
+					  encap_list))
+		if (mlx5e_encap_take(next))
+			break;
+
+	rcu_read_unlock();
+
+	/* release starting encap */
+	if (e)
+		mlx5e_encap_put(netdev_priv(e->out_dev), e);
+	if (!next)
+		return next;
+
+	/* wait for encap to be fully initialized */
+	wait_for_completion(&next->res_ready);
+	/* continue searching if encap entry is not in valid state after completion */
+	if (!(next->flags & MLX5_ENCAP_ENTRY_VALID)) {
+		e = next;
+		goto retry;
+	}
+
+	return next;
+}
+
 void mlx5e_tc_update_neigh_used_value(struct mlx5e_neigh_hash_entry *nhe)
 {
 	struct mlx5e_neigh *m_neigh = &nhe->m_neigh;
-	u64 bytes, packets, lastuse = 0;
+	struct mlx5e_encap_entry *e = NULL;
 	struct mlx5e_tc_flow *flow;
-	struct mlx5e_encap_entry *e;
 	struct mlx5_fc *counter;
 	struct neigh_table *tbl;
 	bool neigh_used = false;
 	struct neighbour *n;
+	u64 lastuse;
 
 	if (m_neigh->family == AF_INET)
 		tbl = &arp_tbl;
@@ -1432,12 +1477,11 @@ void mlx5e_tc_update_neigh_used_value(struct mlx5e_neigh_hash_entry *nhe)
 	else
 		return;
 
-	list_for_each_entry(e, &nhe->encap_list, encap_list) {
+	/* mlx5e_get_next_valid_encap() releases previous encap before returning
+	 * next one.
+	 */
+	while ((e = mlx5e_get_next_valid_encap(nhe, e)) != NULL) {
 		struct encap_flow_item *efi, *tmp;
-
-		if (!(e->flags & MLX5_ENCAP_ENTRY_VALID) ||
-		    !mlx5e_encap_take(e))
-			continue;
 
 		list_for_each_entry_safe(efi, tmp, &e->flows, list) {
 			flow = container_of(efi, struct mlx5e_tc_flow,
@@ -1447,7 +1491,7 @@ void mlx5e_tc_update_neigh_used_value(struct mlx5e_neigh_hash_entry *nhe)
 
 			if (mlx5e_is_offloaded_flow(flow)) {
 				counter = mlx5e_tc_get_counter(flow);
-				mlx5_fc_query_cached(counter, &bytes, &packets, &lastuse);
+				lastuse = mlx5_fc_query_lastuse(counter);
 				if (time_after((unsigned long)lastuse, nhe->reported_lastuse)) {
 					mlx5e_flow_put(netdev_priv(e->out_dev), flow);
 					neigh_used = true;
@@ -1458,9 +1502,11 @@ void mlx5e_tc_update_neigh_used_value(struct mlx5e_neigh_hash_entry *nhe)
 			mlx5e_flow_put(netdev_priv(e->out_dev), flow);
 		}
 
-		mlx5e_encap_put(netdev_priv(e->out_dev), e);
-		if (neigh_used)
+		if (neigh_used) {
+			/* release current encap before breaking the loop */
+			mlx5e_encap_put(netdev_priv(e->out_dev), e);
 			break;
+		}
 	}
 
 	if (neigh_used) {
@@ -1490,7 +1536,7 @@ static void mlx5e_encap_dealloc(struct mlx5e_priv *priv, struct mlx5e_encap_entr
 	}
 
 	kfree(e->encap_header);
-	kfree(e);
+	kfree_rcu(e, rcu);
 }
 
 void mlx5e_encap_put(struct mlx5e_priv *priv, struct mlx5e_encap_entry *e)
@@ -1705,7 +1751,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			      struct mlx5_flow_spec *spec,
 			      struct flow_cls_offload *f,
 			      struct net_device *filter_dev,
-			      u8 *match_level, u8 *tunnel_match_level)
+			      u8 *inner_match_level, u8 *outer_match_level)
 {
 	struct netlink_ext_ack *extack = f->common.extack;
 	void *headers_c = MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
@@ -1720,8 +1766,9 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	struct flow_dissector *dissector = rule->match.dissector;
 	u16 addr_type = 0;
 	u8 ip_proto = 0;
+	u8 *match_level;
 
-	*match_level = MLX5_MATCH_NONE;
+	match_level = outer_match_level;
 
 	if (dissector->used_keys &
 	    ~(BIT(FLOW_DISSECTOR_KEY_META) |
@@ -1749,12 +1796,14 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	}
 
 	if (mlx5e_get_tc_tun(filter_dev)) {
-		if (parse_tunnel_attr(priv, spec, f, filter_dev, tunnel_match_level))
+		if (parse_tunnel_attr(priv, spec, f, filter_dev,
+				      outer_match_level))
 			return -EOPNOTSUPP;
 
-		/* In decap flow, header pointers should point to the inner
+		/* At this point, header pointers should point to the inner
 		 * headers, outer header were already set by parse_tunnel_attr
 		 */
+		match_level = inner_match_level;
 		headers_c = get_match_headers_criteria(MLX5_FLOW_CONTEXT_ACTION_DECAP,
 						       spec);
 		headers_v = get_match_headers_value(MLX5_FLOW_CONTEXT_ACTION_DECAP,
@@ -2056,37 +2105,43 @@ static int parse_cls_flower(struct mlx5e_priv *priv,
 			    struct flow_cls_offload *f,
 			    struct net_device *filter_dev)
 {
+	u8 inner_match_level, outer_match_level, non_tunnel_match_level;
 	struct netlink_ext_ack *extack = f->common.extack;
 	struct mlx5_core_dev *dev = priv->mdev;
 	struct mlx5_eswitch *esw = dev->priv.eswitch;
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
-	u8 match_level, tunnel_match_level = MLX5_MATCH_NONE;
 	struct mlx5_eswitch_rep *rep;
 	bool is_eswitch_flow;
 	int err;
 
-	err = __parse_cls_flower(priv, spec, f, filter_dev, &match_level, &tunnel_match_level);
+	inner_match_level = MLX5_MATCH_NONE;
+	outer_match_level = MLX5_MATCH_NONE;
+
+	err = __parse_cls_flower(priv, spec, f, filter_dev, &inner_match_level,
+				 &outer_match_level);
+	non_tunnel_match_level = (inner_match_level == MLX5_MATCH_NONE) ?
+				 outer_match_level : inner_match_level;
 
 	is_eswitch_flow = mlx5e_is_eswitch_flow(flow);
 	if (!err && is_eswitch_flow) {
 		rep = rpriv->rep;
 		if (rep->vport != MLX5_VPORT_UPLINK &&
 		    (esw->offloads.inline_mode != MLX5_INLINE_MODE_NONE &&
-		    esw->offloads.inline_mode < match_level)) {
+		    esw->offloads.inline_mode < non_tunnel_match_level)) {
 			NL_SET_ERR_MSG_MOD(extack,
 					   "Flow is not offloaded due to min inline setting");
 			netdev_warn(priv->netdev,
 				    "Flow is not offloaded due to min inline setting, required %d actual %d\n",
-				    match_level, esw->offloads.inline_mode);
+				    non_tunnel_match_level, esw->offloads.inline_mode);
 			return -EOPNOTSUPP;
 		}
 	}
 
 	if (is_eswitch_flow) {
-		flow->esw_attr->match_level = match_level;
-		flow->esw_attr->tunnel_match_level = tunnel_match_level;
+		flow->esw_attr->inner_match_level = inner_match_level;
+		flow->esw_attr->outer_match_level = outer_match_level;
 	} else {
-		flow->nic_attr->match_level = match_level;
+		flow->nic_attr->match_level = non_tunnel_match_level;
 	}
 
 	return err;
@@ -3441,7 +3496,7 @@ mlx5e_flow_esw_attr_init(struct mlx5_esw_flow_attr *esw_attr,
 
 	esw_attr->parse_attr = parse_attr;
 	esw_attr->chain = f->common.chain_index;
-	esw_attr->prio = TC_H_MAJ(f->common.prio) >> 16;
+	esw_attr->prio = f->common.prio;
 
 	esw_attr->in_rep = in_rep;
 	esw_attr->in_mdev = in_mdev;

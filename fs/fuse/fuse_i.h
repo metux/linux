@@ -479,7 +479,6 @@ struct fuse_fs_context {
 	bool destroy:1;
 	bool no_control:1;
 	bool no_force_umount:1;
-	bool no_mount_options:1;
 	unsigned int max_read;
 	unsigned int blksize;
 	const char *subtype;
@@ -713,9 +712,6 @@ struct fuse_conn {
 
 	/** Do not allow MNT_FORCE umount */
 	unsigned int no_force_umount:1;
-
-	/* Do not show mount options */
-	unsigned int no_mount_options:1;
 
 	/** The number of requests waiting for completion */
 	atomic_t num_waiting;

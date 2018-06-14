@@ -137,6 +137,29 @@ Only the lists of names from directories are merged.  Other content
 such as metadata and extended attributes are reported for the upper
 directory only.  These attributes of the lower directory are hidden.
 
+credentials
+-----------
+
+By default, all access to the upper, lower and work directories is the
+recorded mounter's MAC and DAC credentials.  The incoming accesses are
+checked against the caller's credentials.
+
+In the case where caller MAC or DAC credentials do not overlap, a
+use case available in older versions of the driver, the
+override_creds mount flag can be turned off and help when the use
+pattern has caller with legitimate credentials where the mounter
+does not.  Several unintended side effects will occur though.  The
+caller without certain key capabilities or lower privilege will not
+always be able to delete files or directories, create nodes, or
+search some restricted directories.  The ability to search and read
+a directory entry is spotty as a result of the cache mechanism not
+retesting the credentials because of the assumption, a privileged
+caller can fill cache, then a lower privilege can read the directory
+cache.  The uneven security model where cache, upperdir and workdir
+are opened at privilege, but accessed without creating a form of
+privilege escalation, should only be used with strict understanding
+of the side effects and of the security policies.
+
 whiteouts and opaque directories
 --------------------------------
 
@@ -563,25 +586,6 @@ This verification may cause significant overhead in some cases.
 Note: the mount options index=off,nfs_export=on are conflicting for a
 read-write mount and will result in an error.
 
-
-Volatile mount
---------------
-
-This is enabled with the "volatile" mount option.  Volatile mounts are not
-guaranteed to survive a crash.  It is strongly recommended that volatile
-mounts are only used if data written to the overlay can be recreated
-without significant effort.
-
-The advantage of mounting with the "volatile" option is that all forms of
-sync calls to the upper filesystem are omitted.
-
-When overlay is mounted with "volatile" option, the directory
-"$workdir/work/incompat/volatile" is created.  During next mount, overlay
-checks for this directory and refuses to mount if present. This is a strong
-indicator that user should throw away upper and work directories and create
-fresh one. In very limited cases where the user knows that the system has
-not crashed and contents of upperdir are intact, The "volatile" directory
-can be removed.
 
 Testsuite
 ---------

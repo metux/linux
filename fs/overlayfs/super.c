@@ -53,6 +53,11 @@ module_param_named(xino_auto, ovl_xino_auto_def, bool, 0644);
 MODULE_PARM_DESC(xino_auto,
 		 "Auto enable xino feature");
 
+static bool __read_mostly ovl_override_creds_def = true;
+module_param_named(override_creds, ovl_override_creds_def, bool, 0644);
+MODULE_PARM_DESC(ovl_override_creds_def,
+		 "Use mounter's credentials for accesses");
+
 static void ovl_entry_stack_free(struct ovl_entry *oe)
 {
 	unsigned int i;
@@ -264,8 +269,6 @@ static int ovl_sync_fs(struct super_block *sb, int wait)
 	if (!ovl_upper_mnt(ofs))
 		return 0;
 
-	if (!ovl_should_sync(ofs))
-		return 0;
 	/*
 	 * Not called for sync(2) call or an emergency sync (SB_I_SKIP_SYNC).
 	 * All the super blocks will be iterated, including upper_sb.
@@ -364,8 +367,9 @@ static int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	if (ofs->config.metacopy != ovl_metacopy_def)
 		seq_printf(m, ",metacopy=%s",
 			   ofs->config.metacopy ? "on" : "off");
-	if (ofs->config.ovl_volatile)
-		seq_puts(m, ",volatile");
+	if (ofs->config.override_creds != ovl_override_creds_def)
+		seq_show_option(m, "override_creds",
+				ofs->config.override_creds ? "on" : "off");
 	return 0;
 }
 
@@ -380,11 +384,9 @@ static int ovl_remount(struct super_block *sb, int *flags, char *data)
 
 	if (*flags & SB_RDONLY && !sb_rdonly(sb)) {
 		upper_sb = ovl_upper_mnt(ofs)->mnt_sb;
-		if (ovl_should_sync(ofs)) {
-			down_read(&upper_sb->s_umount);
-			ret = sync_filesystem(upper_sb);
-			up_read(&upper_sb->s_umount);
-		}
+		down_read(&upper_sb->s_umount);
+		ret = sync_filesystem(upper_sb);
+		up_read(&upper_sb->s_umount);
 	}
 
 	return ret;
@@ -417,7 +419,8 @@ enum {
 	OPT_XINO_AUTO,
 	OPT_METACOPY_ON,
 	OPT_METACOPY_OFF,
-	OPT_VOLATILE,
+	OPT_OVERRIDE_CREDS_ON,
+	OPT_OVERRIDE_CREDS_OFF,
 	OPT_ERR,
 };
 
@@ -436,7 +439,8 @@ static const match_table_t ovl_tokens = {
 	{OPT_XINO_AUTO,			"xino=auto"},
 	{OPT_METACOPY_ON,		"metacopy=on"},
 	{OPT_METACOPY_OFF,		"metacopy=off"},
-	{OPT_VOLATILE,			"volatile"},
+	{OPT_OVERRIDE_CREDS_ON,		"override_creds=on"},
+	{OPT_OVERRIDE_CREDS_OFF,	"override_creds=off"},
 	{OPT_ERR,			NULL}
 };
 
@@ -496,6 +500,7 @@ static int ovl_parse_opt(char *opt, struct ovl_config *config)
 	config->redirect_mode = kstrdup(ovl_redirect_mode_def(), GFP_KERNEL);
 	if (!config->redirect_mode)
 		return -ENOMEM;
+	config->override_creds = ovl_override_creds_def;
 
 	while ((p = ovl_next_opt(&opt)) != NULL) {
 		int token;
@@ -581,8 +586,12 @@ static int ovl_parse_opt(char *opt, struct ovl_config *config)
 			metacopy_opt = true;
 			break;
 
-		case OPT_VOLATILE:
-			config->ovl_volatile = true;
+		case OPT_OVERRIDE_CREDS_ON:
+			config->override_creds = true;
+			break;
+
+		case OPT_OVERRIDE_CREDS_OFF:
+			config->override_creds = false;
 			break;
 
 		default:
@@ -605,11 +614,6 @@ static int ovl_parse_opt(char *opt, struct ovl_config *config)
 			index_opt = false;
 		}
 		config->index = false;
-	}
-
-	if (!config->upperdir && config->ovl_volatile) {
-		pr_info("option \"volatile\" is meaningless in a non-upper mount, ignoring it.\n");
-		config->ovl_volatile = false;
 	}
 
 	err = ovl_parse_redirect_mode(config, config->redirect_mode);
@@ -722,12 +726,8 @@ retry:
 				goto out_unlock;
 
 			retried = true;
-			err = ovl_workdir_cleanup(dir, mnt, work, 0);
+			ovl_workdir_cleanup(dir, mnt, work, 0);
 			dput(work);
-			if (err == -EINVAL) {
-				work = ERR_PTR(err);
-				goto out_unlock;
-			}
 			goto retry;
 		}
 
@@ -1222,50 +1222,11 @@ out_unlock:
 	return err;
 }
 
-static struct dentry *ovl_lookup_or_create(struct dentry *parent,
-					   const char *name, umode_t mode)
-{
-	size_t len = strlen(name);
-	struct dentry *child;
-
-	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
-	child = lookup_one_len(name, parent, len);
-	if (!IS_ERR(child) && !child->d_inode)
-		child = ovl_create_real(parent->d_inode, child,
-					OVL_CATTR(mode));
-	inode_unlock(parent->d_inode);
-	dput(parent);
-
-	return child;
-}
-
-/*
- * Creates $workdir/work/incompat/volatile/dirty file if it is not already
- * present.
- */
-static int ovl_create_volatile_dirty(struct ovl_fs *ofs)
-{
-	unsigned int ctr;
-	struct dentry *d = dget(ofs->workbasedir);
-	static const char *const volatile_path[] = {
-		OVL_WORKDIR_NAME, "incompat", "volatile", "dirty"
-	};
-	const char *const *name = volatile_path;
-
-	for (ctr = ARRAY_SIZE(volatile_path); ctr; ctr--, name++) {
-		d = ovl_lookup_or_create(d, *name, ctr > 1 ? S_IFDIR : S_IFREG);
-		if (IS_ERR(d))
-			return PTR_ERR(d);
-	}
-	dput(d);
-	return 0;
-}
-
 static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 			    struct path *workpath)
 {
 	struct vfsmount *mnt = ovl_upper_mnt(ofs);
-	struct dentry *temp, *workdir;
+	struct dentry *temp;
 	bool rename_whiteout;
 	bool d_type;
 	int fh_type;
@@ -1275,12 +1236,9 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 	if (err)
 		return err;
 
-	workdir = ovl_workdir_create(ofs, OVL_WORKDIR_NAME, false);
-	err = PTR_ERR(workdir);
-	if (IS_ERR_OR_NULL(workdir))
+	ofs->workdir = ovl_workdir_create(ofs, OVL_WORKDIR_NAME, false);
+	if (!ofs->workdir)
 		goto out;
-
-	ofs->workdir = workdir;
 
 	err = ovl_setup_trap(sb, ofs->workdir, &ofs->workdir_trap, "workdir");
 	if (err)
@@ -1321,7 +1279,7 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 	/*
 	 * Check if upper/work fs supports trusted.overlay.* xattr
 	 */
-	err = ovl_do_setxattr(ofs, ofs->workdir, OVL_XATTR_OPAQUE, "0", 1);
+	err = ovl_do_setxattr(ofs->workdir, OVL_XATTR_OPAQUE, "0", 1, 0);
 	if (err) {
 		ofs->noxattr = true;
 		ofs->config.index = false;
@@ -1329,7 +1287,7 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 		pr_warn("upper fs does not support xattr, falling back to index=off and metacopy=off.\n");
 		err = 0;
 	} else {
-		ovl_do_removexattr(ofs, ofs->workdir, OVL_XATTR_OPAQUE);
+		vfs_removexattr(ofs->workdir, OVL_XATTR_OPAQUE);
 	}
 
 	/*
@@ -1342,18 +1300,6 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 		pr_err("upper fs missing required features.\n");
 		err = -EINVAL;
 		goto out;
-	}
-
-	/*
-	 * For volatile mount, create a incompat/volatile/dirty file to keep
-	 * track of it.
-	 */
-	if (ofs->config.ovl_volatile) {
-		err = ovl_create_volatile_dirty(ofs);
-		if (err < 0) {
-			pr_err("Failed to create volatile/dirty file.\n");
-			goto out;
-		}
 	}
 
 	/* Check if upper/work fs supports file handles */
@@ -1424,7 +1370,6 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 			    struct ovl_entry *oe, struct path *upperpath)
 {
 	struct vfsmount *mnt = ovl_upper_mnt(ofs);
-	struct dentry *indexdir;
 	int err;
 
 	err = mnt_want_write(mnt);
@@ -1432,8 +1377,8 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 		return err;
 
 	/* Verify lower root is upper root origin */
-	err = ovl_verify_origin(ofs, upperpath->dentry,
-				oe->lowerstack[0].dentry, true);
+	err = ovl_verify_origin(upperpath->dentry, oe->lowerstack[0].dentry,
+				true);
 	if (err) {
 		pr_err("failed to verify upper root origin\n");
 		goto out;
@@ -1444,12 +1389,9 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 	ofs->workdir_trap = NULL;
 	dput(ofs->workdir);
 	ofs->workdir = NULL;
-	indexdir = ovl_workdir_create(ofs, OVL_INDEXDIR_NAME, true);
-	if (IS_ERR(indexdir)) {
-		err = PTR_ERR(indexdir);
-	} else if (indexdir) {
-		ofs->indexdir = indexdir;
-		ofs->workdir = dget(indexdir);
+	ofs->indexdir = ovl_workdir_create(ofs, OVL_INDEXDIR_NAME, true);
+	if (ofs->indexdir) {
+		ofs->workdir = dget(ofs->indexdir);
 
 		err = ovl_setup_trap(sb, ofs->indexdir, &ofs->indexdir_trap,
 				     "indexdir");
@@ -1464,15 +1406,13 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 		 * "trusted.overlay.upper" to indicate that index may have
 		 * directory entries.
 		 */
-		if (ovl_check_origin_xattr(ofs, ofs->indexdir)) {
-			err = ovl_verify_set_fh(ofs, ofs->indexdir,
-						OVL_XATTR_ORIGIN,
+		if (ovl_check_origin_xattr(ofs->indexdir)) {
+			err = ovl_verify_set_fh(ofs->indexdir, OVL_XATTR_ORIGIN,
 						upperpath->dentry, true, false);
 			if (err)
 				pr_err("failed to verify index dir 'origin' xattr\n");
 		}
-		err = ovl_verify_upper(ofs, ofs->indexdir, upperpath->dentry,
-				       true);
+		err = ovl_verify_upper(ofs->indexdir, upperpath->dentry, true);
 		if (err)
 			pr_err("failed to verify index dir 'upper' xattr\n");
 
@@ -1838,7 +1778,7 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 		ino = d_inode(upperdentry)->i_ino;
 		fsid = 0;
 		ovl_dentry_set_upper_alias(root);
-		if (ovl_is_impuredir(sb, upperdentry))
+		if (ovl_is_impuredir(upperdentry))
 			ovl_set_flag(OVL_IMPURE, d_inode(root));
 	}
 
@@ -2007,7 +1947,6 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	kfree(splitlower);
 
 	sb->s_root = root_dentry;
-
 	return 0;
 
 out_free_oe:

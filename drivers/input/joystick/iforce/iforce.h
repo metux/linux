@@ -81,9 +81,16 @@ struct iforce_device {
 	signed short *ff;
 };
 
+struct iforce;
+
+struct iforce_xport_ops {
+	void (*xmit)(struct iforce *iforce);
+};
+
 struct iforce {
 	struct input_dev *dev;		/* Input device interface */
 	struct iforce_device *type;
+	const struct iforce_xport_ops *xport_ops;
 	int bus;
 
 	unsigned char data[IFORCE_MAX_LENGTH];
@@ -129,12 +136,6 @@ struct iforce {
 
 
 /* Public functions */
-/* iforce-serio.c */
-void iforce_serial_xmit(struct iforce *iforce);
-
-/* iforce-usb.c */
-void iforce_usb_xmit(struct iforce *iforce);
-
 /* iforce-main.c */
 int iforce_init_device(struct iforce *iforce);
 

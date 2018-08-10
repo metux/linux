@@ -21,6 +21,7 @@ struct iforce_serio {
 	u8 expect_packet;
 	u8 cmd_response[IFORCE_MAX_LENGTH];
 	u8 cmd_response_len;
+	u8 data_in[IFORCE_MAX_LENGTH];
 };
 
 static void iforce_serio_xmit(struct iforce *iforce)
@@ -157,7 +158,7 @@ static irqreturn_t iforce_serio_irq(struct serio *serio,
 	}
 
 	if (iforce_serio->idx < iforce_serio->len) {
-		iforce->data[iforce_serio->idx++] = data;
+		iforce_serio->data_in[iforce_serio->idx++] = data;
 		iforce_serio->csum += data;
 		goto out;
 	}
@@ -166,15 +167,16 @@ static irqreturn_t iforce_serio_irq(struct serio *serio,
 		/* Handle command completion */
 		if (iforce_serio->expect_packet == iforce_serio->id) {
 			iforce_serio->expect_packet = 0;
-			memcpy(iforce_serio->cmd_response, iforce->data,
-			       IFORCE_MAX_LENGTH);
+			memcpy(iforce_serio->cmd_response,
+			       iforce_serio->data_in, IFORCE_MAX_LENGTH);
 			iforce_serio->cmd_response_len = iforce_serio->len;
 
 			/* Signal that command is done */
 			wake_up(&iforce->wait);
 		} else if (likely(iforce->type)) {
 			iforce_process_packet(iforce, iforce_serio->id,
-					      iforce->data, iforce_serio->len);
+					      iforce_serio->data_in,
+					      iforce_serio->len);
 		}
 
 		iforce_serio->pkt = 0;

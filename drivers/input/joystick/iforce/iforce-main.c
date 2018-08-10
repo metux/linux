@@ -9,6 +9,7 @@
 /*
  */
 
+#include <asm/unaligned.h>
 #include "iforce.h"
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@ucw.cz>, Johann Deneux <johann.deneux@gmail.com>");
@@ -274,17 +275,17 @@ int iforce_init_device(struct device *parent, u16 bustype,
  */
 
 	if (!iforce_get_id_packet(iforce, 'M', buf, &len) || len < 3)
-		input_dev->id.vendor = (buf[2] << 8) | buf[1];
+		input_dev->id.vendor = get_unaligned_le16(buf + 1);
 	else
 		dev_warn(&iforce->dev->dev, "Device does not respond to id packet M\n");
 
 	if (!iforce_get_id_packet(iforce, 'P', buf, &len) || len < 3)
-		input_dev->id.product = (buf[2] << 8) | buf[1];
+		input_dev->id.product = get_unaligned_le16(buf + 1);
 	else
 		dev_warn(&iforce->dev->dev, "Device does not respond to id packet P\n");
 
 	if (!iforce_get_id_packet(iforce, 'B', buf, &len) || len < 3)
-		iforce->device_memory.end = (buf[2] << 8) | buf[1];
+		iforce->device_memory.end = get_unaligned_le16(buf + 1);
 	else
 		dev_warn(&iforce->dev->dev, "Device does not respond to id packet B\n");
 

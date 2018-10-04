@@ -301,4 +301,17 @@ void ion_page_pool_free(struct ion_page_pool *pool, struct page *page);
 int ion_page_pool_shrink(struct ion_page_pool *pool, gfp_t gfp_mask,
 			 int nr_to_scan);
 
+/**
+ * ion_buffer_prep_noncached - flush cache before non-cached mapping
+ *
+ * @buffer:		ion_buffer to flush
+ *
+ * The memory allocated by the heap could be in the CPU cache. To map
+ * this memory as non-cached, we need to flush the associated cache
+ * first. Without the flush, it is possible for stale dirty cache lines
+ * to be evicted after the ION client started writing into this buffer,
+ * leading to data corruption.
+ */
+void ion_buffer_prep_noncached(struct ion_buffer *buffer);
+
 #endif /* _ION_H */

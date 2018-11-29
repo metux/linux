@@ -42,4 +42,6 @@ struct smu_funcs
 
 extern const struct amd_ip_funcs smu_ip_funcs;
 
+extern const struct amdgpu_ip_block_version smu_v11_0_ip_block;
+
 #endif

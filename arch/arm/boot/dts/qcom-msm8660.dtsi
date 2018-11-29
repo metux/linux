@@ -138,6 +138,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
+			status = "disabled";
 
 			syscon-tcsr = <&tcsr>;
 
@@ -172,6 +173,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges;
+			status = "disabled";
 
 			syscon-tcsr = <&tcsr>;
 

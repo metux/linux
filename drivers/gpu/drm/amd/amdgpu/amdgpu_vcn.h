@@ -89,6 +89,7 @@ struct dpg_pause_state {
 
 struct amdgpu_vcn_reg{
 	unsigned	scratch9;
+	unsigned	jpeg_pitch;
 };
 
 struct amdgpu_vcn {

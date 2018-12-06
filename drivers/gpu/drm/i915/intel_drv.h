@@ -1218,6 +1218,9 @@ struct intel_dp {
 
 	/* Displayport compliance testing */
 	struct intel_dp_compliance compliance;
+
+	/* Display stream compression testing */
+	bool force_dsc_en;
 };
 
 enum lspcon_vendor {

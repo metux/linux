@@ -22,8 +22,6 @@
 
 #include <sound/hda_verbs.h>
 
-#include <media/cec-notifier.h>
-
 #include "hdmi.h"
 #include "drm.h"
 #include "dc.h"
@@ -1710,10 +1708,6 @@ static int tegra_hdmi_probe(struct platform_device *pdev)
 		return PTR_ERR(hdmi->vdd);
 	}
 
-	hdmi->output.notifier = cec_notifier_get(&pdev->dev);
-	if (hdmi->output.notifier == NULL)
-		return -ENOMEM;
-
 	hdmi->output.dev = &pdev->dev;
 
 	err = tegra_output_probe(&hdmi->output);
@@ -1771,9 +1765,6 @@ static int tegra_hdmi_remove(struct platform_device *pdev)
 	}
 
 	tegra_output_remove(&hdmi->output);
-
-	if (hdmi->output.notifier)
-		cec_notifier_put(hdmi->output.notifier);
 
 	return 0;
 }

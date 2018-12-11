@@ -82,6 +82,7 @@ struct clk_core {
 
 struct clk {
 	struct clk_core	*core;
+	struct device *dev;
 	const char *dev_id;
 	const char *con_id;
 	unsigned long min_rate;
@@ -3276,6 +3277,7 @@ static void free_clk(struct clk *clk)
 /**
  * clk_hw_create_clk: Allocate and link a clk consumer to a clk_core given
  * a clk_hw
+ * @dev: clk consumer device
  * @hw: clk_hw associated with the clk being consumed
  * @dev_id: string describing device name
  * @con_id: connection ID string on device
@@ -3284,7 +3286,7 @@ static void free_clk(struct clk *clk)
  * consumers. It connects a consumer to the clk_core and clk_hw structures
  * used by the framework and clk provider respectively.
  */
-struct clk *clk_hw_create_clk(struct clk_hw *hw,
+struct clk *clk_hw_create_clk(struct device *dev, struct clk_hw *hw,
 			      const char *dev_id, const char *con_id)
 {
 	struct clk *clk;
@@ -3298,6 +3300,7 @@ struct clk *clk_hw_create_clk(struct clk_hw *hw,
 	clk = alloc_clk(core, dev_id, con_id);
 	if (IS_ERR(clk))
 		return clk;
+	clk->dev = dev;
 
 	if (!try_module_get(core->owner)) {
 		free_clk(clk);
@@ -4152,7 +4155,7 @@ struct clk *of_clk_get_from_provider(struct of_phandle_args *clkspec)
 {
 	struct clk_hw *hw = of_clk_get_hw_from_clkspec(clkspec);
 
-	return clk_hw_create_clk(hw, NULL, __func__);
+	return clk_hw_create_clk(NULL, hw, NULL, __func__);
 }
 EXPORT_SYMBOL_GPL(of_clk_get_from_provider);
 

@@ -5397,7 +5397,8 @@ static bool icl_tc_port_connected(struct drm_i915_private *dev_priv,
 			  port_name(port));
 		intel_dig_port->tc_legacy_port = true;
 	}
-	is_legacy = intel_dig_port->tc_legacy_port;
+	is_legacy = intel_dig_port->tc_legacy_port ||
+		I915_READ(SDEISR) & SDE_TC_HOTPLUG_ICP(tc_port);
 
 	/*
 	 * The spec says we shouldn't be using the ISR bits for detecting

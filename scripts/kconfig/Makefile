@@ -2,6 +2,9 @@
 # Kernel configuration targets
 # These targets are used from top-level makefile
 
+srctree ?= ../../
+src ?= scripts/kconfig
+
 PHONY += xconfig gconfig menuconfig config silentoldconfig update-po-config \
 	localmodconfig localyesconfig
 
@@ -161,7 +164,7 @@ check-lxdialog  := $(srctree)/$(src)/lxdialog/check-lxdialog.sh
 
 # Use recursively expanded variables so we do not call gcc unless
 # we really need to do so. (Do not call gcc as part of make mrproper)
-HOST_EXTRACFLAGS += $(shell $(CONFIG_SHELL) $(check-lxdialog) -ccflags) \
+KCONFIG_CFLAGS += $(shell $(CONFIG_SHELL) $(check-lxdialog) -ccflags) \
                     -DLOCALE
 
 # ===========================================================================
@@ -203,7 +206,9 @@ $(obj)/dochecklxdialog:
 always := dochecklxdialog
 
 # Add environment specific flags
-HOST_EXTRACFLAGS += $(shell $(CONFIG_SHELL) $(srctree)/$(src)/check.sh $(HOSTCC) $(HOSTCFLAGS))
+KCONFIG_CFLAGS += $(shell $(CONFIG_SHELL) $(srctree)/$(src)/check.sh $(HOSTCC) $(HOSTCFLAGS))
+
+HOST_EXTRACFLAGS += $(KCONFIG_CFLAGS)
 
 # generated files seem to need this to find local include files
 HOSTCFLAGS_zconf.lex.o	:= -I$(src)
@@ -294,3 +299,18 @@ $(obj)/%.moc: $(src)/%.h $(obj)/.tmp_qtcheck
 $(obj)/gconf.glade.h: $(obj)/gconf.glade
 	$(Q)intltool-extract --type=gettext/glade --srcdir=$(srctree) \
 	$(obj)/gconf.glade
+
+foo:
+#	echo "MAKECMDGOALS=$(MAKECMDGOALS)"
+	echo 'HOST_EXTRACFLAGS=$(HOST_EXTRACFLAGS)'
+	echo 'KCONFIG_CFLAGS=$(KCONFIG_CFLAGS)'
+#	echo "SRCTREE=$(srctree)"
+
+%.o:	%.c
+	echo "COMPILING $@"
+	echo "host_cc=$(HOST_CC)"
+	echo "CC=$(CC)"
+	$(CC) $(KCONFIG_CFLAGS) $< -o $@
+
+mconf: mconf.o lxdialog/util.o confdata.o
+	echo HOST_CC=$(HOST_CC)

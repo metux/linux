@@ -2,6 +2,8 @@
 # Generated files
 #
 *.moc
+.mconf-cfg
+.mconf-cfg.tmp
 
 #
 # configuration programs

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 *.moc
 *conf-cfg
+.mconf-cfg
+.mconf-cfg.tmp
 
 #
 # configuration programs

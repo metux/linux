@@ -11,12 +11,15 @@
 # Normal rules (sorted alphabetically)
 #
 .*
+*.cmd
+*.config.old
 *.a
 *.asn1.[ch]
 *.bin
 *.bz2
 *.c.[012]*.*
 *.dt.yaml
+.*.d
 *.dtb
 *.dtb.S
 *.dwo
@@ -37,12 +40,16 @@
 *.o.*
 *.patch
 *.s
+.scmversion
 *.so
 *.so.dbg
 *.su
 *.symtypes
+.tmp_*
 *.tab.[ch]
 *.tar
+*.version
+.version
 *.xz
 Module.symvers
 modules.builtin

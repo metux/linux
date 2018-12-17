@@ -3,6 +3,8 @@
 #
 *.moc
 *conf-cfg
+.mconf-cfg
+.mconf-cfg.tmp
 
 #
 # configuration programs

@@ -9,7 +9,6 @@
 #
 # Normal rules (sorted alphabetically)
 #
-.*
 *.cmd
 *.config.old
 *.a
@@ -47,7 +46,6 @@
 .tmp_*
 *.tab.[ch]
 *.tar
-*.version
 *.xz
 Module.symvers
 modules.builtin

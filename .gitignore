@@ -10,7 +10,6 @@
 #
 # Normal rules (sorted alphabetically)
 #
-.*
 *.cmd
 *.config.old
 *.a

@@ -24,6 +24,33 @@
 static LIST_HEAD(clocks);
 static DEFINE_MUTEX(clocks_mutex);
 
+#if defined(CONFIG_OF) && defined(CONFIG_COMMON_CLK)
+static struct clk_hw *of_clk_get_hw(struct device_node *np,
+				    int index, const char *con_id)
+{
+	int ret;
+	struct clk_hw *hw;
+	struct of_phandle_args clkspec;
+
+	ret = of_parse_clkspec(np, index, con_id, &clkspec);
+	if (ret)
+		return ERR_PTR(ret);
+
+	hw = of_clk_get_hw_from_clkspec(&clkspec);
+	of_node_put(clkspec.np);
+
+	return hw;
+}
+
+#else /* defined(CONFIG_OF) && defined(CONFIG_COMMON_CLK) */
+
+static struct clk_hw *of_clk_get_hw(struct device_node *np,
+				    int index, const char *con_id)
+{
+	return ERR_PTR(-ENOENT);
+}
+#endif
+
 /*
  * Find the correct struct clk for the device and connection ID.
  * We do slightly fuzzy matching here:

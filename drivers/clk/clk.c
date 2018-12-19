@@ -4447,7 +4447,7 @@ EXPORT_SYMBOL(devm_of_clk_del_provider);
  * if @name is NULL or -EINVAL if @name is non-NULL and it can't be found in
  * the "clock-names" property of @np.
  */
-static int of_parse_clkspec(const struct device_node *np, int index,
+int of_parse_clkspec(const struct device_node *np, int index,
 			    const char *name, struct of_phandle_args *out_args)
 {
 	int ret = -ENOENT;
@@ -4498,8 +4498,7 @@ __of_clk_get_hw_from_provider(struct of_clk_provider *provider,
 	return __clk_get_hw(clk);
 }
 
-static struct clk_hw *
-of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
+struct clk_hw *of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec)
 {
 	struct of_clk_provider *provider;
 	struct clk_hw *hw = ERR_PTR(-EPROBE_DEFER);

@@ -1288,6 +1288,15 @@ config INTEL_ATOMISP2_PM
 	  To compile this driver as a module, choose M here: the module
 	  will be called intel_atomisp2_pm.
 
+config PCENGINES_APU2
+	tristate "LEDs and buttons driver forPC Engines APUv2 board"
+	depends on GPIO_AMD_FCH
+	depends on KEYBOARD_GPIO
+	depends on KEYBOARD_GPIO_POLLED
+	depends on LEDS_GPIO
+	---help---
+	  This options adds APUv2 board support for LEDs and keys
+
 endif # X86_PLATFORM_DEVICES
 
 config PMC_ATOM

@@ -60,7 +60,10 @@
 #define ARM64_HAS_AMU_EXTN			50
 #define ARM64_HAS_ADDRESS_AUTH			51
 #define ARM64_HAS_GENERIC_AUTH			52
+#define ARM64_HAS_32BIT_EL1			53
+#define ARM64_BTI				54
+#define ARM64_HAS_ARMv8_4_TTL			55
 
-#define ARM64_NCAPS				53
+#define ARM64_NCAPS				56
 
 #endif /* __ASM_CPUCAPS_H */

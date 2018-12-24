@@ -1607,7 +1607,12 @@ out_unlock:
  */
 static inline bool may_mount(void)
 {
-	return ns_capable(current->nsproxy->mnt_ns->user_ns, CAP_SYS_ADMIN);
+	if (current->nsproxy->mnt_us->usermount)
+		printk(KERN_INFO "may_mount() allowing within usermount ns\n");
+
+	// FIXME: compare kuid
+	return (ns_capable(current->nsproxy->mnt_ns->user_ns, CAP_SYS_ADMIN) ||
+		current->nsproxy->mnt_ns->usermount);
 }
 
 static inline bool may_mandlock(void)
@@ -2742,6 +2747,13 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 
 	retval = security_sb_mount(dev_name, &path,
 				   type_page, flags, data_page);
+
+	if (!retval)
+		printk(KERN_INFO "LSM forbid mounting\n");
+
+	if (!may_mount())
+		printk(KERN_INFO "may_mount() forbid mounting\n");
+
 	if (!retval && !may_mount())
 		retval = -EPERM;
 	if (!retval && (flags & SB_MANDLOCK) && !may_mandlock())
@@ -2865,9 +2877,19 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns)
 	return new_ns;
 }
 
+kuid_t mnt_ns_get_userid(struct mnt_namespace *ns)
+{
+	return (ns == NULL ? 0 : ns->usermount);
+}
+
+void mnt_ns_get_userid(struct mnt_namespace *ns, kuid_t user)
+{
+	ns->usermount = user;
+}
+
 __latent_entropy
 struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
-		struct user_namespace *user_ns, struct fs_struct *new_fs)
+		struct user_namespace *user_ns, struct fs_struct *new_fs, kuid_t uid)
 {
 	struct mnt_namespace *new_ns;
 	struct vfsmount *rootmnt = NULL, *pwdmnt = NULL;
@@ -2936,6 +2958,13 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 		mntput(rootmnt);
 	if (pwdmnt)
 		mntput(pwdmnt);
+
+	/* if it should be a usermount namespace (allow unprivileged process to
+	   manipulate it's own namespace at will), we need to record his uid */
+	if (flags & CLONE_USERMNT) {
+		printk(KERN_INFO "mnt_namespace: enabling usermount. SUID flag will be disabled\n");
+		new_ns->usermount = uid;
+	}
 
 	return new_ns;
 }
@@ -3398,8 +3427,13 @@ bool mnt_may_suid(struct vfsmount *mnt)
 	 * prevents namespaces from trusting potentially unsafe
 	 * suid/sgid bits, file caps, or security labels that originate
 	 * in other namespaces.
+	 *
+	 * Also when we're in a user-controlled mnt_namespace, we have
+	 * to disable SUID+friends.
 	 */
+
 	return !(mnt->mnt_flags & MNT_NOSUID) && check_mnt(real_mount(mnt)) &&
+	       (current->nsproxy->mnt_ns->usermount == 0) &&
 	       current_in_userns(mnt->mnt_sb->s_user_ns);
 }
 

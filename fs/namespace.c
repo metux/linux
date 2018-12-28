@@ -2882,7 +2882,7 @@ kuid_t mnt_ns_get_userid(struct mnt_namespace *ns)
 	return (ns == NULL ? 0 : ns->usermount);
 }
 
-void mnt_ns_get_userid(struct mnt_namespace *ns, kuid_t user)
+void mnt_ns_set_userid(struct mnt_namespace *ns, kuid_t user)
 {
 	ns->usermount = user;
 }

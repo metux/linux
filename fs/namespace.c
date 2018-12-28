@@ -1607,7 +1607,7 @@ out_unlock:
  */
 static inline bool may_mount(void)
 {
-	if (current->nsproxy->mnt_us->usermount)
+	if (current->nsproxy->mnt_ns->usermount)
 		printk(KERN_INFO "may_mount() allowing within usermount ns\n");
 
 	// FIXME: compare kuid

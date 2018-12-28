@@ -1391,6 +1391,8 @@ static int sdhci_esdhc_imx_probe(struct platform_device *pdev)
 	if (err)
 		goto disable_ahb_clk;
 
+	host->tuning_delay = 1;
+
 	sdhci_esdhc_imx_hwinit(host);
 
 	err = sdhci_add_host(host);

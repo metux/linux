@@ -1607,12 +1607,12 @@ out_unlock:
  */
 static inline bool may_mount(void)
 {
-	if (current->nsproxy->mnt_ns->usermount.uid != 0)
+	if (current->nsproxy->mnt_ns->usermount.val != 0)
 		printk(KERN_INFO "may_mount() allowing within usermount ns\n");
 
 	// FIXME: compare kuid
 	return (ns_capable(current->nsproxy->mnt_ns->user_ns, CAP_SYS_ADMIN) ||
-		(current->nsproxy->mnt_ns->usermount.uid != 0));
+		(current->nsproxy->mnt_ns->usermount.val != 0));
 }
 
 static inline bool may_mandlock(void)
@@ -2879,7 +2879,7 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns)
 
 kuid_t mnt_ns_get_userid(struct mnt_namespace *ns)
 {
-	return (ns == NULL ? (kuid_t){ .uid = 0 } : ns->usermount);
+	return (ns == NULL ? (kuid_t){ .val = 0 } : ns->usermount);
 }
 
 void mnt_ns_set_userid(struct mnt_namespace *ns, kuid_t user)
@@ -3433,7 +3433,7 @@ bool mnt_may_suid(struct vfsmount *mnt)
 	 */
 
 	return !(mnt->mnt_flags & MNT_NOSUID) && check_mnt(real_mount(mnt)) &&
-	       (current->nsproxy->mnt_ns->usermount.uid == 0) &&
+	       (current->nsproxy->mnt_ns->usermount.val == 0) &&
 	       current_in_userns(mnt->mnt_sb->s_user_ns);
 }
 

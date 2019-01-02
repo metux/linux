@@ -644,8 +644,8 @@ static int error_type_set(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(error_type_fops, error_type_get,
-			error_type_set, "0x%llx\n");
+DEFINE_DEBUGFS_ATTRIBUTE(error_type_fops, error_type_get, error_type_set,
+			 "0x%llx\n");
 
 static int error_inject_set(void *data, u64 val)
 {
@@ -656,8 +656,7 @@ static int error_inject_set(void *data, u64 val)
 		error_param3, error_param4);
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(error_inject_fops, NULL,
-			error_inject_set, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(error_inject_fops, NULL, error_inject_set, "%llu\n");
 
 static int einj_check_table(struct acpi_table_einj *einj_tab)
 {

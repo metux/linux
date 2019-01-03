@@ -5075,7 +5075,6 @@ static int gfx_v8_0_post_soft_reset(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	u32 grbm_soft_reset = 0;
-	struct amdgpu_ring *ring;
 
 	if ((!adev->gfx.grbm_soft_reset) &&
 	    (!adev->gfx.srbm_soft_reset))

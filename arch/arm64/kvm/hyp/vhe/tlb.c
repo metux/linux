@@ -79,8 +79,7 @@ static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
 	local_irq_restore(cxt->flags);
 }
 
-void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
-			      phys_addr_t ipa, int level)
+void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa)
 {
 	struct tlb_inv_context cxt;
 
@@ -95,7 +94,7 @@ void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
 	 * whole of Stage-1. Weep...
 	 */
 	ipa >>= 12;
-	__tlbi_level(ipas2e1is, ipa, level);
+	__tlbi(ipas2e1is, ipa);
 
 	/*
 	 * We have to ensure completion of the invalidation at Stage-2,

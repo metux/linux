@@ -36,6 +36,8 @@ Contents:
    alias
    bridge
    snmp_counter
+   checksum-offloads
+   segmentation-offloads
 
 .. only::  subproject
 

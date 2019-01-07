@@ -75,6 +75,13 @@ static struct touchkey_variant aries_touchkey_variant = {
 	.cmd_led_off = ARIES_TOUCHKEY_CMD_LED_OFF,
 };
 
+static struct touchkey_variant aries_touchkey_variant = {
+	.no_reg = true,
+	.fixed_regulator = true,
+	.cmd_led_on = ARIES_TOUCHKEY_CMD_LED_ON,
+	.cmd_led_off = ARIES_TOUCHKEY_CMD_LED_OFF,
+};
+
 static int tm2_touchkey_led_brightness_set(struct led_classdev *led_dev,
 					    enum led_brightness brightness)
 {
@@ -94,8 +101,9 @@ static int tm2_touchkey_led_brightness_set(struct led_classdev *led_dev,
 	if (!touchkey->variant->fixed_regulator)
 		regulator_set_voltage(touchkey->vdd, volt, volt);
 
-	return touchkey->variant->no_reg ?
-		i2c_smbus_write_byte(touchkey->client, data) :
+	if (touchkey->variant->no_reg)
+		i2c_smbus_write_byte(touchkey->client, data);
+	else
 		i2c_smbus_write_byte_data(touchkey->client,
 					  touchkey->variant->base_reg, data);
 }

@@ -5055,12 +5055,14 @@ EXPORT_SYMBOL(drm_hdmi_avi_infoframe_colorspace);
  * @connector: the connector
  * @mode: DRM display mode
  * @rgb_quant_range: RGB quantization range (Q)
+ * @rgb_quant_range_selectable: Sink support selectable RGB quantization range (QS)
  */
 void
 drm_hdmi_avi_infoframe_quant_range(struct hdmi_avi_infoframe *frame,
 				   struct drm_connector *connector,
 				   const struct drm_display_mode *mode,
-				   enum hdmi_quantization_range rgb_quant_range)
+				   enum hdmi_quantization_range rgb_quant_range,
+				   bool rgb_quant_range_selectable)
 {
 	const struct drm_display_info *info = &connector->display_info;
 

@@ -506,7 +506,8 @@ void lspcon_set_infoframes(struct intel_encoder *encoder,
 					   adjusted_mode,
 					   crtc_state->limited_color_range ?
 					   HDMI_QUANTIZATION_RANGE_LIMITED :
-					   HDMI_QUANTIZATION_RANGE_FULL);
+					   HDMI_QUANTIZATION_RANGE_FULL,
+					   false);
 
 	ret = hdmi_infoframe_pack(&frame, buf, sizeof(buf));
 	if (ret < 0) {

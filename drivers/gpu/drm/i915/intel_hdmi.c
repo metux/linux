@@ -503,7 +503,8 @@ static void intel_hdmi_set_avi_infoframe(struct intel_encoder *encoder,
 					   adjusted_mode,
 					   crtc_state->limited_color_range ?
 					   HDMI_QUANTIZATION_RANGE_LIMITED :
-					   HDMI_QUANTIZATION_RANGE_FULL);
+					   HDMI_QUANTIZATION_RANGE_FULL,
+					   intel_hdmi->rgb_quant_range_selectable);
 
 	drm_hdmi_avi_infoframe_content_type(&frame.avi,
 					    conn_state);

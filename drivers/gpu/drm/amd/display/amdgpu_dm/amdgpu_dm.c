@@ -4754,6 +4754,53 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			if (!vrr_active)
 				last_flip_vblank = drm_crtc_vblank_count(crtc);
 
+amdgpu_bo_get_tiling_flags(abo, &tiling_flags);
+
+			amdgpu_bo_unreserve(abo);
+
+			flip->flip_addrs[flip_count].address.grph.addr.low_part = lower_32_bits(afb->address);
+			flip->flip_addrs[flip_count].address.grph.addr.high_part = upper_32_bits(afb->address);
+
+			dcc_address = get_dcc_address(afb->address, tiling_flags);
+			flip->flip_addrs[flip_count].address.grph.meta_addr.low_part = lower_32_bits(dcc_address);
+			flip->flip_addrs[flip_count].address.grph.meta_addr.high_part = upper_32_bits(dcc_address);
+
+			flip->flip_addrs[flip_count].flip_immediate =
+					(crtc->state->pageflip_flags & DRM_MODE_PAGE_FLIP_ASYNC) != 0;
+
+			timestamp_ns = ktime_get_ns();
+			flip->flip_addrs[flip_count].flip_timestamp_in_us = div_u64(timestamp_ns, 1000);
+			flip->surface_updates[flip_count].flip_addr = &flip->flip_addrs[flip_count];
+
+			stream_status = dc_stream_get_status(acrtc_state->stream);
+			if (!stream_status) {
+				DRM_ERROR("No stream status for CRTC: id=%d\n",
+						acrtc_attach->crtc_id);
+				continue;
+			}
+
+			surface = stream_status->plane_states[0];
+			flip->surface_updates[flip_count].surface = surface;
+			if (!flip->surface_updates[flip_count].surface) {
+				DRM_ERROR("No surface for CRTC: id=%d\n",
+						acrtc_attach->crtc_id);
+				continue;
+			}
+
+			if (acrtc_state->stream)
+				update_freesync_state_on_stream(
+					dm,
+					acrtc_state,
+					acrtc_state->stream,
+					surface,
+					flip->flip_addrs[flip_count].flip_timestamp_in_us);
+
+			DRM_DEBUG_DRIVER("%s Flipping to hi: 0x%x, low: 0x%x\n",
+					 __func__,
+					 flip->flip_addrs[flip_count].address.grph.addr.high_part,
+					 flip->flip_addrs[flip_count].address.grph.addr.low_part);
+
+			flip_count += 1;
 		}
 
 		full->surface_updates[planes_count].surface = dc_plane;

@@ -1206,7 +1206,7 @@ static int sdma_request_channel0(struct sdma_engine *sdma)
 {
 	int ret = -EBUSY;
 
-	sdma->bd0 = dma_alloc_coherent(sdma->dev, PAGE_SIZE, &sdma->bd0_phys,
+	sdma->bd0 = dma_zalloc_coherent(sdma->dev, PAGE_SIZE, &sdma->bd0_phys,
 					GFP_NOWAIT);
 	if (!sdma->bd0) {
 		ret = -ENOMEM;
@@ -1229,7 +1229,7 @@ static int sdma_alloc_bd(struct sdma_desc *desc)
 	u32 bd_size = desc->num_bd * sizeof(struct sdma_buffer_descriptor);
 	int ret = 0;
 
-	desc->bd = dma_alloc_coherent(desc->sdmac->sdma->dev, bd_size,
+	desc->bd = dma_zalloc_coherent(desc->sdmac->sdma->dev, bd_size,
 				       &desc->bd_phys, GFP_NOWAIT);
 	if (!desc->bd) {
 		ret = -ENOMEM;

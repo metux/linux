@@ -2112,6 +2112,7 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 		lf(vc);
 		if (!is_kbd(vc, lnm))
 			return;
+		/* fall through */
 	case 13:
 		cr(vc);
 		return;
@@ -2237,6 +2238,7 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 		vc->vc_ques = (c == '?');
 		if (vc->vc_ques)
 			return;
+		/* fall through */
 	case ESgetpars:
 		if (c == ';' && vc->vc_npar < NPAR - 1) {
 			vc->vc_npar++;

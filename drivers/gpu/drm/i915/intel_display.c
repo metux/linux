@@ -1200,17 +1200,19 @@ void assert_pipe(struct drm_i915_private *dev_priv,
 	enum transcoder cpu_transcoder = intel_pipe_to_cpu_transcoder(dev_priv,
 								      pipe);
 	enum intel_display_power_domain power_domain;
+	intel_wakeref_t wakeref;
 
 	/* we keep both pipes enabled on 830 */
 	if (IS_I830(dev_priv))
 		state = true;
 
 	power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
-	if (intel_display_power_get_if_enabled(dev_priv, power_domain)) {
+	wakeref = intel_display_power_get_if_enabled(dev_priv, power_domain);
+	if (wakeref) {
 		u32 val = I915_READ(PIPECONF(cpu_transcoder));
 		cur_state = !!(val & PIPECONF_ENABLE);
 
-		intel_display_power_put(dev_priv, power_domain);
+		intel_display_power_put(dev_priv, power_domain, wakeref);
 	} else {
 		cur_state = false;
 	}
@@ -3415,6 +3417,7 @@ static bool i9xx_plane_get_hw_state(struct intel_plane *plane,
 	struct drm_i915_private *dev_priv = to_i915(plane->base.dev);
 	enum intel_display_power_domain power_domain;
 	enum i9xx_plane_id i9xx_plane = plane->i9xx_plane;
+	intel_wakeref_t wakeref;
 	bool ret;
 	u32 val;
 
@@ -3424,7 +3427,8 @@ static bool i9xx_plane_get_hw_state(struct intel_plane *plane,
 	 * display power wells.
 	 */
 	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
-	if (!intel_display_power_get_if_enabled(dev_priv, power_domain))
+	wakeref = intel_display_power_get_if_enabled(dev_priv, power_domain);
+	if (!wakeref)
 		return false;
 
 	val = I915_READ(DSPCNTR(i9xx_plane));
@@ -3437,7 +3441,7 @@ static bool i9xx_plane_get_hw_state(struct intel_plane *plane,
 		*pipe = (val & DISPPLANE_SEL_PIPE_MASK) >>
 			DISPPLANE_SEL_PIPE_SHIFT;
 
-	intel_display_power_put(dev_priv, power_domain);
+	intel_display_power_put(dev_priv, power_domain, wakeref);
 
 	return ret;
 }
@@ -6110,7 +6114,7 @@ static void modeset_put_power_domains(struct drm_i915_private *dev_priv,
 	enum intel_display_power_domain domain;
 
 	for_each_power_domain(domain, domains)
-		intel_display_power_put(dev_priv, domain);
+		intel_display_power_put_unchecked(dev_priv, domain);
 }
 
 static void valleyview_crtc_enable(struct intel_crtc_state *pipe_config,
@@ -6357,7 +6361,7 @@ static void intel_crtc_disable_noatomic(struct drm_crtc *crtc,
 
 	domains = intel_crtc->enabled_power_domains;
 	for_each_power_domain(domain, domains)
-		intel_display_power_put(dev_priv, domain);
+		intel_display_power_put_unchecked(dev_priv, domain);
 	intel_crtc->enabled_power_domains = 0;
 
 	dev_priv->active_crtcs &= ~(1 << intel_crtc->pipe);
@@ -7969,11 +7973,13 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 {
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	enum intel_display_power_domain power_domain;
+	intel_wakeref_t wakeref;
 	uint32_t tmp;
 	bool ret;
 
 	power_domain = POWER_DOMAIN_PIPE(crtc->pipe);
-	if (!intel_display_power_get_if_enabled(dev_priv, power_domain))
+	wakeref = intel_display_power_get_if_enabled(dev_priv, power_domain);
+	if (!wakeref)
 		return false;
 
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
@@ -8074,7 +8080,7 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 	ret = true;
 
 out:
-	intel_display_power_put(dev_priv, power_domain);
+	intel_display_power_put(dev_priv, power_domain, wakeref);
 
 	return ret;
 }
@@ -9041,11 +9047,13 @@ static bool ironlake_get_pipe_config(struct intel_crtc *crtc,
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	enum intel_display_power_domain power_domain;
+	intel_wakeref_t wakeref;
 	uint32_t tmp;
 	bool ret;
 
 	power_domain = POWER_DOMAIN_PIPE(crtc->pipe);
-	if (!intel_display_power_get_if_enabled(dev_priv, power_domain))
+	wakeref = intel_display_power_get_if_enabled(dev_priv, power_domain);
+	if (!wakeref)
 		return false;
 
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
@@ -9128,7 +9136,7 @@ static bool ironlake_get_pipe_config(struct intel_crtc *crtc,
 	ret = true;
 
 out:
-	intel_display_power_put(dev_priv, power_domain);
+	intel_display_power_put(dev_priv, power_domain, wakeref);
 
 	return ret;
 }
@@ -9737,7 +9745,7 @@ static bool haswell_get_pipe_config(struct intel_crtc *crtc,
 
 out:
 	for_each_power_domain(power_domain, power_domain_mask)
-		intel_display_power_put(dev_priv, power_domain);
+		intel_display_power_put_unchecked(dev_priv, power_domain);
 
 	return active;
 }
@@ -9987,17 +9995,19 @@ static bool i845_cursor_get_hw_state(struct intel_plane *plane,
 {
 	struct drm_i915_private *dev_priv = to_i915(plane->base.dev);
 	enum intel_display_power_domain power_domain;
+	intel_wakeref_t wakeref;
 	bool ret;
 
 	power_domain = POWER_DOMAIN_PIPE(PIPE_A);
-	if (!intel_display_power_get_if_enabled(dev_priv, power_domain))
+	wakeref = intel_display_power_get_if_enabled(dev_priv, power_domain);
+	if (!wakeref)
 		return false;
 
 	ret = I915_READ(CURCNTR(PIPE_A)) & CURSOR_ENABLE;
 
 	*pipe = PIPE_A;
 
-	intel_display_power_put(dev_priv, power_domain);
+	intel_display_power_put(dev_priv, power_domain, wakeref);
 
 	return ret;
 }
@@ -10220,6 +10230,7 @@ static bool i9xx_cursor_get_hw_state(struct intel_plane *plane,
 {
 	struct drm_i915_private *dev_priv = to_i915(plane->base.dev);
 	enum intel_display_power_domain power_domain;
+	intel_wakeref_t wakeref;
 	bool ret;
 	u32 val;
 
@@ -10229,7 +10240,8 @@ static bool i9xx_cursor_get_hw_state(struct intel_plane *plane,
 	 * display power wells.
 	 */
 	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
-	if (!intel_display_power_get_if_enabled(dev_priv, power_domain))
+	wakeref = intel_display_power_get_if_enabled(dev_priv, power_domain);
+	if (!wakeref)
 		return false;
 
 	val = I915_READ(CURCNTR(plane->pipe));
@@ -10242,7 +10254,7 @@ static bool i9xx_cursor_get_hw_state(struct intel_plane *plane,
 		*pipe = (val & MCURSOR_PIPE_SELECT_MASK) >>
 			MCURSOR_PIPE_SELECT_SHIFT;
 
-	intel_display_power_put(dev_priv, power_domain);
+	intel_display_power_put(dev_priv, power_domain, wakeref);
 
 	return ret;
 }
@@ -12960,6 +12972,7 @@ static void intel_atomic_commit_tail(struct drm_atomic_state *state)
 	struct drm_crtc *crtc;
 	struct intel_crtc *intel_crtc;
 	u64 put_domains[I915_MAX_PIPES] = {};
+	intel_wakeref_t wakeref = 0;
 	int i;
 
 	intel_atomic_commit_fence_wait(intel_state);
@@ -12967,7 +12980,7 @@ static void intel_atomic_commit_tail(struct drm_atomic_state *state)
 	drm_atomic_helper_wait_for_dependencies(state);
 
 	if (intel_state->modeset)
-		intel_display_power_get(dev_priv, POWER_DOMAIN_MODESET);
+		wakeref = intel_display_power_get(dev_priv, POWER_DOMAIN_MODESET);
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		old_intel_crtc_state = to_intel_crtc_state(old_crtc_state);
@@ -13104,7 +13117,7 @@ static void intel_atomic_commit_tail(struct drm_atomic_state *state)
 		 * the culprit.
 		 */
 		intel_uncore_arm_unclaimed_mmio_detection(dev_priv);
-		intel_display_power_put(dev_priv, POWER_DOMAIN_MODESET);
+		intel_display_power_put(dev_priv, POWER_DOMAIN_MODESET, wakeref);
 	}
 
 	/*
@@ -15544,19 +15557,25 @@ void i915_redisable_vga_power_on(struct drm_i915_private *dev_priv)
 
 void i915_redisable_vga(struct drm_i915_private *dev_priv)
 {
-	/* This function can be called both from intel_modeset_setup_hw_state or
+	intel_wakeref_t wakeref;
+
+	/*
+	 * This function can be called both from intel_modeset_setup_hw_state or
 	 * at a very early point in our resume sequence, where the power well
 	 * structures are not yet restored. Since this function is at a very
 	 * paranoid "someone might have enabled VGA while we were not looking"
 	 * level, just check if the power well is enabled instead of trying to
 	 * follow the "don't touch the power well if we don't need it" policy
-	 * the rest of the driver uses. */
-	if (!intel_display_power_get_if_enabled(dev_priv, POWER_DOMAIN_VGA))
+	 * the rest of the driver uses.
+	 */
+	wakeref = intel_display_power_get_if_enabled(dev_priv,
+						     POWER_DOMAIN_VGA);
+	if (!wakeref)
 		return;
 
 	i915_redisable_vga_power_on(dev_priv);
 
-	intel_display_power_put(dev_priv, POWER_DOMAIN_VGA);
+	intel_display_power_put(dev_priv, POWER_DOMAIN_VGA, wakeref);
 }
 
 /* FIXME read out full plane state for all planes */
@@ -15856,12 +15875,13 @@ intel_modeset_setup_hw_state(struct drm_device *dev,
 			     struct drm_modeset_acquire_ctx *ctx)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct intel_crtc *crtc;
 	struct intel_crtc_state *crtc_state;
 	struct intel_encoder *encoder;
+	struct intel_crtc *crtc;
+	intel_wakeref_t wakeref;
 	int i;
 
-	intel_display_power_get(dev_priv, POWER_DOMAIN_INIT);
+	wakeref = intel_display_power_get(dev_priv, POWER_DOMAIN_INIT);
 
 	intel_early_display_was(dev_priv);
 	intel_modeset_readout_hw_state(dev);
@@ -15931,7 +15951,7 @@ intel_modeset_setup_hw_state(struct drm_device *dev,
 			modeset_put_power_domains(dev_priv, put_domains);
 	}
 
-	intel_display_power_put(dev_priv, POWER_DOMAIN_INIT);
+	intel_display_power_put(dev_priv, POWER_DOMAIN_INIT, wakeref);
 
 	intel_fbc_init_pipe_state(dev_priv);
 }

@@ -990,6 +990,7 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_HYPERV_CPUID 167
 #define KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2 168
 #define KVM_CAP_PPC_IRQ_XIVE 169
+#define KVM_CAP_ARM_SVE 170
 
 #ifdef KVM_CAP_IRQ_ROUTING
 

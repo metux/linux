@@ -2067,10 +2067,11 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 
 	/* enable compression if the mode doesn't fit available BW */
 	DRM_DEBUG_KMS("Force DSC en = %d\n", intel_dp->force_dsc_en);
-	if (!ret || intel_dp->force_dsc_en) {
-		if (!intel_dp_dsc_compute_config(intel_dp, pipe_config,
-						 conn_state, &limits))
-			return false;
+	if (ret || intel_dp->force_dsc_en) {
+		ret = intel_dp_dsc_compute_config(intel_dp, pipe_config,
+						  conn_state, &limits);
+		if (ret < 0)
+			return ret;
 	}
 
 	if (pipe_config->dsc_params.compression_enable) {

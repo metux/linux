@@ -575,7 +575,10 @@ static int platform_drv_probe(struct device *_dev)
 	if (ret)
 		goto out;
 
+	dev_info(_dev, "platform_drv_probe\n");
+
 	if (drv->probe) {
+		dev_info(_dev, "calling ->probe()\n");
 		ret = drv->probe(dev);
 		if (ret)
 			dev_pm_domain_detach(_dev, true);

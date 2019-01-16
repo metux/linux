@@ -1835,9 +1835,12 @@ int device_add(struct device *dev)
 		goto done;
 
 	if (!dev->p) {
+		printk(KERN_INFO "calling device_private_init() dev=%s", dev_name(dev));
 		error = device_private_init(dev);
-		if (error)
+		if (error) {
+			printk(KERN_INFO "device_private_init() gave error (dev=%s)", dev_name(dev));
 			goto done;
+		}
 	}
 
 	/*

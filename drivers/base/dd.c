@@ -106,7 +106,7 @@ static void deferred_probe_work_func(struct work_struct *work)
 		 */
 		device_pm_move_to_tail(dev);
 
-		dev_dbg(dev, "Retrying from deferred list\n");
+		dev_info(dev, "Retrying from deferred list\n");
 		bus_probe_device(dev);
 		mutex_lock(&deferred_probe_mutex);
 
@@ -120,7 +120,7 @@ static void driver_deferred_probe_add(struct device *dev)
 {
 	mutex_lock(&deferred_probe_mutex);
 	if (list_empty(&dev->p->deferred_probe)) {
-		dev_dbg(dev, "Added to deferred list\n");
+		dev_info(dev, "Added to deferred list\n");
 		list_add_tail(&dev->p->deferred_probe, &deferred_probe_pending_list);
 	}
 	mutex_unlock(&deferred_probe_mutex);
@@ -130,7 +130,7 @@ void driver_deferred_probe_del(struct device *dev)
 {
 	mutex_lock(&deferred_probe_mutex);
 	if (!list_empty(&dev->p->deferred_probe)) {
-		dev_dbg(dev, "Removed from deferred list\n");
+		dev_info(dev, "Removed from deferred list\n");
 		list_del_init(&dev->p->deferred_probe);
 	}
 	mutex_unlock(&deferred_probe_mutex);
@@ -456,7 +456,7 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 		 * device_defer_all_probes_enable() which, in turn, will call
 		 * wait_for_device_probe() right after that to avoid any races.
 		 */
-		dev_dbg(dev, "Driver %s force probe deferral\n", drv->name);
+		dev_info(dev, "Driver %s force probe deferral\n", drv->name);
 		driver_deferred_probe_add(dev);
 		return ret;
 	}
@@ -558,7 +558,7 @@ pinctrl_bind_failed:
 	switch (ret) {
 	case -EPROBE_DEFER:
 		/* Driver requested deferred probing */
-		dev_dbg(dev, "Driver %s requests probe deferral\n", drv->name);
+		dev_info(dev, "Driver %s requests probe deferral\n", drv->name);
 		driver_deferred_probe_add_trigger(dev, local_trigger_count);
 		break;
 	case -ENODEV:
@@ -742,10 +742,10 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 		/* no match */
 		return 0;
 	} else if (ret == -EPROBE_DEFER) {
-		dev_dbg(dev, "Device match requests probe deferral\n");
+		dev_info(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
 	} else if (ret < 0) {
-		dev_dbg(dev, "Bus failed to match device: %d", ret);
+		dev_info(dev, "Bus failed to match device: %d", ret);
 		return ret;
 	} /* ret > 0 means positive match */
 
@@ -775,7 +775,7 @@ static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 		pm_runtime_get_sync(dev->parent);
 
 	bus_for_each_drv(dev->bus, NULL, &data, __device_attach_driver);
-	dev_dbg(dev, "async probe completed\n");
+	dev_info(dev, "async probe completed\n");
 
 	pm_request_idle(dev);
 
@@ -793,6 +793,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 
 	device_lock(dev);
 	if (dev->driver) {
+		dev_info(dev, "__device_attach() already got driver for device\n");
 		if (device_is_bound(dev)) {
 			ret = 1;
 			goto out_unlock;
@@ -811,6 +812,8 @@ static int __device_attach(struct device *dev, bool allow_async)
 			.want_async = false,
 		};
 
+		dev_info(dev, "__device_attach() no driver yet for device\n");
+
 		if (dev->parent)
 			pm_runtime_get_sync(dev->parent);
 
@@ -824,7 +827,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 			 * want to probe asynchronously, we'll
 			 * try them.
 			 */
-			dev_dbg(dev, "scheduling asynchronous probe\n");
+			dev_info(dev, "scheduling asynchronous probe\n");
 			get_device(dev);
 			async_schedule(__device_attach_async_helper, dev);
 		} else {
@@ -884,10 +887,10 @@ static int __driver_attach(struct device *dev, void *data)
 		/* no match */
 		return 0;
 	} else if (ret == -EPROBE_DEFER) {
-		dev_dbg(dev, "Device match requests probe deferral\n");
+		dev_info(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
 	} else if (ret < 0) {
-		dev_dbg(dev, "Bus failed to match device: %d", ret);
+		dev_info(dev, "Bus failed to match device: %d", ret);
 		return ret;
 	} /* ret > 0 means positive match */
 

@@ -154,6 +154,8 @@ int driver_register(struct device_driver *drv)
 		return -EINVAL;
 	}
 
+	pr_warn("driver_register() name=%s\n", drv->name);
+
 	if ((drv->bus->probe && drv->probe) ||
 	    (drv->bus->remove && drv->remove) ||
 	    (drv->bus->shutdown && drv->shutdown))

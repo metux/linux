@@ -33,6 +33,8 @@
 #include "intel_drv.h"
 #include "intel_guc_submission.h"
 
+#include "i915_reset.h"
+
 static inline struct drm_i915_private *node_to_i915(struct drm_info_node *node)
 {
 	return to_i915(node->minor->dev);

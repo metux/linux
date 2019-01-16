@@ -32,7 +32,6 @@
 #include <linux/reservation.h>
 #include <linux/slab.h>
 #include <linux/vgaarb.h>
-
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_atomic_uapi.h>
@@ -46,6 +45,7 @@
 
 #include "i915_drv.h"
 #include "i915_gem_clflush.h"
+#include "i915_reset.h"
 #include "i915_trace.h"
 #include "intel_drv.h"
 #include "intel_dsi.h"

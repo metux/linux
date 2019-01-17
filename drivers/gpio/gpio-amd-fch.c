@@ -144,6 +144,8 @@ static int amd_fch_gpio_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "initializing on my own II\n");
 
+	dump_stack();
+
 	if (IS_ENABLED(CONFIG_DEBUG_FS)) {
 		dev_info(&pdev->dev, "enabling debugfs\n");
 		priv->gc.dbg_show = amd_fch_gpio_dbg_show;

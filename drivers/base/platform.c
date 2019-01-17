@@ -575,10 +575,10 @@ static int platform_drv_probe(struct device *_dev)
 	if (ret)
 		goto out;
 
-	printk(KERN_WARNING "platform_drv_probe: driver=%s\n", drv->name);
+	dev_info(_dev, "platform_drv_probe\n");
 
 	if (drv->probe) {
-		printk(KERN_WARNING "calling ->probe()\n");
+		dev_info(_dev, "calling ->probe()\n");
 		ret = drv->probe(dev);
 		if (ret)
 			dev_pm_domain_detach(_dev, true);

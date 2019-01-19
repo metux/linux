@@ -161,6 +161,13 @@ struct vcpu_reset_state {
 	bool		reset;
 };
 
+static inline void kvm_init_host_cpu_context(kvm_cpu_context_t *cpu_ctxt,
+					     int cpu)
+{
+	/* The host's MPIDR is immutable, so let's set it up at boot time */
+	cpu_ctxt->cp15[c0_MPIDR] = cpu_logical_map(cpu);
+}
+
 struct kvm_vcpu_arch {
 	struct kvm_cpu_context ctxt;
 

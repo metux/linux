@@ -971,14 +971,11 @@ static int verify_header(struct aa_ext *e, int required, const char **ns)
 				    e, error);
 			return error;
 		}
-		if (*ns && strcmp(*ns, name)) {
+		if (*ns && strcmp(*ns, name))
 			audit_iface(NULL, NULL, NULL, "invalid ns change", e,
 				    error);
-		} else if (!*ns) {
-			*ns = kstrdup(name, GFP_KERNEL);
-			if (!*ns)
-				return -ENOMEM;
-		}
+		else if (!*ns)
+			*ns = name;
 	}
 
 	return 0;
@@ -1092,7 +1089,7 @@ static int deflate_compress(const char *src, size_t slen, char **dst,
 		dstbuf = kvzalloc(strm.total_out, GFP_KERNEL);
 		if (dstbuf) {
 			memcpy(dstbuf, stgbuf, strm.total_out);
-			kvfree(stgbuf);
+			vfree(stgbuf);
 		}
 	} else
 		/*
@@ -1228,7 +1225,3 @@ fail:
 
 	return error;
 }
-
-#ifdef CONFIG_SECURITY_APPARMOR_KUNIT_TEST
-#include "policy_unpack_test.c"
-#endif /* CONFIG_SECURITY_APPARMOR_KUNIT_TEST */

@@ -1266,7 +1266,7 @@ wrp_alu64_imm(struct nfp_prog *nfp_prog, struct nfp_insn_meta *meta,
 	u64 imm = insn->imm; /* sign extend */
 
 	if (skip) {
-		meta->skip = true;
+		meta->flags |= FLAG_INSN_SKIP_NOOP;
 		return 0;
 	}
 
@@ -3390,7 +3390,7 @@ static int nfp_fixup_branches(struct nfp_prog *nfp_prog)
 	int err;
 
 	list_for_each_entry(meta, &nfp_prog->insns, l) {
-		if (meta->skip)
+		if (meta->flags & FLAG_INSN_SKIP_MASK)
 			continue;
 		if (BPF_CLASS(meta->insn.code) != BPF_JMP)
 			continue;
@@ -3434,7 +3434,7 @@ static int nfp_fixup_branches(struct nfp_prog *nfp_prog)
 
 		jmp_dst = meta->jmp_dst;
 
-		if (jmp_dst->skip) {
+		if (jmp_dst->flags & FLAG_INSN_SKIP_PREC_DEPENDENT) {
 			pr_err("Branch landing on removed instruction!!\n");
 			return -ELOOP;
 		}
@@ -3684,7 +3684,7 @@ static int nfp_translate(struct nfp_prog *nfp_prog)
 				return nfp_prog->error;
 		}
 
-		if (meta->skip) {
+		if (meta->flags & FLAG_INSN_SKIP_MASK) {
 			nfp_prog->n_translated++;
 			continue;
 		}
@@ -3732,10 +3732,10 @@ static void nfp_bpf_opt_reg_init(struct nfp_prog *nfp_prog)
 		/* Programs start with R6 = R1 but we ignore the skb pointer */
 		if (insn.code == (BPF_ALU64 | BPF_MOV | BPF_X) &&
 		    insn.src_reg == 1 && insn.dst_reg == 6)
-			meta->skip = true;
+			meta->flags |= FLAG_INSN_SKIP_PREC_DEPENDENT;
 
 		/* Return as soon as something doesn't match */
-		if (!meta->skip)
+		if (!(meta->flags & FLAG_INSN_SKIP_MASK))
 			return;
 	}
 }
@@ -3750,7 +3750,7 @@ static void nfp_bpf_opt_neg_add_sub(struct nfp_prog *nfp_prog)
 	list_for_each_entry(meta, &nfp_prog->insns, l) {
 		struct bpf_insn insn = meta->insn;
 
-		if (meta->skip)
+		if (meta->flags & FLAG_INSN_SKIP_MASK)
 			continue;
 
 		if (BPF_CLASS(insn.code) != BPF_ALU &&
@@ -3824,7 +3824,7 @@ static void nfp_bpf_opt_ld_mask(struct nfp_prog *nfp_prog)
 		if (meta2->flags & FLAG_INSN_IS_JUMP_DST)
 			continue;
 
-		meta2->skip = true;
+		meta2->flags |= FLAG_INSN_SKIP_PREC_DEPENDENT;
 	}
 }
 
@@ -3864,8 +3864,8 @@ static void nfp_bpf_opt_ld_shift(struct nfp_prog *nfp_prog)
 		    meta3->flags & FLAG_INSN_IS_JUMP_DST)
 			continue;
 
-		meta2->skip = true;
-		meta3->skip = true;
+		meta2->flags |= FLAG_INSN_SKIP_PREC_DEPENDENT;
+		meta3->flags |= FLAG_INSN_SKIP_PREC_DEPENDENT;
 	}
 }
 
@@ -4060,7 +4060,8 @@ static void nfp_bpf_opt_ldst_gather(struct nfp_prog *nfp_prog)
 				}
 
 				head_ld_meta->paired_st = &head_st_meta->insn;
-				head_st_meta->skip = true;
+				head_st_meta->flags |=
+					FLAG_INSN_SKIP_PREC_DEPENDENT;
 			} else {
 				head_ld_meta->ldst_gather_len = 0;
 			}
@@ -4093,8 +4094,8 @@ static void nfp_bpf_opt_ldst_gather(struct nfp_prog *nfp_prog)
 			head_ld_meta = meta1;
 			head_st_meta = meta2;
 		} else {
-			meta1->skip = true;
-			meta2->skip = true;
+			meta1->flags |= FLAG_INSN_SKIP_PREC_DEPENDENT;
+			meta2->flags |= FLAG_INSN_SKIP_PREC_DEPENDENT;
 		}
 
 		head_ld_meta->ldst_gather_len += BPF_LDST_BYTES(ld);
@@ -4119,7 +4120,7 @@ static void nfp_bpf_opt_pkt_cache(struct nfp_prog *nfp_prog)
 		if (meta->flags & FLAG_INSN_IS_JUMP_DST)
 			cache_avail = false;
 
-		if (meta->skip)
+		if (meta->flags & FLAG_INSN_SKIP_MASK)
 			continue;
 
 		insn = &meta->insn;
@@ -4205,7 +4206,7 @@ start_new:
 	}
 
 	list_for_each_entry(meta, &nfp_prog->insns, l) {
-		if (meta->skip)
+		if (meta->flags & FLAG_INSN_SKIP_MASK)
 			continue;
 
 		if (is_mbpf_load_pkt(meta) && !meta->ldst_gather_len) {
@@ -4241,7 +4242,8 @@ static int nfp_bpf_replace_map_ptrs(struct nfp_prog *nfp_prog)
 	u32 id;
 
 	nfp_for_each_insn_walk2(nfp_prog, meta1, meta2) {
-		if (meta1->skip || meta2->skip)
+		if (meta1->flags & FLAG_INSN_SKIP_MASK ||
+		    meta2->flags & FLAG_INSN_SKIP_MASK)
 			continue;
 
 		if (meta1->insn.code != (BPF_LD | BPF_IMM | BPF_DW) ||

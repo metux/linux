@@ -40,7 +40,7 @@ struct stpmic1_regulator_cfg {
 struct stpmic1_regulator {
 	unsigned int regul_id;
 	struct device_node *reg_node;
-	struct stpmic1_regulator_cfg *cfg;
+	const struct stpmic1_regulator_cfg *cfg;
 	u8 mask_reset;
 	int irq_curlim;
 	struct regmap *regmap;
@@ -81,7 +81,7 @@ static const struct regulator_linear_range buck1_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1500000, 37, 63, 0),
 };
 
-struct regulator_linear_range buck2_ranges[] = {
+static const struct regulator_linear_range buck2_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1000000, 0, 17, 0),
 	REGULATOR_LINEAR_RANGE(1050000, 18, 19, 0),
 	REGULATOR_LINEAR_RANGE(1100000, 20, 21, 0),
@@ -95,7 +95,7 @@ struct regulator_linear_range buck2_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1500000, 36, 63, 0),
 };
 
-struct regulator_linear_range buck3_ranges[] = {
+static const struct regulator_linear_range buck3_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1000000, 0, 19, 0),
 	REGULATOR_LINEAR_RANGE(1100000, 20, 23, 0),
 	REGULATOR_LINEAR_RANGE(1200000, 24, 27, 0),
@@ -103,10 +103,9 @@ struct regulator_linear_range buck3_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1400000, 32, 35, 0),
 	REGULATOR_LINEAR_RANGE(1500000, 36, 55, 100000),
 	REGULATOR_LINEAR_RANGE(3400000, 56, 63, 0),
-
 };
 
-struct regulator_linear_range buck4_ranges[] = {
+static const struct regulator_linear_range buck4_ranges[] = {
 	REGULATOR_LINEAR_RANGE(600000, 0, 27, 25000),
 	REGULATOR_LINEAR_RANGE(1300000, 28, 29, 0),
 	REGULATOR_LINEAR_RANGE(1350000, 30, 31, 0),
@@ -114,24 +113,21 @@ struct regulator_linear_range buck4_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1450000, 34, 35, 0),
 	REGULATOR_LINEAR_RANGE(1500000, 36, 60, 100000),
 	REGULATOR_LINEAR_RANGE(3900000, 61, 63, 0),
-
 };
 
-struct regulator_linear_range ldo1_ranges[] = {
+static const struct regulator_linear_range ldo1_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1700000, 0, 7, 0),
 	REGULATOR_LINEAR_RANGE(1700000, 8, 24, 100000),
 	REGULATOR_LINEAR_RANGE(3300000, 25, 31, 0),
-
 };
 
-struct regulator_linear_range ldo2_ranges[] = {
+static const struct regulator_linear_range ldo2_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1700000, 0, 7, 0),
 	REGULATOR_LINEAR_RANGE(1700000, 8, 24, 100000),
 	REGULATOR_LINEAR_RANGE(3300000, 25, 30, 0),
-
 };
 
-struct regulator_linear_range ldo3_ranges[] = {
+static const struct regulator_linear_range ldo3_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1700000, 0, 7, 0),
 	REGULATOR_LINEAR_RANGE(1700000, 8, 24, 100000),
 	REGULATOR_LINEAR_RANGE(3300000, 25, 30, 0),
@@ -139,18 +135,18 @@ struct regulator_linear_range ldo3_ranges[] = {
 	REGULATOR_LINEAR_RANGE(500000, 31, 31, 0),
 };
 
-struct regulator_linear_range ldo5_ranges[] = {
+static const struct regulator_linear_range ldo5_ranges[] = {
 	REGULATOR_LINEAR_RANGE(1700000, 0, 7, 0),
 	REGULATOR_LINEAR_RANGE(1700000, 8, 30, 100000),
 	REGULATOR_LINEAR_RANGE(3900000, 31, 31, 0),
 };
 
-struct regulator_linear_range ldo6_ranges[] = {
+static const struct regulator_linear_range ldo6_ranges[] = {
 	REGULATOR_LINEAR_RANGE(900000, 0, 24, 100000),
 	REGULATOR_LINEAR_RANGE(3300000, 25, 31, 0),
 };
 
-static struct regulator_ops stpmic1_ldo_ops = {
+static const struct regulator_ops stpmic1_ldo_ops = {
 	.list_voltage = regulator_list_voltage_linear_range,
 	.map_voltage = regulator_map_voltage_linear_range,
 	.is_enabled = regulator_is_enabled_regmap,
@@ -162,7 +158,7 @@ static struct regulator_ops stpmic1_ldo_ops = {
 	.set_over_current_protection = stpmic1_set_icc,
 };
 
-static struct regulator_ops stpmic1_ldo3_ops = {
+static const struct regulator_ops stpmic1_ldo3_ops = {
 	.list_voltage = regulator_list_voltage_linear_range,
 	.map_voltage = regulator_map_voltage_iterate,
 	.is_enabled = regulator_is_enabled_regmap,
@@ -176,7 +172,7 @@ static struct regulator_ops stpmic1_ldo3_ops = {
 	.set_over_current_protection = stpmic1_set_icc,
 };
 
-static struct regulator_ops stpmic1_ldo4_fixed_regul_ops = {
+static const struct regulator_ops stpmic1_ldo4_fixed_regul_ops = {
 	.is_enabled = regulator_is_enabled_regmap,
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
@@ -184,7 +180,7 @@ static struct regulator_ops stpmic1_ldo4_fixed_regul_ops = {
 	.set_over_current_protection = stpmic1_set_icc,
 };
 
-static struct regulator_ops stpmic1_buck_ops = {
+static const struct regulator_ops stpmic1_buck_ops = {
 	.list_voltage = regulator_list_voltage_linear_range,
 	.map_voltage = regulator_map_voltage_linear_range,
 	.is_enabled = regulator_is_enabled_regmap,
@@ -198,14 +194,14 @@ static struct regulator_ops stpmic1_buck_ops = {
 	.set_over_current_protection = stpmic1_set_icc,
 };
 
-static struct regulator_ops stpmic1_vref_ddr_ops = {
+static const struct regulator_ops stpmic1_vref_ddr_ops = {
 	.is_enabled = regulator_is_enabled_regmap,
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
 	.set_pull_down = regulator_set_pull_down_regmap,
 };
 
-static struct regulator_ops stpmic1_switch_regul_ops = {
+static const struct regulator_ops stpmic1_switch_regul_ops = {
 	.is_enabled = regulator_is_enabled_regmap,
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
@@ -335,7 +331,7 @@ static struct regulator_ops stpmic1_switch_regul_ops = {
 	.supply_name = #base, \
 }
 
-struct stpmic1_regulator_cfg stpmic1_regulator_cfgs[] = {
+static const struct stpmic1_regulator_cfg stpmic1_regulator_cfgs[] = {
 	[STPMIC1_BUCK1] = {
 		.desc = REG_BUCK(BUCK1, buck1),
 		.icc_reg = BUCKS_ICCTO_CR,

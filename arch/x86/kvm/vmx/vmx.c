@@ -6372,6 +6372,9 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 	if (static_branch_unlikely(&vmx_l1d_should_flush))
 		vmx_l1d_flush(vcpu);
 
+	if (vcpu->arch.cr2 != read_cr2())
+		write_cr2(vcpu->arch.cr2);
+
 	asm(
 		/* Store host registers */
 		"push %%" _ASM_BP " \n\t"
@@ -6392,13 +6395,6 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 		"1: \n\t"
 		"add $%c[wordsize], %%" _ASM_SP "\n\t" /* un-adjust RSP */
 
-		/* Reload cr2 if changed */
-		"mov %c[cr2](%%" _ASM_CX "), %%" _ASM_AX " \n\t"
-		"mov %%cr2, %%" _ASM_DX " \n\t"
-		"cmp %%" _ASM_AX ", %%" _ASM_DX " \n\t"
-		"je 3f \n\t"
-		"mov %%" _ASM_AX", %%cr2 \n\t"
-		"3: \n\t"
 		/* Check if vmlaunch or vmresume is needed */
 		"cmpb $0, %c[launched](%%" _ASM_CX ") \n\t"
 		/* Load guest registers.  Don't clobber flags. */
@@ -6468,9 +6464,6 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 		"xor %%r14d, %%r14d \n\t"
 		"xor %%r15d, %%r15d \n\t"
 #endif
-		"mov %%cr2, %%" _ASM_AX "   \n\t"
-		"mov %%" _ASM_AX ", %c[cr2](%%" _ASM_CX ") \n\t"
-
 		"xor %%eax, %%eax \n\t"
 		"xor %%ebx, %%ebx \n\t"
 		"xor %%ecx, %%ecx \n\t"
@@ -6501,7 +6494,6 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 		[r14]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R14])),
 		[r15]"i"(offsetof(struct vcpu_vmx, vcpu.arch.regs[VCPU_REGS_R15])),
 #endif
-		[cr2]"i"(offsetof(struct vcpu_vmx, vcpu.arch.cr2)),
 		[wordsize]"i"(sizeof(ulong))
 	      : "cc", "memory"
 #ifdef CONFIG_X86_64
@@ -6511,6 +6503,8 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 		, "eax", "ebx", "edx"
 #endif
 	      );
+
+	vcpu->arch.cr2 = read_cr2();
 }
 STACK_FRAME_NON_STANDARD(__vmx_vcpu_run);
 

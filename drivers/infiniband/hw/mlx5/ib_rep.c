@@ -52,7 +52,7 @@ mlx5_ib_vport_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 	const struct mlx5_ib_profile *profile;
 	struct mlx5_ib_dev *ibdev;
 
-	if (rep->vport == MLX5_VPORT_UPLINK)
+if (rep->vport == MLX5_VPORT_UPLINK)
 		profile = &uplink_rep_profile;
 	else
 		profile = &vf_rep_profile;

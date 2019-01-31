@@ -353,6 +353,12 @@ static inline void pi_set_on(struct pi_desc *pi_desc)
 		(unsigned long *)&pi_desc->control);
 }
 
+static inline void pi_set_on(struct pi_desc *pi_desc)
+{
+	set_bit(POSTED_INTR_ON,
+		(unsigned long *)&pi_desc->control);
+}
+
 static inline void pi_clear_on(struct pi_desc *pi_desc)
 {
 	clear_bit(POSTED_INTR_ON,

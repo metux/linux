@@ -95,6 +95,10 @@ else
 fi
 sourcename=$KDEB_SOURCENAME
 
+if [ -z "$KDEB_RULES" ]; then
+    KDEB_RULES=debian/rules
+fi
+
 if [ "$ARCH" = "um" ] ; then
 	packagename=user-mode-linux
 else
@@ -218,7 +222,7 @@ Description: Linux kernel debugging symbols for $version
 EOF
 fi
 
-cat <<EOF > debian/rules
+cat <<EOF > $KDEB_RULES
 #!$(command -v $MAKE) -f
 
 srctree ?= .
@@ -241,6 +245,6 @@ clean:
 
 binary: binary-arch
 EOF
-chmod +x debian/rules
+chmod +x $KDEB_RULES
 
 exit 0

@@ -68,6 +68,8 @@ modules.builtin
 # Debian directory (make deb-pkg)
 #
 /debian/
+!/debian/rules
+!/debian/control.bootstrap
 
 #
 # Snap directory (make snap-pkg)

@@ -1,0 +1,7 @@
+Source: linux-source
+Section: kernel
+Priority: optional
+Maintainer: Enrico Weigelt, metux IT consult <info@metux.net>
+Build-Depends: bc, kmod, cpio, bison, flex | flex:native , libelf-dev, libssl-dev:native
+Homepage: http://www.kernel.org/
+Version: 5.1-git

@@ -1573,6 +1573,10 @@ help:
 	@echo  'Kernel packaging:'
 	@$(MAKE) -f $(srctree)/scripts/Makefile.package help
 	@echo  ''
+	@echo  'Build configuration retrieval:'
+	@echo  '  kernellocalversion  - Print kernel local version (CONFIG_LOCALVERSION)'
+	@echo  '  kernelarch          - Print kernel architecture'
+	@echo  ''
 	@echo  'Documentation targets:'
 	@$(MAKE) -f $(srctree)/Documentation/Makefile dochelp
 	@echo  ''
@@ -1839,6 +1843,12 @@ kernelrelease:
 
 kernelversion:
 	@echo $(KERNELVERSION)
+
+kernellocalversion:
+	@$(CONFIG_SHELL) $(srctree)/scripts/setlocalversion $(srctree) | sed -e 's~^\-~~'
+
+kernelarch:
+	@echo $(ARCH)
 
 image_name:
 	@echo $(KBUILD_IMAGE)

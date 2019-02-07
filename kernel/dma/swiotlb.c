@@ -709,3 +709,8 @@ fail:
 late_initcall(swiotlb_create_debugfs);
 
 #endif
+
+size_t swiotlb_max_mapping_size(struct device *dev)
+{
+	return ((size_t)1 << IO_TLB_SHIFT) * IO_TLB_SEGSIZE;
+}

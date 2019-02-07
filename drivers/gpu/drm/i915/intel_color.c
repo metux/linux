@@ -945,6 +945,33 @@ static int check_luts(const struct intel_crtc_state *crtc_state)
 	degamma_tests = INTEL_INFO(dev_priv)->color.degamma_lut_tests;
 	gamma_tests = INTEL_INFO(dev_priv)->color.gamma_lut_tests;
 
+	/* C8 needs the legacy LUT all to itself */
+	if (crtc_state->c8_planes &&
+	    !crtc_state_is_legacy_gamma(crtc_state))
+		return -EINVAL;
+
+	crtc_state->gamma_enable = (gamma_lut || degamma_lut) &&
+		!crtc_state->c8_planes;
+
+	if (INTEL_GEN(dev_priv) >= 9 ||
+	    IS_BROADWELL(dev_priv) || IS_HASWELL(dev_priv))
+		limited_color_range = crtc_state->limited_color_range;
+
+	crtc_state->csc_enable =
+		crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB ||
+		crtc_state->base.ctm || limited_color_range;
+
+	ret = intel_color_add_affected_planes(crtc_state);
+	if (ret)
+		return ret;
+
+	/* Always allow legacy gamma LUT with no further checking. */
+	if (!crtc_state->gamma_enable ||
+	    crtc_state_is_legacy_gamma(crtc_state)) {
+		crtc_state->gamma_mode = GAMMA_MODE_MODE_8BIT;
+		return 0;
+	}
+
 	if (check_lut_size(degamma_lut, degamma_length) ||
 	    check_lut_size(gamma_lut, gamma_length))
 		return -EINVAL;

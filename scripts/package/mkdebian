@@ -178,6 +178,7 @@ Section: kernel
 Priority: optional
 Maintainer: $maintainer
 Build-Depends: bc, kmod, cpio, bison, flex | flex:native $extra_build_depends
+X-Build-Depends: bc, kmod, cpio, bison, flex | flex:native, libelf-dev, libssl-dev $extra_build_depends
 Homepage: http://www.kernel.org/
 
 Package: $packagename

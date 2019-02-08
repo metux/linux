@@ -344,8 +344,7 @@ static int g_num_of_iommus;
 
 static void domain_exit(struct dmar_domain *domain);
 static void domain_remove_dev_info(struct dmar_domain *domain);
-static void dmar_remove_one_dev_info(struct dmar_domain *domain,
-				     struct device *dev);
+static void dmar_remove_one_dev_info(struct device *dev);
 static void __dmar_remove_one_dev_info(struct device_domain_info *info);
 static void domain_context_clear(struct intel_iommu *iommu,
 				 struct device *dev);
@@ -2547,7 +2546,7 @@ static struct dmar_domain *dmar_insert_one_dev_info(struct intel_iommu *iommu,
 		ret = intel_pasid_alloc_table(dev);
 		if (ret) {
 			dev_err(dev, "PASID table allocation failed\n");
-			dmar_remove_one_dev_info(domain, dev);
+			dmar_remove_one_dev_info(dev);
 			return NULL;
 		}
 
@@ -2562,14 +2561,14 @@ static struct dmar_domain *dmar_insert_one_dev_info(struct intel_iommu *iommu,
 		spin_unlock(&iommu->lock);
 		if (ret) {
 			dev_err(dev, "Setup RID2PASID failed\n");
-			dmar_remove_one_dev_info(domain, dev);
+			dmar_remove_one_dev_info(dev);
 			return NULL;
 		}
 	}
 
 	if (dev && domain_context_mapping(domain, dev)) {
 		dev_err(dev, "Domain context map failed\n");
-		dmar_remove_one_dev_info(domain, dev);
+		dmar_remove_one_dev_info(dev);
 		return NULL;
 	}
 
@@ -3622,7 +3621,7 @@ static int iommu_no_mapping(struct device *dev)
 			 * 32 bit DMA is removed from si_domain and fall back
 			 * to non-identity mapping.
 			 */
-			dmar_remove_one_dev_info(si_domain, dev);
+			dmar_remove_one_dev_info(dev);
 			dev_info(dev, "32bit DMA uses non-identity mapping\n");
 			return 0;
 		}
@@ -4577,7 +4576,7 @@ static int device_notifier(struct notifier_block *nb,
 	if (!domain)
 		return 0;
 
-	dmar_remove_one_dev_info(domain, dev);
+	dmar_remove_one_dev_info(dev);
 	if (!domain_type_is_vm_or_si(domain) && list_empty(&domain->devices))
 		domain_exit(domain);
 
@@ -4990,8 +4989,7 @@ static void __dmar_remove_one_dev_info(struct device_domain_info *info)
 	free_devinfo_mem(info);
 }
 
-static void dmar_remove_one_dev_info(struct dmar_domain *domain,
-				     struct device *dev)
+static void dmar_remove_one_dev_info(struct device *dev)
 {
 	struct device_domain_info *info;
 	unsigned long flags;
@@ -5080,7 +5078,7 @@ static int intel_iommu_attach_device(struct iommu_domain *domain,
 		old_domain = find_domain(dev);
 		if (old_domain) {
 			rcu_read_lock();
-			dmar_remove_one_dev_info(old_domain, dev);
+			dmar_remove_one_dev_info(dev);
 			rcu_read_unlock();
 
 			if (!domain_type_is_vm_or_si(old_domain) &&
@@ -5127,7 +5125,7 @@ static int intel_iommu_attach_device(struct iommu_domain *domain,
 static void intel_iommu_detach_device(struct iommu_domain *domain,
 				      struct device *dev)
 {
-	dmar_remove_one_dev_info(to_dmar_domain(domain), dev);
+	dmar_remove_one_dev_info(dev);
 }
 
 static int intel_iommu_map(struct iommu_domain *domain,

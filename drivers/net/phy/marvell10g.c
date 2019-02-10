@@ -143,10 +143,9 @@ static int mv3310_hwmon_config(struct phy_device *phydev, bool enable)
 		return ret;
 
 	val = enable ? MV_V2_TEMP_CTRL_SAMPLE : MV_V2_TEMP_CTRL_DISABLE;
-	ret = phy_modify_mmd(phydev, MDIO_MMD_VEND2, MV_V2_TEMP_CTRL,
-			     MV_V2_TEMP_CTRL_MASK, val);
 
-	return ret < 0 ? ret : 0;
+	return phy_modify_mmd(phydev, MDIO_MMD_VEND2, MV_V2_TEMP_CTRL,
+			      MV_V2_TEMP_CTRL_MASK, val);
 }
 
 static void mv3310_hwmon_disable(void *data)
@@ -347,7 +346,7 @@ static int mv3310_config_aneg(struct phy_device *phydev)
 	linkmode_and(phydev->advertising, phydev->advertising,
 		     phydev->supported);
 
-	ret = phy_modify_mmd(phydev, MDIO_MMD_AN, MDIO_AN_ADVERTISE,
+	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_ADVERTISE,
 			     ADVERTISE_ALL | ADVERTISE_100BASE4 |
 			     ADVERTISE_PAUSE_CAP | ADVERTISE_PAUSE_ASYM,
 			     linkmode_adv_to_mii_adv_t(phydev->advertising));
@@ -357,7 +356,7 @@ static int mv3310_config_aneg(struct phy_device *phydev)
 		changed = true;
 
 	reg = linkmode_adv_to_mii_ctrl1000_t(phydev->advertising);
-	ret = phy_modify_mmd(phydev, MDIO_MMD_AN, MV_AN_CTRL1000,
+	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MV_AN_CTRL1000,
 			     ADVERTISE_1000FULL | ADVERTISE_1000HALF, reg);
 	if (ret < 0)
 		return ret;
@@ -372,7 +371,7 @@ static int mv3310_config_aneg(struct phy_device *phydev)
 		reg = 0;
 
 	/* Make sure we clear unsupported 2.5G/5G advertising */
-	ret = phy_modify_mmd(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_CTRL,
+	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_CTRL,
 			    MDIO_AN_10GBT_CTRL_ADV10G |
 			    MDIO_AN_10GBT_CTRL_ADV_NBT_MASK, reg);
 	if (ret < 0)

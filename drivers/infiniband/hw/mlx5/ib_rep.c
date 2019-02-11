@@ -65,8 +65,10 @@ if (rep->vport == MLX5_VPORT_UPLINK)
 	ibdev->mdev = dev;
 	ibdev->num_ports = max(MLX5_CAP_GEN(dev, num_ports),
 			       MLX5_CAP_GEN(dev, num_vhca_ports));
-	if (!__mlx5_ib_add(ibdev, profile))
+if (!__mlx5_ib_add(ibdev, profile)) {
+		ib_dealloc_device(&ibdev->ib_dev);
 		return -EINVAL;
+	}
 
 	rep->rep_if[REP_IB].priv = ibdev;
 

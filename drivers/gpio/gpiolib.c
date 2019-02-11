@@ -1598,6 +1598,7 @@ static int gpiochip_match_name(struct gpio_chip *chip, void *data)
 {
 	const char *name = data;
 
+	pr_info("gpiochip_match_name() chip->label=%s name=%s\n", chip->label, name);
 	return !strcmp(chip->label, name);
 }
 
@@ -3935,19 +3936,31 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
 	struct gpiod_lookup *p;
 
 	table = gpiod_find_lookup_table(dev);
-	if (!table)
+	if (!table) {
+		dev_info(dev, "didnt find gpiod lookup table\n");
 		return desc;
+	}
+
+	dev_info(dev, "gpiod_find() con_id=%s idx=%d\n", con_id, idx);
 
 	for (p = &table->table[0]; p->chip_label; p++) {
 		struct gpio_chip *chip;
 
+		dev_info(dev, "gpiod_find() walk idx=%d conid=%s\n", p->idx, p->con_id);
+
 		/* idx must always match exactly */
-		if (p->idx != idx)
+		if (p->idx != idx) {
+			dev_info(dev, "gpiod_find() idx mismatch\n");
 			continue;
+		}
 
 		/* If the lookup entry has a con_id, require exact match */
-		if (p->con_id && (!con_id || strcmp(p->con_id, con_id)))
+		if (p->con_id && (!con_id || strcmp(p->con_id, con_id))) {
+			dev_info(dev, "gpiod_find() con_id mismatch\n");
 			continue;
+		}
+
+		dev_info(dev, "gpiod_find() chip_label=%s\n", p->chip_label);
 
 		chip = find_chip_by_name(p->chip_label);
 
@@ -3974,9 +3987,11 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
 		desc = gpiochip_get_desc(chip, p->chip_hwnum);
 		*flags = p->flags;
 
+		dev_info(dev, "gpiod_find() found desc\n");
 		return desc;
 	}
 
+	dev_info(dev, "gpiod_find() didn't find any matching desc\n");
 	return desc;
 }
 
@@ -4173,15 +4188,15 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 	/* Maybe we have a device name, maybe not */
 	const char *devname = dev ? dev_name(dev) : "?";
 
-	dev_dbg(dev, "GPIO lookup for consumer %s\n", con_id);
+	dev_info(dev, "GPIO lookup for consumer=%s idx=%d\n", con_id, idx);
 
 	if (dev) {
 		/* Using device tree? */
 		if (IS_ENABLED(CONFIG_OF) && dev->of_node) {
-			dev_dbg(dev, "using device tree for GPIO lookup\n");
+			dev_info(dev, "using device tree for GPIO lookup\n");
 			desc = of_find_gpio(dev, con_id, idx, &lookupflags);
 		} else if (ACPI_COMPANION(dev)) {
-			dev_dbg(dev, "using ACPI for GPIO lookup\n");
+			dev_info(dev, "using ACPI for GPIO lookup\n");
 			desc = acpi_find_gpio(dev, con_id, idx, &flags, &lookupflags);
 		}
 	}
@@ -4191,12 +4206,12 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 	 * a result. In that case, use platform lookup as a fallback.
 	 */
 	if (!desc || desc == ERR_PTR(-ENOENT)) {
-		dev_dbg(dev, "using lookup tables for GPIO lookup\n");
+		dev_info(dev, "using lookup tables for GPIO lookup\n");
 		desc = gpiod_find(dev, con_id, idx, &lookupflags);
 	}
 
 	if (IS_ERR(desc)) {
-		dev_dbg(dev, "No GPIO consumer %s found\n", con_id);
+		dev_info(dev, "No GPIO consumer %s found\n", con_id);
 		return desc;
 	}
 
@@ -4219,13 +4234,14 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 				 con_id ? con_id : devname);
 			return desc;
 		} else {
+			dev_info(dev, "gpiod_request() returned error: %d\n", status);
 			return ERR_PTR(status);
 		}
 	}
 
 	status = gpiod_configure_flags(desc, con_id, lookupflags, flags);
 	if (status < 0) {
-		dev_dbg(dev, "setup of GPIO %s failed\n", con_id);
+		dev_info(dev, "setup of GPIO %s failed\n", con_id);
 		gpiod_put(desc);
 		return ERR_PTR(status);
 	}

@@ -673,6 +673,7 @@ phy_lookup_setting(int speed, int duplex, const unsigned long *mask,
 		   bool exact);
 size_t phy_speeds(unsigned int *speeds, size_t size,
 		  unsigned long *mask);
+void of_set_phy_supported(struct phy_device *phydev);
 
 /**
  * phy_is_started - Convenience function to check whether PHY is started

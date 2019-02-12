@@ -525,12 +525,10 @@ static int brcmstb_dpfe_download_firmware(struct platform_device *pdev,
 }
 
 static ssize_t generic_show(unsigned int command, u32 response[],
-			    struct device *dev, char *buf)
+			    struct private_data *priv, char *buf)
 {
-	struct private_data *priv;
 	int ret;
 
-	priv = dev_get_drvdata(dev);
 	if (!priv)
 		return sprintf(buf, "ERROR: driver private data not set\n");
 
@@ -545,10 +543,12 @@ static ssize_t show_info(struct device *dev, struct device_attribute *devattr,
 			 char *buf)
 {
 	u32 response[MSG_FIELD_MAX];
+	struct private_data *priv;
 	unsigned int info;
 	ssize_t ret;
 
-	ret = generic_show(DPFE_CMD_GET_INFO, response, dev, buf);
+	priv = dev_get_drvdata(dev);
+	ret = generic_show(DPFE_CMD_GET_INFO, response, priv, buf);
 	if (ret)
 		return ret;
 
@@ -571,11 +571,10 @@ static ssize_t show_refresh(struct device *dev,
 	u32 mr4;
 	ssize_t ret;
 
-	ret = generic_show(DPFE_CMD_GET_REFRESH, response, dev, buf);
+	priv = dev_get_drvdata(dev);
+	ret = generic_show(DPFE_CMD_GET_REFRESH, response, priv, buf);
 	if (ret)
 		return ret;
-
-	priv = dev_get_drvdata(dev);
 
 	info = get_msg_ptr(priv, response[MSG_ARG0], buf, &ret);
 	if (!info)
@@ -630,11 +629,10 @@ static ssize_t show_vendor(struct device *dev, struct device_attribute *devattr,
 	void __iomem *info;
 	ssize_t ret;
 
-	ret = generic_show(DPFE_CMD_GET_VENDOR, response, dev, buf);
+	priv = dev_get_drvdata(dev);
+	ret = generic_show(DPFE_CMD_GET_VENDOR, response, priv, buf);
 	if (ret)
 		return ret;
-
-	priv = dev_get_drvdata(dev);
 
 	info = get_msg_ptr(priv, response[MSG_ARG0], buf, &ret);
 	if (!info)

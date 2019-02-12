@@ -245,6 +245,19 @@ struct of_device_id {
 	const void *data;
 };
 
+/*
+ * macro for adding the of module device table only if CONFIG_OF enabled
+ */
+#ifdef CONFIG_OF
+#define MODULE_OF_TABLE(name)	MODULE_DEVICE_TABLE(of,name)
+#define MODULE_DECLARE_OF_TABLE(name,entries...) \
+static const struct of_device_id name[] = { entries, {} };
+#else
+#define MODULE_OF_TABLE(name)
+#define MODULE_DECLARE_OF_TABLE(name,entries...) \
+static const struct of_device_id *name = NULL;
+#endif /* CONFIG_OF */
+
 /* VIO */
 struct vio_device_id {
 	char type[32];

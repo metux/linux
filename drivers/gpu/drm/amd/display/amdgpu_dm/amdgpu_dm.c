@@ -5395,6 +5395,70 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 				 bundle->flip_addrs[planes_count].address.grph.addr.high_part,
 				 bundle->flip_addrs[planes_count].address.grph.addr.low_part);
 
+		plane_needs_flip = old_plane_state->fb && new_plane_state->fb;
+
+		pflip_present = pflip_present || plane_needs_flip;
+
+		if (!plane_needs_flip) {
+			planes_count += 1;
+			continue;
+		}
+
+		/*
+		 * TODO This might fail and hence better not used, wait
+		 * explicitly on fences instead
+		 * and in general should be called for
+		 * blocking commit to as per framework helpers
+		 */
+		abo = gem_to_amdgpu_bo(fb->obj[0]);
+		r = amdgpu_bo_reserve(abo, true);
+		if (unlikely(r != 0)) {
+			DRM_ERROR("failed to reserve buffer before flip\n");
+			WARN_ON(1);
+		}
+
+		/* Wait for all fences on this FB */
+		WARN_ON(reservation_object_wait_timeout_rcu(abo->tbo.resv, true, false,
+									    MAX_SCHEDULE_TIMEOUT) < 0);
+
+		amdgpu_bo_get_tiling_flags(abo, &tiling_flags);
+
+		amdgpu_bo_unreserve(abo);
+
+		bundle->flip_addrs[planes_count].address.grph.addr.low_part = lower_32_bits(afb->address);
+		bundle->flip_addrs[planes_count].address.grph.addr.high_part = upper_32_bits(afb->address);
+
+		dcc_address = get_dcc_address(afb->address, tiling_flags);
+		bundle->flip_addrs[planes_count].address.grph.meta_addr.low_part = lower_32_bits(dcc_address);
+		bundle->flip_addrs[planes_count].address.grph.meta_addr.high_part = upper_32_bits(dcc_address);
+
+		bundle->flip_addrs[planes_count].flip_immediate =
+				(crtc->state->pageflip_flags & DRM_MODE_PAGE_FLIP_ASYNC) != 0;
+
+		timestamp_ns = ktime_get_ns();
+		bundle->flip_addrs[planes_count].flip_timestamp_in_us = div_u64(timestamp_ns, 1000);
+		bundle->surface_updates[planes_count].flip_addr = &bundle->flip_addrs[planes_count];
+		bundle->surface_updates[planes_count].surface = dc_plane;
+
+		if (!bundle->surface_updates[planes_count].surface) {
+			DRM_ERROR("No surface for CRTC: id=%d\n",
+					acrtc_attach->crtc_id);
+			continue;
+		}
+
+		if (plane == pcrtc->primary)
+			update_freesync_state_on_stream(
+				dm,
+				acrtc_state,
+				acrtc_state->stream,
+				dc_plane,
+				bundle->flip_addrs[planes_count].flip_timestamp_in_us);
+
+		DRM_DEBUG_DRIVER("%s Flipping to hi: 0x%x, low: 0x%x\n",
+				 __func__,
+				 bundle->flip_addrs[planes_count].address.grph.addr.high_part,
+				 bundle->flip_addrs[planes_count].address.grph.addr.low_part);
+
 		planes_count += 1;
 
 	}

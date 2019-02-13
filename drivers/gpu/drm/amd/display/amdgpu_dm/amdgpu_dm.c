@@ -4729,18 +4729,19 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			 */
 			abo = gem_to_amdgpu_bo(fb->obj[0]);
 			r = amdgpu_bo_reserve(abo, true);
-			if (unlikely(r != 0)) {
+			if (unlikely(r != 0))
 				DRM_ERROR("failed to reserve buffer before flip\n");
-				WARN_ON(1);
-			}
 
-			/* Use old throttling in non-vrr fixed refresh rate mode
-			 * to keep flip scheduling based on target vblank counts
-			 * working in a backwards compatible way, e.g., clients
-			 * using GLX_OML_sync_control extension.
+/*
+			 * Wait for all fences on this FB. Do limited wait to avoid
+			 * deadlock during GPU reset when this fence will not signal
+			 * but we hold reservation lock for the BO.
 			 */
-			if (!vrr_active)
-				last_flip_vblank = drm_crtc_vblank_count(crtc);
+			r = reservation_object_wait_timeout_rcu(abo->tbo.resv,
+								true, false,
+								msecs_to_jiffies(5000));
+			if (unlikely(r == 0))
+				DRM_ERROR("Waiting for fences timed out.");
 
 amdgpu_bo_get_tiling_flags(abo, &tiling_flags);
 

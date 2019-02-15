@@ -46,7 +46,6 @@
 	};
 };
 
-
 &mac0 {
 	phy-mode = "rmii";
 	pinctrl-names = "default";

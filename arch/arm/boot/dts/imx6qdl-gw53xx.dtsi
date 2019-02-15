@@ -451,9 +451,9 @@
 
 	pinctrl_gpio_leds: gpioledsgrp {
 		fsl,pins = <
-			MX6QDL_PAD_KEY_COL0__GPIO4_IO06   0x1b0b0
-			MX6QDL_PAD_KEY_ROW0__GPIO4_IO07   0x1b0b0
-			MX6QDL_PAD_KEY_ROW4__GPIO4_IO15   0x1b0b0
+			MX6QDL_PAD_KEY_COL0__GPIO4_IO06		0x1b0b0
+			MX6QDL_PAD_KEY_ROW0__GPIO4_IO07		0x1b0b0
+			MX6QDL_PAD_KEY_ROW4__GPIO4_IO15		0x1b0b0
 		>;
 	};
 
@@ -500,8 +500,8 @@
 
 	pinctrl_pcie: pciegrp {
 		fsl,pins = <
-			MX6QDL_PAD_ENET_TX_EN__GPIO1_IO28 0x1b0b0 /* PCIE IRQ */
-			MX6QDL_PAD_ENET_TXD1__GPIO1_IO29  0x1b0b0 /* PCIE RST */
+			MX6QDL_PAD_ENET_TX_EN__GPIO1_IO28	0x1b0b0 /* PCIE IRQ */
+			MX6QDL_PAD_ENET_TXD1__GPIO1_IO29	0x1b0b0 /* PCIE RST */
 		>;
 	};
 

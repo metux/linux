@@ -50,7 +50,6 @@
 						};
 					};
 				};
-
 			};
 
 			macb0: ethernet@f8020000 {
@@ -87,7 +86,6 @@
 				atmel,adc-ts-wires = <4>;
 				atmel,adc-ts-pressure-threshold = <10000>;
 			};
-
 
 			pinctrl@fc06a000 {
 				board {

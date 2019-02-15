@@ -140,5 +140,4 @@
 		pinctrl-0 = <&pinctrl_1wire_cm>;
 		status = "okay";
 	};
-
 };

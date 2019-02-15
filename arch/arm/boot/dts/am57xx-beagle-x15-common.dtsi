@@ -330,7 +330,6 @@
 			ti,enable-vbus-detection;
 			vbus-gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 		};
-
 	};
 
 	tmp102: tmp102@48 {

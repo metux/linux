@@ -360,7 +360,7 @@ static int build_int_epilogue(struct jit_ctx *ctx, int dest_reg)
 	if (dest_reg == MIPS_R_RA) {
 		/* Don't let zero extended value escape. */
 		td = get_reg_val_type(ctx, prog->len, BPF_REG_0);
-		if (td == REG_64BIT)
+		if (td == REG_64BIT || td == REG_32BIT_ZERO_EX)
 			emit_instr(ctx, sll, r0, r0, 0);
 	}
 

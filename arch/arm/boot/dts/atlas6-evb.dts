@@ -47,7 +47,6 @@
 					reg = <0x40>;
 				};
 			};
-
 		};
 		disp-iobg {
 			lcd@90010000 {
@@ -57,22 +56,23 @@
 			};
 		};
 	};
+
 	display: display@0 {
-	    panels {
-		panel0: panel@0 {
-			panel-name = "Innolux TFT";
-			hactive = <800>;
-			vactive = <480>;
-			left_margin = <20>;
-			right_margin = <234>;
-			upper_margin = <3>;
-			lower_margin = <41>;
-			hsync_len = <3>;
-			vsync_len = <2>;
-			pixclock = <33264000>;
-			sync = <3>;
-			timing = <0x88>;
+		panels {
+			panel0: panel@0 {
+				panel-name = "Innolux TFT";
+				hactive = <800>;
+				vactive = <480>;
+				left_margin = <20>;
+				right_margin = <234>;
+				upper_margin = <3>;
+				lower_margin = <41>;
+				hsync_len = <3>;
+				vsync_len = <2>;
+				pixclock = <33264000>;
+				sync = <3>;
+				timing = <0x88>;
 			};
-	    };
+		};
 	};
 };

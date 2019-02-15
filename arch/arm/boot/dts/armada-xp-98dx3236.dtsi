@@ -335,4 +335,3 @@
 &sdio {
 	status = "disabled";
 };
-

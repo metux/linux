@@ -41,7 +41,6 @@
 		};
 	};
 
-
 	noc {
 		mediam {
 			nand@17050000 {
@@ -122,6 +121,5 @@
 				debounce_interval = <100>;
 			};
 		};
-
 	};
 };

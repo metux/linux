@@ -54,5 +54,4 @@
 	i2c-gpio-0 {
 		status = "okay";
 	};
-
 };

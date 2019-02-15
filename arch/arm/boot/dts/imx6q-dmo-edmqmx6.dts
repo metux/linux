@@ -295,8 +295,8 @@
 	imx6q-dmo-edmqmx6 {
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
-				MX6QDL_PAD_EIM_A16__GPIO2_IO22 0x80000000
-				MX6QDL_PAD_EIM_A17__GPIO2_IO21 0x80000000
+				MX6QDL_PAD_EIM_A16__GPIO2_IO22		0x80000000
+				MX6QDL_PAD_EIM_A17__GPIO2_IO21		0x80000000
 			>;
 		};
 
@@ -372,11 +372,11 @@
 		};
 
 		pinctrl_stmpe1: stmpe1grp {
-			fsl,pins = <MX6QDL_PAD_EIM_D30__GPIO3_IO30 0x80000000>;
+			fsl,pins = <MX6QDL_PAD_EIM_D30__GPIO3_IO30	0x80000000>;
 		};
 
 		pinctrl_stmpe2: stmpe2grp {
-			fsl,pins = <MX6QDL_PAD_EIM_A25__GPIO5_IO02 0x80000000>;
+			fsl,pins = <MX6QDL_PAD_EIM_A25__GPIO5_IO02	0x80000000>;
 		};
 
 		pinctrl_uart1: uart1grp {

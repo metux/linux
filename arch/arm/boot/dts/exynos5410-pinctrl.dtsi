@@ -648,5 +648,4 @@
 		samsung,pin-pud = <0>;
 		samsung,pin-drv = <0>;
 	};
-
 };

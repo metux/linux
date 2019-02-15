@@ -175,7 +175,6 @@
 			/* 4G Modem */
 			status = "okay";
 		};
-
 	};
 
 	leds {
@@ -217,7 +216,6 @@
 			gpios = <&pioA 26 GPIO_ACTIVE_LOW>;
 			default-state = "on";
 		};
-
 	};
 
 	vcc_3v3_reg: fixedregulator_3v3 {

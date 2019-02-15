@@ -78,7 +78,6 @@
 				(GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>;
 	};
 
-
 	pmu {
 		compatible = "arm,cortex-a15-pmu";
 		interrupts = <GIC_SPI 190 IRQ_TYPE_LEVEL_HIGH>;
@@ -192,9 +191,3 @@
 		};
 	};
 };
-
-/*
-  Local Variables:
-  mode: C
-  End:
-*/

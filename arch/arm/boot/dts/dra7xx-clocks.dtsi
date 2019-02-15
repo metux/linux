@@ -812,6 +812,7 @@
 		clock-frequency = <0>;
 	};
 };
+
 &prm_clocks {
 	sys_clkin1: sys_clkin1@110 {
 		#clock-cells = <0>;
@@ -1535,7 +1536,6 @@
 			reg = <0x20 0x4>;
 			#clock-cells = <2>;
 		};
-
 	};
 
 	dsp1_cm: dsp1-cm@400 {
@@ -1550,7 +1550,6 @@
 			reg = <0x20 0x4>;
 			#clock-cells = <2>;
 		};
-
 	};
 
 	ipu_cm: ipu-cm@500 {
@@ -1571,7 +1570,6 @@
 			reg = <0x50 0x34>;
 			#clock-cells = <2>;
 		};
-
 	};
 
 	dsp2_cm: dsp2-cm@600 {
@@ -1586,7 +1584,6 @@
 			reg = <0x20 0x4>;
 			#clock-cells = <2>;
 		};
-
 	};
 
 	rtc_cm: rtc-cm@700 {
@@ -1602,7 +1599,6 @@
 			#clock-cells = <2>;
 		};
 	};
-
 };
 
 &cm_core {
@@ -1632,7 +1628,6 @@
 			reg = <0x20 0x74>;
 			#clock-cells = <2>;
 		};
-
 	};
 
 	ipu2_cm: ipu2-cm@900 {
@@ -1795,7 +1790,6 @@
 			#clock-cells = <2>;
 		};
 	};
-
 };
 
 &prm {

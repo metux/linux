@@ -20,5 +20,4 @@
 
 &serial_flash {
 	status = "okay";
-
 };

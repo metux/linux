@@ -26,12 +26,12 @@
 		reg = <0x80000000 0x10000000>; /* 256 MB */
 	};
 
-        vmmc_fixed: vmmc {
-                compatible = "regulator-fixed";
-                regulator-name = "vmmc_fixed";
-                regulator-min-microvolt = <3300000>;
-                regulator-max-microvolt = <3300000>;
-        };
+	vmmc_fixed: vmmc {
+		compatible = "regulator-fixed";
+		regulator-name = "vmmc_fixed";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
 
 	gpio-keys {
 		compatible = "gpio-keys-polled";
@@ -182,11 +182,11 @@
 };
 
 &davinci_emac {
-	     status = "okay";
+	status = "okay";
 };
 
 &davinci_mdio {
-	     status = "okay";
+	status = "okay";
 };
 
 &dss {
@@ -233,7 +233,7 @@
 };
 
 &mmc3 {
-      status = "disabled";
+	status = "disabled";
 };
 
 &usbhshost {

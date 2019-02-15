@@ -626,7 +626,6 @@
 			gpios = <&pioA PIN_PB6 GPIO_ACTIVE_LOW>;
 		};
 
-
 		green {
 			label = "green";
 			gpios = <&pioA PIN_PB5 GPIO_ACTIVE_LOW>;

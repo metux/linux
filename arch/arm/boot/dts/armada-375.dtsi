@@ -599,7 +599,6 @@
 				clocks = <&gateclk 6>;
 				status = "disabled";
 			};
-
 		};
 
 		crypto_sram0: sa-sram0 {

@@ -177,7 +177,6 @@
 			gpios = <&pioB 8 GPIO_ACTIVE_HIGH>; /* PB8 */
 			linux,default-trigger = "heartbeat";
 		};
-
 	};
 
 	onewire {

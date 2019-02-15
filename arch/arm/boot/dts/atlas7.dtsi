@@ -1782,7 +1782,6 @@
 				compatible = "sirf,atlas7-memc";
 				reg = <0x10800000 0x2000>;
 			};
-
 		};
 
 		btm {
@@ -1898,8 +1897,8 @@
 				compatible = "sirf,atlas7-retain";
 				reg = <0x188D0000 0x1000>;
 			};
-
 		};
+
 		disp-iobg {
 			/* lcdc0 */
 			compatible = "simple-bus";
@@ -1935,7 +1934,6 @@
 				interrupts = <0 61 0>;
 				clocks = <&car 104>;
 			};
-
 		};
 
 		graphics-iobg {

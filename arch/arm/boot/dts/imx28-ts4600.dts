@@ -9,7 +9,6 @@
 #include "dt-bindings/gpio/gpio.h"
 
 / {
-
 	model = "Technologic Systems i.MX28 TS-4600";
 	compatible = "technologic,imx28-ts4600", "fsl,imx28";
 
@@ -33,7 +32,6 @@
 			};
 
 			pinctrl@80018000 {
-
 				en_sd_pwr: en-sd-pwr@0 {
 					reg = <0>;
 					fsl,pinmux-ids = <
@@ -43,7 +41,6 @@
 					fsl,voltage = <MXS_VOLTAGE_HIGH>;
 					fsl,pull-up = <MXS_PULL_DISABLE>;
 				};
-
 			};
 		};
 
@@ -70,5 +67,4 @@
 		regulator-boot-on;
 		gpio = <&gpio3 28 GPIO_ACTIVE_LOW>;
 	};
-
 };

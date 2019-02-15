@@ -84,6 +84,7 @@ static void mpage_end_io(struct bio *bio)
 {
 	struct bio_vec *bv;
 	int i;
+	struct bvec_iter_all iter_all;
 
 	if (trace_android_fs_dataread_start_enabled())
 		ext4_trace_read_completion(bio);
@@ -96,7 +97,7 @@ static void mpage_end_io(struct bio *bio)
 			return;
 		}
 	}
-	bio_for_each_segment_all(bv, bio, i) {
+	bio_for_each_segment_all(bv, bio, i, iter_all) {
 		struct page *page = bv->bv_page;
 
 		if (!bio->bi_status) {

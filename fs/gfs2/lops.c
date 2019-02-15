@@ -168,7 +168,8 @@ u64 gfs2_log_bmap(struct gfs2_sbd *sdp)
  * that is pinned in the pagecache.
  */
 
-static void gfs2_end_log_write_bh(struct gfs2_sbd *sdp, struct bio_vec *bvec,
+static void gfs2_end_log_write_bh(struct gfs2_sbd *sdp,
+				  struct bio_vec *bvec,
 				  blk_status_t error)
 {
 	struct buffer_head *bh, *next;
@@ -207,6 +208,7 @@ static void gfs2_end_log_write(struct bio *bio)
 	struct bio_vec *bvec;
 	struct page *page;
 	int i;
+	struct bvec_iter_all iter_all;
 
 	if (bio->bi_status) {
 		fs_err(sdp, "Error %d writing to journal, jid=%u\n",
@@ -214,7 +216,7 @@ static void gfs2_end_log_write(struct bio *bio)
 		wake_up(&sdp->sd_logd_waitq);
 	}
 
-	bio_for_each_segment_all(bvec, bio, i) {
+	bio_for_each_segment_all(bvec, bio, i, iter_all) {
 		page = bvec->bv_page;
 		if (page_has_buffers(page))
 			gfs2_end_log_write_bh(sdp, bvec, bio->bi_status);
@@ -375,6 +377,34 @@ void gfs2_log_write_page(struct gfs2_sbd *sdp, struct page *page)
 		       gfs2_log_bmap(sdp));
 }
 
+/**
+ * gfs2_end_log_read - end I/O callback for reads from the log
+ * @bio: The bio
+ *
+ * Simply unlock the pages in the bio. The main thread will wait on them and
+ * process them in order as necessary.
+ */
+
+static void gfs2_end_log_read(struct bio *bio)
+{
+	struct page *page;
+	struct bio_vec *bvec;
+	int i;
+	struct bvec_iter_all iter_all;
+
+	bio_for_each_segment_all(bvec, bio, i, iter_all) {
+		page = bvec->bv_page;
+		if (bio->bi_status) {
+			int err = blk_status_to_errno(bio->bi_status);
+
+			SetPageError(page);
+			mapping_set_error(page->mapping, err);
+		}
+		unlock_page(page);
+	}
+
+	bio_put(bio);
+}
 static struct page *gfs2_get_log_desc(struct gfs2_sbd *sdp, u32 ld_type,
 				      u32 ld_length, u32 ld_data1)
 {

@@ -583,7 +583,7 @@ static void tcindex_destroy(struct tcf_proto *tp, bool rtnl_held,
 
 		for (f = rtnl_dereference(p->h[i]); f; f = next) {
 			next = rtnl_dereference(f->next);
-			tcindex_delete(tp, &f->result, &last, NULL);
+			tcindex_delete(tp, &f->result, &last, rtnl_held, NULL);
 		}
 	}
 

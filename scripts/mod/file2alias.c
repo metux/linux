@@ -42,6 +42,8 @@ typedef struct {
 } uuid_t;
 #define	UUID_STRING_LEN		36
 
+#define	UUID_STRING_LEN		36
+
 /* Big exception to the "don't include kernel headers into userspace, which
  * even potentially has different endianness and word sizes, since
  * we handle those differences explicitly below */

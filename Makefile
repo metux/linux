@@ -1025,9 +1025,6 @@ cmd_link-vmlinux =                                                 \
 	$(if $(ARCH_POSTLINK), $(MAKE) -f $(ARCH_POSTLINK) $@, true)
 
 vmlinux: scripts/link-vmlinux.sh autoksyms_recursive $(vmlinux-deps) FORCE
-ifdef CONFIG_GDB_SCRIPTS
-	$(Q)ln -fsn $(abspath $(srctree)/scripts/gdb/vmlinux-gdb.py)
-endif
 	+$(call if_changed,link-vmlinux)
 
 targets := vmlinux
@@ -1529,6 +1526,7 @@ $(DOC_TARGETS): scripts_basic FORCE
 PHONY += scripts_gdb
 scripts_gdb: prepare
 	$(Q)$(MAKE) $(build)=scripts/gdb
+	$(Q)ln -fsn $(abspath $(srctree)/scripts/gdb/vmlinux-gdb.py)
 
 ifdef CONFIG_GDB_SCRIPTS
 all: scripts_gdb

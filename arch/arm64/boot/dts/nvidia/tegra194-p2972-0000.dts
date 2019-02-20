@@ -29,6 +29,11 @@
 			status = "okay";
 		};
 
+		hda@3510000 {
+			nvidia,model = "jetson-xavier-hda";
+			status = "okay";
+		};
+
 		host1x@13e00000 {
 			display-hub@15200000 {
 				status = "okay";

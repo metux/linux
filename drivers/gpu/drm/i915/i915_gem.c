@@ -1838,9 +1838,15 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 
 	wakeref = intel_runtime_pm_get(dev_priv);
 
+	srcu = i915_reset_trylock(dev_priv);
+	if (srcu < 0) {
+		ret = srcu;
+		goto err_rpm;
+	}
+
 	ret = i915_mutex_lock_interruptible(dev);
 	if (ret)
-		goto err_rpm;
+		goto err_reset;
 
 	/* Access to snoopable pages through the GTT is incoherent. */
 	if (obj->cache_level != I915_CACHE_NONE && !HAS_LLC(dev_priv)) {
@@ -1889,12 +1895,6 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 	if (ret)
 		goto err_unpin;
 
-	srcu = i915_reset_trylock(dev_priv);
-	if (srcu < 0) {
-		ret = srcu;
-		goto err_fence;
-	}
-
 	/* Finally, remap it using the new GTT offset */
 	ret = remap_io_mapping(area,
 			       area->vm_start + (vma->ggtt_view.partial.offset << PAGE_SHIFT),
@@ -1902,7 +1902,7 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 			       min_t(u64, vma->size, area->vm_end - area->vm_start),
 			       &ggtt->iomap);
 	if (ret)
-		goto err_reset;
+		goto err_fence;
 
 	/* Mark as being mmapped into userspace for later revocation */
 	assert_rpm_wakelock_held(dev_priv);
@@ -1912,14 +1912,14 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 
 	i915_vma_set_ggtt_write(vma);
 
-err_reset:
-	i915_reset_unlock(dev_priv, srcu);
 err_fence:
 	i915_vma_unpin_fence(vma);
 err_unpin:
 	__i915_vma_unpin(vma);
 err_unlock:
 	mutex_unlock(&dev->struct_mutex);
+err_reset:
+	i915_reset_unlock(dev_priv, srcu);
 err_rpm:
 	intel_runtime_pm_put(dev_priv, wakeref);
 	i915_gem_object_unpin_pages(obj);

@@ -333,7 +333,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 						  &metadata->u.tun_info,
 						  opts_len, extack);
 			if (ret < 0)
-				goto release_tun_meta;
+				goto release_dst_cache;
 		}
 
 		metadata->u.tun_info.mode |= IP_TUNNEL_INFO_TX;
@@ -349,14 +349,14 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 				     &act_tunnel_key_ops, bind, true);
 		if (ret) {
 			NL_SET_ERR_MSG(extack, "Cannot create TC IDR");
-			goto release_tun_meta;
+			goto release_dst_cache;
 		}
 
 		ret = ACT_P_CREATED;
 	} else if (!ovr) {
 		NL_SET_ERR_MSG(extack, "TC IDR already exists");
 		ret = -EEXIST;
-		goto release_tun_meta;
+		goto release_dst_cache;
 	}
 
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
@@ -372,7 +372,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		NL_SET_ERR_MSG(extack, "Cannot allocate tunnel key parameters");
 		ret = -ENOMEM;
 		exists = true;
-		goto put_chain;
+		goto release_dst_cache;
 	}
 	params_new->tcft_action = parm->t_action;
 	params_new->tcft_enc_metadata = metadata;
@@ -391,10 +391,12 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 
 	return ret;
 
-put_chain:
+release_dst_cache:
+#ifdef CONFIG_DST_CACHE
+	dst_cache_destroy(&metadata->u.tun_info.dst_cache);
+#endif
 	if (goto_ch)
 		tcf_chain_put_by_act(goto_ch);
-
 release_tun_meta:
 	if (metadata)
 		dst_release(&metadata->dst);
@@ -411,8 +413,15 @@ static void tunnel_key_release(struct tc_action *a)
 {
 	struct tcf_tunnel_key *t = to_tunnel_key(a);
 	struct tcf_tunnel_key_params *params;
+#ifdef CONFIG_DST_CACHE
+	struct ip_tunnel_info *info;
+#endif
 
 	params = rcu_dereference_protected(t->params, 1);
+#ifdef CONFIG_DST_CACHE
+	info = &params->tcft_enc_metadata->u.tun_info;
+	dst_cache_destroy(&info->dst_cache);
+#endif
 	tunnel_key_release_params(params);
 }
 

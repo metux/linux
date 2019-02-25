@@ -642,31 +642,27 @@ static void intel_write_infoframe(struct intel_encoder *encoder,
 	intel_dig_port->write_infoframe(encoder, crtc_state, type, buffer, len);
 }
 
-void intel_read_infoframe(struct intel_encoder *encoder,
-			  const struct intel_crtc_state *crtc_state,
-			  enum hdmi_infoframe_type type,
-			  union hdmi_infoframe *frame)
+static bool
+intel_hdmi_compute_avi_infoframe(struct intel_encoder *encoder,
+				 struct intel_crtc_state *crtc_state,
+				 struct drm_connector_state *conn_state)
 {
-	struct intel_digital_port *intel_dig_port = enc_to_dig_port(&encoder->base);
-	u8 buffer[VIDEO_DIP_DATA_SIZE];
+	struct hdmi_avi_infoframe *frame = &crtc_state->infoframes.avi.avi;
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->base.adjusted_mode;
+	struct drm_connector *connector = conn_state->connector;
 	int ret;
 
-	if ((crtc_state->infoframes.enable &
-	     intel_hdmi_infoframe_enable(type)) == 0)
-		return;
+	if (!crtc_state->has_infoframe)
+		return true;
 
-	intel_dig_port->read_infoframe(encoder, crtc_state,
-				       type, buffer, sizeof(buffer));
+	crtc_state->infoframes.enable |=
+		intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_AVI);
 
-	/* Fill the 'hole' (see big comment above) at position 3 */
-	memmove(&buffer[1], &buffer[0], 3);
-
-	/* see comment above for the reason for this offset */
-	ret = hdmi_infoframe_unpack(frame, buffer + 1, sizeof(buffer) - 1);
-	if (ret) {
-		DRM_DEBUG_KMS("Failed to unpack infoframe type 0x%02x\n", type);
-		return;
-	}
+	ret = drm_hdmi_avi_infoframe_from_display_mode(frame, connector,
+						       adjusted_mode);
+	if (ret)
+		return false;
 
 	if (frame->any.type != type)
 		DRM_DEBUG_KMS("Found the wrong infoframe type 0x%x (expected 0x%02x)\n",
@@ -927,29 +923,6 @@ static bool intel_hdmi_set_gcp_infoframe(struct intel_encoder *encoder,
 	I915_WRITE(reg, crtc_state->infoframes.gcp);
 
 	return true;
-}
-
-void intel_hdmi_read_gcp_infoframe(struct intel_encoder *encoder,
-				   struct intel_crtc_state *crtc_state)
-{
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
-	i915_reg_t reg;
-
-	if ((crtc_state->infoframes.enable &
-	     intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GENERAL_CONTROL)) == 0)
-		return;
-
-	if (HAS_DDI(dev_priv))
-		reg = HSW_TVIDEO_DIP_GCP(crtc_state->cpu_transcoder);
-	else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
-		reg = VLV_TVIDEO_DIP_GCP(crtc->pipe);
-	else if (HAS_PCH_SPLIT(dev_priv))
-		reg = TVIDEO_DIP_GCP(crtc->pipe);
-	else
-		return;
-
-	crtc_state->infoframes.gcp = I915_READ(reg);
 }
 
 static void intel_hdmi_compute_gcp_infoframe(struct intel_encoder *encoder,

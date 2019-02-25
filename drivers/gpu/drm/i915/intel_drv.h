@@ -1847,6 +1847,96 @@ void intel_hpd_poll_init(struct drm_i915_private *dev_priv);
 bool intel_encoder_hotplug(struct intel_encoder *encoder,
 			   struct intel_connector *connector);
 
+/* legacy fbdev emulation in intel_fbdev.c */
+#ifdef CONFIG_DRM_FBDEV_EMULATION
+extern int intel_fbdev_init(struct drm_device *dev);
+extern void intel_fbdev_initial_config_async(struct drm_device *dev);
+extern void intel_fbdev_unregister(struct drm_i915_private *dev_priv);
+extern void intel_fbdev_fini(struct drm_i915_private *dev_priv);
+extern void intel_fbdev_set_suspend(struct drm_device *dev, int state, bool synchronous);
+extern void intel_fbdev_output_poll_changed(struct drm_device *dev);
+extern void intel_fbdev_restore_mode(struct drm_device *dev);
+#else
+static inline int intel_fbdev_init(struct drm_device *dev)
+{
+	return 0;
+}
+
+static inline void intel_fbdev_initial_config_async(struct drm_device *dev)
+{
+}
+
+static inline void intel_fbdev_unregister(struct drm_i915_private *dev_priv)
+{
+}
+
+static inline void intel_fbdev_fini(struct drm_i915_private *dev_priv)
+{
+}
+
+static inline void intel_fbdev_set_suspend(struct drm_device *dev, int state, bool synchronous)
+{
+}
+
+static inline void intel_fbdev_output_poll_changed(struct drm_device *dev)
+{
+}
+
+static inline void intel_fbdev_restore_mode(struct drm_device *dev)
+{
+}
+#endif
+
+/* intel_fbc.c */
+void intel_fbc_choose_crtc(struct drm_i915_private *dev_priv,
+			   struct intel_atomic_state *state);
+bool intel_fbc_is_active(struct drm_i915_private *dev_priv);
+void intel_fbc_pre_update(struct intel_crtc *crtc,
+			  struct intel_crtc_state *crtc_state,
+			  struct intel_plane_state *plane_state);
+void intel_fbc_post_update(struct intel_crtc *crtc);
+void intel_fbc_init(struct drm_i915_private *dev_priv);
+void intel_fbc_init_pipe_state(struct drm_i915_private *dev_priv);
+void intel_fbc_enable(struct intel_crtc *crtc,
+		      struct intel_crtc_state *crtc_state,
+		      struct intel_plane_state *plane_state);
+void intel_fbc_disable(struct intel_crtc *crtc);
+void intel_fbc_global_disable(struct drm_i915_private *dev_priv);
+void intel_fbc_invalidate(struct drm_i915_private *dev_priv,
+			  unsigned int frontbuffer_bits,
+			  enum fb_op_origin origin);
+void intel_fbc_flush(struct drm_i915_private *dev_priv,
+		     unsigned int frontbuffer_bits, enum fb_op_origin origin);
+void intel_fbc_cleanup_cfb(struct drm_i915_private *dev_priv);
+void intel_fbc_handle_fifo_underrun_irq(struct drm_i915_private *dev_priv);
+int intel_fbc_reset_underrun(struct drm_i915_private *dev_priv);
+
+/* intel_hdmi.c */
+void intel_hdmi_init(struct drm_i915_private *dev_priv, i915_reg_t hdmi_reg,
+		     enum port port);
+void intel_hdmi_init_connector(struct intel_digital_port *intel_dig_port,
+			       struct intel_connector *intel_connector);
+struct intel_hdmi *enc_to_intel_hdmi(struct drm_encoder *encoder);
+int intel_hdmi_compute_config(struct intel_encoder *encoder,
+			      struct intel_crtc_state *pipe_config,
+			      struct drm_connector_state *conn_state);
+bool intel_hdmi_handle_sink_scrambling(struct intel_encoder *encoder,
+				       struct drm_connector *connector,
+				       bool high_tmds_clock_ratio,
+				       bool scrambling);
+void intel_dp_dual_mode_set_tmds_output(struct intel_hdmi *hdmi, bool enable);
+void intel_infoframe_init(struct intel_digital_port *intel_dig_port);
+u32 intel_hdmi_infoframes_enabled(struct intel_encoder *encoder,
+				  const struct intel_crtc_state *crtc_state);
+u32 intel_hdmi_infoframe_enable(unsigned int type);
+
+/* intel_lvds.c */
+bool intel_lvds_port_enabled(struct drm_i915_private *dev_priv,
+			     i915_reg_t lvds_reg, enum pipe *pipe);
+void intel_lvds_init(struct drm_i915_private *dev_priv);
+struct intel_encoder *intel_get_lvds_encoder(struct drm_device *dev);
+bool intel_is_dual_link_lvds(struct drm_device *dev);
+
 /* intel_overlay.c */
 void intel_overlay_setup(struct drm_i915_private *dev_priv);
 void intel_overlay_cleanup(struct drm_i915_private *dev_priv);

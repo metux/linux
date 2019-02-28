@@ -572,4 +572,8 @@ i915_request_active_timeline(struct i915_request *rq)
 					 lockdep_is_held(&rq->engine->active.lock));
 }
 
+int i915_global_request_init(void);
+void i915_global_request_shrink(void);
+void i915_global_request_exit(void);
+
 #endif /* I915_REQUEST_H */

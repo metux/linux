@@ -55,6 +55,11 @@ static struct i915_global_request {
 	struct kmem_cache *slab_execute_cbs;
 } global;
 
+static struct i915_global_request {
+	struct kmem_cache *slab_requests;
+	struct kmem_cache *slab_dependencies;
+} global;
+
 static const char *i915_fence_get_driver_name(struct dma_fence *fence)
 {
 	return dev_name(to_request(fence)->i915->drm.dev);
@@ -598,6 +603,7 @@ out:
 	return kmem_cache_alloc(global.slab_requests, gfp);
 }
 
+<<<<<<< HEAD
 static void __i915_request_ctor(void *arg)
 {
 	struct i915_request *rq = arg;
@@ -615,6 +621,22 @@ static void __i915_request_ctor(void *arg)
 	INIT_LIST_HEAD(&rq->execute_cb);
 }
 
+=======
+static int add_timeline_barrier(struct i915_request *rq)
+{
+	return i915_request_await_active_request(rq, &rq->timeline->barrier);
+}
+
+/**
+ * i915_request_alloc - allocate a request structure
+ *
+ * @engine: engine that we wish to issue the request on.
+ * @ctx: context that the request will be associated with.
+ *
+ * Returns a pointer to the allocated request if successful,
+ * or an error code if not.
+ */
+>>>>>>> b7f1446a1fcdd (drm/i915: Make request allocation caches global)
 struct i915_request *
 __i915_request_create(struct intel_context *ce, gfp_t gfp)
 {
@@ -1676,7 +1698,23 @@ int __init i915_global_request_init(void)
 
 err_execute_cbs:
 	kmem_cache_destroy(global.slab_execute_cbs);
+		goto err_requests;
+
+	return 0;
+
 err_requests:
 	kmem_cache_destroy(global.slab_requests);
 	return -ENOMEM;
+}
+
+void i915_global_request_shrink(void)
+{
+	kmem_cache_shrink(global.slab_dependencies);
+	kmem_cache_shrink(global.slab_requests);
+}
+
+void i915_global_request_exit(void)
+{
+	kmem_cache_destroy(global.slab_dependencies);
+	kmem_cache_destroy(global.slab_requests);
 }

@@ -98,6 +98,7 @@ struct intel_gt;
  * do the writes, and that must have qw aligned offsets, simply pretend it's 8b.
  */
 
+<<<<<<< HEAD
 static inline unsigned int
 execlists_num_ports(const struct intel_engine_execlists * const execlists)
 {
@@ -348,3 +349,5 @@ intel_engine_has_timeslices(const struct intel_engine_cs *engine)
 }
 
 #endif /* _INTEL_RINGBUFFER_H_ */
+=======
+>>>>>>> b7f1446a1fcdd (drm/i915: Make request allocation caches global)

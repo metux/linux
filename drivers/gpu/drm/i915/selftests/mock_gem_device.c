@@ -66,8 +66,15 @@ static void mock_device_release(struct drm_device *dev)
 	mock_fini_ggtt(&i915->ggtt);
 	destroy_workqueue(i915->wq);
 
+<<<<<<< HEAD
 	intel_gt_driver_late_release(&i915->gt);
 	intel_memory_regions_driver_release(i915);
+=======
+	kmem_cache_destroy(i915->vmas);
+	kmem_cache_destroy(i915->objects);
+
+	i915_gemfs_fini(i915);
+>>>>>>> b7f1446a1fcdd (drm/i915: Make request allocation caches global)
 
 	drm_mode_config_cleanup(&i915->drm);
 
@@ -174,6 +181,30 @@ struct drm_i915_private *mock_gem_device(void)
 
 	mock_init_contexts(i915);
 
+<<<<<<< HEAD
+=======
+	INIT_DELAYED_WORK(&i915->gem.retire_work, mock_retire_work_handler);
+	INIT_WORK(&i915->gem.idle_work, mock_idle_work_handler);
+
+	i915->gt.awake = true;
+
+	i915->objects = KMEM_CACHE(mock_object, SLAB_HWCACHE_ALIGN);
+	if (!i915->objects)
+		goto err_wq;
+
+	i915->vmas = KMEM_CACHE(i915_vma, SLAB_HWCACHE_ALIGN);
+	if (!i915->vmas)
+		goto err_objects;
+
+	i915_timelines_init(i915);
+
+	INIT_LIST_HEAD(&i915->gt.active_rings);
+	INIT_LIST_HEAD(&i915->gt.closed_vma);
+	spin_lock_init(&i915->gt.closed_lock);
+
+	mutex_lock(&i915->drm.struct_mutex);
+
+>>>>>>> b7f1446a1fcdd (drm/i915: Make request allocation caches global)
 	mock_init_ggtt(i915, &i915->ggtt);
 	i915->gt.vm = i915_vm_get(&i915->ggtt.vm);
 
@@ -194,6 +225,15 @@ struct drm_i915_private *mock_gem_device(void)
 err_context:
 	intel_gt_driver_remove(&i915->gt);
 err_unlock:
+<<<<<<< HEAD
+=======
+	mutex_unlock(&i915->drm.struct_mutex);
+	i915_timelines_fini(i915);
+	kmem_cache_destroy(i915->vmas);
+err_objects:
+	kmem_cache_destroy(i915->objects);
+err_wq:
+>>>>>>> b7f1446a1fcdd (drm/i915: Make request allocation caches global)
 	destroy_workqueue(i915->wq);
 err_drv:
 	intel_gt_driver_late_release(&i915->gt);

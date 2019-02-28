@@ -30,6 +30,7 @@
 
 #include "i915_active.h"
 #include "i915_drv.h"
+#include "i915_globals.h"
 #include "i915_selftest.h"
 
 #define PLATFORM(x) .platform = (x), .platform_mask = BIT(x)
@@ -802,7 +803,9 @@ static int __init i915_init(void)
 	bool use_kms = true;
 	int err;
 
-	i915_global_active_init();
+	err = i915_globals_init();
+	if (err)
+		return err;
 
 	err = i915_mock_selftests();
 	if (err)
@@ -835,7 +838,7 @@ static void __exit i915_exit(void)
 		return;
 
 	pci_unregister_driver(&i915_pci_driver);
-	i915_global_active_exit();
+	i915_globals_exit();
 }
 
 module_init(i915_init);

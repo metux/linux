@@ -186,6 +186,8 @@ void i915_gem_unpark(struct drm_i915_private *i915)
 
 	i915_globals_unpark();
 
+	i915_globals_unpark();
+
 	intel_enable_gt_powersave(i915);
 	i915_update_gfx_val(i915);
 	if (INTEL_GEN(i915) >= 6)
@@ -2926,6 +2928,11 @@ static bool switch_to_kernel_context_sync(struct drm_i915_private *i915,
 
 	i915_retire_requests(i915); /* ensure we flush after wedging */
 	return result;
+	kmem_cache_shrink(i915->luts);
+	kmem_cache_shrink(i915->vmas);
+	kmem_cache_shrink(i915->objects);
+
+	i915_globals_park();
 }
 
 static bool load_power_context(struct drm_i915_private *i915)
@@ -5109,6 +5116,19 @@ static void i915_gem_init__mm(struct drm_i915_private *i915)
 int i915_gem_init_early(struct drm_i915_private *dev_priv)
 {
 	int err;
+	int err = -ENOMEM;
+
+	dev_priv->objects = KMEM_CACHE(drm_i915_gem_object, SLAB_HWCACHE_ALIGN);
+	if (!dev_priv->objects)
+		goto err_out;
+
+	dev_priv->vmas = KMEM_CACHE(i915_vma, SLAB_HWCACHE_ALIGN);
+	if (!dev_priv->vmas)
+		goto err_objects;
+
+	dev_priv->luts = KMEM_CACHE(i915_lut_handle, 0);
+	if (!dev_priv->luts)
+		goto err_vmas;
 
 	INIT_LIST_HEAD(&dev_priv->gt.active_rings);
 	INIT_LIST_HEAD(&dev_priv->gt.closed_vma);
@@ -5133,6 +5153,13 @@ int i915_gem_init_early(struct drm_i915_private *dev_priv)
 		DRM_NOTE("Unable to create a private tmpfs mount, hugepage support will be disabled(%d).\n", err);
 
 	return 0;
+
+err_vmas:
+	kmem_cache_destroy(dev_priv->vmas);
+err_objects:
+	kmem_cache_destroy(dev_priv->objects);
+err_out:
+	return err;
 }
 
 void i915_gem_cleanup_early(struct drm_i915_private *dev_priv)
@@ -5143,6 +5170,13 @@ void i915_gem_cleanup_early(struct drm_i915_private *dev_priv)
 	WARN_ON(dev_priv->mm.object_count);
 
 	cleanup_srcu_struct(&dev_priv->gpu_error.reset_backoff_srcu);
+
+	kmem_cache_destroy(dev_priv->luts);
+	kmem_cache_destroy(dev_priv->vmas);
+	kmem_cache_destroy(dev_priv->objects);
+
+	/* And ensure that our DESTROY_BY_RCU slabs are truly destroyed */
+	rcu_barrier();
 
 	i915_gemfs_fini(dev_priv);
 }

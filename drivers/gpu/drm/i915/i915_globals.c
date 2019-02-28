@@ -28,6 +28,37 @@ static void i915_globals_shrink(void)
 {
 	struct i915_global *global;
 
+#include "i915_globals.h"
+#include "i915_request.h"
+#include "i915_scheduler.h"
+
+int __init i915_globals_init(void)
+{
+	int err;
+
+	err = i915_global_active_init();
+	if (err)
+		return err;
+
+	err = i915_global_request_init();
+	if (err)
+		goto err_active;
+
+	err = i915_global_scheduler_init();
+	if (err)
+		goto err_request;
+
+	return 0;
+
+err_request:
+	i915_global_request_exit();
+err_active:
+	i915_global_active_exit();
+	return err;
+}
+
+static void i915_globals_shrink(void)
+{
 	/*
 	 * kmem_cache_shrink() discards empty slabs and reorders partially
 	 * filled slabs to prioritise allocating from the mostly full slabs,
@@ -86,10 +117,33 @@ int __init i915_globals_init(void)
 
 	INIT_RCU_WORK(&park.work, __i915_globals_park);
 	return 0;
+	i915_global_active_shrink();
+	i915_global_request_shrink();
+	i915_global_scheduler_shrink();
+}
+
+static atomic_t active;
+static atomic_t epoch;
+struct park_work {
+	struct rcu_work work;
+	int epoch;
+};
+
+static void __i915_globals_park(struct work_struct *work)
+{
+	struct park_work *wrk = container_of(work, typeof(*wrk), work.work);
+
+	/* Confirm nothing woke up in the last grace period */
+	if (wrk->epoch == atomic_read(&epoch))
+		i915_globals_shrink();
+
+	kfree(wrk);
 }
 
 void i915_globals_park(void)
 {
+	struct park_work *wrk;
+
 	/*
 	 * Defer shrinking the global slab caches (and other work) until
 	 * after a RCU grace period has completed with no activity. This
@@ -104,6 +158,13 @@ void i915_globals_park(void)
 
 	park.epoch = atomic_inc_return(&epoch);
 	queue_rcu_work(system_wq, &park.work);
+	wrk = kmalloc(sizeof(*wrk), GFP_KERNEL);
+	if (!wrk)
+		return;
+
+	wrk->epoch = atomic_inc_return(&epoch);
+	INIT_RCU_WORK(&wrk->work, __i915_globals_park);
+	queue_rcu_work(system_wq, &wrk->work);
 }
 
 void i915_globals_unpark(void)
@@ -119,6 +180,12 @@ void __exit i915_globals_exit(void)
 	flush_rcu_work(&park.work);
 
 	__i915_globals_cleanup();
+	rcu_barrier();
+	flush_scheduled_work();
+
+	i915_global_scheduler_exit();
+	i915_global_request_exit();
+	i915_global_active_exit();
 
 	/* And ensure that our DESTROY_BY_RCU slabs are truly destroyed */
 	rcu_barrier();

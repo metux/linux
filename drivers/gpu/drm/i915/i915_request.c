@@ -48,6 +48,11 @@ static struct i915_global_request {
 	struct kmem_cache *slab_execute_cbs;
 } global;
 
+static struct i915_global_request {
+	struct kmem_cache *slab_requests;
+	struct kmem_cache *slab_dependencies;
+} global;
+
 static const char *i915_fence_get_driver_name(struct dma_fence *fence)
 {
 	return "i915";
@@ -614,6 +619,11 @@ i915_request_alloc_slow(struct intel_context *ce)
 
 out:
 	return kmem_cache_alloc(global.slab_requests, GFP_KERNEL);
+}
+
+static int add_timeline_barrier(struct i915_request *rq)
+{
+	return i915_request_await_active_request(rq, &rq->timeline->barrier);
 }
 
 /**
@@ -1505,7 +1515,23 @@ int __init i915_global_request_init(void)
 
 err_execute_cbs:
 	kmem_cache_destroy(global.slab_execute_cbs);
+		goto err_requests;
+
+	return 0;
+
 err_requests:
 	kmem_cache_destroy(global.slab_requests);
 	return -ENOMEM;
+}
+
+void i915_global_request_shrink(void)
+{
+	kmem_cache_shrink(global.slab_dependencies);
+	kmem_cache_shrink(global.slab_requests);
+}
+
+void i915_global_request_exit(void)
+{
+	kmem_cache_destroy(global.slab_dependencies);
+	kmem_cache_destroy(global.slab_requests);
 }

@@ -1478,6 +1478,10 @@ struct intel_cdclk_state {
 struct drm_i915_private {
 	struct drm_device drm;
 
+	struct kmem_cache *objects;
+	struct kmem_cache *vmas;
+	struct kmem_cache *luts;
+
 	const struct intel_device_info __info; /* Use INTEL_INFO() to access. */
 	struct intel_runtime_info __runtime; /* Use RUNTIME_INFO() to access. */
 	struct intel_driver_caps caps;

@@ -79,6 +79,9 @@ static void mock_device_release(struct drm_device *dev)
 
 	destroy_workqueue(i915->wq);
 
+	kmem_cache_destroy(i915->vmas);
+	kmem_cache_destroy(i915->objects);
+
 	i915_gemfs_fini(i915);
 
 	drm_mode_config_cleanup(&i915->drm);
@@ -194,7 +197,19 @@ struct drm_i915_private *mock_gem_device(void)
 
 	i915->gt.awake = true;
 
-	intel_timelines_init(i915);
+	i915->objects = KMEM_CACHE(mock_object, SLAB_HWCACHE_ALIGN);
+	if (!i915->objects)
+		goto err_wq;
+
+	i915->vmas = KMEM_CACHE(i915_vma, SLAB_HWCACHE_ALIGN);
+	if (!i915->vmas)
+		goto err_objects;
+
+	i915_timelines_init(i915);
+
+	INIT_LIST_HEAD(&i915->gt.active_rings);
+	INIT_LIST_HEAD(&i915->gt.closed_vma);
+	spin_lock_init(&i915->gt.closed_lock);
 
 	mutex_lock(&i915->drm.struct_mutex);
 
@@ -226,7 +241,11 @@ err_engine:
 	mock_engine_free(i915->engine[RCS0]);
 err_unlock:
 	mutex_unlock(&i915->drm.struct_mutex);
-	intel_timelines_fini(i915);
+	i915_timelines_fini(i915);
+	kmem_cache_destroy(i915->vmas);
+err_objects:
+	kmem_cache_destroy(i915->objects);
+err_wq:
 	destroy_workqueue(i915->wq);
 err_drv:
 	drm_mode_config_cleanup(&i915->drm);

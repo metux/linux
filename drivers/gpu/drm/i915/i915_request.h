@@ -431,4 +431,8 @@ static inline void i915_request_mark_complete(struct i915_request *rq)
 
 bool i915_retire_requests(struct drm_i915_private *i915);
 
+int i915_global_request_init(void);
+void i915_global_request_shrink(void);
+void i915_global_request_exit(void);
+
 #endif /* I915_REQUEST_H */

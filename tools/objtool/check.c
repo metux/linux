@@ -31,6 +31,7 @@
 struct alternative {
 	struct list_head list;
 	struct instruction *insn;
+	bool skip_orig;
 };
 
 const char *objname;
@@ -624,9 +625,6 @@ static int add_call_destinations(struct objtool_file *file)
  *    conditionally jumps to the _end_ of the entry.  We have to modify these
  *    jumps' destinations to point back to .text rather than the end of the
  *    entry in .altinstr_replacement.
- *
- * 4. It has been requested that we don't validate the !POPCNT feature path
- *    which is a "very very small percentage of machines".
  */
 static int handle_group_alt(struct objtool_file *file,
 			    struct special_alt *special_alt,
@@ -641,9 +639,6 @@ static int handle_group_alt(struct objtool_file *file,
 	sec_for_each_insn_from(file, insn) {
 		if (insn->offset >= special_alt->orig_off + special_alt->orig_len)
 			break;
-
-		if (special_alt->skip_orig)
-			insn->type = INSN_NOP;
 
 		insn->alt_group = true;
 		last_orig_insn = insn;
@@ -809,6 +804,7 @@ static int add_special_section_alts(struct objtool_file *file)
 		}
 
 		alt->insn = new_insn;
+		alt->skip_orig = special_alt->skip_orig;
 		list_add_tail(&alt->list, &orig_insn->alts);
 
 		list_del(&special_alt->list);
@@ -1884,7 +1880,12 @@ static int validate_branch(struct objtool_file *file, struct instruction *first,
 		insn->visited = true;
 
 		if (!insn->ignore_alts) {
+			bool skip_orig = false;
+
 			list_for_each_entry(alt, &insn->alts, list) {
+				if (alt->skip_orig)
+					skip_orig = true;
+
 				ret = validate_branch(file, alt->insn, state);
 				if (ret) {
 					if (backtrace)
@@ -1892,6 +1893,9 @@ static int validate_branch(struct objtool_file *file, struct instruction *first,
 					return ret;
 				}
 			}
+
+			if (skip_orig)
+				return 0;
 		}
 
 		switch (insn->type) {

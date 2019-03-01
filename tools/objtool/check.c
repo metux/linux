@@ -1886,8 +1886,11 @@ static int validate_branch(struct objtool_file *file, struct instruction *first,
 		if (!insn->ignore_alts) {
 			list_for_each_entry(alt, &insn->alts, list) {
 				ret = validate_branch(file, alt->insn, state);
-				if (ret)
-					return 1;
+				if (ret) {
+					if (backtrace)
+						BT_FUNC("(alt)", insn);
+					return ret;
+				}
 			}
 		}
 
@@ -1934,8 +1937,11 @@ static int validate_branch(struct objtool_file *file, struct instruction *first,
 			     insn->jump_dest->func->pfunc == func)) {
 				ret = validate_branch(file, insn->jump_dest,
 						      state);
-				if (ret)
-					return 1;
+				if (ret) {
+					if (backtrace)
+						BT_FUNC("(branch)", insn);
+					return ret;
+				}
 
 			} else if (func && has_modified_stack_frame(&state)) {
 				WARN_FUNC("sibling call from callable instruction with modified stack frame",
@@ -2006,6 +2012,8 @@ static int validate_unwind_hints(struct objtool_file *file)
 	for_each_insn(file, insn) {
 		if (insn->hint && !insn->visited) {
 			ret = validate_branch(file, insn, state);
+			if (ret && backtrace)
+				BT_FUNC("<=== (hint)", insn);
 			warnings += ret;
 		}
 	}
@@ -2134,6 +2142,8 @@ static int validate_functions(struct objtool_file *file)
 				continue;
 
 			ret = validate_branch(file, insn, state);
+			if (ret && backtrace)
+				BT_FUNC("<=== (func)", insn);
 			warnings += ret;
 		}
 	}

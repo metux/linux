@@ -21,7 +21,7 @@ config CRYPTO_DEV_PADLOCK
 	  (so called VIA PadLock ACE, Advanced Cryptography Engine)
 	  that provides instructions for very fast cryptographic
 	  operations with supported algorithms.
-	  
+
 	  The instructions are used only when the CPU supports them.
 	  Otherwise software encryption is used.
 
@@ -351,8 +351,8 @@ config HW_RANDOM_PPC4XX
 	depends on CRYPTO_DEV_PPC4XX && HW_RANDOM
 	default y
 	help
-	 This option provides the kernel-side support for the TRNG hardware
-	 found in the security function of some PowerPC 4xx SoCs.
+	  This option provides the kernel-side support for the TRNG hardware
+	  found in the security function of some PowerPC 4xx SoCs.
 
 config CRYPTO_DEV_OMAP
 	tristate "Support for OMAP crypto HW accelerators"

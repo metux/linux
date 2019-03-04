@@ -23,6 +23,5 @@ config DRM_VMWGFX_FBCON
 	depends on DRM_VMWGFX && FB
 	bool "Enable framebuffer console under vmwgfx by default"
 	help
-	   Choose this option if you are shipping a new vmwgfx
-	   userspace driver that supports using the kernel driver.
-
+	  Choose this option if you are shipping a new vmwgfx
+	  userspace driver that supports using the kernel driver.

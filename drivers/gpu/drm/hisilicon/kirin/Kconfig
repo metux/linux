@@ -9,4 +9,3 @@ config DRM_HISI_KIRIN
 	help
 	  Choose this option if you have a hisilicon Kirin chipsets(hi6220).
 	  If M is selected the module will be called kirin-drm.
-

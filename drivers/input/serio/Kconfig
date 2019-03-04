@@ -8,7 +8,7 @@ config SERIO
 	help
 	  Say Yes here if you have any input device that uses serial I/O to
 	  communicate with the system. This includes the
-	  		* standard AT keyboard and PS/2 mouse *
+	                * standard AT keyboard and PS/2 mouse *
 	  as well as serial mice, Sun keyboards, some joysticks and 6dof
 	  devices and more.
 

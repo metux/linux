@@ -83,7 +83,7 @@ config BUILDTIME_TABLE_SORT
 config THREAD_INFO_IN_TASK
 	bool
 	help
-	  Select this to move thread_info off the stack into task_struct.  To
+	  Select this to move thread_info off the stack into task_struct. To
 	  make this work, an arch will need to remove all thread_info fields
 	  except flags and fix any runtime bugs.
 
@@ -1495,7 +1495,6 @@ config ELF_CORE
 	help
 	  Enable support for generating core dumps. Disabling saves about 4k.
 
-
 config PCSPKR_PLATFORM
 	bool "Enable PC-Speaker support" if EXPERT
 	depends on HAVE_PCSPKR_PLATFORM
@@ -1871,7 +1870,7 @@ choice
 	prompt "Choose SLAB allocator"
 	default SLUB
 	help
-	   This option allows to select a slab allocator.
+	  This option allows to select a slab allocator.
 
 config SLAB
 	bool "SLAB"
@@ -1885,20 +1884,20 @@ config SLUB
 	bool "SLUB (Unqueued Allocator)"
 	select HAVE_HARDENED_USERCOPY_ALLOCATOR
 	help
-	   SLUB is a slab allocator that minimizes cache line usage
-	   instead of managing queues of cached objects (SLAB approach).
-	   Per cpu caching is realized using slabs of objects instead
-	   of queues of objects. SLUB can use memory efficiently
-	   and has enhanced diagnostics. SLUB is the default choice for
-	   a slab allocator.
+	  SLUB is a slab allocator that minimizes cache line usage
+	  instead of managing queues of cached objects (SLAB approach).
+	  Per cpu caching is realized using slabs of objects instead
+	  of queues of objects. SLUB can use memory efficiently
+	  and has enhanced diagnostics. SLUB is the default choice for
+	  a slab allocator.
 
 config SLOB
 	depends on EXPERT
 	bool "SLOB (Simple Allocator)"
 	help
-	   SLOB replaces the stock allocator with a drastically simpler
-	   allocator. SLOB is generally more space efficient but
-	   does not perform as well on large systems.
+	  SLOB replaces the stock allocator with a drastically simpler
+	  allocator. SLOB is generally more space efficient but
+	  does not perform as well on large systems.
 
 endchoice
 
@@ -2023,7 +2022,7 @@ config PROFILING
 config TRACEPOINTS
 	bool
 
-endmenu		# General setup
+endmenu # General setup
 
 source "arch/Kconfig"
 
@@ -2115,7 +2114,7 @@ config MODULE_SRCVERSION_ALL
 	help
 	  Modules which contain a MODULE_VERSION get an extra "srcversion"
 	  field inserted into their modinfo section, which contains a
-    	  sum of the source files which made it.  This helps maintainers
+	  sum of the source files which made it.  This helps maintainers
 	  see exactly which source was used to build a module (since
 	  others sometimes change the module source without updating
 	  the version).  With this option, such a "srcversion" field

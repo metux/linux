@@ -127,9 +127,9 @@ config REGULATOR_AB3100
 	depends on AB3100_CORE
 	default y if AB3100_CORE
 	help
-	 These regulators correspond to functionality in the
-	 AB3100 analog baseband dealing with power regulators
-	 for the system.
+	  These regulators correspond to functionality in the
+	  AB3100 analog baseband dealing with power regulators
+	  for the system.
 
 config REGULATOR_AB8500
 	bool "ST-Ericsson AB8500 Power Regulators"
@@ -427,15 +427,15 @@ config REGULATOR_LP3971
 	tristate "National Semiconductors LP3971 PMIC regulator driver"
 	depends on I2C
 	help
-	 Say Y here to support the voltage regulators and convertors
-	 on National Semiconductors LP3971 PMIC
+	  Say Y here to support the voltage regulators and convertors
+	  on National Semiconductors LP3971 PMIC
 
 config REGULATOR_LP3972
 	tristate "National Semiconductors LP3972 PMIC regulator driver"
 	depends on I2C
 	help
-	 Say Y here to support the voltage regulators and convertors
-	 on National Semiconductors LP3972 PMIC
+	  Say Y here to support the voltage regulators and convertors
+	  on National Semiconductors LP3972 PMIC
 
 config REGULATOR_LP872X
 	tristate "TI/National Semiconductor LP8720/LP8725 voltage regulators"
@@ -764,10 +764,10 @@ config REGULATOR_PBIAS
 	tristate "PBIAS OMAP regulator driver"
 	depends on (ARCH_OMAP || COMPILE_TEST) && MFD_SYSCON
 	help
-	 Say y here to support pbias regulator for mmc1:SD card i/o
-	 on OMAP SoCs.
-	 This driver provides support for OMAP pbias modelled
-	 regulators.
+	  Say y here to support pbias regulator for mmc1:SD card i/o
+	  on OMAP SoCs.
+	  This driver provides support for OMAP pbias modelled
+	  regulators.
 
 config REGULATOR_PCA9450
 	tristate "NXP PCA9450A/PCA9450B/PCA9450C regulator driver"
@@ -781,15 +781,15 @@ config REGULATOR_PCAP
 	tristate "Motorola PCAP2 regulator driver"
 	depends on EZX_PCAP
 	help
-	 This driver provides support for the voltage regulators of the
-	 PCAP2 PMIC.
+	  This driver provides support for the voltage regulators of the
+	  PCAP2 PMIC.
 
 config REGULATOR_PCF50633
 	tristate "NXP PCF50633 regulator driver"
 	depends on MFD_PCF50633
 	help
-	 Say Y here to support the voltage regulators and converters
-	 on PCF50633
+	  Say Y here to support the voltage regulators and converters
+	  on PCF50633
 
 config REGULATOR_PFUZE100
 	tristate "Freescale PFUZE100/200/3000/3001 regulator driver"
@@ -952,25 +952,25 @@ config REGULATOR_S2MPA01
 	tristate "Samsung S2MPA01 voltage regulator"
 	depends on MFD_SEC_CORE || COMPILE_TEST
 	help
-	 This driver controls Samsung S2MPA01 voltage output regulator
-	 via I2C bus. S2MPA01 has 10 Bucks and 26 LDO outputs.
+	  This driver controls Samsung S2MPA01 voltage output regulator
+	  via I2C bus. S2MPA01 has 10 Bucks and 26 LDO outputs.
 
 config REGULATOR_S2MPS11
 	tristate "Samsung S2MPS11/13/14/15/S2MPU02 voltage regulator"
 	depends on MFD_SEC_CORE || COMPILE_TEST
 	help
-	 This driver supports a Samsung S2MPS11/13/14/15/S2MPU02 voltage
-	 output regulator via I2C bus. The chip is comprised of high efficient
-	 Buck converters including Dual-Phase Buck converter, Buck-Boost
-	 converter, various LDOs.
+	  This driver supports a Samsung S2MPS11/13/14/15/S2MPU02 voltage
+	  output regulator via I2C bus. The chip is comprised of high efficient
+	  Buck converters including Dual-Phase Buck converter, Buck-Boost
+	  converter, various LDOs.
 
 config REGULATOR_S5M8767
 	tristate "Samsung S5M8767A voltage regulator"
 	depends on MFD_SEC_CORE || COMPILE_TEST
 	help
-	 This driver supports a Samsung S5M8767A voltage output regulator
-	 via I2C bus. S5M8767A have 9 Bucks and 28 LDOs output and
-	 supports DVS mode with 8bits of output voltage control.
+	  This driver supports a Samsung S5M8767A voltage output regulator
+	  via I2C bus. S5M8767A have 9 Bucks and 28 LDOs output and
+	  supports DVS mode with 8bits of output voltage control.
 
 config REGULATOR_SC2731
 	tristate "Spreadtrum SC2731 power regulator driver"
@@ -1280,4 +1280,3 @@ config REGULATOR_QCOM_LABIBB
 	  for LCD display panel.
 
 endif
-

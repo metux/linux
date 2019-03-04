@@ -35,13 +35,13 @@ config USB_AT91
 	depends on ARCH_AT91
 	depends on OF || COMPILE_TEST
 	help
-	   Many Atmel AT91 processors (such as the AT91RM2000) have a
-	   full speed USB Device Port with support for five configurable
-	   endpoints (plus endpoint zero).
+	  Many Atmel AT91 processors (such as the AT91RM2000) have a
+	  full speed USB Device Port with support for five configurable
+	  endpoints (plus endpoint zero).
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "at91_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "at91_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_LPC32XX
 	tristate "LPC32XX USB Peripheral Controller"
@@ -49,11 +49,11 @@ config USB_LPC32XX
 	depends on I2C
 	select USB_ISP1301
 	help
-	   This option selects the USB device controller in the LPC32xx SoC.
+	  This option selects the USB device controller in the LPC32xx SoC.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "lpc32xx_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "lpc32xx_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_ATMEL_USBA
 	tristate "Atmel USBA"
@@ -81,43 +81,43 @@ config USB_BCM63XX_UDC
 	tristate "Broadcom BCM63xx Peripheral Controller"
 	depends on BCM63XX
 	help
-	   Many Broadcom BCM63xx chipsets (such as the BCM6328) have a
-	   high speed USB Device Port with support for four fixed endpoints
-	   (plus endpoint zero).
+	  Many Broadcom BCM63xx chipsets (such as the BCM6328) have a
+	  high speed USB Device Port with support for four fixed endpoints
+	  (plus endpoint zero).
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "bcm63xx_udc".
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "bcm63xx_udc".
 
 config USB_FSL_USB2
 	tristate "Freescale Highspeed USB DR Peripheral Controller"
 	depends on FSL_SOC || ARCH_MXC
 	help
-	   Some of Freescale PowerPC and i.MX processors have a High Speed
-	   Dual-Role(DR) USB controller, which supports device mode.
+	  Some of Freescale PowerPC and i.MX processors have a High Speed
+	  Dual-Role(DR) USB controller, which supports device mode.
 
-	   The number of programmable endpoints is different through
-	   SOC revisions.
+	  The number of programmable endpoints is different through
+	  SOC revisions.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "fsl_usb2_udc" and force
-	   all gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "fsl_usb2_udc" and force
+	  all gadget drivers to also be dynamically linked.
 
 config USB_FUSB300
 	tristate "Faraday FUSB300 USB Peripheral Controller"
 	depends on !PHYS_ADDR_T_64BIT && HAS_DMA
 	help
-	   Faraday usb device controller FUSB300 driver
+	  Faraday usb device controller FUSB300 driver
 
 config USB_FOTG210_UDC
 	depends on HAS_DMA
 	tristate "Faraday FOTG210 USB Peripheral Controller"
 	help
-	   Faraday USB2.0 OTG controller which can be configured as
-	   high speed or full speed USB device. This driver supppors
-	   Bulk Transfer so far.
+	  Faraday USB2.0 OTG controller which can be configured as
+	  high speed or full speed USB device. This driver supppors
+	  Bulk Transfer so far.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "fotg210_udc".
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "fotg210_udc".
 
 config USB_GR_UDC
 	tristate "Aeroflex Gaisler GRUSBDC USB Peripheral Controller Driver"
@@ -131,31 +131,31 @@ config USB_OMAP
 	depends on ARCH_OMAP1
 	depends on ISP1301_OMAP || !(MACH_OMAP_H2 || MACH_OMAP_H3)
 	help
-	   Many Texas Instruments OMAP processors have flexible full
-	   speed USB device controllers, with support for up to 30
-	   endpoints (plus endpoint zero).  This driver supports the
-	   controller in the OMAP 1611, and should work with controllers
-	   in other OMAP processors too, given minor tweaks.
+	  Many Texas Instruments OMAP processors have flexible full
+	  speed USB device controllers, with support for up to 30
+	  endpoints (plus endpoint zero).  This driver supports the
+	  controller in the OMAP 1611, and should work with controllers
+	  in other OMAP processors too, given minor tweaks.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "omap_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "omap_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_PXA25X
 	tristate "PXA 25x or IXP 4xx"
 	depends on (ARCH_PXA && PXA25x) || ARCH_IXP4XX
 	depends on HAS_IOMEM
 	help
-	   Intel's PXA 25x series XScale ARM-5TE processors include
-	   an integrated full speed USB 1.1 device controller.  The
-	   controller in the IXP 4xx series is register-compatible.
+	  Intel's PXA 25x series XScale ARM-5TE processors include
+	  an integrated full speed USB 1.1 device controller.  The
+	  controller in the IXP 4xx series is register-compatible.
 
-	   It has fifteen fixed-function endpoints, as well as endpoint
-	   zero (for control transfers).
+	  It has fifteen fixed-function endpoints, as well as endpoint
+	  zero (for control transfers).
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "pxa25x_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "pxa25x_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 # if there's only one gadget driver, using only two bulk endpoints,
 # don't waste memory for the other endpoints
@@ -171,25 +171,25 @@ config USB_R8A66597
 	tristate "Renesas R8A66597 USB Peripheral Controller"
 	depends on HAS_DMA
 	help
-	   R8A66597 is a discrete USB host and peripheral controller chip that
-	   supports both full and high speed USB 2.0 data transfers.
-	   It has nine configurable endpoints, and endpoint zero.
+	  R8A66597 is a discrete USB host and peripheral controller chip that
+	  supports both full and high speed USB 2.0 data transfers.
+	  It has nine configurable endpoints, and endpoint zero.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "r8a66597_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "r8a66597_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_RENESAS_USBHS_UDC
 	tristate 'Renesas USBHS controller'
 	depends on USB_RENESAS_USBHS
 	help
-	   Renesas USBHS is a discrete USB host and peripheral controller chip
-	   that supports both full and high speed USB 2.0 data transfers.
-	   It has nine or more configurable endpoints, and endpoint zero.
+	  Renesas USBHS is a discrete USB host and peripheral controller chip
+	  that supports both full and high speed USB 2.0 data transfers.
+	  It has nine or more configurable endpoints, and endpoint zero.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "renesas_usbhs" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "renesas_usbhs" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_RENESAS_USB3
 	tristate 'Renesas USB3.0 Peripheral controller'
@@ -197,26 +197,26 @@ config USB_RENESAS_USB3
 	depends on EXTCON
 	select USB_ROLE_SWITCH
 	help
-	   Renesas USB3.0 Peripheral controller is a USB peripheral controller
-	   that supports super, high, and full speed USB 3.0 data transfers.
+	  Renesas USB3.0 Peripheral controller is a USB peripheral controller
+	  that supports super, high, and full speed USB 3.0 data transfers.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "renesas_usb3" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "renesas_usb3" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_PXA27X
 	tristate "PXA 27x"
 	depends on HAS_IOMEM
 	help
-	   Intel's PXA 27x series XScale ARM v5TE processors include
-	   an integrated full speed USB 1.1 device controller.
+	  Intel's PXA 27x series XScale ARM v5TE processors include
+	  an integrated full speed USB 1.1 device controller.
 
-	   It has up to 23 endpoints, as well as endpoint zero (for
-	   control transfers).
+	  It has up to 23 endpoints, as well as endpoint zero (for
+	  control transfers).
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "pxa27x_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "pxa27x_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_S3C2410
 	tristate "S3C2410 USB Device Controller"
@@ -295,13 +295,13 @@ config USB_M66592
 	tristate "Renesas M66592 USB Peripheral Controller"
 	depends on HAS_IOMEM
 	help
-	   M66592 is a discrete USB peripheral controller chip that
-	   supports both full and high speed USB 2.0 data transfers.
-	   It has seven configurable endpoints, and endpoint zero.
+	  M66592 is a discrete USB peripheral controller chip that
+	  supports both full and high speed USB 2.0 data transfers.
+	  It has seven configurable endpoints, and endpoint zero.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "m66592_udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "m66592_udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 source "drivers/usb/gadget/udc/bdc/Kconfig"
 
@@ -314,31 +314,31 @@ config USB_AMD5536UDC
 	depends on USB_PCI
 	select USB_SNP_CORE
 	help
-	   The AMD5536 UDC is part of the AMD Geode CS5536, an x86 southbridge.
-	   It is a USB Highspeed DMA capable USB device controller. Beside ep0
-	   it provides 4 IN and 4 OUT endpoints (bulk or interrupt type).
-	   The UDC port supports OTG operation, and may be used as a host port
-	   if it's not being used to implement peripheral or OTG roles.
+	  The AMD5536 UDC is part of the AMD Geode CS5536, an x86 southbridge.
+	  It is a USB Highspeed DMA capable USB device controller. Beside ep0
+	  it provides 4 IN and 4 OUT endpoints (bulk or interrupt type).
+	  The UDC port supports OTG operation, and may be used as a host port
+	  if it's not being used to implement peripheral or OTG roles.
 
-	   This UDC is based on Synopsys USB device controller IP and selects
-	   CONFIG_USB_SNP_CORE option to build the core driver.
+	  This UDC is based on Synopsys USB device controller IP and selects
+	  CONFIG_USB_SNP_CORE option to build the core driver.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "amd5536udc" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "amd5536udc" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_FSL_QE
 	tristate "Freescale QE/CPM USB Device Controller"
 	depends on FSL_SOC && (QUICC_ENGINE || CPM)
 	help
-	   Some of Freescale PowerPC processors have a Full Speed
-	   QE/CPM2 USB controller, which support device mode with 4
-	   programmable endpoints. This driver supports the
-	   controller in the MPC8360 and MPC8272, and should work with
-	   controllers having QE or CPM2, given minor tweaks.
+	  Some of Freescale PowerPC processors have a Full Speed
+	  QE/CPM2 USB controller, which support device mode with 4
+	  programmable endpoints. This driver supports the
+	  controller in the MPC8360 and MPC8272, and should work with
+	  controllers having QE or CPM2, given minor tweaks.
 
-	   Set CONFIG_USB_GADGET to "m" to build this driver as a
-	   dynamically linked module called "fsl_qe_udc".
+	  Set CONFIG_USB_GADGET to "m" to build this driver as a
+	  dynamically linked module called "fsl_qe_udc".
 
 config USB_NET2272
 	depends on HAS_IOMEM
@@ -367,40 +367,40 @@ config USB_NET2280
 	tristate "NetChip NET228x / PLX USB3x8x"
 	depends on USB_PCI
 	help
-	   NetChip 2280 / 2282 is a PCI based USB peripheral controller which
-	   supports both full and high speed USB 2.0 data transfers.
+	  NetChip 2280 / 2282 is a PCI based USB peripheral controller which
+	  supports both full and high speed USB 2.0 data transfers.
 
-	   It has six configurable endpoints, as well as endpoint zero
-	   (for control transfers) and several endpoints with dedicated
-	   functions.
+	  It has six configurable endpoints, as well as endpoint zero
+	  (for control transfers) and several endpoints with dedicated
+	  functions.
 
-	   PLX 2380 is a PCIe version of the PLX 2380.
+	  PLX 2380 is a PCIe version of the PLX 2380.
 
-	   PLX 3380 / 3382 is a PCIe based USB peripheral controller which
-	   supports full, high speed USB 2.0 and super speed USB 3.0
-	   data transfers.
+	  PLX 3380 / 3382 is a PCIe based USB peripheral controller which
+	  supports full, high speed USB 2.0 and super speed USB 3.0
+	  data transfers.
 
-	   It has eight configurable endpoints, as well as endpoint zero
-	   (for control transfers) and several endpoints with dedicated
-	   functions.
+	  It has eight configurable endpoints, as well as endpoint zero
+	  (for control transfers) and several endpoints with dedicated
+	  functions.
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "net2280" and force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "net2280" and force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_GOKU
 	tristate "Toshiba TC86C001 'Goku-S'"
 	depends on USB_PCI
 	help
-	   The Toshiba TC86C001 is a PCI device which includes controllers
-	   for full speed USB devices, IDE, I2C, SIO, plus a USB host (OHCI).
+	  The Toshiba TC86C001 is a PCI device which includes controllers
+	  for full speed USB devices, IDE, I2C, SIO, plus a USB host (OHCI).
 
-	   The device controller has three configurable (bulk or interrupt)
-	   endpoints, plus endpoint zero (for control transfers).
+	  The device controller has three configurable (bulk or interrupt)
+	  endpoints, plus endpoint zero (for control transfers).
 
-	   Say "y" to link the driver statically, or "m" to build a
-	   dynamically linked module called "goku_udc" and to force all
-	   gadget drivers to also be dynamically linked.
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "goku_udc" and to force all
+	  gadget drivers to also be dynamically linked.
 
 config USB_EG20T
 	tristate "Intel QUARK X1000/EG20T PCH/LAPIS Semiconductor IOH(ML7213/ML7831) UDC"

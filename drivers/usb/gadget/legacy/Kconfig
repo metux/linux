@@ -157,18 +157,18 @@ config USB_ETH_RNDIS
 	select USB_F_RNDIS
 	default y
 	help
-	   Microsoft Windows XP bundles the "Remote NDIS" (RNDIS) protocol,
-	   and Microsoft provides redistributable binary RNDIS drivers for
-	   older versions of Windows.
+	  Microsoft Windows XP bundles the "Remote NDIS" (RNDIS) protocol,
+	  and Microsoft provides redistributable binary RNDIS drivers for
+	  older versions of Windows.
 
-	   If you say "y" here, the Ethernet gadget driver will try to provide
-	   a second device configuration, supporting RNDIS to talk to such
-	   Microsoft USB hosts.
+	  If you say "y" here, the Ethernet gadget driver will try to provide
+	  a second device configuration, supporting RNDIS to talk to such
+	  Microsoft USB hosts.
 
-	   To make MS-Windows work with this, use Documentation/usb/linux.inf
-	   as the "driver info file".  For versions of MS-Windows older than
-	   XP, you'll need to download drivers from Microsoft's website; a URL
-	   is given in comments found in that info file.
+	  To make MS-Windows work with this, use Documentation/usb/linux.inf
+	  as the "driver info file".  For versions of MS-Windows older than
+	  XP, you'll need to download drivers from Microsoft's website; a URL
+	  is given in comments found in that info file.
 
 config USB_ETH_EEM
 	bool "Ethernet Emulation Model (EEM) support"

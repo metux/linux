@@ -78,10 +78,10 @@ config USB_SERIAL_SIMPLE
 config USB_SERIAL_AIRCABLE
 	tristate "USB AIRcable Bluetooth Dongle Driver"
 	help
-	    Say Y here if you want to use USB AIRcable Bluetooth Dongle.
+	  Say Y here if you want to use USB AIRcable Bluetooth Dongle.
 
-	    To compile this driver as a module, choose M here: the module
-	    will be called aircable.
+	  To compile this driver as a module, choose M here: the module
+	  will be called aircable.
 
 config USB_SERIAL_ARK3116
 	tristate "USB ARK Micro 3116 USB Serial Driver"
@@ -389,9 +389,9 @@ config USB_SERIAL_MOS7715_PARPORT
 	depends on PARPORT=y || PARPORT=USB_SERIAL_MOS7720
 	select PARPORT_NOT_PC
 	help
-	Say Y if you have a Moschip 7715 device and would like to use
-	the parallel port it provides.  The port will register with
-	the parport subsystem as a low-level driver.
+	  Say Y if you have a Moschip 7715 device and would like to use
+	  the parallel port it provides.  The port will register with
+	  the parport subsystem as a low-level driver.
 
 config USB_SERIAL_MOS7840
 	tristate "USB Moschip 7840/7820 USB Serial Driver"

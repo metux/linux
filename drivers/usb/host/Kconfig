@@ -193,8 +193,8 @@ config USB_EHCI_HCD_PMC_MSP
 	select USB_EHCI_BIG_ENDIAN_DESC
 	select USB_EHCI_BIG_ENDIAN_MMIO
 	help
-		Enables support for the onchip USB controller on the PMC_MSP7100 Family SoC's.
-		If unsure, say N.
+	  Enables support for the onchip USB controller on the PMC_MSP7100 Family SoC's.
+	  If unsure, say N.
 
 config XPS_USB_HCD_XILINX
 	bool "Use Xilinx usb host EHCI controller core"
@@ -202,10 +202,10 @@ config XPS_USB_HCD_XILINX
 	select USB_EHCI_BIG_ENDIAN_DESC
 	select USB_EHCI_BIG_ENDIAN_MMIO
 	help
-		Xilinx xps USB host controller core is EHCI compliant and has
-		transaction translator built-in. It can be configured to either
-		support both high speed and full speed devices, or high speed
-		devices only.
+	  Xilinx xps USB host controller core is EHCI compliant and has
+	  transaction translator built-in. It can be configured to either
+	  support both high speed and full speed devices, or high speed
+	  devices only.
 
 config USB_EHCI_FSL
 	tristate "Support for Freescale on-chip EHCI USB controller"
@@ -691,7 +691,7 @@ config USB_SL811_HCD
 	help
 	  The SL811HS is a single-port USB controller that supports either
 	  host side or peripheral side roles.  Enable this option if your
-	  board has this chip, and you want to use it as a host controller. 
+	  board has this chip, and you want to use it as a host controller.
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the

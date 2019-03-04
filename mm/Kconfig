@@ -408,14 +408,14 @@ choice
 	  Selects the sysfs defaults for Transparent Hugepage Support.
 
 	config TRANSPARENT_HUGEPAGE_ALWAYS
-		bool "always"
+	bool "always"
 	help
 	  Enabling Transparent Hugepage always, can increase the
 	  memory footprint of applications without a guaranteed
 	  benefit but it will work automatically for all applications.
 
 	config TRANSPARENT_HUGEPAGE_MADVISE
-		bool "madvise"
+	bool "madvise"
 	help
 	  Enabling Transparent Hugepage madvise, will only provide a
 	  performance improvement benefit to the applications using
@@ -611,15 +611,15 @@ config ZSWAP_COMPRESSOR_DEFAULT_ZSTD
 endchoice
 
 config ZSWAP_COMPRESSOR_DEFAULT
-       string
-       depends on ZSWAP
-       default "deflate" if ZSWAP_COMPRESSOR_DEFAULT_DEFLATE
-       default "lzo" if ZSWAP_COMPRESSOR_DEFAULT_LZO
-       default "842" if ZSWAP_COMPRESSOR_DEFAULT_842
-       default "lz4" if ZSWAP_COMPRESSOR_DEFAULT_LZ4
-       default "lz4hc" if ZSWAP_COMPRESSOR_DEFAULT_LZ4HC
-       default "zstd" if ZSWAP_COMPRESSOR_DEFAULT_ZSTD
-       default ""
+	string
+	depends on ZSWAP
+	default "deflate" if ZSWAP_COMPRESSOR_DEFAULT_DEFLATE
+	default "lzo" if ZSWAP_COMPRESSOR_DEFAULT_LZO
+	default "842" if ZSWAP_COMPRESSOR_DEFAULT_842
+	default "lz4" if ZSWAP_COMPRESSOR_DEFAULT_LZ4
+	default "lz4hc" if ZSWAP_COMPRESSOR_DEFAULT_LZ4HC
+	default "zstd" if ZSWAP_COMPRESSOR_DEFAULT_ZSTD
+	default ""
 
 choice
 	prompt "Compressed cache for swap pages default allocator"
@@ -655,12 +655,12 @@ config ZSWAP_ZPOOL_DEFAULT_ZSMALLOC
 endchoice
 
 config ZSWAP_ZPOOL_DEFAULT
-       string
-       depends on ZSWAP
-       default "zbud" if ZSWAP_ZPOOL_DEFAULT_ZBUD
-       default "z3fold" if ZSWAP_ZPOOL_DEFAULT_Z3FOLD
-       default "zsmalloc" if ZSWAP_ZPOOL_DEFAULT_ZSMALLOC
-       default ""
+	string
+	depends on ZSWAP
+	default "zbud" if ZSWAP_ZPOOL_DEFAULT_ZBUD
+	default "z3fold" if ZSWAP_ZPOOL_DEFAULT_Z3FOLD
+	default "zsmalloc" if ZSWAP_ZPOOL_DEFAULT_ZSMALLOC
+	default ""
 
 config ZSWAP_DEFAULT_ON
 	bool "Enable the compressed cache for swap pages by default"
@@ -870,6 +870,6 @@ config ARCH_HAS_HUGEPD
 	bool
 
 config MAPPING_DIRTY_HELPERS
-        bool
+	bool
 
 endmenu

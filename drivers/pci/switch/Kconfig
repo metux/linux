@@ -6,10 +6,10 @@ menu "PCI switch controller drivers"
 config PCI_SW_SWITCHTEC
 	tristate "MicroSemi Switchtec PCIe Switch Management Driver"
 	help
-	 Enables support for the management interface for the MicroSemi
-	 Switchtec series of PCIe switches. Supports userspace access
-	 to submit MRPC commands to the switch via /dev/switchtecX
-	 devices. See <file:Documentation/driver-api/switchtec.rst> for more
-	 information.
+	  Enables support for the management interface for the MicroSemi
+	  Switchtec series of PCIe switches. Supports userspace access
+	  to submit MRPC commands to the switch via /dev/switchtecX
+	  devices. See <file:Documentation/driver-api/switchtec.rst> for more
+	  information.
 
 endmenu

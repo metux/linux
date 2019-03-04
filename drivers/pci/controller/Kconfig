@@ -18,19 +18,19 @@ config PCI_AARDVARK
 	depends on PCI_MSI_IRQ_DOMAIN
 	select PCI_BRIDGE_EMUL
 	help
-	 Add support for Aardvark 64bit PCIe Host Controller. This
-	 controller is part of the South Bridge of the Marvel Armada
-	 3700 SoC.
+	  Add support for Aardvark 64bit PCIe Host Controller. This
+	  controller is part of the South Bridge of the Marvel Armada
+	  3700 SoC.
 
 config PCIE_XILINX_NWL
 	bool "NWL PCIe Core"
 	depends on ARCH_ZYNQMP || COMPILE_TEST
 	depends on PCI_MSI_IRQ_DOMAIN
 	help
-	 Say 'Y' here if you want kernel support for Xilinx
-	 NWL PCIe controller. The controller can act as Root Port
-	 or End Point. The current option selection will only
-	 support root port enabling.
+	  Say 'Y' here if you want kernel support for Xilinx
+	  NWL PCIe controller. The controller can act as Root Port
+	  or End Point. The current option selection will only
+	  support root port enabling.
 
 config PCI_FTPCI100
 	bool "Faraday Technology FTPCI100 PCI controller"

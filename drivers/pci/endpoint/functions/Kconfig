@@ -8,7 +8,7 @@ config PCI_EPF_TEST
 	depends on PCI_ENDPOINT
 	select CRC32
 	help
-	   Enable this configuration option to enable the test driver
-	   for PCI Endpoint.
+	  Enable this configuration option to enable the test driver
+	  for PCI Endpoint.
 
-	   If in doubt, say "N" to disable Endpoint test driver.
+	  If in doubt, say "N" to disable Endpoint test driver.

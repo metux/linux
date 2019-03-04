@@ -40,16 +40,16 @@ config PCI_MSI
 	bool "Message Signaled Interrupts (MSI and MSI-X)"
 	select GENERIC_MSI_IRQ
 	help
-	   This allows device drivers to enable MSI (Message Signaled
-	   Interrupts).  Message Signaled Interrupts enable a device to
-	   generate an interrupt using an inbound Memory Write on its
-	   PCI bus instead of asserting a device IRQ pin.
+	  This allows device drivers to enable MSI (Message Signaled
+	  Interrupts).  Message Signaled Interrupts enable a device to
+	  generate an interrupt using an inbound Memory Write on its
+	  PCI bus instead of asserting a device IRQ pin.
 
-	   Use of PCI MSI interrupts can be disabled at kernel boot time
-	   by using the 'pci=nomsi' option.  This disables MSI for the
-	   entire system.
+	  Use of PCI MSI interrupts can be disabled at kernel boot time
+	  by using the 'pci=nomsi' option.  This disables MSI for the
+	  entire system.
 
-	   If you don't know what to do here, say Y.
+	  If you don't know what to do here, say Y.
 
 config PCI_MSI_IRQ_DOMAIN
 	def_bool y

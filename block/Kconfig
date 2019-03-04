@@ -3,26 +3,26 @@
 # Block layer core configuration
 #
 menuconfig BLOCK
-       bool "Enable the block layer" if EXPERT
-       default y
-       select SBITMAP
-       select SRCU
-       help
-	 Provide block layer support for the kernel.
+	bool "Enable the block layer" if EXPERT
+	default y
+	select SBITMAP
+	select SRCU
+	help
+	  Provide block layer support for the kernel.
 
-	 Disable this option to remove the block layer support from the
-	 kernel. This may be useful for embedded devices.
+	  Disable this option to remove the block layer support from the
+	  kernel. This may be useful for embedded devices.
 
-	 If this option is disabled:
+	  If this option is disabled:
 
 	   - block device files will become unusable
 	   - some filesystems (such as ext3) will become unavailable.
 
-	 Also, SCSI character devices and USB storage will be disabled since
-	 they make use of various block layer definitions and facilities.
+	  Also, SCSI character devices and USB storage will be disabled since
+	  they make use of various block layer definitions and facilities.
 
-	 Say Y here unless you know you really don't want to mount disks and
-	 suchlike.
+	  Say Y here unless you know you really don't want to mount disks and
+	  suchlike.
 
 if BLOCK
 
@@ -175,8 +175,8 @@ config BLK_DEBUG_FS
 	say Y here.
 
 config BLK_DEBUG_FS_ZONED
-       bool
-       default BLK_DEBUG_FS && BLK_DEV_ZONED
+	bool
+	default BLK_DEBUG_FS && BLK_DEV_ZONED
 
 config BLK_SED_OPAL
 	bool "Logic for interfacing with Opal enabled SEDs"

@@ -19,10 +19,10 @@ config NVME_MULTIPATH
 	bool "NVMe multipath support"
 	depends on NVME_CORE
 	help
-	   This option enables support for multipath access to NVMe
-	   subsystems.  If this option is enabled only a single
-	   /dev/nvmeXnY device will show up for each NVMe namespaces,
-	   even if it is accessible through multiple controllers.
+	  This option enables support for multipath access to NVMe
+	  subsystems.  If this option is enabled only a single
+	  /dev/nvmeXnY device will show up for each NVMe namespaces,
+	  even if it is accessible through multiple controllers.
 
 config NVME_HWMON
 	bool "NVMe hardware monitoring"

@@ -415,7 +415,7 @@ choice
 	  benefit but it will work automatically for all applications.
 
 	config TRANSPARENT_HUGEPAGE_MADVISE
-		bool "madvise"
+	bool "madvise"
 	help
 	  Enabling Transparent Hugepage madvise, will only provide a
 	  performance improvement benefit to the applications using

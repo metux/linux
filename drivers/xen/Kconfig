@@ -43,8 +43,8 @@ config XEN_BALLOON_MEMORY_HOTPLUG
 	  the newly added memory can be manually onlined in the target domain
 	  by doing the following:
 
-		for i in /sys/devices/system/memory/memory*/state; do \
-		  [ "`cat "$i"`" = offline ] && echo online > "$i"; done
+	        for i in /sys/devices/system/memory/memory*/state; do \
+	          [ "`cat "$i"`" = offline ] && echo online > "$i"; done
 
 	  or by adding the following line to udev rules:
 

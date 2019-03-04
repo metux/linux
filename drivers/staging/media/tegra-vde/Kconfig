@@ -6,5 +6,5 @@ config TEGRA_VDE
 	select IOMMU_IOVA
 	select SRAM
 	help
-	    Say Y here to enable support for the NVIDIA Tegra video decoder
-	    driver.
+	  Say Y here to enable support for the NVIDIA Tegra video decoder
+	  driver.

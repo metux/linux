@@ -4,11 +4,11 @@ config MFD_NVEC
 	depends on I2C && GPIOLIB && ARCH_TEGRA
 	select MFD_CORE
 	help
-	    Say Y here to enable support for a nVidia compliant embedded
-	    controller.
+	  Say Y here to enable support for a nVidia compliant embedded
+	  controller.
 
-	    To compile this driver as a module, say M here: the module will be
-	    called mfd-nvec
+	  To compile this driver as a module, say M here: the module will be
+	  called mfd-nvec
 
 config KEYBOARD_NVEC
 	tristate "Keyboard on nVidia compliant EC"
@@ -30,7 +30,6 @@ config SERIO_NVEC_PS2
 	  To compile this driver as a module, say M here: the module will be
 	  called serio-nvec-ps2
 
-
 config NVEC_POWER
 	tristate "NVEC charger and battery"
 	depends on MFD_NVEC && POWER_SUPPLY
@@ -41,7 +40,6 @@ config NVEC_POWER
 	  To compile this driver as a module, say M here: the module will be
 	  called nvec-power
 
-
 config NVEC_PAZ00
 	tristate "Support for OEM specific functions on Compal PAZ00 based devices"
 	depends on MFD_NVEC && LEDS_CLASS
@@ -51,4 +49,3 @@ config NVEC_PAZ00
 
 	  To compile this driver as a module, say M here: the module will be
 	  called nvec-paz00
-

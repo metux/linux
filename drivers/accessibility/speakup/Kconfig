@@ -32,7 +32,6 @@ config SPEAKUP
 		used in conjunction with Speakup.  Think of them as
 		video cards for blind people.
 
-
 		The Dectalk pc driver can only be built as a module, and
 		requires software to be pre-loaded on to the card before
 		the module can be loaded.  See the decpc choice below
@@ -76,7 +75,7 @@ config SPEAKUP_SYNTH_AUDPTR
 	tristate "Audapter synthesizer support"
 	help
 		This is the Speakup driver for the Audapter synthesizer.
-		 You can say y to build it into the kernel, or m to
+		You can say y to build it into the kernel, or m to
 		build it as a module.  See the configuration help on the
 		Speakup choice above for more info.
 
@@ -178,7 +177,7 @@ config SPEAKUP_SYNTH_SPKOUT
 	help
 
 		This is the Speakup driver for the Speakout synthesizer.
-		 You can say y to build it into the kernel, or m to
+		You can say y to build it into the kernel, or m to
 		build it as a module.  See the configuration help on the
 		Speakup choice above for more info.
 
@@ -201,5 +200,6 @@ config SPEAKUP_SYNTH_DUMMY
 		the kernel, or m to build it as a module.  See the
 		configuration help on the Speakup choice above for more info.
 
-endif	# SPEAKUP
+endif # SPEAKUP
+
 endmenu

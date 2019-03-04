@@ -202,7 +202,7 @@ config GREYBUS_USB
 	  To compile this code as a module, chose M here: the module
 	  will be called gb-usb.ko
 
-endif	# GREYBUS_BRIDGED_PHY
+endif # GREYBUS_BRIDGED_PHY
 
 config GREYBUS_ARCHE
 	tristate "Greybus Arche Platform driver"
@@ -213,4 +213,4 @@ config GREYBUS_ARCHE
 	  To compile this code as a module, chose M here: the module
 	  will be called gb-arche.ko
 
-endif	# GREYBUS
+endif # GREYBUS

@@ -14,8 +14,6 @@ menuconfig MOST_COMPONENTS
 
 	  If in doubt, say N here.
 
-
-
 if MOST_COMPONENTS
 
 source "drivers/staging/most/net/Kconfig"

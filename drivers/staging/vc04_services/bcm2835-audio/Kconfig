@@ -6,4 +6,3 @@ config SND_BCM2835
 	select BCM2835_VCHIQ
 	help
 	  Say Y or M if you want to support BCM2835 built in audio
-

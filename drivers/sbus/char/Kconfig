@@ -69,9 +69,8 @@ config ORACLE_DAX
 	depends on SPARC64
 	default m
 	help
-	 Driver for Oracle Data Analytics Accelerator, which is
-	 a coprocessor that performs database operations in hardware.
-	 It is available on M7 and M8 based systems only.
+	  Driver for Oracle Data Analytics Accelerator, which is
+	  a coprocessor that performs database operations in hardware.
+	  It is available on M7 and M8 based systems only.
 
 endmenu
-

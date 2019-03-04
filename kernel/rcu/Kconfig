@@ -182,7 +182,7 @@ config RCU_FAST_NO_HZ
 	  for example, slowing down synchronize_rcu().
 
 	  Say Y if energy efficiency is critically important, and you
-	  	don't care about increased grace-period durations.
+	  don't care about increased grace-period durations.
 
 	  Say N if you are unsure.
 

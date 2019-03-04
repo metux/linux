@@ -23,18 +23,18 @@ config PCMCIA
 	select CRC32
 	default y
 	help
-	   This option enables support for 16-bit PCMCIA cards. Most older
-	   PC-cards are such 16-bit PCMCIA cards, so unless you know you're
-	   only using 32-bit CardBus cards, say Y or M here.
+	  This option enables support for 16-bit PCMCIA cards. Most older
+	  PC-cards are such 16-bit PCMCIA cards, so unless you know you're
+	  only using 32-bit CardBus cards, say Y or M here.
 
-	   To use 16-bit PCMCIA cards, you will need supporting software in
-	   most cases. (see the file <file:Documentation/Changes> for
-	   location and details).
+	  To use 16-bit PCMCIA cards, you will need supporting software in
+	  most cases. (see the file <file:Documentation/Changes> for
+	  location and details).
 
-	   To compile this driver as modules, choose M here: the
-	   module will be called pcmcia.
+	  To compile this driver as modules, choose M here: the
+	  module will be called pcmcia.
 
-	   If unsure, say Y.
+	  If unsure, say Y.
 
 config PCMCIA_LOAD_CIS
 	bool "Load CIS updates from userspace"
@@ -276,4 +276,4 @@ config PCCARD_NONSTATIC
 config PCCARD_IODYN
 	bool
 
-endif	# PCCARD
+endif # PCCARD

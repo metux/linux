@@ -50,7 +50,7 @@ config OMAP_MUX_WARNINGS
 	default y
 	help
 	  Choose Y here to warn whenever driver initialization logic needs
-	  to change the pin multiplexing setup.	 When there are no warnings
+	  to change the pin multiplexing setup. When there are no warnings
 	  printed, it's safe to deselect OMAP_MUX for your product.
 
 comment "OMAP Board Type"
@@ -59,20 +59,20 @@ config MACH_OMAP_INNOVATOR
 	bool "TI Innovator"
 	depends on ARCH_OMAP15XX || ARCH_OMAP16XX
 	help
-          TI OMAP 1510 or 1610 Innovator board support. Say Y here if you
-          have such a board.
+	  TI OMAP 1510 or 1610 Innovator board support. Say Y here if you
+	  have such a board.
 
 config MACH_OMAP_H2
 	bool "TI H2 Support"
 	depends on ARCH_OMAP16XX
-    	help
+	help
 	  TI OMAP 1610/1611B H2 board support. Say Y here if you have such
 	  a board.
 
 config MACH_OMAP_H3
 	bool "TI H3 Support"
 	depends on ARCH_OMAP16XX
-    	help
+	help
 	  TI OMAP 1710 H3 board support. Say Y here if you have such
 	  a board.
 
@@ -85,14 +85,14 @@ config MACH_HERALD
 config MACH_OMAP_OSK
 	bool "TI OSK Support"
 	depends on ARCH_OMAP16XX
-    	help
+	help
 	  TI OMAP 5912 OSK (OMAP Starter Kit) board support. Say Y here
-          if you have such a board.
+	  if you have such a board.
 
 config OMAP_OSK_MISTRAL
 	bool "Mistral QVGA board Support"
 	depends on MACH_OMAP_OSK
-    	help
+	help
 	  The OSK supports an optional add-on board with a Quarter-VGA
 	  touchscreen, PDA-ish buttons, a resume button, bicolor LED,
 	  and camera connector.  Say Y here if you have this board.
@@ -100,14 +100,14 @@ config OMAP_OSK_MISTRAL
 config MACH_OMAP_PERSEUS2
 	bool "TI Perseus2"
 	depends on ARCH_OMAP730
-    	help
+	help
 	  Support for TI OMAP 730 Perseus2 board. Say Y here if you have such
 	  a board.
 
 config MACH_OMAP_FSAMPLE
 	bool "TI F-Sample"
 	depends on ARCH_OMAP730
-    	help
+	help
 	  Support for TI OMAP 850 F-Sample board. Say Y here if you have such
 	  a board.
 
@@ -124,10 +124,10 @@ config MACH_OMAP_PALMZ71
 	bool "Palm Zire71"
 	depends on ARCH_OMAP15XX
 	help
-	 Support for the Palm Zire71 PDA. To boot the kernel,
-	 you'll need a PalmOS compatible bootloader; check out
-	 http://hackndev.com/palm/z71 for more information.
-	 Say Y here if you have such a PDA, say N otherwise.
+	  Support for the Palm Zire71 PDA. To boot the kernel,
+	  you'll need a PalmOS compatible bootloader; check out
+	  http://hackndev.com/palm/z71 for more information.
+	  Say Y here if you have such a PDA, say N otherwise.
 
 config MACH_OMAP_PALMTT
 	bool "Palm Tungsten|T"
@@ -173,10 +173,10 @@ config MACH_OMAP_GENERIC
 	bool "Generic OMAP board"
 	depends on ARCH_OMAP15XX || ARCH_OMAP16XX
 	help
-          Support for generic OMAP-1510, 1610 or 1710 board with
-          no FPGA. Can be used as template for porting Linux to
-          custom OMAP boards. Say Y here if you have a custom
-          board.
+	  Support for generic OMAP-1510, 1610 or 1710 board with
+	  no FPGA. Can be used as template for porting Linux to
+	  custom OMAP boards. Say Y here if you have a custom
+	  board.
 
 endmenu
 

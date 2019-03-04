@@ -18,4 +18,4 @@ config SND_HARMONY
 	  chip found in most GSC-based PA-RISC workstations.  It's frequently
 	  provided as part of the Lasi multi-function IC.
 
-endif	# SND_GSC
+endif # SND_GSC

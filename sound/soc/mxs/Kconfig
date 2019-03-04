@@ -8,7 +8,6 @@ menuconfig SND_MXS_SOC
 	  Say Y or M if you want to add support for codecs attached to
 	  the MXS SAIF interface.
 
-
 if SND_MXS_SOC
 
 config SND_SOC_MXS_SGTL5000
@@ -19,4 +18,4 @@ config SND_SOC_MXS_SGTL5000
 	  Say Y if you want to add support for SoC audio on an MXS board with
 	  a sgtl5000 codec.
 
-endif	# SND_MXS_SOC
+endif # SND_MXS_SOC

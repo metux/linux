@@ -322,10 +322,10 @@ config SND_SOC_FSL_ASOC_CARD
 	select SND_SOC_FSL_SAI
 	select SND_SOC_FSL_SSI
 	help
-	 ALSA SoC Audio support with ASRC feature for Freescale SoCs that have
-	 ESAI/SAI/SSI and connect with external CODECs such as WM8962, CS42888,
-	 CS4271, CS4272, SGTL5000 and TLV320AIC32x4.
-	 Say Y if you want to add support for Freescale Generic ASoC Sound Card.
+	  ALSA SoC Audio support with ASRC feature for Freescale SoCs that have
+	  ESAI/SAI/SSI and connect with external CODECs such as WM8962, CS42888,
+	  CS4271, CS4272, SGTL5000 and TLV320AIC32x4.
+	  Say Y if you want to add support for Freescale Generic ASoC Sound Card.
 
 config SND_SOC_IMX_AUDMIX
 	tristate "SoC Audio support for i.MX boards with AUDMIX"

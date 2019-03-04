@@ -57,8 +57,8 @@ config SND_USB_CAIAQ
 	select SND_RAWMIDI
 	select SND_PCM
 	help
-	   Say Y here to include support for caiaq USB audio interfaces,
-	   namely:
+	  Say Y here to include support for caiaq USB audio interfaces,
+	  namely:
 
 	    * Native Instruments RigKontrol2
 	    * Native Instruments RigKontrol3
@@ -75,16 +75,16 @@ config SND_USB_CAIAQ
 	    * Native Instruments Traktor Kontrol S4
 	    * Native Instruments Maschine Controller
 
-	   To compile this driver as a module, choose M here: the module
-	   will be called snd-usb-caiaq.
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-usb-caiaq.
 
 config SND_USB_CAIAQ_INPUT
 	bool "enable input device for controllers"
 	depends on SND_USB_CAIAQ
 	depends on INPUT=y || INPUT=SND_USB_CAIAQ
 	help
-	  Say Y here to support input controllers like buttons, knobs,
-	  alpha dials and analog pedals on the following products:
+	 Say Y here to support input controllers like buttons, knobs,
+	 alpha dials and analog pedals on the following products:
 
 	   * Native Instruments RigKontrol2
 	   * Native Instruments RigKontrol3
@@ -167,5 +167,4 @@ config SND_BCD2000
 
 source "sound/usb/line6/Kconfig"
 
-endif	# SND_USB
-
+endif # SND_USB

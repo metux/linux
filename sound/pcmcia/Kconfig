@@ -30,5 +30,4 @@ config SND_PDAUDIOCF
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-pdaudiocf.
 
-endif	# SND_PCMCIA
-
+endif # SND_PCMCIA

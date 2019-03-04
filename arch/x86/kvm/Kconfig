@@ -106,7 +106,7 @@ config KVM_MMU_AUDIT
 	bool "Audit KVM MMU"
 	depends on KVM && TRACEPOINTS
 	help
-	 This option adds a R/W kVM module parameter 'mmu_audit', which allows
-	 auditing of KVM MMU events at runtime.
+	  This option adds a R/W kVM module parameter 'mmu_audit', which allows
+	  auditing of KVM MMU events at runtime.
 
 endif # VIRTUALIZATION

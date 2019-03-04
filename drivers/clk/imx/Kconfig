@@ -91,7 +91,7 @@ config CLK_IMX8MQ
 	depends on ARCH_MXC || COMPILE_TEST
 	select MXC_CLK
 	help
-	    Build the driver for i.MX8MQ CCM Clock Driver
+	  Build the driver for i.MX8MQ CCM Clock Driver
 
 config CLK_IMX8QXP
 	tristate "IMX8QXP SCU Clock"

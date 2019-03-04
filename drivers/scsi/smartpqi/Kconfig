@@ -43,14 +43,14 @@ config SCSI_SMARTPQI
 	select SCSI_SAS_ATTRS
 	select RAID_ATTRS
 	help
-	This driver supports Microsemi PQI controllers.
+	  This driver supports Microsemi PQI controllers.
 
-	<http://www.microsemi.com>
+	  <http://www.microsemi.com>
 
-	To compile this driver as a module, choose M here: the
-	module will be called smartpqi.
+	  To compile this driver as a module, choose M here: the
+	  module will be called smartpqi.
 
-        Note: the aacraid driver will not manage a smartpqi
-              controller. You need to enable smartpqi for smartpqi
-              controllers. For more information, please see
-              Documentation/scsi/smartpqi.rst
+	  Note: the aacraid driver will not manage a smartpqi
+	        controller. You need to enable smartpqi for smartpqi
+	        controllers. For more information, please see
+	        Documentation/scsi/smartpqi.rst

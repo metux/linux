@@ -34,13 +34,13 @@ config ENC28J60_WRITEVERIFY
 	  If unsure, say N.
 
 config ENCX24J600
-    tristate "ENCX24J600 support"
-    depends on SPI
+	tristate "ENCX24J600 support"
+	depends on SPI
 	help
-      Support for the Microchip ENC424J600/624J600 ethernet chip.
+	  Support for the Microchip ENC424J600/624J600 ethernet chip.
 
-      To compile this driver as a module, choose M here. The module will be
-      called encx24j600.
+	  To compile this driver as a module, choose M here. The module will be
+	  called encx24j600.
 
 config LAN743X
 	tristate "LAN743x support"

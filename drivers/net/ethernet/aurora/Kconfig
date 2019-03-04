@@ -18,6 +18,6 @@ config AURORA_NB8800
 	depends on HAS_DMA
 	select PHYLIB
 	help
-	 Support for the AU-NB8800 gigabit Ethernet controller.
+	  Support for the AU-NB8800 gigabit Ethernet controller.
 
 endif

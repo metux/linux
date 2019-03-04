@@ -145,10 +145,10 @@ config SKGE_GENESIS
 	bool "Support for older SysKonnect Genesis boards"
 	depends on SKGE
 	help
-	 This enables support for the older and uncommon SysKonnect Genesis
-	 chips, which support MII via an external transceiver, instead of
-	 an internal one. Disabling this option will save some memory
-	 by making code smaller. If unsure say Y.
+	  This enables support for the older and uncommon SysKonnect Genesis
+	  chips, which support MII via an external transceiver, instead of
+	  an internal one. Disabling this option will save some memory
+	  by making code smaller. If unsure say Y.
 
 config SKY2
 	tristate "Marvell Yukon 2 support"
@@ -175,7 +175,6 @@ config SKY2_DEBUG
 	  transmit and receive rings.
 
 	  If unsure, say N.
-
 
 source "drivers/net/ethernet/marvell/octeontx2/Kconfig"
 source "drivers/net/ethernet/marvell/prestera/Kconfig"

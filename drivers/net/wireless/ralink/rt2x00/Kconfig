@@ -71,7 +71,7 @@ config RT2800PCI
 	help
 	  This adds support for rt27xx/rt28xx/rt30xx wireless chipset family.
 	  Supported chips: RT2760, RT2790, RT2860, RT2880, RT2890, RT3052,
-			   RT3090, RT3091 & RT3092
+	                   RT3090, RT3091 & RT3092
 
 	  When compiled as a module, this driver will be called "rt2800pci.ko".
 
@@ -214,7 +214,6 @@ config RT2800SOC
 	  Supported chips: RT2880, RT3050, RT3052, RT3350, RT3352.
 
 	  When compiled as a module, this driver will be called rt2800soc.
-
 
 config RT2800_LIB
 	tristate

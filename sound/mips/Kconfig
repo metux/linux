@@ -24,5 +24,4 @@ config SND_SGI_HAL2
 	help
 	  Sound support for the SGI Indy and Indigo2 Workstation.
 
-endif	# SND_MIPS
-
+endif # SND_MIPS

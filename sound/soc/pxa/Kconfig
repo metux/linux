@@ -173,7 +173,6 @@ config SND_SOC_TTC_DKB
 	help
 	  Say Y if you want to add support for SoC audio on TTC DKB
 
-
 config SND_SOC_ZYLONITE
 	tristate "SoC Audio support for Marvell Zylonite"
 	depends on SND_PXA2XX_SOC && MACH_ZYLONITE

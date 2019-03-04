@@ -40,4 +40,4 @@ config SND_SUN_DBRI
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-sun-dbri.
 
-endif	# SND_SPARC
+endif # SND_SPARC

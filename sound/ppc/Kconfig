@@ -50,4 +50,4 @@ config SND_PS3_DEFAULT_START_DELAY
 	depends on SND_PS3
 	default "2000"
 
-endif	# SND_PPC
+endif # SND_PPC

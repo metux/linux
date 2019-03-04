@@ -28,5 +28,4 @@ config SND_SH_DAC_AUDIO
 	help
 	  Say Y here to include support for the on-chip DAC.
 
-endif	# SND_SUPERH
-
+endif # SND_SUPERH

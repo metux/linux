@@ -908,6 +908,6 @@ config SND_YMFPCI
 	  To compile this driver as a module, choose M here: the module
 	  will be called snd-ymfpci.
 
-endif	# SND_PCI
+endif # SND_PCI
 
 source "sound/pci/hda/Kconfig"

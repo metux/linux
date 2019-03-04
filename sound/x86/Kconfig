@@ -13,6 +13,6 @@ config HDMI_LPE_AUDIO
 	depends on DRM_I915
 	select SND_PCM
 	help
-	 Choose this option to support HDMI LPE Audio mode
+	  Choose this option to support HDMI LPE Audio mode
 
-endif	# SND_X86
+endif # SND_X86

@@ -389,10 +389,10 @@ config ARMADA_37XX_WATCHDOG
 	select MFD_SYSCON
 	select WATCHDOG_CORE
 	help
-	   Say Y here to include support for the watchdog timer found on
-	   Marvell Armada 37xx SoCs.
-	   To compile this driver as a module, choose M here: the
-	   module will be called armada_37xx_wdt.
+	  Say Y here to include support for the watchdog timer found on
+	  Marvell Armada 37xx SoCs.
+	  To compile this driver as a module, choose M here: the
+	  module will be called armada_37xx_wdt.
 
 config ASM9260_WATCHDOG
 	tristate "Alphascale ASM9260 watchdog"
@@ -704,10 +704,10 @@ config MAX77620_WATCHDOG
 	depends on MFD_MAX77620 || COMPILE_TEST
 	select WATCHDOG_CORE
 	help
-	 This is the driver for the Max77620 watchdog timer.
-	 Say 'Y' here to enable the watchdog timer support for
-	 MAX77620 chips. To compile this driver as a module,
-	 choose M here: the module will be called max77620_wdt.
+	  This is the driver for the Max77620 watchdog timer.
+	  Say 'Y' here to enable the watchdog timer support for
+	  MAX77620 chips. To compile this driver as a module,
+	  choose M here: the module will be called max77620_wdt.
 
 config IMX2_WDT
 	tristate "IMX2+ Watchdog"
@@ -1800,10 +1800,10 @@ config BCM7038_WDT
 	depends on HAS_IOMEM
 	depends on ARCH_BRCMSTB || BMIPS_GENERIC || COMPILE_TEST
 	help
-	 Watchdog driver for the built-in hardware in Broadcom 7038 and
-	 later SoCs used in set-top boxes.  BCM7038 was made public
-	 during the 2004 CES, and since then, many Broadcom chips use this
-	 watchdog block, including some cable modem chips.
+	  Watchdog driver for the built-in hardware in Broadcom 7038 and
+	  later SoCs used in set-top boxes.  BCM7038 was made public
+	  during the 2004 CES, and since then, many Broadcom chips use this
+	  watchdog block, including some cable modem chips.
 
 config IMGPDC_WDT
 	tristate "Imagination Technologies PDC Watchdog Timer"

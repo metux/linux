@@ -79,30 +79,30 @@ config FRAMEBUFFER_CONSOLE
 	  Low-level framebuffer-based console driver.
 
 config FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
-       bool "Map the console to the primary display device"
-       depends on FRAMEBUFFER_CONSOLE
-       default n
+	bool "Map the console to the primary display device"
+	depends on FRAMEBUFFER_CONSOLE
+	default n
 	help
-	 If this option is selected, the framebuffer console will
-	 automatically select the primary display device (if the architecture
-	 supports this feature).  Otherwise, the framebuffer console will
-	 always select the first framebuffer driver that is loaded. The latter
-	 is the default behavior.
+	  If this option is selected, the framebuffer console will
+	  automatically select the primary display device (if the architecture
+	  supports this feature).  Otherwise, the framebuffer console will
+	  always select the first framebuffer driver that is loaded. The latter
+	  is the default behavior.
 
-	 You can always override the automatic selection of the primary device
-	 by using the fbcon=map: boot option.
+	  You can always override the automatic selection of the primary device
+	  by using the fbcon=map: boot option.
 
-	 If unsure, select n.
+	  If unsure, select n.
 
 config FRAMEBUFFER_CONSOLE_ROTATION
-       bool "Framebuffer Console Rotation"
-       depends on FRAMEBUFFER_CONSOLE
-       help
-	 Enable display rotation for the framebuffer console.  This is done
-	 in software and may be significantly slower than a normally oriented
-	 display.  Note that the rotation is done at the console level only
-	 such that other users of the framebuffer will remain normally
-	 oriented.
+	bool "Framebuffer Console Rotation"
+	depends on FRAMEBUFFER_CONSOLE
+	help
+	  Enable display rotation for the framebuffer console.  This is done
+	  in software and may be significantly slower than a normally oriented
+	  display.  Note that the rotation is done at the console level only
+	  such that other users of the framebuffer will remain normally
+	  oriented.
 
 config FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
 	bool "Framebuffer Console Deferred Takeover"
@@ -127,4 +127,3 @@ config STI_CONSOLE
 	  The alternative is to use your primary serial port as a console.
 
 endmenu
-

@@ -4,38 +4,35 @@
 #
 
 menuconfig MCB
-	   tristate "MCB support"
-	   default n
-	   depends on HAS_IOMEM
-	   help
+	tristate "MCB support"
+	default n
+	depends on HAS_IOMEM
+	help
+	  The MCB (MEN Chameleon Bus) is a Bus specific to MEN Mikroelektronik
+	  FPGA based devices. It is used to identify MCB based IP-Cores within
+	  an FPGA and provide the necessary framework for instantiating drivers
+	  for these devices.
 
-	   The MCB (MEN Chameleon Bus) is a Bus specific to MEN Mikroelektronik
-	   FPGA based devices. It is used to identify MCB based IP-Cores within
-	   an FPGA and provide the necessary framework for instantiating drivers
-	   for these devices.
-
-	   If build as a module, the module is called mcb.ko
+	  If build as a module, the module is called mcb.ko
 
 if MCB
 config MCB_PCI
-	   tristate "PCI based MCB carrier"
-	   default n
-	   depends on PCI
-	   help
+	tristate "PCI based MCB carrier"
+	default n
+	depends on PCI
+	help
+	  This is a MCB carrier on a PCI device. Both PCI attached on-board
+	  FPGAs as well as CompactPCI attached MCB FPGAs are supported with
+	  this driver.
 
-	   This is a MCB carrier on a PCI device. Both PCI attached on-board
-	   FPGAs as well as CompactPCI attached MCB FPGAs are supported with
-	   this driver.
-
-	   If build as a module, the module is called mcb-pci.ko
+	  If build as a module, the module is called mcb-pci.ko
 
 config MCB_LPC
-	   tristate "LPC (non PCI) based MCB carrier"
-	   default n
-	   help
+	tristate "LPC (non PCI) based MCB carrier"
+	default n
+	help
+	  This is a MCB carrier on a LPC or non PCI device.
 
-	   This is a MCB carrier on a LPC or non PCI device.
-
-	   If build as a module, the module is called mcb-lpc.ko
+	  If build as a module, the module is called mcb-lpc.ko
 
 endif # MCB

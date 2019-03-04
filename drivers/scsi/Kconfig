@@ -2,9 +2,9 @@
 menu "SCSI device support"
 
 config SCSI_MOD
-       tristate
-       default y if SCSI=n || SCSI=y
-       default m if SCSI=m
+	tristate
+	default y if SCSI=n || SCSI=y
+	default m if SCSI=m
 
 config RAID_ATTRS
 	tristate "RAID Transport Class"
@@ -48,7 +48,7 @@ config SCSI_ESP_PIO
 
 config SCSI_NETLINK
 	bool
-	default	n
+	default n
 	depends on NET
 
 config SCSI_PROC_FS
@@ -278,25 +278,25 @@ config ISCSI_TCP
 	select CRYPTO_CRC32C
 	select SCSI_ISCSI_ATTRS
 	help
-	 The iSCSI Driver provides a host with the ability to access storage
-	 through an IP network. The driver uses the iSCSI protocol to transport
-	 SCSI requests and responses over a TCP/IP network between the host
-	 (the "initiator") and "targets".  Architecturally, the iSCSI driver
-	 combines with the host's TCP/IP stack, network drivers, and Network
-	 Interface Card (NIC) to provide the same functions as a SCSI or a
-	 Fibre Channel (FC) adapter driver with a Host Bus Adapter (HBA).
+	  The iSCSI Driver provides a host with the ability to access storage
+	  through an IP network. The driver uses the iSCSI protocol to transport
+	  SCSI requests and responses over a TCP/IP network between the host
+	  (the "initiator") and "targets".  Architecturally, the iSCSI driver
+	  combines with the host's TCP/IP stack, network drivers, and Network
+	  Interface Card (NIC) to provide the same functions as a SCSI or a
+	  Fibre Channel (FC) adapter driver with a Host Bus Adapter (HBA).
 
-	 To compile this driver as a module, choose M here: the
-	 module will be called iscsi_tcp.
+	  To compile this driver as a module, choose M here: the
+	  module will be called iscsi_tcp.
 
-	 The userspace component needed to initialize the driver, documentation,
-	 and sample configuration files can be found here:
+	  The userspace component needed to initialize the driver, documentation,
+	  and sample configuration files can be found here:
 
-	 http://open-iscsi.org
+	  http://open-iscsi.org
 
 config ISCSI_BOOT_SYSFS
 	tristate "iSCSI Boot Sysfs Interface"
-	default	n
+	default n
 	help
 	  This option enables support for exposing iSCSI boot information
 	  via sysfs to userspace. If you wish to export this information,
@@ -311,7 +311,7 @@ source "drivers/scsi/cxlflash/Kconfig"
 config SGIWD93_SCSI
 	tristate "SGI WD93C93 SCSI Driver"
 	depends on SGI_HAS_WD93 && SCSI
-  	help
+	help
 	  If you have a Western Digital WD93 SCSI controller on
 	  an SGI MIPS system, say Y.  Otherwise, say N.
 
@@ -426,7 +426,6 @@ config SCSI_AACRAID
 	  To compile this driver as a module, choose M here: the module
 	  will be called aacraid.
 
-
 source "drivers/scsi/aic7xxx/Kconfig.aic7xxx"
 source "drivers/scsi/aic7xxx/Kconfig.aic79xx"
 source "drivers/scsi/aic94xx/Kconfig"
@@ -446,7 +445,7 @@ config SCSI_DPT_I2O
 	tristate "Adaptec I2O RAID support "
 	depends on SCSI && PCI && VIRT_TO_BUS
 	help
-	  This driver supports all of Adaptec's I2O based RAID controllers as 
+	  This driver supports all of Adaptec's I2O based RAID controllers as
 	  well as the DPT SmartRaid V cards.  This is an Adaptec maintained
 	  driver by Deanna Bonds.  See <file:Documentation/scsi/dpti.rst>.
 
@@ -675,7 +674,7 @@ config SCSI_GDTH
 	help
 	  Formerly called GDT SCSI Disk Array Controller Support.
 
-	  This is a driver for RAID/SCSI Disk Array Controllers (EISA/ISA/PCI) 
+	  This is a driver for RAID/SCSI Disk Array Controllers (EISA/ISA/PCI)
 	  manufactured by Intel Corporation/ICP vortex GmbH. It is documented
 	  in the kernel source in <file:drivers/scsi/gdth.c> and
 	  <file:drivers/scsi/gdth.h>.
@@ -1160,8 +1159,8 @@ config SCSI_LPFC
 	depends on NVME_FC || NVME_FC=n
 	select CRC_T10DIF
 	help
-          This lpfc driver supports the Emulex LightPulse
-          Family of Fibre Channel PCI host adapters.
+	  This lpfc driver supports the Emulex LightPulse
+	  Family of Fibre Channel PCI host adapters.
 
 config SCSI_LPFC_DEBUG_FS
 	bool "Emulex LightPulse Fibre Channel debugfs Support"
@@ -1484,9 +1483,9 @@ config ZFCP
 	  operation refer to the IBM publication "Device Drivers, Features, and
 	  Commands", SC33-8411.
 
-          This driver is also available as a module. This module will be
-          called zfcp. If you want to compile it as a module, say M here
-          and read <file:Documentation/kbuild/modules.rst>.
+	  This driver is also available as a module. This module will be
+	  called zfcp. If you want to compile it as a module, say M here
+	  and read <file:Documentation/kbuild/modules.rst>.
 
 config SCSI_PMCRAID
 	tristate "PMC SIERRA Linux MaxRAID adapter support"
@@ -1517,8 +1516,8 @@ config SCSI_VIRTIO
 	tristate "virtio-scsi support"
 	depends on VIRTIO
 	help
-          This is the virtual HBA driver for virtio.  If the kernel will
-          be used in a virtual machine, say Y or M.
+	  This is the virtual HBA driver for virtio.  If the kernel will
+	  be used in a virtual machine, say Y or M.
 
 source "drivers/scsi/csiostor/Kconfig"
 

@@ -610,7 +610,7 @@ config SERIAL_MUX
 	    1. create the device entry (mknod /dev/ttyB0 c 11 0)
 	    2. Edit the /etc/inittab to start a getty listening on /dev/ttyB0
 	    3. Add device ttyB0 to /etc/securetty (if you want to log on as
-		 root on this console.)
+	       root on this console.)
 	    4. Change the kernel command console parameter to: console=ttyB0
 
 config SERIAL_MUX_CONSOLE
@@ -623,15 +623,15 @@ config PDC_CONSOLE
 	bool "PDC software console support"
 	depends on PARISC && !SERIAL_MUX && VT
 	help
-	  Saying Y here will enable the software based PDC console to be 
-	  used as the system console.  This is useful for machines in 
+	  Saying Y here will enable the software based PDC console to be
+	  used as the system console.  This is useful for machines in
 	  which the hardware based console has not been written yet.  The
 	  following steps must be completed to use the PDC console:
 
 	    1. create the device entry (mknod /dev/ttyB0 c 11 0)
 	    2. Edit the /etc/inittab to start a getty listening on /dev/ttyB0
 	    3. Add device ttyB0 to /etc/securetty (if you want to log on as
-		 root on this console.)
+	       root on this console.)
 	    4. Change the kernel command console parameter to: console=ttyB0
 
 config SERIAL_SUNSAB
@@ -820,7 +820,7 @@ config SERIAL_CPM
 	depends on CPM2 || CPM1
 	select SERIAL_CORE
 	help
-	  This driver supports the SCC and SMC serial ports on Motorola 
+	  This driver supports the SCC and SMC serial ports on Motorola
 	  embedded PowerPC that contain a CPM1 (8xx) or CPM2 (8xxx)
 
 config SERIAL_CPM_CONSOLE
@@ -1128,7 +1128,7 @@ config SERIAL_TIMBERDALE
 	select SERIAL_CORE
 	depends on X86_32 || COMPILE_TEST
 	help
-	Add support for UART controller on timberdale.
+	  Add support for UART controller on timberdale.
 
 config SERIAL_BCM63XX
 	tristate "Broadcom BCM63xx/BCM33xx UART support"
@@ -1157,14 +1157,14 @@ config SERIAL_GRLIB_GAISLER_APBUART
 	depends on OF && SPARC
 	select SERIAL_CORE
 	help
-	Add support for the GRLIB APBUART serial port.
+	  Add support for the GRLIB APBUART serial port.
 
 config SERIAL_GRLIB_GAISLER_APBUART_CONSOLE
 	bool "Console on GRLIB APBUART serial port"
 	depends on SERIAL_GRLIB_GAISLER_APBUART=y
 	select SERIAL_CORE_CONSOLE
 	help
-	Support for running a console on the GRLIB APBUART
+	  Support for running a console on the GRLIB APBUART
 
 config SERIAL_ALTERA_JTAGUART
 	tristate "Altera JTAG UART support"

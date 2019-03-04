@@ -101,26 +101,26 @@ config QCOM_L3_PMU
 	depends on ARCH_QCOM && ARM64 && ACPI
 	select QCOM_IRQ_COMBINER
 	help
-	   Provides support for the L3 cache performance monitor unit (PMU)
-	   in Qualcomm Technologies processors.
-	   Adds the L3 cache PMU into the perf events subsystem for
-	   monitoring L3 cache events.
+	  Provides support for the L3 cache performance monitor unit (PMU)
+	  in Qualcomm Technologies processors.
+	  Adds the L3 cache PMU into the perf events subsystem for
+	  monitoring L3 cache events.
 
 config THUNDERX2_PMU
 	tristate "Cavium ThunderX2 SoC PMU UNCORE"
 	depends on ARCH_THUNDER2 && ARM64 && ACPI && NUMA
 	default m
 	help
-	   Provides support for ThunderX2 UNCORE events.
-	   The SoC has PMU support in its L3 cache controller (L3C) and
-	   in the DDR4 Memory Controller (DMC).
+	  Provides support for ThunderX2 UNCORE events.
+	  The SoC has PMU support in its L3 cache controller (L3C) and
+	  in the DDR4 Memory Controller (DMC).
 
 config XGENE_PMU
-        depends on ARCH_XGENE
-        bool "APM X-Gene SoC PMU"
-        default n
-        help
-          Say y if you want to use APM X-Gene SoC performance monitors.
+	depends on ARCH_XGENE
+	bool "APM X-Gene SoC PMU"
+	default n
+	help
+	  Say y if you want to use APM X-Gene SoC performance monitors.
 
 config ARM_SPE_PMU
 	tristate "Enable support for the ARMv8.2 Statistical Profiling Extension"

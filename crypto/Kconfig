@@ -328,7 +328,7 @@ config CRYPTO_AEGIS128
 	select CRYPTO_AEAD
 	select CRYPTO_AES  # for AES S-box tables
 	help
-	 Support for the AEGIS-128 dedicated AEAD algorithm.
+	  Support for the AEGIS-128 dedicated AEAD algorithm.
 
 config CRYPTO_AEGIS128_SIMD
 	bool "Support SIMD acceleration for AEGIS-128"
@@ -341,7 +341,7 @@ config CRYPTO_AEGIS128_AESNI_SSE2
 	select CRYPTO_AEAD
 	select CRYPTO_SIMD
 	help
-	 AESNI+SSE2 implementation of the AEGIS-128 dedicated AEAD algorithm.
+	  AESNI+SSE2 implementation of the AEGIS-128 dedicated AEAD algorithm.
 
 config CRYPTO_SEQIV
 	tristate "Sequence Number IV Generator"
@@ -565,9 +565,9 @@ config CRYPTO_XCBC
 	select CRYPTO_MANAGER
 	help
 	  XCBC: Keyed-Hashing with encryption algorithm
-		https://www.ietf.org/rfc/rfc3566.txt
-		http://csrc.nist.gov/encryption/modes/proposedmodes/
-		 xcbc-mac/xcbc-mac-spec.pdf
+	  https://www.ietf.org/rfc/rfc3566.txt
+	  http://csrc.nist.gov/encryption/modes/proposedmodes/
+	   xcbc-mac/xcbc-mac-spec.pdf
 
 config CRYPTO_VMAC
 	tristate "VMAC support"
@@ -1850,7 +1850,7 @@ config CRYPTO_DRBG
 	select CRYPTO_RNG
 	select CRYPTO_JITTERENTROPY
 
-endif	# if CRYPTO_DRBG_MENU
+endif # if CRYPTO_DRBG_MENU
 
 config CRYPTO_JITTERENTROPY
 	tristate "Jitterentropy Non-Deterministic Random Number Generator"
@@ -1941,4 +1941,4 @@ source "drivers/crypto/Kconfig"
 source "crypto/asymmetric_keys/Kconfig"
 source "certs/Kconfig"
 
-endif	# if CRYPTO
+endif # if CRYPTO

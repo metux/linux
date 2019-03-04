@@ -35,12 +35,12 @@ config IMA_KEXEC
 	depends on IMA && TCG_TPM && HAVE_IMA_KEXEC
 	default n
 	help
-	   TPM PCRs are only reset on a hard reboot.  In order to validate
-	   a TPM's quote after a soft boot, the IMA measurement list of the
-	   running kernel must be saved and restored on boot.
+	  TPM PCRs are only reset on a hard reboot.  In order to validate
+	  a TPM's quote after a soft boot, the IMA measurement list of the
+	  running kernel must be saved and restored on boot.
 
-	   Depending on the IMA policy, the measurement list can grow to
-	   be very large.
+	  Depending on the IMA policy, the measurement list can grow to
+	  be very large.
 
 config IMA_MEASURE_PCR_IDX
 	int
@@ -92,10 +92,10 @@ choice
 	default IMA_DEFAULT_HASH_SHA1
 	depends on IMA
 	help
-	   Select the default hash algorithm used for the measurement
-	   list, integrity appraisal and audit log.  The compiled default
-	   hash algorithm can be overwritten using the kernel command
-	   line 'ima_hash=' option.
+	  Select the default hash algorithm used for the measurement
+	  list, integrity appraisal and audit log.  The compiled default
+	  hash algorithm can be overwritten using the kernel command
+	  line 'ima_hash=' option.
 
 	config IMA_DEFAULT_HASH_SHA1
 		bool "SHA1 (default)"
@@ -144,9 +144,9 @@ config IMA_READ_POLICY
 	default y if IMA_WRITE_POLICY
 	default n if !IMA_WRITE_POLICY
 	help
-	   It is often useful to be able to read back the IMA policy.  It is
-	   even more important after introducing CONFIG_IMA_WRITE_POLICY.
-	   This option allows the root user to see the current policy rules.
+	  It is often useful to be able to read back the IMA policy.  It is
+	  even more important after introducing CONFIG_IMA_WRITE_POLICY.
+	  This option allows the root user to see the current policy rules.
 
 config IMA_APPRAISE
 	bool "Appraise integrity measurements"
@@ -164,13 +164,13 @@ config IMA_APPRAISE
 	  If unsure, say N.
 
 config IMA_ARCH_POLICY
-        bool "Enable loading an IMA architecture specific policy"
-        depends on (KEXEC_SIG && IMA) || IMA_APPRAISE \
-		   && INTEGRITY_ASYMMETRIC_KEYS
-        default n
-        help
-          This option enables loading an IMA architecture specific policy
-          based on run time secure boot flags.
+	bool "Enable loading an IMA architecture specific policy"
+	depends on (KEXEC_SIG && IMA) || IMA_APPRAISE \
+		    && INTEGRITY_ASYMMETRIC_KEYS
+	default n
+	help
+	  This option enables loading an IMA architecture specific policy
+	  based on run time secure boot flags.
 
 config IMA_APPRAISE_BUILD_POLICY
 	bool "IMA build time configured policy rules"
@@ -258,10 +258,10 @@ config IMA_TRUSTED_KEYRING
 	select INTEGRITY_TRUSTED_KEYRING
 	default y
 	help
-	   This option requires that all keys added to the .ima
-	   keyring be signed by a key on the system trusted keyring.
+	  This option requires that all keys added to the .ima
+	  keyring be signed by a key on the system trusted keyring.
 
-	   This option is deprecated in favor of INTEGRITY_TRUSTED_KEYRING
+	  This option is deprecated in favor of INTEGRITY_TRUSTED_KEYRING
 
 config IMA_KEYRINGS_PERMIT_SIGNED_BY_BUILTIN_OR_SECONDARY
 	bool "Permit keys validly signed by a built-in or secondary CA cert (EXPERIMENTAL)"
@@ -286,35 +286,35 @@ config IMA_BLACKLIST_KEYRING
 	depends on IMA_TRUSTED_KEYRING
 	default n
 	help
-	   This option creates an IMA blacklist keyring, which contains all
-	   revoked IMA keys.  It is consulted before any other keyring.  If
-	   the search is successful the requested operation is rejected and
-	   an error is returned to the caller.
+	  This option creates an IMA blacklist keyring, which contains all
+	  revoked IMA keys.  It is consulted before any other keyring.  If
+	  the search is successful the requested operation is rejected and
+	  an error is returned to the caller.
 
 config IMA_LOAD_X509
 	bool "Load X509 certificate onto the '.ima' trusted keyring"
 	depends on IMA_TRUSTED_KEYRING
 	default n
 	help
-	   File signature verification is based on the public keys
-	   loaded on the .ima trusted keyring. These public keys are
-	   X509 certificates signed by a trusted key on the
-	   .system keyring.  This option enables X509 certificate
-	   loading from the kernel onto the '.ima' trusted keyring.
+	  File signature verification is based on the public keys
+	  loaded on the .ima trusted keyring. These public keys are
+	  X509 certificates signed by a trusted key on the
+	  .system keyring.  This option enables X509 certificate
+	  loading from the kernel onto the '.ima' trusted keyring.
 
 config IMA_X509_PATH
 	string "IMA X509 certificate path"
 	depends on IMA_LOAD_X509
 	default "/etc/keys/x509_ima.der"
 	help
-	   This option defines IMA X509 certificate path.
+	  This option defines IMA X509 certificate path.
 
 config IMA_APPRAISE_SIGNED_INIT
 	bool "Require signed user-space initialization"
 	depends on IMA_LOAD_X509
 	default n
 	help
-	   This option requires user-space init to be signed.
+	  This option requires user-space init to be signed.
 
 config IMA_MEASURE_ASYMMETRIC_KEYS
 	bool
@@ -329,8 +329,8 @@ config IMA_QUEUE_EARLY_BOOT_KEYS
 	default y
 
 config IMA_SECURE_AND_OR_TRUSTED_BOOT
-       bool
-       depends on IMA_ARCH_POLICY
-       help
-          This option is selected by architectures to enable secure and/or
-          trusted boot based on IMA runtime policies.
+	bool
+	depends on IMA_ARCH_POLICY
+	help
+	  This option is selected by architectures to enable secure and/or
+	  trusted boot based on IMA runtime policies.

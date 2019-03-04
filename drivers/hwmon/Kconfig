@@ -588,10 +588,10 @@ config SENSORS_GSC
 	  the module will be called gsc-hwmon.
 
 config SENSORS_MC13783_ADC
-        tristate "Freescale MC13783/MC13892 ADC"
-        depends on MFD_MC13XXX
-        help
-          Support for the A/D converter on MC13783 and MC13892 PMIC.
+	tristate "Freescale MC13783/MC13892 ADC"
+	depends on MFD_MC13XXX
+	help
+	  Support for the A/D converter on MC13783 and MC13892 PMIC.
 
 config SENSORS_FSCHMD
 	tristate "Fujitsu Siemens Computers sensor chips"
@@ -1179,18 +1179,18 @@ config SENSORS_LM75
 	  If you say yes here you get support for one common type of
 	  temperature sensor chip, with models including:
 
-		- Analog Devices ADT75
-		- Dallas Semiconductor DS75, DS1775 and DS7505
-		- Global Mixed-mode Technology (GMT) G751
-		- Maxim MAX6625 and MAX6626
-		- Microchip MCP980x
-		- National Semiconductor LM75, LM75A
-		- NXP's LM75A
-		- ST Microelectronics STDS75
-		- ST Microelectronics STLM75
-		- TelCom (now Microchip) TCN75
-		- Texas Instruments TMP100, TMP101, TMP105, TMP112, TMP75,
-		  TMP175, TMP275
+	        - Analog Devices ADT75
+	        - Dallas Semiconductor DS75, DS1775 and DS7505
+	        - Global Mixed-mode Technology (GMT) G751
+	        - Maxim MAX6625 and MAX6626
+	        - Microchip MCP980x
+	        - National Semiconductor LM75, LM75A
+	        - NXP's LM75A
+	        - ST Microelectronics STDS75
+	        - ST Microelectronics STLM75
+	        - TelCom (now Microchip) TCN75
+	        - Texas Instruments TMP100, TMP101, TMP105, TMP112, TMP75,
+	          TMP175, TMP275
 
 	  This driver supports driver model based binding through board
 	  specific I2C device tables.
@@ -1430,10 +1430,10 @@ config SENSORS_NPCM7XX
 	imply THERMAL
 	help
 	  This driver provides support for Nuvoton NPCM750/730/715/705 PWM
-          and Fan controllers.
+	  and Fan controllers.
 
-          This driver can also be built as a module. If so, the module
-          will be called npcm750-pwm-fan.
+	  This driver can also be built as a module. If so, the module
+	  will be called npcm750-pwm-fan.
 
 config SENSORS_NSA320
 	tristate "ZyXEL NSA320 and compatible fan speed and temperature sensors"
@@ -1746,7 +1746,7 @@ config SENSORS_ADS7871
 
 config SENSORS_AMC6821
 	tristate "Texas Instruments AMC6821"
-	depends on I2C 
+	depends on I2C
 	help
 	  If you say yes here you get support for the Texas Instruments
 	  AMC6821 hardware monitoring chips.

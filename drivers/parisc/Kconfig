@@ -124,9 +124,8 @@ config PDC_CHASSIS
 	  shown by the LED/LCD driver.
 	  This driver updates the state panel (LED and/or LCD) upon system
 	  state change (eg: boot, shutdown or panic).
-	  
-	  If unsure, say Y.
 
+	  If unsure, say Y.
 
 config PDC_CHASSIS_WARN
 	bool "PDC chassis warnings support"

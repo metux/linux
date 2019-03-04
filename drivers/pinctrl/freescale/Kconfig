@@ -38,7 +38,6 @@ config PINCTRL_IMX27
 	help
 	  Say Y here to enable the imx27 pinctrl driver
 
-
 config PINCTRL_IMX25
 	bool "IMX25 pinctrl driver"
 	depends on OF

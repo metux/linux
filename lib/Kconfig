@@ -539,7 +539,7 @@ config NLATTR
 # Generic 64-bit atomic support is selected if needed
 #
 config GENERIC_ATOMIC64
-       bool
+	bool
 
 config LRU_CACHE
 	tristate
@@ -601,16 +601,16 @@ source "lib/fonts/Kconfig"
 config SG_SPLIT
 	def_bool n
 	help
-	 Provides a helper to split scatterlists into chunks, each chunk being
-	 a scatterlist. This should be selected by a driver or an API which
-	 whishes to split a scatterlist amongst multiple DMA channels.
+	  Provides a helper to split scatterlists into chunks, each chunk being
+	  a scatterlist. This should be selected by a driver or an API which
+	  whishes to split a scatterlist amongst multiple DMA channels.
 
 config SG_POOL
 	def_bool n
 	help
-	 Provides a helper to allocate chained scatterlists. This should be
-	 selected by a driver or an API which whishes to allocate chained
-	 scatterlist.
+	  Provides a helper to allocate chained scatterlists. This should be
+	  selected by a driver or an API which whishes to allocate chained
+	  scatterlist.
 
 #
 # sg chaining option

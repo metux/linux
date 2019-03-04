@@ -153,4 +153,3 @@ config AGP_EFFICEON
 config INTEL_GTT
 	tristate
 	depends on X86 && PCI
-

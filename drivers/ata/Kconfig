@@ -32,7 +32,7 @@ menuconfig ATA
 if ATA
 
 config ATA_NONSTANDARD
-       bool
+	bool
 
 config SATA_HOST
 	bool
@@ -259,7 +259,7 @@ config AHCI_XGENE
 	depends on PHY_XGENE
 	select SATA_HOST
 	help
-	 This option enables support for APM X-Gene SoC SATA host controller.
+	  This option enables support for APM X-Gene SoC SATA host controller.
 
 config AHCI_QORIQ
 	tristate "Freescale QorIQ AHCI SATA support"
@@ -297,9 +297,9 @@ config SATA_AHCI_SEATTLE
 	depends on ARCH_SEATTLE
 	select SATA_HOST
 	help
-	 This option enables support for AMD Seattle SATA host controller.
+	  This option enables support for AMD Seattle SATA host controller.
 
-	 If unsure, say N
+	  If unsure, say N
 
 config SATA_INIC162X
 	tristate "Initio 162x SATA support (Very Experimental)"
@@ -764,7 +764,7 @@ config PATA_IMX
 	select PATA_TIMINGS
 	help
 	  This option enables support for the PATA host available on Freescale
-          iMX SoCs.
+	  iMX SoCs.
 
 	  If unsure, say N.
 
@@ -773,7 +773,7 @@ config PATA_IT8213
 	depends on PCI
 	help
 	  This option enables support for the ITE 821 PATA
-          controllers via the new ATA layer.
+	  controllers via the new ATA layer.
 
 	  If unsure, say N.
 
@@ -801,9 +801,9 @@ config PATA_MACIO
 	depends on PPC_PMAC
 	help
 	  Most IDE capable PowerMacs have IDE busses driven by a variant
-          of this controller which is part of the Apple chipset used on
-          most PowerMac models. Some models have multiple busses using
-          different chipsets, though generally, MacIO is one of them.
+	  of this controller which is part of the Apple chipset used on
+	  most PowerMac models. Some models have multiple busses using
+	  different chipsets, though generally, MacIO is one of them.
 
 config PATA_MARVELL
 	tristate "Marvell PATA support via legacy mode"

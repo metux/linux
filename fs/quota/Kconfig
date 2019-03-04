@@ -47,7 +47,7 @@ config QUOTA_DEBUG
 
 # Generic support for tree structured quota files. Selected when needed.
 config QUOTA_TREE
-	 tristate
+	tristate
 
 config QFMT_V1
 	tristate "Old quota format support"

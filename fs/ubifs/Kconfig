@@ -32,8 +32,8 @@ config UBIFS_FS_LZO
 	bool "LZO compression support" if UBIFS_FS_ADVANCED_COMPR
 	default y
 	help
-	   LZO compressor is generally faster than zlib but compresses worse.
-	   Say 'Y' if unsure.
+	  LZO compressor is generally faster than zlib but compresses worse.
+	  Say 'Y' if unsure.
 
 config UBIFS_FS_ZLIB
 	bool "ZLIB compression support" if UBIFS_FS_ADVANCED_COMPR

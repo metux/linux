@@ -943,12 +943,12 @@ config NET_ACT_SKBMOD
 	tristate "skb data modification action"
 	depends on NET_CLS_ACT
 	help
-	 Say Y here to allow modification of skb data
+	  Say Y here to allow modification of skb data
 
-	 If unsure, say N.
+	  If unsure, say N.
 
-	 To compile this code as a module, choose M here: the
-	 module will be called act_skbmod.
+	  To compile this code as a module, choose M here: the
+	  module will be called act_skbmod.
 
 config NET_ACT_IFE
 	tristate "Inter-FE action based on IETF ForCES InterFE LFB"
@@ -958,7 +958,7 @@ config NET_ACT_IFE
 	  Say Y here to allow for sourcing and terminating metadata
 	  For details refer to netdev01 paper:
 	  "Distributing Linux Traffic Control Classifier-Action Subsystem"
-	   Authors: Jamal Hadi Salim and Damascene M. Joachimpillai
+	  Authors: Jamal Hadi Salim and Damascene M. Joachimpillai
 
 	  To compile this code as a module, choose M here: the
 	  module will be called act_ife.
@@ -1013,7 +1013,6 @@ config NET_TC_SKB_EXT
 	bool "TC recirculation support"
 	depends on NET_CLS_ACT
 	select SKB_EXTENSIONS
-
 	help
 	  Say Y here to allow tc chain misses to continue in OvS datapath in
 	  the correct recirc_id, and hardware chain misses to continue in

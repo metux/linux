@@ -645,10 +645,10 @@ config TCP_CONG_CDG
 	  CAIA Delay-Gradient (CDG) is a TCP congestion control that modifies
 	  the TCP sender in order to:
 
-	  o Use the delay gradient as a congestion signal.
-	  o Back off with an average probability that is independent of the RTT.
-	  o Coexist with flows that use loss-based congestion control.
-	  o Tolerate packet loss unrelated to congestion.
+	    o Use the delay gradient as a congestion signal.
+	    o Back off with an average probability that is independent of the RTT.
+	    o Coexist with flows that use loss-based congestion control.
+	    o Tolerate packet loss unrelated to congestion.
 
 	  For further details see:
 	    D.A. Hayes and G. Armitage. "Revisiting TCP congestion control using

@@ -48,12 +48,12 @@ config CORESIGHT_CATU
 	tristate "Coresight Address Translation Unit (CATU) driver"
 	depends on CORESIGHT_LINK_AND_SINK_TMC
 	help
-	   Enable support for the Coresight Address Translation Unit (CATU).
-	   CATU supports a scatter gather table of 4K pages, with forward/backward
-	   lookup. CATU helps TMC ETR to use a large physically non-contiguous trace
-	   buffer by translating the addresses used by ETR to the physical address
-	   by looking up the provided table. CATU can also be used in pass-through
-	   mode where the address is not translated.
+	  Enable support for the Coresight Address Translation Unit (CATU).
+	  CATU supports a scatter gather table of 4K pages, with forward/backward
+	  lookup. CATU helps TMC ETR to use a large physically non-contiguous trace
+	  buffer by translating the addresses used by ETR to the physical address
+	  by looking up the provided table. CATU can also be used in pass-through
+	  mode where the address is not translated.
 
 	   To compile this driver as a module, choose M here: the
 	   module will be called coresight-catu.

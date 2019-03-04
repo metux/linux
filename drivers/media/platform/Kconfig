@@ -18,9 +18,9 @@ config VIDEO_VIA_CAMERA
 	select VIDEOBUF2_DMA_SG
 	select VIDEO_OV7670
 	help
-	   Driver support for the integrated camera controller in VIA
-	   Chrome9 chipsets.  Currently only tested on OLPC xo-1.5 systems
-	   with ov7670 sensors.
+	  Driver support for the integrated camera controller in VIA
+	  Chrome9 chipsets.  Currently only tested on OLPC xo-1.5 systems
+	  with ov7670 sensors.
 
 #
 # Platform multimedia device configuration
@@ -191,8 +191,8 @@ config VIDEO_CODA
 	select V4L2_MEM2MEM_DEV
 	select GENERIC_ALLOCATOR
 	help
-	   Coda is a range of video codec IPs that supports
-	   H.264, MPEG-4, and other video formats.
+	  Coda is a range of video codec IPs that supports
+	  H.264, MPEG-4, and other video formats.
 
 config VIDEO_IMX_VDOA
 	def_tristate VIDEO_CODA if SOC_IMX6Q || COMPILE_TEST
@@ -225,13 +225,13 @@ config VIDEO_MEDIATEK_VPU
 	depends on VIDEO_DEV && VIDEO_V4L2
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	help
-	    This driver provides downloading VPU firmware and
-	    communicating with VPU. This driver for hw video
-	    codec embedded in Mediatek's MT8173 SOCs. It is able
-	    to handle video decoding/encoding in a range of formats.
+	  This driver provides downloading VPU firmware and
+	  communicating with VPU. This driver for hw video
+	  codec embedded in Mediatek's MT8173 SOCs. It is able
+	  to handle video decoding/encoding in a range of formats.
 
-	    To compile this driver as a module, choose M here: the
-	    module will be called mtk-vpu.
+	  To compile this driver as a module, choose M here: the
+	  module will be called mtk-vpu.
 
 config VIDEO_MEDIATEK_MDP
 	tristate "Mediatek MDP driver"
@@ -242,11 +242,11 @@ config VIDEO_MEDIATEK_MDP
 	select V4L2_MEM2MEM_DEV
 	select VIDEO_MEDIATEK_VPU
 	help
-	    It is a v4l2 driver and present in Mediatek MT8173 SoCs.
-	    The driver supports for scaling and color space conversion.
+	  It is a v4l2 driver and present in Mediatek MT8173 SoCs.
+	  The driver supports for scaling and color space conversion.
 
-	    To compile this driver as a module, choose M here: the
-	    module will be called mtk-mdp.
+	  To compile this driver as a module, choose M here: the
+	  module will be called mtk-mdp.
 
 config VIDEO_MEDIATEK_VCODEC
 	tristate "Mediatek Video Codec driver"
@@ -286,7 +286,7 @@ config VIDEO_MEM2MEM_DEINTERLACE
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	help
-	    Generic deinterlacing V4L2 driver.
+	  Generic deinterlacing V4L2 driver.
 
 config VIDEO_SAMSUNG_S5P_G2D
 	tristate "Samsung S5P and EXYNOS4 G2D 2d graphics accelerator driver"
@@ -314,7 +314,7 @@ config VIDEO_SAMSUNG_S5P_MFC
 	depends on ARCH_S5PV210 || ARCH_EXYNOS || COMPILE_TEST
 	select VIDEOBUF2_DMA_CONTIG
 	help
-	    MFC 5.1 and 6.x driver for V4L2
+	  MFC 5.1 and 6.x driver for V4L2
 
 config VIDEO_MX2_EMMAPRP
 	tristate "MX2 eMMa-PrP support"
@@ -323,9 +323,9 @@ config VIDEO_MX2_EMMAPRP
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	help
-	    MX2X chips have a PrP that can be used to process buffers from
-	    memory to memory. Operations include resizing and format
-	    conversion.
+	  MX2X chips have a PrP that can be used to process buffers from
+	  memory to memory. Operations include resizing and format
+	  conversion.
 
 config VIDEO_SAMSUNG_EXYNOS_GSC
 	tristate "Samsung Exynos G-Scaler driver"
@@ -375,16 +375,16 @@ config VIDEO_STI_DELTA
 	depends on VIDEO_DEV && VIDEO_V4L2
 	depends on ARCH_STI || COMPILE_TEST
 	help
-		This V4L2 driver enables DELTA multi-format video decoder
-		of STMicroelectronics STiH4xx SoC series allowing hardware
-		decoding of various compressed video bitstream format in
-		raw uncompressed format.
+	  This V4L2 driver enables DELTA multi-format video decoder
+	  of STMicroelectronics STiH4xx SoC series allowing hardware
+	  decoding of various compressed video bitstream format in
+	  raw uncompressed format.
 
-		Use this option to see the decoders available for such
-		hardware.
+	  Use this option to see the decoders available for such
+	  hardware.
 
-		Please notice that the driver will only be built if
-		at least one of the DELTA decoder below is selected.
+	  Please notice that the driver will only be built if
+	  at least one of the DELTA decoder below is selected.
 
 if VIDEO_STI_DELTA
 
@@ -392,10 +392,10 @@ config VIDEO_STI_DELTA_MJPEG
 	bool "STMicroelectronics DELTA MJPEG support"
 	default y
 	help
-		Enables DELTA MJPEG hardware support.
+	  Enables DELTA MJPEG hardware support.
 
-		To compile this driver as a module, choose M here:
-		the module will be called st-delta.
+	  To compile this driver as a module, choose M here:
+	  the module will be called st-delta.
 
 config VIDEO_STI_DELTA_DRIVER
 	tristate
@@ -519,9 +519,9 @@ config VIDEO_SUN8I_DEINTERLACE
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	help
-	   Support for the Allwinner deinterlace unit with scaling
-	   capability found on some SoCs, like H3.
-	   To compile this driver as a module choose m here.
+	  Support for the Allwinner deinterlace unit with scaling
+	  capability found on some SoCs, like H3.
+	  To compile this driver as a module choose m here.
 
 config VIDEO_SUN8I_ROTATE
 	tristate "Allwinner DE2 rotation driver"
@@ -532,8 +532,8 @@ config VIDEO_SUN8I_ROTATE
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	help
-	   Support for the Allwinner DE2 rotation unit.
-	   To compile this driver as a module choose m here.
+	  Support for the Allwinner DE2 rotation unit.
+	  To compile this driver as a module choose m here.
 
 endif # V4L_MEM2MEM_DRIVERS
 

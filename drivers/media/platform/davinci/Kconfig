@@ -37,14 +37,14 @@ config VIDEO_DM6446_CCDC
 	depends on I2C
 	select VIDEOBUF_DMA_CONTIG
 	help
-	   Enables DaVinci CCD hw module. DaVinci CCDC hw interfaces
-	   with decoder modules such as TVP5146 over BT656 or
-	   sensor module such as MT9T001 over a raw interface. This
-	   module configures the interface and CCDC/ISIF to do
-	   video frame capture from slave decoders.
+	  Enables DaVinci CCD hw module. DaVinci CCDC hw interfaces
+	  with decoder modules such as TVP5146 over BT656 or
+	  sensor module such as MT9T001 over a raw interface. This
+	  module configures the interface and CCDC/ISIF to do
+	  video frame capture from slave decoders.
 
-	   To compile this driver as a module, choose M here. There will
-	   be three modules called vpfe_capture.ko, vpss.ko and dm644x_ccdc.ko
+	  To compile this driver as a module, choose M here. There will
+	  be three modules called vpfe_capture.ko, vpss.ko and dm644x_ccdc.ko
 
 config VIDEO_DM355_CCDC
 	tristate "TI DM355 CCDC video capture driver"
@@ -53,14 +53,14 @@ config VIDEO_DM355_CCDC
 	depends on I2C
 	select VIDEOBUF_DMA_CONTIG
 	help
-	   Enables DM355 CCD hw module. DM355 CCDC hw interfaces
-	   with decoder modules such as TVP5146 over BT656 or
-	   sensor module such as MT9T001 over a raw interface. This
-	   module configures the interface and CCDC/ISIF to do
-	   video frame capture from a slave decoders
+	  Enables DM355 CCD hw module. DM355 CCDC hw interfaces
+	  with decoder modules such as TVP5146 over BT656 or
+	  sensor module such as MT9T001 over a raw interface. This
+	  module configures the interface and CCDC/ISIF to do
+	  video frame capture from a slave decoders
 
-	   To compile this driver as a module, choose M here. There will
-	   be three modules called vpfe_capture.ko, vpss.ko and dm355_ccdc.ko
+	  To compile this driver as a module, choose M here. There will
+	  be three modules called vpfe_capture.ko, vpss.ko and dm355_ccdc.ko
 
 config VIDEO_DM365_ISIF
 	tristate "TI DM365 ISIF video capture driver"
@@ -69,12 +69,12 @@ config VIDEO_DM365_ISIF
 	depends on I2C
 	select VIDEOBUF_DMA_CONTIG
 	help
-	   Enables ISIF hw module. This is the hardware module for
-	   configuring ISIF in VPFE to capture Raw Bayer RGB data from
-	   a image sensor or YUV data from a YUV source.
+	  Enables ISIF hw module. This is the hardware module for
+	  configuring ISIF in VPFE to capture Raw Bayer RGB data from
+	  a image sensor or YUV data from a YUV source.
 
-	   To compile this driver as a module, choose M here. There will
-	   be three modules called vpfe_capture.ko, vpss.ko and isif.ko
+	  To compile this driver as a module, choose M here. There will
+	  be three modules called vpfe_capture.ko, vpss.ko and isif.ko
 
 config VIDEO_DAVINCI_VPBE_DISPLAY
 	tristate "TI DaVinci VPBE V4L2-Display driver"
@@ -83,10 +83,10 @@ config VIDEO_DAVINCI_VPBE_DISPLAY
 	depends on I2C
 	select VIDEOBUF2_DMA_CONTIG
 	help
-	    Enables Davinci VPBE module used for display devices.
-	    This module is used for display on TI DM644x/DM365/DM355
-	    based display devices.
+	  Enables Davinci VPBE module used for display devices.
+	  This module is used for display on TI DM644x/DM365/DM355
+	  based display devices.
 
-	    To compile this driver as a module, choose M here. There will
-	    be five modules created called vpss.ko, vpbe.ko, vpbe_osd.ko,
-	    vpbe_venc.ko and vpbe_display.ko
+	  To compile this driver as a module, choose M here. There will
+	  be five modules created called vpss.ko, vpbe.ko, vpbe_osd.ko,
+	  vpbe_venc.ko and vpbe_display.ko

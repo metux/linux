@@ -9,8 +9,8 @@ config VIDEO_ATMEL_ISC
 	select REGMAP_MMIO
 	select V4L2_FWNODE
 	help
-	   This module makes the ATMEL Image Sensor Controller available
-	   as a v4l2 device.
+	  This module makes the ATMEL Image Sensor Controller available
+	  as a v4l2 device.
 
 config VIDEO_ATMEL_ISI
 	tristate "ATMEL Image Sensor Interface (ISI) support"

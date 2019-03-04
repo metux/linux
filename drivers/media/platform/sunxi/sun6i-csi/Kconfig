@@ -9,4 +9,4 @@ config VIDEO_SUN6I_CSI
 	select REGMAP_MMIO
 	select V4L2_FWNODE
 	help
-	   Support for the Allwinner Camera Sensor Interface Controller on V3s.
+	  Support for the Allwinner Camera Sensor Interface Controller on V3s.

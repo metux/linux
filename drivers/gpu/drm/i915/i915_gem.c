@@ -2872,6 +2872,14 @@ i915_gem_object_pwrite_gtt(struct drm_i915_gem_object *obj,
 	return 0;
 }
 
+static bool match_ring(struct i915_request *rq)
+{
+	struct drm_i915_private *dev_priv = rq->i915;
+	u32 ring = I915_READ(RING_START(rq->engine->mmio_base));
+
+	return ring == i915_ggtt_offset(rq->ring->vma);
+}
+
 static void
 i915_gem_retire_work_handler(struct work_struct *work)
 {

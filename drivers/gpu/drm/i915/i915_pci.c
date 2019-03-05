@@ -759,6 +759,8 @@ static const struct intel_device_info intel_elkhartlake_info = {
 	.is_alpha_support = 1,
 	.engine_mask = BIT(RCS0) | BIT(BCS0) | BIT(VCS0),
 	.ppgtt_size = 36,
+	.engine_mask =
+		BIT(RCS0) | BIT(BCS0) | BIT(VECS0) | BIT(VCS0) | BIT(VCS2),
 };
 
 #undef GEN

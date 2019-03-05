@@ -1008,6 +1008,8 @@ void intel_engine_get_instdone(struct intel_engine_cs *engine,
 	case 4:
 		instdone->instdone =
 			intel_uncore_read(uncore, RING_INSTDONE(mmio_base));
+		instdone->instdone = I915_READ(RING_INSTDONE(mmio_base));
+
 		if (engine->id == RCS0)
 			/* HACK: Using the wrong struct member */
 			instdone->slice_common =
@@ -1358,6 +1360,7 @@ static void intel_engine_print_registers(const struct intel_engine_cs *engine,
 
 	if (engine->id == RCS0 && IS_GEN_RANGE(dev_priv, 4, 7))
 		drm_printf(m, "\tCCID: 0x%08x\n", ENGINE_READ(engine, CCID));
+		drm_printf(m, "\tCCID: 0x%08x\n", I915_READ(CCID));
 	drm_printf(m, "\tRING_START: 0x%08x\n",
 		   ENGINE_READ(engine, RING_START));
 	drm_printf(m, "\tRING_HEAD:  0x%08x\n",

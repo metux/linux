@@ -2517,6 +2517,8 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 	ENGINE_INSTANCES_MASK(dev_priv, VCS0, I915_MAX_VCS)
 #define VEBOX_MASK(dev_priv) \
 	ENGINE_INSTANCES_MASK(dev_priv, VECS0, I915_MAX_VECS)
+#define ALL_ENGINES	(~0u)
+#define HAS_ENGINE(dev_priv, id) (INTEL_INFO(dev_priv)->engine_mask & BIT(id))
 
 #define HAS_LLC(dev_priv)	(INTEL_INFO(dev_priv)->has_llc)
 #define HAS_SNOOP(dev_priv)	(INTEL_INFO(dev_priv)->has_snoop)

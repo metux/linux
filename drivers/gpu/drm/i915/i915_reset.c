@@ -1256,6 +1256,7 @@ void i915_clear_error_registers(struct drm_i915_private *i915)
 			intel_uncore_posting_read(uncore,
 						  RING_FAULT_REG(engine));
 		}
+		POSTING_READ(RING_FAULT_REG(dev_priv->engine[RCS0]));
 	}
 }
 

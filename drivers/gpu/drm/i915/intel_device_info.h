@@ -166,6 +166,8 @@ struct sseu_dev_info {
 	u8 eu_mask[GEN_MAX_SLICES * GEN_MAX_SUBSLICES];
 };
 
+typedef u8 intel_engine_mask_t;
+
 struct intel_device_info {
 	u16 gen_mask;
 

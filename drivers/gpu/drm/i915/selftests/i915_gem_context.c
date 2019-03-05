@@ -559,6 +559,10 @@ static int igt_ctx_exec(void *arg)
 			ndwords++;
 			ncontexts++;
 		}
+		ncontexts++;
+	}
+	pr_info("Submitted %lu contexts (across %u engines), filling %lu dwords\n",
+		ncontexts, RUNTIME_INFO(i915)->num_engines, ndwords);
 
 		pr_info("Submitted %lu contexts to %s, filling %lu dwords\n",
 			ncontexts, engine->name, ndwords);

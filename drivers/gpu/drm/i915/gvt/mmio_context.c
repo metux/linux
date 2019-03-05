@@ -69,6 +69,7 @@ static struct engine_mmio gen8_engine_mmio_list[] __cacheline_aligned = {
 	{BCS0, RING_INSTPM(BLT_RING_BASE), 0xffff, false}, /* 0x220c0 */
 	{BCS0, RING_HWSTAM(BLT_RING_BASE), 0x0, false}, /* 0x22098 */
 	{BCS0, RING_EXCC(BLT_RING_BASE), 0xffff, false}, /* 0x22028 */
+	{BCS0, RING_EXCC(BLT_RING_BASE), 0x0, false}, /* 0x22028 */
 	{RCS0, INVALID_MMIO_REG, 0, false } /* Terminated */
 };
 
@@ -115,12 +116,19 @@ static struct engine_mmio gen9_engine_mmio_list[] __cacheline_aligned = {
 	{RCS0, TRVADR, 0, true}, /* 0x4df0 */
 	{RCS0, TRTTE, 0, true}, /* 0x4df4 */
 	{RCS0, _MMIO(0x4dfc), 0, true},
+	{RCS0, TRVATTL3PTRDW(0), 0, false}, /* 0x4de0 */
+	{RCS0, TRVATTL3PTRDW(1), 0, false}, /* 0x4de4 */
+	{RCS0, TRNULLDETCT, 0, false}, /* 0x4de8 */
+	{RCS0, TRINVTILEDETCT, 0, false}, /* 0x4dec */
+	{RCS0, TRVADR, 0, false}, /* 0x4df0 */
+	{RCS0, TRTTE, 0, false}, /* 0x4df4 */
 
 	{BCS0, RING_GFX_MODE(BLT_RING_BASE), 0xffff, false}, /* 0x2229c */
 	{BCS0, RING_MI_MODE(BLT_RING_BASE), 0xffff, false}, /* 0x2209c */
 	{BCS0, RING_INSTPM(BLT_RING_BASE), 0xffff, false}, /* 0x220c0 */
 	{BCS0, RING_HWSTAM(BLT_RING_BASE), 0x0, false}, /* 0x22098 */
 	{BCS0, RING_EXCC(BLT_RING_BASE), 0xffff, false}, /* 0x22028 */
+	{BCS0, RING_EXCC(BLT_RING_BASE), 0x0, false}, /* 0x22028 */
 
 	{VCS1, RING_EXCC(GEN8_BSD2_RING_BASE), 0xffff, false}, /* 0x1c028 */
 
@@ -134,6 +142,7 @@ static struct engine_mmio gen9_engine_mmio_list[] __cacheline_aligned = {
 	{RCS0, GEN9_GAMT_ECO_REG_RW_IA, 0x0, false}, /* 0x4ab0 */
 	{RCS0, GEN9_CSFE_CHICKEN1_RCS, 0xffff, false}, /* 0x20d4 */
 	{RCS0, _MMIO(0x20D8), 0xffff, true}, /* 0x20d8 */
+	{RCS, _MMIO(0x20D8), 0xffff, true}, /* 0x20d8 */
 
 	{RCS0, GEN8_GARBCNTL, 0x0, false}, /* 0xb004 */
 	{RCS0, GEN7_FF_THREAD_MODE, 0x0, false}, /* 0x20a0 */
@@ -394,6 +403,10 @@ static void switch_mocs(struct intel_vgpu *pre, struct intel_vgpu *next,
 		return;
 
 	if (ring_id == RCS0 && IS_GEN(dev_priv, 9))
+	if (ring_id == RCS0 &&
+	    (IS_KABYLAKE(dev_priv) ||
+	     IS_BROXTON(dev_priv) ||
+	     IS_COFFEELAKE(dev_priv)))
 		return;
 
 	if (!pre && !gen9_render_mocs.initialized)

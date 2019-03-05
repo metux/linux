@@ -391,6 +391,7 @@ struct i915_hw_ppgtt {
 	struct kref ref;
 
 	intel_engine_mask_t pd_dirty_engines;
+	unsigned long pd_dirty_engines;
 	union {
 		struct i915_pml4 pml4;		/* GEN8+ & 48b PPGTT */
 		struct i915_page_directory_pointer pdp;	/* GEN8+ */

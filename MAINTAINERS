@@ -7514,6 +7514,11 @@ F:	Documentation/filesystems/gfs2*
 F:	fs/gfs2/
 F:	include/uapi/linux/gfs2_ondisk.h
 
+GIT_SEND_PATCH SCRIPT
+M:	Enrico Weigelt, metux IT consult <info@metux.net>
+F:	scripts/git-send-patch
+S:	Maintained
+
 GNSS SUBSYSTEM
 M:	Johan Hovold <johan@kernel.org>
 S:	Maintained

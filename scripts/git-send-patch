@@ -1,0 +1,62 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+
+[ -x "$GIT" ]       || export GIT=git
+[ -d "$KERNELSRC" ] || export KERNELSRC=.
+
+LKML="linux-kernel@vger.kernel.org"
+
+check_ksrc() {
+    if [ -d $KERNELSRC/arch ] && \
+       [ -d $KERNELSRC/block ] && \
+       [ -d $KERNELSRC/init ] && \
+       [ -d $KERNELSRC/kernel ] && \
+       [ -d $KERNELSRC/sound ] && \
+       [ -d $KERNELSRC/drivers ] && \
+       [ -d $KERNELSRC/net ] && \
+       [ -d $KERNELSRC/include ] && \
+       [ -f $KERNELSRC/COPYING ] && \
+       [ -f $KERNELSRC/MAINTAINERS ] && \
+       [ -f $KERNELSRC/CREDITS ] && \
+       [ -f $KERNELSRC/Kconfig ] && \
+       [ -f $KERNELSRC/Makefile ]; then
+        return 0
+    else
+        echo "$0: cant find the kernel source tree. please call me from the topdir" >&2
+        exit 1
+    fi
+}
+
+check_ksrc
+
+get_files() {
+    $GIT diff --name-only "$REF"
+}
+
+get_maintainers() {
+    $KERNELSRC/scripts/get_maintainer.pl --m --l --remove-duplicates `get_files` |
+        grep -v "$LKML" | \
+        grep -E "(maintainer|reviewer|open list)" | \
+        grep -o '[[:alnum:]+\.\_\-]*@[[:alnum:]+\.\_\-]*'
+}
+
+construct_params() {
+    echo -n "--to=$LKML "
+    for a in `get_maintainers`; do
+        echo -n "--cc=$a "
+    done
+}
+
+if [ ! "$1" ]; then
+    echo "$0: missing git revision to send out" >&2
+    echo "" >&2
+    echo "for example: 'HEAD^' for sending just the last patch" >&2
+    echo >&2
+    echo "$0 <git-ref> [<extra params for git-send-mail>]"
+    exit 1
+fi
+
+REF="$1"
+shift
+
+$GIT send-email `construct_params` "$REF" "$@"

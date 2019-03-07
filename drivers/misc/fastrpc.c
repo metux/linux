@@ -1316,6 +1316,7 @@ static int fastrpc_cb_probe(struct platform_device *pdev)
 	int i, sessions = 0;
 	unsigned long flags;
 	int rc;
+	unsigned long flags;
 
 	cctx = dev_get_drvdata(dev->parent);
 	if (!cctx)

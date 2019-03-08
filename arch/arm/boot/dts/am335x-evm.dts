@@ -363,10 +363,10 @@
 
 	mcasp1_pins: mcasp1_pins {
 		pinctrl-single,pins = <
-			AM33XX_PADCONF(AM335X_PIN_MII1_CRS, PIN_INPUT_PULLDOWN, MUX_MODE4) /* mii1_crs.mcasp1_aclkx */
-			AM33XX_PADCONF(AM335X_PIN_MII1_RX_ER, PIN_INPUT_PULLDOWN, MUX_MODE4) /* mii1_rxerr.mcasp1_fsx */
-			AM33XX_PADCONF(AM335X_PIN_MII1_COL, PIN_OUTPUT_PULLDOWN, MUX_MODE4) /* mii1_col.mcasp1_axr2 */
-			AM33XX_PADCONF(AM335X_PIN_RMII1_REF_CLK, PIN_INPUT_PULLDOWN, MUX_MODE4) /* rmii1_ref_clk.mcasp1_axr3 */
+			AM33XX_PADCONF(AM335X_PIN_MII1_CRS, PIN_INPUT_PULLDOWN, MUX_MODE4)	/* mii1_crs.mcasp1_aclkx */
+			AM33XX_PADCONF(AM335X_PIN_MII1_RX_ER, PIN_INPUT_PULLDOWN, MUX_MODE4)	/* mii1_rxerr.mcasp1_fsx */
+			AM33XX_PADCONF(AM335X_PIN_MII1_COL, PIN_OUTPUT_PULLDOWN, MUX_MODE4)	/* mii1_col.mcasp1_axr2 */
+			AM33XX_PADCONF(AM335X_PIN_RMII1_REF_CLK, PIN_INPUT_PULLDOWN, MUX_MODE4)	/* rmii1_ref_clk.mcasp1_axr3 */
 		>;
 	};
 
@@ -381,8 +381,8 @@
 
 	dcan1_pins_default: dcan1_pins_default {
 		pinctrl-single,pins = <
-			AM33XX_PADCONF(AM335X_PIN_UART0_CTSN, PIN_OUTPUT, MUX_MODE2) /* uart0_ctsn.d_can1_tx */
-			AM33XX_PADCONF(AM335X_PIN_UART0_RTSN, PIN_INPUT_PULLDOWN, MUX_MODE2) /* uart0_rtsn.d_can1_rx */
+			AM33XX_PADCONF(AM335X_PIN_UART0_CTSN, PIN_OUTPUT, MUX_MODE2)		/* uart0_ctsn.d_can1_tx */
+			AM33XX_PADCONF(AM335X_PIN_UART0_RTSN, PIN_INPUT_PULLDOWN, MUX_MODE2)	/* uart0_rtsn.d_can1_rx */
 		>;
 	};
 };

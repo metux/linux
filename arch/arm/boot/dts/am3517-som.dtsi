@@ -181,35 +181,35 @@
 
 	wl12xx_buffer_pins: pinmux_wl12xx_buffer_pins {
 		pinctrl-single,pins = <
-			OMAP3_CORE1_IOPAD(0x2156, PIN_OUTPUT | MUX_MODE4)  /* mmc1_dat7.gpio_129 */
+			OMAP3_CORE1_IOPAD(0x2156, PIN_OUTPUT | MUX_MODE4)	/* mmc1_dat7.gpio_129 */
 		>;
 	};
 
 	mmc2_pins: pinmux_mmc2_pins {
 		pinctrl-single,pins = <
-			OMAP3_CORE1_IOPAD(0x2158, PIN_INPUT_PULLUP | MUX_MODE0)  /* mmc2_clk.mmc2_clk */
-			OMAP3_CORE1_IOPAD(0x215a, PIN_INPUT_PULLUP | MUX_MODE0)  /* mmc2_cmd.mmc2_cmd */
-			OMAP3_CORE1_IOPAD(0x215c, PIN_INPUT_PULLUP | MUX_MODE0)  /* mmc2_dat0.mmc2_dat0 */
-			OMAP3_CORE1_IOPAD(0x215e, PIN_INPUT_PULLUP | MUX_MODE0)  /* mmc2_dat1.mmc2_dat1 */
-			OMAP3_CORE1_IOPAD(0x2160, PIN_INPUT_PULLUP | MUX_MODE0)  /* mmc2_dat2.mmc2_dat2 */
-			OMAP3_CORE1_IOPAD(0x2162, PIN_INPUT_PULLUP | MUX_MODE0)  /* mmc2_dat3.mmc2_dat3 */
-			OMAP3_CORE1_IOPAD(0x2164, PIN_OUTPUT | MUX_MODE1) /* mmc2_dat4.mmc2_dir_dat0 */
-			OMAP3_CORE1_IOPAD(0x2166, PIN_OUTPUT | MUX_MODE1) /* mmc2_dat5.mmc2_dir_dat1 */
-			OMAP3_CORE1_IOPAD(0x2168, PIN_OUTPUT | MUX_MODE1) /* mmc2_dat6.mmc2_dir_cmd */
-			OMAP3_CORE1_IOPAD(0x216a, PIN_INPUT | MUX_MODE1) /* mmc2_dat7.mmc2_clkin */
+			OMAP3_CORE1_IOPAD(0x2158, PIN_INPUT_PULLUP | MUX_MODE0)	/* mmc2_clk.mmc2_clk */
+			OMAP3_CORE1_IOPAD(0x215a, PIN_INPUT_PULLUP | MUX_MODE0)	/* mmc2_cmd.mmc2_cmd */
+			OMAP3_CORE1_IOPAD(0x215c, PIN_INPUT_PULLUP | MUX_MODE0)	/* mmc2_dat0.mmc2_dat0 */
+			OMAP3_CORE1_IOPAD(0x215e, PIN_INPUT_PULLUP | MUX_MODE0)	/* mmc2_dat1.mmc2_dat1 */
+			OMAP3_CORE1_IOPAD(0x2160, PIN_INPUT_PULLUP | MUX_MODE0)	/* mmc2_dat2.mmc2_dat2 */
+			OMAP3_CORE1_IOPAD(0x2162, PIN_INPUT_PULLUP | MUX_MODE0)	/* mmc2_dat3.mmc2_dat3 */
+			OMAP3_CORE1_IOPAD(0x2164, PIN_OUTPUT | MUX_MODE1)	/* mmc2_dat4.mmc2_dir_dat0 */
+			OMAP3_CORE1_IOPAD(0x2166, PIN_OUTPUT | MUX_MODE1)	/* mmc2_dat5.mmc2_dir_dat1 */
+			OMAP3_CORE1_IOPAD(0x2168, PIN_OUTPUT | MUX_MODE1)	/* mmc2_dat6.mmc2_dir_cmd */
+			OMAP3_CORE1_IOPAD(0x216a, PIN_INPUT | MUX_MODE1)	/* mmc2_dat7.mmc2_clkin */
 			OMAP3_CORE1_IOPAD(0x21c6, PIN_INPUT_PULLUP | MUX_MODE4)	/* hdq_sio.gpio_170 */
 		>;
 	};
 
 	rtc_pins: pinmux_rtc_pins {
 		pinctrl-single,pins = <
-			OMAP3_CORE1_IOPAD(0x20b6, PIN_INPUT_PULLUP | MUX_MODE4) /* gpmc_ncs4.gpio_55 */
+			OMAP3_CORE1_IOPAD(0x20b6, PIN_INPUT_PULLUP | MUX_MODE4)	/* gpmc_ncs4.gpio_55 */
 		>;
 	};
 
 	tsc2004_pins: pinmux_tsc2004_pins {
 		pinctrl-single,pins = <
-			OMAP3_CORE1_IOPAD(0x20d2, PIN_INPUT | MUX_MODE4) /* gpmc_wait3.gpio_65 */
+			OMAP3_CORE1_IOPAD(0x20d2, PIN_INPUT | MUX_MODE4)	/* gpmc_wait3.gpio_65 */
 		>;
 	};
 

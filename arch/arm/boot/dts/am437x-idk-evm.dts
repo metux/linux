@@ -175,14 +175,14 @@
 &am43xx_pinmux {
 	gpio_keys_pins_default: gpio_keys_pins_default {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x9b8, PIN_INPUT | MUX_MODE7)	/* cam0_field.gpio4_2 */
+			AM4372_IOPAD(0x9b8, PIN_INPUT | MUX_MODE7)			/* cam0_field.gpio4_2 */
 		>;
 	};
 
 	i2c0_pins_default: i2c0_pins_default {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x988, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE0) /* i2c0_sda.i2c0_sda */
-			AM4372_IOPAD(0x98c, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE0) /* i2c0_scl.i2c0_scl */
+			AM4372_IOPAD(0x988, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE0)	/* i2c0_sda.i2c0_sda */
+			AM4372_IOPAD(0x98c, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE0)	/* i2c0_scl.i2c0_scl */
 		>;
 	};
 
@@ -195,8 +195,8 @@
 
 	i2c2_pins_default: i2c2_pins_default {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x9e8, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE3) /* cam1_data1.i2c2_scl */
-			AM4372_IOPAD(0x9ec, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE3) /* cam1_data0.i2c2_sda */
+			AM4372_IOPAD(0x9e8, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE3)	/* cam1_data1.i2c2_scl */
+			AM4372_IOPAD(0x9ec, PIN_INPUT | SLEWCTRL_FAST | MUX_MODE3)	/* cam1_data0.i2c2_sda */
 		>;
 	};
 
@@ -209,13 +209,13 @@
 
 	mmc1_pins_default: pinmux_mmc1_pins_default {
 		pinctrl-single,pins = <
-			AM4372_IOPAD(0x900, PIN_INPUT | MUX_MODE0) /* mmc0_clk.mmc0_clk */
-			AM4372_IOPAD(0x904, PIN_INPUT | MUX_MODE0) /* mmc0_cmd.mmc0_cmd */
-			AM4372_IOPAD(0x9f0, PIN_INPUT | MUX_MODE0) /* mmc0_dat3.mmc0_dat3 */
-			AM4372_IOPAD(0x9f4, PIN_INPUT | MUX_MODE0) /* mmc0_dat2.mmc0_dat2 */
-			AM4372_IOPAD(0x9f8, PIN_INPUT | MUX_MODE0) /* mmc0_dat1.mmc0_dat1 */
-			AM4372_IOPAD(0x9fc, PIN_INPUT | MUX_MODE0) /* mmc0_dat0.mmc0_dat0 */
-			AM4372_IOPAD(0x960, PIN_INPUT | MUX_MODE7) /* spi0_cs1.gpio0_6 */
+			AM4372_IOPAD(0x900, PIN_INPUT | MUX_MODE0)	/* mmc0_clk.mmc0_clk */
+			AM4372_IOPAD(0x904, PIN_INPUT | MUX_MODE0)	/* mmc0_cmd.mmc0_cmd */
+			AM4372_IOPAD(0x9f0, PIN_INPUT | MUX_MODE0)	/* mmc0_dat3.mmc0_dat3 */
+			AM4372_IOPAD(0x9f4, PIN_INPUT | MUX_MODE0)	/* mmc0_dat2.mmc0_dat2 */
+			AM4372_IOPAD(0x9f8, PIN_INPUT | MUX_MODE0)	/* mmc0_dat1.mmc0_dat1 */
+			AM4372_IOPAD(0x9fc, PIN_INPUT | MUX_MODE0)	/* mmc0_dat0.mmc0_dat0 */
+			AM4372_IOPAD(0x960, PIN_INPUT | MUX_MODE7)	/* spi0_cs1.gpio0_6 */
 		>;
 	};
 

@@ -445,138 +445,138 @@
 						sirf,function = "i2c1";
 					};
 				};
-                                pwm0_pins_a: pwm0@0 {
-                                        pwm {
-                                                sirf,pins = "pwm0grp";
-                                                sirf,function = "pwm0";
-                                        };
-                                };
-                                pwm1_pins_a: pwm1@0 {
-                                        pwm {
-                                                sirf,pins = "pwm1grp";
-                                                sirf,function = "pwm1";
-                                        };
-                                };
-                                pwm2_pins_a: pwm2@0 {
-                                        pwm {
-                                                sirf,pins = "pwm2grp";
-                                                sirf,function = "pwm2";
-                                        };
-                                };
-                                pwm3_pins_a: pwm3@0 {
-                                        pwm {
-                                                sirf,pins = "pwm3grp";
-                                                sirf,function = "pwm3";
-                                        };
-                                };
+				pwm0_pins_a: pwm0@0 {
+					pwm {
+						sirf,pins = "pwm0grp";
+						sirf,function = "pwm0";
+					};
+				};
+				pwm1_pins_a: pwm1@0 {
+					pwm {
+						sirf,pins = "pwm1grp";
+						sirf,function = "pwm1";
+					};
+				};
+				pwm2_pins_a: pwm2@0 {
+					pwm {
+						sirf,pins = "pwm2grp";
+						sirf,function = "pwm2";
+					};
+				};
+				pwm3_pins_a: pwm3@0 {
+					pwm {
+						sirf,pins = "pwm3grp";
+						sirf,function = "pwm3";
+					};
+				};
 				pwm4_pins_a: pwm4@0 {
-                                        pwm {
-                                                sirf,pins = "pwm4grp";
-                                                sirf,function = "pwm4";
-                                        };
-                                };
-                                gps_pins_a: gps@0 {
-                                        gps {
-                                                sirf,pins = "gpsgrp";
-                                                sirf,function = "gps";
-                                        };
-                                };
-                                vip_pins_a: vip@0 {
-                                        vip {
-                                                sirf,pins = "vipgrp";
-                                                sirf,function = "vip";
-                                        };
-                                };
-                                sdmmc0_pins_a: sdmmc0@0 {
-                                        sdmmc0 {
-                                                sirf,pins = "sdmmc0grp";
-                                                sirf,function = "sdmmc0";
-                                        };
-                                };
-                                sdmmc1_pins_a: sdmmc1@0 {
-                                        sdmmc1 {
-                                                sirf,pins = "sdmmc1grp";
-                                                sirf,function = "sdmmc1";
-                                        };
-                                };
-                                sdmmc2_pins_a: sdmmc2@0 {
-                                        sdmmc2 {
-                                                sirf,pins = "sdmmc2grp";
-                                                sirf,function = "sdmmc2";
-                                        };
-                                };
+					pwm {
+						sirf,pins = "pwm4grp";
+						sirf,function = "pwm4";
+					};
+				};
+				gps_pins_a: gps@0 {
+					gps {
+						sirf,pins = "gpsgrp";
+						sirf,function = "gps";
+					};
+				};
+				vip_pins_a: vip@0 {
+					vip {
+						sirf,pins = "vipgrp";
+						sirf,function = "vip";
+					};
+				};
+				sdmmc0_pins_a: sdmmc0@0 {
+					sdmmc0 {
+						sirf,pins = "sdmmc0grp";
+						sirf,function = "sdmmc0";
+					};
+				};
+				sdmmc1_pins_a: sdmmc1@0 {
+					sdmmc1 {
+						sirf,pins = "sdmmc1grp";
+						sirf,function = "sdmmc1";
+					};
+				};
+				sdmmc2_pins_a: sdmmc2@0 {
+					sdmmc2 {
+						sirf,pins = "sdmmc2grp";
+						sirf,function = "sdmmc2";
+					};
+				};
 				sdmmc2_nowp_pins_a: sdmmc2_nowp@0 {
-                                        sdmmc2_nowp {
-                                                sirf,pins = "sdmmc2_nowpgrp";
-                                                sirf,function = "sdmmc2_nowp";
-                                        };
-                                };
-                                sdmmc3_pins_a: sdmmc3@0 {
-                                        sdmmc3 {
-                                                sirf,pins = "sdmmc3grp";
-                                                sirf,function = "sdmmc3";
-                                        };
-                                };
-                                sdmmc5_pins_a: sdmmc5@0 {
-                                        sdmmc5 {
-                                                sirf,pins = "sdmmc5grp";
-                                                sirf,function = "sdmmc5";
-                                        };
-                                };
+					sdmmc2_nowp {
+						sirf,pins = "sdmmc2_nowpgrp";
+						sirf,function = "sdmmc2_nowp";
+					};
+				};
+				sdmmc3_pins_a: sdmmc3@0 {
+					sdmmc3 {
+						sirf,pins = "sdmmc3grp";
+						sirf,function = "sdmmc3";
+					};
+				};
+				sdmmc5_pins_a: sdmmc5@0 {
+					sdmmc5 {
+						sirf,pins = "sdmmc5grp";
+						sirf,function = "sdmmc5";
+					};
+				};
 				i2s_mclk_pins_a: i2s_mclk@0 {
-                                        i2s_mclk {
-                                                sirf,pins = "i2smclkgrp";
-                                                sirf,function = "i2s_mclk";
-                                        };
-                                };
+					i2s_mclk {
+						sirf,pins = "i2smclkgrp";
+						sirf,function = "i2s_mclk";
+					};
+				};
 				i2s_ext_clk_input_pins_a: i2s_ext_clk_input@0 {
-                                        i2s_ext_clk_input {
-                                                sirf,pins = "i2s_ext_clk_inputgrp";
-                                                sirf,function = "i2s_ext_clk_input";
-                                        };
-                                };
-                                i2s_pins_a: i2s@0 {
-                                        i2s {
-                                                sirf,pins = "i2sgrp";
-                                                sirf,function = "i2s";
-                                        };
-                                };
+					i2s_ext_clk_input {
+						sirf,pins = "i2s_ext_clk_inputgrp";
+						sirf,function = "i2s_ext_clk_input";
+					};
+				};
+				i2s_pins_a: i2s@0 {
+					i2s {
+						sirf,pins = "i2sgrp";
+						sirf,function = "i2s";
+					};
+				};
 				i2s_no_din_pins_a: i2s_no_din@0 {
-                                        i2s_no_din {
-                                                sirf,pins = "i2s_no_dingrp";
-                                                sirf,function = "i2s_no_din";
-                                        };
-                                };
+					i2s_no_din {
+						sirf,pins = "i2s_no_dingrp";
+						sirf,function = "i2s_no_din";
+					};
+				};
 				i2s_6chn_pins_a: i2s_6chn@0 {
-                                        i2s_6chn {
-                                                sirf,pins = "i2s_6chngrp";
-                                                sirf,function = "i2s_6chn";
-                                        };
-                                };
-                                ac97_pins_a: ac97@0 {
-                                        ac97 {
-                                                sirf,pins = "ac97grp";
-                                                sirf,function = "ac97";
-                                        };
-                                };
-                                nand_pins_a: nand@0 {
-                                        nand {
-                                                sirf,pins = "nandgrp";
-                                                sirf,function = "nand";
-                                        };
-                                };
-                                usp0_pins_a: usp0@0 {
-                                        usp0 {
-                                                sirf,pins = "usp0grp";
-                                                sirf,function = "usp0";
-                                        };
-                                };
+					i2s_6chn {
+						sirf,pins = "i2s_6chngrp";
+						sirf,function = "i2s_6chn";
+					};
+				};
+				ac97_pins_a: ac97@0 {
+					ac97 {
+						sirf,pins = "ac97grp";
+						sirf,function = "ac97";
+					};
+				};
+				nand_pins_a: nand@0 {
+					nand {
+						sirf,pins = "nandgrp";
+						sirf,function = "nand";
+					};
+				};
+				usp0_pins_a: usp0@0 {
+					usp0 {
+						sirf,pins = "usp0grp";
+						sirf,function = "usp0";
+					};
+				};
 				usp0_uart_nostreamctrl_pins_a: usp0@1 {
-                                        usp0 {
-                                                sirf,pins = "usp0_uart_nostreamctrl_grp";
-                                                sirf,function = "usp0_uart_nostreamctrl";
-                                        };
-                                };
+					usp0 {
+						sirf,pins = "usp0_uart_nostreamctrl_grp";
+						sirf,function = "usp0_uart_nostreamctrl";
+					};
+				};
 				usp0_only_utfs_pins_a: usp0@2 {
 					usp0 {
 						sirf,pins = "usp0_only_utfs_grp";
@@ -589,66 +589,66 @@
 						sirf,function = "usp0_only_urfs";
 					};
 				};
-                                usp1_pins_a: usp1@0 {
-                                        usp1 {
-                                                sirf,pins = "usp1grp";
-                                                sirf,function = "usp1";
-                                        };
-                                };
+				usp1_pins_a: usp1@0 {
+					usp1 {
+						sirf,pins = "usp1grp";
+						sirf,function = "usp1";
+					};
+				};
 				usp1_uart_nostreamctrl_pins_a: usp1@1 {
-                                        usp1 {
-                                                sirf,pins = "usp1_uart_nostreamctrl_grp";
-                                                sirf,function = "usp1_uart_nostreamctrl";
-                                        };
-                                };
-                                usb0_upli_drvbus_pins_a: usb0_upli_drvbus@0 {
-                                        usb0_upli_drvbus {
-                                                sirf,pins = "usb0_upli_drvbusgrp";
-                                                sirf,function = "usb0_upli_drvbus";
-                                        };
-                                };
-                                usb1_utmi_drvbus_pins_a: usb1_utmi_drvbus@0 {
-                                        usb1_utmi_drvbus {
-                                                sirf,pins = "usb1_utmi_drvbusgrp";
-                                                sirf,function = "usb1_utmi_drvbus";
-                                        };
-                                };
-                                usb1_dp_dn_pins_a: usb1_dp_dn@0 {
-                                        usb1_dp_dn {
-                                                sirf,pins = "usb1_dp_dngrp";
-                                                sirf,function = "usb1_dp_dn";
-                                        };
-                                };
-                                uart1_route_io_usb1_pins_a: uart1_route_io_usb1@0 {
-                                        uart1_route_io_usb1 {
-                                                sirf,pins = "uart1_route_io_usb1grp";
-                                                sirf,function = "uart1_route_io_usb1";
-                                        };
-                                };
-                                warm_rst_pins_a: warm_rst@0 {
-                                        warm_rst {
-                                                sirf,pins = "warm_rstgrp";
-                                                sirf,function = "warm_rst";
-                                        };
-                                };
-                                pulse_count_pins_a: pulse_count@0 {
-                                        pulse_count {
-                                                sirf,pins = "pulse_countgrp";
-                                                sirf,function = "pulse_count";
-                                        };
-                                };
-                                cko0_pins_a: cko0@0 {
-                                        cko0 {
-                                                sirf,pins = "cko0grp";
-                                                sirf,function = "cko0";
-                                        };
-                                };
-                                cko1_pins_a: cko1@0 {
-                                        cko1 {
-                                                sirf,pins = "cko1grp";
-                                                sirf,function = "cko1";
-                                        };
-                                };
+					usp1 {
+						sirf,pins = "usp1_uart_nostreamctrl_grp";
+						sirf,function = "usp1_uart_nostreamctrl";
+					};
+				};
+				usb0_upli_drvbus_pins_a: usb0_upli_drvbus@0 {
+					usb0_upli_drvbus {
+						sirf,pins = "usb0_upli_drvbusgrp";
+						sirf,function = "usb0_upli_drvbus";
+					};
+				};
+				usb1_utmi_drvbus_pins_a: usb1_utmi_drvbus@0 {
+					usb1_utmi_drvbus {
+						sirf,pins = "usb1_utmi_drvbusgrp";
+						sirf,function = "usb1_utmi_drvbus";
+					};
+				};
+				usb1_dp_dn_pins_a: usb1_dp_dn@0 {
+					usb1_dp_dn {
+						sirf,pins = "usb1_dp_dngrp";
+						sirf,function = "usb1_dp_dn";
+					};
+				};
+				uart1_route_io_usb1_pins_a: uart1_route_io_usb1@0 {
+					uart1_route_io_usb1 {
+						sirf,pins = "uart1_route_io_usb1grp";
+						sirf,function = "uart1_route_io_usb1";
+					};
+				};
+				warm_rst_pins_a: warm_rst@0 {
+					warm_rst {
+						sirf,pins = "warm_rstgrp";
+						sirf,function = "warm_rst";
+					};
+				};
+				pulse_count_pins_a: pulse_count@0 {
+					pulse_count {
+						sirf,pins = "pulse_countgrp";
+						sirf,function = "pulse_count";
+					};
+				};
+				cko0_pins_a: cko0@0 {
+					cko0 {
+						sirf,pins = "cko0grp";
+						sirf,function = "cko0";
+					};
+				};
+				cko1_pins_a: cko1@0 {
+					cko1 {
+						sirf,pins = "cko1grp";
+						sirf,function = "cko1";
+					};
+				};
 			};
 
 			pwm@b0130000 {

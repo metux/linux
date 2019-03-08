@@ -343,4 +343,3 @@
 &uart1 {
 	compatible = "marvell,armada-38x-uart";
 };
-

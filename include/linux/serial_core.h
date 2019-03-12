@@ -572,6 +572,49 @@ static inline resource_size_t uart_memres_len(struct uart_port *port)
 }
 
 /*
+ * do a request_mem_region() call on the memory resource
+ */
+static inline struct resource *uart_memres_request(struct uart_port *port,
+						   const char *name)
+{
+	return request_mem_region(
+		uart_memres_start(port),
+		uart_memres_len(port),
+		name);
+}
+
+/*
+ * do a release_mem_region() call on the memory resource
+ */
+static inline void uart_memres_release(struct uart_port *port)
+{
+	return release_mem_region(uart_memres_start(port),
+				  uart_memres_len(port));
+}
+
+/*
+ * devm_ version of uart_memres_request()
+ */
+static inline struct resource *devm_uart_memres_request(struct uart_port *port,
+							const char *name)
+{
+	return devm_request_mem_region(port->dev,
+				       uart_memres_start(port),
+				       uart_memres_len(port),
+				       name);
+}
+
+/*
+ * devm_ version of uart_memres_release()
+ */
+static inline void devm_uart_memres_release(struct uart_port *port)
+{
+	return devm_release_mem_region(port->dev,
+				       uart_memres_start(port),
+				       uart_memres_len(port));
+}
+
+/*
  * Power Management
  */
 int uart_suspend_port(struct uart_driver *reg, struct uart_port *port);

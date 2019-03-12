@@ -1359,8 +1359,7 @@ usp_no_flow_control:
 		goto err;
 	}
 	port->mapbase = res->start;
-	port->membase = devm_ioremap(&pdev->dev,
-			res->start, resource_size(res));
+	port->membase = devm_ioremap_resource(&pdev->dev, res);
 	if (!port->membase) {
 		dev_err(&pdev->dev, "Cannot remap resource.\n");
 		ret = -ENOMEM;

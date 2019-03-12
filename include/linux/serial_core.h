@@ -24,6 +24,7 @@
 #include <linux/compiler.h>
 #include <linux/console.h>
 #include <linux/interrupt.h>
+#include <linux/ioport.h>
 #include <linux/circ_buf.h>
 #include <linux/spinlock.h>
 #include <linux/sched.h>
@@ -256,6 +257,7 @@ struct uart_port {
 	unsigned int		minor;
 	resource_size_t		mapbase;		/* for ioremap */
 	resource_size_t		mapsize;
+	struct resource		memres;
 	struct device		*dev;			/* parent device */
 	unsigned char		hub6;			/* this should be in the 8250 driver */
 	unsigned char		suspended;
@@ -486,6 +488,87 @@ static inline void uart_memres_set_mmio_range(struct uart_port *port,
 	port->mapbase = start;
 	port->mapsize = len;
 	port->iotype  = UPIO_MEM;
+}
+
+/*
+ * set the memory resource from start address and length.
+ * this also maintains the old mapbase field, so old code that hasn't
+ * been converted yet, still gets the correct data
+ */
+static inline void uart_memres_set_interval(struct uart_port *port,
+					    resource_size_t start,
+					    resource_size_t len)
+{
+	port->mapbase = start;
+	port->memres = DEFINE_RES_MEM(start, len);
+}
+
+/*
+ * sets a new start address for the memory resource, keeping the old length.
+ * this also maintains the old mapbase field, so old code that hasn't
+ * been converted yet, still gets the correct data
+ */
+static inline void uart_memres_set_start(struct uart_port *port,
+					 resource_size_t *start)
+{
+	port->mapbase = start;
+	port->memres = DEFINE_RES_MEM(start, uart_memres_len(port));
+}
+
+/*
+ * copy over the memory resource data (including the old mapbase/mapsize
+ * fields) from one struct uart_port to another
+ */
+static inline void uart_memres_copy(struct uart_port *dst,
+				    struct uart_port *src)
+{
+	dst->memres = src->memres;
+	dst->mapbase = src->mapbase;
+	dst->mapsize = src->mapsize;
+}
+
+/*
+ * clear the memory resource data (IOW: set it to zero)
+ * some drivers needs this to tell whether a device is in use.
+ */
+static inline void uart_memres_clear(struct uart_port *port)
+{
+	port->memres = DEFINE_RES_MEM(0, 0);
+	port->mapbase = NULL;
+	port->mapsize = 0;
+}
+
+/*
+ * check for whether the memory resource is valid (IOW: non-0)
+ *
+ * note: for the time being, this checks the old mapbase field,
+ * but later will be changed to memres.start, once all drivers
+ * have been converted.
+ */
+static inline int uart_memres_valid(struct uart_port *port)
+{
+	return (port->mapbase != 0);
+}
+
+/*
+ * retrieve the memory resource's start addresss
+ *
+ * note: for the time being, this retrieves the old mapbase field,
+ * but later will be changed to memres.start, once all drivers
+ * have been converted.
+ */
+static inline resource_size_t uart_memres_start(struct uart_port *port)
+{
+	return port->mapbase;
+}
+
+/*
+ * retrieve the memory resource's length
+ *
+ */
+static inline resource_size_t uart_memres_len(struct uart_port *port)
+{
+	return resource_size(&port->memres);
 }
 
 /*

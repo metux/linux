@@ -953,15 +953,13 @@ static int cdns_uart_verify_port(struct uart_port *port,
  */
 static int cdns_uart_request_port(struct uart_port *port)
 {
-	if (!request_mem_region(port->mapbase, CDNS_UART_REGISTER_SPACE,
-					 CDNS_UART_NAME)) {
+	if (!uart_memres_request(port, CDNS_UART_NAME)) {
 		return -ENOMEM;
 	}
 
-	port->membase = ioremap(port->mapbase, CDNS_UART_REGISTER_SPACE);
-	if (!port->membase) {
+	if (!uart_memres_ioremap(port)) {
 		dev_err(port->dev, "Unable to map registers\n");
-		release_mem_region(port->mapbase, CDNS_UART_REGISTER_SPACE);
+		uart_memres_release(port);
 		return -ENOMEM;
 	}
 	return 0;
@@ -976,9 +974,8 @@ static int cdns_uart_request_port(struct uart_port *port)
  */
 static void cdns_uart_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, CDNS_UART_REGISTER_SPACE);
-	iounmap(port->membase);
-	port->membase = NULL;
+	uart_memres_release(port);
+	uart_memres_iounmap(port);
 }
 
 /**
@@ -1626,7 +1623,7 @@ static int cdns_uart_probe(struct platform_device *pdev)
 	 * This function also registers this device with the tty layer
 	 * and triggers invocation of the config_port() entry point.
 	 */
-	port->mapbase = res->start;
+	uart_memres_set(*res);
 	port->irq = irq;
 	port->dev = &pdev->dev;
 	port->uartclk = clk_get_rate(cdns_uart_data->uartclk);
@@ -1707,7 +1704,7 @@ static int cdns_uart_remove(struct platform_device *pdev)
 			&cdns_uart_data->clk_rate_change_nb);
 #endif
 	rc = uart_remove_one_port(cdns_uart_data->cdns_uart_driver, port);
-	port->mapbase = 0;
+	uart_memres_clear(port);
 	mutex_lock(&bitmap_lock);
 	if (cdns_uart_data->id < MAX_UART_INSTANCES)
 		clear_bit(cdns_uart_data->id, bitmap);

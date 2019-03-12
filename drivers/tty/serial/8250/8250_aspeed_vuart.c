@@ -328,8 +328,7 @@ static int aspeed_vuart_probe(struct platform_device *pdev)
 	memset(&port, 0, sizeof(port));
 	port.port.private_data = vuart;
 	port.port.membase = vuart->regs;
-	port.port.mapbase = res->start;
-	port.port.mapsize = resource_size(res);
+	uart_memres_set_res(&port.port, res);
 	port.port.startup = aspeed_vuart_startup;
 	port.port.shutdown = aspeed_vuart_shutdown;
 	port.port.throttle = aspeed_vuart_throttle;
@@ -363,7 +362,9 @@ static int aspeed_vuart_probe(struct platform_device *pdev)
 
 	/* Check for shifted address mapping */
 	if (of_property_read_u32(np, "reg-offset", &prop) == 0)
-		port.port.mapbase += prop;
+		uart_memres_set_interval(port,
+			uart_memres_start(port) + prop,
+			uart_memres_len(port));
 
 	/* Check for registers offset within the devices address range */
 	if (of_property_read_u32(np, "reg-shift", &prop) == 0)

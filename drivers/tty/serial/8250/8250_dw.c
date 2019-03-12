@@ -513,7 +513,7 @@ static int dw8250_probe(struct platform_device *pdev)
 	}
 
 	spin_lock_init(&p->lock);
-	p->mapbase	= regs->start;
+	uart_memres_set_res(p, regs);
 	p->irq		= irq;
 	p->handle_irq	= dw8250_handle_irq;
 	p->pm		= dw8250_do_pm;

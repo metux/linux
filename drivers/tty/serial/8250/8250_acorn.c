@@ -69,7 +69,8 @@ serial_card_probe(struct expansion_card *ec, const struct ecard_id *id)
 
 	for (i = 0; i < info->num_ports; i++) {
 		uart.port.membase = info->vaddr + type->offset[i];
-		uart.port.mapbase = bus_addr + type->offset[i];
+		// FIXME: is SZ_4K okay ?
+		uart_memres_set_interval(&uart.port, bus_addr + type->offset[i], SZ_4K);
 
 		info->ports[i] = serial8250_register_8250_port(&uart);
 	}

@@ -542,7 +542,6 @@ static struct uart_ops ks8695uart_pops = {
 static struct uart_port ks8695uart_ports[SERIAL_KS8695_NR] = {
 	{
 		.membase	= KS8695_UART_VA,
-		.mapbase	= KS8695_UART_PA,
 		.memres		= DEFINE_RES_MEM(KS8695_UART_PA, UART_PORT_SIZE),
 		.iotype		= SERIAL_IO_MEM,
 		.irq		= KS8695_IRQ_UART_TX,

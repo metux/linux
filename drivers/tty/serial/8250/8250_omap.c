@@ -1158,7 +1158,7 @@ static int omap8250_probe(struct platform_device *pdev)
 
 	memset(&up, 0, sizeof(up));
 	up.port.dev = &pdev->dev;
-	up.port.mapbase = regs->start;
+	uart_memres_set_res(&up.port, regs);
 	up.port.membase = membase;
 	up.port.irq = irq->start;
 	/*

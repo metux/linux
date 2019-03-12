@@ -359,7 +359,6 @@ static const struct uart_ops serial21285_ops = {
 };
 
 static struct uart_port serial21285_port = {
-	.mapbase	= SERIAL_21285_BASE,
 	.memres		= DEFINE_RES_MEM(SERIAL_21285_BASE, SERIAL_21285_SIZE),
 	.iotype		= UPIO_MEM,
 	.irq		= 0,

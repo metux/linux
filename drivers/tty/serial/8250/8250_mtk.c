@@ -399,7 +399,6 @@ static int mtk8250_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	spin_lock_init(&uart.port.lock);
-	uart.port.mapbase = regs->start;
 	uart.port.irq = irq->start;
 	uart.port.pm = mtk8250_do_pm;
 	uart.port.type = PORT_16550;
@@ -407,6 +406,8 @@ static int mtk8250_probe(struct platform_device *pdev)
 	uart.port.dev = &pdev->dev;
 	uart.port.iotype = UPIO_MEM32;
 	uart.port.regshift = 2;
+	uart_memres_set_res(&uart.port, regs);
+
 	uart.port.private_data = data;
 	uart.port.shutdown = mtk8250_shutdown;
 	uart.port.startup = mtk8250_startup;

@@ -5,9 +5,9 @@
  *  Based on drivers/char/serial.c, by Linus Torvalds, Theodore Ts'o.
  *  Split from 8250_core.c, Copyright (C) 2001 Russell King.
  *
- * A note about mapbase / membase
+ * A note about memres / membase
  *
- *  mapbase is the physical address of the IO port.
+ *  memres is the phyical address range of the IO port.
  *  membase is an 'ioremapped' cookie.
  */
 
@@ -1207,7 +1207,7 @@ static void autoconfig(struct uart_8250_port *up)
 	unsigned long flags;
 	unsigned int old_capabilities;
 
-	if (!port->iobase && !port->mapbase && !port->membase)
+	if (!port->iobase && !uart_memres_start(port) && !port->membase)
 		return;
 
 	DEBUG_AUTOCONF("%s: autoconf (0x%04lx, 0x%p): ",
@@ -2831,8 +2831,9 @@ serial8250_pm(struct uart_port *port, unsigned int state,
 
 static unsigned int serial8250_port_size(struct uart_8250_port *pt)
 {
-	if (pt->port.mapsize)
-		return pt->port.mapsize;
+	resource_size_t len = uart_memres_len(&pt->port);
+	if (len)
+		return len;
 	if (pt->port.iotype == UPIO_AU) {
 		if (pt->port.type == PORT_RT2880)
 			return 0x100;
@@ -2860,18 +2861,20 @@ static int serial8250_request_std_resource(struct uart_8250_port *up)
 	case UPIO_MEM32BE:
 	case UPIO_MEM16:
 	case UPIO_MEM:
-		if (!port->mapbase)
+		resource_size_t addr = uart_memres_start(port);
+
+		if (!addr)
 			break;
 
-		if (!request_mem_region(port->mapbase, size, "serial")) {
+		if (!request_mem_region(addr, size, "serial")) {
 			ret = -EBUSY;
 			break;
 		}
 
 		if (port->flags & UPF_IOREMAP) {
-			port->membase = ioremap_nocache(port->mapbase, size);
+			port->membase = ioremap_nocache(addr, size);
 			if (!port->membase) {
-				release_mem_region(port->mapbase, size);
+				release_mem_region(addr, size);
 				ret = -ENOMEM;
 			}
 		}
@@ -2898,7 +2901,10 @@ static void serial8250_release_std_resource(struct uart_8250_port *up)
 	case UPIO_MEM32BE:
 	case UPIO_MEM16:
 	case UPIO_MEM:
-		if (!port->mapbase)
+
+		resource_size_t addr = uart_memres_start(port);
+
+		if (!addr)
 			break;
 
 		if (port->flags & UPF_IOREMAP) {
@@ -2906,7 +2912,7 @@ static void serial8250_release_std_resource(struct uart_8250_port *up)
 			port->membase = NULL;
 		}
 
-		release_mem_region(port->mapbase, size);
+		release_mem_region(addr, size);
 		break;
 
 	case UPIO_HUB6:
@@ -3159,6 +3165,7 @@ void serial8250_init_port(struct uart_8250_port *up)
 	spin_lock_init(&port->lock);
 	port->ops = &serial8250_pops;
 
+//fixme
 	up->cur_iotype = 0xFF;
 }
 EXPORT_SYMBOL_GPL(serial8250_init_port);

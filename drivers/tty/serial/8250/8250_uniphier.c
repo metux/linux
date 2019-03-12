@@ -210,8 +210,6 @@ static int uniphier_uart_probe(struct platform_device *pdev)
 
 	up.port.dev = dev;
 	up.port.private_data = priv;
-	up.port.mapbase = regs->start;
-	up.port.mapsize = resource_size(regs);
 	up.port.membase = membase;
 	up.port.irq = irq;
 
@@ -229,6 +227,8 @@ static int uniphier_uart_probe(struct platform_device *pdev)
 	up.port.serial_out = uniphier_serial_out;
 	up.dl_read = uniphier_serial_dl_read;
 	up.dl_write = uniphier_serial_dl_write;
+
+	uart_memres_set_res(&up.port, regs);
 
 	ret = serial8250_register_8250_port(&up);
 	if (ret < 0) {

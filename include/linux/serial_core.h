@@ -255,9 +255,7 @@ struct uart_port {
 	unsigned int		custom_divisor;
 	unsigned int		line;			/* port index */
 	unsigned int		minor;
-	resource_size_t		mapbase;		/* for ioremap */
-	resource_size_t		mapsize;
-	struct resource		memres;
+	struct resource		memres;			/* for ioremap */
 	struct device		*dev;			/* parent device */
 	unsigned char		hub6;			/* this should be in the 8250 driver */
 	unsigned char		suspended;
@@ -501,7 +499,7 @@ static inline void uart_memres_clear(struct uart_port *port)
  */
 static inline int uart_memres_valid(struct uart_port *port)
 {
-	return (port->mapbase != 0);
+	return (port->memres.start != 0);
 }
 
 /*
@@ -513,7 +511,7 @@ static inline int uart_memres_valid(struct uart_port *port)
  */
 static inline resource_size_t uart_memres_start(struct uart_port *port)
 {
-	return port->mapbase;
+	return port->memres.start;
 }
 
 /*

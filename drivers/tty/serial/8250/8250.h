@@ -179,7 +179,7 @@ static inline int is_omap1_8250(struct uart_8250_port *pt)
 {
 	int res;
 
-	switch (pt->port.mapbase) {
+	switch (uart_memres_start(&pt->port)) {
 	case OMAP1_UART1_BASE:
 	case OMAP1_UART2_BASE:
 	case OMAP1_UART3_BASE:
@@ -254,4 +254,23 @@ static inline int ns16550a_goto_highspeed(struct uart_8250_port *up)
 static inline int serial_index(struct uart_port *port)
 {
 	return port->minor - 64;
+}
+
+/*
+ * set the memory resource for a 8250 derivative controller,
+ * automatically deriving the size on the controller type.
+ * note: port type and iotype must have been set before
+ */
+static inline void serial8250_set_memres(struct uart_8250_port *up,
+					 resource_size_t start)
+) {
+	if (up->port.iotype == UPIO_AU) {
+		if (up->port.type == PORT_RT2880)
+			return 0x100;
+		return 0x1000;
+	}
+	if (is_omap1_8250(up))
+		return 0x16 << pt->port.regshift;
+
+	return 8 << up->port.regshift;
 }

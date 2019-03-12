@@ -1103,11 +1103,13 @@ static void __init ip22zilog_prepare(void)
 			up[(chip * 2) + 0].port.membase = (char *) &rp->channelB;
 			up[(chip * 2) + 1].port.membase = (char *) &rp->channelA;
 
-			/* In theory mapbase is the physical address ...  */
-			up[(chip * 2) + 0].port.mapbase =
-				(unsigned long) ioremap((unsigned long) &rp->channelB, 8);
-			up[(chip * 2) + 1].port.mapbase =
-				(unsigned long) ioremap((unsigned long) &rp->channelA, 8);
+			/* In theory memres is the physical address ...  */
+			up[(chip * 2) + 0].port.memres = DEFINE_RES_MEM(
+				(unsigned long) ioremap((unsigned long) &rp->channelB, 8),
+				1 /* fixme */);
+			up[(chip * 2) + 1].port.memres = DEFINE_RES_MEM(
+				(unsigned long) ioremap((unsigned long) &rp->channelA, 8),
+				1 /* fixme */);
 		}
 
 		/* Channel A */
@@ -1202,13 +1204,13 @@ static void __exit ip22zilog_exit(void)
 	/* Free IO mem */
 	up = &ip22zilog_port_table[0];
 	for (i = 0; i < NUM_IP22ZILOG; i++) {
-		if (up[(i * 2) + 0].port.mapbase) {
-		   iounmap((void*)up[(i * 2) + 0].port.mapbase);
-		   up[(i * 2) + 0].port.mapbase = 0;
+		if (up[(i * 2) + 0].port.memres.start) {
+		   iounmap((void*)up[(i * 2) + 0].port.memres.start);
+		   up[(i * 2) + 0].port.memres.start = 0;
 		}
-		if (up[(i * 2) + 1].port.mapbase) {
-			iounmap((void*)up[(i * 2) + 1].port.mapbase);
-			up[(i * 2) + 1].port.mapbase = 0;
+		if (up[(i * 2) + 1].port.memres.start) {
+			iounmap((void*)up[(i * 2) + 1].port.memres.start);
+			up[(i * 2) + 1].port.memres.start = 0;
 		}
 	}
 

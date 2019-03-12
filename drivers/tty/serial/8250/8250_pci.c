@@ -83,13 +83,13 @@ setup_port(struct serial_private *priv, struct uart_8250_port *port,
 
 		port->port.iotype = UPIO_MEM;
 		port->port.iobase = 0;
-		port->port.mapbase = pci_resource_start(dev, bar) + offset;
 		port->port.membase = pcim_iomap_table(dev)[bar] + offset;
 		port->port.regshift = regshift;
+
+		serial8250_set_memres(port, pci_resource_start(dev, bar) + offset);
 	} else {
 		port->port.iotype = UPIO_PORT;
 		port->port.iobase = pci_resource_start(dev, bar) + offset;
-		port->port.mapbase = 0;
 		port->port.membase = NULL;
 		port->port.regshift = 0;
 	}

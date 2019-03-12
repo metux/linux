@@ -2300,7 +2300,7 @@ uart_report_port(struct uart_driver *drv, struct uart_port *port)
 	case UPIO_AU:
 	case UPIO_TSI:
 		snprintf(address, sizeof(address),
-			 "MMIO 0x%llx", (unsigned long long)uart_menres_start(port));
+			 "MMIO 0x%llx", (unsigned long long)uart_memres_start(port));
 		break;
 	default:
 		strlcpy(address, "*unknown*", sizeof(address));
@@ -2965,7 +2965,7 @@ int uart_match_port(struct uart_port *port1, struct uart_port *port2)
 	case UPIO_MEM32BE:
 	case UPIO_AU:
 	case UPIO_TSI:
-		return (uart_menres_start(port1) == uart_memres_start(port2));
+		return (uart_memres_start(port1) == uart_memres_start(port2));
 	}
 	return 0;
 }

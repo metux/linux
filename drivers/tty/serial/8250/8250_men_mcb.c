@@ -114,9 +114,11 @@ static int serial_8250_men_mcb_probe(struct mcb_device *mdev,
 		data[i].uart.port.irq = mcb_get_irq(mdev);
 		data[i].uart.port.membase = membase;
 		data[i].uart.port.fifosize = 60;
-		data[i].uart.port.mapbase = (unsigned long) mem->start
-					    + i * MEN_UART_MEM_SIZE;
-		data[i].uart.port.iobase = data[i].uart.port.mapbase;
+		uart_memres_set_interval(&data[i].uart.port,
+					(unsigned long) mem->start +
+					    i * MEN_UART_MEM_SIZE,
+					MEN_UART_MEM_SIZE);
+		data[i].uart.port.iobase = uart_memres_start(&data[i].uart.port);
 
 		/* ok, register the port */
 		data[i].line = serial8250_register_8250_port(&data[i].uart);

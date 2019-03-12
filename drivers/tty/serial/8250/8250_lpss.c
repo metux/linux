@@ -298,7 +298,7 @@ static int lpss8250_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	uart.port.uartclk = lpss->board->base_baud * 16;
 	uart.port.flags = UPF_SHARE_IRQ | UPF_FIXED_PORT | UPF_FIXED_TYPE;
 	uart.capabilities = UART_CAP_FIFO | UART_CAP_AFE;
-	uart.port.mapbase = pci_resource_start(pdev, 0);
+	serial8250_set_memres(&uart.port, pci_resource_start(pdev, 0));
 	uart.port.membase = pcim_iomap(pdev, 0, 0);
 	if (!uart.port.membase)
 		return -ENOMEM;

@@ -54,9 +54,8 @@ static int __init serial_init_chip(struct parisc_device *dev)
 	/* 7.272727MHz on Lasi.  Assumed the same for Dino, Wax and Timi. */
 	uart.port.uartclk	= (dev->id.sversion != 0xad) ?
 					7272727 : 1843200;
-	uart.port.mapbase	= address;
-	uart.port.membase	= ioremap_nocache(address, 16);
-	if (!uart.port.membase) {
+	uart_memres_set_interval(&uart.port, address, 16);
+	if (!uart_memres_ioremap_nocache(&uart.port)) {
 		dev_warn(&dev->dev, "Failed to map memory\n");
 		return -ENOMEM;
 	}

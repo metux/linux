@@ -234,7 +234,7 @@ static int ingenic_uart_probe(struct platform_device *pdev)
 	uart.port.type = PORT_16550A;
 	uart.port.flags = UPF_SKIP_TEST | UPF_IOREMAP | UPF_FIXED_TYPE;
 	uart.port.iotype = UPIO_MEM;
-	uart.port.mapbase = regs->start;
+	uart_memres_set_res(&uart.port, regs);
 	uart.port.regshift = 2;
 	uart.port.serial_out = ingenic_uart_serial_out;
 	uart.port.serial_in = ingenic_uart_serial_in;

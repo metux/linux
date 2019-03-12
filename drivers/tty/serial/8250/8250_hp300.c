@@ -114,8 +114,8 @@ int __init hp300_setup_serial_console(void)
 		pr_info("Serial console is HP APCI 1\n");
 
 		port.uartclk = HPAPCI_BAUD_BASE * 16;
-		port.mapbase = (FRODO_BASE + FRODO_APCI_OFFSET(1));
-		port.membase = (char *)(port.mapbase + DIO_VIRADDRBASE);
+		uart_memres_set_interval(&port, FRODO_BASE + FRODO_APCI_OFFSET(1), 0);
+		port.membase = (char *)(uart_memres_start(&port) + DIO_VIRADDRBASE);
 		port.regshift = 2;
 		add_preferred_console("ttyS", port.line, "9600n8");
 #else
@@ -131,8 +131,8 @@ int __init hp300_setup_serial_console(void)
 		pr_info("Serial console is HP DCA at select code %d\n", scode);
 
 		port.uartclk = HPDCA_BAUD_BASE * 16;
-		port.mapbase = (pa + UART_OFFSET);
-		port.membase = (char *)(port.mapbase + DIO_VIRADDRBASE);
+		uart_memres_set_interval(&port, pa + UART_OFFSET, 0);
+		port.membase = (char *)(uart_memres_start(&port) + DIO_VIRADDRBASE);
 		port.regshift = 1;
 		port.irq = DIO_IPL(pa + DIO_VIRADDRBASE);
 
@@ -173,8 +173,11 @@ static int hpdca_init_one(struct dio_dev *d,
 	uart.port.flags = UPF_SKIP_TEST | UPF_SHARE_IRQ | UPF_BOOT_AUTOCONF;
 	uart.port.irq = d->ipl;
 	uart.port.uartclk = HPDCA_BAUD_BASE * 16;
-	uart.port.mapbase = (d->resource.start + UART_OFFSET);
-	uart.port.membase = (char *)(uart.port.mapbase + DIO_VIRADDRBASE);
+	uart_memres_set_interval(
+		&uart.port,
+		d->resource.start + UART_OFFSET,
+		resource_size(&d->resource) - UART_OFFSET);
+	uart.port.membase = (char *)(uart_memres_start(&uart.port) + DIO_VIRADDRBASE);
 	uart.port.regshift = 1;
 	uart.port.dev = &d->dev;
 	line = serial8250_register_8250_port(&uart);
@@ -255,7 +258,7 @@ static int __init hp300_8250_init(void)
 		/* XXX - no interrupt support yet */
 		uart.port.irq = 0;
 		uart.port.uartclk = HPAPCI_BAUD_BASE * 16;
-		uart.port.mapbase = base;
+		uart_memres_set_interval(&uart.port, base, 0);
 		uart.port.membase = (char *)(base + DIO_VIRADDRBASE);
 		uart.port.regshift = 2;
 

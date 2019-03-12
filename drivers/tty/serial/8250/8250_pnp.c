@@ -455,15 +455,16 @@ serial_pnp_probe(struct pnp_dev *dev, const struct pnp_device_id *dev_id)
 		uart.port.iobase = pnp_port_start(dev, 0);
 		uart.port.iotype = UPIO_PORT;
 	} else if (pnp_mem_valid(dev, 0)) {
-		uart.port.mapbase = pnp_mem_start(dev, 0);
 		uart.port.iotype = UPIO_MEM;
 		uart.port.flags = UPF_IOREMAP;
+		serial8250_set_memres(&uart.port, pnp_mem_start(dev, 0));
 	} else
 		return -ENODEV;
 
 	dev_dbg(&dev->dev,
 		 "Setup PNP port: port %lx, mem %pa, irq %d, type %d\n",
-		 uart.port.iobase, &uart.port.mapbase,
+		 uart.port.iobase,
+		 uart_memres_start(&uart.port),
 		 uart.port.irq, uart.port.iotype);
 
 	if (flags & CIR_PORT) {

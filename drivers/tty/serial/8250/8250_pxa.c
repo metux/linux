@@ -119,7 +119,6 @@ static int serial_pxa_probe(struct platform_device *pdev)
 
 	uart.port.type = PORT_XSCALE;
 	uart.port.iotype = UPIO_MEM32;
-	uart.port.mapbase = mmres->start;
 	uart.port.regshift = 2;
 	uart.port.irq = irqres->start;
 	uart.port.fifosize = 64;
@@ -129,6 +128,7 @@ static int serial_pxa_probe(struct platform_device *pdev)
 	uart.port.pm = serial_pxa_pm;
 	uart.port.private_data = data;
 	uart.dl_write = serial_pxa_dl_write;
+	uart_memres_set_res(&uart.port, mmres);
 
 	ret = serial8250_register_8250_port(&uart);
 	if (ret < 0)

@@ -307,7 +307,11 @@ static int mid8250_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	uart.port.flags = UPF_SHARE_IRQ | UPF_FIXED_PORT | UPF_FIXED_TYPE;
 	uart.port.set_termios = mid8250_set_termios;
 
-	uart.port.mapbase = pci_resource_start(pdev, bar);
+	/* fixme: can we directly use pdev->resource[bar] ? */
+	uart_memres_set_interval(&uart.port,
+				 pci_resource_start(pdev, bar),
+				 pci_resource_len(pdev, bar));
+
 	uart.port.membase = pcim_iomap(pdev, bar, 0);
 	if (!uart.port.membase)
 		return -ENOMEM;

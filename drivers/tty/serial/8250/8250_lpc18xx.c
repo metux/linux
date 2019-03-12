@@ -162,7 +162,7 @@ static int lpc18xx_serial_probe(struct platform_device *pdev)
 	uart.port.dev = &pdev->dev;
 	uart.port.irq = irq;
 	uart.port.iotype = UPIO_MEM32;
-	uart.port.mapbase = res->start;
+	uart_memres_set_res(&uart.port, res);
 	uart.port.regshift = 2;
 	uart.port.type = PORT_16550A;
 	uart.port.flags = UPF_FIXED_PORT | UPF_FIXED_TYPE | UPF_SKIP_TEST;

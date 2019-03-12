@@ -648,7 +648,7 @@ static int univ8250_console_match(struct console *co, char *name, int idx,
 			continue;
 		if ((iotype == UPIO_MEM || iotype == UPIO_MEM16 ||
 		     iotype == UPIO_MEM32 || iotype == UPIO_MEM32BE)
-		    && (port->mapbase != addr))
+		    && (uart_memres_start(port) != addr))
 			continue;
 		if (iotype == UPIO_PORT && port->iobase != addr)
 			continue;
@@ -721,8 +721,7 @@ int __init early_serial_setup(struct uart_port *port)
 	p->regshift     = port->regshift;
 	p->iotype       = port->iotype;
 	p->flags        = port->flags;
-	p->mapbase      = port->mapbase;
-	p->mapsize      = port->mapsize;
+	uart_memres_copy(p, port);
 	p->private_data = port->private_data;
 	p->type		= port->type;
 	p->line		= port->line;
@@ -813,7 +812,7 @@ static int serial8250_probe(struct platform_device *dev)
 		uart.port.regshift	= p->regshift;
 		uart.port.iotype	= p->iotype;
 		uart.port.flags		= p->flags;
-		uart.port.mapbase	= p->mapbase;
+		uart_memres_copy(&uart.port, p);
 		uart.port.hub6		= p->hub6;
 		uart.port.private_data	= p->private_data;
 		uart.port.type		= p->type;
@@ -831,7 +830,7 @@ static int serial8250_probe(struct platform_device *dev)
 		if (ret < 0) {
 			dev_err(&dev->dev, "unable to register port at index %d "
 				"(IO%lx MEM%llx IRQ%d): %d\n", i,
-				p->iobase, (unsigned long long)p->mapbase,
+				p->iobase, (unsigned long long)uart_memres_start(p),
 				p->irq, ret);
 		}
 	}
@@ -995,8 +994,7 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 		uart->port.iotype       = up->port.iotype;
 		uart->port.flags        = up->port.flags | UPF_BOOT_AUTOCONF;
 		uart->bugs		= up->bugs;
-		uart->port.mapbase      = up->port.mapbase;
-		uart->port.mapsize      = up->port.mapsize;
+		uart_memres_copy(&uart->port, &up->port);
 		uart->port.private_data = up->port.private_data;
 		uart->tx_loadsz		= up->tx_loadsz;
 		uart->capabilities	= up->capabilities;
@@ -1065,7 +1063,7 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 			dev_info(uart->port.dev,
 				"skipping CIR port at 0x%lx / 0x%llx, IRQ %d\n",
 				uart->port.iobase,
-				(unsigned long long)uart->port.mapbase,
+				(unsigned long long)uart_memres_start(&uart->port),
 				uart->port.irq);
 
 			ret = 0;

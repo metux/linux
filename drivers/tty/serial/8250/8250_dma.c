@@ -152,9 +152,11 @@ int serial8250_request_dma(struct uart_8250_port *p)
 {
 	struct uart_8250_dma	*dma = p->dma;
 	phys_addr_t rx_dma_addr = dma->rx_dma_addr ?
-				  dma->rx_dma_addr : p->port.mapbase;
+				  dma->rx_dma_addr :
+				  uart_memres_start(&p->port);
 	phys_addr_t tx_dma_addr = dma->tx_dma_addr ?
-				  dma->tx_dma_addr : p->port.mapbase;
+				  dma->tx_dma_addr :
+				  uart_memres_start(&p->port);
 	dma_cap_mask_t		mask;
 	struct dma_slave_caps	caps;
 	int			ret;

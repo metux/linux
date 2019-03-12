@@ -100,12 +100,13 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 		port->iotype = UPIO_PORT;
 		port->iobase = resource.start;
 	} else {
-		port->mapbase = resource.start;
-		port->mapsize = resource_size(&resource);
-
 		/* Check for shifted address mapping */
 		if (of_property_read_u32(np, "reg-offset", &prop) == 0)
-			port->mapbase += prop;
+			port->memres = DEFINE_RES_MEM(
+				resource.start + prop,
+				resource_size(&resource));
+		else
+			port->memres = resource;
 
 		port->iotype = UPIO_MEM;
 		if (of_property_read_u32(np, "reg-io-width", &prop) == 0) {

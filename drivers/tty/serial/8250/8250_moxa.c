@@ -92,9 +92,10 @@ static int moxa8250_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 		uart.port.iotype = UPIO_MEM;
 		uart.port.iobase = 0;
-		uart.port.mapbase = baseaddr + offset;
 		uart.port.membase = ioaddr + offset;
 		uart.port.regshift = 0;
+
+		serial8250_set_memres(&uart.port, baseaddr + offset);
 
 		dev_dbg(&pdev->dev, "Setup PCI port: port %lx, irq %d, type %d\n",
 			uart.port.iobase, uart.port.irq, uart.port.iotype);

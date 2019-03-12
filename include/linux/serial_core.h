@@ -572,6 +572,70 @@ static inline resource_size_t uart_memres_len(struct uart_port *port)
 }
 
 /*
+ * do a ioremap_nocache() call on the resource
+ * also sets the membase field with the resulting address
+ */
+static inline void __iomem *uart_memres_ioremap_nocache(struct uart_port *port)
+{
+	port->membase = ioremap_nocache(uart_memres_start(port),
+					uart_memres_len(port));
+	return port->membase;
+}
+
+/*
+ * do a ioremap() call on the resource
+ * also sets the membase field with the resulting address
+ */
+static inline void __iomem *uart_memres_ioremap(struct uart_port *port)
+{
+	port->membase = ioremap(uart_memres_start(port),
+				uart_memres_len(port));
+	return port->membase;
+}
+
+/*
+ * do a iounmap() call on the resource
+ * also clears the membase field
+ */
+static inline void uart_memres_iounmap(struct uart_port *port)
+{
+	iounmap(port->membase);
+	port->membase = NULL;
+}
+
+/*
+ * devm_ version of uart_memres_ioremap()
+ */
+static inline void __iomem *devm_uart_memres_ioremap(struct uart_port *port)
+{
+	port->membase = devm_ioremap(port->dev,
+				     uart_memres_start(port),
+				     uart_memres_len(port));
+	return port->membase;
+}
+
+/*
+ * devm_ version of uart_memres_ioremap_nocache()
+ */
+static inline void __iomem *devm_uart_memres_ioremap_nocache(
+		struct uart_port *port)
+{
+	port->membase = devm_ioremap_nocache(port->dev,
+					     uart_memres_start(port),
+					     uart_menres_len(port));
+	return port->membase;
+}
+
+/*
+ * devm_ version of uart_memres_iounmap()
+ */
+static inline void devm_uart_memres_iounmap(struct uart_port *port)
+{
+	devm_iounmap(port->dev, port->membase);
+	port->membase = NULL;
+}
+
+/*
  * do a request_mem_region() call on the memory resource
  */
 static inline struct resource *uart_memres_request(struct uart_port *port,

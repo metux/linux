@@ -4202,6 +4202,7 @@ static int init_rescuer(struct workqueue_struct *wq)
 	return 0;
 }
 
+__printf(1, 4)
 struct workqueue_struct *alloc_workqueue(const char *fmt,
 					 unsigned int flags,
 					 int max_active, ...)

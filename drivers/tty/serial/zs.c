@@ -984,36 +984,23 @@ static const char *zs_type(struct uart_port *uport)
 
 static void zs_release_port(struct uart_port *uport)
 {
-	iounmap(uport->membase);
-	uport->membase = 0;
-	release_mem_region(uport->mapbase, ZS_CHAN_IO_SIZE);
-}
-
-static int zs_map_port(struct uart_port *uport)
-{
-	if (!uport->membase)
-		uport->membase = ioremap_nocache(uport->mapbase,
-						 ZS_CHAN_IO_SIZE);
-	if (!uport->membase) {
-		printk(KERN_ERR "zs: Cannot map MMIO\n");
-		return -ENOMEM;
-	}
-	return 0;
+	devm_uart_memres_iounmap(uport);
+	devm_uart_memres_release(uport);
 }
 
 static int zs_request_port(struct uart_port *uport)
 {
-	int ret;
-
-	if (!request_mem_region(uport->mapbase, ZS_CHAN_IO_SIZE, "scc")) {
+	if (!devm_uart_memres_request(uport, "scc")) {
 		printk(KERN_ERR "zs: Unable to reserve MMIO resource\n");
 		return -EBUSY;
 	}
-	ret = zs_map_port(uport);
-	if (ret) {
-		release_mem_region(uport->mapbase, ZS_CHAN_IO_SIZE);
-		return ret;
+
+	if (!devm_uart_memres_ioremap_nocache(uport)) {
+		dev_err(uport->dev, "zs: Cannot map MMIO\n");
+		uart_release_memres(uport);
+		return -ENOMEM;
 	}
+
 	return 0;
 }
 
@@ -1113,9 +1100,10 @@ static int __init zs_probe_sccs(void)
 			uport->flags	= UPF_BOOT_AUTOCONF;
 			uport->ops	= &zs_ops;
 			uport->line	= chip * ZS_NUM_CHAN + side;
-			uport->mapbase	= dec_kn_slot_base +
-					  zs_parms.scc[chip] +
-					  (side ^ ZS_CHAN_B) * ZS_CHAN_IO_SIZE;
+			uart_memres_set_interval(
+				dec_kn_slot_base + zs_parms.scc[chip] +
+					(side ^ ZS_CHAN_B) * ZS_CHAN_IO_SIZE,
+				ZS_CHAN_IO_SIZE);
 
 			for (i = 0; i < ZS_NUM_REGS; i++)
 				zport->regs[i] = zs_init_regs[i];
@@ -1207,9 +1195,10 @@ static int __init zs_console_setup(struct console *co, char *options)
 	int flow = 'n';
 	int ret;
 
-	ret = zs_map_port(uport);
-	if (ret)
-		return ret;
+	if (!devm_uart_memres_ioremap_nocache(uport)) {
+		printk(KERN_ERR "zs: Cannot map MMIO\n");
+		return -ENOMEM;
+	}
 
 	zs_reset(zport);
 	zs_pm(uport, 0, -1);

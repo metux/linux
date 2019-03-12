@@ -82,7 +82,6 @@ static int bcm2835aux_serial_probe(struct platform_device *pdev)
 {
 	struct uart_8250_port up = { };
 	struct bcm2835aux_data *data;
-	struct resource *res;
 	int ret;
 
 	/* allocate the custom structure */
@@ -120,13 +119,13 @@ static int bcm2835aux_serial_probe(struct platform_device *pdev)
 	up.port.irq = ret;
 
 	/* map the main registers */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "memory resource not found");
-		return -EINVAL;
+	data->uart.port.membase = devm_platform_ioremap_resource(pdev, 0);
+	// up.port.mapsize = resource_size(res); /* rebase fixme: where to fetch that ? */
+	ret = PTR_ERR_OR_ZERO(data->uart.port.membase);
+	if (ret) {
+		dev_err(&pdev->dev, "could not map memory resource");
+		return ret;
 	}
-	up.port.mapbase = res->start;
-	up.port.mapsize = resource_size(res);
 
 	/* Check for a fixed line number */
 	ret = of_alias_get_id(pdev->dev.of_node, "serial");

@@ -291,7 +291,6 @@ static struct ata_port_operations pata_bk3710_ports_ops = {
 static int __init pata_bk3710_probe(struct platform_device *pdev)
 {
 	struct clk *clk;
-	struct resource *mem;
 	struct ata_host *host;
 	struct ata_port *ap;
 	void __iomem *base;
@@ -310,15 +309,13 @@ static int __init pata_bk3710_probe(struct platform_device *pdev)
 	/* NOTE:  round *down* to meet minimum timings; we count in clocks */
 	ideclk_period = 1000000000UL / rate;
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		pr_err(DRV_NAME ": failed to get IRQ resource\n");
 		return irq;
 	}
 
-	base = devm_ioremap_resource(&pdev->dev, mem);
+	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 

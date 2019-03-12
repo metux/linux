@@ -481,7 +481,6 @@ static int tegra_ahci_probe(struct platform_device *pdev)
 {
 	struct ahci_host_priv *hpriv;
 	struct tegra_ahci_priv *tegra;
-	struct resource *res;
 	int ret;
 
 	hpriv = ahci_platform_get_resources(pdev, 0);
@@ -497,19 +496,17 @@ static int tegra_ahci_probe(struct platform_device *pdev)
 	tegra->pdev = pdev;
 	tegra->soc = of_device_get_match_data(&pdev->dev);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	tegra->sata_regs = devm_ioremap_resource(&pdev->dev, res);
+	tegra->sata_regs = devm_platform_ioremap_resource(pdev, 1);
 	if (IS_ERR(tegra->sata_regs))
 		return PTR_ERR(tegra->sata_regs);
 
 	/*
 	 * AUX registers is optional.
 	 */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
-	if (res) {
-		tegra->sata_aux_regs = devm_ioremap_resource(&pdev->dev, res);
-		if (IS_ERR(tegra->sata_aux_regs))
-			return PTR_ERR(tegra->sata_aux_regs);
+	tegra->sata_aux_regs = devm_platform_ioremap_resource(pdev, 2);
+	if (IS_ERR(tegra->sata_aux_regs)) {
+		dev_info(&pdev->dev, "Cant get aux registers (optional)");
+		tegra->sata_aux_regs = NULL;
 	}
 
 	tegra->sata_rst = devm_reset_control_get(&pdev->dev, "sata");

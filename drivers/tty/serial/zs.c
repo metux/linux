@@ -984,36 +984,23 @@ static const char *zs_type(struct uart_port *uport)
 
 static void zs_release_port(struct uart_port *uport)
 {
-	iounmap(uport->membase);
-	uport->membase = 0;
-	release_mem_region(uport->mapbase, uport->mapsize);
-}
-
-static int zs_map_port(struct uart_port *uport)
-{
-	if (!uport->membase)
-		uport->membase = ioremap_nocache(uport->mapbase,
-						 uport->mapsize);
-	if (!uport->membase) {
-		dev_err(port->dev, "zs: Cannot map MMIO\n");
-		return -ENOMEM;
-	}
-	return 0;
+	uart_memres_iounmap(uport);
+	uart_memres_release(uport);
 }
 
 static int zs_request_port(struct uart_port *uport)
 {
-	int ret;
-
-	if (!request_mem_region(uport->mapbase, uport->mapsize, "scc")) {
+	if (!uart_memres_request(uport, "scc")) {
 		dev_err(uport->dev, "zs: Unable to reserve MMIO resource\n");
 		return -EBUSY;
 	}
-	ret = zs_map_port(uport);
-	if (ret) {
-		release_mem_region(uport->mapbase, uport->mapsize);
-		return ret;
+
+	if (!uart_memres_ioremap_nocache(uport)) {
+		dev_err(uport->dev, "zs: Cannot map MMIO\n");
+		uart_release_memres(uport);
+		return -ENOMEM;
 	}
+
 	return 0;
 }
 
@@ -1210,9 +1197,10 @@ static int __init zs_console_setup(struct console *co, char *options)
 	int flow = 'n';
 	int ret;
 
-	ret = zs_map_port(uport);
-	if (ret)
-		return ret;
+	if (!uart_memres_ioremap_nocache(uport)) {
+		dev_err(uport->dev, "zs: Cannot map MMIO\n");
+		return -ENOMEM;
+	}
 
 	zs_reset(zport);
 	zs_pm(uport, 0, -1);

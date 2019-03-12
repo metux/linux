@@ -253,10 +253,9 @@ static int ingenic_uart_probe(struct platform_device *pdev)
 	if (line >= 0)
 		uart.port.line = line;
 
-	uart.port.membase = devm_ioremap(&pdev->dev, regs->start,
-					 resource_size(regs));
-	if (!uart.port.membase)
-		return -ENOMEM;
+	uart.port.membase = devm_ioremap_resource(&pdev->dev, regs);
+	if (IS_ERR(uart.port.membase))
+		return PTR_ERR(uart.port.membase);
 
 	data->clk_module = devm_clk_get(&pdev->dev, "module");
 	if (IS_ERR(data->clk_module))

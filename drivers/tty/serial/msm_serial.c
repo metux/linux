@@ -1189,8 +1189,8 @@ static int msm_startup(struct uart_port *port)
 	msm_write(port, data, UART_MR1);
 
 	if (msm_port->is_uartdm) {
-		msm_request_tx_dma(msm_port, msm_port->uart.mapbase);
-		msm_request_rx_dma(msm_port, msm_port->uart.mapbase);
+		msm_request_tx_dma(msm_port, uart_memres_start(&msm_port->uart));
+		msm_request_rx_dma(msm_port, uart_memres_start(&msm_port->uart));
 	}
 
 	ret = request_irq(port->irq, msm_uart_irq, IRQF_TRIGGER_HIGH,
@@ -1315,50 +1315,23 @@ static const char *msm_type(struct uart_port *port)
 
 static void msm_release_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *uart_resource;
-	resource_size_t size;
-
-	uart_resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (unlikely(!uart_resource))
-		return;
-	size = resource_size(uart_resource);
-
-	devm_release_mem_region(port->dev, port->mapbase, size);
-	devm_iounmap(port->dev, port->membase);
-	port->membase = NULL;
+	devm_uart_memres_release(port);
+	devm_uart_memres_iounmap(port);
 }
 
 static int msm_request_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *uart_resource;
-	resource_size_t size;
 	int ret;
 
-	uart_resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (unlikely(!uart_resource))
-		return -ENXIO;
-
-	size = resource_size(uart_resource);
-
-	if (!devm_request_mem_region(port->dev,
-				     port->mapbase,
-				     size,
-				     "msm_serial"))
+	if (!devm_uart_memres_request(port, "msm_serial"))
 		return -EBUSY;
 
-	port->membase = ioremap(port->dev, port->mapbase, size);
-	if (!port->membase) {
-		ret = -EBUSY;
-		goto fail_release_port;
+	if (!devm_uart_memres_ioremap(port)) {
+		devm_uart_memres_release(port);
+		return -EBUSY;
 	}
 
 	return 0;
-
-fail_release_port:
-	devm_release_mem_region(port->dev, port->mapbase, size);
-	return ret;
 }
 
 static void msm_config_port(struct uart_port *port, int flags)
@@ -1787,7 +1760,7 @@ static int msm_serial_probe(struct platform_device *pdev)
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (unlikely(!resource))
 		return -ENXIO;
-	port->mapbase = resource->start;
+	uart_memres_set_res(port, resource);
 
 	irq = platform_get_irq(pdev, 0);
 	if (unlikely(irq < 0))

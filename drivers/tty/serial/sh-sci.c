@@ -123,7 +123,6 @@ struct sci_port {
 	const struct sci_port_params *params;
 	const struct plat_sci_port *cfg;
 	unsigned int		sampling_rate_mask;
-	resource_size_t		reg_size;
 	struct mctrl_gpios	*gpios;
 
 	/* Clocks */
@@ -1531,11 +1530,11 @@ static struct dma_chan *sci_request_dma_chan(struct uart_port *port,
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.direction = dir;
 	if (dir == DMA_MEM_TO_DEV) {
-		cfg.dst_addr = port->mapbase +
+		cfg.dst_addr = uart_memres_start(port) +
 			(sci_getreg(port, SCxTDR)->offset << port->regshift);
 		cfg.dst_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 	} else {
-		cfg.src_addr = port->mapbase +
+		cfg.src_addr = uart_memres_start(port) +
 			(sci_getreg(port, SCxRDR)->offset << port->regshift);
 		cfg.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 	}
@@ -2659,10 +2658,7 @@ static int sci_remap_port(struct uart_port *port)
 		return 0;
 
 	if (port->dev->of_node || (port->flags & UPF_IOREMAP)) {
-		port->membase = devm_ioremap_nocache(port->dev,
-						     port->mapbase,
-						     sport->reg_size);
-		if (unlikely(!port->membase)) {
+		if (!devm_uart_memres_ioremap_nocache(port)) {
 			dev_err(port->dev, "can't remap port#%d\n", port->line);
 			return -ENXIO;
 		}
@@ -2672,7 +2668,7 @@ static int sci_remap_port(struct uart_port *port)
 		 * need to do any remapping, just cast the cookie
 		 * directly.
 		 */
-		port->membase = (void __iomem *)(uintptr_t)port->mapbase;
+		port->membase = (void __iomem *)(uintptr_t)uart_memres_start(port);
 	}
 
 	return 0;
@@ -2682,12 +2678,10 @@ static void sci_release_port(struct uart_port *port)
 {
 	struct sci_port *sport = to_sci_port(port);
 
-	if (port->dev->of_node || (port->flags & UPF_IOREMAP)) {
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
-	}
+	if (port->dev->of_node || (port->flags & UPF_IOREMAP))
+		devm_uart_memres_iounmap(port);
 
-	devm_release_mem_region(port->dev, port->mapbase, sport->reg_size);
+	devm_uart_memres_release(port);
 }
 
 static int sci_request_port(struct uart_port *port)
@@ -2696,10 +2690,7 @@ static int sci_request_port(struct uart_port *port)
 	struct sci_port *sport = to_sci_port(port);
 	int ret;
 
-	res = devm_request_mem_region(port->dev,
-				      port->mapbase,
-				      sport->reg_size,
-				      dev_name(port->dev));
+	res = devm_uart_memres_request(port, dev_name(port->dev));
 	if (unlikely(res == NULL)) {
 		dev_err(port->dev, "request_mem_region failed.");
 		return -EBUSY;
@@ -2875,8 +2866,7 @@ static int sci_init_single(struct platform_device *dev,
 	if (res == NULL)
 		return -ENOMEM;
 
-	port->mapbase = res->start;
-	sci_port->reg_size = resource_size(res);
+	uart_memres_set_res(port, res);
 
 	for (i = 0; i < ARRAY_SIZE(sci_port->irqs); ++i)
 		sci_port->irqs[i] = platform_get_irq(dev, i);
@@ -2947,7 +2937,7 @@ static int sci_init_single(struct platform_device *dev,
 	port->fifosize		= sci_port->params->fifosize;
 
 	if (port->type == PORT_SCI) {
-		if (sci_port->reg_size >= 0x20)
+		if (uart_memres_len(port) >= 0x20)
 			port->regshift = 2;
 		else
 			port->regshift = 1;

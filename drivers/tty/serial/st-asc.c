@@ -735,7 +735,7 @@ static int asc_init_port(struct asc_port *ascport,
 	port->membase = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(port->membase))
 		return PTR_ERR(port->membase);
-	port->mapbase = res->start;
+	uart_memres_set_res(res);
 
 	spin_lock_init(&port->lock);
 
@@ -928,7 +928,7 @@ static int asc_console_setup(struct console *co, char *options)
 	 * this to be called during the uart port registration when the
 	 * driver gets probed and the port should be mapped at that point.
 	 */
-	if (ascport->port.mapbase == 0 || ascport->port.membase == NULL)
+	if (!uart_memres_valid(&ascport->port) || ascport->port.membase == NULL)
 		return -ENXIO;
 
 	if (options)

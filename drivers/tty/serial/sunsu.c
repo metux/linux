@@ -1216,7 +1216,7 @@ static int sunsu_kbd_ms_init(struct uart_sunsu_port *up)
 	printk("%pOF: %s port at %llx, irq %u\n",
 	       up->port.dev->of_node,
 	       (up->su_type == SU_PORT_KBD) ? "Keyboard" : "Mouse",
-	       (unsigned long long) up->port.mapbase,
+	       (unsigned long long) uart_memres_start(&up->port),
 	       up->port.irq);
 
 #ifdef CONFIG_SERIO
@@ -1460,7 +1460,7 @@ static int su_probe(struct platform_device *op)
 	up->su_type = type;
 
 	rp = &op->resource[0];
-	up->port.mapbase = rp->start;
+	uart_memres_set_res(&up->port, rp);
 	up->reg_size = resource_size(rp);
 	up->port.membase = of_ioremap(rp, 0, up->reg_size, "su");
 	if (!up->port.membase) {

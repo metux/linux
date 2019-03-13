@@ -546,10 +546,10 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATI, 0x4385, sb600_hpet_quirk);
  */
 static void twinhead_reserve_killing_zone(struct pci_dev *dev)
 {
-        if (dev->subsystem_vendor == 0x14FF && dev->subsystem_device == 0xA003) {
-                pr_info("Reserving memory on Twinhead H12Y\n");
-                request_mem_region(0xFFB00000, 0x100000, "twinhead");
-        }
+	if (dev->subsystem_vendor == 0x14FF && dev->subsystem_device == 0xA003) {
+		pr_info("Reserving memory on Twinhead H12Y\n");
+		request_mem_region(0xFFB00000, 0x100000, "twinhead");
+	}
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x27B9, twinhead_reserve_killing_zone);
 

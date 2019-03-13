@@ -342,9 +342,8 @@ static const char *ulite_type(struct uart_port *port)
 
 static void ulite_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, ULITE_REGION);
-	iounmap(port->membase);
-	port->membase = NULL;
+	uart_memres_iounmap(port);
+	uart_memres_release(port);
 }
 
 static int ulite_request_port(struct uart_port *port)
@@ -352,18 +351,18 @@ static int ulite_request_port(struct uart_port *port)
 	struct uartlite_data *pdata = port->private_data;
 	int ret;
 
-	pr_debug("ulite console: port=%p; port->mapbase=%llx\n",
-		 port, (unsigned long long) port->mapbase);
+	pr_debug("ulite console: port=%p; start-addr=%llx\n",
+		 port, (unsigned long long) uart_memres_start(port));
 
-	if (!request_mem_region(port->mapbase, ULITE_REGION, "uartlite")) {
+	if (!uart_memres_request(port, "uartlite")) {
 		dev_err(port->dev, "Memory region busy\n");
 		return -EBUSY;
 	}
 
-	port->membase = ioremap(port->mapbase, ULITE_REGION);
+	port->membase = uart_memres_ioremap(port);
 	if (!port->membase) {
 		dev_err(port->dev, "Unable to map registers\n");
-		release_mem_region(port->mapbase, ULITE_REGION);
+		uart_memres_release(port);
 		return -EBUSY;
 	}
 
@@ -514,11 +513,10 @@ static int ulite_console_setup(struct console *co, char *options)
 	int parity = 'n';
 	int flow = 'n';
 
-
 	port = console_port;
 
 	/* Has the device been initialized yet? */
-	if (!port->mapbase) {
+	if (!uart_memres_valid(port)) {
 		pr_debug("console on ttyUL%i not present\n", co->index);
 		return -ENODEV;
 	}
@@ -625,7 +623,7 @@ static int ulite_assign(struct device *dev, int id, u32 base, int irq,
 	/* if id = -1; then scan for a free id and use that */
 	if (id < 0) {
 		for (id = 0; id < ULITE_NR_UARTS; id++)
-			if (ulite_ports[id].mapbase == 0)
+			if (!uart_memres_valid(&ulite_ports[id]))
 				break;
 	}
 	if (id < 0 || id >= ULITE_NR_UARTS) {
@@ -633,7 +631,7 @@ static int ulite_assign(struct device *dev, int id, u32 base, int irq,
 		return -EINVAL;
 	}
 
-	if ((ulite_ports[id].mapbase) && (ulite_ports[id].mapbase != base)) {
+	if (uart_memres_valid(&ulite_ports[id]) && (uart_memres_start(&ulite_ports[id]) != base)) {
 		dev_err(dev, "cannot assign to %s%i; it is already in use\n",
 			ULITE_NAME, id);
 		return -EBUSY;
@@ -646,7 +644,6 @@ static int ulite_assign(struct device *dev, int id, u32 base, int irq,
 	port->regshift = 2;
 	port->iotype = UPIO_MEM;
 	port->iobase = 1; /* mark port in use */
-	port->mapbase = base;
 	port->membase = NULL;
 	port->ops = &ulite_ops;
 	port->irq = irq;
@@ -655,6 +652,7 @@ static int ulite_assign(struct device *dev, int id, u32 base, int irq,
 	port->type = PORT_UNKNOWN;
 	port->line = id;
 	port->private_data = pdata;
+	uart_memset_res(port, DEFINE_RES_MEM(base, ULITE_REGION));
 
 	dev_set_drvdata(dev, port);
 
@@ -673,7 +671,7 @@ static int ulite_assign(struct device *dev, int id, u32 base, int irq,
 	rc = uart_add_one_port(&ulite_uart_driver, port);
 	if (rc) {
 		dev_err(dev, "uart_add_one_port() failed; err=%i\n", rc);
-		port->mapbase = 0;
+		uart_memres_clear(port);
 		dev_set_drvdata(dev, NULL);
 		return rc;
 	}
@@ -701,7 +699,7 @@ static int ulite_release(struct device *dev)
 
 		rc = uart_remove_one_port(pdata->ulite_uart_driver, port);
 		dev_set_drvdata(dev, NULL);
-		port->mapbase = 0;
+		port->DEFINE_MEM_RES(0, 0);
 	}
 
 	return rc;

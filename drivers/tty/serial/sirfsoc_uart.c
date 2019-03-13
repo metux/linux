@@ -1041,15 +1041,12 @@ static int sirfsoc_uart_request_port(struct uart_port *port)
 {
 	struct sirfsoc_uart_port *sirfport = to_sirfport(port);
 	struct sirfsoc_uart_param *uart_param = &sirfport->uart_reg->uart_param;
-	void *ret;
-	ret = request_mem_region(port->mapbase,
-		SIRFUART_MAP_SIZE, uart_param->port_name);
-	return ret ? 0 : -EBUSY;
+	return (uart_memres_request(port, uart_param->port_name) ? 0 : -EBUSY);
 }
 
 static void sirfsoc_uart_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, SIRFUART_MAP_SIZE);
+	uart_memres_release(port);
 }
 
 static void sirfsoc_uart_config_port(struct uart_port *port, int flags)
@@ -1095,7 +1092,7 @@ sirfsoc_uart_console_setup(struct console *co, char *options)
 	if (!sirfport)
 		return -ENODEV;
 	ureg = &sirfport->uart_reg->uart_reg;
-	if (!sirfport->port.mapbase)
+	if (!uart_memres_valid(&sirfport->port))
 		return -ENODEV;
 
 	/* enable usp in mode1 register */
@@ -1358,7 +1355,7 @@ usp_no_flow_control:
 		ret = -EFAULT;
 		goto err;
 	}
-	port->mapbase = res->start;
+	uart_memres_set_res(res);
 	port->membase = devm_ioremap_resource(&pdev->dev, res);
 	if (!port->membase) {
 		dev_err(&pdev->dev, "Cannot remap resource.\n");

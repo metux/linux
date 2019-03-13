@@ -1270,7 +1270,7 @@ static int ucc_uart_probe(struct platform_device *ofdev)
 		ret = -EINVAL;
 		goto out_free;
 	}
-	qe_port->port.mapbase = res.start;
+	uart_memres_set(port, res);
 
 	/* Get the UCC number (device ID) */
 	/* UCCs are numbered 1-7 */

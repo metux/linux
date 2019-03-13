@@ -614,32 +614,23 @@ static const char *siu_type(struct uart_port *port)
 
 static void siu_release_port(struct uart_port *port)
 {
-	unsigned long size;
-
 	if (port->flags	& UPF_IOREMAP) {
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
+		uart_memres_iounmap(port);
 	}
 
-	size = siu_port_size(port);
-	devm_release_mem_region(port->dev, port->mapbase, size);
+	devm_uart_memres_release(port);
 }
 
 static int siu_request_port(struct uart_port *port)
 {
-	unsigned long size;
 	struct resource *res;
 
-	size = siu_port_size(port);
-	res = devm_request_mem_region(port->dev,
-				      port->mapbase,
-				      size,
-				      siu_type_name(port));
+	res = devm_uart_memres_request(port, siu_type_name(port));
 	if (res == NULL)
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = devm_ioremap(port->dev, port->mapbase, size);
+		devm_uart_memres_ioremap(port);
 		if (port->membase == NULL) {
 			release_resource(res);
 			return -ENOMEM;
@@ -665,7 +656,7 @@ static int siu_verify_port(struct uart_port *port, struct serial_struct *serial)
 		return -EINVAL;
 	if (port->iotype != serial->io_type)
 		return -EINVAL;
-	if (port->mapbase != (unsigned long)serial->iomem_base)
+	if (uart_memres_start(port) != (unsigned long)serial->iomem_base)
 		return -EINVAL;
 
 	return 0;
@@ -714,7 +705,9 @@ static int siu_init_ports(struct platform_device *pdev)
 		port->flags = UPF_IOREMAP | UPF_BOOT_AUTOCONF;
 		port->line = i;
 		res = platform_get_resource(pdev, IORESOURCE_MEM, i);
-		port->mapbase = res->start;
+		uart_memres_set(
+			port,
+			DEFINE_RES_MEM(res->start, siu_port_size(port));
 		port++;
 	}
 
@@ -785,9 +778,9 @@ static int __init siu_console_setup(struct console *con, char *options)
 
 	port = &siu_uart_ports[con->index];
 	if (port->membase == NULL) {
-		if (port->mapbase == 0)
+		if (!uart_memres_valid(port))
 			return -ENODEV;
-		port->membase = ioremap(port->mapbase, siu_port_size(port));
+		uart_memres_ioremap(port);
 	}
 
 	if (port->type == PORT_VR41XX_SIU)
@@ -836,8 +829,8 @@ void __init vr41xx_siu_early_setup(struct uart_port *port)
 	siu_uart_ports[port->line].line = port->line;
 	siu_uart_ports[port->line].type = port->type;
 	siu_uart_ports[port->line].uartclk = SIU_BAUD_BASE * 16;
-	siu_uart_ports[port->line].mapbase = port->mapbase;
 	siu_uart_ports[port->line].ops = &siu_uart_ops;
+	uart_memres_set(&siu_uart_ports[port->line], port->memres);
 }
 
 #define SERIAL_VR41XX_CONSOLE	&siu_console

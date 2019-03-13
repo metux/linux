@@ -434,9 +434,11 @@ static int altera_jtaguart_probe(struct platform_device *pdev)
 
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res_mem)
-		port->mapbase = res_mem->start;
+		uart_memres_set_res(port, res_mem);
 	else if (platp)
-		port->mapbase = platp->mapbase;
+		uart_memres_set_interval(port,
+					 platp->mapbase,
+					 ALTERA_JTAGUART_SIZE);
 	else
 		return -ENODEV;
 
@@ -448,8 +450,7 @@ static int altera_jtaguart_probe(struct platform_device *pdev)
 	else
 		return -ENODEV;
 
-	port->membase = ioremap(port->mapbase, ALTERA_JTAGUART_SIZE);
-	if (!port->membase)
+	if (!uart_memres_ioremap(port))
 		return -ENOMEM;
 
 	port->line = i;
@@ -474,7 +475,7 @@ static int altera_jtaguart_remove(struct platform_device *pdev)
 
 	port = &altera_jtaguart_ports[i].port;
 	uart_remove_one_port(&altera_jtaguart_driver, port);
-	iounmap(port->membase);
+	uart_memres_unmap(port);
 
 	return 0;
 }

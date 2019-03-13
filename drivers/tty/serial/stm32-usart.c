@@ -820,7 +820,7 @@ static int stm32_init_port(struct stm32_port *stm32port,
 	port->membase = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(port->membase))
 		return PTR_ERR(port->membase);
-	port->mapbase = res->start;
+	uart_memset_set_res(res);
 
 	spin_lock_init(&port->lock);
 
@@ -904,7 +904,7 @@ static int stm32_of_dma_rx_probe(struct stm32_port *stm32port,
 
 	/* Configure DMA channel */
 	memset(&config, 0, sizeof(config));
-	config.src_addr = port->mapbase + ofs->rdr;
+	config.src_addr = uart_memres_start(port) + ofs->rdr;
 	config.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 
 	ret = dmaengine_slave_config(stm32port->rx_ch, &config);
@@ -976,7 +976,7 @@ static int stm32_of_dma_tx_probe(struct stm32_port *stm32port,
 
 	/* Configure DMA channel */
 	memset(&config, 0, sizeof(config));
-	config.dst_addr = port->mapbase + ofs->tdr;
+	config.dst_addr = uart_memres_start(port) + ofs->tdr;
 	config.dst_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 
 	ret = dmaengine_slave_config(stm32port->tx_ch, &config);
@@ -1153,7 +1153,7 @@ static int stm32_console_setup(struct console *co, char *options)
 	 * this to be called during the uart port registration when the
 	 * driver gets probed and the port should be mapped at that point.
 	 */
-	if (stm32port->port.mapbase == 0 || stm32port->port.membase == NULL)
+	if (!uart_memres_valid(&stm32port->port) || stm32port->port.membase == NULL)
 		return -ENXIO;
 
 	if (options)

@@ -1432,7 +1432,9 @@ static int zs_probe(struct platform_device *op)
 	up = &sunzilog_port_table[inst * 2];
 
 	/* Channel A */
-	up[0].port.mapbase = op->resource[0].start + 0x00;
+	uart_memres_set_interval(&up[0].port,
+				 op->resource[0].start,
+				 0x04);
 	up[0].port.membase = (void __iomem *) &rp->channelA;
 	up[0].port.iotype = UPIO_MEM;
 	up[0].port.irq = op->archdata.irqs[0];
@@ -1449,7 +1451,9 @@ static int zs_probe(struct platform_device *op)
 	sunzilog_init_hw(&up[0]);
 
 	/* Channel B */
-	up[1].port.mapbase = op->resource[0].start + 0x04;
+	uart_memres_set_interval(&up[0].port,
+				 op->resource[0].start + 0x04,
+				 0x04);
 	up[1].port.membase = (void __iomem *) &rp->channelB;
 	up[1].port.iotype = UPIO_MEM;
 	up[1].port.irq = op->archdata.irqs[0];
@@ -1492,12 +1496,12 @@ static int zs_probe(struct platform_device *op)
 		printk(KERN_INFO "%s: Keyboard at MMIO 0x%llx (irq = %d) "
 		       "is a %s\n",
 		       dev_name(&op->dev),
-		       (unsigned long long) up[0].port.mapbase,
+		       (unsigned long long) uart_memres_start(&up[0].port),
 		       op->archdata.irqs[0], sunzilog_type(&up[0].port));
 		printk(KERN_INFO "%s: Mouse at MMIO 0x%llx (irq = %d) "
 		       "is a %s\n",
 		       dev_name(&op->dev),
-		       (unsigned long long) up[1].port.mapbase,
+		       (unsigned long long) uart_memres_start(&up[1].port),
 		       op->archdata.irqs[0], sunzilog_type(&up[1].port));
 		kbm_inst++;
 	}

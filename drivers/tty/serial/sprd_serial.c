@@ -713,7 +713,7 @@ static int sprd_probe(struct platform_device *pdev)
 	if (IS_ERR(up->membase))
 		return PTR_ERR(up->membase);
 
-	up->mapbase = res->start;
+	uart_memres_set_res(up, res);
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {

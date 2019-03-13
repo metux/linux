@@ -973,7 +973,11 @@ static int sunsab_init_one(struct uart_sunsab_port *up,
 	up->port.line = line;
 	up->port.dev = &op->dev;
 
-	up->port.mapbase = op->resource[0].start + offset;
+	uart_memres_set_interval(
+		&up->port,
+		op->resource[0].start + offset,
+		resource_size(&op->resource[0]) - offset);
+
 	up->port.membase = of_ioremap(&op->resource[0], offset,
 				      sizeof(union sab82532_async_regs),
 				      "sab");

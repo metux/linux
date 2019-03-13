@@ -308,14 +308,12 @@ static const char *serial21285_type(struct uart_port *port)
 
 static void serial21285_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, port->mapsize);
+	uart_memres_release(port);
 }
 
 static int serial21285_request_port(struct uart_port *port)
 {
-	return request_mem_region(port->mapbase,
-				  port->mapsize,
-				  serial21285_name)
+	return uart_memres_request(port, serial21285_name)
 			 != NULL ? 0 : -EBUSY;
 }
 
@@ -361,6 +359,7 @@ static const struct uart_ops serial21285_ops = {
 static struct uart_port serial21285_port = {
 	.mapbase	= SERIAL_21285_BASE,
 	.mapsize	= SERIAL_21285_SIZE,
+	.memres		= DEFINE_RES_MEM(SERIAL_21285_BASE, SERIAL_21285_SIZE),
 	.iotype		= UPIO_MEM,
 	.irq		= 0,
 	.fifosize	= 16,

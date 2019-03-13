@@ -562,7 +562,7 @@ static int altera_uart_probe(struct platform_device *pdev)
 	/* if id is -1 scan for a free id and use that one */
 	if (i == -1) {
 		for (i = 0; i < CONFIG_SERIAL_ALTERA_UART_MAXPORTS; i++)
-			if (altera_uart_ports[i].port.mapbase == 0)
+			if (!uart_memres_valid(&altera_uart_ports[i].port))
 				break;
 	}
 
@@ -573,9 +573,11 @@ static int altera_uart_probe(struct platform_device *pdev)
 
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res_mem)
-		port->mapbase = res_mem->start;
+		uart_memres_set_res(port, res_mem);
 	else if (platp)
-		port->mapbase = platp->mapbase;
+		uart_memres_set_interval(port,
+					 platp->mapbase,
+					 ALTERA_UART_SIZE);
 	else
 		return -EINVAL;
 
@@ -595,10 +597,7 @@ static int altera_uart_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	port->membase = devm_ioremap(port->dev,
-				     port->mapbase,
-				     ALTERA_UART_SIZE);
-	if (!port->membase)
+	if (!devm_uart_memres_ioremap(port))
 		return -ENOMEM;
 
 	if (platp)
@@ -626,7 +625,7 @@ static int altera_uart_remove(struct platform_device *pdev)
 
 	if (port) {
 		uart_remove_one_port(&altera_uart_driver, port);
-		port->mapbase = 0;
+		devm_uart_memres_iounmap(port);
 	}
 
 	return 0;

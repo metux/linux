@@ -790,7 +790,7 @@ static int uart_get_info(struct tty_port *port, struct serial_struct *retinfo)
 	retinfo->hub6	    = uport->hub6;
 	retinfo->io_type         = uport->iotype;
 	retinfo->iomem_reg_shift = uport->regshift;
-	retinfo->iomem_base      = (void *)(unsigned long)uport->mapbase;
+	retinfo->iomem_base      = (void *)(unsigned long)uart_memres_start(uport);
 
 	ret = 0;
 out:
@@ -842,7 +842,7 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 	 */
 	change_port = !(uport->flags & UPF_FIXED_PORT)
 		&& (new_port != uport->iobase ||
-		    (unsigned long)new_info->iomem_base != uport->mapbase ||
+		    (unsigned long)new_info->iomem_base != uart_memres_start(uport) ||
 		    new_info->hub6 != uport->hub6 ||
 		    new_info->io_type != uport->iotype ||
 		    new_info->iomem_reg_shift != uport->regshift ||
@@ -902,7 +902,7 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 		unsigned int old_type, old_iotype, old_hub6, old_shift;
 
 		old_iobase = uport->iobase;
-		old_mapbase = uport->mapbase;
+		old_mapbase = uart_memres_start(uport);
 		old_type = uport->type;
 		old_hub6 = uport->hub6;
 		old_iotype = uport->iotype;
@@ -919,7 +919,9 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 		uport->hub6 = new_info->hub6;
 		uport->iotype = new_info->io_type;
 		uport->regshift = new_info->iomem_reg_shift;
-		uport->mapbase = (unsigned long)new_info->iomem_base;
+		uart_memres_set_interval(uport,
+			(unsigned long)new_info->iomem_base,
+			SZ_4K /* fixme */);
 
 		/*
 		 * Claim and map the new regions
@@ -941,7 +943,7 @@ static int uart_set_info(struct tty_struct *tty, struct tty_port *port,
 			uport->hub6 = old_hub6;
 			uport->iotype = old_iotype;
 			uport->regshift = old_shift;
-			uport->mapbase = old_mapbase;
+			uart_memres_set_interval(uport, old_mapbase, SZ_4K);
 
 			if (old_type != PORT_UNKNOWN) {
 				retval = uport->ops->request_port(uport);
@@ -1823,7 +1825,7 @@ static void uart_line_info(struct seq_file *m, struct uart_driver *drv, int i)
 	seq_printf(m, "%d: uart:%s %s%08llX irq:%d",
 			uport->line, uart_type(uport),
 			mmio ? "mmio:0x" : "port:",
-			mmio ? (unsigned long long)uport->mapbase
+			mmio ? (unsigned long long)uart_memres_start(uport)
 			     : (unsigned long long)uport->iobase,
 			uport->irq);
 
@@ -2298,7 +2300,7 @@ uart_report_port(struct uart_driver *drv, struct uart_port *port)
 	case UPIO_AU:
 	case UPIO_TSI:
 		snprintf(address, sizeof(address),
-			 "MMIO 0x%llx", (unsigned long long)port->mapbase);
+			 "MMIO 0x%llx", (unsigned long long)uart_menres_start(port));
 		break;
 	default:
 		strlcpy(address, "*unknown*", sizeof(address));
@@ -2321,7 +2323,7 @@ uart_configure_port(struct uart_driver *drv, struct uart_state *state,
 	/*
 	 * If there isn't a port here, don't do anything further.
 	 */
-	if (!port->iobase && !port->mapbase && !port->membase)
+	if (!port->iobase && !uart_memres_valid(port) && !port->membase)
 		return;
 
 	/*
@@ -2963,7 +2965,7 @@ int uart_match_port(struct uart_port *port1, struct uart_port *port2)
 	case UPIO_MEM32BE:
 	case UPIO_AU:
 	case UPIO_TSI:
-		return (port1->mapbase == port2->mapbase);
+		return (uart_menres_start(port1) == uart_memres_start(port2));
 	}
 	return 0;
 }

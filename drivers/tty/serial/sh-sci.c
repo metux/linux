@@ -2659,7 +2659,9 @@ static int sci_remap_port(struct uart_port *port)
 		return 0;
 
 	if (port->dev->of_node || (port->flags & UPF_IOREMAP)) {
-		port->membase = ioremap_nocache(port->mapbase, sport->reg_size);
+		port->membase = devm_ioremap_nocache(port->dev,
+						     port->mapbase,
+						     sport->reg_size);
 		if (unlikely(!port->membase)) {
 			dev_err(port->dev, "can't remap port#%d\n", port->line);
 			return -ENXIO;
@@ -2681,11 +2683,11 @@ static void sci_release_port(struct uart_port *port)
 	struct sci_port *sport = to_sci_port(port);
 
 	if (port->dev->of_node || (port->flags & UPF_IOREMAP)) {
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 		port->membase = NULL;
 	}
 
-	release_mem_region(port->mapbase, sport->reg_size);
+	devm_release_mem_region(port->dev, port->mapbase, sport->reg_size);
 }
 
 static int sci_request_port(struct uart_port *port)
@@ -2694,8 +2696,10 @@ static int sci_request_port(struct uart_port *port)
 	struct sci_port *sport = to_sci_port(port);
 	int ret;
 
-	res = request_mem_region(port->mapbase, sport->reg_size,
-				 dev_name(port->dev));
+	res = devm_request_mem_region(port->dev,
+				      port->mapbase,
+				      sport->reg_size,
+				      dev_name(port->dev));
 	if (unlikely(res == NULL)) {
 		dev_err(port->dev, "request_mem_region failed.");
 		return -EBUSY;

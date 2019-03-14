@@ -1643,7 +1643,6 @@ static int serial_omap_probe(struct platform_device *pdev)
 {
 	struct omap_uart_port_info *omap_up_info = dev_get_platdata(&pdev->dev);
 	struct uart_omap_port *up;
-	struct resource *mem;
 	void __iomem *base;
 	int uartirq = 0;
 	int wakeirq = 0;
@@ -1667,11 +1666,6 @@ static int serial_omap_probe(struct platform_device *pdev)
 	if (!up)
 		return -ENOMEM;
 
-	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&pdev->dev, mem);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
-
 	up->dev = &pdev->dev;
 	up->port.dev = &pdev->dev;
 	up->port.type = PORT_OMAP;
@@ -1680,6 +1674,13 @@ static int serial_omap_probe(struct platform_device *pdev)
 	up->port.regshift = 2;
 	up->port.fifosize = 64;
 	up->port.ops = &serial_omap_pops;
+
+	uart_memres_set_res(&up->port,
+			    platform_get_resource(pdev, IORESOURCE_MEM, 0));
+
+	base = devm_uart_memres_ioremap(&up->port);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
 	if (pdev->dev.of_node)
 		ret = of_alias_get_id(pdev->dev.of_node, "serial");
@@ -1710,8 +1711,6 @@ static int serial_omap_probe(struct platform_device *pdev)
 		goto err_rs485;
 
 	sprintf(up->name, "OMAP UART%d", up->port.line);
-	up->port.mapbase = mem->start;
-	up->port.membase = base;
 	up->port.flags = omap_up_info->flags;
 	up->port.uartclk = omap_up_info->uartclk;
 	up->port.rs485_config = serial_omap_config_rs485;

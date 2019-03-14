@@ -1410,8 +1410,8 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	 */
 	if (of_address_to_resource(np, 0, &r_ports))
 		return -ENODEV;
-	uap->port.mapbase = r_ports.start;
-	uap->port.membase = ioremap(uap->port.mapbase, 0x1000);
+	uart_memres_set_res(&uap->port, r_ports);
+	uart_memres_ioremap(&uap->port);
 
 	uap->control_reg = uap->port.membase;
 	uap->data_reg = uap->control_reg + 0x10;
@@ -1434,8 +1434,8 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 			goto no_dma;
 		}
 		uap->rx_dma_regs = ioremap(r_rxdma.start, 0x100);
-		if (uap->rx_dma_regs == NULL) {	
-			iounmap(uap->tx_dma_regs);
+		if (uap->rx_dma_regs == NULL) {
+			uart_memres_iounmap(&uap->port);
 			uap->tx_dma_regs = NULL;
 			uap->flags &= ~PMACZILOG_FLAG_HAS_DMA;
 			goto no_dma;
@@ -1708,7 +1708,7 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	if (!r_ports || irq <= 0)
 		return -ENODEV;
 
-	uap->port.mapbase  = r_ports->start;
+	uart_memres_set_res(&uap->port, r_ports);
 	uap->port.membase  = (unsigned char __iomem *) r_ports->start;
 	uap->port.iotype   = UPIO_MEM;
 	uap->port.irq      = irq;

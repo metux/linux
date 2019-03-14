@@ -646,14 +646,18 @@ static void sbd_release_port(struct uart_port *uport)
 	struct sbd_port *sport = to_sport(uport);
 	struct sbd_duart *duart = sport->duart;
 
-	iounmap(sport->memctrl);
+	devm_iounmap(uport->dev, sport->memctrl);
 	sport->memctrl = NULL;
-	iounmap(uport->membase);
+	devm_iounmap(uport->dev, uport->membase);
 	uport->membase = NULL;
 
 	if(refcount_dec_and_test(&duart->map_guard))
-		release_mem_region(duart->mapctrl, DUART_CHANREG_SPACING);
-	release_mem_region(uport->mapbase, DUART_CHANREG_SPACING);
+		devm_release_mem_region(uport->dev,
+					duart->mapctrl,
+					DUART_CHANREG_SPACING);
+	devm_release_mem_region(uport->dev,
+				uport->mapbase,
+				DUART_CHANREG_SPACING);
 }
 
 static int sbd_map_port(struct uart_port *uport)
@@ -662,19 +666,21 @@ static int sbd_map_port(struct uart_port *uport)
 	struct sbd_duart *duart = sport->duart;
 
 	if (!uport->membase)
-		uport->membase = ioremap(uport->mapbase,
-						 DUART_CHANREG_SPACING);
+		uport->membase = devm_ioremap(uport->dev,
+					      uport->mapbase,
+					      DUART_CHANREG_SPACING);
 	if (!uport->membase) {
 		dev_err(uport->dev, "Cannot map MMIO (base)\n");
 		return -ENOMEM;
 	}
 
 	if (!sport->memctrl)
-		sport->memctrl = ioremap(duart->mapctrl,
-						 DUART_CHANREG_SPACING);
+		sport->memctrl = devm_ioremap(uport->dev,
+					      duart->mapctrl,
+					      DUART_CHANREG_SPACING);
 	if (!sport->memctrl) {
 		dev_err(uport->dev, "Cannot map MMIO (ctrl)\n");
-		iounmap(uport->membase);
+		devm_iounmap(uport->dev, uport->membase);
 		uport->membase = NULL;
 		return -ENOMEM;
 	}
@@ -688,15 +694,18 @@ static int sbd_request_port(struct uart_port *uport)
 	struct sbd_duart *duart = to_sport(uport)->duart;
 	int ret = 0;
 
-	if (!request_mem_region(uport->mapbase, DUART_CHANREG_SPACING,
+	if (!devm_request_mem_region(uport->dev,
+				uport->mapbase, DUART_CHANREG_SPACING,
 				"sb1250-duart")) {
 		printk(err);
 		return -EBUSY;
 	}
 	refcount_inc(&duart->map_guard);
 	if (refcount_read(&duart->map_guard) == 1) {
-		if (!request_mem_region(duart->mapctrl, DUART_CHANREG_SPACING,
-					"sb1250-duart")) {
+		if (!devm_request_mem_region(uport->dev,
+					     duart->mapctrl,
+					     DUART_CHANREG_SPACING,
+					     "sb1250-duart")) {
 			refcount_dec(&duart->map_guard);
 			printk(err);
 			ret = -EBUSY;
@@ -706,12 +715,15 @@ static int sbd_request_port(struct uart_port *uport)
 		ret = sbd_map_port(uport);
 		if (ret) {
 			if (refcount_dec_and_test(&duart->map_guard))
-				release_mem_region(duart->mapctrl,
-						   DUART_CHANREG_SPACING);
+				devm_release_mem_region(uport->dev,
+							duart->mapctrl,
+							DUART_CHANREG_SPACING);
 		}
 	}
 	if (ret) {
-		release_mem_region(uport->mapbase, DUART_CHANREG_SPACING);
+		devm_release_mem_region(uport->dev,
+					uport->mapbase,
+					DUART_CHANREG_SPACING);
 		return ret;
 	}
 	return 0;

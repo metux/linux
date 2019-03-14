@@ -350,7 +350,8 @@ static const struct intel_device_info intel_ironlake_m_info = {
 	.has_llc = 1, \
 	.has_rc6 = 1, \
 	.has_rc6p = 1, \
-	.ppgtt = INTEL_PPGTT_ALIASING, \
+	.ppgtt_type = INTEL_PPGTT_ALIASING, \
+	.ppgtt_size = 31, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	GEN_DEFAULT_PAGE_SIZES
@@ -395,7 +396,8 @@ static const struct intel_device_info intel_sandybridge_m_gt2_info = {
 	.has_llc = 1, \
 	.has_rc6 = 1, \
 	.has_rc6p = 1, \
-	.ppgtt = INTEL_PPGTT_FULL, \
+	.ppgtt_type = INTEL_PPGTT_FULL, \
+	.ppgtt_size = 31, \
 	IVB_PIPE_OFFSETS, \
 	IVB_CURSOR_OFFSETS, \
 	GEN_DEFAULT_PAGE_SIZES
@@ -448,7 +450,8 @@ static const struct intel_device_info intel_valleyview_info = {
 	.has_rc6 = 1,
 	.display.has_gmch = 1,
 	.display.has_hotplug = 1,
-	.ppgtt = INTEL_PPGTT_FULL,
+	.ppgtt_type = INTEL_PPGTT_FULL,
+	.ppgtt_size = 31,
 	.has_snoop = true,
 	.has_coherent_ggtt = false,
 	.engine_mask = BIT(RCS0) | BIT(VCS0) | BIT(BCS0),
@@ -496,7 +499,8 @@ static const struct intel_device_info intel_haswell_gt3_info = {
 	.page_sizes = I915_GTT_PAGE_SIZE_4K | \
 		      I915_GTT_PAGE_SIZE_2M, \
 	.has_logical_ring_contexts = 1, \
-	.ppgtt = INTEL_PPGTT_FULL_4LVL, \
+	.ppgtt_type = INTEL_PPGTT_FULL_4LVL, \
+	.ppgtt_size = 48, \
 	.has_64bit_reloc = 1, \
 	.has_reset_engine = 1
 
@@ -541,7 +545,8 @@ static const struct intel_device_info intel_cherryview_info = {
 	.has_rc6 = 1,
 	.has_logical_ring_contexts = 1,
 	.display.has_gmch = 1,
-	.ppgtt = INTEL_PPGTT_FULL,
+	.ppgtt_type = INTEL_PPGTT_FULL,
+	.ppgtt_size = 32,
 	.has_reset_engine = 1,
 	.has_snoop = true,
 	.has_coherent_ggtt = false,
@@ -617,7 +622,8 @@ static const struct intel_device_info intel_skylake_gt4_info = {
 	.has_logical_ring_contexts = 1, \
 	.has_logical_ring_preemption = 1, \
 	.has_guc = 1, \
-	.ppgtt = INTEL_PPGTT_FULL_4LVL, \
+	.ppgtt_type = INTEL_PPGTT_FULL_4LVL, \
+	.ppgtt_size = 48, \
 	.has_reset_engine = 1, \
 	.has_snoop = true, \
 	.has_coherent_ggtt = false, \

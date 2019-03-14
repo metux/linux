@@ -503,30 +503,16 @@ lqasc_release_port(struct uart_port *port)
 static int
 lqasc_request_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *res;
-	int size;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "cannot obtain I/O memory region");
-		return -ENODEV;
-	}
-	size = resource_size(res);
-
-	res = devm_request_mem_region(&pdev->dev, res->start,
-		size, dev_name(&pdev->dev));
-	if (!res) {
+	if (!devm_uart_memres_request(port, dev_name(port->dev))) {
 		dev_err(&pdev->dev, "cannot request I/O memory region");
 		return -EBUSY;
 	}
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = devm_ioremap_nocache(&pdev->dev,
-			port->mapbase, size);
-		if (port->membase == NULL)
+		if (!devm_uart_memres_ioremap_nocache(port))
 			return -ENOMEM;
 	}
+
 	return 0;
 }
 
@@ -743,7 +729,8 @@ lqasc_probe(struct platform_device *pdev)
 	port->dev	= &pdev->dev;
 	/* unused, just to be backward-compatible */
 	port->irq	= irqres[0].start;
-	port->mapbase	= mmres->start;
+
+	uart_memres_set_res(port, mmres);
 
 	if (IS_ENABLED(CONFIG_LANTIQ) && !IS_ENABLED(CONFIG_COMMON_CLK))
 		ltq_port->freqclk = clk_get_fpi();

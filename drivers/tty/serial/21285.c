@@ -340,12 +340,13 @@ static const char *serial21285_type(struct uart_port *port)
 
 static void serial21285_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, 32);
+	devm_release_mem_region(port->dev, port->mapbase, 32);
 }
 
 static int serial21285_request_port(struct uart_port *port)
 {
-	return request_mem_region(port->mapbase, 32, serial21285_name)
+	return devm_request_mem_region(port->dev, port->mapbase,
+				       32, serial21285_name)
 			 != NULL ? 0 : -EBUSY;
 }
 

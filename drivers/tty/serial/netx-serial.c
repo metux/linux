@@ -424,12 +424,13 @@ static const char *netx_type(struct uart_port *port)
 
 static void netx_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, UART_PORT_SIZE);
+	devm_release_mem_region(port->dev, port->mapbase, UART_PORT_SIZE);
 }
 
 static int netx_request_port(struct uart_port *port)
 {
-	return request_mem_region(port->mapbase, UART_PORT_SIZE,
+	return devm_request_mem_region(port->dev,
+				       port->mapbase, UART_PORT_SIZE,
 			DRIVER_NAME) != NULL ? 0 : -EBUSY;
 }
 

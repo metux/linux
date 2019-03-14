@@ -296,12 +296,12 @@ static const char *apbuart_type(struct uart_port *port)
 
 static void apbuart_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, 0x100);
+	uart_memres_release(port);
 }
 
 static int apbuart_request_port(struct uart_port *port)
 {
-	return request_mem_region(port->mapbase, 0x100, "grlib-apbuart")
+	return uart_memres_request(port, "grlib-apbuart")
 	    != NULL ? 0 : -EBUSY;
 	return 0;
 }
@@ -575,7 +575,7 @@ static int apbuart_probe(struct platform_device *op)
 	apbuart_flush_fifo((struct uart_port *) port);
 
 	dev_info(&pdev->pdev, "grlib-apbuart at 0x%llx, irq %d\n",
-	       (unsigned long long) port->mapbase, port->irq);
+	       (unsigned long long) uart_memres_start(port), port->irq);
 	return 0;
 }
 
@@ -627,9 +627,10 @@ static int __init grlib_apbuart_configure(void)
 
 		port = &grlib_apbuart_ports[line];
 
-		port->mapbase = addr;
-		port->membase = ioremap(addr,
-			sizeof(struct grlib_apbuart_regs_map));
+		uart_memres_set_interval(port,
+					 addr,
+					 sizeof(struct grlib_apbuart_regs_map));
+		devm_uart_mamres_ioremap(port);
 		port->irq = 0;
 		port->iotype = UPIO_MEM;
 		port->ops = &grlib_apbuart_ops;

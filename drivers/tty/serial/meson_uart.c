@@ -398,22 +398,18 @@ static int meson_uart_verify_port(struct uart_port *port,
 
 static void meson_uart_release_port(struct uart_port *port)
 {
-	devm_iounmap(port->dev, port->membase);
-	port->membase = NULL;
-	devm_release_mem_region(port->dev, port->mapbase, port->mapsize);
+	devm_uart_memres_iounmap(port);
+	devm_uart_memres_release(port);
 }
 
 static int meson_uart_request_port(struct uart_port *port)
 {
-	if (!devm_request_mem_region(port->dev, port->mapbase, port->mapsize,
-				     dev_name(port->dev))) {
+	if (!devm_uart_memres_request(port, dev_name(port->dev))) {
 		dev_err(port->dev, "Memory region busy\n");
 		return -EBUSY;
 	}
 
-	port->membase = devm_ioremap_nocache(port->dev, port->mapbase,
-					     port->mapsize);
-	if (!port->membase)
+	if (!devm_uart_memres_ioremap_nocache(port->dev))
 		return -ENOMEM;
 
 	return 0;

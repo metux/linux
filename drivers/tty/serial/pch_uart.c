@@ -210,7 +210,6 @@ struct eg20t_port {
 	struct uart_port port;
 	int port_type;
 	void __iomem *membase;
-	resource_size_t mapbase;
 	unsigned int iobase;
 	struct pci_dev *pdev;
 	int fifo_size;
@@ -728,7 +727,7 @@ static void pch_request_dma(struct uart_port *port)
 	param->dma_dev = &dma_dev->dev;
 	param->chan_id = priv->port.line * 2; /* Tx = 0, 2, 4, ... */
 
-	param->tx_reg = port->mapbase + UART_TX;
+	param->tx_reg = uart_memres_start(port) + UART_TX;
 	chan = dma_request_channel(mask, filter, param);
 	if (!chan) {
 		dev_err(priv->port.dev, "%s:dma_request_channel FAILS(Tx)\n",
@@ -742,7 +741,7 @@ static void pch_request_dma(struct uart_port *port)
 	param->dma_dev = &dma_dev->dev;
 	param->chan_id = priv->port.line * 2 + 1; /* Rx = Tx + 1 */
 
-	param->rx_reg = port->mapbase + UART_RX;
+	param->rx_reg = uart_memres_start(port->memres) + UART_RX;
 	chan = dma_request_channel(mask, filter, param);
 	if (!chan) {
 		dev_err(priv->port.dev, "%s:dma_request_channel FAILS(Rx)\n",
@@ -1734,7 +1733,6 @@ static struct eg20t_port *pch_uart_init_port(struct pci_dev *pdev,
 	struct eg20t_port *priv;
 	int ret;
 	unsigned int iobase;
-	unsigned int mapbase;
 	unsigned char *rxbuf;
 	int fifosize;
 	int port_type;
@@ -1772,8 +1770,6 @@ static struct eg20t_port *pch_uart_init_port(struct pci_dev *pdev,
 	spin_lock_init(&priv->lock);
 
 	iobase = pci_resource_start(pdev, 0);
-	mapbase = pci_resource_start(pdev, 1);
-	priv->mapbase = mapbase;
 	priv->iobase = iobase;
 	priv->pdev = pdev;
 	priv->tx_empty = 1;
@@ -1786,7 +1782,8 @@ static struct eg20t_port *pch_uart_init_port(struct pci_dev *pdev,
 	priv->port.dev = &pdev->dev;
 	priv->port.iobase = iobase;
 	priv->port.membase = NULL;
-	priv->port.mapbase = mapbase;
+	uart_memres_set_interval(pci_resource_start(pdev, 1),
+				 pci_resource_len(pdev, 1));
 	priv->port.irq = pdev->irq;
 	priv->port.iotype = UPIO_PORT;
 	priv->port.ops = &pch_uart_ops;

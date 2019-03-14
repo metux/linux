@@ -950,7 +950,7 @@ static int tegra_uart_dma_channel_allocate(struct tegra_uart_port *tup,
 			dma_release_channel(dma_chan);
 			return -ENOMEM;
 		}
-		dma_sconfig.src_addr = tup->uport.mapbase;
+		dma_sconfig.src_addr = uart_memres_start(&tup->uport);
 		dma_sconfig.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 		dma_sconfig.src_maxburst = 4;
 		tup->rx_dma_chan = dma_chan;
@@ -966,7 +966,7 @@ static int tegra_uart_dma_channel_allocate(struct tegra_uart_port *tup,
 			return -ENOMEM;
 		}
 		dma_buf = tup->uport.state->xmit.buf;
-		dma_sconfig.dst_addr = tup->uport.mapbase;
+		dma_sconfig.dst_addr = uart_memres_start(&tup->uport);
 		dma_sconfig.dst_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 		dma_sconfig.dst_maxburst = 16;
 		tup->tx_dma_chan = dma_chan;
@@ -1288,8 +1288,8 @@ static int tegra_uart_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	u->mapbase = resource->start;
-	u->membase = devm_ioremap_resource(&pdev->dev, resource);
+	uart_memres_set_res(u, resource);
+	devm_uart_memres_ioremap(u);
 	if (IS_ERR(u->membase))
 		return PTR_ERR(u->membase);
 

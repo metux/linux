@@ -151,7 +151,7 @@ static void lpc32xx_hsuart_console_write(struct console *co, const char *s,
 	local_irq_restore(flags);
 }
 
-static void lpc32xx_loopback_set(resource_size_t mapbase, int state);
+static void lpc32xx_loopback_set(struct uart_port *port, int state);
 
 static int __init lpc32xx_hsuart_console_setup(struct console *co,
 					       char *options)
@@ -172,7 +172,7 @@ static int __init lpc32xx_hsuart_console_setup(struct console *co,
 	if (options)
 		uart_parse_options(options, &baud, &parity, &bits, &flow);
 
-	lpc32xx_loopback_set(port->mapbase, 0); /* get out of loopback mode */
+	lpc32xx_loopback_set(port, 0); /* get out of loopback mode */
 
 	return uart_set_options(port, co, baud, parity, bits, flow);
 }
@@ -440,12 +440,12 @@ static void serial_lpc32xx_break_ctl(struct uart_port *port,
 }
 
 /* LPC3250 Errata HSUART.1: Hang workaround via loopback mode on inactivity */
-static void lpc32xx_loopback_set(resource_size_t mapbase, int state)
+static void lpc32xx_loopback_set(struct uart_port *port, int state)
 {
 	int bit;
 	u32 tmp;
 
-	switch (mapbase) {
+	switch (uart_memres_start(port)) {
 	case LPC32XX_HS_UART1_BASE:
 		bit = 0;
 		break;
@@ -456,7 +456,7 @@ static void lpc32xx_loopback_set(resource_size_t mapbase, int state)
 		bit = 6;
 		break;
 	default:
-		WARN(1, "lpc32xx_hs: Warning: Unknown port at %08x\n", mapbase);
+		WARN(1, "lpc32xx_hs: Warning: Unknown port at %08x\n", res.start);
 		return;
 	}
 
@@ -493,7 +493,7 @@ static int serial_lpc32xx_startup(struct uart_port *port)
 		LPC32XX_HSU_OFFSET(20) | LPC32XX_HSU_TMO_INACT_4B;
 	writel(tmp, LPC32XX_HSUART_CTRL(port->membase));
 
-	lpc32xx_loopback_set(port->mapbase, 0); /* get out of loopback mode */
+	lpc32xx_loopback_set(port, 0); /* get out of loopback mode */
 
 	spin_unlock_irqrestore(&port->lock, flags);
 
@@ -518,7 +518,7 @@ static void serial_lpc32xx_shutdown(struct uart_port *port)
 		LPC32XX_HSU_OFFSET(20) | LPC32XX_HSU_TMO_INACT_4B;
 	writel(tmp, LPC32XX_HSUART_CTRL(port->membase));
 
-	lpc32xx_loopback_set(port->mapbase, 1); /* go to loopback mode */
+	lpc32xx_loopback_set(port, 1); /* go to loopback mode */
 
 	spin_unlock_irqrestore(&port->lock, flags);
 
@@ -573,38 +573,33 @@ static const char *serial_lpc32xx_type(struct uart_port *port)
 
 static void serial_lpc32xx_release_port(struct uart_port *port)
 {
-	if ((port->iotype == UPIO_MEM32) && (port->mapbase)) {
-		if (port->flags & UPF_IOREMAP) {
-			iounmap(port->membase);
-			port->membase = NULL;
-		}
+	if ((port->iotype != UPIO_MEM32) || (!uart_memres_start(port)))
+		return;
 
-		release_mem_region(port->mapbase, port->mapsize);
-	}
+	if (port->flags & UPF_IOREMAP)
+		uart_memres_iounmap(port);
+
+	uart_memres_release(port);
 }
 
 static int serial_lpc32xx_request_port(struct uart_port *port)
 {
 	int ret = -ENODEV;
 
-	if ((port->iotype == UPIO_MEM32) && (port->mapbase)) {
-		ret = 0;
+	if ((port->iotype != UPIO_MEM32) || (!uart_memres_start(port)))
+		return -ENODEV;
 
-		if (!request_mem_region(port->mapbase,
-					port->mapsize, MODNAME))
-			ret = -EBUSY;
-		else if (port->flags & UPF_IOREMAP) {
-			port->membase = ioremap(port->mapbase,
-						port->mapsize);
-			if (!port->membase) {
-				release_mem_region(port->mapbase,
-						   port->mapsize);
-				ret = -ENOMEM;
-			}
+	if (!uart_memres_request(port, MODNAME))
+		return -EBUSY;
+
+	if (port->flags & UPF_IOREMAP) {
+		if (!uart_memres_ioremap(port)) {
+			uart_memres_release(port);
+			return -ENOMEM;
 		}
 	}
 
-	return ret;
+	return 0;
 }
 
 static void serial_lpc32xx_config_port(struct uart_port *port, int uflags)
@@ -686,8 +681,7 @@ static int serial_hs_lpc32xx_probe(struct platform_device *pdev)
 			uarts_registered);
 		return -ENXIO;
 	}
-	p->port.mapbase = res->start;
-	p->port.mapsize = SZ_4K;
+	uart_memres_set_start_len(&p->port, res->start, SZ_4K);
 	p->port.membase = NULL;
 
 	ret = platform_get_irq(pdev, 0);
@@ -708,7 +702,7 @@ static int serial_hs_lpc32xx_probe(struct platform_device *pdev)
 	spin_lock_init(&p->port.lock);
 
 	/* send port to loopback mode by default */
-	lpc32xx_loopback_set(p->port.mapbase, 1);
+	lpc32xx_loopback_set(&p->port, 1);
 
 	ret = uart_add_one_port(&lpc32xx_hs_reg, &p->port);
 

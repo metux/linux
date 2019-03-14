@@ -398,38 +398,19 @@ static void owl_uart_set_termios(struct uart_port *port,
 
 static void owl_uart_release_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *res;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return;
-
 	if (port->flags & UPF_IOREMAP) {
-		devm_release_mem_region(port->dev, port->mapbase,
-			resource_size(res));
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
+		devm_uart_memres_release(port);
+		devm_uart_iounmap(port);
 	}
 }
 
 static int owl_uart_request_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *res;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -ENXIO;
-
-	if (!devm_request_mem_region(port->dev, port->mapbase,
-			resource_size(res), dev_name(port->dev)))
+	if (!devm_uart_memres_request(port, dev_name(port->dev)))
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = devm_ioremap_nocache(port->dev, port->mapbase,
-				resource_size(res));
-		if (!port->membase)
+		if (!devm_uart_memres_ioremap_nocache(port))
 			return -EBUSY;
 	}
 
@@ -686,7 +667,7 @@ static int owl_uart_probe(struct platform_device *pdev)
 	owl_port->port.line = pdev->id;
 	owl_port->port.type = PORT_OWL;
 	owl_port->port.iotype = UPIO_MEM;
-	owl_port->port.mapbase = res_mem->start;
+	uart_memres_set_res(&owl_port->port, res_mem);
 	owl_port->port.irq = irq;
 	owl_port->port.uartclk = clk_get_rate(owl_port->clk);
 	if (owl_port->port.uartclk == 0) {

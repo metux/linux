@@ -627,7 +627,7 @@ static int bcm_uart_verify_port(struct uart_port *port,
 		return -EINVAL;
 	if (port->iotype != serinfo->io_type)
 		return -EINVAL;
-	if (port->mapbase != (unsigned long)serinfo->iomem_base)
+	if (uart_memres_start(port) != (unsigned long)serinfo->iomem_base)
 		return -EINVAL;
 	return 0;
 }
@@ -830,12 +830,12 @@ static int bcm_uart_probe(struct platform_device *pdev)
 		return -EBUSY;
 	memset(port, 0, sizeof(*port));
 
-	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res_mem)
-		return -ENODEV;
+	port->dev = &pdev->dev;
 
-	port->mapbase = res_mem->start;
-	port->membase = devm_ioremap_resource(&pdev->dev, res_mem);
+	uart_memres_set_res(port,
+			    platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	devm_uart_memres_ioremap(port);
+
 	if (IS_ERR(port->membase))
 		return PTR_ERR(port->membase);
 
@@ -854,7 +854,6 @@ static int bcm_uart_probe(struct platform_device *pdev)
 	port->irq = res_irq->start;
 	port->ops = &bcm_uart_ops;
 	port->flags = UPF_BOOT_AUTOCONF;
-	port->dev = &pdev->dev;
 	port->fifosize = 16;
 	port->uartclk = clk_get_rate(clk) / 2;
 	port->line = pdev->id;

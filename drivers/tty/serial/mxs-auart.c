@@ -1685,7 +1685,7 @@ static int mxs_auart_probe(struct platform_device *pdev)
 	}
 
 	s->port.mapbase = r->start;
-	s->port.membase = ioremap(r->start, resource_size(r));
+	s->port.membase = devm_ioremap_resource(s->port.dev, r);
 	if (!s->port.membase) {
 		ret = -ENOMEM;
 		goto out_disable_clks;

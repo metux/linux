@@ -1413,7 +1413,7 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	if (of_address_to_resource(np, 0, &r_ports))
 		return -ENODEV;
 	uart_memres_set_mmio_range(&uap->port, r_ports.start, PMZ_MAPSIZE);
-	uap->port.membase = ioremap(uap->port.mapbase, uap->port.mapsize);
+	uart_memres_ioremap(&uap->port);
 
 	uap->control_reg = uap->port.membase;
 	uap->data_reg = uap->control_reg + 0x10;

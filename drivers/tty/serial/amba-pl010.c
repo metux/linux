@@ -503,7 +503,7 @@ static const char *pl010_type(struct uart_port *port)
  */
 static void pl010_release_port(struct uart_port *port)
 {
-	devm_release_mem_region(port->dev, port->mapbase, UART_PORT_SIZE);
+	devm_uart_memres_release(port);
 }
 
 /*
@@ -511,10 +511,7 @@ static void pl010_release_port(struct uart_port *port)
  */
 static int pl010_request_port(struct uart_port *port)
 {
-	return devm_request_mem_region(port->dev,
-				       port->mapbase,
-				       UART_PORT_SIZE,
-				       "uart-pl010")
+	return devm_uart_memres_request(port, "uart-pl010")
 			!= NULL ? 0 : -EBUSY;
 }
 
@@ -726,7 +723,7 @@ static int pl010_probe(struct amba_device *dev, const struct amba_id *id)
 		return PTR_ERR(uap->clk);
 
 	uap->port.dev = &dev->dev;
-	uap->port.mapbase = dev->res.start;
+	uart_memres_set_res(&uap->port, dev->res);
 	uap->port.membase = base;
 	uap->port.iotype = UPIO_MEM;
 	uap->port.irq = dev->irq[0];

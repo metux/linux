@@ -732,8 +732,7 @@ static void men_z135_release_port(struct uart_port *port)
 {
 	struct men_z135_port *uart = to_men_z135(port);
 
-	devm_iounmap(port->dev, port->membase);
-	port->membase = NULL;
+	devm_uart_memres_iounmap(port);
 
 	mcb_release_mem(uart->mem);
 }
@@ -748,11 +747,10 @@ static int men_z135_request_port(struct uart_port *port)
 	if (IS_ERR(mem))
 		return PTR_ERR(mem);
 
-	port->mapbase = mem->start;
+	uart_memres_set_res(port, mem);
 	uart->mem = mem;
 
-	port->membase = devm_ioremap_resource(port->dev, mem);
-	if (port->membase == NULL) {
+	if (!devm_uart_memres_ioremap(port)) {
 		mcb_release_mem(mem);
 		return -ENOMEM;
 	}
@@ -839,7 +837,7 @@ static int men_z135_probe(struct mcb_device *mdev,
 	uart->port.line = line++;
 	uart->port.dev = dev;
 	uart->port.type = PORT_MEN_Z135;
-	uart->port.mapbase = mem->start;
+	uart_memres_set_res(&uart->port, mem);
 	uart->port.membase = NULL;
 	uart->mdev = mdev;
 

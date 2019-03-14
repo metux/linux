@@ -445,30 +445,25 @@ static int efm32_uart_request_port(struct uart_port *port)
 	struct efm32_uart_port *efm_port = to_efm_port(port);
 	int ret;
 
-	port->membase = devm_ioremap(port->dev, port->mapbase, 60);
-	if (!efm_port->port.membase) {
-		ret = -ENOMEM;
+	if (!devm_uart_memres_ioremap(port)) {
 		efm_debug(efm_port, "failed to remap\n");
-		goto err_ioremap;
+		return -ENOMEM;
 	}
 
 	efm_port->clk = clk_get(port->dev, NULL);
 	if (IS_ERR(efm_port->clk)) {
-		ret = PTR_ERR(efm_port->clk);
 		efm_debug(efm_port, "failed to get clock\n");
-		goto err_clk_get;
+		devm_uart_memres_iounmap(port);
+		return PTR_ERR(efm_port->clk);
 	}
 
 	ret = clk_prepare(efm_port->clk);
-	if (ret) {
-		clk_put(efm_port->clk);
-err_clk_get:
+	if (!ret)
+		return 0;
 
-		devm_iounmap(port->dev, port->membase);
-err_ioremap:
-		return ret;
-	}
-	return 0;
+	clk_put(efm_port->clk);
+	devm_uart_memres_iounmap(port);
+	return ret;
 }
 
 static void efm32_uart_config_port(struct uart_port *port, int type)
@@ -744,7 +739,7 @@ static int efm32_uart_probe(struct platform_device *pdev)
 	efm_port->txirq = ret;
 
 	efm_port->port.dev = &pdev->dev;
-	efm_port->port.mapbase = res->start;
+	uart_memres_set_res(&efm_port->port, res);
 	efm_port->port.type = PORT_EFMUART;
 	efm_port->port.iotype = UPIO_MEM32;
 	efm_port->port.fifosize = 2;

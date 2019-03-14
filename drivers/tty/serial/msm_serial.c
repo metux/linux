@@ -1324,8 +1324,8 @@ static void msm_release_port(struct uart_port *port)
 		return;
 	size = resource_size(uart_resource);
 
-	release_mem_region(port->mapbase, size);
-	iounmap(port->membase);
+	devm_release_mem_region(port->dev, port->mapbase, size);
+	devm_iounmap(port->dev, port->membase);
 	port->membase = NULL;
 }
 
@@ -1342,10 +1342,13 @@ static int msm_request_port(struct uart_port *port)
 
 	size = resource_size(uart_resource);
 
-	if (!request_mem_region(port->mapbase, size, "msm_serial"))
+	if (!devm_request_mem_region(port->dev,
+				     port->mapbase,
+				     size,
+				     "msm_serial"))
 		return -EBUSY;
 
-	port->membase = ioremap(port->mapbase, size);
+	port->membase = ioremap(port->dev, port->mapbase, size);
 	if (!port->membase) {
 		ret = -EBUSY;
 		goto fail_release_port;
@@ -1354,7 +1357,7 @@ static int msm_request_port(struct uart_port *port)
 	return 0;
 
 fail_release_port:
-	release_mem_region(port->mapbase, size);
+	devm_release_mem_region(port->dev, port->mapbase, size);
 	return ret;
 }
 

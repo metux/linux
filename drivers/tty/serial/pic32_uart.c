@@ -614,15 +614,19 @@ static int pic32_uart_request_port(struct uart_port *port)
 	if (unlikely(!res_mem))
 		return -EINVAL;
 
-	if (!request_mem_region(port->mapbase, resource_size(res_mem),
-				"pic32_uart_mem"))
+	if (!devm_request_mem_region(port->dev,
+				     port->mapbase,
+				     resource_size(res_mem),
+				     "pic32_uart_mem"))
 		return -EBUSY;
 
 	port->membase = devm_ioremap_nocache(port->dev, port->mapbase,
 						resource_size(res_mem));
 	if (!port->membase) {
 		dev_err(port->dev, "Unable to map registers\n");
-		release_mem_region(port->mapbase, resource_size(res_mem));
+		devm_release_mem_region(port->dev,
+					port->mapbase,
+					resource_size(res_mem));
 		return -ENOMEM;
 	}
 
@@ -641,7 +645,7 @@ static void pic32_uart_release_port(struct uart_port *port)
 		return;
 	res_size = resource_size(res_mem);
 
-	release_mem_region(port->mapbase, res_size);
+	devm_release_mem_region(port->dev, port->mapbase, res_size);
 }
 
 /* serial core request to do any port required auto-configuration */

@@ -554,11 +554,11 @@ static int mps2_of_get_port(struct platform_device *pdev,
 static int mps2_init_port(struct platform_device *pdev,
 			  struct mps2_uart_port *mps_port)
 {
-	struct resource *res;
 	int ret;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	mps_port->port.membase = devm_ioremap_resource(&pdev->dev, res);
+	uart_memres_set_res(&mps_port.port,
+			    platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	devm_uart_memres_ioremap(&mps_port.port);
 	if (IS_ERR(mps_port->port.membase))
 		return PTR_ERR(mps_port->port.membase);
 

@@ -1211,7 +1211,7 @@ static int cpm_uart_init_port(struct device_node *np,
 	pinfo->rx_fifosize = RX_BUF_SIZE;
 
 	pinfo->port.uartclk = ppc_proc_freq;
-	pinfo->port.mapbase = (unsigned long)mem;
+	uart_memres_set_interval((unsigned long)mem, 1); /* FIXME */
 	pinfo->port.type = PORT_CPM;
 	pinfo->port.ops = &cpm_uart_pops,
 	pinfo->port.iotype = UPIO_MEM;

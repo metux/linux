@@ -448,7 +448,9 @@ static int altera_jtaguart_probe(struct platform_device *pdev)
 	else
 		return -ENODEV;
 
-	port->membase = ioremap(port->mapbase, ALTERA_JTAGUART_SIZE);
+	port->membase = devm_ioremap(port->dev,
+				     port->mapbase,
+				     ALTERA_JTAGUART_SIZE);
 	if (!port->membase)
 		return -ENOMEM;
 
@@ -474,7 +476,7 @@ static int altera_jtaguart_remove(struct platform_device *pdev)
 
 	port = &altera_jtaguart_ports[i].port;
 	uart_remove_one_port(&altera_jtaguart_driver, port);
-	iounmap(port->membase);
+	devm_iounmap(port->dev, port->membase);
 
 	return 0;
 }

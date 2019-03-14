@@ -646,7 +646,7 @@ static irqreturn_t mpc512x_psc_handle_irq(struct uart_port *port)
 	fifoc_int = in_be32(&psc_fifoc->fifoc_int);
 
 	/* Check if it is an interrupt for this port */
-	psc_num = (port->mapbase & 0xf00) >> 8;
+	psc_num = (uart_memres_start(port) & 0xf00) >> 8;
 	if (test_bit(psc_num, &fifoc_int) ||
 	    test_bit(psc_num + 16, &fifoc_int))
 		return mpc5xxx_uart_process_int(port);
@@ -664,7 +664,7 @@ static int mpc512x_psc_alloc_clock(struct uart_port *port)
 	struct clk *clk;
 	int err;
 
-	psc_num = (port->mapbase & 0xf00) >> 8;
+	psc_num = (uart_memres_start(port) & 0xf00) >> 8;
 
 	clk = devm_clk_get(port->dev, "mclk");
 	if (IS_ERR(clk)) {
@@ -712,7 +712,7 @@ static void mpc512x_psc_relse_clock(struct uart_port *port)
 	int psc_num;
 	struct clk *clk;
 
-	psc_num = (port->mapbase & 0xf00) >> 8;
+	psc_num = (uart_memres_start(port) & 0xf00) >> 8;
 	clk = psc_mclk_clk[psc_num];
 	if (clk) {
 		clk_disable_unprepare(clk);
@@ -734,7 +734,7 @@ static int mpc512x_psc_endis_clock(struct uart_port *port, int enable)
 	if (uart_console(port))
 		return 0;
 
-	psc_num = (port->mapbase & 0xf00) >> 8;
+	psc_num = (uart_memres_start(port) & 0xf00) >> 8;
 	psc_clk = psc_mclk_clk[psc_num];
 	if (!psc_clk) {
 		dev_err(port->dev, "Failed to get PSC clock entry!\n");
@@ -1275,34 +1275,25 @@ mpc52xx_uart_release_port(struct uart_port *port)
 		psc_ops->clock_relse(port);
 
 	/* remapped by us ? */
-	if (port->flags & UPF_IOREMAP) {
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
-	}
+	if (port->flags & UPF_IOREMAP)
+		devm_uart_memres_iounmap(port);
 
-	devm_release_mem_region(port->dev,
-				port->mapbase,
-				sizeof(struct mpc52xx_psc));
+	devm_uart_memres_release(port);
 }
 
 static int
 mpc52xx_uart_request_port(struct uart_port *port)
 {
-	int err;
+	int err = 0;
 
 	if (port->flags & UPF_IOREMAP) /* Need to remap ? */
-		port->membase = devm_ioremap(port->dev, port->mapbase,
-					sizeof(struct mpc52xx_psc));
+		if (!devm_uart_memres_ioremap(port))
+			return -EINVAL;
 
-	if (!port->membase)
-		return -EINVAL;
-
-	err = devm_request_mem_region(port->mapbase,
-			sizeof(struct mpc52xx_psc),
-			"mpc52xx_psc_uart") != NULL ? 0 : -EBUSY;
-
-	if (err)
+	if (!devm_uart_memres_request(port, "mpc52xx_psc_uart")) {
+		err = -EBUSY;
 		goto out_membase;
+	}
 
 	if (psc_ops->clock_alloc) {
 		err = psc_ops->clock_alloc(port);
@@ -1313,14 +1304,11 @@ mpc52xx_uart_request_port(struct uart_port *port)
 	return 0;
 
 out_mapregion:
-	devm_release_mem_region(port->dev,
-				port->mapbase,
-				sizeof(struct mpc52xx_psc));
+	devm_uart_memres_release(port);
 out_membase:
-	if (port->flags & UPF_IOREMAP) {
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
-	}
+	if (port->flags & UPF_IOREMAP)
+		devm_uart_memres_iounmap(port);
+
 	return err;
 }
 
@@ -1341,7 +1329,7 @@ mpc52xx_uart_verify_port(struct uart_port *port, struct serial_struct *ser)
 	if ((ser->irq != port->irq) ||
 	    (ser->io_type != UPIO_MEM) ||
 	    (ser->baud_base != port->uartclk)  ||
-	    (ser->iomem_base != (void *)port->mapbase) ||
+	    (ser->iomem_base != (void *)uart_memres_start(port)) ||
 	    (ser->hub6 != 0))
 		return -EINVAL;
 
@@ -1657,17 +1645,22 @@ mpc52xx_console_setup(struct console *co, char *options)
 	spin_lock_init(&port->lock);
 	port->uartclk = uartclk;
 	port->ops	= &mpc52xx_uart_ops;
-	port->mapbase = res.start;
-	port->membase = devm_ioremap(port->dev,
-				     res.start,
-				     sizeof(struct mpc52xx_psc));
+
+	if (resource_size(res) < sizeof(struct mpc52xx_psc)) {
+		pr_err("io mem resource too small\n");
+		return -EINVAL;
+	}
+
+	uart_memres_set_res(port, res);
+	devm_uart_memres_ioremap(port);
+
 	port->irq = irq_of_parse_and_map(np, 0);
 
 	if (port->membase == NULL)
 		return -EINVAL;
 
 	pr_debug("mpc52xx-psc uart at %p, mapped to %p, irq=%x, freq=%i\n",
-		 (void *)port->mapbase, port->membase,
+		 (void *)uart_memres_start(port), port->membase,
 		 port->irq, port->uartclk);
 
 	/* Setup the port parameters accoding to options */
@@ -1784,13 +1777,19 @@ static int mpc52xx_uart_of_probe(struct platform_device *op)
 	port->ops	= &mpc52xx_uart_ops;
 	port->dev	= &op->dev;
 
-	/* Search for IRQ and mapbase */
+	/* Search for IRQ and memory resource*/
 	ret = of_address_to_resource(op->dev.of_node, 0, &res);
 	if (ret)
 		return ret;
 
-	port->mapbase = res.start;
-	if (!port->mapbase) {
+	if (resource_size(res) < sizeof(struct mpc52xx_psc)) {
+		dev_err(&op->dev, "io mem resource too small\n");
+		return -EINVAL;
+	}
+
+	uart_memres_set_res(res);
+
+	if (!uart_memres_valid(port)) {
 		dev_dbg(&op->dev, "Could not allocate resources for PSC\n");
 		return -EINVAL;
 	}
@@ -1802,7 +1801,7 @@ static int mpc52xx_uart_of_probe(struct platform_device *op)
 	}
 
 	dev_dbg(&op->dev, "mpc52xx-psc uart at %p, irq=%x, freq=%i\n",
-		(void *)port->mapbase, port->irq, port->uartclk);
+		(void *)uart_memres_start(port), port->irq, port->uartclk);
 
 	/* Add the port to the uart sub-system */
 	ret = uart_add_one_port(&mpc52xx_uart_driver, port);

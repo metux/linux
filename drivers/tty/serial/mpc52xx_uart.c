@@ -1276,11 +1276,13 @@ mpc52xx_uart_release_port(struct uart_port *port)
 
 	/* remapped by us ? */
 	if (port->flags & UPF_IOREMAP) {
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 		port->membase = NULL;
 	}
 
-	release_mem_region(port->mapbase, sizeof(struct mpc52xx_psc));
+	devm_release_mem_region(port->dev,
+				port->mapbase,
+				sizeof(struct mpc52xx_psc));
 }
 
 static int
@@ -1289,13 +1291,14 @@ mpc52xx_uart_request_port(struct uart_port *port)
 	int err;
 
 	if (port->flags & UPF_IOREMAP) /* Need to remap ? */
-		port->membase = ioremap(port->mapbase,
+		port->membase = devm_ioremap(port->dev, port->mapbase,
 					sizeof(struct mpc52xx_psc));
 
 	if (!port->membase)
 		return -EINVAL;
 
-	err = request_mem_region(port->mapbase, sizeof(struct mpc52xx_psc),
+	err = devm_request_mem_region(port->mapbase,
+			sizeof(struct mpc52xx_psc),
 			"mpc52xx_psc_uart") != NULL ? 0 : -EBUSY;
 
 	if (err)
@@ -1310,10 +1313,12 @@ mpc52xx_uart_request_port(struct uart_port *port)
 	return 0;
 
 out_mapregion:
-	release_mem_region(port->mapbase, sizeof(struct mpc52xx_psc));
+	devm_release_mem_region(port->dev,
+				port->mapbase,
+				sizeof(struct mpc52xx_psc));
 out_membase:
 	if (port->flags & UPF_IOREMAP) {
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 		port->membase = NULL;
 	}
 	return err;
@@ -1653,7 +1658,9 @@ mpc52xx_console_setup(struct console *co, char *options)
 	port->uartclk = uartclk;
 	port->ops	= &mpc52xx_uart_ops;
 	port->mapbase = res.start;
-	port->membase = ioremap(res.start, sizeof(struct mpc52xx_psc));
+	port->membase = devm_ioremap(port->dev,
+				     res.start,
+				     sizeof(struct mpc52xx_psc));
 	port->irq = irq_of_parse_and_map(np, 0);
 
 	if (port->membase == NULL)

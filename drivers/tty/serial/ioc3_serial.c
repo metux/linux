@@ -1932,11 +1932,11 @@ static inline int ioc3_serial_core_attach( struct ioc3_submodule *is,
 			__func__, (void *)the_port, (void *)port,
 				phys_port, ii));
 
-		/* membase, iobase and mapbase just need to be non-0 */
+		/* membase, iobase and memres just need to be non-0 */
 		the_port->membase = (unsigned char __iomem *)1;
 		the_port->iobase = (pdev->bus->number << 16) |  ii;
 		the_port->line = (Num_of_ioc3_cards << 2) | ii;
-		the_port->mapbase = 1;
+		uart_memres_set_interval(1, 1);
 		the_port->type = PORT_16550A;
 		the_port->fifosize = FIFO_SIZE;
 		the_port->ops = &ioc3_ops;

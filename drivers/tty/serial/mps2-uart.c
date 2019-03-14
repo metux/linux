@@ -554,16 +554,14 @@ static int mps2_of_get_port(struct platform_device *pdev,
 static int mps2_init_port(struct platform_device *pdev,
 			  struct mps2_uart_port *mps_port)
 {
-	struct resource *res;
 	int ret;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	mps_port->port.membase = devm_ioremap_resource(&pdev->dev, res);
+	uart_memres_set_res(&mps_port.port,
+			    platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	uart_memres_ioremap(&mps_port.port);
 	if (IS_ERR(mps_port->port.membase))
 		return PTR_ERR(mps_port->port.membase);
 
-	mps_port->port.mapbase = res->start;
-	mps_port->port.mapsize = resource_size(res);
 	mps_port->port.iotype = UPIO_MEM;
 	mps_port->port.flags = UPF_BOOT_AUTOCONF;
 	mps_port->port.fifosize = 1;

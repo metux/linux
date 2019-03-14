@@ -455,8 +455,12 @@ static int uart_clps711x_probe(struct platform_device *pdev)
 	if (IS_ERR(uart_clk))
 		return PTR_ERR(uart_clk);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	s->port.membase = devm_ioremap_resource(&pdev->dev, res);
+	s->port.dev		= &pdev->dev;
+
+	uart_memres_set_res(&s->port,
+			    platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	devm_uart_memres_ioremap(&s->por);
+
 	if (IS_ERR(s->port.membase))
 		return PTR_ERR(s->port.membase);
 
@@ -474,9 +478,7 @@ static int uart_clps711x_probe(struct platform_device *pdev)
 		return PTR_ERR(s->syscon);
 
 	s->port.line		= of_alias_get_id(np, "serial");
-	s->port.dev		= &pdev->dev;
 	s->port.iotype		= UPIO_MEM32;
-	s->port.mapbase		= res->start;
 	s->port.type		= PORT_CLPS711X;
 	s->port.fifosize	= 16;
 	s->port.flags		= UPF_SKIP_TEST | UPF_FIXED_TYPE;

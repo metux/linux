@@ -653,12 +653,11 @@ static void sbd_release_port(struct uart_port *uport)
 
 	iounmap(sport->memctrl);
 	sport->memctrl = NULL;
-	iounmap(uport->membase);
-	uport->membase = NULL;
+	uart_memres_iounmap(uport);
 
 	if (refcount_dec_and_test(&duart->map_guard))
 		release_mem_region(duart->mapctrl, DUART_CHANREG_SPACING);
-	release_mem_region(uport->mapbase, uport->mapsize);
+	uart_memres_release(uport);
 }
 
 static int sbd_map_port(struct uart_port *uport)
@@ -666,12 +665,11 @@ static int sbd_map_port(struct uart_port *uport)
 	struct sbd_port *sport = to_sport(uport);
 	struct sbd_duart *duart = sport->duart;
 
-	if (!uport->membase)
-		uport->membase = ioremap_nocache(uport->mapbase,
-						 uport->mapsize);
 	if (!uport->membase) {
-		dev_err(uport->dev, "Cannot map MMIO (base)\n");
-		return -ENOMEM;
+		if (!uart_memres_ioremap_nocache(uport)) {
+			dev_err(uport->dev, "Cannot map MMIO\n");
+			return -ENOMEM;
+		}
 	}
 
 	if (!sport->memctrl)
@@ -679,8 +677,7 @@ static int sbd_map_port(struct uart_port *uport)
 						 DUART_CHANREG_SPACING);
 	if (!sport->memctrl) {
 		dev_err(uport->dev, "Cannot map MMIO (ctrl)\n");
-		iounmap(uport->membase);
-		uport->membase = NULL;
+		uart_memres_iounmap(uport);
 		return -ENOMEM;
 	}
 
@@ -689,37 +686,35 @@ static int sbd_map_port(struct uart_port *uport)
 
 static int sbd_request_port(struct uart_port *uport)
 {
-	const char *err = "sbd: Unable to reserve MMIO resource\n";
 	struct sbd_duart *duart = to_sport(uport)->duart;
-	int ret = 0;
+	int ret = -EBUSY;
 
-	if (!request_mem_region(uport->mapbase, uport->mapsize,
-				"sb1250-duart")) {
-		pr_err(err);
+	if (!uart_memres_request(uport, "sb1250-duart")) {
+		dev_err(uport->dev, "Unable to reserve MMIO resource\n");
 		return -EBUSY;
 	}
 	refcount_inc(&duart->map_guard);
 	if (refcount_read(&duart->map_guard) == 1) {
 		if (!request_mem_region(duart->mapctrl, DUART_CHANREG_SPACING,
 					"sb1250-duart")) {
+			dev_err(uport->dev,
+				"Unable to reserve MMIO resource (ctrl)\n");
 			refcount_dec(&duart->map_guard);
-			pr_err(err);
-			ret = -EBUSY;
+			goto out_release;
 		}
 	}
-	if (!ret) {
-		ret = sbd_map_port(uport);
-		if (ret) {
-			if (refcount_dec_and_test(&duart->map_guard))
-				release_mem_region(duart->mapctrl,
-						   DUART_CHANREG_SPACING);
-		}
-	}
+
+	ret = sbd_map_port(uport);
 	if (ret) {
-		release_mem_region(uport->mapbase, uport->mapsize);
+		uart_memres_release(uport);
 		return ret;
 	}
+
 	return 0;
+
+out_release:
+	uart_memres_release(uport);
+	return ret;
 }
 
 static void sbd_config_port(struct uart_port *uport, int flags)
@@ -811,8 +806,9 @@ static void __init sbd_probe_duarts(void)
 			uport->flags	= UPF_BOOT_AUTOCONF;
 			uport->ops	= &sbd_ops;
 			uport->line	= line;
-			uport->mapbase	= SBD_CHANREGS(line);
-			uport->mapsize	= DUART_CHANREG_SPACING;
+			uart_memres_set_interval(uport,
+						 SBD_CHANREGS(line),
+						 DUART_CHANREG_SPACING);
 		}
 	}
 }

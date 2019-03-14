@@ -682,6 +682,8 @@ static void rp2_fw_cb(const struct firmware *fw, void *context)
 		struct rp2_uart_port *rp = &card->ports[i];
 		struct uart_port *p;
 		int j = (unsigned)i % PORTS_PER_ASIC;
+		unsigned long mem_base = phys_base + RP2_PORT_BASE
+						   + j*RP2_PORT_SPACING;
 
 		rp->asic_base = card->bar1;
 		rp->base = card->bar1 + RP2_PORT_BASE + j*RP2_PORT_SPACING;
@@ -700,14 +702,15 @@ static void rp2_fw_cb(const struct firmware *fw, void *context)
 		p->ops = &rp2_uart_ops;
 		p->irq = card->pdev->irq;
 		p->membase = rp->base;
-		p->mapbase = phys_base + RP2_PORT_BASE + j*RP2_PORT_SPACING;
 
 		if (i >= PORTS_PER_ASIC) {
 			rp->asic_base += RP2_ASIC_SPACING;
 			rp->base += RP2_ASIC_SPACING;
 			rp->ucode += RP2_ASIC_SPACING;
-			p->mapbase += RP2_ASIC_SPACING;
+			mem_base += RP2_ASIC_SPACING;
 		}
+
+		uart_memres_set_interval(mem_base, SZ_4K /* fixme */);
 
 		rp2_init_port(rp, fw);
 		rc = uart_add_one_port(&rp2_uart_driver, p);

@@ -1531,7 +1531,7 @@ static int mpsc_verify_port(struct uart_port *port, struct serial_struct *ser)
 		rc = -EINVAL;
 	else if (pi->port.uartclk / 16 != ser->baud_base) /* Not sure */
 		rc = -EINVAL;
-	else if ((void *)pi->port.mapbase != ser->iomem_base)
+	else if ((void *)uart_memres_start(&pi->port) != ser->iomem_base)
 		rc = -EINVAL;
 	else if (pi->port.iobase != ser->port)
 		rc = -EINVAL;
@@ -2032,8 +2032,9 @@ static void mpsc_drv_get_platform_data(struct mpsc_port_info *pi,
 	pi->port.type = PORT_MPSC;
 	pi->port.fifosize = MPSC_TXBE_SIZE;
 	pi->port.membase = pi->mpsc_base;
-	pi->port.mapbase = (ulong)pi->mpsc_base;
 	pi->port.ops = &mpsc_pops;
+	uart_memres_set_interval((ulong)pi->mpsc_base,
+				 MPSC_ROUTING_REG_BLOCK_SIZE);
 
 	pi->mirror_regs = pdata->mirror_regs;
 	pi->cache_mgmt = pdata->cache_mgmt;

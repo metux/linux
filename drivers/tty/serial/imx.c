@@ -1231,7 +1231,7 @@ static int imx_uart_dma_init(struct imx_port *sport)
 	}
 
 	slave_config.direction = DMA_DEV_TO_MEM;
-	slave_config.src_addr = sport->port.mapbase + URXD0;
+	slave_config.src_addr = uart_memres_start(&sport->port) + URXD0;
 	slave_config.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 	/* one byte less than the watermark level to enable the aging timer */
 	slave_config.src_maxburst = RXTL_DMA - 1;
@@ -1257,7 +1257,7 @@ static int imx_uart_dma_init(struct imx_port *sport)
 	}
 
 	slave_config.direction = DMA_MEM_TO_DEV;
-	slave_config.dst_addr = sport->port.mapbase + URTX0;
+	slave_config.dst_addr = uart_memres_start(&sport->port) + URTX0;
 	slave_config.dst_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
 	slave_config.dst_maxburst = TXTL_DMA;
 	ret = dmaengine_slave_config(sport->dma_chan_tx, &slave_config);
@@ -1732,7 +1732,7 @@ imx_uart_verify_port(struct uart_port *port, struct serial_struct *ser)
 		ret = -EINVAL;
 	if (sport->port.uartclk / 16 != ser->baud_base)
 		ret = -EINVAL;
-	if (sport->port.mapbase != (unsigned long)ser->iomem_base)
+	if (uart_memres_start(&sport->port) != (unsigned long)ser->iomem_base)
 		ret = -EINVAL;
 	if (sport->port.iobase != ser->port)
 		ret = -EINVAL;
@@ -2223,7 +2223,6 @@ static int imx_uart_probe(struct platform_device *pdev)
 	rtsirq = platform_get_irq(pdev, 2);
 
 	sport->port.dev = &pdev->dev;
-	sport->port.mapbase = res->start;
 	sport->port.membase = base;
 	sport->port.type = PORT_IMX,
 	sport->port.iotype = UPIO_MEM;
@@ -2232,6 +2231,7 @@ static int imx_uart_probe(struct platform_device *pdev)
 	sport->port.ops = &imx_uart_pops;
 	sport->port.rs485_config = imx_uart_rs485_config;
 	sport->port.flags = UPF_BOOT_AUTOCONF;
+	uart_memres_set_res(&sport->port, res);
 	timer_setup(&sport->timer, imx_uart_timeout, 0);
 
 	sport->gpios = mctrl_gpio_init(&sport->port, 0);

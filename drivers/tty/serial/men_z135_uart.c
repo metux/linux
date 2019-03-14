@@ -732,7 +732,7 @@ static void men_z135_release_port(struct uart_port *port)
 {
 	struct men_z135_port *uart = to_men_z135(port);
 
-	iounmap(port->membase);
+	devm_iounmap(port->dev, port->membase);
 	port->membase = NULL;
 
 	mcb_release_mem(uart->mem);
@@ -751,7 +751,7 @@ static int men_z135_request_port(struct uart_port *port)
 	port->mapbase = mem->start;
 	uart->mem = mem;
 
-	port->membase = ioremap(mem->start, resource_size(mem));
+	port->membase = devm_ioremap_resource(port->dev, mem);
 	if (port->membase == NULL) {
 		mcb_release_mem(mem);
 		return -ENOMEM;

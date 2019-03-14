@@ -996,7 +996,7 @@ static int sccnxp_probe(struct platform_device *pdev)
 		s->port[i].fifosize	= s->chip->fifosize;
 		s->port[i].flags	= UPF_SKIP_TEST | UPF_FIXED_TYPE;
 		s->port[i].iotype	= UPIO_MEM;
-		s->port[i].mapbase	= res->start;
+		uart_memres_set_res(&s->port[i], res);
 		s->port[i].membase	= membase;
 		s->port[i].regshift	= s->pdata.reg_shift;
 		s->port[i].uartclk	= uartclk;

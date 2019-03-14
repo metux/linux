@@ -544,11 +544,11 @@ static void serial_lpc32xx_release_port(struct uart_port *port)
 {
 	if ((port->iotype == UPIO_MEM32) && (port->mapbase)) {
 		if (port->flags & UPF_IOREMAP) {
-			iounmap(port->membase);
+			devm_iounmap(port->dev, port->membase);
 			port->membase = NULL;
 		}
 
-		release_mem_region(port->mapbase, SZ_4K);
+		devm_release_mem_region(port->dev, port->mapbase, SZ_4K);
 	}
 }
 
@@ -559,12 +559,19 @@ static int serial_lpc32xx_request_port(struct uart_port *port)
 	if ((port->iotype == UPIO_MEM32) && (port->mapbase)) {
 		ret = 0;
 
-		if (!request_mem_region(port->mapbase, SZ_4K, MODNAME))
+		if (!devm_request_mem_region(port->dev,
+					     port->mapbase,
+					     SZ_4K,
+					     MODNAME))
 			ret = -EBUSY;
 		else if (port->flags & UPF_IOREMAP) {
-			port->membase = ioremap(port->mapbase, SZ_4K);
+			port->membase = devm_ioremap(port->dev,
+						     port->mapbase,
+						     SZ_4K);
 			if (!port->membase) {
-				release_mem_region(port->mapbase, SZ_4K);
+				devm_release_mem_region(port->dev,
+							port->mapbase,
+							SZ_4K);
 				ret = -ENOMEM;
 			}
 		}

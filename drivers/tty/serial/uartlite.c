@@ -343,8 +343,8 @@ static const char *ulite_type(struct uart_port *port)
 
 static void ulite_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, port->mapsize);
-	iounmap(port->membase);
+	devm_release_mem_region(port->dev, port->mapbase, port->mapsize);
+	devm_iounmap(port->dev, port->membase);
 	port->membase = NULL;
 }
 
@@ -357,15 +357,20 @@ static int ulite_request_port(struct uart_port *port)
 		"ulite console: port=%p; port->mapbase=%llx\n",
 		 port, (unsigned long long) port->mapbase);
 
-	if (!request_mem_region(port->mapbase, port->mapsize, "uartlite")) {
+	if (!devm_request_mem_region(port->dev,
+				     port->mapbase,
+				     port->mapsize,
+				     "uartlite")) {
 		dev_err(port->dev, "Memory region busy\n");
 		return -EBUSY;
 	}
 
-	port->membase = ioremap(port->mapbase, port->mapsize);
+	port->membase = devm_ioremap(port->dev, port->mapbase, port->mapsize);
 	if (!port->membase) {
 		dev_err(port->dev, "Unable to map registers\n");
-		release_mem_region(port->mapbase, port->mapsize);
+		devm_release_mem_region(port->dev,
+					port->mapbase,
+					port->mapsize);
 		return -EBUSY;
 	}
 

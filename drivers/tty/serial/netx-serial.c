@@ -424,13 +424,12 @@ static const char *netx_type(struct uart_port *port)
 
 static void netx_release_port(struct uart_port *port)
 {
-	devm_release_mem_region(port->dev, port->mapbase, UART_PORT_SIZE);
+	devm_uart_memres_release(port);
 }
 
 static int netx_request_port(struct uart_port *port)
 {
-	return devm_request_mem_region(port->dev,
-				       port->mapbase, UART_PORT_SIZE,
+	return devm_uart_memres_request(port,
 			DRIVER_NAME) != NULL ? 0 : -EBUSY;
 }
 
@@ -477,6 +476,7 @@ static struct netx_port netx_ports[] = {
 		.iotype = UPIO_MEM,
 		.membase = (char __iomem *)io_p2v(NETX_PA_UART0),
 		.mapbase = NETX_PA_UART0,
+		.memres = DEFINE_RES_MEM(NETX_PA_UART0, UART_PORT_SIZE),
 		.irq = NETX_IRQ_UART0,
 		.uartclk = 100000000,
 		.fifosize = 16,
@@ -490,6 +490,7 @@ static struct netx_port netx_ports[] = {
 		.iotype = UPIO_MEM,
 		.membase = (char __iomem *)io_p2v(NETX_PA_UART1),
 		.mapbase = NETX_PA_UART1,
+		.memres = DEFINE_RES_MEM(NETX_PA_UART1, UART_PORT_SIZE),
 		.irq = NETX_IRQ_UART1,
 		.uartclk = 100000000,
 		.fifosize = 16,
@@ -503,6 +504,7 @@ static struct netx_port netx_ports[] = {
 		.iotype = UPIO_MEM,
 		.membase = (char __iomem *)io_p2v(NETX_PA_UART2),
 		.mapbase = NETX_PA_UART2,
+		.memres = DEFINE_RES_MEM(NETX_PA_UART2, UART_PORT_SIZE),
 		.irq = NETX_IRQ_UART2,
 		.uartclk = 100000000,
 		.fifosize = 16,

@@ -863,12 +863,12 @@ static int s3c24xx_serial_request_dma(struct s3c24xx_uart_port *p)
 	/* Default slave configuration parameters */
 	dma->rx_conf.direction		= DMA_DEV_TO_MEM;
 	dma->rx_conf.src_addr_width	= DMA_SLAVE_BUSWIDTH_1_BYTE;
-	dma->rx_conf.src_addr		= p->port.mapbase + S3C2410_URXH;
+	dma->rx_conf.src_addr		= uart_memres_start(&p->port) + S3C2410_URXH;
 	dma->rx_conf.src_maxburst	= 1;
 
 	dma->tx_conf.direction		= DMA_MEM_TO_DEV;
 	dma->tx_conf.dst_addr_width	= DMA_SLAVE_BUSWIDTH_1_BYTE;
-	dma->tx_conf.dst_addr		= p->port.mapbase + S3C2410_UTXH;
+	dma->tx_conf.dst_addr		= uart_memres_start(&p->port) + S3C2410_UTXH;
 	dma->tx_conf.dst_maxburst	= 1;
 
 	dma->rx_chan = dma_request_chan(p->port.dev, "rx");
@@ -1010,7 +1010,7 @@ static int s3c24xx_serial_startup(struct uart_port *port)
 	int ret;
 
 	dbg("s3c24xx_serial_startup: port=%p (%08llx,%p)\n",
-	    port, (unsigned long long)port->mapbase, port->membase);
+	    port, (unsigned long long)uart_memres_start(port), port->membase);
 
 	rx_enabled(port) = 1;
 
@@ -1058,7 +1058,7 @@ static int s3c64xx_serial_startup(struct uart_port *port)
 	int ret;
 
 	dbg("s3c64xx_serial_startup: port=%p (%08llx,%p)\n",
-	    port, (unsigned long long)port->mapbase, port->membase);
+	    port, (unsigned long long)uart_memres_start(port), port->membase);
 
 	wr_regl(port, S3C64XX_UINTM, 0xf);
 	if (ourport->dma) {
@@ -1436,13 +1436,14 @@ static const char *s3c24xx_serial_type(struct uart_port *port)
 
 static void s3c24xx_serial_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, MAP_SIZE);
+	uart_memres_release(port);
 }
 
 static int s3c24xx_serial_request_port(struct uart_port *port)
 {
-	const char *name = s3c24xx_serial_portname(port);
-	return request_mem_region(port->mapbase, MAP_SIZE, name) ? 0 : -EBUSY;
+	return uart_memres_request(
+		port,
+		s3c24xx_serial_portname(port)) ? 0 : -EBUSY;
 }
 
 static void s3c24xx_serial_config_port(struct uart_port *port, int flags)
@@ -1748,7 +1749,7 @@ static int s3c24xx_serial_init_port(struct s3c24xx_uart_port *ourport,
 	if (platdev == NULL)
 		return -ENODEV;
 
-	if (port->mapbase != 0)
+	if (!uart_memres_valid(port))
 		return -EINVAL;
 
 	/* setup info for port */
@@ -1775,13 +1776,12 @@ static int s3c24xx_serial_init_port(struct s3c24xx_uart_port *ourport,
 
 	dbg("resource %pR)\n", res);
 
-	port->membase = devm_ioremap_resource(port->dev, res);
-	if (!port->membase) {
+	uart_memres_set_res(port, res);
+	if (!devm_uart_memres_ioremap(port)) {
 		dev_err(port->dev, "failed to remap controller address\n");
 		return -EBUSY;
 	}
 
-	port->mapbase = res->start;
 	ret = platform_get_irq(platdev, 0);
 	if (ret < 0)
 		port->irq = 0;
@@ -1836,7 +1836,7 @@ static int s3c24xx_serial_init_port(struct s3c24xx_uart_port *ourport,
 	}
 
 	dbg("port: map=%pa, mem=%p, irq=%d (%d,%d), clock=%u\n",
-	    &port->mapbase, port->membase, port->irq,
+	    uart_memres_start(port), port->membase, port->irq,
 	    ourport->rx_irq, ourport->tx_irq, port->uartclk);
 
 	/* reset the fifos (and setup the uart) */
@@ -1845,7 +1845,7 @@ static int s3c24xx_serial_init_port(struct s3c24xx_uart_port *ourport,
 	return 0;
 
 err:
-	port->mapbase = 0;
+	uart_memres_clear(port);
 	return ret;
 }
 
@@ -2216,7 +2216,7 @@ s3c24xx_serial_console_setup(struct console *co, char *options)
 
 	/* is the port configured? */
 
-	if (port->mapbase == 0x0)
+	if (!uart_memres_valid(port))
 		return -ENODEV;
 
 	cons_uart = port;

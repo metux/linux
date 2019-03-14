@@ -473,11 +473,11 @@ static int __init mux_probe(struct parisc_device *dev)
 	for(i = 0; i < port_count; ++i, ++port_cnt) {
 		struct uart_port *port = &mux_ports[port_cnt].port;
 		port->iobase	= 0;
-		port->mapbase	= dev->hpa.start + MUX_OFFSET +
-						(i * MUX_LINE_OFFSET);
-		port->membase	= devm_ioremap_nocache(port->dev,
-						       port->mapbase,
-						       MUX_LINE_OFFSET);
+		uart_memres_set_interval(
+			port,
+			dev->hpa.start + MUX_OFFSET + (i * MUX_LINE_OFFSET),
+			MUX_LINE_OFFSET);
+		devm_uart_memres_ioremap_nocache(port);
 		port->iotype	= UPIO_MEM;
 		port->type	= PORT_MUX;
 		port->irq	= 0;
@@ -509,7 +509,7 @@ static int __exit mux_remove(struct parisc_device *dev)
 
 	/* Find Port 0 for this card in the mux_ports list. */
 	for(i = 0; i < port_cnt; ++i) {
-		if(mux_ports[i].port.mapbase == dev->hpa.start + MUX_OFFSET)
+		if(uart_memres_start(&mux_ports[i].port) == dev->hpa.start + MUX_OFFSET)
 			break;
 	}
 	BUG_ON(i + port_count > port_cnt);

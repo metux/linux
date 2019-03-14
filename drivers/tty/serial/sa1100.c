@@ -519,10 +519,7 @@ static const char *sa1100_type(struct uart_port *port)
  */
 static void sa1100_release_port(struct uart_port *port)
 {
-	struct sa1100_port *sport =
-		container_of(port, struct sa1100_port, port);
-
-	devm_release_mem_region(port->dev, sport->port.mapbase, UART_PORT_SIZE);
+	devm_uart_memres_release(port);
 }
 
 /*
@@ -530,11 +527,8 @@ static void sa1100_release_port(struct uart_port *port)
  */
 static int sa1100_request_port(struct uart_port *port)
 {
-	struct sa1100_port *sport =
-		container_of(port, struct sa1100_port, port);
-
-	return devm_request_mem_region(port->dev, port->mapbase, UART_PORT_SIZE,
-			"sa11x0-uart") != NULL ? 0 : -EBUSY;
+	return devm_uart_memres_request(port, "sa11x0-uart")
+		!= NULL ? 0 : -EBUSY;
 }
 
 /*
@@ -570,7 +564,7 @@ sa1100_verify_port(struct uart_port *port, struct serial_struct *ser)
 		ret = -EINVAL;
 	if (sport->port.uartclk / 16 != ser->baud_base)
 		ret = -EINVAL;
-	if ((void *)sport->port.mapbase != ser->iomem_base)
+	if ((void *)uart_memres_start(port) != ser->iomem_base)
 		ret = -EINVAL;
 	if (sport->port.iobase != ser->port)
 		ret = -EINVAL;
@@ -662,23 +656,23 @@ void __init sa1100_register_uart(int idx, int port)
 	switch (port) {
 	case 1:
 		sa1100_ports[idx].port.membase = (void __iomem *)&Ser1UTCR0;
-		sa1100_ports[idx].port.mapbase = _Ser1UTCR0;
 		sa1100_ports[idx].port.irq     = IRQ_Ser1UART;
 		sa1100_ports[idx].port.flags   = UPF_BOOT_AUTOCONF;
+		uart_memres_set_interval(&sa1100_ports[idx].port, _Ser1UTCR0, UART_PORT_SIZE);
 		break;
 
 	case 2:
 		sa1100_ports[idx].port.membase = (void __iomem *)&Ser2UTCR0;
-		sa1100_ports[idx].port.mapbase = _Ser2UTCR0;
 		sa1100_ports[idx].port.irq     = IRQ_Ser2ICP;
 		sa1100_ports[idx].port.flags   = UPF_BOOT_AUTOCONF;
+		uart_memres_set_interval(&sa1100_ports[idx].port, _Ser2UTCR0, UART_PORT_SIZE);
 		break;
 
 	case 3:
 		sa1100_ports[idx].port.membase = (void __iomem *)&Ser3UTCR0;
-		sa1100_ports[idx].port.mapbase = _Ser3UTCR0;
 		sa1100_ports[idx].port.irq     = IRQ_Ser3UART;
 		sa1100_ports[idx].port.flags   = UPF_BOOT_AUTOCONF;
+		uart_memres_set_interval(&sa1100_ports[idx].port, Ser3UTCR0, UART_PORT_SIZE);
 		break;
 
 	default:
@@ -853,7 +847,7 @@ static int sa1100_serial_probe(struct platform_device *dev)
 
 	if (i < dev->num_resources) {
 		for (i = 0; i < NR_PORTS; i++) {
-			if (sa1100_ports[i].port.mapbase != res->start)
+			if (uart_memres_start(&sa1100_ports[i].port) != res->start)
 				continue;
 
 			sa1100_ports[i].port.dev = &dev->dev;

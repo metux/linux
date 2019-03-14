@@ -2411,10 +2411,10 @@ static void atmel_release_port(struct uart_port *port)
 	struct platform_device *mpdev = to_platform_device(port->dev->parent);
 	int size = resource_size(mpdev->resource);
 
-	release_mem_region(port->mapbase, size);
+	devm_release_mem_region(port->dev, port->mapbase, size);
 
 	if (port->flags & UPF_IOREMAP) {
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 		port->membase = NULL;
 	}
 }
@@ -2427,13 +2427,16 @@ static int atmel_request_port(struct uart_port *port)
 	struct platform_device *mpdev = to_platform_device(port->dev->parent);
 	int size = resource_size(mpdev->resource);
 
-	if (!request_mem_region(port->mapbase, size, "atmel_serial"))
+	if (!devm_request_mem_region(port->dev,
+				     port->mapbase,
+				     size,
+				     "atmel_serial"))
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = ioremap(port->mapbase, size);
+		port->membase = devm_ioremap(port->dev, port->mapbase, size);
 		if (port->membase == NULL) {
-			release_mem_region(port->mapbase, size);
+			devm_release_mem_region(port->dev, port->mapbase, size);
 			return -ENOMEM;
 		}
 	}

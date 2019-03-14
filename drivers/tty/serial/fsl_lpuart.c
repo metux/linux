@@ -430,11 +430,11 @@ static dma_addr_t lpuart_dma_datareg_addr(struct lpuart_port *sport)
 {
 	switch (sport->port.iotype) {
 	case UPIO_MEM32:
-		return sport->port.mapbase + UARTDATA;
+		return uart_memres_start(&sport->port) + UARTDATA;
 	case UPIO_MEM32BE:
-		return sport->port.mapbase + UARTDATA + sizeof(u32) - 1;
+		return uart_memres_start(&sport->port) + UARTDATA + sizeof(u32) - 1;
 	}
-	return sport->port.mapbase + UARTDR;
+	return uart_memres_start(&sport->port) + UARTDR;
 }
 
 static int lpuart_dma_tx_request(struct uart_port *port)
@@ -2280,12 +2280,13 @@ static int lpuart_probe(struct platform_device *pdev)
 	}
 	sport->port.line = ret;
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	sport->port.membase = devm_ioremap_resource(&pdev->dev, res);
+
+	uart_memres_set_res(&sport->port, res);
+	devm_uart_memres_ioremap(&sport->port);
 	if (IS_ERR(sport->port.membase))
 		return PTR_ERR(sport->port.membase);
 
 	sport->port.membase += sdata->reg_off;
-	sport->port.mapbase = res->start;
 	sport->port.dev = &pdev->dev;
 	sport->port.type = PORT_LPUART;
 	ret = platform_get_irq(pdev, 0);

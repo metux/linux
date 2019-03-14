@@ -872,13 +872,13 @@ static int serial_pxa_probe(struct platform_device *dev)
 
 	sport->port.type = PORT_PXA;
 	sport->port.iotype = UPIO_MEM;
-	sport->port.mapbase = mmres->start;
 	sport->port.irq = irqres->start;
 	sport->port.fifosize = 64;
 	sport->port.ops = &serial_pxa_pops;
 	sport->port.dev = &dev->dev;
 	sport->port.flags = UPF_IOREMAP | UPF_BOOT_AUTOCONF;
 	sport->port.uartclk = clk_get_rate(sport->clk);
+	uart_memres_set_res(&sport->port, mmres);
 
 	ret = serial_pxa_probe_dt(dev, sport);
 	if (ret > 0)
@@ -892,8 +892,7 @@ static int serial_pxa_probe(struct platform_device *dev)
 	}
 	snprintf(sport->name, PXA_NAME_LEN - 1, "UART%d", sport->port.line + 1);
 
-	sport->port.membase = devm_ioremap_resource(sport->port.dev, mmres);
-	if (!sport->port.membase) {
+	if (!devm_uart_memres_ioremap(&sport->port)) {
 		ret = -ENOMEM;
 		goto err_clk;
 	}

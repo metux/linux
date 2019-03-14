@@ -702,7 +702,7 @@ static int mvebu_uart_console_setup(struct console *co, char *options)
 
 	port = &mvebu_uart_ports[co->index];
 
-	if (!port->mapbase || !port->membase) {
+	if (!uart_memres_start(port) || !port->membase) {
 		pr_debug("console on ttyMV%i not present\n", co->index);
 		return -ENODEV;
 	}
@@ -847,9 +847,9 @@ static int mvebu_uart_probe(struct platform_device *pdev)
 	 */
 	port->irq        = 0;
 	port->irqflags   = 0;
-	port->mapbase    = reg->start;
+	uart_memres_set_res(port, reg);
 
-	port->membase = devm_ioremap_resource(&pdev->dev, reg);
+	devm_uart_memres_ioremap(port);
 	if (IS_ERR(port->membase))
 		return -PTR_ERR(port->membase);
 

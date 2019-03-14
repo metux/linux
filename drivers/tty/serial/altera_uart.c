@@ -595,7 +595,9 @@ static int altera_uart_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	port->membase = ioremap(port->mapbase, ALTERA_UART_SIZE);
+	port->membase = devm_ioremap(port->dev,
+				     port->mapbase,
+				     ALTERA_UART_SIZE);
 	if (!port->membase)
 		return -ENOMEM;
 
@@ -625,7 +627,6 @@ static int altera_uart_remove(struct platform_device *pdev)
 	if (port) {
 		uart_remove_one_port(&altera_uart_driver, port);
 		port->mapbase = 0;
-		iounmap(port->membase);
 	}
 
 	return 0;

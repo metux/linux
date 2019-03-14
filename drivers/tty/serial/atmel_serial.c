@@ -1097,7 +1097,7 @@ static int atmel_prepare_tx_dma(struct uart_port *port)
 	config.dst_addr_width = (atmel_port->fifo_size) ?
 				DMA_SLAVE_BUSWIDTH_4_BYTES :
 				DMA_SLAVE_BUSWIDTH_1_BYTE;
-	config.dst_addr = port->mapbase + ATMEL_US_THR;
+	config.dst_addr = uart_memres_start(port) + ATMEL_US_THR;
 	config.dst_maxburst = 1;
 
 	ret = dmaengine_slave_config(atmel_port->chan_tx,
@@ -1278,7 +1278,7 @@ static int atmel_prepare_rx_dma(struct uart_port *port)
 	memset(&config, 0, sizeof(config));
 	config.direction = DMA_DEV_TO_MEM;
 	config.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
-	config.src_addr = port->mapbase + ATMEL_US_RHR;
+	config.src_addr = uart_memres_start(port) + ATMEL_US_RHR;
 	config.src_maxburst = 1;
 
 	ret = dmaengine_slave_config(atmel_port->chan_rx,
@@ -2408,14 +2408,10 @@ static const char *atmel_type(struct uart_port *port)
  */
 static void atmel_release_port(struct uart_port *port)
 {
-	struct platform_device *mpdev = to_platform_device(port->dev->parent);
-	int size = resource_size(mpdev->resource);
-
-	devm_release_mem_region(port->dev, port->mapbase, size);
+	devm_uart_memres_release(port);
 
 	if (port->flags & UPF_IOREMAP) {
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
+		devm_uart_memres_iounmap(port);
 	}
 }
 
@@ -2424,19 +2420,12 @@ static void atmel_release_port(struct uart_port *port)
  */
 static int atmel_request_port(struct uart_port *port)
 {
-	struct platform_device *mpdev = to_platform_device(port->dev->parent);
-	int size = resource_size(mpdev->resource);
-
-	if (!devm_request_mem_region(port->dev,
-				     port->mapbase,
-				     size,
-				     "atmel_serial"))
+	if (!devm_uart_memres_request(port, "atmel_serial"))
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = devm_ioremap(port->dev, port->mapbase, size);
-		if (port->membase == NULL) {
-			devm_release_mem_region(port->dev, port->mapbase, size);
+		if (!devm_uart_memres_ioremap(port)) {
+			devm_uart_memres_release(port);
 			return -ENOMEM;
 		}
 	}
@@ -2469,7 +2458,7 @@ static int atmel_verify_port(struct uart_port *port, struct serial_struct *ser)
 		ret = -EINVAL;
 	if (port->uartclk / 16 != ser->baud_base)
 		ret = -EINVAL;
-	if (port->mapbase != (unsigned long)ser->iomem_base)
+	if (uart_memres_start(port) != (unsigned long)ser->iomem_base)
 		ret = -EINVAL;
 	if (port->iobase != ser->port)
 		ret = -EINVAL;
@@ -2542,11 +2531,11 @@ static int atmel_init_port(struct atmel_uart_port *atmel_port,
 	port->ops		= &atmel_pops;
 	port->fifosize		= 1;
 	port->dev		= &pdev->dev;
-	port->mapbase		= mpdev->resource[0].start;
 	port->irq		= mpdev->resource[1].start;
 	port->rs485_config	= atmel_config_rs485;
 	port->iso7816_config	= atmel_config_iso7816;
 	port->membase		= NULL;
+	uart_memres_set_res(port, &mpdev->resource[0]);
 
 	memset(&atmel_port->rx_ring, 0, sizeof(atmel_port->rx_ring));
 

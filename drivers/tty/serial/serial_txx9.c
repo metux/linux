@@ -754,25 +754,17 @@ static int serial_txx9_request_resource(struct uart_txx9_port *up)
 
 	switch (up->port.iotype) {
 	default:
-		if (!up->port.mapbase)
+		if (!uart_memres_valid(&up->port))
 			break;
 
-		if (!devm_request_mem_region(up->port.dev,
-					     up->port.mapbase,
-					     size,
-					     "serial_txx9")) {
+		if (!devm_uart_memres_request(&up->port, "serial_txx9")) {
 			ret = -EBUSY;
 			break;
 		}
 
 		if (up->port.flags & UPF_IOREMAP) {
-			up->port.membase = devm_ioremap(up->port.dev,
-							up->port.mapbase,
-							size);
-			if (!up->port.membase) {
-				devm_release_mem_region(up->port.dev,
-							up->port.mapbase,
-							size);
+			if (!devm_uart_memres_ioremap(&up->port)) {
+				devm_uart_memres_release(&up->port);
 				ret = -ENOMEM;
 			}
 		}
@@ -792,15 +784,13 @@ static void serial_txx9_release_resource(struct uart_txx9_port *up)
 
 	switch (up->port.iotype) {
 	default:
-		if (!up->port.mapbase)
+		if (!uart_memres_valid(&up->port))
 			break;
 
-		if (up->port.flags & UPF_IOREMAP) {
-			devm_iounmap(up->port.dev, up->port.membase);
-			up->port.membase = NULL;
-		}
+		if (up->port.flags & UPF_IOREMAP)
+			devm_uart_memres_iounmap(&up->port);
 
-		devm_release_mem_region(up->port.dev, up->port.mapbase, size);
+		devm_uart_memres_release(&up->port);
 		break;
 
 	case UPIO_PORT:
@@ -884,7 +874,7 @@ static void __init serial_txx9_register_ports(struct uart_driver *drv,
 		up->port.line = i;
 		up->port.ops = &serial_txx9_pops;
 		up->port.dev = dev;
-		if (up->port.iobase || up->port.mapbase)
+		if (up->port.iobase || uart_memres_valid(&up->port))
 			uart_add_one_port(drv, &up->port);
 	}
 }
@@ -1039,7 +1029,7 @@ static int serial_txx9_register_port(struct uart_port *port)
 		/* Find unused port */
 		for (i = 0; i < UART_NR; i++) {
 			uart = &serial_txx9_ports[i];
-			if (!(uart->port.iobase || uart->port.mapbase))
+			if (!(uart->port.iobase || uart_memres_valid(&uart->port)))
 				break;
 		}
 	}
@@ -1051,7 +1041,7 @@ static int serial_txx9_register_port(struct uart_port *port)
 		uart->port.iotype   = port->iotype;
 		uart->port.flags    = port->flags
 			| UPF_BOOT_AUTOCONF | UPF_FIXED_PORT;
-		uart->port.mapbase  = port->mapbase;
+		uart_memres_copy(&uart->port, port);
 		if (port->dev)
 			uart->port.dev = port->dev;
 		ret = uart_add_one_port(&serial_txx9_reg, &uart->port);
@@ -1078,7 +1068,7 @@ static void serial_txx9_unregister_port(int line)
 	uart->port.flags = 0;
 	uart->port.type = PORT_UNKNOWN;
 	uart->port.iobase = 0;
-	uart->port.mapbase = 0;
+	uart_memres_clear(&uart->port);
 	uart->port.membase = NULL;
 	uart->port.dev = NULL;
 	mutex_unlock(&serial_txx9_mutex);
@@ -1101,13 +1091,13 @@ static int serial_txx9_probe(struct platform_device *dev)
 		port.uartclk	= p->uartclk;
 		port.iotype	= p->iotype;
 		port.flags	= p->flags;
-		port.mapbase	= p->mapbase;
+		uart_memres_copy(&port, p);
 		port.dev	= &dev->dev;
 		ret = serial_txx9_register_port(&port);
 		if (ret < 0) {
 			dev_err(&dev->dev, "unable to register port at index %d "
 				"(IO%lx MEM%llx IRQ%d): %d\n", i,
-				p->iobase, (unsigned long long)p->mapbase,
+				p->iobase, (unsigned long long)uart_memres_start(p),
 				p->irq, ret);
 		}
 	}
@@ -1316,7 +1306,7 @@ static void __exit serial_txx9_exit(void)
 	platform_device_unregister(serial_txx9_plat_devs);
 	for (i = 0; i < UART_NR; i++) {
 		struct uart_txx9_port *up = &serial_txx9_ports[i];
-		if (up->port.iobase || up->port.mapbase)
+		if (up->port.iobase || uart_memres_valid(&up->port))
 			uart_remove_one_port(&serial_txx9_reg, &up->port);
 	}
 

@@ -196,12 +196,7 @@ static struct qcom_geni_serial_port qcom_geni_console_port = {
 
 static int qcom_geni_serial_request_port(struct uart_port *uport)
 {
-	struct platform_device *pdev = to_platform_device(uport->dev);
-	struct qcom_geni_serial_port *port = to_dev_port(uport, uport);
-	struct resource *res;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	uport->membase = devm_ioremap_resource(&pdev->dev, res);
+	devm_uart_memres_ioremap(uport);
 	if (IS_ERR(uport->membase))
 		return PTR_ERR(uport->membase);
 	port->se.base = uport->membase;
@@ -1284,7 +1279,8 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
 		return -EINVAL;
-	uport->mapbase = res->start;
+
+	uart_memres_set_res(uport, res);
 
 	port->tx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
 	port->rx_fifo_depth = DEF_FIFO_DEPTH_WORDS;

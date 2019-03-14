@@ -497,9 +497,9 @@ int __init early_mcf_setup(struct mcf_platform_uart *platp)
 
 		port->line = i;
 		port->type = PORT_MCF;
-		port->mapbase = platp[i].mapbase;
+		uart_memres_set_interval(port, platp[i].mapbase, SZ_4K);
 		port->membase = (platp[i].membase) ? platp[i].membase :
-			(unsigned char __iomem *) port->mapbase;
+			(unsigned char __iomem *) uart_memres_start(port);
 		port->iotype = SERIAL_IO_MEM;
 		port->irq = platp[i].irq;
 		port->uartclk = MCF_BUSCLK;
@@ -622,9 +622,9 @@ static int mcf_probe(struct platform_device *pdev)
 
 		port->line = i;
 		port->type = PORT_MCF;
-		port->mapbase = platp[i].mapbase;
+		uart_memres_set(port, platp[i].mapbase, SZ_4K);
 		port->membase = (platp[i].membase) ? platp[i].membase :
-			(unsigned char __iomem *) platp[i].mapbase;
+			(unsigned char __iomem *) uart_memres_start(port);
 		port->dev = &pdev->dev;
 		port->iotype = SERIAL_IO_MEM;
 		port->irq = platp[i].irq;

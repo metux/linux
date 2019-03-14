@@ -1800,7 +1800,7 @@ static inline int ic4_startup_local(struct uart_port *the_port)
 	local_open(port);
 
 	/* set the protocol - mapbase has the port type */
-	ioc4_set_proto(port, the_port->mapbase);
+	ioc4_set_proto(port, uart_memres_start(the_port));
 
 	/* set the speed of the serial port */
 	ioc4_change_speed(the_port, &state->port.tty->termios,
@@ -2375,7 +2375,7 @@ static void receive_chars(struct uart_port *the_port)
  */
 static const char *ic4_type(struct uart_port *the_port)
 {
-	if (the_port->mapbase == PROTO_RS232)
+	if (uart_memres_start(the_port) == PROTO_RS232)
 		return "SGI IOC4 Serial [rs232]";
 	else
 		return "SGI IOC4 Serial [rs422]";
@@ -2737,11 +2737,12 @@ ioc4_serial_core_attach(struct pci_dev *pdev, int port_type)
 				(void *)port,
 				port_type == PROTO_RS232 ? "rs232" : "rs422"));
 
-		/* membase, iobase and mapbase just need to be non-0 */
+		/* membase, iobase just need to be non-0 */
 		the_port->membase = (unsigned char __iomem *)1;
 		the_port->iobase = (pdev->bus->number << 16) |  port_num;
 		the_port->line = (Num_of_ioc4_cards << 2) | port_num;
-		the_port->mapbase = port_type;
+		/* memres is abused to store the port type */
+		uart_memres_set_interval(port_type, 1);
 		the_port->type = PORT_16550A;
 		the_port->fifosize = IOC4_FIFO_CHARS;
 		the_port->ops = &ioc4_ops;

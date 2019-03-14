@@ -289,12 +289,15 @@ static const char *apbuart_type(struct uart_port *port)
 
 static void apbuart_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, 0x100);
+	devm_release_mem_region(port->dev, port->mapbase, 0x100);
 }
 
 static int apbuart_request_port(struct uart_port *port)
 {
-	return request_mem_region(port->mapbase, 0x100, "grlib-apbuart")
+	return devm_request_mem_region(port->dev,
+				       port->mapbase,
+				       0x100,
+				       "grlib-apbuart")
 	    != NULL ? 0 : -EBUSY;
 	return 0;
 }
@@ -618,7 +621,9 @@ static int __init grlib_apbuart_configure(void)
 		port = &grlib_apbuart_ports[line];
 
 		port->mapbase = addr;
-		port->membase = ioremap(addr, sizeof(struct grlib_apbuart_regs_map));
+		port->membase = devm_ioremap(port->dev,
+					     addr,
+					     sizeof(struct grlib_apbuart_regs_map));
 		port->irq = 0;
 		port->iotype = UPIO_MEM;
 		port->ops = &grlib_apbuart_ops;

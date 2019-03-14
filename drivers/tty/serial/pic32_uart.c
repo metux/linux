@@ -614,19 +614,13 @@ static int pic32_uart_request_port(struct uart_port *port)
 	if (unlikely(!res_mem))
 		return -EINVAL;
 
-	if (!devm_request_mem_region(port->dev,
-				     port->mapbase,
-				     resource_size(res_mem),
-				     "pic32_uart_mem"))
+	if (!devm_uart_memres_request(port, "pic32_uart_mem"))
 		return -EBUSY;
 
-	port->membase = devm_ioremap_nocache(port->dev, port->mapbase,
-						resource_size(res_mem));
+	devm_uart_memres_ioremap_nocache(port);
 	if (!port->membase) {
 		dev_err(port->dev, "Unable to map registers\n");
-		devm_release_mem_region(port->dev,
-					port->mapbase,
-					resource_size(res_mem));
+		devm_uart_memres_release(port);
 		return -ENOMEM;
 	}
 
@@ -636,16 +630,7 @@ static int pic32_uart_request_port(struct uart_port *port)
 /* serial core request to release uart iomem */
 static void pic32_uart_release_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *res_mem;
-	unsigned int res_size;
-
-	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (unlikely(!res_mem))
-		return;
-	res_size = resource_size(res_mem);
-
-	devm_release_mem_region(port->dev, port->mapbase, res_size);
+	devm_uart_memres_release(port);
 }
 
 /* serial core request to do any port required auto-configuration */
@@ -668,7 +653,7 @@ static int pic32_uart_verify_port(struct uart_port *port,
 		return -EINVAL;
 	if (port->iotype != serinfo->io_type)
 		return -EINVAL;
-	if (port->mapbase != (unsigned long)serinfo->iomem_base)
+	if (uart_memres_start(port) != (unsigned long)serinfo->iomem_base)
 		return -EINVAL;
 
 	return 0;
@@ -861,13 +846,13 @@ static int pic32_uart_probe(struct platform_device *pdev)
 	port = &sport->port;
 	memset(port, 0, sizeof(*port));
 	port->iotype	= UPIO_MEM;
-	port->mapbase	= res_mem->start;
 	port->ops	= &pic32_uart_ops;
 	port->flags	= UPF_BOOT_AUTOCONF;
 	port->dev	= &pdev->dev;
 	port->fifosize	= PIC32_UART_TX_FIFO_DEPTH;
 	port->uartclk	= clk_get_rate(sport->clk);
 	port->line	= uart_idx;
+	uart_memres_set_res(port, res_mem);
 
 	ret = uart_add_one_port(&pic32_uart_driver, port);
 	if (ret) {

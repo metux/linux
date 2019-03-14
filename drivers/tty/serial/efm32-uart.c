@@ -437,7 +437,7 @@ static void efm32_uart_release_port(struct uart_port *port)
 
 	clk_unprepare(efm_port->clk);
 	clk_put(efm_port->clk);
-	iounmap(port->membase);
+	devm_iounmap(port->dev, port->membase);
 }
 
 static int efm32_uart_request_port(struct uart_port *port)
@@ -445,7 +445,7 @@ static int efm32_uart_request_port(struct uart_port *port)
 	struct efm32_uart_port *efm_port = to_efm_port(port);
 	int ret;
 
-	port->membase = ioremap(port->mapbase, 60);
+	port->membase = devm_ioremap(port->dev, port->mapbase, 60);
 	if (!efm_port->port.membase) {
 		ret = -ENOMEM;
 		efm_debug(efm_port, "failed to remap\n");
@@ -464,7 +464,7 @@ static int efm32_uart_request_port(struct uart_port *port)
 		clk_put(efm_port->clk);
 err_clk_get:
 
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 err_ioremap:
 		return ret;
 	}

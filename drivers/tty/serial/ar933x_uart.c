@@ -614,7 +614,6 @@ static int ar933x_uart_probe(struct platform_device *pdev)
 {
 	struct ar933x_uart_port *up;
 	struct uart_port *port;
-	struct resource *mem_res;
 	struct resource *irq_res;
 	struct device_node *np;
 	unsigned int baud;
@@ -657,8 +656,10 @@ static int ar933x_uart_probe(struct platform_device *pdev)
 
 	port = &up->port;
 
-	mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	port->membase = devm_ioremap_resource(&pdev->dev, mem_res);
+	uart_memres_set_res(port,
+			    platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	devm_uart_memres_ioremap(port);
+
 	if (IS_ERR(port->membase))
 		return PTR_ERR(port->membase);
 
@@ -672,7 +673,6 @@ static int ar933x_uart_probe(struct platform_device *pdev)
 		goto err_disable_clk;
 	}
 
-	port->mapbase = mem_res->start;
 	port->line = id;
 	port->irq = irq_res->start;
 	port->dev = &pdev->dev;

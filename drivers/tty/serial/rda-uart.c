@@ -493,14 +493,11 @@ static int rda_uart_request_port(struct uart_port *port)
 	if (!res)
 		return -ENXIO;
 
-	if (!devm_request_mem_region(port->dev, port->mapbase,
-				     resource_size(res), dev_name(port->dev)))
+	if (!devm_uart_memres_request(port, dev_name(port->dev)))
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = devm_ioremap_nocache(port->dev, port->mapbase,
-						     resource_size(res));
-		if (!port->membase)
+		if (!devm_uart_memres_ioremap_nocache(port))
 			return -EBUSY;
 	}
 
@@ -529,18 +526,9 @@ static void rda_uart_config_port(struct uart_port *port, int flags)
 
 static void rda_uart_release_port(struct uart_port *port)
 {
-	struct platform_device *pdev = to_platform_device(port->dev);
-	struct resource *res;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return;
-
 	if (port->flags & UPF_IOREMAP) {
-		devm_release_mem_region(port->dev, port->mapbase,
-					resource_size(res));
-		devm_iounmap(port->dev, port->membase);
-		port->membase = NULL;
+		devm_uart_memres_release(port);
+		devm_uart_memres_iounmap(port);
 	}
 }
 
@@ -760,7 +748,8 @@ static int rda_uart_probe(struct platform_device *pdev)
 	rda_port->port.line = pdev->id;
 	rda_port->port.type = PORT_RDA;
 	rda_port->port.iotype = UPIO_MEM;
-	rda_port->port.mapbase = res_mem->start;
+	uart_memres_set_res(&rda_port->port, res_mem);
+
 	rda_port->port.irq = irq;
 	rda_port->port.uartclk = clk_get_rate(rda_port->clk);
 	if (rda_port->port.uartclk == 0) {

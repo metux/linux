@@ -26,6 +26,8 @@
 
 #include <asm/serial.h>
 
+#define EARLYCON_MEMRES_SIZE	64
+
 static struct console early_con = {
 	.name =		"uart",		/* fixed up at earlycon registration */
 	.flags =	CON_PRINTBUFFER | CON_BOOT,
@@ -78,7 +80,7 @@ static void __init earlycon_init(struct earlycon_device *device,
 			(port->iotype == UPIO_MEM) ? "" :
 			(port->iotype == UPIO_MEM16) ? "16" :
 			(port->iotype == UPIO_MEM32) ? "32" : "32be",
-			&port->mapbase, device->options);
+			uart_memres_start(port), device->options);
 	else
 		pr_info("%s%d at I/O port 0x%lx (options '%s')\n",
 			earlycon->name, earlycon->index,
@@ -96,16 +98,16 @@ static int __init parse_options(struct earlycon_device *device, char *options)
 
 	switch (port->iotype) {
 	case UPIO_MEM:
-		port->mapbase = addr;
+		uart_memres_set_interval(port, addr, EARLYCON_MEMRES_SIZE);
 		break;
 	case UPIO_MEM16:
 		port->regshift = 1;
-		port->mapbase = addr;
+		uart_memres_set_interval(port, addr, EARLYCON_MEMRES_SIZE);
 		break;
 	case UPIO_MEM32:
 	case UPIO_MEM32BE:
 		port->regshift = 2;
-		port->mapbase = addr;
+		uart_memres_set_interval(port, addr, EARLYCON_MEMRES_SIZE);
 		break;
 	case UPIO_PORT:
 		port->iobase = addr;
@@ -124,6 +126,13 @@ static int __init parse_options(struct earlycon_device *device, char *options)
 	return 0;
 }
 
+static inline void do_map_earlycon(struct uart_port *port)
+{
+	if (uart_memres_valid(port))
+		port->membase = earlycon_map(uart_memres_start(port),
+					     uart_memres_len(port));
+}
+
 static int __init register_earlycon(char *buf, const struct earlycon_id *match)
 {
 	int err;
@@ -135,8 +144,7 @@ static int __init register_earlycon(char *buf, const struct earlycon_id *match)
 
 	spin_lock_init(&port->lock);
 	port->uartclk = BASE_BAUD * 16;
-	if (port->mapbase)
-		port->membase = earlycon_map(port->mapbase, 64);
+	do_map_earlycon(port);
 
 	earlycon_init(&early_console_dev, match->name);
 	err = match->setup(&early_console_dev, buf);
@@ -245,12 +253,14 @@ int __init of_setup_earlycon(const struct earlycon_id *match,
 		pr_warn("[%s] bad address\n", match->name);
 		return -ENXIO;
 	}
-	port->mapbase = addr;
 
 	val = of_get_flat_dt_prop(node, "reg-offset", NULL);
 	if (val)
-		port->mapbase += be32_to_cpu(*val);
-	port->membase = earlycon_map(port->mapbase, SZ_4K);
+		addr += be32_to_cpu(*val);
+
+	uart_memres_set_interval(port, addr, EARLYCON_MEMRES_SIZE);
+
+	do_map_earlycon(port);
 
 	val = of_get_flat_dt_prop(node, "reg-shift", NULL);
 	if (val)

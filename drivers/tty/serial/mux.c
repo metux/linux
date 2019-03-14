@@ -456,8 +456,9 @@ static int __init mux_probe(struct parisc_device *dev)
 	printk(KERN_INFO "Serial mux driver (%d ports) Revision: 0.6\n", port_count);
 
 	dev_set_drvdata(&dev->dev, (void *)(long)port_count);
-	request_mem_region(dev->hpa.start + MUX_OFFSET,
-                           port_count * MUX_LINE_OFFSET, "Mux");
+	devm_request_mem_region(&dev->dev,
+				dev->hpa.start + MUX_OFFSET,
+				port_count * MUX_LINE_OFFSET, "Mux");
 
 	if(!port_cnt) {
 		mux_driver.cons = MUX_CONSOLE;
@@ -474,7 +475,9 @@ static int __init mux_probe(struct parisc_device *dev)
 		port->iobase	= 0;
 		port->mapbase	= dev->hpa.start + MUX_OFFSET +
 						(i * MUX_LINE_OFFSET);
-		port->membase	= ioremap_nocache(port->mapbase, MUX_LINE_OFFSET);
+		port->membase	= devm_ioremap_nocache(port->dev,
+						       port->mapbase,
+						       MUX_LINE_OFFSET);
 		port->iotype	= UPIO_MEM;
 		port->type	= PORT_MUX;
 		port->irq	= 0;
@@ -517,10 +520,12 @@ static int __exit mux_remove(struct parisc_device *dev)
 
 		uart_remove_one_port(&mux_driver, port);
 		if(port->membase)
-			iounmap(port->membase);
+			devm_iounmap(port->dev, port->membase);
 	}
 
-	release_mem_region(dev->hpa.start + MUX_OFFSET, port_count * MUX_LINE_OFFSET);
+	devm_release_mem_region(&dev->dev,
+				dev->hpa.start + MUX_OFFSET,
+				port_count * MUX_LINE_OFFSET);
 	return 0;
 }
 

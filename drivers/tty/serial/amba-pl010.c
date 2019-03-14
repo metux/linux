@@ -503,7 +503,7 @@ static const char *pl010_type(struct uart_port *port)
  */
 static void pl010_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, UART_PORT_SIZE);
+	devm_release_mem_region(port->dev, port->mapbase, UART_PORT_SIZE);
 }
 
 /*
@@ -511,7 +511,10 @@ static void pl010_release_port(struct uart_port *port)
  */
 static int pl010_request_port(struct uart_port *port)
 {
-	return request_mem_region(port->mapbase, UART_PORT_SIZE, "uart-pl010")
+	return devm_request_mem_region(port->dev,
+				       port->mapbase,
+				       UART_PORT_SIZE,
+				       "uart-pl010")
 			!= NULL ? 0 : -EBUSY;
 }
 

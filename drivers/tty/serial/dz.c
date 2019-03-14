@@ -666,19 +666,17 @@ static void dz_release_port(struct uart_port *uport)
 	struct dz_mux *mux = to_dport(uport)->mux;
 	int map_guard;
 
-	iounmap(uport->membase);
-	uport->membase = NULL;
+	uart_memres_iounmap(uport);
 
 	map_guard = atomic_add_return(-1, &mux->map_guard);
 	if (!map_guard)
-		release_mem_region(uport->mapbase, dec_kn_slot_size);
+		uart_memres_release(uport);
 }
 
 static int dz_map_port(struct uart_port *uport)
 {
 	if (!uport->membase)
-		uport->membase = ioremap_nocache(uport->mapbase,
-						 dec_kn_slot_size);
+		uart_memres_ioremap_nocache(uport);
 	if (!uport->membase) {
 		printk(KERN_ERR "dz: Cannot map MMIO\n");
 		return -ENOMEM;
@@ -694,8 +692,7 @@ static int dz_request_port(struct uart_port *uport)
 
 	map_guard = atomic_add_return(1, &mux->map_guard);
 	if (map_guard == 1) {
-		if (!request_mem_region(uport->mapbase, dec_kn_slot_size,
-					"dz")) {
+		if (!uart_memres_request(uport, "dz")) {
 			atomic_add(-1, &mux->map_guard);
 			printk(KERN_ERR
 			       "dz: Unable to reserve MMIO resource\n");
@@ -706,7 +703,7 @@ static int dz_request_port(struct uart_port *uport)
 	if (ret) {
 		map_guard = atomic_add_return(-1, &mux->map_guard);
 		if (!map_guard)
-			release_mem_region(uport->mapbase, dec_kn_slot_size);
+			uart_memres_release(uport);
 		return ret;
 	}
 	return 0;
@@ -786,7 +783,7 @@ static void __init dz_init_ports(void)
 		uport->flags	= UPF_BOOT_AUTOCONF;
 		uport->ops	= &dz_ops;
 		uport->line	= line;
-		uport->mapbase	= base;
+		uart_memres_set_interval(uport, base, dec_kn_slot_size);
 	}
 }
 

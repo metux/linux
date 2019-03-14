@@ -1408,7 +1408,7 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	if (of_address_to_resource(np, 0, &r_ports))
 		return -ENODEV;
 	uap->port.mapbase = r_ports.start;
-	uap->port.membase = ioremap(uap->port.mapbase, 0x1000);
+	uap->port.membase = devm_ioremap(uap->port->dev, uap->port.mapbase, 0x1000);
 
 	uap->control_reg = uap->port.membase;
 	uap->data_reg = uap->control_reg + 0x10;
@@ -1425,14 +1425,16 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	memset(&r_rxdma, 0, sizeof(struct resource));
 #endif	
 	if (ZS_HAS_DMA(uap)) {
-		uap->tx_dma_regs = ioremap(r_txdma.start, 0x100);
+		uap->tx_dma_regs = devm_ioremap(uap->port.dev,
+					        r_txdma.start, 0x100);
 		if (uap->tx_dma_regs == NULL) {	
 			uap->flags &= ~PMACZILOG_FLAG_HAS_DMA;
 			goto no_dma;
 		}
-		uap->rx_dma_regs = ioremap(r_rxdma.start, 0x100);
+		uap->rx_dma_regs = devm_ioremap(uap->port.dev,
+					        r_rxdma.start, 0x100);
 		if (uap->rx_dma_regs == NULL) {	
-			iounmap(uap->tx_dma_regs);
+			devm_iounmap(uap->port.dev, uap->tx_dma_regs);
 			uap->tx_dma_regs = NULL;
 			uap->flags &= ~PMACZILOG_FLAG_HAS_DMA;
 			goto no_dma;
@@ -1527,9 +1529,9 @@ static void pmz_dispose_port(struct uart_pmac_port *uap)
 	struct device_node *np;
 
 	np = uap->node;
-	iounmap(uap->rx_dma_regs);
-	iounmap(uap->tx_dma_regs);
-	iounmap(uap->control_reg);
+	devm_iounmap(uap->port.dev, uap->rx_dma_regs);
+	devm_iounmap(uap->port.dev, uap->tx_dma_regs);
+	devm_iounmap(uap->port.dev, uap->control_reg);
 	uap->node = NULL;
 	of_node_put(np);
 	memset(uap, 0, sizeof(struct uart_pmac_port));

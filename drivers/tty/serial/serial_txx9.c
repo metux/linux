@@ -757,15 +757,22 @@ static int serial_txx9_request_resource(struct uart_txx9_port *up)
 		if (!up->port.mapbase)
 			break;
 
-		if (!request_mem_region(up->port.mapbase, size, "serial_txx9")) {
+		if (!devm_request_mem_region(up->port.dev,
+					     up->port.mapbase,
+					     size,
+					     "serial_txx9")) {
 			ret = -EBUSY;
 			break;
 		}
 
 		if (up->port.flags & UPF_IOREMAP) {
-			up->port.membase = ioremap(up->port.mapbase, size);
+			up->port.membase = devm_ioremap(up->port.dev,
+							up->port.mapbase,
+							size);
 			if (!up->port.membase) {
-				release_mem_region(up->port.mapbase, size);
+				devm_release_mem_region(up->port.dev,
+							up->port.mapbase,
+							size);
 				ret = -ENOMEM;
 			}
 		}
@@ -789,11 +796,11 @@ static void serial_txx9_release_resource(struct uart_txx9_port *up)
 			break;
 
 		if (up->port.flags & UPF_IOREMAP) {
-			iounmap(up->port.membase);
+			devm_iounmap(up->port.dev, up->port.membase);
 			up->port.membase = NULL;
 		}
 
-		release_mem_region(up->port.mapbase, size);
+		devm_release_mem_region(up->port.dev, up->port.mapbase, size);
 		break;
 
 	case UPIO_PORT:

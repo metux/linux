@@ -1684,17 +1684,18 @@ static int mxs_auart_probe(struct platform_device *pdev)
 		goto out_disable_clks;
 	}
 
-	s->port.mapbase = r->start;
-	s->port.membase = devm_ioremap_resource(s->port.dev, r);
-	if (!s->port.membase) {
-		ret = -ENOMEM;
-		goto out_disable_clks;
-	}
 	s->port.ops = &mxs_auart_ops;
 	s->port.iotype = UPIO_MEM;
 	s->port.fifosize = MXS_AUART_FIFO_SIZE;
 	s->port.uartclk = clk_get_rate(s->clk);
 	s->port.type = PORT_IMX;
+
+	uart_memres_set_res(&s->port, r);
+	devm_uart_memres_ioremap(&s->port);
+	if (!s->port.membase) {
+		ret = -ENOMEM;
+		goto out_disable_clks;
+	}
 
 	mxs_init_regs(s);
 

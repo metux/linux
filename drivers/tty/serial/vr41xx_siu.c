@@ -617,12 +617,12 @@ static void siu_release_port(struct uart_port *port)
 	unsigned long size;
 
 	if (port->flags	& UPF_IOREMAP) {
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 		port->membase = NULL;
 	}
 
 	size = siu_port_size(port);
-	release_mem_region(port->mapbase, size);
+	devm_release_mem_region(port->dev, port->mapbase, size);
 }
 
 static int siu_request_port(struct uart_port *port)
@@ -631,12 +631,15 @@ static int siu_request_port(struct uart_port *port)
 	struct resource *res;
 
 	size = siu_port_size(port);
-	res = request_mem_region(port->mapbase, size, siu_type_name(port));
+	res = devm_request_mem_region(port->dev,
+				      port->mapbase,
+				      size,
+				      siu_type_name(port));
 	if (res == NULL)
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
-		port->membase = ioremap(port->mapbase, size);
+		port->membase = devm_ioremap(port->dev, port->mapbase, size);
 		if (port->membase == NULL) {
 			release_resource(res);
 			return -ENOMEM;

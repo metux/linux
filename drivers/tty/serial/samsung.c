@@ -1436,13 +1436,16 @@ static const char *s3c24xx_serial_type(struct uart_port *port)
 
 static void s3c24xx_serial_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, MAP_SIZE);
+	devm_release_mem_region(port->dev, port->mapbase, MAP_SIZE);
 }
 
 static int s3c24xx_serial_request_port(struct uart_port *port)
 {
 	const char *name = s3c24xx_serial_portname(port);
-	return request_mem_region(port->mapbase, MAP_SIZE, name) ? 0 : -EBUSY;
+	return devm_request_mem_region(port->dev,
+				       port->mapbase,
+				       MAP_SIZE,
+				       name) ? 0 : -EBUSY;
 }
 
 static void s3c24xx_serial_config_port(struct uart_port *port, int flags)

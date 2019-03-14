@@ -403,7 +403,7 @@ static void pl011_dma_probe(struct uart_amba_port *uap)
 	struct amba_pl011_data *plat = dev_get_platdata(uap->port.dev);
 	struct device *dev = uap->port.dev;
 	struct dma_slave_config tx_conf = {
-		.dst_addr = uap->port.mapbase +
+		.dst_addr = uart_memres_start(&uap->port) +
 				 pl011_reg_to_offset(uap, REG_DR),
 		.dst_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE,
 		.direction = DMA_MEM_TO_DEV,
@@ -459,7 +459,7 @@ static void pl011_dma_probe(struct uart_amba_port *uap)
 
 	if (chan) {
 		struct dma_slave_config rx_conf = {
-			.src_addr = uap->port.mapbase +
+			.src_addr = uart_memres_start(&uap->port) +
 				pl011_reg_to_offset(uap, REG_DR),
 			.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE,
 			.direction = DMA_DEV_TO_MEM,
@@ -2098,7 +2098,7 @@ static const char *pl011_type(struct uart_port *port)
  */
 static void pl011_release_port(struct uart_port *port)
 {
-	devm_release_mem_region(port->dev, port->mapbase, SZ_4K);
+	devm_uart_memres_release(port);
 }
 
 /*
@@ -2106,10 +2106,7 @@ static void pl011_release_port(struct uart_port *port)
  */
 static int pl011_request_port(struct uart_port *port)
 {
-	return devm_request_mem_region(port->dev,
-				       port->mapbase,
-				       SZ_4K,
-				       "uart-pl011")
+	return devm_uart_memres_request(port, "uart-pl011")
 			!= NULL ? 0 : -EBUSY;
 }
 
@@ -2391,7 +2388,7 @@ static int __init pl011_console_match(struct console *co, char *name, int idx,
 
 		port = &amba_ports[i]->port;
 
-		if (port->mapbase != addr)
+		if (uart_memres_start(port) != addr)
 			continue;
 
 		co->index = i;
@@ -2585,11 +2582,11 @@ static int pl011_setup_port(struct device *dev, struct uart_amba_port *uap,
 
 	uap->old_cr = 0;
 	uap->port.dev = dev;
-	uap->port.mapbase = mmiobase->start;
 	uap->port.membase = base;
 	uap->port.fifosize = uap->fifosize;
 	uap->port.flags = UPF_BOOT_AUTOCONF;
 	uap->port.line = index;
+	uart_memres_set_res(&uap->port, mmiobase);
 
 	amba_ports[index] = uap;
 

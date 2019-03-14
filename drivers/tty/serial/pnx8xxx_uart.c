@@ -568,10 +568,8 @@ static const char *pnx8xxx_type(struct uart_port *port)
  */
 static void pnx8xxx_release_port(struct uart_port *port)
 {
-	struct pnx8xxx_port *sport =
-		container_of(port, struct pnx8xxx_port, port);
-
-	release_mem_region(sport->port.mapbase, UART_PORT_SIZE);
+	// fixme: size = UART_PORT_SIZE
+	uart_memres_release(port);
 }
 
 /*
@@ -579,9 +577,8 @@ static void pnx8xxx_release_port(struct uart_port *port)
  */
 static int pnx8xxx_request_port(struct uart_port *port)
 {
-	struct pnx8xxx_port *sport =
-		container_of(port, struct pnx8xxx_port, port);
-	return request_mem_region(sport->port.mapbase, UART_PORT_SIZE,
+	// fixme: size = UART_PORT_SIZE
+	return uart_memres_request(port,
 			"pnx8xxx-uart") != NULL ? 0 : -EBUSY;
 }
 
@@ -618,7 +615,7 @@ pnx8xxx_verify_port(struct uart_port *port, struct serial_struct *ser)
 		ret = -EINVAL;
 	if (sport->port.uartclk / 16 != ser->baud_base)
 		ret = -EINVAL;
-	if ((void *)sport->port.mapbase != ser->iomem_base)
+	if ((void *)uart_memres_start(port) != ser->iomem_base)
 		ret = -EINVAL;
 	if (sport->port.iobase != ser->port)
 		ret = -EINVAL;
@@ -797,9 +794,10 @@ static int pnx8xxx_serial_probe(struct platform_device *pdev)
 			continue;
 
 		for (i = 0; i < NR_PORTS; i++) {
-			if (pnx8xxx_ports[i].port.mapbase != res->start)
+			if (uart_memres_start(&pnx8xxx_ports[i].port) != res->start)
 				continue;
 
+			// fixme: do we need to set the addresses ?
 			pnx8xxx_ports[i].port.dev = &pdev->dev;
 			uart_add_one_port(&pnx8xxx_reg, &pnx8xxx_ports[i].port);
 			platform_set_drvdata(pdev, &pnx8xxx_ports[i]);

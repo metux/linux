@@ -892,7 +892,7 @@ static int serial_pxa_probe(struct platform_device *dev)
 	}
 	snprintf(sport->name, PXA_NAME_LEN - 1, "UART%d", sport->port.line + 1);
 
-	sport->port.membase = ioremap(mmres->start, resource_size(mmres));
+	sport->port.membase = devm_ioremap_resource(sport->port.dev, mmres);
 	if (!sport->port.membase) {
 		ret = -ENOMEM;
 		goto err_clk;

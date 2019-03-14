@@ -324,11 +324,11 @@ static void timbuart_release_port(struct uart_port *port)
 		resource_size(platform_get_resource(pdev, IORESOURCE_MEM, 0));
 
 	if (port->flags & UPF_IOREMAP) {
-		iounmap(port->membase);
+		devm_iounmap(port->dev, port->membase);
 		port->membase = NULL;
 	}
 
-	release_mem_region(port->mapbase, size);
+	devm_release_mem_region(port->dev, port->mapbase, size);
 }
 
 static int timbuart_request_port(struct uart_port *port)
@@ -337,13 +337,18 @@ static int timbuart_request_port(struct uart_port *port)
 	int size =
 		resource_size(platform_get_resource(pdev, IORESOURCE_MEM, 0));
 
-	if (!request_mem_region(port->mapbase, size, "timb-uart"))
+	if (!devm_request_mem_region(port->dev,
+				     port->mapbase,
+				     size,
+				     "timb-uart"))
 		return -EBUSY;
 
 	if (port->flags & UPF_IOREMAP) {
 		port->membase = ioremap(port->mapbase, size);
 		if (port->membase == NULL) {
-			release_mem_region(port->mapbase, size);
+			devm-release_mem_region(port->dev,
+						port->mapbase,
+						size);
 			return -ENOMEM;
 		}
 	}

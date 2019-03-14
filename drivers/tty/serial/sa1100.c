@@ -522,7 +522,7 @@ static void sa1100_release_port(struct uart_port *port)
 	struct sa1100_port *sport =
 		container_of(port, struct sa1100_port, port);
 
-	release_mem_region(sport->port.mapbase, UART_PORT_SIZE);
+	devm_release_mem_region(port->dev, sport->port.mapbase, UART_PORT_SIZE);
 }
 
 /*
@@ -533,7 +533,7 @@ static int sa1100_request_port(struct uart_port *port)
 	struct sa1100_port *sport =
 		container_of(port, struct sa1100_port, port);
 
-	return request_mem_region(sport->port.mapbase, UART_PORT_SIZE,
+	return devm_request_mem_region(port->dev, port->mapbase, UART_PORT_SIZE,
 			"sa11x0-uart") != NULL ? 0 : -EBUSY;
 }
 

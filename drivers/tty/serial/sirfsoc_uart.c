@@ -1042,14 +1042,14 @@ static int sirfsoc_uart_request_port(struct uart_port *port)
 	struct sirfsoc_uart_port *sirfport = to_sirfport(port);
 	struct sirfsoc_uart_param *uart_param = &sirfport->uart_reg->uart_param;
 	void *ret;
-	ret = request_mem_region(port->mapbase,
+	ret = devm_request_mem_region(port->dev, port->mapbase,
 		SIRFUART_MAP_SIZE, uart_param->port_name);
 	return ret ? 0 : -EBUSY;
 }
 
 static void sirfsoc_uart_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, SIRFUART_MAP_SIZE);
+	devm_release_mem_region(port->dev, port->mapbase, SIRFUART_MAP_SIZE);
 }
 
 static void sirfsoc_uart_config_port(struct uart_port *port, int flags)

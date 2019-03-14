@@ -962,15 +962,21 @@ static int cdns_uart_verify_port(struct uart_port *port,
  */
 static int cdns_uart_request_port(struct uart_port *port)
 {
-	if (!request_mem_region(port->mapbase, CDNS_UART_REGISTER_SPACE,
-					 CDNS_UART_NAME)) {
+	if (!devm_request_mem_region(port->dev,
+				     port->mapbase,
+				     CDNS_UART_REGISTER_SPACE,
+				     CDNS_UART_NAME)) {
 		return -ENOMEM;
 	}
 
-	port->membase = ioremap(port->mapbase, CDNS_UART_REGISTER_SPACE);
+	port->membase = devm_ioremap(port->dev,
+				     port->mapbase,
+				     CDNS_UART_REGISTER_SPACE);
 	if (!port->membase) {
 		dev_err(port->dev, "Unable to map registers\n");
-		release_mem_region(port->mapbase, CDNS_UART_REGISTER_SPACE);
+		devm_release_mem_region(port->dev,
+					port->mapbase,
+					CDNS_UART_REGISTER_SPACE);
 		return -ENOMEM;
 	}
 	return 0;
@@ -985,8 +991,10 @@ static int cdns_uart_request_port(struct uart_port *port)
  */
 static void cdns_uart_release_port(struct uart_port *port)
 {
-	release_mem_region(port->mapbase, CDNS_UART_REGISTER_SPACE);
-	iounmap(port->membase);
+	devm_release_mem_region(port->dev,
+				port->mapbase,
+				CDNS_UART_REGISTER_SPACE);
+	devm_iounmap(port->dev, port->membase);
 	port->membase = NULL;
 }
 

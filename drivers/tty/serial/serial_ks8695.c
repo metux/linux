@@ -482,7 +482,7 @@ static const char *ks8695uart_type(struct uart_port *port)
  */
 static void ks8695uart_release_port(struct uart_port *port)
 {
-	devm_release_mem_region(port->dev, port->mapbase, UART_PORT_SIZE);
+	devm_uart_memres_release(port);
 }
 
 /*
@@ -490,10 +490,8 @@ static void ks8695uart_release_port(struct uart_port *port)
  */
 static int ks8695uart_request_port(struct uart_port *port)
 {
-	return devm_request_mem_region(port->dev,
-				       port->mapbase,
-				       UART_PORT_SIZE,
-			"serial_ks8695") != NULL ? 0 : -EBUSY;
+	return devm_uart_memres_request(port, "serial_ks8695")
+		!= NULL ? 0 : -EBUSY;
 }
 
 /*
@@ -546,6 +544,7 @@ static struct uart_port ks8695uart_ports[SERIAL_KS8695_NR] = {
 	{
 		.membase	= KS8695_UART_VA,
 		.mapbase	= KS8695_UART_PA,
+		.memres		= DEFINE_RES_MEM(KS8695_UART_PA, UART_PORT_SIZE),
 		.iotype		= SERIAL_IO_MEM,
 		.irq		= KS8695_IRQ_UART_TX,
 		.uartclk	= KS8695_CLOCK_RATE * 16,

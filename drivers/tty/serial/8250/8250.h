@@ -255,3 +255,5 @@ static inline int serial_index(struct uart_port *port)
 {
 	return port->minor - 64;
 }
+
+unsigned int serial8250_port_size(struct uart_8250_port *pt);

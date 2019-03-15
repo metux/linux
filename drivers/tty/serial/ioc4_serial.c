@@ -2752,7 +2752,7 @@ ioc4_serial_core_attach(struct pci_dev *pdev, int port_type)
 		the_port->dev = &pdev->dev;
 		spin_lock_init(&the_port->lock);
 		if (uart_add_one_port(u_driver, the_port) < 0) {
-			printk(KERN_WARNING
+			dev_warn(&pdev->dev,
 		           "%s: unable to add port %d bus %d\n",
 			       __func__, the_port->line, pdev->bus->number);
 		} else {

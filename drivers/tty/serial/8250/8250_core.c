@@ -979,6 +979,9 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
 	if (up->port.uartclk == 0)
 		return -EINVAL;
 
+	/* compute the mapsize in case the driver didn't specify one */
+	up->mapsize = serial8250_port_size(up);
+
 	mutex_lock(&serial_mutex);
 
 	uart = serial8250_find_match_or_unused(&up->port);

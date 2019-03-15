@@ -134,8 +134,10 @@ static int default_setup(struct exar8250 *priv, struct pci_dev *pcidev,
 	const struct exar8250_board *board = priv->board;
 	unsigned int bar = 0;
 
-	port->port.iotype = UPIO_MEM;
-	port->port.mapbase = pci_resource_start(pcidev, bar) + offset;
+	uart_memres_set_mmio_range(&port->port,
+				   pci_resource_start(pcidev, bar) + offset,
+				   pci_resource_len(pcidev, bar) - offset);
+
 	port->port.membase = priv->virt + offset;
 	port->port.regshift = board->reg_shift;
 

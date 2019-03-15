@@ -698,9 +698,8 @@ static int meson_uart_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	port->iotype = UPIO_MEM;
-	port->mapbase = res_mem->start;
-	port->mapsize = resource_size(res_mem);
+	uart_memset_set_res(port, res_mem);
+
 	port->irq = res_irq->start;
 	port->flags = UPF_BOOT_AUTOCONF | UPF_LOW_LATENCY;
 	port->dev = &pdev->dev;

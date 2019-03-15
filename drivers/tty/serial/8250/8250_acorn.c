@@ -63,14 +63,15 @@ serial_card_probe(struct expansion_card *ec, const struct ecard_id *id)
 	uart.port.irq	= ec->irq;
 	uart.port.flags	= UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
 	uart.port.uartclk	= type->uartclk;
-	uart.port.iotype	= UPIO_MEM;
 	uart.port.regshift	= 2;
 	uart.port.dev	= &ec->dev;
 
 	for (i = 0; i < info->num_ports; i++) {
 		uart.port.membase = info->vaddr + type->offset[i];
-		uart.port.mapbase = bus_addr + type->offset[i];
 
+		/* mapsize is computed by serial8250_register_8250_port() */
+		uart_memres_set_mmio_range(&uart.port,
+					   bus_addr + type->offset[i], 0);
 		info->ports[i] = serial8250_register_8250_port(&uart);
 	}
 

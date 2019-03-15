@@ -1626,8 +1626,7 @@ static int cdns_uart_probe(struct platform_device *pdev)
 	 * This function also registers this device with the tty layer
 	 * and triggers invocation of the config_port() entry point.
 	 */
-	port->mapbase = res->start;
-	port->mapsize = CDNS_UART_REGISTER_SPACE;
+	uart_memres_set_mmio_range(port, res->start, CDNS_UART_REGISTER_SPACE);
 	port->irq = irq;
 	port->dev = &pdev->dev;
 	port->uartclk = clk_get_rate(cdns_uart_data->uartclk);

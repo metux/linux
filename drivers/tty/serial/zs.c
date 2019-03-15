@@ -1102,6 +1102,7 @@ static int __init zs_probe_sccs(void)
 		for (side = 0; side < ZS_NUM_CHAN; side++) {
 			struct zs_port *zport = &zs_sccs[chip].zport[side];
 			struct uart_port *uport = &zport->port;
+			long membase;
 
 			zport->scc	= &zs_sccs[chip];
 			zport->clk_mode	= 16;
@@ -1109,14 +1110,15 @@ static int __init zs_probe_sccs(void)
 			uport->irq	= zs_parms.irq[chip];
 			uport->uartclk	= ZS_CLOCK;
 			uport->fifosize	= 1;
-			uport->iotype	= UPIO_MEM;
 			uport->flags	= UPF_BOOT_AUTOCONF;
 			uport->ops	= &zs_ops;
 			uport->line	= chip * ZS_NUM_CHAN + side;
-			uport->mapsize	= ZS_CHAN_IO_SIZE;
-			uport->mapbase	= dec_kn_slot_base +
-					  zs_parms.scc[chip] +
-					  (side ^ ZS_CHAN_B) * ZS_CHAN_IO_SIZE;
+
+			membase = dec_kn_slot_base + zs_parms.scc[chip] +
+				    (side ^ ZS_CHAN_B) * ZS_CHAN_IO_SIZE;
+
+			uart_memres_set_mmio_range(uport, membase,
+						   ZS_CHAN_IO_SIZE);
 
 			for (i = 0; i < ZS_NUM_REGS; i++)
 				zport->regs[i] = zs_init_regs[i];

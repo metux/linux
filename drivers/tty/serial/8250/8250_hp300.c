@@ -114,7 +114,8 @@ int __init hp300_setup_serial_console(void)
 		pr_info("Serial console is HP APCI 1\n");
 
 		port.uartclk = HPAPCI_BAUD_BASE * 16;
-		port.mapbase = (FRODO_BASE + FRODO_APCI_OFFSET(1));
+		uart_memres_set_mmio_range(&port,
+			FRODO_BASE + FRODO_APCI_OFFSET(1), 0);
 		port.membase = (char *)(port.mapbase + DIO_VIRADDRBASE);
 		port.regshift = 2;
 		add_preferred_console("ttyS", port.line, "9600n8");
@@ -131,7 +132,8 @@ int __init hp300_setup_serial_console(void)
 		pr_info("Serial console is HP DCA at select code %d\n", scode);
 
 		port.uartclk = HPDCA_BAUD_BASE * 16;
-		port.mapbase = (pa + UART_OFFSET);
+
+		uart_memres_set_mmio_range(&port, (pa + UART_OFFSET), 0);
 		port.membase = (char *)(port.mapbase + DIO_VIRADDRBASE);
 		port.regshift = 1;
 		port.irq = DIO_IPL(pa + DIO_VIRADDRBASE);
@@ -169,11 +171,10 @@ static int hpdca_init_one(struct dio_dev *d,
 	memset(&uart, 0, sizeof(uart));
 
 	/* Memory mapped I/O */
-	uart.port.iotype = UPIO_MEM;
+	uart_memres_set_res(&uart.port, &d->resource, UART_OFFSET);
 	uart.port.flags = UPF_SKIP_TEST | UPF_SHARE_IRQ | UPF_BOOT_AUTOCONF;
 	uart.port.irq = d->ipl;
 	uart.port.uartclk = HPDCA_BAUD_BASE * 16;
-	uart.port.mapbase = (d->resource.start + UART_OFFSET);
 	uart.port.membase = (char *)(uart.port.mapbase + DIO_VIRADDRBASE);
 	uart.port.regshift = 1;
 	uart.port.dev = &d->dev;

@@ -1412,8 +1412,7 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	 */
 	if (of_address_to_resource(np, 0, &r_ports))
 		return -ENODEV;
-	uap->port.mapbase = r_ports.start;
-	uap->port.mapsize = PMZ_MAPSIZE;
+	uart_memres_set_mmio_range(&uap->port, r_ports.start, PMZ_MAPSIZE);
 	uap->port.membase = ioremap(uap->port.mapbase, uap->port.mapsize);
 
 	uap->control_reg = uap->port.membase;
@@ -1493,7 +1492,6 @@ no_dma:
 	/*
 	 * Init remaining bits of "port" structure
 	 */
-	uap->port.iotype = UPIO_MEM;
 	uap->port.irq = irq_of_parse_and_map(np, 0);
 	uap->port.uartclk = ZS_CLOCK;
 	uap->port.fifosize = 1;
@@ -1711,10 +1709,8 @@ static int __init pmz_init_port(struct uart_pmac_port *uap)
 	if (!r_ports || irq <= 0)
 		return -ENODEV;
 
-	uap->port.mapbase  = r_ports->start;
-	uap->port.mapsize  = PMZ_MAPSIZE;
+	uart_memres_set_mmio_range(&uap->port, r_ports->start, PMZ_MAPSIZE);
 	uap->port.membase  = (unsigned char __iomem *) r_ports->start;
-	uap->port.iotype   = UPIO_MEM;
 	uap->port.irq      = irq;
 	uap->port.uartclk  = ZS_CLOCK;
 	uap->port.fifosize = 1;

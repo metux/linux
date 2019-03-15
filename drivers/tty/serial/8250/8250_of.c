@@ -185,6 +185,7 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 
 	case PORT_RT2880:
 		port->iotype = UPIO_AU;
+		port->mapsize = SERIAL_RT2880_IOSIZE;
 		break;
 	}
 

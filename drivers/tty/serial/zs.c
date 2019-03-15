@@ -1110,10 +1110,12 @@ static int __init zs_probe_sccs(void)
 			uport->flags	= UPF_BOOT_AUTOCONF;
 			uport->ops	= &zs_ops;
 			uport->line	= chip * ZS_NUM_CHAN + side;
-			uport->mapsize	= ZS_CHAN_IO_SIZE;
-			uport->mapbase	= dec_kn_slot_base +
-					  zs_parms.scc[chip] +
-					  (side ^ ZS_CHAN_B) * ZS_CHAN_IO_SIZE;
+
+			uart_memres_set_start_len(dec_kn_slot_base +
+						    zs_parms.scc[chip] +
+						    (side ^ ZS_CHAN_B) *
+							ZS_CHAN_IO_SIZE,
+						  ZS_CHAN_IO_SIZE);
 
 			for (i = 0; i < ZS_NUM_REGS; i++)
 				zport->regs[i] = zs_init_regs[i];

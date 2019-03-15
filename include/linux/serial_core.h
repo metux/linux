@@ -411,6 +411,46 @@ int uart_remove_one_port(struct uart_driver *reg, struct uart_port *port);
 int uart_match_port(struct uart_port *port1, struct uart_port *port2);
 
 /*
+ * set physical io range from struct resource
+ * if resource is NULL, clear the fields
+ * also set the iotype to UPIO_MEM
+ */
+static inline void uart_memres_set_res(struct uart_port *port,
+				       struct resource *res)
+{
+	if (!res) {
+		port->mapsize = 0;
+		port->mapbase = 0;
+		port->iobase = 0;
+		return;
+	}
+
+	if (resource_type(res) == IORESOURCE_IO) {
+		port->iotype = UPIO_PORT;
+		port->iobase = resource->start;
+		return;
+	}
+
+	uart->mapbase = res->start;
+	uart->mapsize = resource_size(res);
+	uart->iotype  = UPIO_MEM;
+}
+
+/*
+ * set physical io range by start address and length
+ * if resource is NULL, clear the fields
+ * also set the iotype to UPIO_MEM
+ */
+static inline void uart_memres_set_start_len(struct uart_driver *uart,
+					     resource_size_t start,
+					     resource_size_t len)
+{
+	uart->mapbase = start;
+	uart->mapsize = len;
+	uart->iotype  = UPIO_MEM;
+}
+
+/*
  * Power Management
  */
 int uart_suspend_port(struct uart_driver *reg, struct uart_port *port);

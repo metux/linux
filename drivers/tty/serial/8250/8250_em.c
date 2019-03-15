@@ -100,7 +100,6 @@ static int serial8250_em_probe(struct platform_device *pdev)
 	}
 
 	memset(&up, 0, sizeof(up));
-	up.port.mapbase = regs->start;
 	up.port.irq = irq->start;
 	up.port.type = PORT_UNKNOWN;
 	up.port.flags = UPF_BOOT_AUTOCONF | UPF_FIXED_PORT | UPF_IOREMAP;
@@ -109,6 +108,7 @@ static int serial8250_em_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(priv->sclk);
 	up.port.uartclk = clk_get_rate(priv->sclk);
+	uart_memres_set_res(&up.port, res, 0);
 
 	up.port.iotype = UPIO_MEM32;
 	up.port.serial_in = serial8250_em_serial_in;

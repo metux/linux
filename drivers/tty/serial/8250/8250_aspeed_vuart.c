@@ -328,14 +328,14 @@ static int aspeed_vuart_probe(struct platform_device *pdev)
 	memset(&port, 0, sizeof(port));
 	port.port.private_data = vuart;
 	port.port.membase = vuart->regs;
-	port.port.mapbase = res->start;
-	port.port.mapsize = resource_size(res);
 	port.port.startup = aspeed_vuart_startup;
 	port.port.shutdown = aspeed_vuart_shutdown;
 	port.port.throttle = aspeed_vuart_throttle;
 	port.port.unthrottle = aspeed_vuart_unthrottle;
 	port.port.status = UPSTAT_SYNC_FIFO;
 	port.port.dev = &pdev->dev;
+
+	uart_memres_set_res(&port.port, res, 0);
 
 	rc = sysfs_create_group(&vuart->dev->kobj, &aspeed_vuart_attr_group);
 	if (rc < 0)

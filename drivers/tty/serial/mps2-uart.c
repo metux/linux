@@ -562,9 +562,8 @@ static int mps2_init_port(struct platform_device *pdev,
 	if (IS_ERR(mps_port->port.membase))
 		return PTR_ERR(mps_port->port.membase);
 
-	mps_port->port.mapbase = res->start;
-	mps_port->port.mapsize = resource_size(res);
-	mps_port->port.iotype = UPIO_MEM;
+	uart_memres_set_res(&mps_port->port, res, 0);
+
 	mps_port->port.flags = UPF_BOOT_AUTOCONF;
 	mps_port->port.fifosize = 1;
 	mps_port->port.ops = &mps2_uart_pops;

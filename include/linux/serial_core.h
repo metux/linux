@@ -427,6 +427,68 @@ int uart_remove_one_port(struct uart_driver *reg, struct uart_port *port);
 int uart_match_port(struct uart_port *port1, struct uart_port *port2);
 
 /*
+ * uart_memres_set_res()  set io range from struct resource
+ *
+ * @port:     pointer to the port to set the io range for
+ * @resource: pointer to the resource
+ * @offset:   start offset withinn the resource's range
+ *
+ * Set physical IO range and iotype from struct resource.
+ * Also sets the iotype to UPIO_MEM for IORESOURCE_MEM, or
+ * UPIO_PORT for IORESOURCE_IO.
+ *
+ * If resource is NULL, clear the io range.
+ */
+static inline void uart_memres_set_res(struct uart_port *port,
+				       struct resource *res,
+				       resource_size_t offset)
+{
+	/* clear on NULL resource */
+	if (!res) {
+		port->mapsize = 0;
+		port->mapbase = 0;
+		port->iobase = 0;
+		port->iotype = 0;
+		return;
+	}
+
+	if (resource_type(res) == IORESOURCE_IO) {
+		port->iotype = UPIO_PORT;
+		port->iobase = res->start + offset;
+		return;
+	}
+
+	port->mapbase = res->start;
+	port->mapsize = resource_size(res) - offset;
+	port->iotype  = UPIO_MEM;
+}
+
+/*
+ * uart_memres_set_mmio_range()  set MMIO range from interval
+ *
+ * @port:     pointer to the port to set the io range for
+ * @start:    resource start address
+ * @len:      resource length
+ *
+ * Set physical IO range by start/length.
+ * Also sets the iotype to UPIO_MEM.
+ */
+
+/*
+ * set physical io range by start address and length
+ * if resource is NULL, clear the fields
+ * also set the iotype to UPIO_MEM
+ */
+static inline void uart_memres_set_mmio_range(struct uart_port *port,
+					      resource_size_t start,
+					      resource_size_t len)
+{
+	port->mapbase = start;
+	port->mapsize = len;
+	port->iotype  = UPIO_MEM;
+}
+
+/*
  * Power Management
  */
 int uart_suspend_port(struct uart_driver *reg, struct uart_port *port);

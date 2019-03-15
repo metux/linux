@@ -96,18 +96,13 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 				  UPF_FIXED_TYPE;
 	spin_lock_init(&port->lock);
 
-	if (resource_type(&resource) == IORESOURCE_IO) {
-		port->iotype = UPIO_PORT;
-		port->iobase = resource.start;
-	} else {
-		port->mapbase = resource.start;
-		port->mapsize = resource_size(&resource);
+	uart_memres_set_res(port, &resource, 0);
 
+	if (resource_type(&resource) == IORESOURCE_MEM) {
 		/* Check for shifted address mapping */
 		if (of_property_read_u32(np, "reg-offset", &prop) == 0)
 			port->mapbase += prop;
 
-		port->iotype = UPIO_MEM;
 		if (of_property_read_u32(np, "reg-io-width", &prop) == 0) {
 			switch (prop) {
 			case 1:

@@ -695,14 +695,14 @@ static int vt8500_serial_probe(struct platform_device *pdev)
 					VT8500_RECOMMENDED_CLK
 				      );
 	vt8500_port->uart.type = PORT_VT8500;
-	vt8500_port->uart.iotype = UPIO_MEM;
-	vt8500_port->uart.mapbase = mmres->start;
 	vt8500_port->uart.irq = irqres->start;
 	vt8500_port->uart.fifosize = 16;
 	vt8500_port->uart.ops = &vt8500_uart_pops;
 	vt8500_port->uart.line = port;
 	vt8500_port->uart.dev = &pdev->dev;
 	vt8500_port->uart.flags = UPF_IOREMAP | UPF_BOOT_AUTOCONF;
+
+	uart_memres_set_res(&vt8500_port->uart, mmres, 0);
 
 	/* Serial core uses the magic "16" everywhere - adjust for it */
 	vt8500_port->uart.uartclk = 16 * clk_get_rate(vt8500_port->clk) /

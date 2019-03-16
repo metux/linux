@@ -140,6 +140,12 @@ static int ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 		 * so clear that flag now to avoid trying to remove
 		 * it again later.
 		 */
+		if (key->flags & KEY_FLAG_UPLOADED_TO_HARDWARE &&
+		    !(key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
+					 IEEE80211_KEY_FLAG_PUT_MIC_SPACE |
+					 IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
+			increment_tailroom_need_count(sdata);
+
 		key->flags &= ~KEY_FLAG_UPLOADED_TO_HARDWARE;
 		return -EINVAL;
 	}
@@ -179,9 +185,9 @@ static int ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 	if (!ret) {
 		key->flags |= KEY_FLAG_UPLOADED_TO_HARDWARE;
 
-		if (!((key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
-					   IEEE80211_KEY_FLAG_PUT_MIC_SPACE)) ||
-		      (key->conf.flags & IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
+		if (!(key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
+					 IEEE80211_KEY_FLAG_PUT_MIC_SPACE |
+					 IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
 			decrease_tailroom_need_count(sdata, 1);
 
 		WARN_ON((key->conf.flags & IEEE80211_KEY_FLAG_PUT_IV_SPACE) &&
@@ -242,9 +248,9 @@ static void ieee80211_key_disable_hw_accel(struct ieee80211_key *key)
 	sta = key->sta;
 	sdata = key->sdata;
 
-	if (!((key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
-				   IEEE80211_KEY_FLAG_PUT_MIC_SPACE)) ||
-	      (key->conf.flags & IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
+	if (!(key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
+				 IEEE80211_KEY_FLAG_PUT_MIC_SPACE |
+				 IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
 		increment_tailroom_need_count(sdata);
 
 	key->flags &= ~KEY_FLAG_UPLOADED_TO_HARDWARE;
@@ -1187,9 +1193,9 @@ void ieee80211_remove_key(struct ieee80211_key_conf *keyconf)
 	if (key->flags & KEY_FLAG_UPLOADED_TO_HARDWARE) {
 		key->flags &= ~KEY_FLAG_UPLOADED_TO_HARDWARE;
 
-		if (!((key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
-					   IEEE80211_KEY_FLAG_PUT_MIC_SPACE)) ||
-		      (key->conf.flags & IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
+		if (!(key->conf.flags & (IEEE80211_KEY_FLAG_GENERATE_MMIC |
+					 IEEE80211_KEY_FLAG_PUT_MIC_SPACE |
+					 IEEE80211_KEY_FLAG_RESERVE_TAILROOM)))
 			increment_tailroom_need_count(key->sdata);
 	}
 

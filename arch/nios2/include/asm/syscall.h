@@ -80,7 +80,7 @@ static inline void syscall_set_arguments(struct task_struct *task,
 	regs->r9 = *args;
 }
 
-static inline int syscall_get_arch(void)
+static inline int syscall_get_arch(struct task_struct *task)
 {
 	return AUDIT_ARCH_NIOS2;
 }

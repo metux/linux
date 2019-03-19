@@ -678,11 +678,6 @@ static inline void *kvcalloc(size_t n, size_t size, gfp_t flags)
 
 extern void kvfree(const void *addr);
 
-static inline atomic_t *compound_mapcount_ptr(struct page *page)
-{
-	return &page[1].compound_mapcount;
-}
-
 static inline int compound_mapcount(struct page *page)
 {
 	VM_BUG_ON_PAGE(!PageCompound(page), page);
@@ -788,10 +783,22 @@ static inline void set_compound_order(struct page *page, unsigned int order)
 	page[1].compound_order = order;
 }
 
+/* Returns the number of pages in this potentially compound page. */
+static inline unsigned long compound_nr(struct page *page)
+{
+	return 1UL << compound_order(page);
+}
+
 /* Returns the number of bytes in this potentially compound page. */
 static inline unsigned long page_size(struct page *page)
 {
 	return PAGE_SIZE << compound_order(page);
+}
+
+/* Returns the number of bits needed for the number of bytes in a page */
+static inline unsigned int page_shift(struct page *page)
+{
+	return PAGE_SHIFT + compound_order(page);
 }
 
 void free_compound_page(struct page *page);
@@ -1069,8 +1076,9 @@ static inline void put_user_page(struct page *page)
 	put_page(page);
 }
 
-void put_user_pages_dirty(struct page **pages, unsigned long npages);
-void put_user_pages_dirty_lock(struct page **pages, unsigned long npages);
+void put_user_pages_dirty_lock(struct page **pages, unsigned long npages,
+			       bool make_dirty);
+
 void put_user_pages(struct page **pages, unsigned long npages);
 
 #if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
@@ -1955,7 +1963,7 @@ static inline void pgtable_init(void)
 	pgtable_cache_init();
 }
 
-static inline bool pgtable_page_ctor(struct page *page)
+static inline bool pgtable_pte_page_ctor(struct page *page)
 {
 	if (!ptlock_init(page))
 		return false;
@@ -1964,7 +1972,7 @@ static inline bool pgtable_page_ctor(struct page *page)
 	return true;
 }
 
-static inline void pgtable_page_dtor(struct page *page)
+static inline void pgtable_pte_page_dtor(struct page *page)
 {
 	ptlock_free(page);
 	__ClearPageTable(page);
@@ -2334,6 +2342,8 @@ extern int install_special_mapping(struct mm_struct *mm,
 				   unsigned long addr, unsigned long len,
 				   unsigned long flags, struct page **pages);
 
+unsigned long randomize_stack_top(unsigned long stack_top);
+
 extern unsigned long get_unmapped_area(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 
 extern unsigned long mmap_region(struct file *file, unsigned long addr,
@@ -2597,6 +2607,7 @@ struct page *follow_page(struct vm_area_struct *vma, unsigned long address,
 #define FOLL_COW	0x4000	/* internal GUP flag */
 #define FOLL_ANON	0x8000	/* don't do file mappings */
 #define FOLL_LONGTERM	0x10000	/* mapping lifetime is indefinite: see below */
+#define FOLL_SPLIT_PMD	0x20000	/* split huge pmd before returning */
 
 /*
  * NOTE on FOLL_LONGTERM:
@@ -2639,7 +2650,6 @@ static inline int vm_fault_to_errno(vm_fault_t vm_fault, int foll_flags)
 typedef int (*pte_fn_t)(pte_t *pte, unsigned long addr, void *data);
 extern int apply_to_page_range(struct mm_struct *mm, unsigned long address,
 			       unsigned long size, pte_fn_t fn, void *data);
-
 
 #ifdef CONFIG_PAGE_POISONING
 extern bool page_poisoning_enabled(void);
@@ -2866,6 +2876,25 @@ static inline bool page_is_guard(struct page *page) { return false; }
 void __init setup_nr_node_ids(void);
 #else
 static inline void setup_nr_node_ids(void) {}
+#endif
+
+extern int memcmp_pages(struct page *page1, struct page *page2);
+
+static inline int pages_identical(struct page *page1, struct page *page2)
+{
+	return !memcmp_pages(page1, page2);
+}
+
+#ifdef CONFIG_MAPPING_DIRTY_HELPERS
+unsigned long clean_record_shared_mapping_range(struct address_space *mapping,
+						pgoff_t first_index, pgoff_t nr,
+						pgoff_t bitmap_pgoff,
+						unsigned long *bitmap,
+						pgoff_t *start,
+						pgoff_t *end);
+
+unsigned long wp_shared_mapping_range(struct address_space *mapping,
+				      pgoff_t first_index, pgoff_t nr);
 #endif
 
 #endif /* __KERNEL__ */

@@ -44,7 +44,7 @@ struct asoc_simple_priv {
 		struct asoc_simple_dai *codec_dai;
 		struct snd_soc_dai_link_component codecs; /* single codec */
 		struct snd_soc_dai_link_component platforms;
-		struct asoc_simple_data adata;
+		struct asoc_simple_card_data adata;
 		struct snd_soc_codec_conf *codec_conf;
 		unsigned int mclk_fs;
 	} *dai_props;
@@ -60,18 +60,11 @@ struct asoc_simple_priv {
 #define simple_priv_to_dev(priv)	(simple_priv_to_card(priv)->dev)
 #define simple_priv_to_link(priv, i)	(simple_priv_to_card(priv)->dai_link + (i))
 
-struct link_info {
-	int dais; /* number of dai  */
-	int link; /* number of link */
-	int conf; /* number of codec_conf */
-	int cpu;  /* turn for CPU / Codec */
-};
-
-int asoc_simple_parse_daifmt(struct device *dev,
-			     struct device_node *node,
-			     struct device_node *codec,
-			     char *prefix,
-			     unsigned int *retfmt);
+int asoc_simple_card_parse_daifmt(struct device *dev,
+				  struct device_node *node,
+				  struct device_node *codec,
+				  char *prefix,
+				  unsigned int *retfmt);
 __printf(3, 4)
 int asoc_simple_set_dailink_name(struct device *dev,
 				 struct snd_soc_dai_link *dai_link,

@@ -20,7 +20,12 @@
 #include <linux/string.h>
 #include <sound/simple_card_utils.h>
 
-#define DPCM_SELECTABLE 1
+struct link_info {
+	int dais; /* number of dai  */
+	int link; /* number of link */
+	int conf; /* number of codec_conf */
+	int cpu;  /* turn for CPU / Codec */
+};
 
 #define PREFIX	"audio-graph-card,"
 
@@ -51,6 +56,66 @@ static const struct snd_soc_dapm_widget graph_dapm_widgets[] = {
 			       SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
 };
 
+static int graph_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
+	int ret;
+
+	ret = asoc_simple_card_clk_enable(dai_props->cpu_dai);
+	if (ret)
+		return ret;
+
+	ret = asoc_simple_card_clk_enable(dai_props->codec_dai);
+	if (ret)
+		asoc_simple_card_clk_disable(dai_props->cpu_dai);
+
+	return ret;
+}
+
+static void graph_shutdown(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
+
+	asoc_simple_card_clk_disable(dai_props->cpu_dai);
+
+	asoc_simple_card_clk_disable(dai_props->codec_dai);
+}
+
+static int graph_hw_params(struct snd_pcm_substream *substream,
+			   struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
+	unsigned int mclk, mclk_fs = 0;
+	int ret = 0;
+
+	if (dai_props->mclk_fs)
+		mclk_fs = dai_props->mclk_fs;
+
+	if (mclk_fs) {
+		mclk = params_rate(params) * mclk_fs;
+		ret = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
+					     SND_SOC_CLOCK_IN);
+		if (ret && ret != -ENOTSUPP)
+			goto err;
+
+		ret = snd_soc_dai_set_sysclk(cpu_dai, 0, mclk,
+					     SND_SOC_CLOCK_OUT);
+		if (ret && ret != -ENOTSUPP)
+			goto err;
+	}
+	return 0;
+err:
+	return ret;
+}
+
 static const struct snd_soc_ops graph_ops = {
 	.startup	= asoc_simple_startup,
 	.shutdown	= asoc_simple_shutdown,
@@ -59,11 +124,9 @@ static const struct snd_soc_ops graph_ops = {
 
 static int graph_get_dai_id(struct device_node *ep)
 {
-	struct device_node *node;
-	struct device_node *endpoint;
-	struct of_endpoint info;
-	int i, id;
-	int ret;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
+	int ret = 0;
 
 	/* use driver specified DAI ID if exist */
 	ret = snd_soc_get_dai_id(ep);
@@ -115,9 +178,8 @@ static int asoc_simple_parse_dai(struct device_node *ep,
 				 const char **dai_name,
 				 int *is_single_link)
 {
-	struct device_node *node;
-	struct of_phandle_args args;
-	int ret;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
 
 	/*
 	 * Use snd_soc_dai_link_component instead of legacy style.
@@ -416,8 +478,7 @@ static int graph_for_each_link(struct asoc_simple_priv *priv,
 	struct device_node *codec_ep;
 	struct device_node *codec_port;
 	struct device_node *codec_port_old = NULL;
-	struct asoc_simple_data adata;
-	uintptr_t dpcm_selectable = (uintptr_t)of_device_get_match_data(dev);
+	struct asoc_simple_card_data adata;
 	int rc, ret;
 
 	/* loop for all listed CPU port */
@@ -448,9 +509,8 @@ static int graph_for_each_link(struct asoc_simple_priv *priv,
 			 * if Codec port has many endpoints,
 			 * or has convert-xxx property
 			 */
-			if (dpcm_selectable &&
-			    ((of_get_child_count(codec_port) > 1) ||
-			     adata.convert_rate || adata.convert_channels))
+			if ((of_get_child_count(codec_port) > 1) ||
+			    adata.convert_rate || adata.convert_channels)
 				ret = func_dpcm(priv, cpu_ep, codec_ep, li,
 						(codec_port_old == codec_port));
 			/* else normal sound */
@@ -619,6 +679,9 @@ static int graph_card_probe(struct snd_soc_card *card)
 static int graph_probe(struct platform_device *pdev)
 {
 	struct asoc_simple_priv *priv;
+	struct snd_soc_dai_link *dai_link;
+	struct simple_dai_props *dai_props;
+	struct asoc_simple_dai *dais;
 	struct device *dev = &pdev->dev;
 	struct snd_soc_card *card;
 	struct link_info li;
@@ -683,8 +746,7 @@ static int graph_remove(struct platform_device *pdev)
 
 static const struct of_device_id graph_of_match[] = {
 	{ .compatible = "audio-graph-card", },
-	{ .compatible = "audio-graph-scu-card",
-	  .data = (void *)DPCM_SELECTABLE },
+	{ .compatible = "audio-graph-scu-card", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, graph_of_match);

@@ -9,18 +9,109 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/string.h>
 #include <sound/simple_card.h>
 #include <sound/soc-dai.h>
 #include <sound/soc.h>
 
-#define DPCM_SELECTABLE 1
+struct link_info {
+	int dais; /* number of dai  */
+	int link; /* number of link */
+	int conf; /* number of codec_conf */
+	int cpu;  /* turn for CPU / Codec */
+};
 
 #define DAI	"sound-dai"
 #define CELL	"#sound-dai-cells"
 #define PREFIX	"simple-audio-card,"
+
+static int simple_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props =
+		simple_priv_to_props(priv, rtd->num);
+	int ret;
+
+	ret = asoc_simple_card_clk_enable(dai_props->cpu_dai);
+	if (ret)
+		return ret;
+
+	ret = asoc_simple_card_clk_enable(dai_props->codec_dai);
+	if (ret)
+		asoc_simple_card_clk_disable(dai_props->cpu_dai);
+
+	return ret;
+}
+
+static void simple_shutdown(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props =
+		simple_priv_to_props(priv, rtd->num);
+
+	asoc_simple_card_clk_disable(dai_props->cpu_dai);
+
+	asoc_simple_card_clk_disable(dai_props->codec_dai);
+}
+
+static int simple_set_clk_rate(struct asoc_simple_dai *simple_dai,
+			       unsigned long rate)
+{
+	if (!simple_dai)
+		return 0;
+
+	if (!simple_dai->clk)
+		return 0;
+
+	if (clk_get_rate(simple_dai->clk) == rate)
+		return 0;
+
+	return clk_set_rate(simple_dai->clk, rate);
+}
+
+static int simple_hw_params(struct snd_pcm_substream *substream,
+			    struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props =
+		simple_priv_to_props(priv, rtd->num);
+	unsigned int mclk, mclk_fs = 0;
+	int ret = 0;
+
+	if (dai_props->mclk_fs)
+		mclk_fs = dai_props->mclk_fs;
+
+	if (mclk_fs) {
+		mclk = params_rate(params) * mclk_fs;
+
+		ret = simple_set_clk_rate(dai_props->codec_dai, mclk);
+		if (ret < 0)
+			return ret;
+
+		ret = simple_set_clk_rate(dai_props->cpu_dai, mclk);
+		if (ret < 0)
+			return ret;
+
+		ret = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
+					     SND_SOC_CLOCK_IN);
+		if (ret && ret != -ENOTSUPP)
+			goto err;
+
+		ret = snd_soc_dai_set_sysclk(cpu_dai, 0, mclk,
+					     SND_SOC_CLOCK_OUT);
+		if (ret && ret != -ENOTSUPP)
+			goto err;
+	}
+	return 0;
+err:
+	return ret;
+}
 
 static const struct snd_soc_ops simple_ops = {
 	.startup	= asoc_simple_startup,
@@ -34,7 +125,8 @@ static int asoc_simple_parse_dai(struct device_node *node,
 				 const char **dai_name,
 				 int *is_single_link)
 {
-	struct of_phandle_args args;
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
 	int ret;
 
 	if (!node)
@@ -68,8 +160,13 @@ static int asoc_simple_parse_dai(struct device_node *node,
 
 	*dai_of_node = args.np;
 
-	if (is_single_link)
-		*is_single_link = !args.args_count;
+static int simple_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
+				     struct snd_pcm_hw_params *params)
+{
+	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
+
+	asoc_simple_card_convert_fixup(&dai_props->adata, params);
 
 	return 0;
 }
@@ -352,7 +449,6 @@ static int simple_for_each_link(struct asoc_simple_priv *priv,
 	struct device *dev = simple_priv_to_dev(priv);
 	struct device_node *top = dev->of_node;
 	struct device_node *node;
-	uintptr_t dpcm_selectable = (uintptr_t)of_device_get_match_data(dev);
 	bool is_top = 0;
 	int ret = 0;
 
@@ -392,9 +488,8 @@ static int simple_for_each_link(struct asoc_simple_priv *priv,
 			 * if it has many CPUs,
 			 * or has convert-xxx property
 			 */
-			if (dpcm_selectable &&
-			    (num > 2 ||
-			     adata.convert_rate || adata.convert_channels))
+			if (num > 2 ||
+			    adata.convert_rate || adata.convert_channels)
 				ret = func_dpcm(priv, np, codec, li, is_top);
 			/* else normal sound */
 			else
@@ -610,6 +705,9 @@ static int simple_soc_probe(struct snd_soc_card *card)
 static int simple_probe(struct platform_device *pdev)
 {
 	struct asoc_simple_priv *priv;
+	struct snd_soc_dai_link *dai_link;
+	struct simple_dai_props *dai_props;
+	struct asoc_simple_dai *dais;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct snd_soc_card *card;
@@ -714,8 +812,7 @@ static int simple_remove(struct platform_device *pdev)
 
 static const struct of_device_id simple_of_match[] = {
 	{ .compatible = "simple-audio-card", },
-	{ .compatible = "simple-scu-audio-card",
-	  .data = (void *)DPCM_SELECTABLE },
+	{ .compatible = "simple-scu-audio-card", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, simple_of_match);

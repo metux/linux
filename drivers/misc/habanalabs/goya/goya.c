@@ -1435,6 +1435,7 @@ static void goya_init_golden_registers(struct hl_device *hdev)
 	 * from Host using DMA CH 1
 	 */
 	WREG32(mmDMA_CH_1_CFG0, 0x0fff00F0);
+	WREG32(mmTPC_PLL_CLK_RLX_0, 0x200020);
 
 	goya->hw_cap_initialized |= HW_CAP_GOLDEN;
 }
@@ -4457,6 +4458,7 @@ static int goya_context_switch(struct hl_device *hdev, u32 asid)
 		return rc;
 	}
 
+	WREG32(mmTPC_PLL_CLK_RLX_0, 0x200020);
 	goya_mmu_prepare(hdev, asid);
 
 	return 0;

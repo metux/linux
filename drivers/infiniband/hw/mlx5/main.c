@@ -1121,8 +1121,6 @@ static int mlx5_ib_query_device(struct ib_device *ibdev,
 		if (MLX5_CAP_GEN(mdev, qp_packet_based))
 			resp.flags |=
 				MLX5_IB_QUERY_DEV_RESP_PACKET_BASED_CREDIT_MODE;
-
-		resp.flags |= MLX5_IB_QUERY_DEV_RESP_FLAGS_SCAT2CQE_DCT;
 	}
 
 	if (field_avail(typeof(resp), sw_parsing_caps,
@@ -2073,7 +2071,6 @@ static int mlx5_ib_mmap_clock_info_page(struct mlx5_ib_dev *dev,
 
 	if (vma->vm_flags & (VM_WRITE | VM_EXEC))
 		return -EPERM;
-	vma->vm_flags &= ~VM_MAYWRITE;
 
 	if (!dev->mdev->clock_info)
 		return -EOPNOTSUPP;
@@ -2239,18 +2236,19 @@ static int mlx5_ib_mmap(struct ib_ucontext *ibcontext, struct vm_area_struct *vm
 
 		if (vma->vm_flags & VM_WRITE)
 			return -EPERM;
-		vma->vm_flags &= ~VM_MAYWRITE;
 
 		/* Don't expose to user-space information it shouldn't have */
 		if (PAGE_SIZE > 4096)
 			return -EOPNOTSUPP;
 
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		pfn = (dev->mdev->iseg_base +
 		       offsetof(struct mlx5_init_seg, internal_timer_h)) >>
 			PAGE_SHIFT;
-		return rdma_user_mmap_io(&context->ibucontext, vma, pfn,
-					 PAGE_SIZE,
-					 pgprot_noncached(vma->vm_page_prot));
+		if (io_remap_pfn_range(vma, vma->vm_start, pfn,
+				       PAGE_SIZE, vma->vm_page_prot))
+			return -EAGAIN;
+		break;
 	case MLX5_IB_MMAP_CLOCK_INFO:
 		return mlx5_ib_mmap_clock_info_page(dev, vma, context);
 
@@ -4485,13 +4483,9 @@ static void delay_drop_handler(struct work_struct *work)
 static void handle_general_event(struct mlx5_ib_dev *ibdev, struct mlx5_eqe *eqe,
 				 struct ib_event *ibev)
 {
-	u8 port = (eqe->data.port.port >> 4) & 0xf;
-
 	switch (eqe->sub_type) {
 	case MLX5_GENERAL_SUBTYPE_DELAY_DROP_TIMEOUT:
-		if (mlx5_ib_port_link_layer(&ibdev->ib_dev, port) ==
-					    IB_LINK_LAYER_ETHERNET)
-			schedule_work(&ibdev->delay_drop.delay_drop_work);
+		schedule_work(&ibdev->delay_drop.delay_drop_work);
 		break;
 	default: /* do nothing */
 		return;
@@ -5823,8 +5817,7 @@ static int mlx5_ib_init_multiport_master(struct mlx5_ib_dev *dev)
 			}
 
 			if (bound) {
-				dev_dbg(mpi->mdev->device,
-					"removing port from unaffiliated list.\n");
+				dev_dbg(&mpi->mdev->pdev->dev, "removing port from unaffiliated list.\n");
 				mlx5_ib_dbg(dev, "port %d bound\n", i + 1);
 				list_del(&mpi->list);
 				break;
@@ -6049,7 +6042,7 @@ static int mlx5_ib_stage_init_init(struct mlx5_ib_dev *dev)
 	dev->ib_dev.local_dma_lkey	= 0 /* not supported for now */;
 	dev->ib_dev.phys_port_cnt	= dev->num_ports;
 	dev->ib_dev.num_comp_vectors    = mlx5_comp_vectors_count(mdev);
-	dev->ib_dev.dev.parent		= mdev->device;
+	dev->ib_dev.dev.parent		= &mdev->pdev->dev;
 
 	mutex_init(&dev->cap_mask_mutex);
 	INIT_LIST_HEAD(&dev->qp_list);
@@ -6761,8 +6754,7 @@ static void *mlx5_ib_add_slave_port(struct mlx5_core_dev *mdev)
 
 	if (!bound) {
 		list_add_tail(&mpi->list, &mlx5_ib_unaffiliated_port_list);
-		dev_dbg(mdev->device,
-			"no suitable IB device found to bind to, added to unaffiliated list.\n");
+		dev_dbg(&mdev->pdev->dev, "no suitable IB device found to bind to, added to unaffiliated list.\n");
 	}
 	mutex_unlock(&mlx5_ib_multiport_mutex);
 

@@ -4674,6 +4674,7 @@ lpfc_check_sli_ndlp(struct lpfc_hba *phba,
 		case CMD_XMIT_ELS_RSP64_CX:
 			if (iocb->context1 == (uint8_t *) ndlp)
 				return 1;
+			/* fall through */
 		}
 	} else if (pring->ringno == LPFC_FCP_RING) {
 		/* Skip match check if waiting to relogin to FCP target */

@@ -117,6 +117,10 @@
 		[PIPE_C] = IVB_CURSOR_C_OFFSET, \
 	}
 
+#define I965_COLORS \
+	.color = { .gamma_lut_size = 129, \
+		   .gamma_lut_tests = DRM_COLOR_LUT_NON_DECREASING, \
+	}
 #define ILK_COLORS \
 	.color = { .gamma_lut_size = 1024 }
 #define IVB_COLORS \
@@ -286,6 +290,7 @@ static const struct intel_device_info intel_pineview_m_info = {
 	.has_coherent_ggtt = true, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
+	I965_COLORS, \
 	GEN_DEFAULT_PAGE_SIZES
 
 static const struct intel_device_info intel_i965g_info = {
@@ -470,6 +475,7 @@ static const struct intel_device_info intel_valleyview_info = {
 	.display_mmio_offset = VLV_DISPLAY_BASE,
 	I9XX_PIPE_OFFSETS,
 	I9XX_CURSOR_OFFSETS,
+	I965_COLORS,
 	GEN_DEFAULT_PAGE_SIZES,
 };
 

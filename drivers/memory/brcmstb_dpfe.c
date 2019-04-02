@@ -33,10 +33,10 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
 
 #define DRVNAME			"brcmstb-dpfe"
-#define FIRMWARE_NAME		"dpfe.bin"
 
 /* DCPU register offsets */
 #define REG_DCPU_RESET		0x0
@@ -162,12 +162,20 @@ struct init_data {
 	bool is_big_endian;
 };
 
+/* API version and corresponding commands */
+struct dpfe_api {
+	int version;
+	const char *fw_name;
+	u32 command[DPFE_CMD_MAX][MSG_FIELD_MAX];
+};
+
 /* Things we need for as long as we are active. */
 struct private_data {
 	void __iomem *regs;
 	void __iomem *dmem;
 	void __iomem *imem;
 	struct device *dev;
+	const struct dpfe_api *dpfe_api;
 	struct mutex lock;
 };
 
@@ -176,29 +184,33 @@ static const char *error_text[] = {
 	"Incorrect checksum", "Malformed command", "Timed out",
 };
 
-/* List of supported firmware commands */
-static const u32 dpfe_commands[DPFE_CMD_MAX][MSG_FIELD_MAX] = {
-	[DPFE_CMD_GET_INFO] = {
-		[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
-		[MSG_COMMAND] = 1,
-		[MSG_ARG_COUNT] = 1,
-		[MSG_ARG0] = 1,
-		[MSG_CHKSUM] = 4,
-	},
-	[DPFE_CMD_GET_REFRESH] = {
-		[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
-		[MSG_COMMAND] = 2,
-		[MSG_ARG_COUNT] = 1,
-		[MSG_ARG0] = 1,
-		[MSG_CHKSUM] = 5,
-	},
-	[DPFE_CMD_GET_VENDOR] = {
-		[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
-		[MSG_COMMAND] = 2,
-		[MSG_ARG_COUNT] = 1,
-		[MSG_ARG0] = 2,
-		[MSG_CHKSUM] = 6,
-	},
+/* API v2 firmware commands */
+static const struct dpfe_api dpfe_api_v2 = {
+	.version = 2,
+	.fw_name = "dpfe.bin",
+	.command = {
+		[DPFE_CMD_GET_INFO] = {
+			[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
+			[MSG_COMMAND] = 1,
+			[MSG_ARG_COUNT] = 1,
+			[MSG_ARG0] = 1,
+			[MSG_CHKSUM] = 4,
+		},
+		[DPFE_CMD_GET_REFRESH] = {
+			[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
+			[MSG_COMMAND] = 2,
+			[MSG_ARG_COUNT] = 1,
+			[MSG_ARG0] = 1,
+			[MSG_CHKSUM] = 5,
+		},
+		[DPFE_CMD_GET_VENDOR] = {
+			[MSG_HEADER] = DPFE_MSG_TYPE_COMMAND,
+			[MSG_COMMAND] = 2,
+			[MSG_ARG_COUNT] = 1,
+			[MSG_ARG0] = 2,
+			[MSG_CHKSUM] = 6,
+		},
+	}
 };
 
 static bool is_dcpu_enabled(void __iomem *regs)
@@ -291,7 +303,7 @@ static void __iomem *get_msg_ptr(struct private_data *priv, u32 response,
 static int __send_command(struct private_data *priv, unsigned int cmd,
 			  u32 result[])
 {
-	const u32 *msg = dpfe_commands[cmd];
+	const u32 *msg = priv->dpfe_api->command[cmd];
 	void __iomem *regs = priv->regs;
 	unsigned int i, chksum;
 	int ret = 0;
@@ -490,7 +502,15 @@ static int brcmstb_dpfe_download_firmware(struct platform_device *pdev,
 			return 0;
 	}
 
-	ret = request_firmware(&fw, FIRMWARE_NAME, dev);
+	/*
+	 * If the firmware filename is NULL it means the boot firmware has to
+	 * download the DCPU firmware for us. If that didn't work, we have to
+	 * bail, since downloading it ourselves wouldn't work either.
+	 */
+	if (!priv->dpfe_api->fw_name)
+		return -ENODEV;
+
+	ret = request_firmware(&fw, priv->dpfe_api->fw_name, dev);
 	/* request_firmware() prints its own error messages. */
 	if (ret)
 		return ret;
@@ -712,6 +732,16 @@ static int brcmstb_dpfe_probe(struct platform_device *pdev)
 		return -ENOENT;
 	}
 
+	priv->dpfe_api = of_device_get_match_data(dev);
+	if (unlikely(!priv->dpfe_api)) {
+		/*
+		 * It should be impossible to end up here, but to be safe we
+		 * check anyway.
+		 */
+		dev_err(dev, "Couldn't determine API\n");
+		return -ENOENT;
+	}
+
 	ret = brcmstb_dpfe_download_firmware(pdev, &init);
 	if (ret) {
 		dev_err(dev, "Couldn't download firmware -- %d\n", ret);
@@ -720,7 +750,8 @@ static int brcmstb_dpfe_probe(struct platform_device *pdev)
 
 	ret = sysfs_create_groups(&pdev->dev.kobj, dpfe_groups);
 	if (!ret)
-		dev_info(dev, "registered.\n");
+		dev_info(dev, "registered with API v%d.\n",
+			 priv->dpfe_api->version);
 
 	return ret;
 }
@@ -733,7 +764,7 @@ static int brcmstb_dpfe_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id brcmstb_dpfe_of_match[] = {
-	{ .compatible = "brcm,dpfe-cpu", },
+	{ .compatible = "brcm,dpfe-cpu", .data = &dpfe_api_v2 },
 	{}
 };
 MODULE_DEVICE_TABLE(of, brcmstb_dpfe_of_match);

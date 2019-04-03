@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0+
 /*
  * TI OMAP Real Time Clock interface for Linux
  *
@@ -7,6 +6,11 @@
  *
  * Copyright (C) 2006 David Brownell (new RTC framework)
  * Copyright (C) 2014 Johan Hovold <johan@kernel.org>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version
+ * 2 of the License, or (at your option) any later version.
  */
 
 #include <dt-bindings/gpio/gpio.h>
@@ -267,7 +271,7 @@ static int omap_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
 }
 
 /* this hardware doesn't support "don't care" alarm fields */
-static void tm2bcd(struct rtc_time *tm)
+static int tm2bcd(struct rtc_time *tm)
 {
 	tm->tm_sec = bin2bcd(tm->tm_sec);
 	tm->tm_min = bin2bcd(tm->tm_min);
@@ -275,7 +279,13 @@ static void tm2bcd(struct rtc_time *tm)
 	tm->tm_mday = bin2bcd(tm->tm_mday);
 
 	tm->tm_mon = bin2bcd(tm->tm_mon + 1);
+
+	/* epoch == 1900 */
+	if (tm->tm_year < 100 || tm->tm_year > 199)
+		return -EINVAL;
 	tm->tm_year = bin2bcd(tm->tm_year - 100);
+
+	return 0;
 }
 
 static void bcd2tm(struct rtc_time *tm)
@@ -318,7 +328,8 @@ static int omap_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
 	struct omap_rtc *rtc = dev_get_drvdata(dev);
 
-	tm2bcd(tm);
+	if (tm2bcd(tm) < 0)
+		return -EINVAL;
 
 	local_irq_disable();
 	rtc_wait_not_busy(rtc);
@@ -367,7 +378,8 @@ static int omap_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	struct omap_rtc *rtc = dev_get_drvdata(dev);
 	u8 reg, irqwake_reg = 0;
 
-	tm2bcd(&alm->time);
+	if (tm2bcd(&alm->time) < 0)
+		return -EINVAL;
 
 	local_irq_disable();
 	rtc_wait_not_busy(rtc);
@@ -429,10 +441,14 @@ again:
 	omap_rtc_read_time_raw(rtc, &tm);
 	seconds = tm.tm_sec;
 	bcd2tm(&tm);
-	now = rtc_tm_to_time64(&tm);
-	rtc_time64_to_tm(now + 1, &tm);
+	rtc_tm_to_time(&tm, &now);
+	rtc_time_to_tm(now + 1, &tm);
 
-	tm2bcd(&tm);
+	if (tm2bcd(&tm) < 0) {
+		dev_err(&rtc->rtc->dev, "power off failed\n");
+		rtc->type->lock(rtc);
+		return -EINVAL;
+	}
 
 	rtc_wait_not_busy(rtc);
 
@@ -862,8 +878,6 @@ static int omap_rtc_probe(struct platform_device *pdev)
 	}
 
 	rtc->rtc->ops = &omap_rtc_ops;
-	rtc->rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
-	rtc->rtc->range_max = RTC_TIMESTAMP_END_2099;
 	omap_rtc_nvmem_config.priv = rtc;
 
 	/* handle periodic and alarm irqs */

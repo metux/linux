@@ -41,7 +41,6 @@
 
 struct spi_gpio {
 	struct spi_bitbang		bitbang;
-	struct spi_gpio_platform_data	pdata;
 	struct platform_device		*pdev;
 	struct gpio_desc		*sck;
 	struct gpio_desc		*miso;
@@ -414,8 +413,6 @@ static int spi_gpio_probe(struct platform_device *pdev)
 	spi_gpio->has_cs = !!pdata->num_chipselect;
 
 	spi_gpio->pdev = pdev;
-	if (pdata)
-		spi_gpio->pdata = *pdata;
 
 	status = spi_gpio_request(dev, spi_gpio,
 				  pdata->num_chipselect, &master_flags);

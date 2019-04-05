@@ -63,6 +63,7 @@
 #include "intel_pm.h"
 #include "intel_psr.h"
 #include "intel_sdvo.h"
+#include "intel_tv.h"
 
 #include "intel_drv.h"
 #include "intel_dsi.h"

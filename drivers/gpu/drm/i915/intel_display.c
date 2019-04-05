@@ -51,6 +51,7 @@
 #include "intel_ddi.h"
 #include "intel_drv.h"
 #include "intel_dsi.h"
+#include "intel_fbc.h"
 #include "intel_frontbuffer.h"
 
 /* Primary plane formats for gen <= 3 */

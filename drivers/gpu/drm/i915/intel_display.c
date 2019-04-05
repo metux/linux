@@ -47,6 +47,7 @@
 #include "i915_gem_clflush.h"
 #include "i915_reset.h"
 #include "i915_trace.h"
+#include "intel_crt.h"
 #include "intel_drv.h"
 #include "intel_dsi.h"
 #include "intel_frontbuffer.h"

@@ -4057,6 +4057,9 @@ static u64 goya_read_pte(struct hl_device *hdev, u64 addr)
 {
 	struct goya_device *goya = hdev->asic_specific;
 
+	if (hdev->hard_reset_pending)
+		return U64_MAX;
+
 	return readq(hdev->pcie_bar[DDR_BAR_ID] +
 			(addr - goya->ddr_bar_cur_addr));
 }
@@ -4064,6 +4067,9 @@ static u64 goya_read_pte(struct hl_device *hdev, u64 addr)
 static void goya_write_pte(struct hl_device *hdev, u64 addr, u64 val)
 {
 	struct goya_device *goya = hdev->asic_specific;
+
+	if (hdev->hard_reset_pending)
+		return;
 
 	writeq(val, hdev->pcie_bar[DDR_BAR_ID] +
 			(addr - goya->ddr_bar_cur_addr));

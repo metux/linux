@@ -153,6 +153,7 @@ static int __must_check submit_one_bio(struct bio *bio, int mirror_num,
 	struct bio_vec bv;
 	struct extent_io_tree *tree = bio->bi_private;
 	u64 start;
+	struct extent_io_tree *tree = bio->bi_private;
 
 	mp_bvec_last_segment(bvec, &bv);
 	start = page_offset(bv.bv_page) + bv.bv_offset;
@@ -161,7 +162,7 @@ static int __must_check submit_one_bio(struct bio *bio, int mirror_num,
 
 	if (tree->ops)
 		ret = tree->ops->submit_bio_hook(tree->private_data, bio,
-					   mirror_num, bio_flags, start);
+						 mirror_num, bio_flags);
 	else
 		btrfsic_submit_bio(bio);
 
@@ -2546,7 +2547,7 @@ static int bio_readpage_error(struct bio *failed_bio, u64 phy_offset,
 		read_mode, failrec->this_mirror, failrec->in_validation);
 
 	status = tree->ops->submit_bio_hook(tree->private_data, bio, failrec->this_mirror,
-					 failrec->bio_flags, 0);
+					 failrec->bio_flags);
 	if (status) {
 		free_io_failure(failure_tree, tree, failrec);
 		bio_put(bio);

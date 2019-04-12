@@ -85,7 +85,10 @@ struct clk_hw *clk_hw_register_fixed_factor(struct device *dev,
 	init.name = name;
 	init.ops = &clk_fixed_factor_ops;
 	init.flags = flags;
-	init.parent_names = &parent_name;
+	if (parent_name)
+		init.parent_names = &parent_name;
+	else
+		init.parent_data = &pdata;
 	init.num_parents = 1;
 
 	hw = &fix->hw;

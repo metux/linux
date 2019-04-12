@@ -2128,7 +2128,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1101,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1101",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &marvell_config_init,
 		.config_aneg = &m88e1101_config_aneg,
@@ -2146,7 +2146,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1112,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1112",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1111_config_init,
 		.config_aneg = &marvell_config_aneg,
@@ -2164,7 +2164,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1111,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1111",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1111_config_init,
 		.config_aneg = &marvell_config_aneg,
@@ -2183,7 +2183,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1118,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1118",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1118_config_init,
 		.config_aneg = &m88e1118_config_aneg,
@@ -2201,7 +2201,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1121R,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1121R",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = &m88e1121_probe,
 		.config_init = &marvell_config_init,
 		.config_aneg = &m88e1121_config_aneg,
@@ -2221,7 +2221,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1318S,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1318S",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1318_config_init,
 		.config_aneg = &m88e1318_config_aneg,
@@ -2243,7 +2243,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1145,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1145",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1145_config_init,
 		.config_aneg = &m88e1101_config_aneg,
@@ -2262,7 +2262,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1149R,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1149R",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1149_config_init,
 		.config_aneg = &m88e1118_config_aneg,
@@ -2280,7 +2280,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1240,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1240",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1111_config_init,
 		.config_aneg = &marvell_config_aneg,
@@ -2298,7 +2298,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1116R,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1116R",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e1116r_config_init,
 		.ack_interrupt = &marvell_ack_interrupt,
@@ -2338,7 +2338,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E1540,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1540",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = m88e1510_probe,
 		.config_init = &marvell_config_init,
 		.config_aneg = &m88e1510_config_aneg,
@@ -2361,7 +2361,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E1545",
 		.probe = m88e1510_probe,
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.config_init = &marvell_config_init,
 		.config_aneg = &m88e1510_config_aneg,
 		.read_status = &marvell_read_status,
@@ -2380,7 +2380,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E3016,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E3016",
-		.features = PHY_BASIC_FEATURES,
+		/* PHY_BASIC_FEATURES */
 		.probe = marvell_probe,
 		.config_init = &m88e3016_config_init,
 		.aneg_done = &marvell_aneg_done,
@@ -2400,7 +2400,7 @@ static struct phy_driver marvell_drivers[] = {
 		.phy_id = MARVELL_PHY_ID_88E6390,
 		.phy_id_mask = MARVELL_PHY_ID_MASK,
 		.name = "Marvell 88E6390",
-		.features = PHY_GBIT_FEATURES,
+		/* PHY_GBIT_FEATURES */
 		.probe = m88e6390_probe,
 		.config_init = &marvell_config_init,
 		.config_aneg = &m88e6390_config_aneg,

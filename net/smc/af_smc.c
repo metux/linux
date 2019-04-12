@@ -1285,6 +1285,8 @@ static void smc_listen_work(struct work_struct *work)
 	smc_rx_init(new_smc);
 	smc_tx_init(new_smc);
 
+	/* prepare ISM check */
+	ini.is_smcd = true;
 	/* check if ISM is available */
 	if (pclc->hdr.path == SMC_TYPE_D || pclc->hdr.path == SMC_TYPE_B) {
 		ini.is_smcd = true; /* prepare ISM check */

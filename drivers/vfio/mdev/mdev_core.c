@@ -395,6 +395,24 @@ struct device *mdev_get_iommu_device(struct device *dev)
 }
 EXPORT_SYMBOL(mdev_get_iommu_device);
 
+int mdev_set_iommu_device(struct device *dev, struct device *iommu_device)
+{
+	struct mdev_device *mdev = to_mdev_device(dev);
+
+	mdev->iommu_device = iommu_device;
+
+	return 0;
+}
+EXPORT_SYMBOL(mdev_set_iommu_device);
+
+struct device *mdev_get_iommu_device(struct device *dev)
+{
+	struct mdev_device *mdev = to_mdev_device(dev);
+
+	return mdev->iommu_device;
+}
+EXPORT_SYMBOL(mdev_get_iommu_device);
+
 static int __init mdev_init(void)
 {
 	return mdev_bus_register();

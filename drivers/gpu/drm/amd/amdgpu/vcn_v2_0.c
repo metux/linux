@@ -166,6 +166,13 @@ static int vcn_v2_0_sw_init(void *handle)
 	if (r)
 		return r;
 
+	adev->vcn.internal.context_id = mmUVD_CONTEXT_ID_INTERNAL_OFFSET;
+	adev->vcn.internal.ib_vmid = mmUVD_LMI_RBC_IB_VMID_INTERNAL_OFFSET;
+	adev->vcn.internal.ib_bar_low = mmUVD_LMI_RBC_IB_64BIT_BAR_LOW_INTERNAL_OFFSET;
+	adev->vcn.internal.ib_bar_high = mmUVD_LMI_RBC_IB_64BIT_BAR_HIGH_INTERNAL_OFFSET;
+	adev->vcn.internal.ib_size = mmUVD_RBC_IB_SIZE_INTERNAL_OFFSET;
+	adev->vcn.internal.gp_scratch8 = mmUVD_GP_SCRATCH8_INTERNAL_OFFSET;
+
 	adev->vcn.internal.scratch9 = mmUVD_SCRATCH9_INTERNAL_OFFSET;
 	adev->vcn.external.scratch9 = SOC15_REG_OFFSET(UVD, 0, mmUVD_SCRATCH9);
 	adev->vcn.internal.data0 = mmUVD_GPCOM_VCPU_DATA0_INTERNAL_OFFSET;
@@ -372,8 +379,11 @@ static void vcn_v2_0_mc_resume(struct amdgpu_device *adev)
 		WREG32_SOC15(UVD, 0, mmUVD_LMI_VCPU_CACHE_64BIT_BAR_HIGH,
 			upper_32_bits(adev->vcn.gpu_addr));
 		offset = size;
+		/* No signed header for now from firmware
 		WREG32_SOC15(UVD, 0, mmUVD_VCPU_CACHE_OFFSET0,
 			AMDGPU_UVD_FIRMWARE_OFFSET >> 3);
+		*/
+		WREG32_SOC15(UVD, 0, mmUVD_VCPU_CACHE_OFFSET0, 0);
 	}
 
 	WREG32_SOC15(UVD, 0, mmUVD_VCPU_CACHE_SIZE0, size);
@@ -1482,10 +1492,12 @@ static void vcn_v2_0_dec_ring_set_wptr(struct amdgpu_ring *ring)
  */
 static void vcn_v2_0_dec_ring_insert_start(struct amdgpu_ring *ring)
 {
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA0_INTERNAL_OFFSET, 0));
+	struct amdgpu_device *adev = ring->adev;
+
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data0, 0));
 	amdgpu_ring_write(ring, 0);
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_PACKET_START << 1));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.cmd, 0));
+	amdgpu_ring_write(ring, VCN_DEC_CMD_PACKET_START << 1);
 }
 
 /**
@@ -1497,8 +1509,10 @@ static void vcn_v2_0_dec_ring_insert_start(struct amdgpu_ring *ring)
  */
 static void vcn_v2_0_dec_ring_insert_end(struct amdgpu_ring *ring)
 {
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_PACKET_END << 1));
+	struct amdgpu_device *adev = ring->adev;
+
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.cmd, 0));
+	amdgpu_ring_write(ring, VCN_DEC_CMD_PACKET_END << 1);
 }
 
 /**
@@ -1510,12 +1524,13 @@ static void vcn_v2_0_dec_ring_insert_end(struct amdgpu_ring *ring)
  */
 static void vcn_v2_0_dec_ring_insert_nop(struct amdgpu_ring *ring, uint32_t count)
 {
+	struct amdgpu_device *adev = ring->adev;
 	int i;
 
 	WARN_ON(ring->wptr % 2 || count % 2);
 
 	for (i = 0; i < count / 2; i++) {
-		amdgpu_ring_write(ring, PACKET0(mmUVD_NO_OP_INTERNAL_OFFSET, 0));
+		amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.nop, 0));
 		amdgpu_ring_write(ring, 0);
 	}
 }
@@ -1531,29 +1546,30 @@ static void vcn_v2_0_dec_ring_insert_nop(struct amdgpu_ring *ring, uint32_t coun
 static void vcn_v2_0_dec_ring_emit_fence(struct amdgpu_ring *ring, u64 addr, u64 seq,
 				     unsigned flags)
 {
-	WARN_ON(flags & AMDGPU_FENCE_FLAG_64BIT);
+	struct amdgpu_device *adev = ring->adev;
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_CONTEXT_ID_INTERNAL_OFFSET, 0));
+	WARN_ON(flags & AMDGPU_FENCE_FLAG_64BIT);
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.context_id, 0));
 	amdgpu_ring_write(ring, seq);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA0_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data0, 0));
 	amdgpu_ring_write(ring, addr & 0xffffffff);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA1_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data1, 0));
 	amdgpu_ring_write(ring, upper_32_bits(addr) & 0xff);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_FENCE << 1));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.cmd, 0));
+	amdgpu_ring_write(ring, VCN_DEC_CMD_FENCE << 1);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA0_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data0, 0));
 	amdgpu_ring_write(ring, 0);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA1_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data1, 0));
 	amdgpu_ring_write(ring, 0);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.cmd, 0));
 
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_TRAP << 1));
+	amdgpu_ring_write(ring, VCN_DEC_CMD_TRAP << 1);
 }
 
 /**
@@ -1569,16 +1585,17 @@ static void vcn_v2_0_dec_ring_emit_ib(struct amdgpu_ring *ring,
 				      struct amdgpu_ib *ib,
 				      uint32_t flags)
 {
+	struct amdgpu_device *adev = ring->adev;
 	unsigned vmid = AMDGPU_JOB_GET_VMID(job);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_LMI_RBC_IB_VMID_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.ib_vmid, 0));
 	amdgpu_ring_write(ring, vmid);
 
-	amdgpu_ring_write(ring,	PACKET0(mmUVD_LMI_RBC_IB_64BIT_BAR_LOW_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring,	PACKET0(adev->vcn.internal.ib_bar_low, 0));
 	amdgpu_ring_write(ring, lower_32_bits(ib->gpu_addr));
-	amdgpu_ring_write(ring,	PACKET0(mmUVD_LMI_RBC_IB_64BIT_BAR_HIGH_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring,	PACKET0(adev->vcn.internal.ib_bar_high, 0));
 	amdgpu_ring_write(ring, upper_32_bits(ib->gpu_addr));
-	amdgpu_ring_write(ring,	PACKET0(mmUVD_RBC_IB_SIZE_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring,	PACKET0(adev->vcn.internal.ib_size, 0));
 	amdgpu_ring_write(ring, ib->length_dw);
 }
 
@@ -1586,18 +1603,20 @@ static void vcn_v2_0_dec_ring_emit_reg_wait(struct amdgpu_ring *ring,
 					    uint32_t reg, uint32_t val,
 					    uint32_t mask)
 {
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA0_INTERNAL_OFFSET, 0));
+	struct amdgpu_device *adev = ring->adev;
+
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data0, 0));
 	amdgpu_ring_write(ring, reg << 2);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA1_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data1, 0));
 	amdgpu_ring_write(ring, val);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GP_SCRATCH8_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.gp_scratch8, 0));
 	amdgpu_ring_write(ring, mask);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.cmd, 0));
 
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_REG_READ_COND_WAIT << 1));
+	amdgpu_ring_write(ring, VCN_DEC_CMD_REG_READ_COND_WAIT << 1);
 }
 
 static void vcn_v2_0_dec_ring_emit_vm_flush(struct amdgpu_ring *ring,
@@ -1618,15 +1637,17 @@ static void vcn_v2_0_dec_ring_emit_vm_flush(struct amdgpu_ring *ring,
 static void vcn_v2_0_dec_ring_emit_wreg(struct amdgpu_ring *ring,
 					uint32_t reg, uint32_t val)
 {
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA0_INTERNAL_OFFSET, 0));
+	struct amdgpu_device *adev = ring->adev;
+
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data0, 0));
 	amdgpu_ring_write(ring, reg << 2);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_DATA1_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.data1, 0));
 	amdgpu_ring_write(ring, val);
 
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
+	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.cmd, 0));
 
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_WRITE_REG << 1));
+	amdgpu_ring_write(ring, VCN_DEC_CMD_WRITE_REG << 1);
 }
 
 /**
@@ -2079,36 +2100,6 @@ static int vcn_v2_0_process_interrupt(struct amdgpu_device *adev,
 	return 0;
 }
 
-static int vcn_v2_0_dec_ring_test_ring(struct amdgpu_ring *ring)
-{
-	struct amdgpu_device *adev = ring->adev;
-	uint32_t tmp = 0;
-	unsigned i;
-	int r;
-
-	WREG32(adev->vcn.external.scratch9, 0xCAFEDEAD);
-	r = amdgpu_ring_alloc(ring, 4);
-	if (r)
-		return r;
-	amdgpu_ring_write(ring, PACKET0(mmUVD_GPCOM_VCPU_CMD_INTERNAL_OFFSET, 0));
-	amdgpu_ring_write(ring, VCN_DEC_KMD_CMD | (VCN_DEC_CMD_PACKET_START << 1));
-	amdgpu_ring_write(ring, PACKET0(adev->vcn.internal.scratch9, 0));
-	amdgpu_ring_write(ring, 0xDEADBEEF);
-	amdgpu_ring_commit(ring);
-	for (i = 0; i < adev->usec_timeout; i++) {
-		tmp = RREG32(adev->vcn.external.scratch9);
-		if (tmp == 0xDEADBEEF)
-			break;
-		DRM_UDELAY(1);
-	}
-
-	if (i >= adev->usec_timeout)
-		r = -ETIMEDOUT;
-
-	return r;
-}
-
-
 static int vcn_v2_0_set_powergating_state(void *handle,
 					  enum amd_powergating_state state)
 {
@@ -2172,7 +2163,7 @@ static const struct amdgpu_ring_funcs vcn_v2_0_dec_ring_vm_funcs = {
 	.emit_ib = vcn_v2_0_dec_ring_emit_ib,
 	.emit_fence = vcn_v2_0_dec_ring_emit_fence,
 	.emit_vm_flush = vcn_v2_0_dec_ring_emit_vm_flush,
-	.test_ring = vcn_v2_0_dec_ring_test_ring,
+	.test_ring = amdgpu_vcn_dec_ring_test_ring,
 	.test_ib = amdgpu_vcn_dec_ring_test_ib,
 	.insert_nop = vcn_v2_0_dec_ring_insert_nop,
 	.insert_start = vcn_v2_0_dec_ring_insert_start,

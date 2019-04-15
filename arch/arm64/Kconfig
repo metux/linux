@@ -480,6 +480,7 @@ config ARM64_ERRATUM_1418040
 	bool "Cortex-A76/Neoverse-N1: MRC read following MRRC read of specific Generic Timer in AArch32 might give incorrect result"
 	default y
 	depends on COMPAT
+	select ARM_ARCH_TIMER_OOL_WORKAROUND
 	help
 	  This option adds a workaround for ARM Cortex-A76/Neoverse-N1
 	  errata 1188873 and 1418040.

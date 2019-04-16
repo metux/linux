@@ -1127,7 +1127,7 @@ restart:
 	}
 
 out:
-	trace_fib6_table_lookup(net, res.f6i, table, fl6);
+	trace_fib6_table_lookup(net, &res, table, fl6);
 
 	rcu_read_unlock();
 
@@ -1860,7 +1860,7 @@ redo_rt6_select:
 		}
 	}
 
-	trace_fib6_table_lookup(net, res.f6i, table, fl6);
+	trace_fib6_table_lookup(net, &res, table, fl6);
 
 	return res.f6i;
 }
@@ -2533,7 +2533,7 @@ out:
 
 	rcu_read_unlock();
 
-	trace_fib6_table_lookup(net, rt, table, fl6);
+	trace_fib6_table_lookup(net, &res, table, fl6);
 	return ret;
 };
 

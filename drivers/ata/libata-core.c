@@ -177,6 +177,13 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 
 static struct ctl_table ctl_libata[] = {
+	{
+		.procname	= "allow_tpm",
+		.data		= &libata_allow_tpm,
+		.maxlen		= sizeof(libata_allow_tpm),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
 	{}
 };
 

@@ -6,12 +6,15 @@
  *
  *  Copyright (C) 2000 Deep Blue Solutions Ltd.
  *  Copyright (C) 2003 Konrad Eisele <eiselekd@web.de>
- *  Copyright (C) 2006 Daniel Hellstrom <daniel@gaisler.com>, Aeroflex Gaisler AB
+ *  Copyright (C) 2006 Daniel Hellstrom <daniel@gaisler.com>,
+ *                     Aeroflex Gaisler AB
  *  Copyright (C) 2008 Gilead Kutnick <kutnickg@zin-tech.com>
- *  Copyright (C) 2009 Kristoffer Glembo <kristoffer@gaisler.com>, Aeroflex Gaisler AB
+ *  Copyright (C) 2009 Kristoffer Glembo <kristoffer@gaisler.com>,
+ *                     Aeroflex Gaisler AB
  */
 
-#if defined(CONFIG_SERIAL_GRLIB_GAISLER_APBUART_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
+#if defined(CONFIG_SERIAL_GRLIB_GAISLER_APBUART_CONSOLE) \
+	&& defined(CONFIG_MAGIC_SYSRQ)
 #define SUPPORT_SYSRQ
 #endif
 
@@ -116,8 +119,7 @@ static void apbuart_rx_chars(struct uart_port *port)
 
 		uart_insert_char(port, rsr, UART_STATUS_OE, ch, flag);
 
-
-	      ignore_char:
+ignore_char:
 		status = UART_GET_STATUS(port);
 	}
 
@@ -181,6 +183,7 @@ static irqreturn_t apbuart_int(int irq, void *dev_id)
 static unsigned int apbuart_tx_empty(struct uart_port *port)
 {
 	unsigned int status = UART_GET_STATUS(port);
+
 	return status & UART_STATUS_THE ? TIOCSER_TEMT : 0;
 }
 
@@ -317,6 +320,7 @@ static int apbuart_verify_port(struct uart_port *port,
 			       struct serial_struct *ser)
 {
 	int ret = 0;
+
 	if (ser->type != PORT_UNKNOWN && ser->type != PORT_APBUART)
 		ret = -EINVAL;
 	if (ser->irq < 0 || ser->irq >= NR_IRQS)
@@ -422,6 +426,7 @@ static void apbuart_flush_fifo(struct uart_port *port)
 static void apbuart_console_putchar(struct uart_port *port, int ch)
 {
 	unsigned int status;
+
 	do {
 		status = UART_GET_STATUS(port);
 	} while (!UART_TX_READY(status));
@@ -458,6 +463,7 @@ apbuart_console_get_options(struct uart_port *port, int *baud,
 	if (UART_GET_CTRL(port) & (UART_CTRL_RE | UART_CTRL_TE)) {
 
 		unsigned int quot, status;
+
 		status = UART_GET_STATUS(port);
 
 		*parity = 'n';
@@ -622,14 +628,16 @@ static int __init grlib_apbuart_configure(void)
 		port = &grlib_apbuart_ports[line];
 
 		port->mapbase = addr;
-		port->membase = ioremap(addr, sizeof(struct grlib_apbuart_regs_map));
+		port->membase = ioremap(addr,
+			sizeof(struct grlib_apbuart_regs_map));
 		port->irq = 0;
 		port->iotype = UPIO_MEM;
 		port->ops = &grlib_apbuart_ops;
 		port->flags = UPF_BOOT_AUTOCONF;
 		port->line = line;
 		port->uartclk = *freq_hz;
-		port->fifosize = apbuart_scan_fifo_size((struct uart_port *) port, line);
+		port->fifosize = apbuart_scan_fifo_size(
+			(struct uart_port *) port, line);
 		line++;
 
 		/* We support maximum UART_NR uarts ... */

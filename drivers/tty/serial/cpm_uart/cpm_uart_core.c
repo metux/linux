@@ -63,7 +63,7 @@ static void cpm_uart_initbd(struct uart_cpm_port *pinfo);
 
 /*
  * Check, if transmit buffers are processed
-*/
+ */
 static unsigned int cpm_uart_tx_empty(struct uart_port *port)
 {
 	struct uart_cpm_port *pinfo =
@@ -167,11 +167,10 @@ static void cpm_uart_start_tx(struct uart_port *port)
 	}
 
 	if (cpm_uart_tx_pump(port) != 0) {
-		if (IS_SMC(pinfo)) {
+		if (IS_SMC(pinfo))
 			setbits8(&smcp->smc_smcm, SMCM_TX);
-		} else {
+		else
 			setbits16(&sccp->scc_sccm, UART_SCCM_TX);
-		}
 	}
 }
 
@@ -289,14 +288,14 @@ static void cpm_uart_int_rx(struct uart_port *port)
 				return;
 			}
 #endif
-		      error_return:
+error_return:
 			tty_insert_flip_char(tport, ch, flg);
 
 		}		/* End while (i--) */
 
 		/* This BD is ready to be used again. Clear status. get next */
 		clrbits16(&bdp->cbd_sc, BD_SC_BR | BD_SC_FR | BD_SC_PR |
-		                        BD_SC_OV | BD_SC_ID);
+					BD_SC_OV | BD_SC_ID);
 		setbits16(&bdp->cbd_sc, BD_SC_EMPTY);
 
 		if (in_be16(&bdp->cbd_sc) & BD_SC_WRAP)
@@ -316,7 +315,7 @@ static void cpm_uart_int_rx(struct uart_port *port)
 
 	/* Error processing */
 
-      handle_error:
+handle_error:
 	/* Statistics */
 	if (status & BD_SC_BR)
 		port->icount.brk++;
@@ -429,7 +428,8 @@ static int cpm_uart_startup(struct uart_port *port)
 		setbits16(&pinfo->smcp->smc_smcmr, (SMCMR_REN | SMCMR_TEN));
 	} else {
 		setbits16(&pinfo->sccp->scc_sccm, UART_SCCM_RX);
-		setbits32(&pinfo->sccp->scc_gsmrl, (SCC_GSMRL_ENR | SCC_GSMRL_ENT));
+		setbits32(&pinfo->sccp->scc_gsmrl,
+			  (SCC_GSMRL_ENR | SCC_GSMRL_ENT));
 	}
 
 	return 0;
@@ -457,7 +457,7 @@ static void cpm_uart_shutdown(struct uart_port *port)
 	/* If the port is not the console, disable Rx and Tx. */
 	if (!(pinfo->flags & FLAG_CONSOLE)) {
 		/* Wait for all the BDs marked sent */
-		while(!cpm_uart_tx_empty(port)) {
+		while (!cpm_uart_tx_empty(port)) {
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout(2);
 		}
@@ -468,12 +468,17 @@ static void cpm_uart_shutdown(struct uart_port *port)
 		/* Stop uarts */
 		if (IS_SMC(pinfo)) {
 			smc_t __iomem *smcp = pinfo->smcp;
-			clrbits16(&smcp->smc_smcmr, SMCMR_REN | SMCMR_TEN);
+
+			clrbits16(&smcp->smc_smcmr,
+				  SMCMR_REN | SMCMR_TEN);
 			clrbits8(&smcp->smc_smcm, SMCM_RX | SMCM_TX);
 		} else {
 			scc_t __iomem *sccp = pinfo->sccp;
-			clrbits32(&sccp->scc_gsmrl, SCC_GSMRL_ENR | SCC_GSMRL_ENT);
-			clrbits16(&sccp->scc_sccm, UART_SCCM_TX | UART_SCCM_RX);
+
+			clrbits32(&sccp->scc_gsmrl,
+				  SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+			clrbits16(&sccp->scc_sccm,
+				  UART_SCCM_TX | UART_SCCM_RX);
 		}
 
 		/* Shut them really down and reinit buffer descriptors */
@@ -490,8 +495,8 @@ static void cpm_uart_shutdown(struct uart_port *port)
 }
 
 static void cpm_uart_set_termios(struct uart_port *port,
-                                 struct ktermios *termios,
-                                 struct ktermios *old)
+				 struct ktermios *termios,
+				 struct ktermios *old)
 {
 	int baud;
 	unsigned long flags;
@@ -628,12 +633,14 @@ static void cpm_uart_set_termios(struct uart_port *port,
 		 * present.
 		 */
 		prev_mode = in_be16(&smcp->smc_smcmr) & (SMCMR_REN | SMCMR_TEN);
-		/* Output in *one* operation, so we don't interrupt RX/TX if they
-		 * were already enabled. */
+		/* Output in *one* operation, so we don't interrupt RX/TX if
+		 * they were already enabled.
+		 */
 		out_be16(&smcp->smc_smcmr, smcr_mk_clen(bits) | cval |
 		    SMCMR_SM_UART | prev_mode);
 	} else {
-		out_be16(&pinfo->sccup->scc_genscc.scc_mrblr, pinfo->rx_fifosize);
+		out_be16(&pinfo->sccup->scc_genscc.scc_mrblr,
+			 pinfo->rx_fifosize);
 		out_be16(&pinfo->sccup->scc_maxidl, maxidl);
 		out_be16(&sccp->scc_psmr, (sbits << 12) | scval);
 	}
@@ -777,7 +784,8 @@ static void cpm_uart_initbd(struct uart_cpm_port *pinfo)
 	 * buffers in the buffer descriptors, and the
 	 * virtual address for us to work with.
 	 */
-	mem_addr = pinfo->mem_addr + L1_CACHE_ALIGN(pinfo->rx_nrfifos * pinfo->rx_fifosize);
+	mem_addr = pinfo->mem_addr +
+		   L1_CACHE_ALIGN(pinfo->rx_nrfifos * pinfo->rx_fifosize);
 	bdp = pinfo->tx_cur = pinfo->tx_bd_base;
 	for (i = 0; i < (pinfo->tx_nrfifos - 1); i++, bdp++) {
 		out_be32(&bdp->cbd_bufaddr, cpu2cpm_addr(mem_addr, pinfo));
@@ -801,9 +809,9 @@ static void cpm_uart_init_scc(struct uart_cpm_port *pinfo)
 
 	/* Store address */
 	out_be16(&pinfo->sccup->scc_genscc.scc_rbase,
-	         (u8 __iomem *)pinfo->rx_bd_base - DPRAM_BASE);
+		 (u8 __iomem *)pinfo->rx_bd_base - DPRAM_BASE);
 	out_be16(&pinfo->sccup->scc_genscc.scc_tbase,
-	         (u8 __iomem *)pinfo->tx_bd_base - DPRAM_BASE);
+		 (u8 __iomem *)pinfo->tx_bd_base - DPRAM_BASE);
 
 	/* Set up the uart parameters in the
 	 * parameter ram.
@@ -840,7 +848,7 @@ static void cpm_uart_init_scc(struct uart_cpm_port *pinfo)
 	 */
 	out_be32(&scp->scc_gsmrh, 0);
 	out_be32(&scp->scc_gsmrl,
-	         SCC_GSMRL_MODE_UART | SCC_GSMRL_TDCR_16 | SCC_GSMRL_RDCR_16);
+		 SCC_GSMRL_MODE_UART | SCC_GSMRL_TDCR_16 | SCC_GSMRL_RDCR_16);
 
 	/* Enable rx interrupts  and clear all pending events.  */
 	out_be16(&scp->scc_sccm, 0);
@@ -863,9 +871,9 @@ static void cpm_uart_init_smc(struct uart_cpm_port *pinfo)
 
 	/* Store address */
 	out_be16(&pinfo->smcup->smc_rbase,
-	         (u8 __iomem *)pinfo->rx_bd_base - DPRAM_BASE);
+		 (u8 __iomem *)pinfo->rx_bd_base - DPRAM_BASE);
 	out_be16(&pinfo->smcup->smc_tbase,
-	         (u8 __iomem *)pinfo->tx_bd_base - DPRAM_BASE);
+		 (u8 __iomem *)pinfo->tx_bd_base - DPRAM_BASE);
 
 /*
  *  In case SMC is being relocated...
@@ -920,8 +928,10 @@ static int cpm_uart_request_port(struct uart_port *port)
 		clrbits8(&pinfo->smcp->smc_smcm, SMCM_RX | SMCM_TX);
 		clrbits16(&pinfo->smcp->smc_smcmr, SMCMR_REN | SMCMR_TEN);
 	} else {
-		clrbits16(&pinfo->sccp->scc_sccm, UART_SCCM_TX | UART_SCCM_RX);
-		clrbits32(&pinfo->sccp->scc_gsmrl, SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+		clrbits16(&pinfo->sccp->scc_sccm,
+			  UART_SCCM_TX | UART_SCCM_RX);
+		clrbits32(&pinfo->sccp->scc_gsmrl,
+			  SCC_GSMRL_ENR | SCC_GSMRL_ENT);
 	}
 
 	ret = cpm_uart_allocbuf(pinfo, 0);
@@ -1051,8 +1061,9 @@ static int poll_chars;
 static int poll_wait_key(char *obuf, struct uart_cpm_port *pinfo)
 {
 	u_char		c, *cp;
-	volatile cbd_t	*bdp;
 	int		i;
+
+	volatile cbd_t	*bdp;
 
 	/* Get the address of the host memory buffer.
 	 */
@@ -1141,7 +1152,7 @@ static const struct uart_ops cpm_uart_pops = {
 struct uart_cpm_port cpm_uart_ports[UART_NR];
 
 static int cpm_uart_init_port(struct device_node *np,
-                              struct uart_cpm_port *pinfo)
+			      struct uart_cpm_port *pinfo)
 {
 	const u32 *data;
 	void __iomem *mem, *pram;
@@ -1151,7 +1162,8 @@ static int cpm_uart_init_port(struct device_node *np,
 
 	data = of_get_property(np, "clock", NULL);
 	if (data) {
-		struct clk *clk = clk_get(NULL, (const char*)data);
+		struct clk *clk = clk_get(NULL, (const char *)data);
+
 		if (!IS_ERR(clk))
 			pinfo->clk = clk;
 	}
@@ -1159,7 +1171,7 @@ static int cpm_uart_init_port(struct device_node *np,
 		data = of_get_property(np, "fsl,cpm-brg", &len);
 		if (!data || len != 4) {
 			dev_err(port->dev, "CPM UART %pOFn has no/invalid "
-			                "fsl,cpm-brg property.\n", np);
+					   "fsl,cpm-brg property.\n", np);
 			return -EINVAL;
 		}
 		pinfo->brg = *data;
@@ -1168,7 +1180,7 @@ static int cpm_uart_init_port(struct device_node *np,
 	data = of_get_property(np, "fsl,cpm-command", &len);
 	if (!data || len != 4) {
 		dev_err(port->dev, "CPM UART %pOFn has no/invalid "
-		                "fsl,cpm-command property.\n", np);
+				   "fsl,cpm-command property.\n", np);
 		return -EINVAL;
 	}
 	pinfo->command = *data;
@@ -1182,7 +1194,7 @@ static int cpm_uart_init_port(struct device_node *np,
 		pinfo->sccp = mem;
 		pinfo->sccup = pram = cpm_uart_map_pram(pinfo, np);
 	} else if (of_device_is_compatible(np, "fsl,cpm1-smc-uart") ||
-	           of_device_is_compatible(np, "fsl,cpm2-smc-uart")) {
+		   of_device_is_compatible(np, "fsl,cpm2-smc-uart")) {
 		pinfo->flags |= FLAG_SMC;
 		pinfo->smcp = mem;
 		pinfo->smcup = pram = cpm_uart_map_pram(pinfo, np);
@@ -1269,19 +1281,17 @@ static void cpm_uart_console_write(struct console *co, const char *s,
 	unsigned long flags;
 	int nolock = oops_in_progress;
 
-	if (unlikely(nolock)) {
+	if (unlikely(nolock))
 		local_irq_save(flags);
-	} else {
+	else
 		spin_lock_irqsave(&pinfo->port.lock, flags);
-	}
 
 	cpm_uart_early_write(pinfo, s, count, true);
 
-	if (unlikely(nolock)) {
+	if (unlikely(nolock))
 		local_irq_restore(flags);
-	} else {
+	else
 		spin_unlock_irqrestore(&pinfo->port.lock, flags);
-	}
 }
 
 
@@ -1344,7 +1354,8 @@ static int __init cpm_uart_console_setup(struct console *co, char *options)
 		out_be16(&pinfo->sccup->scc_brkcr, 0);
 		cpm_line_cr_cmd(pinfo, CPM_CR_GRA_STOP_TX);
 		clrbits16(&pinfo->sccp->scc_sccm, UART_SCCM_TX | UART_SCCM_RX);
-		clrbits32(&pinfo->sccp->scc_gsmrl, SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+		clrbits32(&pinfo->sccp->scc_gsmrl,
+			  SCC_GSMRL_ENR | SCC_GSMRL_ENT);
 	}
 
 	ret = cpm_uart_allocbuf(pinfo, 1);
@@ -1384,7 +1395,7 @@ static int __init cpm_uart_console_init(void)
 
 console_initcall(cpm_uart_console_init);
 
-#define CPM_UART_CONSOLE	&cpm_scc_uart_console
+#define CPM_UART_CONSOLE	(&cpm_scc_uart_console)
 #else
 #define CPM_UART_CONSOLE	NULL
 #endif
@@ -1427,6 +1438,7 @@ static int cpm_uart_probe(struct platform_device *ofdev)
 static int cpm_uart_remove(struct platform_device *ofdev)
 {
 	struct uart_cpm_port *pinfo = platform_get_drvdata(ofdev);
+
 	return uart_remove_one_port(&cpm_reg, &pinfo->port);
 }
 
@@ -1454,11 +1466,12 @@ static struct platform_driver cpm_uart_driver = {
 	},
 	.probe = cpm_uart_probe,
 	.remove = cpm_uart_remove,
- };
+};
 
 static int __init cpm_uart_init(void)
 {
 	int ret = uart_register_driver(&cpm_reg);
+
 	if (ret)
 		return ret;
 

@@ -16,13 +16,13 @@ static inline void cpm_set_brg(int brg, int baud)
 	cpm_setbrg(brg, baud);
 }
 
-static inline void cpm_set_scc_fcr(scc_uart_t __iomem * sup)
+static inline void cpm_set_scc_fcr(scc_uart_t __iomem *sup)
 {
 	out_8(&sup->scc_genscc.scc_rfcr, SMC_EB);
 	out_8(&sup->scc_genscc.scc_tfcr, SMC_EB);
 }
 
-static inline void cpm_set_smc_fcr(smc_uart_t __iomem * up)
+static inline void cpm_set_smc_fcr(smc_uart_t __iomem *up)
 {
 	out_8(&up->smc_rfcr, SMC_EB);
 	out_8(&up->smc_tfcr, SMC_EB);

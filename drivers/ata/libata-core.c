@@ -159,6 +159,21 @@ MODULE_DESCRIPTION("Library module for ATA devices");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 
+static struct ctl_table ctl_libata[] = {
+	{}
+};
+
+static struct ctl_table libata_dir_table[] = {
+	{
+		.procname	= "libata",
+		.maxlen		= 0,
+		.mode		= 0555,
+		.child		= ctl_libata,
+	},
+	{ },
+};
+
+static struct ctl_table_header *libata_sysctl_header;
 
 static bool ata_sstatus_online(u32 sstatus)
 {
@@ -6295,6 +6310,8 @@ static int __init ata_init(void)
 		goto err_out;
 	}
 
+	libata_sysctl_header = register_sysctl_table(libata_dir_table);
+
 	printk(KERN_DEBUG "libata version " DRV_VERSION " loaded.\n");
 	return 0;
 
@@ -6308,6 +6325,7 @@ static void __exit ata_exit(void)
 	libata_transport_exit();
 	ata_sff_exit();
 	ata_free_force_param();
+	unregister_sysctl_table(libata_sysctl_header);
 }
 
 subsys_initcall(ata_init);

@@ -105,10 +105,10 @@ void scc3_lineif(struct uart_cpm_port *pinfo);
 void scc4_lineif(struct uart_cpm_port *pinfo);
 
 /*
-   virtual to phys transtalion
-*/
+ * virtual to phys transtalion
+ */
 static inline unsigned long cpu2cpm_addr(void *addr,
-                                         struct uart_cpm_port *pinfo)
+					 struct uart_cpm_port *pinfo)
 {
 	int offset;
 	u32 val = (u32)addr;
@@ -124,7 +124,7 @@ static inline unsigned long cpu2cpm_addr(void *addr,
 }
 
 static inline void *cpm2cpu_addr(unsigned long addr,
-                                 struct uart_cpm_port *pinfo)
+				 struct uart_cpm_port *pinfo)
 {
 	int offset;
 	u32 val = addr;

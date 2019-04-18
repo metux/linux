@@ -106,14 +106,17 @@ struct uart_sunzilog_port {
 
 static void sunzilog_putchar(struct uart_port *port, int ch);
 
-#define ZILOG_CHANNEL_FROM_PORT(PORT)	((struct zilog_channel __iomem *)((PORT)->membase))
-#define UART_ZILOG(PORT)		((struct uart_sunzilog_port *)(PORT))
+#define ZILOG_CHANNEL_FROM_PORT(PORT)	\
+	((struct zilog_channel __iomem *)((PORT)->membase))
+#define UART_ZILOG(PORT)		\
+	((struct uart_sunzilog_port *)(PORT))
 
 #define ZS_IS_KEYB(UP)	((UP)->flags & SUNZILOG_FLAG_CONS_KEYB)
 #define ZS_IS_MOUSE(UP)	((UP)->flags & SUNZILOG_FLAG_CONS_MOUSE)
 #define ZS_IS_CONS(UP)	((UP)->flags & SUNZILOG_FLAG_IS_CONS)
 #define ZS_IS_KGDB(UP)	((UP)->flags & SUNZILOG_FLAG_IS_KGDB)
-#define ZS_WANTS_MODEM_STATUS(UP)	((UP)->flags & SUNZILOG_FLAG_MODEM_STATUS)
+#define ZS_WANTS_MODEM_STATUS(UP)	\
+	((UP)->flags & SUNZILOG_FLAG_MODEM_STATUS)
 #define ZS_IS_CHANNEL_A(UP)	((UP)->flags & SUNZILOG_FLAG_IS_CHANNEL_A)
 #define ZS_REGS_HELD(UP)	((UP)->flags & SUNZILOG_FLAG_REGS_HELD)
 #define ZS_TX_STOPPED(UP)	((UP)->flags & SUNZILOG_FLAG_TX_STOPPED)
@@ -176,7 +179,8 @@ static void sunzilog_clear_fifo(struct zilog_channel __iomem *channel)
 /* This function must only be called when the TX is not busy.  The UART
  * port lock must be held and local interrupts disabled.
  */
-static int __load_zsregs(struct zilog_channel __iomem *channel, unsigned char *regs)
+static int __load_zsregs(struct zilog_channel __iomem *channel,
+			 unsigned char *regs)
 {
 	int i;
 	int escc;
@@ -185,6 +189,7 @@ static int __load_zsregs(struct zilog_channel __iomem *channel, unsigned char *r
 	/* Let pending transmits finish.  */
 	for (i = 0; i < 1000; i++) {
 		unsigned char stat = read_zsreg(channel, R1);
+
 		if (stat & ALL_SNT)
 			break;
 		udelay(100);
@@ -228,7 +233,7 @@ static int __load_zsregs(struct zilog_channel __iomem *channel, unsigned char *r
 	/* Lower and upper byte of baud rate generator divisor.  */
 	write_zsreg(channel, R12, regs[R12]);
 	write_zsreg(channel, R13, regs[R13]);
-	
+
 	/* Now rewrite R14, with BRENAB (if set).  */
 	write_zsreg(channel, R14, regs[R14]);
 
@@ -273,11 +278,10 @@ static void sunzilog_maybe_update_regs(struct uart_sunzilog_port *up,
 				       struct zilog_channel __iomem *channel)
 {
 	if (!ZS_REGS_HELD(up)) {
-		if (ZS_TX_ACTIVE(up)) {
+		if (ZS_TX_ACTIVE(up))
 			up->flags |= SUNZILOG_FLAG_REGS_HELD;
-		} else {
+		else
 			__load_zsregs(channel, up->curregs);
-		}
 	}
 }
 
@@ -374,8 +378,7 @@ sunzilog_receive_chars(struct uart_sunzilog_port *up,
 				up->port.icount.brk++;
 				if (uart_handle_break(&up->port))
 					continue;
-			}
-			else if (r1 & PAR_ERR)
+			} else if (r1 & PAR_ERR)
 				up->port.icount.parity++;
 			else if (r1 & CRC_ERR)
 				up->port.icount.frame++;
@@ -394,7 +397,7 @@ sunzilog_receive_chars(struct uart_sunzilog_port *up,
 
 		if (up->port.ignore_status_mask == 0xff ||
 		    (r1 & up->port.ignore_status_mask) == 0) {
-		    	tty_insert_flip_char(port, ch, flag);
+			tty_insert_flip_char(port, ch, flag);
 		}
 		if (r1 & Rx_OVR)
 			tty_insert_flip_char(port, 0, TTY_OVERRUN);
@@ -437,9 +440,9 @@ static void sunzilog_status_handle(struct uart_sunzilog_port *up,
 		if (status & SYNC)
 			up->port.icount.dsr++;
 
-		/* The Zilog just gives us an interrupt when DCD/CTS/etc. change.
-		 * But it does not tell us which bit has changed, we have to keep
-		 * track of this ourselves.
+		/* The Zilog just gives us an interrupt when DCD/CTS/etc.
+		 * change.But it does not tell us which bit has changed,
+		 * we have to keep track of this ourselves.
 		 */
 		if ((status ^ up->prev_status) ^ DCD)
 			uart_handle_dcd_change(&up->port,
@@ -461,15 +464,17 @@ static void sunzilog_transmit_chars(struct uart_sunzilog_port *up,
 
 	if (ZS_IS_CONS(up)) {
 		unsigned char status = readb(&channel->control);
+
 		ZSDELAY();
 
 		/* TX still busy?  Just wait for the next TX done interrupt.
 		 *
-		 * It can occur because of how we do serial console writes.  It would
-		 * be nice to transmit console writes just like we normally would for
-		 * a TTY line. (ie. buffered and TX interrupt driven).  That is not
-		 * easy because console writes cannot sleep.  One solution might be
-		 * to poll on enough port->xmit space becoming free.  -DaveM
+		 * It can occur because of how we do serial console writes.
+		 * It would be nice to transmit console writes just like we
+		 * normally would for a TTY line. (ie. buffered and TX
+		 * interrupt driven).  That is not easy because console
+		 * writes cannot sleep.  One solution might be to poll on
+		 * enough port->xmit space becoming free.  -DaveM
 		 */
 		if (!(status & Tx_BUF_EMP))
 			return;
@@ -590,7 +595,8 @@ static irqreturn_t sunzilog_interrupt(int irq, void *dev_id)
 /* A convenient way to quickly get R0 status.  The caller must _not_ hold the
  * port lock, it is acquired here.
  */
-static __inline__ unsigned char sunzilog_read_channel_status(struct uart_port *port)
+static inline unsigned char
+sunzilog_read_channel_status(struct uart_port *port)
 {
 	struct zilog_channel __iomem *channel;
 	unsigned char status;
@@ -661,13 +667,13 @@ static void sunzilog_set_mctrl(struct uart_port *port, unsigned int mctrl)
 	else
 		clear_bits |= DTR;
 
-	/* NOTE: Not subject to 'transmitter active' rule.  */ 
+	/* NOTE: Not subject to 'transmitter active' rule. */
 	up->curregs[R5] |= set_bits;
 	up->curregs[R5] &= ~clear_bits;
 	write_zsreg(channel, R5, up->curregs[R5]);
 }
 
-/* The port lock is held and interrupts are disabled.  */
+/* The port lock is held and interrupts are disabled. */
 static void sunzilog_stop_tx(struct uart_port *port)
 {
 	struct uart_sunzilog_port *up =
@@ -749,7 +755,7 @@ static void sunzilog_enable_ms(struct uart_port *port)
 	if (new_reg != up->curregs[R15]) {
 		up->curregs[R15] = new_reg;
 
-		/* NOTE: Not subject to 'transmitter active' rule.  */ 
+		/* NOTE: Not subject to 'transmitter active' rule. */
 		write_zsreg(channel, R15, up->curregs[R15] & ~WR7pEN);
 	}
 }
@@ -776,7 +782,7 @@ static void sunzilog_break_ctl(struct uart_port *port, int break_state)
 	if (new_reg != up->curregs[R5]) {
 		up->curregs[R5] = new_reg;
 
-		/* NOTE: Not subject to 'transmitter active' rule.  */ 
+		/* NOTE: Not subject to 'transmitter active' rule. */
 		write_zsreg(channel, R5, up->curregs[R5]);
 	}
 
@@ -996,7 +1002,8 @@ static void sunzilog_config_port(struct uart_port *port, int flags)
 }
 
 /* We do not support letting the user mess with the divisor, IRQ, etc. */
-static int sunzilog_verify_port(struct uart_port *port, struct serial_struct *ser)
+static int sunzilog_verify_port(struct uart_port *port,
+				struct serial_struct *ser)
 {
 	return -EINVAL;
 }
@@ -1139,6 +1146,7 @@ static void sunzilog_putchar(struct uart_port *port, int ch)
 	 */
 	do {
 		unsigned char val = readb(&channel->control);
+
 		if (val & Tx_BUF_EMP) {
 			ZSDELAY();
 			break;
@@ -1237,15 +1245,34 @@ static int __init sunzilog_console_setup(struct console *con, char *options)
 	 * this hackish cflag thing is OK.
 	 */
 	switch (con->cflag & CBAUD) {
-	case B150: baud = 150; break;
-	case B300: baud = 300; break;
-	case B600: baud = 600; break;
-	case B1200: baud = 1200; break;
-	case B2400: baud = 2400; break;
-	case B4800: baud = 4800; break;
-	default: case B9600: baud = 9600; break;
-	case B19200: baud = 19200; break;
-	case B38400: baud = 38400; break;
+	case B150:
+		baud = 150;
+		break;
+	case B300:
+		baud = 300;
+		break;
+	case B600:
+		baud = 600;
+		break;
+	case B1200:
+		baud = 1200;
+		break;
+	case B2400:
+		baud = 2400;
+		break;
+	case B4800:
+		baud = 4800;
+		break;
+	default:
+	case B9600:
+		baud = 9600;
+		break;
+	case B19200:
+		baud = 19200;
+		break;
+	case B38400:
+		baud = 38400;
+		break;
 	}
 
 	brg = BPS_TO_BRG(baud, ZS_CLOCK / ZS_CLOCK_DIVISOR);
@@ -1380,9 +1407,9 @@ static void sunzilog_init_hw(struct uart_sunzilog_port *up)
 		up->curregs[R14] = BRSRC | BRENAB;
 		up->curregs[R15] = FIFOEN; /* Use FIFO if on ESCC */
 		up->curregs[R7p] = TxFIFO_LVL | RxFIFO_LVL;
-		if (__load_zsregs(channel, up->curregs)) {
+		if (__load_zsregs(channel, up->curregs))
 			up->flags |= SUNZILOG_FLAG_ESCC;
-		}
+
 		/* Only enable interrupts if an ISR handler available */
 		if (up->flags & SUNZILOG_FLAG_ISR_HANDLER)
 			up->curregs[R9] |= MIE;
@@ -1489,12 +1516,12 @@ static int zs_probe(struct platform_device *op)
 		}
 		uart_inst++;
 	} else {
-		dev_info(&op->dev, "Keyboard at MMIO 0x%llx (irq = %d) "
-		       "is a %s\n",
+		dev_info(&op->dev,
+		       "Keyboard at MMIO 0x%llx (irq = %d) is a %s\n",
 		       (unsigned long long) up[0].port.mapbase,
 		       op->archdata.irqs[0], sunzilog_type(&up[0].port));
-		dev_info(&op->dev, "Mouse at MMIO 0x%llx (irq = %d) "
-		       "is a %s\n",
+		dev_info(&op->dev,
+		       "Mouse at MMIO 0x%llx (irq = %d) is a %s\n",
 		       (unsigned long long) up[1].port.mapbase,
 		       op->archdata.irqs[0], sunzilog_type(&up[1].port));
 		kbm_inst++;
@@ -1578,6 +1605,7 @@ static int __init sunzilog_init(void)
 
 	if (zilog_irq) {
 		struct uart_sunzilog_port *up = sunzilog_irq_chain;
+
 		err = request_irq(zilog_irq, sunzilog_interrupt, IRQF_SHARED,
 				  "zs", sunzilog_irq_chain);
 		if (err)
@@ -1587,7 +1615,10 @@ static int __init sunzilog_init(void)
 		while (up) {
 			struct zilog_channel __iomem *channel;
 
-			/* printk (KERN_INFO "Enable IRQ for ZILOG Hardware %p\n", up); */
+			/* printk(KERN_INFO
+			 *        "Enable IRQ for ZILOG Hardware %p\n",
+			 *        up);
+			 */
 			channel          = ZILOG_CHANNEL_FROM_PORT(&up->port);
 			up->flags       |= SUNZILOG_FLAG_ISR_HANDLER;
 			up->curregs[R9] |= MIE;
@@ -1624,7 +1655,10 @@ static void __exit sunzilog_exit(void)
 		while (up) {
 			struct zilog_channel __iomem *channel;
 
-			/* printk (KERN_INFO "Disable IRQ for ZILOG Hardware %p\n", up); */
+			/* printk(KERN_INFO
+			 *        "Disable IRQ for ZILOG Hardware %p\n",
+			 *        up);
+			 */
 			channel          = ZILOG_CHANNEL_FROM_PORT(&up->port);
 			up->flags       &= ~SUNZILOG_FLAG_ISR_HANDLER;
 			up->curregs[R9] &= ~MIE;

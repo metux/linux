@@ -482,8 +482,8 @@ static int __init apbuart_console_setup(struct console *co, char *options)
 	int parity = 'n';
 	int flow = 'n';
 
-	pr_debug("apbuart_console_setup co=%p, co->index=%i, options=%s\n",
-		 co, co->index, options);
+	pr_debug("%s() co=%p, co->index=%i, options=%s\n",
+		 __func__, co, co->index, options);
 
 	/*
 	 * Check whether an invalid uart number has been specified, and
@@ -650,21 +650,20 @@ static int __init grlib_apbuart_init(void)
 	if (ret)
 		return ret;
 
-	printk(KERN_INFO "Serial: GRLIB APBUART driver\n");
+	pr_info("Serial: GRLIB APBUART driver\n");
 
 	ret = uart_register_driver(&grlib_apbuart_driver);
 
 	if (ret) {
-		printk(KERN_ERR "%s: uart_register_driver failed (%i)\n",
-		       __FILE__, ret);
+		pr_err("%s: uart_register_driver failed (%i)\n",
+		       __func__, ret);
 		return ret;
 	}
 
 	ret = platform_driver_register(&grlib_apbuart_of_driver);
 	if (ret) {
-		printk(KERN_ERR
-		       "%s: platform_driver_register failed (%i)\n",
-		       __FILE__, ret);
+		pr_err("%s: platform_driver_register failed (%i)\n",
+		       __func__, ret);
 		uart_unregister_driver(&grlib_apbuart_driver);
 		return ret;
 	}

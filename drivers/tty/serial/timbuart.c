@@ -40,6 +40,7 @@ static void timbuart_stop_rx(struct uart_port *port)
 {
 	/* spin lock held by upper layer, disable all RX interrupts */
 	u32 ier = ioread32(port->membase + TIMBUART_IER) & ~RXFLAGS;
+
 	iowrite32(ier, port->membase + TIMBUART_IER);
 }
 
@@ -47,6 +48,7 @@ static void timbuart_stop_tx(struct uart_port *port)
 {
 	/* spinlock held by upper layer, disable TX interrupt */
 	u32 ier = ioread32(port->membase + TIMBUART_IER) & ~TXBAE;
+
 	iowrite32(ier, port->membase + TIMBUART_IER);
 }
 
@@ -83,6 +85,7 @@ static void timbuart_rx_chars(struct uart_port *port)
 
 	while (ioread32(port->membase + TIMBUART_ISR) & RXDP) {
 		u8 ch = ioread8(port->membase + TIMBUART_RXFIFO);
+
 		port->icount.rx++;
 		tty_insert_flip_char(tport, ch, TTY_NORMAL);
 	}
@@ -199,6 +202,7 @@ static void timbuart_tasklet(unsigned long arg)
 static unsigned int timbuart_get_mctrl(struct uart_port *port)
 {
 	u8 cts = ioread8(port->membase + TIMBUART_CTRL);
+
 	dev_dbg(port->dev, "%s - cts %x\n", __func__, cts);
 
 	if (cts & TIMBUART_CTRL_CTS)
@@ -293,7 +297,8 @@ static void timbuart_set_termios(struct uart_port *port,
 	baud = baudrates[bindex];
 
 	/* The serial layer calls into this once with old = NULL when setting
-	   up initially */
+	 * up initially
+	 */
 	if (old)
 		tty_termios_copy_hw(termios, old);
 	tty_termios_encode_baud_rate(termios, baud, baud);
@@ -500,4 +505,3 @@ module_platform_driver(timbuart_platform_driver);
 MODULE_DESCRIPTION("Timberdale UART driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:timb-uart");
-

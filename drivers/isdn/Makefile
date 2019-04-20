@@ -6,5 +6,3 @@
 obj-$(CONFIG_ISDN_CAPI)			+= capi/
 obj-$(CONFIG_MISDN)			+= mISDN/
 obj-$(CONFIG_ISDN)			+= hardware/
-obj-$(CONFIG_HYSDN)			+= hysdn/
-obj-$(CONFIG_ISDN_DRV_GIGASET)		+= gigaset/

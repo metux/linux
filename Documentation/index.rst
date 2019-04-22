@@ -110,6 +110,9 @@ needed).
    bpf/index
    PCI/index
    misc-devices/index
+   mic/index
+   phy/samsung-usb2
+   scheduler/index
 
 Architecture-specific documentation
 -----------------------------------

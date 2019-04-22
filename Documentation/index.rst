@@ -118,7 +118,16 @@ implementation.
 
    x86/index
    sh/index
+   arm/index
+   arm64/index
+   ia64/index
+   m68k/index
+   riscv/index
+   s390/index
+   sh/index
+   sparc/index
    x86/index
+   xtensa/index
 
 Filesystem Documentation
 ------------------------

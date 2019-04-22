@@ -2699,6 +2699,10 @@ fence_driver_init:
 	if (r)
 		DRM_ERROR("registering pm debugfs failed (%d).\n", r);
 
+	r = amdgpu_ucode_sysfs_init(adev);
+	if (r)
+		DRM_ERROR("Creating firmware sysfs failed (%d).\n", r);
+
 	r = amdgpu_debugfs_gem_init(adev);
 	if (r)
 		DRM_ERROR("registering gem debugfs failed (%d).\n", r);
@@ -2811,6 +2815,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	amdgpu_device_doorbell_fini(adev);
 	amdgpu_debugfs_regs_cleanup(adev);
 	device_remove_file(adev->dev, &dev_attr_pcie_replay_count);
+	amdgpu_ucode_sysfs_fini(adev);
 }
 
 

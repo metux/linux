@@ -53,7 +53,7 @@ static struct {
 
 int riscv_hartid_to_cpuid(int hartid)
 {
-	int i = -1;
+	int i;
 
 	for (i = 0; i < NR_CPUS; i++)
 		if (cpuid_to_hartid_map(i) == hartid)

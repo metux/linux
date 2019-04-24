@@ -33,5 +33,6 @@ header-test-$(CONFIG_DRM_I915_WERROR) := \
 	intel_psr.h \
 	intel_sdvo.h \
 	intel_sprite.h \
+	intel_sseu.h \
 	intel_tv.h \
 	intel_workarounds_types.h

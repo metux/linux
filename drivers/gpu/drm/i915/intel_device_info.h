@@ -29,6 +29,7 @@
 
 #include "intel_engine_types.h"
 #include "intel_display.h"
+#include "intel_sseu.h"
 
 struct drm_printer;
 struct drm_i915_private;

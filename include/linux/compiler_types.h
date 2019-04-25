@@ -241,6 +241,10 @@ struct ftrace_likely_data {
 # define __norecordmcount
 #endif
 
+#ifndef __nocfi
+# define __nocfi
+#endif
+
 #ifndef asm_volatile_goto
 #define asm_volatile_goto(x...) asm goto(x)
 #endif
@@ -249,6 +253,10 @@ struct ftrace_likely_data {
 #define asm_inline asm __inline
 #else
 #define asm_inline asm
+#endif
+
+#ifndef __no_fgcse
+# define __no_fgcse
 #endif
 
 /* Are two types/vars the same type (ignoring qualifiers)? */

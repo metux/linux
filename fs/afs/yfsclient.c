@@ -519,7 +519,8 @@ int yfs_fs_fetch_file_status(struct afs_fs_cursor *fc, struct afs_volsync *volsy
 	call->cb_break = fc->cb_break;
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -711,7 +712,8 @@ int yfs_fs_fetch_data(struct afs_fs_cursor *fc, struct afs_read *req)
 	call->cb_break = fc->cb_break;
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -811,7 +813,8 @@ int yfs_fs_create_file(struct afs_fs_cursor *fc,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 static const struct afs_call_type yfs_RXFSMakeDir = {
@@ -874,7 +877,8 @@ int yfs_fs_make_dir(struct afs_fs_cursor *fc,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -964,7 +968,8 @@ int yfs_fs_remove_file2(struct afs_fs_cursor *fc, struct afs_vnode *vnode,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &dvnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1051,7 +1056,8 @@ int yfs_fs_remove(struct afs_fs_cursor *fc, struct afs_vnode *vnode,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &dvnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1136,7 +1142,8 @@ int yfs_fs_link(struct afs_fs_cursor *fc, struct afs_vnode *vnode,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1232,7 +1239,8 @@ int yfs_fs_symlink(struct afs_fs_cursor *fc,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &dvnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1330,7 +1338,8 @@ int yfs_fs_rename(struct afs_fs_cursor *fc,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &orig_dvnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1436,7 +1445,8 @@ int yfs_fs_store_data(struct afs_fs_cursor *fc, struct address_space *mapping,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1524,7 +1534,8 @@ static int yfs_fs_setattr_size(struct afs_fs_cursor *fc, struct iattr *attr)
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1567,7 +1578,8 @@ int yfs_fs_setattr(struct afs_fs_cursor *fc, struct iattr *attr)
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1755,7 +1767,8 @@ int yfs_fs_get_volume_status(struct afs_fs_cursor *fc,
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1849,7 +1862,8 @@ int yfs_fs_set_lock(struct afs_fs_cursor *fc, afs_lock_type_t type)
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1884,7 +1898,8 @@ int yfs_fs_extend_lock(struct afs_fs_cursor *fc)
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -1919,7 +1934,8 @@ int yfs_fs_release_lock(struct afs_fs_cursor *fc)
 
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &vnode->fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -2007,7 +2023,8 @@ int yfs_fs_fetch_status(struct afs_fs_cursor *fc,
 	call->cb_break = fc->cb_break;
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, fid);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }
 
 /*
@@ -2190,5 +2207,6 @@ int yfs_fs_inline_bulk_status(struct afs_fs_cursor *fc,
 	call->cb_break = fc->cb_break;
 	afs_use_fs_server(call, fc->cbi);
 	trace_afs_make_fs_call(call, &fids[0]);
-	return afs_make_call(&fc->ac, call, GFP_NOFS, false);
+	afs_make_call(&fc->ac, call, GFP_NOFS);
+	return afs_wait_for_call_to_complete(call, &fc->ac);
 }

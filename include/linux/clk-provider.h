@@ -327,6 +327,7 @@ struct clk_fixed_rate {
 	struct		clk_hw hw;
 	unsigned long	fixed_rate;
 	unsigned long	fixed_accuracy;
+	u8		flags;
 };
 
 #define to_clk_fixed_rate(_hw) container_of(_hw, struct clk_fixed_rate, hw)
@@ -368,9 +369,6 @@ void of_fixed_clk_setup(struct device_node *np);
  *	of this register, and mask of gate bits are in higher 16-bit of this
  *	register.  While setting the gate bits, higher 16-bit should also be
  *	updated to indicate changing gate bits.
- * CLK_GATE_BIG_ENDIAN - by default little endian register accesses are used for
- *	the gate register.  Setting this flag makes the register accesses big
- *	endian.
  */
 struct clk_gate {
 	struct clk_hw hw;
@@ -384,7 +382,6 @@ struct clk_gate {
 
 #define CLK_GATE_SET_TO_DISABLE		BIT(0)
 #define CLK_GATE_HIWORD_MASK		BIT(1)
-#define CLK_GATE_BIG_ENDIAN		BIT(2)
 
 extern const struct clk_ops clk_gate_ops;
 struct clk *clk_register_gate(struct device *dev, const char *name,
@@ -440,9 +437,6 @@ struct clk_div_table {
  * CLK_DIVIDER_MAX_AT_ZERO - For dividers which are like CLK_DIVIDER_ONE_BASED
  *	except when the value read from the register is zero, the divisor is
  *	2^width of the field.
- * CLK_DIVIDER_BIG_ENDIAN - By default little endian register accesses are used
- *	for the divider register.  Setting this flag makes the register accesses
- *	big endian.
  */
 struct clk_divider {
 	struct clk_hw	hw;
@@ -464,7 +458,6 @@ struct clk_divider {
 #define CLK_DIVIDER_ROUND_CLOSEST	BIT(4)
 #define CLK_DIVIDER_READ_ONLY		BIT(5)
 #define CLK_DIVIDER_MAX_AT_ZERO		BIT(6)
-#define CLK_DIVIDER_BIG_ENDIAN		BIT(7)
 
 extern const struct clk_ops clk_divider_ops;
 extern const struct clk_ops clk_divider_ro_ops;
@@ -526,13 +519,8 @@ void clk_hw_unregister_divider(struct clk_hw *hw);
  *	register, and mask of mux bits are in higher 16-bit of this register.
  *	While setting the mux bits, higher 16-bit should also be updated to
  *	indicate changing mux bits.
- * CLK_MUX_READ_ONLY - The mux registers can't be written, only read in the
- * 	.get_parent clk_op.
  * CLK_MUX_ROUND_CLOSEST - Use the parent rate that is closest to the desired
  *	frequency.
- * CLK_MUX_BIG_ENDIAN - By default little endian register accesses are used for
- *	the mux register.  Setting this flag makes the register accesses big
- *	endian.
  */
 struct clk_mux {
 	struct clk_hw	hw;
@@ -551,7 +539,6 @@ struct clk_mux {
 #define CLK_MUX_HIWORD_MASK		BIT(2)
 #define CLK_MUX_READ_ONLY		BIT(3) /* mux can't be changed */
 #define CLK_MUX_ROUND_CLOSEST		BIT(4)
-#define CLK_MUX_BIG_ENDIAN		BIT(5)
 
 extern const struct clk_ops clk_mux_ops;
 extern const struct clk_ops clk_mux_ro_ops;
@@ -635,9 +622,6 @@ void clk_hw_unregister_fixed_factor(struct clk_hw *hw);
  *	is the value read from the register. If CLK_FRAC_DIVIDER_ZERO_BASED
  *	is set then the numerator and denominator are both the value read
  *	plus one.
- * CLK_FRAC_DIVIDER_BIG_ENDIAN - By default little endian register accesses are
- *	used for the divider register.  Setting this flag makes the register
- *	accesses big endian.
  */
 struct clk_fractional_divider {
 	struct clk_hw	hw;
@@ -658,7 +642,6 @@ struct clk_fractional_divider {
 #define to_clk_fd(_hw) container_of(_hw, struct clk_fractional_divider, hw)
 
 #define CLK_FRAC_DIVIDER_ZERO_BASED		BIT(0)
-#define CLK_FRAC_DIVIDER_BIG_ENDIAN		BIT(1)
 
 extern const struct clk_ops clk_fractional_divider_ops;
 struct clk *clk_register_fractional_divider(struct device *dev,
@@ -691,9 +674,6 @@ void clk_hw_unregister_fractional_divider(struct clk_hw *hw);
  *	leaving the parent rate unmodified.
  * CLK_MULTIPLIER_ROUND_CLOSEST - Makes the best calculated divider to be
  *	rounded to the closest integer instead of the down one.
- * CLK_MULTIPLIER_BIG_ENDIAN - By default little endian register accesses are
- *	used for the multiplier register.  Setting this flag makes the register
- *	accesses big endian.
  */
 struct clk_multiplier {
 	struct clk_hw	hw;
@@ -708,7 +688,6 @@ struct clk_multiplier {
 
 #define CLK_MULTIPLIER_ZERO_BYPASS		BIT(0)
 #define CLK_MULTIPLIER_ROUND_CLOSEST	BIT(1)
-#define CLK_MULTIPLIER_BIG_ENDIAN		BIT(2)
 
 extern const struct clk_ops clk_multiplier_ops;
 
@@ -753,19 +732,16 @@ struct clk_hw *clk_hw_register_composite(struct device *dev, const char *name,
 		unsigned long flags);
 void clk_hw_unregister_composite(struct clk_hw *hw);
 
-/**
- * struct clk_gpio - gpio gated clock
+/***
+ * struct clk_gpio_gate - gpio gated clock
  *
  * @hw:		handle between common and hardware-specific interfaces
  * @gpiod:	gpio descriptor
  *
- * Clock with a gpio control for enabling and disabling the parent clock
- * or switching between two parents by asserting or deasserting the gpio.
- *
- * Implements .enable, .disable and .is_enabled or
- * .get_parent, .set_parent and .determine_rate depending on which clk_ops
- * is used.
+ * Clock with a gpio control for enabling and disabling the parent clock.
+ * Implements .enable, .disable and .is_enabled
  */
+
 struct clk_gpio {
 	struct clk_hw	hw;
 	struct gpio_desc *gpiod;
@@ -782,6 +758,16 @@ struct clk_hw *clk_hw_register_gpio_gate(struct device *dev, const char *name,
 		unsigned long flags);
 void clk_hw_unregister_gpio_gate(struct clk_hw *hw);
 
+/**
+ * struct clk_gpio_mux - gpio controlled clock multiplexer
+ *
+ * @hw:		see struct clk_gpio
+ * @gpiod:	gpio descriptor to select the parent of this clock multiplexer
+ *
+ * Clock with a gpio control for selecting the parent clock.
+ * Implements .get_parent, .set_parent and .determine_rate
+ */
+
 extern const struct clk_ops clk_gpio_mux_ops;
 struct clk *clk_register_gpio_mux(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents, struct gpio_desc *gpiod,
@@ -791,6 +777,17 @@ struct clk_hw *clk_hw_register_gpio_mux(struct device *dev, const char *name,
 		unsigned long flags);
 void clk_hw_unregister_gpio_mux(struct clk_hw *hw);
 
+/**
+ * clk_register - allocate a new clock, register it and return an opaque cookie
+ * @dev: device that is registering this clock
+ * @hw: link to hardware-specific clock data
+ *
+ * clk_register is the primary interface for populating the clock tree with new
+ * clock nodes.  It returns a pointer to the newly allocated struct clk which
+ * cannot be dereferenced by driver code but may be used in conjuction with the
+ * rest of the clock API.  In the event of an error clk_register will return an
+ * error code; drivers must test for an error code after calling clk_register.
+ */
 struct clk *clk_register(struct device *dev, struct clk_hw *hw);
 struct clk *devm_clk_register(struct device *dev, struct clk_hw *hw);
 
@@ -1016,6 +1013,37 @@ static inline int of_clk_detect_critical(struct device_node *np, int index,
 	return 0;
 }
 #endif /* CONFIG_OF */
+
+/*
+ * wrap access to peripherals in accessor routines
+ * for improved portability across platforms
+ */
+
+#if IS_ENABLED(CONFIG_PPC)
+
+static inline u32 clk_readl(u32 __iomem *reg)
+{
+	return ioread32be(reg);
+}
+
+static inline void clk_writel(u32 val, u32 __iomem *reg)
+{
+	iowrite32be(val, reg);
+}
+
+#else	/* platform dependent I/O accessors */
+
+static inline u32 clk_readl(u32 __iomem *reg)
+{
+	return readl(reg);
+}
+
+static inline void clk_writel(u32 val, u32 __iomem *reg)
+{
+	writel(val, reg);
+}
+
+#endif	/* platform dependent I/O accessors */
 
 void clk_gate_restore_context(struct clk_hw *hw);
 

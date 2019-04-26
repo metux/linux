@@ -1565,6 +1565,7 @@ struct drm_i915_private {
 
 	/* Sideband mailbox protection */
 	struct mutex sb_lock;
+	struct pm_qos_request sb_qos;
 
 	/** Cached value of IMR to avoid reads in updating the bitfield */
 	union {

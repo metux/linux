@@ -759,8 +759,7 @@ err:
 
 static int
 emit_rpcs_query(struct drm_i915_gem_object *obj,
-		struct i915_gem_context *ctx,
-		struct intel_engine_cs *engine,
+		struct intel_context *ce,
 		struct i915_request **rq_out)
 {
 	struct i915_request *rq;
@@ -768,9 +767,9 @@ emit_rpcs_query(struct drm_i915_gem_object *obj,
 	struct i915_vma *vma;
 	int err;
 
-	GEM_BUG_ON(!intel_engine_can_store_dword(engine));
+	GEM_BUG_ON(!intel_engine_can_store_dword(ce->engine));
 
-	vma = i915_vma_instance(obj, &ctx->ppgtt->vm, NULL);
+	vma = i915_vma_instance(obj, &ce->gem_context->ppgtt->vm, NULL);
 	if (IS_ERR(vma))
 		return PTR_ERR(vma);
 
@@ -788,13 +787,15 @@ emit_rpcs_query(struct drm_i915_gem_object *obj,
 		goto err_vma;
 	}
 
-	rq = i915_request_alloc(engine, ctx);
+	rq = i915_request_create(ce);
 	if (IS_ERR(rq)) {
 		err = PTR_ERR(rq);
 		goto err_batch;
 	}
 
-	err = engine->emit_bb_start(rq, batch->node.start, batch->node.size, 0);
+	err = rq->engine->emit_bb_start(rq,
+					batch->node.start, batch->node.size,
+					0);
 	if (err)
 		goto err_request;
 
@@ -838,8 +839,7 @@ static int
 __sseu_prepare(struct drm_i915_private *i915,
 	       const char *name,
 	       unsigned int flags,
-	       struct i915_gem_context *ctx,
-	       struct intel_engine_cs *engine,
+	       struct intel_context *ce,
 	       struct igt_spinner **spin)
 {
 	struct i915_request *rq;
@@ -857,7 +857,10 @@ __sseu_prepare(struct drm_i915_private *i915,
 	if (ret)
 		goto err_free;
 
-	rq = igt_spinner_create_request(*spin, ctx, engine, MI_NOOP);
+	rq = igt_spinner_create_request(*spin,
+					ce->gem_context,
+					ce->engine,
+					MI_NOOP);
 	if (IS_ERR(rq)) {
 		ret = PTR_ERR(rq);
 		goto err_fini;
@@ -884,8 +887,7 @@ err_free:
 
 static int
 __read_slice_count(struct drm_i915_private *i915,
-		   struct i915_gem_context *ctx,
-		   struct intel_engine_cs *engine,
+		   struct intel_context *ce,
 		   struct drm_i915_gem_object *obj,
 		   struct igt_spinner *spin,
 		   u32 *rpcs)
@@ -896,7 +898,7 @@ __read_slice_count(struct drm_i915_private *i915,
 	u32 *buf, val;
 	long ret;
 
-	ret = emit_rpcs_query(obj, ctx, engine, &rq);
+	ret = emit_rpcs_query(obj, ce, &rq);
 	if (ret)
 		return ret;
 
@@ -960,29 +962,28 @@ static int
 __sseu_finish(struct drm_i915_private *i915,
 	      const char *name,
 	      unsigned int flags,
-	      struct i915_gem_context *ctx,
-	      struct intel_engine_cs *engine,
+	      struct intel_context *ce,
 	      struct drm_i915_gem_object *obj,
 	      unsigned int expected,
 	      struct igt_spinner *spin)
 {
-	unsigned int slices = hweight32(engine->sseu.slice_mask);
+	unsigned int slices = hweight32(ce->engine->sseu.slice_mask);
 	u32 rpcs = 0;
 	int ret = 0;
 
 	if (flags & TEST_RESET) {
-		ret = i915_reset_engine(engine, "sseu");
+		ret = i915_reset_engine(ce->engine, "sseu");
 		if (ret)
 			goto out;
 	}
 
-	ret = __read_slice_count(i915, ctx, engine, obj,
+	ret = __read_slice_count(i915, ce, obj,
 				 flags & TEST_RESET ? NULL : spin, &rpcs);
 	ret = __check_rpcs(name, rpcs, ret, expected, "Context", "!");
 	if (ret)
 		goto out;
 
-	ret = __read_slice_count(i915, i915->kernel_context, engine, obj,
+	ret = __read_slice_count(i915, ce->engine->kernel_context, obj,
 				 NULL, &rpcs);
 	ret = __check_rpcs(name, rpcs, ret, slices, "Kernel context", "!");
 
@@ -997,7 +998,7 @@ out:
 		if (ret)
 			return ret;
 
-		ret = __read_slice_count(i915, ctx, engine, obj, NULL, &rpcs);
+		ret = __read_slice_count(i915, ce, obj, NULL, &rpcs);
 		ret = __check_rpcs(name, rpcs, ret, expected,
 				   "Context", " after idle!");
 	}
@@ -1009,23 +1010,22 @@ static int
 __sseu_test(struct drm_i915_private *i915,
 	    const char *name,
 	    unsigned int flags,
-	    struct i915_gem_context *ctx,
-	    struct intel_engine_cs *engine,
+	    struct intel_context *ce,
 	    struct drm_i915_gem_object *obj,
 	    struct intel_sseu sseu)
 {
 	struct igt_spinner *spin = NULL;
 	int ret;
 
-	ret = __sseu_prepare(i915, name, flags, ctx, engine, &spin);
+	ret = __sseu_prepare(i915, name, flags, ce, &spin);
 	if (ret)
 		return ret;
 
-	ret = __i915_gem_context_reconfigure_sseu(ctx, engine, sseu);
+	ret = __i915_gem_context_reconfigure_sseu(ce->gem_context, ce->engine, sseu);
 	if (ret)
 		goto out_spin;
 
-	ret = __sseu_finish(i915, name, flags, ctx, engine, obj,
+	ret = __sseu_finish(i915, name, flags, ce, obj,
 			    hweight32(sseu.slice_mask), spin);
 
 out_spin:
@@ -1046,6 +1046,7 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 	struct intel_sseu default_sseu = engine->sseu;
 	struct drm_i915_gem_object *obj;
 	struct i915_gem_context *ctx;
+	struct intel_context *ce;
 	struct intel_sseu pg_sseu;
 	intel_wakeref_t wakeref;
 	struct drm_file *file;
@@ -1097,23 +1098,33 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 
 	wakeref = intel_runtime_pm_get(i915);
 
+	ce = intel_context_instance(ctx, i915->engine[RCS0]);
+	if (IS_ERR(ce)) {
+		ret = PTR_ERR(ce);
+		goto out_rpm;
+	}
+
+	ret = intel_context_pin(ce);
+	if (ret)
+		goto out_context;
+
 	/* First set the default mask. */
-	ret = __sseu_test(i915, name, flags, ctx, engine, obj, default_sseu);
+	ret = __sseu_test(i915, name, flags, ce, obj, default_sseu);
 	if (ret)
 		goto out_fail;
 
 	/* Then set a power-gated configuration. */
-	ret = __sseu_test(i915, name, flags, ctx, engine, obj, pg_sseu);
+	ret = __sseu_test(i915, name, flags, ce, obj, pg_sseu);
 	if (ret)
 		goto out_fail;
 
 	/* Back to defaults. */
-	ret = __sseu_test(i915, name, flags, ctx, engine, obj, default_sseu);
+	ret = __sseu_test(i915, name, flags, ce, obj, default_sseu);
 	if (ret)
 		goto out_fail;
 
 	/* One last power-gated configuration for the road. */
-	ret = __sseu_test(i915, name, flags, ctx, engine, obj, pg_sseu);
+	ret = __sseu_test(i915, name, flags, ce, obj, pg_sseu);
 	if (ret)
 		goto out_fail;
 
@@ -1121,9 +1132,12 @@ out_fail:
 	if (igt_flush_test(i915, I915_WAIT_LOCKED))
 		ret = -EIO;
 
-	i915_gem_object_put(obj);
-
+	intel_context_unpin(ce);
+out_context:
+	intel_context_put(ce);
+out_rpm:
 	intel_runtime_pm_put(i915, wakeref);
+	i915_gem_object_put(obj);
 
 out_unlock:
 	mutex_unlock(&i915->drm.struct_mutex);

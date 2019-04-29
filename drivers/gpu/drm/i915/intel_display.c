@@ -73,6 +73,7 @@
 #include "intel_sideband.h"
 #include "intel_sprite.h"
 #include "intel_tv.h"
+#include "intel_vdsc.h"
 
 #include "intel_drv.h"
 #include "intel_dsi.h"

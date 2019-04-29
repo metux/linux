@@ -2834,9 +2834,6 @@ unsigned int serial8250_port_size(struct uart_8250_port *pt)
 	if (pt->port.mapsize)
 		return pt->port.mapsize;
 
-	if (is_omap1_8250(pt))
-		return 0x16 << pt->port.regshift;
-
 	return 8 << pt->port.regshift;
 }
 

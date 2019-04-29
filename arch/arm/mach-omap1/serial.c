@@ -67,6 +67,7 @@ static void __init omap_serial_reset(struct plat_serial8250_port *p)
 static struct plat_serial8250_port serial_platform_data[] = {
 	{
 		.mapbase	= OMAP1_UART1_BASE,
+		.mapsize	= 0x16 << 2,
 		.irq		= INT_UART1,
 		.flags		= UPF_BOOT_AUTOCONF,
 		.iotype		= UPIO_MEM,
@@ -75,6 +76,7 @@ static struct plat_serial8250_port serial_platform_data[] = {
 	},
 	{
 		.mapbase	= OMAP1_UART2_BASE,
+		.mapsize	= 0x16 << 2,
 		.irq		= INT_UART2,
 		.flags		= UPF_BOOT_AUTOCONF,
 		.iotype		= UPIO_MEM,
@@ -83,6 +85,7 @@ static struct plat_serial8250_port serial_platform_data[] = {
 	},
 	{
 		.mapbase	= OMAP1_UART3_BASE,
+		.mapsize	= 0x16 << 2,
 		.irq		= INT_UART3,
 		.flags		= UPF_BOOT_AUTOCONF,
 		.iotype		= UPIO_MEM,

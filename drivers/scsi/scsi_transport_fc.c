@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0+
 /*
  *  FiberChannel transport specific attributes exported to sysfs.
  *
@@ -7,6 +7,7 @@
  *    Rewrite for host, target, device, and remote port attributes,
  *    statistics, and service functions...
  *    Add vports, etc
+ *
  */
 #include <linux/module.h>
 #include <linux/init.h>

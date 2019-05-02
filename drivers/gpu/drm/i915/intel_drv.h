@@ -1690,6 +1690,7 @@ int skl_format_to_fourcc(int format, bool rgb_order, bool alpha);
 unsigned int i9xx_plane_max_stride(struct intel_plane *plane,
 				   u32 pixel_format, u64 modifier,
 				   unsigned int rotation);
+int bdw_get_pipemisc_bpp(struct intel_crtc *crtc);
 
 /* intel_dsi_dcs_backlight.c */
 int intel_dsi_dcs_init_backlight_funcs(struct intel_connector *intel_connector);

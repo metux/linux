@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Ingenic JZ4780 DMA controller
  *
@@ -662,11 +662,10 @@ static enum dma_status jz4780_dma_tx_status(struct dma_chan *chan,
 	return status;
 }
 
-static bool jz4780_dma_chan_irq(struct jz4780_dma_dev *jzdma,
-				struct jz4780_dma_chan *jzchan)
+static void jz4780_dma_chan_irq(struct jz4780_dma_dev *jzdma,
+	struct jz4780_dma_chan *jzchan)
 {
 	uint32_t dcs;
-	bool ack = true;
 
 	spin_lock(&jzchan->vchan.lock);
 
@@ -689,20 +688,12 @@ static bool jz4780_dma_chan_irq(struct jz4780_dma_dev *jzdma,
 		if ((dcs & (JZ_DMA_DCS_AR | JZ_DMA_DCS_HLT)) == 0) {
 			if (jzchan->desc->type == DMA_CYCLIC) {
 				vchan_cyclic_callback(&jzchan->desc->vdesc);
-
-				jz4780_dma_begin(jzchan);
-			} else if (dcs & JZ_DMA_DCS_TT) {
+			} else {
 				vchan_cookie_complete(&jzchan->desc->vdesc);
 				jzchan->desc = NULL;
-
-				jz4780_dma_begin(jzchan);
-			} else {
-				/* False positive - continue the transfer */
-				ack = false;
-				jz4780_dma_chn_writel(jzdma, jzchan->id,
-						      JZ_DMA_REG_DCS,
-						      JZ_DMA_DCS_CTE);
 			}
+
+			jz4780_dma_begin(jzchan);
 		}
 	} else {
 		dev_err(&jzchan->vchan.chan.dev->device,
@@ -710,23 +701,21 @@ static bool jz4780_dma_chan_irq(struct jz4780_dma_dev *jzdma,
 	}
 
 	spin_unlock(&jzchan->vchan.lock);
-
-	return ack;
 }
 
 static irqreturn_t jz4780_dma_irq_handler(int irq, void *data)
 {
 	struct jz4780_dma_dev *jzdma = data;
-	unsigned int nb_channels = jzdma->soc_data->nb_channels;
-	unsigned long pending;
-	uint32_t dmac;
+	uint32_t pending, dmac;
 	int i;
 
 	pending = jz4780_dma_ctrl_readl(jzdma, JZ_DMA_REG_DIRQP);
 
-	for_each_set_bit(i, &pending, nb_channels) {
-		if (jz4780_dma_chan_irq(jzdma, &jzdma->chan[i]))
-			pending &= ~BIT(i);
+	for (i = 0; i < jzdma->soc_data->nb_channels; i++) {
+		if (!(pending & (1<<i)))
+			continue;
+
+		jz4780_dma_chan_irq(jzdma, &jzdma->chan[i]);
 	}
 
 	/* Clear halt and address error status of all channels. */
@@ -735,7 +724,7 @@ static irqreturn_t jz4780_dma_irq_handler(int irq, void *data)
 	jz4780_dma_ctrl_writel(jzdma, JZ_DMA_REG_DMAC, dmac);
 
 	/* Clear interrupt pending status. */
-	jz4780_dma_ctrl_writel(jzdma, JZ_DMA_REG_DIRQP, pending);
+	jz4780_dma_ctrl_writel(jzdma, JZ_DMA_REG_DIRQP, 0);
 
 	return IRQ_HANDLED;
 }

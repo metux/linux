@@ -2631,7 +2631,6 @@ static int goya_cb_mmap(struct hl_device *hdev, struct vm_area_struct *vma,
 void goya_ring_doorbell(struct hl_device *hdev, u32 hw_queue_id, u32 pi)
 {
 	u32 db_reg_offset, db_value;
-	bool invalid_queue = false;
 
 	switch (hw_queue_id) {
 	case GOYA_QUEUE_ID_DMA_0:
@@ -2655,10 +2654,7 @@ void goya_ring_doorbell(struct hl_device *hdev, u32 hw_queue_id, u32 pi)
 		break;
 
 	case GOYA_QUEUE_ID_CPU_PQ:
-		if (hdev->cpu_queues_enable)
-			db_reg_offset = mmCPU_IF_PF_PQ_PI;
-		else
-			invalid_queue = true;
+		db_reg_offset = mmCPU_IF_PF_PQ_PI;
 		break;
 
 	case GOYA_QUEUE_ID_MME:
@@ -2698,12 +2694,8 @@ void goya_ring_doorbell(struct hl_device *hdev, u32 hw_queue_id, u32 pi)
 		break;
 
 	default:
-		invalid_queue = true;
-	}
-
-	if (invalid_queue) {
 		/* Should never get here */
-		dev_err(hdev->dev, "h/w queue %d is invalid. Can't set pi\n",
+		dev_err(hdev->dev, "H/W queue %d is invalid. Can't set pi\n",
 			hw_queue_id);
 		return;
 	}
@@ -2992,11 +2984,9 @@ int goya_test_queues(struct hl_device *hdev)
 			ret_val = -EINVAL;
 	}
 
-	if (hdev->cpu_queues_enable) {
-		rc = goya_test_cpu_queue(hdev);
-		if (rc)
-			ret_val = -EINVAL;
-	}
+	rc = goya_test_cpu_queue(hdev);
+	if (rc)
+		ret_val = -EINVAL;
 
 	return ret_val;
 }

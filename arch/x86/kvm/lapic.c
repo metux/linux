@@ -2337,6 +2337,7 @@ int kvm_create_lapic(struct kvm_vcpu *vcpu, int timer_advance_ns)
 	return 0;
 nomem_free_apic:
 	kfree(apic);
+	vcpu->arch.apic = NULL;
 nomem:
 	return -ENOMEM;
 }

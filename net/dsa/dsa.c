@@ -349,6 +349,8 @@ static int __init dsa_init_module(void)
 
 	return 0;
 
+legacy_register_fail:
+	dsa_slave_unregister_notifier();
 register_notifier_fail:
 	destroy_workqueue(dsa_owq);
 

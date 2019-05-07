@@ -8133,6 +8133,11 @@ static void hpsa_undo_allocations_after_kdump_soft_reset(struct ctlr_info *h)
 		destroy_workqueue(h->rescan_ctlr_wq);
 		h->rescan_ctlr_wq = NULL;
 	}
+	if (h->monitor_ctlr_wq) {
+		destroy_workqueue(h->monitor_ctlr_wq);
+		h->monitor_ctlr_wq = NULL;
+	}
+
 	kfree(h);				/* init_one 1 */
 }
 
@@ -8468,8 +8473,8 @@ static void hpsa_event_monitor_worker(struct work_struct *work)
 
 	spin_lock_irqsave(&h->lock, flags);
 	if (!h->remove_in_progress)
-		schedule_delayed_work(&h->event_monitor_work,
-					HPSA_EVENT_MONITOR_INTERVAL);
+		queue_delayed_work(h->monitor_ctlr_wq, &h->event_monitor_work,
+				HPSA_EVENT_MONITOR_INTERVAL);
 	spin_unlock_irqrestore(&h->lock, flags);
 }
 
@@ -8514,7 +8519,7 @@ static void hpsa_monitor_ctlr_worker(struct work_struct *work)
 
 	spin_lock_irqsave(&h->lock, flags);
 	if (!h->remove_in_progress)
-		schedule_delayed_work(&h->monitor_ctlr_work,
+		queue_delayed_work(h->monitor_ctlr_wq, &h->monitor_ctlr_work,
 				h->heartbeat_sample_interval);
 	spin_unlock_irqrestore(&h->lock, flags);
 }
@@ -8682,6 +8687,12 @@ reinit_after_soft_reset:
 		goto clean7;	/* aer/h */
 	}
 
+	h->monitor_ctlr_wq = hpsa_create_controller_wq(h, "monitor");
+	if (!h->monitor_ctlr_wq) {
+		rc = -ENOMEM;
+		goto clean7;
+	}
+
 	/*
 	 * At this point, the controller is ready to take commands.
 	 * Now, if reset_devices and the hard reset didn't work, try
@@ -8810,6 +8821,10 @@ clean1:	/* wq/aer/h */
 	if (h->rescan_ctlr_wq) {
 		destroy_workqueue(h->rescan_ctlr_wq);
 		h->rescan_ctlr_wq = NULL;
+	}
+	if (h->monitor_ctlr_wq) {
+		destroy_workqueue(h->monitor_ctlr_wq);
+		h->monitor_ctlr_wq = NULL;
 	}
 	kfree(h);
 	return rc;
@@ -8958,6 +8973,7 @@ static void hpsa_remove_one(struct pci_dev *pdev)
 	cancel_delayed_work_sync(&h->event_monitor_work);
 	destroy_workqueue(h->rescan_ctlr_wq);
 	destroy_workqueue(h->resubmit_wq);
+	destroy_workqueue(h->monitor_ctlr_wq);
 
 	hpsa_delete_sas_host(h);
 

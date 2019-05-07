@@ -163,6 +163,12 @@ CONSTANT_CHARGE_VOLTAGE_MAX
   maximum charge voltage supported by the power supply object.
 
 INPUT_CURRENT_LIMIT
+INPUT_VOLTAGE_LIMIT
+  input voltage limit programmed by charger. Indicates
+  the voltage limit from a charging source.
+INPUT_POWER_LIMIT
+  input power limit programmed by charger. Indicates
+  the power limit from a charging source.
   input current limit programmed by charger. Indicates
   the current drawn from a charging source.
 

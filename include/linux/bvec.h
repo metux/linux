@@ -142,8 +142,7 @@ static inline void bvec_advance(const struct bio_vec *bvec,
 		bv->bv_page = nth_page(bv->bv_page, 1);
 		bv->bv_offset = 0;
 	} else {
-		bv->bv_page = bvec_nth_page(bvec->bv_page, bvec->bv_offset /
-					    PAGE_SIZE);
+		bv->bv_page = bvec->bv_page + (bvec->bv_offset >> PAGE_SHIFT);
 		bv->bv_offset = bvec->bv_offset & ~PAGE_MASK;
 	}
 	bv->bv_len = min_t(unsigned int, PAGE_SIZE - bv->bv_offset,

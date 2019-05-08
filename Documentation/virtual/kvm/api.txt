@@ -3958,6 +3958,12 @@ Type: vm ioctl
 Parameters: struct kvm_dirty_log (in)
 Returns: 0 on success, -1 on error
 
+Capability: KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2
+Architectures: x86
+Type: vm ioctl
+Parameters: struct kvm_dirty_log (in)
+Returns: 0 on success, -1 on error
+
 /* for KVM_CLEAR_DIRTY_LOG */
 struct kvm_clear_dirty_log {
 	__u32 slot;

@@ -1777,6 +1777,24 @@ int intel_overlay_attrs_ioctl(struct drm_device *dev, void *data,
 void intel_overlay_reset(struct drm_i915_private *dev_priv);
 
 /* intel_runtime_pm.c */
+#define BITS_PER_WAKEREF	\
+	BITS_PER_TYPE(struct_member(struct i915_runtime_pm, wakeref_count))
+#define INTEL_RPM_WAKELOCK_SHIFT	(BITS_PER_WAKEREF / 2)
+#define INTEL_RPM_WAKELOCK_BIAS		(1 << INTEL_RPM_WAKELOCK_SHIFT)
+#define INTEL_RPM_RAW_WAKEREF_MASK	(INTEL_RPM_WAKELOCK_BIAS - 1)
+
+static inline int
+intel_rpm_raw_wakeref_count(int wakeref_count)
+{
+	return wakeref_count & INTEL_RPM_RAW_WAKEREF_MASK;
+}
+
+static inline int
+intel_rpm_wakelock_count(int wakeref_count)
+{
+	return wakeref_count >> INTEL_RPM_WAKELOCK_SHIFT;
+}
+
 static inline void
 assert_rpm_device_not_suspended(struct i915_runtime_pm *rpm)
 {
@@ -1785,11 +1803,33 @@ assert_rpm_device_not_suspended(struct i915_runtime_pm *rpm)
 }
 
 static inline void
-__assert_rpm_wakelock_held(struct i915_runtime_pm *rpm)
+____assert_rpm_raw_wakeref_held(struct i915_runtime_pm *rpm, int wakeref_count)
 {
 	assert_rpm_device_not_suspended(rpm);
-	WARN_ONCE(!atomic_read(&rpm->wakeref_count),
-		  "RPM wakelock ref not held during HW access");
+	WARN_ONCE(!intel_rpm_raw_wakeref_count(wakeref_count),
+		  "RPM raw-wakeref not held\n");
+}
+
+static inline void
+____assert_rpm_wakelock_held(struct i915_runtime_pm *rpm, int wakeref_count)
+{
+	____assert_rpm_raw_wakeref_held(rpm, wakeref_count);
+	WARN_ONCE(!intel_rpm_wakelock_count(wakeref_count),
+		  "RPM wakelock ref not held during HW access\n");
+}
+
+static inline void
+assert_rpm_raw_wakeref_held(struct drm_i915_private *i915)
+{
+	struct i915_runtime_pm *rpm = &i915->runtime_pm;
+
+	____assert_rpm_raw_wakeref_held(rpm, atomic_read(&rpm->wakeref_count));
+}
+
+static inline void
+__assert_rpm_wakelock_held(struct i915_runtime_pm *rpm)
+{
+	____assert_rpm_wakelock_held(rpm, atomic_read(&rpm->wakeref_count));
 }
 
 static inline void
@@ -1819,7 +1859,8 @@ assert_rpm_wakelock_held(struct drm_i915_private *i915)
 static inline void
 disable_rpm_wakeref_asserts(struct drm_i915_private *i915)
 {
-	atomic_inc(&i915->runtime_pm.wakeref_count);
+	atomic_add(INTEL_RPM_WAKELOCK_BIAS + 1,
+		   &i915->runtime_pm.wakeref_count);
 }
 
 /**
@@ -1836,7 +1877,8 @@ disable_rpm_wakeref_asserts(struct drm_i915_private *i915)
 static inline void
 enable_rpm_wakeref_asserts(struct drm_i915_private *i915)
 {
-	atomic_dec(&i915->runtime_pm.wakeref_count);
+	atomic_sub(INTEL_RPM_WAKELOCK_BIAS + 1,
+		   &i915->runtime_pm.wakeref_count);
 }
 
 intel_wakeref_t intel_runtime_pm_get(struct drm_i915_private *i915);

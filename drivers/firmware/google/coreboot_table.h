@@ -13,7 +13,6 @@
 #define __COREBOOT_TABLE_H
 
 #include <linux/device.h>
-#include <linux/io.h>
 
 /* Coreboot table header structure */
 struct coreboot_table_header {

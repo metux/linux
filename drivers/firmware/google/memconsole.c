@@ -7,7 +7,6 @@
  * Copyright 2017 Google Inc.
  */
 
-#include <linux/init.h>
 #include <linux/sysfs.h>
 #include <linux/kobject.h>
 #include <linux/module.h>

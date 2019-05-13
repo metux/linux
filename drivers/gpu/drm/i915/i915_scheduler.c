@@ -186,7 +186,7 @@ static void kick_submission(struct intel_engine_cs *engine, int prio)
 	tasklet_hi_schedule(&engine->execlists.tasklet);
 }
 
-static void __i915_schedule(struct i915_sched_node *node,
+static void __i915_schedule(struct i915_request *rq,
 			    const struct i915_sched_attr *attr)
 {
 	struct intel_engine_cs *engine;
@@ -200,13 +200,13 @@ static void __i915_schedule(struct i915_sched_node *node,
 	lockdep_assert_held(&schedule_lock);
 	GEM_BUG_ON(prio == I915_PRIORITY_INVALID);
 
-	if (node_signaled(node))
+	if (i915_request_completed(rq))
 		return;
 
-	if (prio <= READ_ONCE(node->attr.priority))
+	if (prio <= READ_ONCE(rq->sched.attr.priority))
 		return;
 
-	stack.signaler = node;
+	stack.signaler = &rq->sched;
 	list_add(&stack.dfs_link, &dfs);
 
 	/*
@@ -257,9 +257,9 @@ static void __i915_schedule(struct i915_sched_node *node,
 	 * execlists_submit_request()), we can set our own priority and skip
 	 * acquiring the engine locks.
 	 */
-	if (node->attr.priority == I915_PRIORITY_INVALID) {
-		GEM_BUG_ON(!list_empty(&node->link));
-		node->attr = *attr;
+	if (rq->sched.attr.priority == I915_PRIORITY_INVALID) {
+		GEM_BUG_ON(!list_empty(&rq->sched.link));
+		rq->sched.attr = *attr;
 
 		if (stack.dfs_link.next == stack.dfs_link.prev)
 			return;
@@ -268,14 +268,15 @@ static void __i915_schedule(struct i915_sched_node *node,
 	}
 
 	memset(&cache, 0, sizeof(cache));
-	engine = node_to_request(node)->engine;
+	engine = rq->engine;
 	spin_lock(&engine->timeline.lock);
 
 	/* Fifo and depth-first replacement ensure our deps execute before us */
 	list_for_each_entry_safe_reverse(dep, p, &dfs, dfs_link) {
+		struct i915_sched_node *node = dep->signaler;
+
 		INIT_LIST_HEAD(&dep->dfs_link);
 
-		node = dep->signaler;
 		engine = sched_lock_engine(node, engine, &cache);
 		lockdep_assert_held(&engine->timeline.lock);
 
@@ -318,20 +319,13 @@ static void __i915_schedule(struct i915_sched_node *node,
 void i915_schedule(struct i915_request *rq, const struct i915_sched_attr *attr)
 {
 	spin_lock_irq(&schedule_lock);
-	__i915_schedule(&rq->sched, attr);
+	__i915_schedule(rq, attr);
 	spin_unlock_irq(&schedule_lock);
-}
-
-static void __bump_priority(struct i915_sched_node *node, unsigned int bump)
-{
-	struct i915_sched_attr attr = node->attr;
-
-	attr.priority |= bump;
-	__i915_schedule(node, &attr);
 }
 
 void i915_schedule_bump_priority(struct i915_request *rq, unsigned int bump)
 {
+	struct i915_sched_attr attr;
 	unsigned long flags;
 
 	GEM_BUG_ON(bump & ~I915_PRIORITY_MASK);
@@ -340,7 +334,11 @@ void i915_schedule_bump_priority(struct i915_request *rq, unsigned int bump)
 		return;
 
 	spin_lock_irqsave(&schedule_lock, flags);
-	__bump_priority(&rq->sched, bump);
+
+	attr = rq->sched.attr;
+	attr.priority |= bump;
+	__i915_schedule(rq, &attr);
+
 	spin_unlock_irqrestore(&schedule_lock, flags);
 }
 
@@ -387,16 +385,6 @@ bool __i915_sched_node_add_dependency(struct i915_sched_node *node,
 		    !node_started(signal))
 			node->flags |= I915_SCHED_HAS_SEMAPHORE_CHAIN;
 
-		/*
-		 * As we do not allow WAIT to preempt inflight requests,
-		 * once we have executed a request, along with triggering
-		 * any execution callbacks, we must preserve its ordering
-		 * within the non-preemptible FIFO.
-		 */
-		BUILD_BUG_ON(__NO_PREEMPTION & ~I915_PRIORITY_MASK);
-		if (flags & I915_DEPENDENCY_EXTERNAL)
-			__bump_priority(signal, __NO_PREEMPTION);
-
 		ret = true;
 	}
 
@@ -415,7 +403,6 @@ int i915_sched_node_add_dependency(struct i915_sched_node *node,
 		return -ENOMEM;
 
 	if (!__i915_sched_node_add_dependency(node, signal, dep,
-					      I915_DEPENDENCY_EXTERNAL |
 					      I915_DEPENDENCY_ALLOC))
 		i915_dependency_free(dep);
 

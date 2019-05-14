@@ -90,7 +90,6 @@ needed).
 
    driver-api/index
    core-api/index
-   infiniband/index
    media/index
    networking/index
    input/index
@@ -102,7 +101,7 @@ needed).
    filesystems/index
    vm/index
    bpf/index
-   usb/index
+   PCI/index
    misc-devices/index
 
 Architecture-specific documentation
@@ -114,6 +113,7 @@ implementation.
 .. toctree::
    :maxdepth: 2
 
+   x86/index
    sh/index
    x86/index
 

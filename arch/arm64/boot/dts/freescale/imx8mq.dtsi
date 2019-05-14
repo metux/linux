@@ -460,7 +460,6 @@
 					clocks = <&clk IMX8MQ_CLK_SNVS_ROOT>;
 					clock-names = "snvs-rtc";
 				};
-
 			};
 
 			clk: clock-controller@30380000 {
@@ -947,7 +946,6 @@
 			#phy-cells = <0>;
 			status = "disabled";
 		};
-
 
 		pcie0: pcie@33800000 {
 			compatible = "fsl,imx8mq-pcie";

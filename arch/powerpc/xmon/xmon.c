@@ -3094,7 +3094,7 @@ static void show_pte(unsigned long addr)
 
 	printf("pgd  @ 0x%px\n", pgdir);
 
-	if (pgd_huge(*pgdp)) {
+	if (pgd_is_leaf(*pgdp)) {
 		format_pte(pgdp, pgd_val(*pgdp));
 		return;
 	}
@@ -3107,7 +3107,7 @@ static void show_pte(unsigned long addr)
 		return;
 	}
 
-	if (pud_huge(*pudp)) {
+	if (pud_is_leaf(*pudp)) {
 		format_pte(pudp, pud_val(*pudp));
 		return;
 	}
@@ -3121,7 +3121,7 @@ static void show_pte(unsigned long addr)
 		return;
 	}
 
-	if (pmd_huge(*pmdp)) {
+	if (pmd_is_leaf(*pmdp)) {
 		format_pte(pmdp, pmd_val(*pmdp));
 		return;
 	}

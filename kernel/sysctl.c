@@ -3187,9 +3187,7 @@ int proc_do_large_bitmap(struct ctl_table *table, int write,
 		if (IS_ERR(kbuf))
 			return PTR_ERR(kbuf);
 
-		tmp_bitmap = kcalloc(BITS_TO_LONGS(bitmap_len),
-				     sizeof(unsigned long),
-				     GFP_KERNEL);
+		tmp_bitmap = bitmap_zalloc(bitmap_len, GFP_KERNEL);
 		if (!tmp_bitmap) {
 			kfree(kbuf);
 			return -ENOMEM;
@@ -3280,7 +3278,7 @@ int proc_do_large_bitmap(struct ctl_table *table, int write,
 		*ppos += *lenp;
 	}
 
-	kfree(tmp_bitmap);
+	bitmap_free(tmp_bitmap);
 	return err;
 }
 

@@ -1326,9 +1326,9 @@ force_sig_info_to_task(struct kernel_siginfo *info, struct task_struct *t)
 	return ret;
 }
 
-int force_sig_info(int sig, struct kernel_siginfo *info, struct task_struct *t)
+int force_sig_info(struct kernel_siginfo *info)
 {
-	return force_sig_info_to_task(info, t);
+	return force_sig_info_to_task(info, current);
 }
 
 /*
@@ -1620,7 +1620,7 @@ void force_sig(int sig)
 	info.si_code = SI_KERNEL;
 	info.si_pid = 0;
 	info.si_uid = 0;
-	force_sig_info(info.si_signo, &info, current);
+	force_sig_info(&info);
 }
 EXPORT_SYMBOL(force_sig);
 
@@ -1709,7 +1709,7 @@ int force_sig_mceerr(int code, void __user *addr, short lsb)
 	info.si_code = code;
 	info.si_addr = addr;
 	info.si_addr_lsb = lsb;
-	return force_sig_info(info.si_signo, &info, current);
+	return force_sig_info(&info);
 }
 
 int send_sig_mceerr(int code, void __user *addr, short lsb, struct task_struct *t)
@@ -1738,7 +1738,7 @@ int force_sig_bnderr(void __user *addr, void __user *lower, void __user *upper)
 	info.si_addr  = addr;
 	info.si_lower = lower;
 	info.si_upper = upper;
-	return force_sig_info(info.si_signo, &info, current);
+	return force_sig_info(&info);
 }
 
 #ifdef SEGV_PKUERR
@@ -1752,7 +1752,7 @@ int force_sig_pkuerr(void __user *addr, u32 pkey)
 	info.si_code  = SEGV_PKUERR;
 	info.si_addr  = addr;
 	info.si_pkey  = pkey;
-	return force_sig_info(info.si_signo, &info, current);
+	return force_sig_info(&info);
 }
 #endif
 
@@ -1768,7 +1768,7 @@ int force_sig_ptrace_errno_trap(int errno, void __user *addr)
 	info.si_errno = errno;
 	info.si_code  = TRAP_HWBKPT;
 	info.si_addr  = addr;
-	return force_sig_info(info.si_signo, &info, current);
+	return force_sig_info(&info);
 }
 
 int kill_pgrp(struct pid *pid, int sig, int priv)

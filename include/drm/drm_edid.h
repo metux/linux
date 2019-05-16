@@ -25,6 +25,7 @@
 
 #include <linux/types.h>
 #include <linux/hdmi.h>
+#include <drm/drm_mode.h>
 
 struct drm_device;
 struct i2c_adapter;
@@ -370,6 +371,10 @@ drm_hdmi_avi_infoframe_quant_range(struct hdmi_avi_infoframe *frame,
 				   const struct drm_display_mode *mode,
 				   enum hdmi_quantization_range rgb_quant_range,
 				   bool rgb_quant_range_selectable);
+
+int
+drm_hdmi_infoframe_set_hdr_metadata(struct hdmi_drm_infoframe *frame,
+				    const struct drm_connector_state *conn_state);
 
 /**
  * drm_eld_mnl - Get ELD monitor name length in bytes.

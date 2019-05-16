@@ -70,6 +70,7 @@
 #define AXI_DMAC_IRQ_EOT		BIT(1)
 
 #define AXI_DMAC_FLAG_CYCLIC		BIT(0)
+#define AXI_DMAC_FLAG_LAST		BIT(1)
 
 /* The maximum ID allocated by the hardware is 31 */
 #define AXI_DMAC_SG_UNUSED 32U
@@ -215,6 +216,7 @@ static void axi_dmac_start_transfer(struct axi_dmac_chan *chan)
 			desc->num_submitted = 0; /* Start again */
 		else
 			chan->next_desc = NULL;
+		flags |= AXI_DMAC_FLAG_LAST;
 	} else {
 		chan->next_desc = desc;
 	}

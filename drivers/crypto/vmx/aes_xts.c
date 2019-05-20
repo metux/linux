@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0
 /**
  * AES XTS routines supporting VMX In-core instructions on Power 8
  *

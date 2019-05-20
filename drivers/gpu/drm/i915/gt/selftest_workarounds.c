@@ -21,12 +21,13 @@ static const struct wo_register {
 	{ INTEL_GEMINILAKE, 0x731c }
 };
 
-#define REF_NAME_MAX (INTEL_ENGINE_CS_MAX_NAME + 4)
+#define REF_NAME_MAX (INTEL_ENGINE_CS_MAX_NAME + 8)
 struct wa_lists {
 	struct i915_wa_list gt_wa_list;
 	struct {
 		char name[REF_NAME_MAX];
 		struct i915_wa_list wa_list;
+		struct i915_wa_list ctx_wa_list;
 	} engine[I915_NUM_ENGINES];
 };
 
@@ -51,6 +52,12 @@ reference_lists_init(struct drm_i915_private *i915, struct wa_lists *lists)
 		wa_init_start(wal, name);
 		engine_init_workarounds(engine, wal);
 		wa_init_finish(wal);
+
+		snprintf(name, REF_NAME_MAX, "%s_CTX_REF", engine->name);
+
+		__intel_engine_init_ctx_wa(engine,
+					   &lists->engine[id].ctx_wa_list,
+					   name);
 	}
 }
 
@@ -1008,34 +1015,48 @@ err:
 	return err;
 }
 
-static bool verify_gt_engine_wa(struct drm_i915_private *i915,
-				struct wa_lists *lists, const char *str)
+static bool
+verify_wa_lists(struct i915_gem_context *ctx, struct wa_lists *lists,
+		const char *str)
 {
-	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
+	struct drm_i915_private *i915 = ctx->i915;
+	struct i915_gem_engines_iter it;
+	struct intel_context *ce;
 	bool ok = true;
 
 	ok &= wa_list_verify(&i915->uncore, &lists->gt_wa_list, str);
 
-	for_each_engine(engine, i915, id) {
-		ok &= engine_wa_list_verify(engine,
+	for_each_gem_engine(ce, i915_gem_context_lock_engines(ctx), it) {
+		enum intel_engine_id id = ce->engine->id;
+
+		ok &= engine_wa_list_verify(ce,
 					    &lists->engine[id].wa_list,
 					    str) == 0;
+
+		ok &= engine_wa_list_verify(ce,
+					    &lists->engine[id].ctx_wa_list,
+					    str) == 0;
 	}
+	i915_gem_context_unlock_engines(ctx);
 
 	return ok;
 }
 
 static int
-live_gpu_reset_gt_engine_workarounds(void *arg)
+live_gpu_reset_workarounds(void *arg)
 {
 	struct drm_i915_private *i915 = arg;
+	struct i915_gem_context *ctx;
 	intel_wakeref_t wakeref;
 	struct wa_lists lists;
 	bool ok;
 
 	if (!intel_has_gpu_reset(i915))
 		return 0;
+
+	ctx = kernel_context(i915);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	pr_info("Verifying after GPU reset...\n");
 
@@ -1044,15 +1065,16 @@ live_gpu_reset_gt_engine_workarounds(void *arg)
 
 	reference_lists_init(i915, &lists);
 
-	ok = verify_gt_engine_wa(i915, &lists, "before reset");
+	ok = verify_wa_lists(ctx, &lists, "before reset");
 	if (!ok)
 		goto out;
 
 	i915_reset(i915, ALL_ENGINES, "live_workarounds");
 
-	ok = verify_gt_engine_wa(i915, &lists, "after reset");
+	ok = verify_wa_lists(ctx, &lists, "after reset");
 
 out:
+	kernel_context_close(ctx);
 	reference_lists_fini(i915, &lists);
 	intel_runtime_pm_put(i915, wakeref);
 	igt_global_reset_unlock(i915);
@@ -1061,7 +1083,7 @@ out:
 }
 
 static int
-live_engine_reset_gt_engine_workarounds(void *arg)
+live_engine_reset_workarounds(void *arg)
 {
 	struct drm_i915_private *i915 = arg;
 	struct intel_engine_cs *engine;
@@ -1090,7 +1112,7 @@ live_engine_reset_gt_engine_workarounds(void *arg)
 
 		pr_info("Verifying after %s reset...\n", engine->name);
 
-		ok = verify_gt_engine_wa(i915, &lists, "before reset");
+		ok = verify_wa_lists(ctx, &lists, "before reset");
 		if (!ok) {
 			ret = -ESRCH;
 			goto err;
@@ -1098,7 +1120,7 @@ live_engine_reset_gt_engine_workarounds(void *arg)
 
 		i915_reset_engine(engine, "live_workarounds");
 
-		ok = verify_gt_engine_wa(i915, &lists, "after idle reset");
+		ok = verify_wa_lists(ctx, &lists, "after idle reset");
 		if (!ok) {
 			ret = -ESRCH;
 			goto err;
@@ -1129,7 +1151,7 @@ live_engine_reset_gt_engine_workarounds(void *arg)
 		igt_spinner_end(&spin);
 		igt_spinner_fini(&spin);
 
-		ok = verify_gt_engine_wa(i915, &lists, "after busy reset");
+		ok = verify_wa_lists(ctx, &lists, "after busy reset");
 		if (!ok) {
 			ret = -ESRCH;
 			goto err;
@@ -1153,8 +1175,8 @@ int intel_workarounds_live_selftests(struct drm_i915_private *i915)
 		SUBTEST(live_dirty_whitelist),
 		SUBTEST(live_reset_whitelist),
 		SUBTEST(live_isolated_whitelist),
-		SUBTEST(live_gpu_reset_gt_engine_workarounds),
-		SUBTEST(live_engine_reset_gt_engine_workarounds),
+		SUBTEST(live_gpu_reset_workarounds),
+		SUBTEST(live_engine_reset_workarounds),
 	};
 	int err;
 

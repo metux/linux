@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0
 /**
  * AES CTR routines supporting VMX instructions on the Power 8
  *

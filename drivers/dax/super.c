@@ -665,10 +665,6 @@ static int dax_fs_init(void)
 	if (!dax_cache)
 		return -ENOMEM;
 
-	rc = register_filesystem(&dax_fs_type);
-	if (rc)
-		goto err_register_fs;
-
 	dax_mnt = kern_mount(&dax_fs_type);
 	if (IS_ERR(dax_mnt)) {
 		rc = PTR_ERR(dax_mnt);
@@ -679,8 +675,6 @@ static int dax_fs_init(void)
 	return 0;
 
  err_mount:
-	unregister_filesystem(&dax_fs_type);
- err_register_fs:
 	kmem_cache_destroy(dax_cache);
 
 	return rc;
@@ -689,7 +683,6 @@ static int dax_fs_init(void)
 static void dax_fs_exit(void)
 {
 	kern_unmount(dax_mnt);
-	unregister_filesystem(&dax_fs_type);
 	kmem_cache_destroy(dax_cache);
 }
 

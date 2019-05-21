@@ -424,7 +424,6 @@ static void __init of_sama5d4_sckc_setup(struct device_node *np)
 	struct clk_init_data init;
 	const char *xtal_name;
 	const char *parent_names[2] = { "slow_rc_osc", "slow_osc" };
-	bool bypass;
 	int ret;
 
 	if (!regbase)
@@ -437,8 +436,6 @@ static void __init of_sama5d4_sckc_setup(struct device_node *np)
 		return;
 
 	xtal_name = of_clk_get_parent_name(np, 0);
-
-	bypass = of_property_read_bool(np, "atmel,osc-bypass");
 
 	osc = kzalloc(sizeof(*osc), GFP_KERNEL);
 	if (!osc)
@@ -453,9 +450,6 @@ static void __init of_sama5d4_sckc_setup(struct device_node *np)
 	osc->hw.init = &init;
 	osc->sckcr = regbase;
 	osc->startup_usec = 1200000;
-
-	if (bypass)
-		writel((readl(regbase) | AT91_SCKC_OSC32BYP), regbase);
 
 	hw = &osc->hw;
 	ret = clk_hw_register(NULL, &osc->hw);

@@ -97,7 +97,7 @@ fault:
 		 goto again;
 
 fail:
-	force_sig(SIGSEGV, current);
+	force_sig(SIGSEGV);
 	return ret;
 }
 

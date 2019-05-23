@@ -68,7 +68,7 @@ void do_trap(struct pt_regs *regs, int signo, int code, unsigned long addr)
 		show_regs(regs);
 	}
 
-	force_sig_fault(signo, code, (void __user *)addr, current);
+	force_sig_fault(signo, code, (void __user *)addr);
 }
 
 static void do_trap_error(struct pt_regs *regs, int signo, int code,
@@ -141,7 +141,7 @@ asmlinkage void do_trap_break(struct pt_regs *regs)
 	}
 #endif /* CONFIG_GENERIC_BUG */
 
-	force_sig_fault(SIGTRAP, TRAP_BRKPT, (void __user *)(regs->sepc), current);
+	force_sig_fault(SIGTRAP, TRAP_BRKPT, (void __user *)(regs->sepc));
 }
 
 #ifdef CONFIG_GENERIC_BUG

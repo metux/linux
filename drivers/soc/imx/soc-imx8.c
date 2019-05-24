@@ -115,8 +115,6 @@ static int __init imx8_soc_init(void)
 	if (!id)
 		goto free_soc;
 
-	of_node_put(root);
-
 	data = id->data;
 	if (data) {
 		soc_dev_attr->soc_id = data->name;
@@ -132,8 +130,7 @@ static int __init imx8_soc_init(void)
 	if (IS_ERR(soc_dev))
 		goto free_rev;
 
-	if (IS_ENABLED(CONFIG_ARM_IMX_CPUFREQ_DT))
-		platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
+	of_node_put(root);
 
 	return 0;
 

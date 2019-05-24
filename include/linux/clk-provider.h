@@ -9,8 +9,6 @@
 #include <linux/of.h>
 #include <linux/of_clk.h>
 
-#ifdef CONFIG_COMMON_CLK
-
 /*
  * flags used across common struct clk.  these flags should only affect the
  * top-level framework.  custom flags for dealing with hardware specifics
@@ -1136,5 +1134,4 @@ static inline void clk_writel(u32 val, u32 __iomem *reg)
 
 void clk_gate_restore_context(struct clk_hw *hw);
 
-#endif /* CONFIG_COMMON_CLK */
 #endif /* CLK_PROVIDER_H */

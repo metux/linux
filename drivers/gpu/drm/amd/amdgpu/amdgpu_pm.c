@@ -22,9 +22,7 @@
  * Authors: Rafał Miłecki <zajec5@gmail.com>
  *          Alex Deucher <alexdeucher@gmail.com>
  */
-
-#include <drm/drm_debugfs.h>
-
+#include <drm/drmP.h>
 #include "amdgpu.h"
 #include "amdgpu_drv.h"
 #include "amdgpu_pm.h"
@@ -33,7 +31,6 @@
 #include "amdgpu_smu.h"
 #include "atom.h"
 #include <linux/power_supply.h>
-#include <linux/pci.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/nospec.h>
@@ -2748,7 +2745,7 @@ void amdgpu_pm_virt_sysfs_fini(struct amdgpu_device *adev)
 
 int amdgpu_pm_load_smu_firmware(struct amdgpu_device *adev, uint32_t *smu_version)
 {
-	int r;
+	int r = -EINVAL;
 
 	if (adev->powerplay.pp_funcs && adev->powerplay.pp_funcs->load_firmware) {
 		r = adev->powerplay.pp_funcs->load_firmware(adev->powerplay.pp_handle);
@@ -2758,7 +2755,7 @@ int amdgpu_pm_load_smu_firmware(struct amdgpu_device *adev, uint32_t *smu_versio
 		}
 		*smu_version = adev->pm.fw_version;
 	}
-	return 0;
+	return r;
 }
 
 int amdgpu_pm_sysfs_init(struct amdgpu_device *adev)

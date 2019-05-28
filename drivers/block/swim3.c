@@ -1251,7 +1251,7 @@ static struct macio_driver swim3_driver =
 {
 	.driver = {
 		.name 		= "swim3",
-		.of_match_table	= swim3_match,
+		.of_match_table	= of_match_ptr(swim3_match),
 	},
 	.probe		= swim3_attach,
 #ifdef CONFIG_PMAC_MEDIABAY

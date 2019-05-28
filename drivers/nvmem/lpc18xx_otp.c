@@ -98,7 +98,7 @@ static struct platform_driver lpc18xx_otp_driver = {
 	.probe	= lpc18xx_otp_probe,
 	.driver = {
 		.name	= "lpc18xx_otp",
-		.of_match_table = lpc18xx_otp_dt_ids,
+		.of_match_table = of_match_ptr(lpc18xx_otp_dt_ids),
 	},
 };
 module_platform_driver(lpc18xx_otp_driver);

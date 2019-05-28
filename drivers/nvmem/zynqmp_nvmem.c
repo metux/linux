@@ -79,7 +79,7 @@ static struct platform_driver zynqmp_nvmem_driver = {
 	.probe = zynqmp_nvmem_probe,
 	.driver = {
 		.name = "zynqmp-nvmem",
-		.of_match_table = zynqmp_nvmem_match,
+		.of_match_table = of_match_ptr(zynqmp_nvmem_match),
 	},
 };
 

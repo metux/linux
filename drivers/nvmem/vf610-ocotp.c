@@ -246,7 +246,7 @@ static struct platform_driver vf610_ocotp_driver = {
 	.probe = vf610_ocotp_probe,
 	.driver = {
 		.name = "vf610-ocotp",
-		.of_match_table = ocotp_of_match,
+		.of_match_table = of_match_ptr(ocotp_of_match),
 	},
 };
 module_platform_driver(vf610_ocotp_driver);

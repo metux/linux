@@ -349,7 +349,7 @@ static struct platform_driver rave_sp_eeprom_driver = {
 	.probe = rave_sp_eeprom_probe,
 	.driver	= {
 		.name = KBUILD_MODNAME,
-		.of_match_table = rave_sp_eeprom_of_match,
+		.of_match_table = of_match_ptr(rave_sp_eeprom_of_match),
 	},
 };
 module_platform_driver(rave_sp_eeprom_driver);

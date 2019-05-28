@@ -234,7 +234,7 @@ static struct platform_driver meson_mx_efuse_driver = {
 	.probe = meson_mx_efuse_probe,
 	.driver = {
 		.name = "meson-mx-efuse",
-		.of_match_table = meson_mx_efuse_match,
+		.of_match_table = of_match_ptr(meson_mx_efuse_match),
 	},
 };
 

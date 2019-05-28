@@ -257,7 +257,7 @@ static struct platform_driver sc27xx_efuse_driver = {
 	.remove = sc27xx_efuse_remove,
 	.driver = {
 		.name = "sc27xx-efuse",
-		.of_match_table = sc27xx_efuse_of_match,
+		.of_match_table = of_match_ptr(sc27xx_efuse_of_match),
 	},
 };
 

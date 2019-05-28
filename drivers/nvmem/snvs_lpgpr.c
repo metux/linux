@@ -146,7 +146,7 @@ static struct platform_driver snvs_lpgpr_driver = {
 	.probe	= snvs_lpgpr_probe,
 	.driver = {
 		.name	= "snvs_lpgpr",
-		.of_match_table = snvs_lpgpr_dt_ids,
+		.of_match_table = of_match_ptr(snvs_lpgpr_dt_ids),
 	},
 };
 module_platform_driver(snvs_lpgpr_driver);

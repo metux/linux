@@ -316,7 +316,7 @@ static struct platform_driver bcm_otpc_driver = {
 	.probe	= bcm_otpc_probe,
 	.driver = {
 		.name	= "brcm-otpc",
-		.of_match_table = bcm_otpc_dt_ids,
+		.of_match_table = of_match_ptr(bcm_otpc_dt_ids),
 		.acpi_match_table = ACPI_PTR(bcm_otpc_acpi_ids),
 	},
 };

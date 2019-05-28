@@ -68,7 +68,7 @@ static struct platform_driver uniphier_efuse_driver = {
 	.probe = uniphier_efuse_probe,
 	.driver = {
 		.name = "uniphier-efuse",
-		.of_match_table = uniphier_efuse_of_match,
+		.of_match_table = of_match_ptr(uniphier_efuse_of_match),
 	},
 };
 module_platform_driver(uniphier_efuse_driver);

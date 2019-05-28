@@ -529,7 +529,7 @@ static struct platform_driver imx_ocotp_driver = {
 	.probe	= imx_ocotp_probe,
 	.driver = {
 		.name	= "imx_ocotp",
-		.of_match_table = imx_ocotp_dt_ids,
+		.of_match_table = of_match_ptr(imx_ocotp_dt_ids),
 	},
 };
 module_platform_driver(imx_ocotp_driver);

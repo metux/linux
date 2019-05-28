@@ -195,7 +195,7 @@ static struct platform_driver mxs_ocotp_driver = {
 	.remove = mxs_ocotp_remove,
 	.driver = {
 		.name = "mxs-ocotp",
-		.of_match_table = mxs_ocotp_match,
+		.of_match_table = of_match_ptr(mxs_ocotp_match),
 	},
 };
 

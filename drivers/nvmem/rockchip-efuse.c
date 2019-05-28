@@ -292,7 +292,7 @@ static struct platform_driver rockchip_efuse_driver = {
 	.probe = rockchip_efuse_probe,
 	.driver = {
 		.name = "rockchip-efuse",
-		.of_match_table = rockchip_efuse_match,
+		.of_match_table = of_match_ptr(rockchip_efuse_match),
 	},
 };
 

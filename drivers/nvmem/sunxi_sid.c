@@ -209,7 +209,7 @@ static struct platform_driver sunxi_sid_driver = {
 	.probe = sunxi_sid_probe,
 	.driver = {
 		.name = "eeprom-sunxi-sid",
-		.of_match_table = sunxi_sid_of_match,
+		.of_match_table = of_match_ptr(sunxi_sid_of_match),
 	},
 };
 module_platform_driver(sunxi_sid_driver);

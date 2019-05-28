@@ -81,7 +81,7 @@ static struct platform_driver mtk_efuse_driver = {
 	.probe = mtk_efuse_probe,
 	.driver = {
 		.name = "mediatek,efuse",
-		.of_match_table = mtk_efuse_of_match,
+		.of_match_table = of_match_ptr(mtk_efuse_of_match),
 	},
 };
 

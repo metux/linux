@@ -83,7 +83,7 @@ static struct platform_driver qfprom_driver = {
 	.probe = qfprom_probe,
 	.driver = {
 		.name = "qcom,qfprom",
-		.of_match_table = qfprom_of_match,
+		.of_match_table = of_match_ptr(qfprom_of_match),
 	},
 };
 module_platform_driver(qfprom_driver);

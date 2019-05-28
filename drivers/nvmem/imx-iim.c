@@ -139,7 +139,7 @@ static struct platform_driver imx_iim_driver = {
 	.probe	= imx_iim_probe,
 	.driver = {
 		.name	= "imx-iim",
-		.of_match_table = imx_iim_dt_ids,
+		.of_match_table = of_match_ptr(imx_iim_dt_ids),
 	},
 };
 module_platform_driver(imx_iim_driver);

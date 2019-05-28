@@ -957,7 +957,7 @@ MODULE_DEVICE_TABLE(of, axi_dmac_of_match_table);
 static struct platform_driver axi_dmac_driver = {
 	.driver = {
 		.name = "dma-axi-dmac",
-		.of_match_table = axi_dmac_of_match_table,
+		.of_match_table = of_match_ptr(axi_dmac_of_match_table),
 	},
 	.probe = axi_dmac_probe,
 	.remove = axi_dmac_remove,

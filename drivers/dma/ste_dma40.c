@@ -3713,7 +3713,7 @@ static struct platform_driver d40_driver = {
 	.driver = {
 		.name  = D40_NAME,
 		.pm = &dma40_pm_ops,
-		.of_match_table = d40_match,
+		.of_match_table = of_match_ptr(d40_match),
 	},
 };
 

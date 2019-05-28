@@ -886,7 +886,7 @@ MODULE_DEVICE_TABLE(of, fsl_re_ids);
 static struct platform_driver fsl_re_driver = {
 	.driver = {
 		.name = "fsl-raideng",
-		.of_match_table = fsl_re_ids,
+		.of_match_table = of_match_ptr(fsl_re_ids),
 	},
 	.probe = fsl_re_probe,
 	.remove = fsl_re_remove,

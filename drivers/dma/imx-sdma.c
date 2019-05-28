@@ -2200,7 +2200,7 @@ static int sdma_remove(struct platform_device *pdev)
 static struct platform_driver sdma_driver = {
 	.driver		= {
 		.name	= "imx-sdma",
-		.of_match_table = sdma_dt_ids,
+		.of_match_table = of_match_ptr(sdma_dt_ids),
 	},
 	.id_table	= sdma_devtypes,
 	.remove		= sdma_remove,

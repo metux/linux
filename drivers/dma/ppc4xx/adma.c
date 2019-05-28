@@ -4553,7 +4553,7 @@ static struct platform_driver ppc440spe_adma_driver = {
 	.remove = ppc440spe_adma_remove,
 	.driver = {
 		.name = "PPC440SP(E)-ADMA",
-		.of_match_table = ppc440spe_adma_of_match,
+		.of_match_table = of_match_ptr(ppc440spe_adma_of_match),
 	},
 };
 

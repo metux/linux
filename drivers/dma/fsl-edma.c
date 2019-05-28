@@ -404,7 +404,7 @@ static const struct dev_pm_ops fsl_edma_pm_ops = {
 static struct platform_driver fsl_edma_driver = {
 	.driver		= {
 		.name	= "fsl-edma",
-		.of_match_table = fsl_edma_dt_ids,
+		.of_match_table = of_match_ptr(fsl_edma_dt_ids),
 		.pm     = &fsl_edma_pm_ops,
 	},
 	.probe          = fsl_edma_probe,

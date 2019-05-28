@@ -730,7 +730,7 @@ static const struct platform_device_id mmp_tdma_id_table[] = {
 static struct platform_driver mmp_tdma_driver = {
 	.driver		= {
 		.name	= "mmp-tdma",
-		.of_match_table = mmp_tdma_dt_ids,
+		.of_match_table = of_match_ptr(mmp_tdma_dt_ids),
 	},
 	.id_table	= mmp_tdma_id_table,
 	.probe		= mmp_tdma_probe,

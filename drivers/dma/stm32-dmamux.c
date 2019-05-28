@@ -333,7 +333,7 @@ static struct platform_driver stm32_dmamux_driver = {
 	.probe	= stm32_dmamux_probe,
 	.driver = {
 		.name = "stm32-dmamux",
-		.of_match_table = stm32_dmamux_match,
+		.of_match_table = of_match_ptr(stm32_dmamux_match),
 		.pm = &stm32_dmamux_pm_ops,
 	},
 };

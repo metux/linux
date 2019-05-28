@@ -1147,7 +1147,7 @@ static struct platform_driver sirfsoc_dma_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &sirfsoc_dma_pm_ops,
-		.of_match_table	= sirfsoc_dma_match,
+		.of_match_table	= of_match_ptr(sirfsoc_dma_match),
 	},
 };
 

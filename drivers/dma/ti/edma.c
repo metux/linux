@@ -2506,7 +2506,7 @@ static struct platform_driver edma_driver = {
 	.driver = {
 		.name	= "edma",
 		.pm	= &edma_pm_ops,
-		.of_match_table = edma_of_ids,
+		.of_match_table = of_match_ptr(edma_of_ids),
 	},
 };
 
@@ -2520,7 +2520,7 @@ static struct platform_driver edma_tptc_driver = {
 	.probe		= edma_tptc_probe,
 	.driver = {
 		.name	= "edma3-tptc",
-		.of_match_table = edma_tptc_of_ids,
+		.of_match_table = of_match_ptr(edma_tptc_of_ids),
 	},
 };
 

@@ -1603,7 +1603,7 @@ static struct platform_driver tegra_dmac_driver = {
 	.driver = {
 		.name	= "tegra-apbdma",
 		.pm	= &tegra_dma_dev_pm_ops,
-		.of_match_table = tegra_dma_of_match,
+		.of_match_table = of_match_ptr(tegra_dma_of_match),
 	},
 	.probe		= tegra_dma_probe,
 	.remove		= tegra_dma_remove,

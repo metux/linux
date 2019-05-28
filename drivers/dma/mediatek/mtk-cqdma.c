@@ -941,7 +941,7 @@ static struct platform_driver mtk_cqdma_driver = {
 	.remove = mtk_cqdma_remove,
 	.driver = {
 		.name           = KBUILD_MODNAME,
-		.of_match_table = mtk_cqdma_match,
+		.of_match_table = of_match_ptr(mtk_cqdma_match),
 	},
 };
 module_platform_driver(mtk_cqdma_driver);

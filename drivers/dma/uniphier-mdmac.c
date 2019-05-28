@@ -496,7 +496,7 @@ static struct platform_driver uniphier_mdmac_driver = {
 	.remove = uniphier_mdmac_remove,
 	.driver = {
 		.name = "uniphier-mio-dmac",
-		.of_match_table = uniphier_mdmac_match,
+		.of_match_table = of_match_ptr(uniphier_mdmac_match),
 	},
 };
 module_platform_driver(uniphier_mdmac_driver);

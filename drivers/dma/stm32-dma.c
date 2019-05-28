@@ -1445,7 +1445,7 @@ static const struct dev_pm_ops stm32_dma_pm_ops = {
 static struct platform_driver stm32_dma_driver = {
 	.driver = {
 		.name = "stm32-dma",
-		.of_match_table = stm32_dma_of_match,
+		.of_match_table = of_match_ptr(stm32_dma_of_match),
 		.pm = &stm32_dma_pm_ops,
 	},
 };

@@ -959,7 +959,7 @@ static struct platform_driver tegra_admac_driver = {
 	.driver = {
 		.name	= "tegra-adma",
 		.pm	= &tegra_adma_dev_pm_ops,
-		.of_match_table = tegra_adma_of_match,
+		.of_match_table = of_match_ptr(tegra_adma_of_match),
 	},
 	.probe		= tegra_adma_probe,
 	.remove		= tegra_adma_remove,

@@ -1460,7 +1460,7 @@ static struct platform_driver bam_dma_driver = {
 	.driver = {
 		.name = "bam-dma-engine",
 		.pm = &bam_dma_pm_ops,
-		.of_match_table = bam_of_match,
+		.of_match_table = of_match_ptr(bam_of_match),
 	},
 };
 

@@ -1769,7 +1769,7 @@ static struct platform_driver sba_driver = {
 	.remove = sba_remove,
 	.driver = {
 		.name = "bcm-sba-raid",
-		.of_match_table = sba_of_match,
+		.of_match_table = of_match_ptr(sba_of_match),
 	},
 };
 module_platform_driver(sba_driver);

@@ -1233,7 +1233,7 @@ static struct platform_driver sprd_dma_driver = {
 	.remove = sprd_dma_remove,
 	.driver = {
 		.name = "sprd-dma",
-		.of_match_table = sprd_dma_match,
+		.of_match_table = of_match_ptr(sprd_dma_match),
 		.pm = &sprd_dma_pm_ops,
 	},
 };

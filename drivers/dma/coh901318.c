@@ -2793,7 +2793,7 @@ static struct platform_driver coh901318_driver = {
 	.remove = coh901318_remove,
 	.driver = {
 		.name	= "coh901318",
-		.of_match_table = coh901318_dt_match,
+		.of_match_table = of_match_ptr(coh901318_dt_match),
 	},
 };
 

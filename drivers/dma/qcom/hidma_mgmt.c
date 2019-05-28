@@ -337,7 +337,7 @@ static struct platform_driver hidma_mgmt_driver = {
 	.probe = hidma_mgmt_probe,
 	.driver = {
 		   .name = "hidma-mgmt",
-		   .of_match_table = hidma_mgmt_match,
+		   .of_match_table = of_match_ptr(hidma_mgmt_match),
 		   .acpi_match_table = ACPI_PTR(hidma_mgmt_acpi_ids),
 	},
 };

@@ -1445,7 +1445,7 @@ static struct platform_driver sun6i_dma_driver = {
 	.remove		= sun6i_dma_remove,
 	.driver = {
 		.name		= "sun6i-dma",
-		.of_match_table	= sun6i_dma_match,
+		.of_match_table	= of_match_ptr(sun6i_dma_match),
 	},
 };
 module_platform_driver(sun6i_dma_driver);

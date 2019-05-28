@@ -1392,7 +1392,7 @@ MODULE_DEVICE_TABLE(of, fsldma_of_ids);
 static struct platform_driver fsldma_of_driver = {
 	.driver = {
 		.name = "fsl-elo-dma",
-		.of_match_table = fsldma_of_ids,
+		.of_match_table = of_match_ptr(fsldma_of_ids),
 #ifdef CONFIG_PM
 		.pm = &fsldma_pm_ops,
 #endif

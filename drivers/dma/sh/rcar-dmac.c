@@ -1950,7 +1950,7 @@ static struct platform_driver rcar_dmac_driver = {
 	.driver		= {
 		.pm	= &rcar_dmac_pm,
 		.name	= "rcar-dmac",
-		.of_match_table = rcar_dmac_of_ids,
+		.of_match_table = of_match_ptr(rcar_dmac_of_ids),
 	},
 	.probe		= rcar_dmac_probe,
 	.remove		= rcar_dmac_remove,

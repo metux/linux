@@ -900,7 +900,7 @@ static struct platform_driver usb_dmac_driver = {
 	.driver		= {
 		.pm	= &usb_dmac_pm,
 		.name	= "usb-dmac",
-		.of_match_table = usb_dmac_of_ids,
+		.of_match_table = of_match_ptr(usb_dmac_of_ids),
 	},
 	.probe		= usb_dmac_probe,
 	.remove		= usb_dmac_remove,

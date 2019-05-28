@@ -1709,7 +1709,7 @@ static struct platform_driver stm32_mdma_driver = {
 	.probe = stm32_mdma_probe,
 	.driver = {
 		.name = "stm32-mdma",
-		.of_match_table = stm32_mdma_of_match,
+		.of_match_table = of_match_ptr(stm32_mdma_of_match),
 		.pm = &stm32_mdma_pm_ops,
 	},
 };

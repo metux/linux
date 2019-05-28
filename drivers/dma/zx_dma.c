@@ -936,7 +936,7 @@ static struct platform_driver zx_pdma_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.pm	= &zx_dma_pmops,
-		.of_match_table = zx6702_dma_dt_ids,
+		.of_match_table = of_match_ptr(zx6702_dma_dt_ids),
 	},
 	.probe		= zx_dma_probe,
 	.remove		= zx_dma_remove,

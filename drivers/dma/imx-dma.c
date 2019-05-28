@@ -1263,7 +1263,7 @@ static int imxdma_remove(struct platform_device *pdev)
 static struct platform_driver imxdma_driver = {
 	.driver		= {
 		.name	= "imx-dma",
-		.of_match_table = imx_dma_of_dev_id,
+		.of_match_table = of_match_ptr(imx_dma_of_dev_id),
 	},
 	.id_table	= imx_dma_devtype,
 	.remove		= imxdma_remove,

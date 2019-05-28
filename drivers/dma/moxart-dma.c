@@ -661,7 +661,7 @@ static struct platform_driver moxart_driver = {
 	.remove	= moxart_remove,
 	.driver = {
 		.name		= "moxart-dma-engine",
-		.of_match_table	= moxart_dma_match,
+		.of_match_table	= of_match_ptr(moxart_dma_match),
 	},
 };
 

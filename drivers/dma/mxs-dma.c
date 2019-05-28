@@ -866,7 +866,7 @@ static int __init mxs_dma_probe(struct platform_device *pdev)
 static struct platform_driver mxs_dma_driver = {
 	.driver		= {
 		.name	= "mxs-dma",
-		.of_match_table = mxs_dma_dt_ids,
+		.of_match_table = of_match_ptr(mxs_dma_dt_ids),
 	},
 	.id_table	= mxs_dma_ids,
 };

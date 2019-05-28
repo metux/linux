@@ -864,7 +864,7 @@ static int st_fdma_remove(struct platform_device *pdev)
 static struct platform_driver st_fdma_platform_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = st_fdma_match,
+		.of_match_table = of_match_ptr(st_fdma_match),
 	},
 	.probe = st_fdma_probe,
 	.remove = st_fdma_remove,

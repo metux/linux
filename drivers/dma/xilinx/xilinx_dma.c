@@ -2789,7 +2789,7 @@ static int xilinx_dma_remove(struct platform_device *pdev)
 static struct platform_driver xilinx_vdma_driver = {
 	.driver = {
 		.name = "xilinx-vdma",
-		.of_match_table = xilinx_dma_of_ids,
+		.of_match_table = of_match_ptr(xilinx_dma_of_ids),
 	},
 	.probe = xilinx_dma_probe,
 	.remove = xilinx_dma_remove,

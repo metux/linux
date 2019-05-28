@@ -1046,7 +1046,7 @@ static struct platform_driver mtk_hsdma_driver = {
 	.remove		= mtk_hsdma_remove,
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= mtk_hsdma_match,
+		.of_match_table	= of_match_ptr(mtk_hsdma_match),
 	},
 };
 module_platform_driver(mtk_hsdma_driver);

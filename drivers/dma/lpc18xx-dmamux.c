@@ -168,7 +168,7 @@ static struct platform_driver lpc18xx_dmamux_driver = {
 	.probe	= lpc18xx_dmamux_probe,
 	.driver = {
 		.name = "lpc18xx-dmamux",
-		.of_match_table = lpc18xx_dmamux_match,
+		.of_match_table = of_match_ptr(lpc18xx_dmamux_match),
 	},
 };
 

@@ -494,7 +494,7 @@ static struct platform_driver mpc52xx_bcom_of_platform_driver = {
 	.remove		= mpc52xx_bcom_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = mpc52xx_bcom_of_match,
+		.of_match_table = of_match_ptr(mpc52xx_bcom_of_match),
 	},
 };
 

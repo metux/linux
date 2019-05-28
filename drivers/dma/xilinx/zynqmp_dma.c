@@ -1144,7 +1144,7 @@ MODULE_DEVICE_TABLE(of, zynqmp_dma_of_match);
 static struct platform_driver zynqmp_dma_driver = {
 	.driver = {
 		.name = "xilinx-zynqmp-dma",
-		.of_match_table = zynqmp_dma_of_match,
+		.of_match_table = of_match_ptr(zynqmp_dma_of_match),
 		.pm = &zynqmp_dma_dev_pm_ops,
 	},
 	.probe = zynqmp_dma_probe,

@@ -971,7 +971,7 @@ static struct platform_driver hidma_driver = {
 	.shutdown = hidma_shutdown,
 	.driver = {
 		   .name = "hidma",
-		   .of_match_table = hidma_match,
+		   .of_match_table = of_match_ptr(hidma_match),
 		   .acpi_match_table = ACPI_PTR(hidma_acpi_ids),
 	},
 };

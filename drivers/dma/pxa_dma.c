@@ -1444,7 +1444,7 @@ static const struct platform_device_id pxad_id_table[] = {
 static struct platform_driver pxad_driver = {
 	.driver		= {
 		.name	= "pxa-dma",
-		.of_match_table = pxad_dt_ids,
+		.of_match_table = of_match_ptr(pxad_dt_ids),
 	},
 	.id_table	= pxad_id_table,
 	.probe		= pxad_probe,

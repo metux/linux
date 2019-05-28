@@ -89,7 +89,7 @@ static struct platform_driver ahci_octeon_driver = {
 	.remove         = ahci_octeon_remove,
 	.driver         = {
 		.name   = "octeon-ahci",
-		.of_match_table = octeon_ahci_match,
+		.of_match_table = of_match_ptr(octeon_ahci_match),
 	},
 };
 

@@ -862,7 +862,7 @@ static struct platform_driver mpc52xx_ata_of_platform_driver = {
 #endif
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = mpc52xx_ata_of_match,
+		.of_match_table = of_match_ptr(mpc52xx_ata_of_match),
 	},
 };
 

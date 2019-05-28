@@ -77,7 +77,7 @@ MODULE_DEVICE_TABLE(of, pata_of_platform_match);
 static struct platform_driver pata_of_platform_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = pata_of_platform_match,
+		.of_match_table = of_match_ptr(pata_of_platform_match),
 	},
 	.probe		= pata_of_platform_probe,
 	.remove		= ata_platform_remove_one,

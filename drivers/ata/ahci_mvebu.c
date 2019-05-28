@@ -250,7 +250,7 @@ static struct platform_driver ahci_mvebu_driver = {
 	.resume = ahci_mvebu_resume,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = ahci_mvebu_of_match,
+		.of_match_table = of_match_ptr(ahci_mvebu_of_match),
 	},
 };
 module_platform_driver(ahci_mvebu_driver);

@@ -1349,7 +1349,7 @@ static struct macio_driver pata_macio_driver =
 	.driver = {
 		.name 		= "pata-macio",
 		.owner		= THIS_MODULE,
-		.of_match_table	= pata_macio_match,
+		.of_match_table	= of_match_ptr(pata_macio_match),
 	},
 	.probe		= pata_macio_attach,
 	.remove		= pata_macio_detach,

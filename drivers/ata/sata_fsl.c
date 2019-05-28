@@ -1613,7 +1613,7 @@ MODULE_DEVICE_TABLE(of, fsl_sata_match);
 static struct platform_driver fsl_sata_driver = {
 	.driver = {
 		.name = "fsl-sata",
-		.of_match_table = fsl_sata_match,
+		.of_match_table = of_match_ptr(fsl_sata_match),
 	},
 	.probe		= sata_fsl_probe,
 	.remove		= sata_fsl_remove,

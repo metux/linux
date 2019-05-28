@@ -621,7 +621,7 @@ static struct platform_driver ahci_highbank_driver = {
 	.remove = ata_platform_remove_one,
         .driver = {
                 .name = "highbank-ahci",
-                .of_match_table = ahci_of_match,
+		.of_match_table = of_match_ptr(ahci_of_match),
                 .pm = &ahci_highbank_pm_ops,
         },
 	.probe = ahci_highbank_probe,

@@ -105,7 +105,7 @@ static struct platform_driver ahci_driver = {
 	.shutdown = ahci_platform_shutdown,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = ahci_of_match,
+		.of_match_table = of_match_ptr(ahci_of_match),
 		.acpi_match_table = ahci_acpi_match,
 		.pm = &ahci_pm_ops,
 	},

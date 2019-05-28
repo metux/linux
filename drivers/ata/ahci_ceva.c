@@ -337,7 +337,7 @@ static struct platform_driver ceva_ahci_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = ceva_ahci_of_match,
+		.of_match_table = of_match_ptr(ceva_ahci_of_match),
 		.pm = &ahci_ceva_pm_ops,
 	},
 };

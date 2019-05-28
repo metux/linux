@@ -272,7 +272,7 @@ static struct platform_driver pata_imx_driver = {
 	.remove		= pata_imx_remove,
 	.driver = {
 		.name		= DRV_NAME,
-		.of_match_table	= imx_pata_dt_ids,
+		.of_match_table	= of_match_ptr(imx_pata_dt_ids),
 		.pm		= &pata_imx_pm_ops,
 	},
 };

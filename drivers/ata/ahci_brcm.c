@@ -473,7 +473,7 @@ static struct platform_driver brcm_ahci_driver = {
 	.remove = brcm_ahci_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = ahci_of_match,
+		.of_match_table = of_match_ptr(ahci_of_match),
 		.pm = &ahci_brcm_pm_ops,
 	},
 };

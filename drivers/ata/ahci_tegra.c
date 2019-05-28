@@ -576,7 +576,7 @@ static struct platform_driver tegra_ahci_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = tegra_ahci_of_match,
+		.of_match_table = of_match_ptr(tegra_ahci_of_match),
 	},
 	/* LP0 suspend support not implemented */
 };

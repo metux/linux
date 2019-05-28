@@ -875,7 +875,7 @@ static struct platform_driver xgene_ahci_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = xgene_ahci_of_match,
+		.of_match_table = of_match_ptr(xgene_ahci_of_match),
 		.acpi_match_table = ACPI_PTR(xgene_ahci_acpi_match),
 	},
 };

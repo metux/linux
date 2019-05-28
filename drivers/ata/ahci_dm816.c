@@ -185,7 +185,7 @@ static struct platform_driver ahci_dm816_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = AHCI_DM816_DRV_NAME,
-		.of_match_table = ahci_dm816_of_match,
+		.of_match_table = of_match_ptr(ahci_dm816_of_match),
 		.pm = &ahci_dm816_pm_ops,
 	},
 };

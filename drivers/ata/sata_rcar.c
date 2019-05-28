@@ -1043,7 +1043,7 @@ static struct platform_driver sata_rcar_driver = {
 	.remove		= sata_rcar_remove,
 	.driver = {
 		.name		= DRV_NAME,
-		.of_match_table	= sata_rcar_match,
+		.of_match_table	= of_match_ptr(sata_rcar_match),
 #ifdef CONFIG_PM_SLEEP
 		.pm		= &sata_rcar_pm_ops,
 #endif

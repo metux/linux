@@ -295,7 +295,7 @@ static struct platform_driver ahci_sunxi_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = ahci_sunxi_of_match,
+		.of_match_table = of_match_ptr(ahci_sunxi_of_match),
 		.pm = &ahci_sunxi_pm_ops,
 	},
 };

@@ -250,7 +250,7 @@ static struct platform_driver ahci_da850_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = ahci_da850_of_match,
+		.of_match_table = of_match_ptr(ahci_da850_of_match),
 		.pm = &ahci_da850_pm_ops,
 	},
 };

@@ -4722,7 +4722,7 @@ static struct platform_driver hns_roce_driver = {
 	.remove = hns_roce_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = hns_roce_of_match,
+		.of_match_table = of_match_ptr(hns_roce_of_match),
 		.acpi_match_table = ACPI_PTR(hns_roce_acpi_match),
 	},
 };

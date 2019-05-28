@@ -260,7 +260,7 @@ MODULE_DEVICE_TABLE(of, bcma_host_soc_of_match);
 static struct platform_driver bcma_host_soc_driver = {
 	.driver = {
 		.name = "bcma-host-soc",
-		.of_match_table = bcma_host_soc_of_match,
+		.of_match_table = of_match_ptr(bcma_host_soc_of_match),
 	},
 	.probe		= bcma_host_soc_probe,
 	.remove		= bcma_host_soc_remove,

@@ -814,7 +814,7 @@ MODULE_DEVICE_TABLE(of, adv748x_of_table);
 static struct i2c_driver adv748x_driver = {
 	.driver = {
 		.name = "adv748x",
-		.of_match_table = adv748x_of_table,
+		.of_match_table = of_match_ptr(adv748x_of_table),
 	},
 	.probe = adv748x_probe,
 	.remove = adv748x_remove,

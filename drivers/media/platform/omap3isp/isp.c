@@ -2405,7 +2405,7 @@ static struct platform_driver omap3isp_driver = {
 	.driver = {
 		.name = "omap3isp",
 		.pm	= &omap3isp_pm_ops,
-		.of_match_table = omap3isp_of_table,
+		.of_match_table = of_match_ptr(omap3isp_of_table),
 	},
 };
 

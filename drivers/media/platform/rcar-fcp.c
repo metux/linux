@@ -172,7 +172,7 @@ static struct platform_driver rcar_fcp_platform_driver = {
 	.remove		= rcar_fcp_remove,
 	.driver		= {
 		.name	= "rcar-fcp",
-		.of_match_table = rcar_fcp_of_match,
+		.of_match_table = of_match_ptr(rcar_fcp_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

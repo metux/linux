@@ -1431,7 +1431,7 @@ MODULE_DEVICE_TABLE(of, max2175_of_ids);
 static struct i2c_driver max2175_driver = {
 	.driver = {
 		.name	= DRIVER_NAME,
-		.of_match_table = max2175_of_ids,
+		.of_match_table = of_match_ptr(max2175_of_ids),
 	},
 	.probe		= max2175_probe,
 	.remove		= max2175_remove,

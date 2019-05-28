@@ -1667,7 +1667,7 @@ static struct platform_driver s5p_mfc_driver = {
 	.driver	= {
 		.name	= S5P_MFC_NAME,
 		.pm	= &s5p_mfc_pm_ops,
-		.of_match_table = exynos_mfc_match,
+		.of_match_table = of_match_ptr(exynos_mfc_match),
 	},
 };
 

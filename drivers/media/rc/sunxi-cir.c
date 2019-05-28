@@ -318,7 +318,7 @@ static struct platform_driver sunxi_ir_driver = {
 	.remove         = sunxi_ir_remove,
 	.driver = {
 		.name = SUNXI_IR_DEV,
-		.of_match_table = sunxi_ir_match,
+		.of_match_table = of_match_ptr(sunxi_ir_match),
 	},
 };
 

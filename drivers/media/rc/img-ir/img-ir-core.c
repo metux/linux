@@ -182,7 +182,7 @@ MODULE_DEVICE_TABLE(of, img_ir_match);
 static struct platform_driver img_ir_driver = {
 	.driver = {
 		.name = "img-ir",
-		.of_match_table	= img_ir_match,
+		.of_match_table	= of_match_ptr(img_ir_match),
 		.pm = &img_ir_pmops,
 	},
 	.probe = img_ir_probe,

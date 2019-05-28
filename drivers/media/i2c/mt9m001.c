@@ -870,7 +870,7 @@ static struct i2c_driver mt9m001_i2c_driver = {
 	.driver = {
 		.name = "mt9m001",
 		.pm = &mt9m001_pm_ops,
-		.of_match_table = mt9m001_of_match,
+		.of_match_table = of_match_ptr(mt9m001_of_match),
 	},
 	.probe		= mt9m001_probe,
 	.remove		= mt9m001_remove,

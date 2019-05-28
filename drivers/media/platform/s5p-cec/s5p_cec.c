@@ -290,7 +290,7 @@ static struct platform_driver s5p_cec_pdrv = {
 	.remove	= s5p_cec_remove,
 	.driver	= {
 		.name		= CEC_NAME,
-		.of_match_table	= s5p_cec_match,
+		.of_match_table	= of_match_ptr(s5p_cec_match),
 		.pm		= &s5p_cec_pm_ops,
 	},
 };

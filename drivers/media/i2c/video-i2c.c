@@ -952,7 +952,7 @@ MODULE_DEVICE_TABLE(of, video_i2c_of_match);
 static struct i2c_driver video_i2c_driver = {
 	.driver = {
 		.name	= VIDEO_I2C_DRIVER,
-		.of_match_table = video_i2c_of_match,
+		.of_match_table = of_match_ptr(video_i2c_of_match),
 		.pm	= &video_i2c_pm_ops,
 	},
 	.probe		= video_i2c_probe,

@@ -168,7 +168,7 @@ static struct spi_driver ir_spi_driver = {
 	.remove = ir_spi_remove,
 	.driver = {
 		.name = IR_SPI_DRIVER_NAME,
-		.of_match_table = ir_spi_of_match,
+		.of_match_table = of_match_ptr(ir_spi_of_match),
 	},
 };
 

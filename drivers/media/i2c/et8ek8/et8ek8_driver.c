@@ -1502,7 +1502,7 @@ static struct i2c_driver et8ek8_i2c_driver = {
 	.driver		= {
 		.name	= ET8EK8_NAME,
 		.pm	= &et8ek8_pm_ops,
-		.of_match_table	= et8ek8_of_table,
+		.of_match_table	= of_match_ptr(et8ek8_of_table),
 	},
 	.probe		= et8ek8_probe,
 	.remove		= __exit_p(et8ek8_remove),

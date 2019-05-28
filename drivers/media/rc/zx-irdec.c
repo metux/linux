@@ -171,7 +171,7 @@ static struct platform_driver zx_irdec_driver = {
 	.remove = zx_irdec_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table	= zx_irdec_match,
+		.of_match_table	= of_match_ptr(zx_irdec_match),
 	},
 };
 module_platform_driver(zx_irdec_driver);

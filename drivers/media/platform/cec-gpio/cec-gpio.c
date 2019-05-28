@@ -264,7 +264,7 @@ static struct platform_driver cec_gpio_pdrv = {
 	.remove = cec_gpio_remove,
 	.driver = {
 		.name		= "cec-gpio",
-		.of_match_table	= cec_gpio_match,
+		.of_match_table	= of_match_ptr(cec_gpio_match),
 	},
 };
 

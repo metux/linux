@@ -1425,7 +1425,7 @@ static struct platform_driver bdisp_driver = {
 	.remove         = bdisp_remove,
 	.driver         = {
 		.name           = BDISP_NAME,
-		.of_match_table = bdisp_match_types,
+		.of_match_table = of_match_ptr(bdisp_match_types),
 		.pm             = &bdisp_pm_ops,
 	},
 };

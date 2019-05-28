@@ -1982,7 +1982,7 @@ static int imx274_remove(struct i2c_client *client)
 static struct i2c_driver imx274_i2c_driver = {
 	.driver = {
 		.name	= DRIVER_NAME,
-		.of_match_table	= imx274_of_id_table,
+		.of_match_table	= of_match_ptr(imx274_of_id_table),
 	},
 	.probe		= imx274_probe,
 	.remove		= imx274_remove,

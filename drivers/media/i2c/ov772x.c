@@ -1484,7 +1484,7 @@ MODULE_DEVICE_TABLE(of, ov772x_of_match);
 static struct i2c_driver ov772x_i2c_driver = {
 	.driver = {
 		.name = "ov772x",
-		.of_match_table = ov772x_of_match,
+		.of_match_table = of_match_ptr(ov772x_of_match),
 	},
 	.probe    = ov772x_probe,
 	.remove   = ov772x_remove,

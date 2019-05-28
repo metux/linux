@@ -1964,7 +1964,7 @@ static struct platform_driver delta_driver = {
 	.remove = delta_remove,
 	.driver = {
 		   .name = DELTA_NAME,
-		   .of_match_table = delta_match_types,
+		   .of_match_table = of_match_ptr(delta_match_types),
 		   .pm = &delta_pm_ops},
 };
 

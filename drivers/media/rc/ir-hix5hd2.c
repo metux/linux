@@ -352,7 +352,7 @@ MODULE_DEVICE_TABLE(of, hix5hd2_ir_table);
 static struct platform_driver hix5hd2_ir_driver = {
 	.driver = {
 		.name = IR_HIX5HD2_NAME,
-		.of_match_table = hix5hd2_ir_table,
+		.of_match_table = of_match_ptr(hix5hd2_ir_table),
 		.pm     = &hix5hd2_ir_pm_ops,
 	},
 	.probe = hix5hd2_ir_probe,

@@ -3168,7 +3168,7 @@ static const struct dev_pm_ops smiapp_pm_ops = {
 
 static struct i2c_driver smiapp_i2c_driver = {
 	.driver	= {
-		.of_match_table = smiapp_of_table,
+		.of_match_table = of_match_ptr(smiapp_of_table),
 		.name = SMIAPP_NAME,
 		.pm = &smiapp_pm_ops,
 	},

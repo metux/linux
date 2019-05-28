@@ -635,7 +635,7 @@ MODULE_DEVICE_TABLE(of, xvip_composite_of_id_table);
 static struct platform_driver xvip_composite_driver = {
 	.driver = {
 		.name = "xilinx-video",
-		.of_match_table = xvip_composite_of_id_table,
+		.of_match_table = of_match_ptr(xvip_composite_of_id_table),
 	},
 	.probe = xvip_composite_probe,
 	.remove = xvip_composite_remove,

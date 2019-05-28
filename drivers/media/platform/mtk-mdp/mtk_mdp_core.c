@@ -279,7 +279,7 @@ static struct platform_driver mtk_mdp_driver = {
 	.driver = {
 		.name	= MTK_MDP_MODULE_NAME,
 		.pm	= &mtk_mdp_pm_ops,
-		.of_match_table = mtk_mdp_of_ids,
+		.of_match_table = of_match_ptr(mtk_mdp_of_ids),
 	}
 };
 

@@ -973,7 +973,7 @@ static struct platform_driver rga_pdrv = {
 	.driver = {
 		.name = RGA_NAME,
 		.pm = &rga_pm,
-		.of_match_table = rockchip_rga_match,
+		.of_match_table = of_match_ptr(rockchip_rga_match),
 	},
 };
 

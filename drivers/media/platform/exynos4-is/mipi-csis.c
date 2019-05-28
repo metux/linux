@@ -1025,7 +1025,7 @@ static struct platform_driver s5pcsis_driver = {
 	.probe		= s5pcsis_probe,
 	.remove		= s5pcsis_remove,
 	.driver		= {
-		.of_match_table = s5pcsis_of_match,
+		.of_match_table = of_match_ptr(s5pcsis_of_match),
 		.name		= CSIS_DRIVER_NAME,
 		.pm		= &s5pcsis_pm_ops,
 	},

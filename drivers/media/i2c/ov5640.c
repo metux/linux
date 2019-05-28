@@ -3092,7 +3092,7 @@ MODULE_DEVICE_TABLE(of, ov5640_dt_ids);
 static struct i2c_driver ov5640_i2c_driver = {
 	.driver = {
 		.name  = "ov5640",
-		.of_match_table	= ov5640_dt_ids,
+		.of_match_table	= of_match_ptr(ov5640_dt_ids),
 	},
 	.id_table = ov5640_id,
 	.probe    = ov5640_probe,

@@ -1270,7 +1270,7 @@ static const struct of_device_id mt9v111_of_match[] = {
 static struct i2c_driver mt9v111_driver = {
 	.driver = {
 		.name = "mt9v111",
-		.of_match_table = mt9v111_of_match,
+		.of_match_table = of_match_ptr(mt9v111_of_match),
 	},
 	.probe_new	= mt9v111_probe,
 	.remove		= mt9v111_remove,

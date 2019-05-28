@@ -2043,7 +2043,7 @@ MODULE_DEVICE_TABLE(of, s5k5baf_of_match);
 
 static struct i2c_driver s5k5baf_i2c_driver = {
 	.driver = {
-		.of_match_table = s5k5baf_of_match,
+		.of_match_table = of_match_ptr(s5k5baf_of_match),
 		.name = S5K5BAF_DRIVER_NAME
 	},
 	.probe		= s5k5baf_probe,

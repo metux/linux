@@ -267,7 +267,7 @@ static struct platform_driver tango_ir_driver = {
 	.remove	= tango_ir_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
-		.of_match_table	= tango_ir_dt_ids,
+		.of_match_table	= of_match_ptr(tango_ir_dt_ids),
 	},
 };
 module_platform_driver(tango_ir_driver);

@@ -364,7 +364,7 @@ MODULE_DEVICE_TABLE(of, xvtc_of_id_table);
 static struct platform_driver xvtc_driver = {
 	.driver = {
 		.name = "xilinx-vtc",
-		.of_match_table = xvtc_of_id_table,
+		.of_match_table = of_match_ptr(xvtc_of_id_table),
 	},
 	.probe = xvtc_probe,
 	.remove = xvtc_remove,

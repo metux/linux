@@ -458,7 +458,7 @@ static struct platform_driver video_mux_driver = {
 	.probe		= video_mux_probe,
 	.remove		= video_mux_remove,
 	.driver		= {
-		.of_match_table = video_mux_dt_ids,
+		.of_match_table = of_match_ptr(video_mux_dt_ids),
 		.name = "video-mux",
 	},
 };

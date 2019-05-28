@@ -2440,7 +2440,7 @@ static struct platform_driver fdp1_pdrv = {
 	.remove		= fdp1_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.of_match_table = fdp1_dt_ids,
+		.of_match_table = of_match_ptr(fdp1_dt_ids),
 		.pm	= &fdp1_pm_ops,
 	},
 };

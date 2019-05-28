@@ -390,7 +390,7 @@ static struct platform_driver mtk_vcodec_dec_driver = {
 	.remove	= mtk_vcodec_dec_remove,
 	.driver	= {
 		.name	= MTK_VCODEC_DEC_NAME,
-		.of_match_table = mtk_vcodec_match,
+		.of_match_table = of_match_ptr(mtk_vcodec_match),
 	},
 };
 

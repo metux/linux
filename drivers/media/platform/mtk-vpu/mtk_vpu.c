@@ -944,7 +944,7 @@ static struct platform_driver mtk_vpu_driver = {
 	.remove	= mtk_vpu_remove,
 	.driver	= {
 		.name	= "mtk_vpu",
-		.of_match_table = mtk_vpu_match,
+		.of_match_table = of_match_ptr(mtk_vpu_match),
 	},
 };
 

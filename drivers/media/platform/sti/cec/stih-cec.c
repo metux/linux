@@ -381,7 +381,7 @@ static struct platform_driver stih_cec_pdrv = {
 	.remove = stih_cec_remove,
 	.driver = {
 		.name		= CEC_NAME,
-		.of_match_table	= stih_cec_match,
+		.of_match_table	= of_match_ptr(stih_cec_match),
 	},
 };
 

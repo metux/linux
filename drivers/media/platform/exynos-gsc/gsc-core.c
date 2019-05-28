@@ -1340,7 +1340,7 @@ static struct platform_driver gsc_driver = {
 	.driver = {
 		.name	= GSC_MODULE_NAME,
 		.pm	= &gsc_pm_ops,
-		.of_match_table = exynos_gsc_match,
+		.of_match_table = of_match_ptr(exynos_gsc_match),
 	}
 };
 

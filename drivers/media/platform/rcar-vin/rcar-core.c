@@ -1335,7 +1335,7 @@ static int rcar_vin_remove(struct platform_device *pdev)
 static struct platform_driver rcar_vin_driver = {
 	.driver = {
 		.name = "rcar-vin",
-		.of_match_table = rvin_of_id_table,
+		.of_match_table = of_match_ptr(rvin_of_id_table),
 	},
 	.probe = rcar_vin_probe,
 	.remove = rcar_vin_remove,

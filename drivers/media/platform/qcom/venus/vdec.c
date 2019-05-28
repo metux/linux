@@ -1244,7 +1244,7 @@ static struct platform_driver qcom_venus_dec_driver = {
 	.remove = vdec_remove,
 	.driver = {
 		.name = "qcom-venus-decoder",
-		.of_match_table = vdec_dt_match,
+		.of_match_table = of_match_ptr(vdec_dt_match),
 		.pm = &vdec_pm_ops,
 	},
 };

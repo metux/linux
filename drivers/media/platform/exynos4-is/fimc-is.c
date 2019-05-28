@@ -958,7 +958,7 @@ static struct platform_driver fimc_is_driver = {
 	.probe		= fimc_is_probe,
 	.remove		= fimc_is_remove,
 	.driver = {
-		.of_match_table	= fimc_is_of_match,
+		.of_match_table	= of_match_ptr(fimc_is_of_match),
 		.name		= FIMC_IS_DRV_NAME,
 		.pm		= &fimc_is_pm_ops,
 	}

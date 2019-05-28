@@ -316,7 +316,7 @@ static struct i2c_driver dw9807_i2c_driver = {
 	.driver = {
 		.name = "dw9807",
 		.pm = &dw9807_pm_ops,
-		.of_match_table = dw9807_of_table,
+		.of_match_table = of_match_ptr(dw9807_of_table),
 	},
 	.probe_new = dw9807_probe,
 	.remove = dw9807_remove,

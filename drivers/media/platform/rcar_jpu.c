@@ -1756,7 +1756,7 @@ static struct platform_driver jpu_driver = {
 	.probe = jpu_probe,
 	.remove = jpu_remove,
 	.driver = {
-		.of_match_table = jpu_dt_ids,
+		.of_match_table = of_match_ptr(jpu_dt_ids),
 		.name = DRV_NAME,
 		.pm = &jpu_pm_ops,
 	},

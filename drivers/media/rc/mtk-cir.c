@@ -441,7 +441,7 @@ static struct platform_driver mtk_ir_driver = {
 	.remove         = mtk_ir_remove,
 	.driver = {
 		.name = MTK_IR_DEV,
-		.of_match_table = mtk_ir_match,
+		.of_match_table = of_match_ptr(mtk_ir_match),
 	},
 };
 

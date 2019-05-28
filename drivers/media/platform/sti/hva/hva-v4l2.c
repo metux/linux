@@ -1464,7 +1464,7 @@ static struct platform_driver hva_driver = {
 	.remove = hva_remove,
 	.driver = {
 		.name		= HVA_NAME,
-		.of_match_table	= hva_match_types,
+		.of_match_table	= of_match_ptr(hva_match_types),
 		.pm		= &hva_pm_ops,
 		},
 };

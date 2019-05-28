@@ -1677,7 +1677,7 @@ static struct platform_driver fimc_lite_driver = {
 	.probe		= fimc_lite_probe,
 	.remove		= fimc_lite_remove,
 	.driver = {
-		.of_match_table = flite_of_match,
+		.of_match_table = of_match_ptr(flite_of_match),
 		.name		= FIMC_LITE_DRV_NAME,
 		.pm		= &fimc_lite_pm_ops,
 	}

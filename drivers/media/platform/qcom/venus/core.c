@@ -491,7 +491,7 @@ static struct platform_driver qcom_venus_driver = {
 	.remove = venus_remove,
 	.driver = {
 		.name = "qcom-venus",
-		.of_match_table = venus_dt_match,
+		.of_match_table = of_match_ptr(venus_dt_match),
 		.pm = &venus_pm_ops,
 	},
 };

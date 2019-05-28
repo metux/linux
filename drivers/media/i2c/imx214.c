@@ -1101,7 +1101,7 @@ static const struct dev_pm_ops imx214_pm_ops = {
 
 static struct i2c_driver imx214_i2c_driver = {
 	.driver = {
-		.of_match_table = imx214_of_match,
+		.of_match_table = of_match_ptr(imx214_of_match),
 		.pm = &imx214_pm_ops,
 		.name  = "imx214",
 	},

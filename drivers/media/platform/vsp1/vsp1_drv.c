@@ -908,7 +908,7 @@ static struct platform_driver vsp1_platform_driver = {
 	.driver		= {
 		.name	= "vsp1",
 		.pm	= &vsp1_pm_ops,
-		.of_match_table = vsp1_of_match,
+		.of_match_table = of_match_ptr(vsp1_of_match),
 	},
 };
 

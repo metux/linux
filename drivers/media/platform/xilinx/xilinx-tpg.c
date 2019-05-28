@@ -917,7 +917,7 @@ static struct platform_driver xtpg_driver = {
 	.driver = {
 		.name		= "xilinx-tpg",
 		.pm		= &xtpg_pm_ops,
-		.of_match_table	= xtpg_of_id_table,
+		.of_match_table	= of_match_ptr(xtpg_of_id_table),
 	},
 	.probe			= xtpg_probe,
 	.remove			= xtpg_remove,

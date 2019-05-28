@@ -338,7 +338,7 @@ static struct platform_driver vdoa_driver = {
 	.remove		= vdoa_remove,
 	.driver		= {
 		.name	= VDOA_NAME,
-		.of_match_table = vdoa_dt_ids,
+		.of_match_table = of_match_ptr(vdoa_dt_ids),
 	},
 };
 

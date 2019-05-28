@@ -234,7 +234,7 @@ static struct platform_driver meson_ir_driver = {
 	.shutdown	= meson_ir_shutdown,
 	.driver = {
 		.name		= DRIVER_NAME,
-		.of_match_table	= meson_ir_match,
+		.of_match_table	= of_match_ptr(meson_ir_match),
 	},
 };
 

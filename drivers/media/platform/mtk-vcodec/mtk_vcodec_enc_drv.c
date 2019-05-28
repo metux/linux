@@ -409,7 +409,7 @@ static struct platform_driver mtk_vcodec_enc_driver = {
 	.remove	= mtk_vcodec_enc_remove,
 	.driver	= {
 		.name	= MTK_VCODEC_ENC_NAME,
-		.of_match_table = mtk_vcodec_enc_match,
+		.of_match_table = of_match_ptr(mtk_vcodec_enc_match),
 	},
 };
 

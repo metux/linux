@@ -664,7 +664,7 @@ MODULE_DEVICE_TABLE(spi, cxd2880_spi_id);
 static struct spi_driver cxd2880_spi_driver = {
 	.driver	= {
 		.name	= "cxd2880",
-		.of_match_table = cxd2880_spi_of_match,
+		.of_match_table = of_match_ptr(cxd2880_spi_of_match),
 	},
 	.id_table = cxd2880_spi_id,
 	.probe    = cxd2880_spi_probe,

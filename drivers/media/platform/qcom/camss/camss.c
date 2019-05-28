@@ -1010,7 +1010,7 @@ static struct platform_driver qcom_camss_driver = {
 	.remove = camss_remove,
 	.driver = {
 		.name = "qcom-camss",
-		.of_match_table = camss_dt_match,
+		.of_match_table = of_match_ptr(camss_dt_match),
 		.pm = &camss_pm_ops,
 	},
 };

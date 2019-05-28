@@ -496,7 +496,7 @@ static struct platform_driver csi2rx_driver = {
 
 	.driver	= {
 		.name		= "cdns-csi2rx",
-		.of_match_table	= csi2rx_of_table,
+		.of_match_table	= of_match_ptr(csi2rx_of_table),
 	},
 };
 module_platform_driver(csi2rx_driver);

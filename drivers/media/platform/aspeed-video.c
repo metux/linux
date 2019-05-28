@@ -1712,7 +1712,7 @@ MODULE_DEVICE_TABLE(of, aspeed_video_of_match);
 static struct platform_driver aspeed_video_driver = {
 	.driver = {
 		.name = DEVICE_NAME,
-		.of_match_table = aspeed_video_of_match,
+		.of_match_table = of_match_ptr(aspeed_video_of_match),
 	},
 	.probe = aspeed_video_probe,
 	.remove = aspeed_video_remove,

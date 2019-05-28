@@ -1265,7 +1265,7 @@ static struct platform_driver mtk_jpeg_driver = {
 	.remove = mtk_jpeg_remove,
 	.driver = {
 		.name           = MTK_JPEG_NAME,
-		.of_match_table = mtk_jpeg_match,
+		.of_match_table = of_match_ptr(mtk_jpeg_match),
 		.pm             = &mtk_jpeg_pm_ops,
 	},
 };

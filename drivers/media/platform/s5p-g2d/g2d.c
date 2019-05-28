@@ -791,7 +791,7 @@ static struct platform_driver g2d_pdrv = {
 	.remove		= g2d_remove,
 	.driver		= {
 		.name = G2D_NAME,
-		.of_match_table = exynos_g2d_match,
+		.of_match_table = of_match_ptr(exynos_g2d_match),
 	},
 };
 

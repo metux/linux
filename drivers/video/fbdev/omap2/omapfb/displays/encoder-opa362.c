@@ -263,7 +263,7 @@ static struct platform_driver opa362_driver = {
 	.remove	= __exit_p(opa362_remove),
 	.driver	= {
 		.name	= "amplifier-opa362",
-		.of_match_table = opa362_of_match,
+		.of_match_table = of_match_ptr(opa362_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

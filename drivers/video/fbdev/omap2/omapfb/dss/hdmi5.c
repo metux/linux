@@ -839,7 +839,7 @@ static struct platform_driver omapdss_hdmihw_driver = {
 	.driver         = {
 		.name   = "omapdss_hdmi5",
 		.pm	= &hdmi_pm_ops,
-		.of_match_table = hdmi_of_match,
+		.of_match_table = of_match_ptr(hdmi_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

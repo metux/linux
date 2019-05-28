@@ -513,7 +513,7 @@ MODULE_DEVICE_TABLE(of, tcx_match);
 static struct platform_driver tcx_driver = {
 	.driver = {
 		.name = "tcx",
-		.of_match_table = tcx_match,
+		.of_match_table = of_match_ptr(tcx_match),
 	},
 	.probe		= tcx_probe,
 	.remove		= tcx_remove,

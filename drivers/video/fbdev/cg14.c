@@ -596,7 +596,7 @@ MODULE_DEVICE_TABLE(of, cg14_match);
 static struct platform_driver cg14_driver = {
 	.driver = {
 		.name = "cg14",
-		.of_match_table = cg14_match,
+		.of_match_table = of_match_ptr(cg14_match),
 	},
 	.probe		= cg14_probe,
 	.remove		= cg14_remove,

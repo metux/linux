@@ -337,7 +337,7 @@ static struct platform_driver dvi_connector_driver = {
 	.remove	= __exit_p(dvic_remove),
 	.driver	= {
 		.name	= "connector-dvi",
-		.of_match_table = dvic_of_match,
+		.of_match_table = of_match_ptr(dvic_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -383,7 +383,7 @@ MODULE_DEVICE_TABLE(of, clps711x_fb_dt_ids);
 static struct platform_driver clps711x_fb_driver = {
 	.driver	= {
 		.name		= CLPS711X_FB_NAME,
-		.of_match_table	= clps711x_fb_dt_ids,
+		.of_match_table	= of_match_ptr(clps711x_fb_dt_ids),
 	},
 	.probe	= clps711x_fb_probe,
 	.remove	= clps711x_fb_remove,

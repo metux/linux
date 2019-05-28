@@ -354,7 +354,7 @@ MODULE_DEVICE_TABLE(of, p9100_match);
 static struct platform_driver p9100_driver = {
 	.driver = {
 		.name = "p9100",
-		.of_match_table = p9100_match,
+		.of_match_table = of_match_ptr(p9100_match),
 	},
 	.probe		= p9100_probe,
 	.remove		= p9100_remove,

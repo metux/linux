@@ -497,7 +497,7 @@ static struct platform_driver xilinxfb_of_driver = {
 	.remove = xilinxfb_of_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = xilinxfb_of_match,
+		.of_match_table = of_match_ptr(xilinxfb_of_match),
 	},
 };
 

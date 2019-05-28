@@ -2465,7 +2465,7 @@ static struct platform_driver pxafb_driver = {
 	.remove 	= pxafb_remove,
 	.driver		= {
 		.name	= "pxa2xx-fb",
-		.of_match_table = pxafb_of_dev_id,
+		.of_match_table = of_match_ptr(pxafb_of_dev_id),
 #ifdef CONFIG_PM
 		.pm	= &pxafb_pm_ops,
 #endif

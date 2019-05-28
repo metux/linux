@@ -635,7 +635,7 @@ static struct spi_driver tpo_td043_spi_driver = {
 	.driver = {
 		.name	= "panel-tpo-td043mtea1",
 		.pm	= &tpo_td043_spi_pm,
-		.of_match_table = tpo_td043_of_match,
+		.of_match_table = of_match_ptr(tpo_td043_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe	= tpo_td043_probe,

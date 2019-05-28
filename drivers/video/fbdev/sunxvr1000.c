@@ -184,7 +184,7 @@ static struct platform_driver gfb_driver = {
 	.probe		= gfb_probe,
 	.driver = {
 		.name			= "gfb",
-		.of_match_table		= gfb_match,
+		.of_match_table		= of_match_ptr(gfb_match),
 		.suppress_bind_attrs	= true,
 	},
 };

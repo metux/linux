@@ -316,7 +316,7 @@ static struct platform_driver goldfish_fb_driver = {
 	.remove		= goldfish_fb_remove,
 	.driver = {
 		.name = "goldfish_fb",
-		.of_match_table = goldfish_fb_of_match,
+		.of_match_table = of_match_ptr(goldfish_fb_of_match),
 		.acpi_match_table = ACPI_PTR(goldfish_fb_acpi_match),
 	}
 };

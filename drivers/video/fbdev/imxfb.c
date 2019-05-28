@@ -1111,7 +1111,7 @@ static SIMPLE_DEV_PM_OPS(imxfb_pm_ops, imxfb_suspend, imxfb_resume);
 static struct platform_driver imxfb_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.of_match_table = imxfb_of_dev_id,
+		.of_match_table = of_match_ptr(imxfb_of_dev_id),
 		.pm	= &imxfb_pm_ops,
 	},
 	.probe		= imxfb_probe,

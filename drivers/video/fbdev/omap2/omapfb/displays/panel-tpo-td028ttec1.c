@@ -467,7 +467,7 @@ static struct spi_driver td028ttec1_spi_driver = {
 
 	.driver         = {
 		.name   = "panel-tpo-td028ttec1",
-		.of_match_table = td028ttec1_of_match,
+		.of_match_table = of_match_ptr(td028ttec1_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

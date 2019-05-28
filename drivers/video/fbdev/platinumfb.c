@@ -670,7 +670,7 @@ static struct platform_driver platinum_driver =
 {
 	.driver = {
 		.name = "platinumfb",
-		.of_match_table = platinumfb_match,
+		.of_match_table = of_match_ptr(platinumfb_match),
 	},
 	.probe		= platinumfb_probe,
 	.remove		= platinumfb_remove,

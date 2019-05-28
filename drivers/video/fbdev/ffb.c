@@ -1053,7 +1053,7 @@ MODULE_DEVICE_TABLE(of, ffb_match);
 static struct platform_driver ffb_driver = {
 	.driver = {
 		.name = "ffb",
-		.of_match_table = ffb_match,
+		.of_match_table = of_match_ptr(ffb_match),
 	},
 	.probe		= ffb_probe,
 	.remove		= ffb_remove,

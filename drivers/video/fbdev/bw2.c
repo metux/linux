@@ -378,7 +378,7 @@ MODULE_DEVICE_TABLE(of, bw2_match);
 static struct platform_driver bw2_driver = {
 	.driver = {
 		.name = "bw2",
-		.of_match_table = bw2_match,
+		.of_match_table = of_match_ptr(bw2_match),
 	},
 	.probe		= bw2_probe,
 	.remove		= bw2_remove,

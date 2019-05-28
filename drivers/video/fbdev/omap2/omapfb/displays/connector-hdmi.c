@@ -303,7 +303,7 @@ static struct platform_driver hdmi_connector_driver = {
 	.remove	= __exit_p(hdmic_remove),
 	.driver	= {
 		.name	= "connector-hdmi",
-		.of_match_table = hdmic_of_match,
+		.of_match_table = of_match_ptr(hdmic_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

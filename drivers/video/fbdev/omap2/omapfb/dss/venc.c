@@ -970,7 +970,7 @@ static struct platform_driver omap_venchw_driver = {
 	.driver         = {
 		.name   = "omapdss_venc",
 		.pm	= &venc_pm_ops,
-		.of_match_table = venc_of_match,
+		.of_match_table = of_match_ptr(venc_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -313,7 +313,7 @@ static struct platform_driver panel_dpi_driver = {
 	.remove = __exit_p(panel_dpi_remove),
 	.driver = {
 		.name = "panel-dpi",
-		.of_match_table = panel_dpi_of_match,
+		.of_match_table = of_match_ptr(panel_dpi_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

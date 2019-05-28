@@ -405,7 +405,7 @@ static struct platform_driver ocfb_driver = {
 	.remove	= ocfb_remove,
 	.driver = {
 		.name = "ocfb_fb",
-		.of_match_table = ocfb_match,
+		.of_match_table = of_match_ptr(ocfb_match),
 	}
 };
 

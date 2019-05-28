@@ -4190,7 +4190,7 @@ static struct platform_driver omap_dispchw_driver = {
 	.driver         = {
 		.name   = "omapdss_dispc",
 		.pm	= &dispc_pm_ops,
-		.of_match_table = dispc_of_match,
+		.of_match_table = of_match_ptr(dispc_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

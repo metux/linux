@@ -542,7 +542,7 @@ MODULE_DEVICE_TABLE(of, svgactrl_of_match);
 static struct platform_driver grvga_driver = {
 	.driver = {
 		.name = "grlib-svgactrl",
-		.of_match_table = svgactrl_of_match,
+		.of_match_table = of_match_ptr(svgactrl_of_match),
 	},
 	.probe		= grvga_probe,
 	.remove		= grvga_remove,

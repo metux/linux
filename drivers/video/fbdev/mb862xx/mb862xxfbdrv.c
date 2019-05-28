@@ -830,7 +830,7 @@ MODULE_DEVICE_TABLE(of, of_platform_mb862xx_tbl);
 static struct platform_driver of_platform_mb862xxfb_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = of_platform_mb862xx_tbl,
+		.of_match_table = of_match_ptr(of_platform_mb862xx_tbl),
 	},
 	.probe		= of_platform_mb862xx_probe,
 	.remove		= of_platform_mb862xx_remove,

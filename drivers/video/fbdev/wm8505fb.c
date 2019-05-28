@@ -398,7 +398,7 @@ static struct platform_driver wm8505fb_driver = {
 	.remove		= wm8505fb_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.of_match_table = wmt_dt_ids,
+		.of_match_table = of_match_ptr(wmt_dt_ids),
 	},
 };
 

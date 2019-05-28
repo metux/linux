@@ -312,7 +312,7 @@ static struct platform_driver dra7_atl_clk_driver = {
 	.driver = {
 		.name = "dra7-atl",
 		.suppress_bind_attrs = true,
-		.of_match_table = of_dra7_atl_clk_match_tbl,
+		.of_match_table = of_match_ptr(of_dra7_atl_clk_match_tbl),
 	},
 	.probe = of_dra7_atl_clk_probe,
 };

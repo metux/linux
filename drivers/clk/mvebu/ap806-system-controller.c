@@ -198,7 +198,7 @@ static struct platform_driver ap806_syscon_legacy_driver = {
 	.probe = ap806_syscon_legacy_probe,
 	.driver		= {
 		.name	= "marvell-ap806-system-controller",
-		.of_match_table = ap806_syscon_legacy_of_match,
+		.of_match_table = of_match_ptr(ap806_syscon_legacy_of_match),
 		.suppress_bind_attrs = true,
 	},
 };
@@ -213,7 +213,7 @@ static struct platform_driver ap806_clock_driver = {
 	.probe = ap806_clock_probe,
 	.driver		= {
 		.name	= "marvell-ap806-clock",
-		.of_match_table = ap806_clock_of_match,
+		.of_match_table = of_match_ptr(ap806_clock_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

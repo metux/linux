@@ -800,7 +800,7 @@ err:
 static struct platform_driver rpm_smd_clk_driver = {
 	.driver = {
 		.name = "qcom-clk-smd-rpm",
-		.of_match_table = rpm_smd_clk_match_table,
+		.of_match_table = of_match_ptr(rpm_smd_clk_match_table),
 	},
 	.probe = rpm_smd_clk_probe,
 };

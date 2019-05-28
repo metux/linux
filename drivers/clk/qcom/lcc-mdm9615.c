@@ -562,7 +562,7 @@ static struct platform_driver lcc_mdm9615_driver = {
 	.probe		= lcc_mdm9615_probe,
 	.driver		= {
 		.name	= "lcc-mdm9615",
-		.of_match_table = lcc_mdm9615_match_table,
+		.of_match_table = of_match_ptr(lcc_mdm9615_match_table),
 	},
 };
 module_platform_driver(lcc_mdm9615_driver);

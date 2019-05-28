@@ -201,7 +201,7 @@ static struct platform_driver s5pv210_audss_clk_driver = {
 	.driver	= {
 		.name = "s5pv210-audss-clk",
 		.suppress_bind_attrs = true,
-		.of_match_table = s5pv210_audss_clk_of_match,
+		.of_match_table = of_match_ptr(s5pv210_audss_clk_of_match),
 	},
 	.probe = s5pv210_audss_clk_probe,
 };

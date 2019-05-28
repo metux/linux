@@ -962,7 +962,7 @@ static int ti_adpll_remove(struct platform_device *pdev)
 static struct platform_driver ti_adpll_driver = {
 	.driver = {
 		.name = "ti-adpll",
-		.of_match_table = ti_adpll_match,
+		.of_match_table = of_match_ptr(ti_adpll_match),
 	},
 	.probe = ti_adpll_probe,
 	.remove = ti_adpll_remove,

@@ -87,7 +87,7 @@ static struct platform_driver clk_mt2712_bdp_drv = {
 	.probe = clk_mt2712_bdp_probe,
 	.driver = {
 		.name = "clk-mt2712-bdp",
-		.of_match_table = of_match_clk_mt2712_bdp,
+		.of_match_table = of_match_ptr(of_match_clk_mt2712_bdp),
 	},
 };
 

@@ -2168,7 +2168,7 @@ MODULE_DEVICE_TABLE(of, bcm2835_clk_of_match);
 static struct platform_driver bcm2835_clk_driver = {
 	.driver = {
 		.name = "bcm2835-clk",
-		.of_match_table = bcm2835_clk_of_match,
+		.of_match_table = of_match_ptr(bcm2835_clk_of_match),
 	},
 	.probe          = bcm2835_clk_probe,
 };

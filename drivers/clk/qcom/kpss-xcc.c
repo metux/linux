@@ -77,7 +77,7 @@ static struct platform_driver kpss_xcc_driver = {
 	.remove = kpss_xcc_driver_remove,
 	.driver = {
 		.name = "kpss-xcc",
-		.of_match_table = kpss_xcc_match_table,
+		.of_match_table = of_match_ptr(kpss_xcc_match_table),
 	},
 };
 module_platform_driver(kpss_xcc_driver);

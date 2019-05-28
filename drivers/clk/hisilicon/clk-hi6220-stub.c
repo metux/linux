@@ -260,7 +260,7 @@ static const struct of_device_id hi6220_stub_clk_of_match[] = {
 static struct platform_driver hi6220_stub_clk_driver = {
 	.driver	= {
 		.name = "hi6220-stub-clk",
-		.of_match_table = hi6220_stub_clk_of_match,
+		.of_match_table = of_match_ptr(hi6220_stub_clk_of_match),
 	},
 	.probe = hi6220_stub_clk_probe,
 };

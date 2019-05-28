@@ -159,7 +159,7 @@ static struct platform_driver turingcc_driver = {
 	.remove		= turingcc_remove,
 	.driver		= {
 		.name	= "qcs404-turingcc",
-		.of_match_table = turingcc_match_table,
+		.of_match_table = of_match_ptr(turingcc_match_table),
 		.pm = &turingcc_pm_ops,
 	},
 };

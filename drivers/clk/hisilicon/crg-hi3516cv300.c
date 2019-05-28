@@ -298,7 +298,7 @@ static struct platform_driver hi3516cv300_crg_driver = {
 	.remove		= hi3516cv300_crg_remove,
 	.driver         = {
 		.name   = "hi3516cv300-crg",
-		.of_match_table = hi3516cv300_crg_match_table,
+		.of_match_table = of_match_ptr(hi3516cv300_crg_match_table),
 	},
 };
 

@@ -160,7 +160,7 @@ static const struct dev_pm_ops exynos4x12_isp_pm_ops = {
 static struct platform_driver exynos4x12_isp_clk_driver __refdata = {
 	.driver	= {
 		.name = "exynos4x12-isp-clk",
-		.of_match_table = exynos4x12_isp_clk_of_match,
+		.of_match_table = of_match_ptr(exynos4x12_isp_clk_of_match),
 		.suppress_bind_attrs = true,
 		.pm = &exynos4x12_isp_pm_ops,
 	},

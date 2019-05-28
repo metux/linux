@@ -110,7 +110,7 @@ static const struct of_device_id abx500_clk_match[] = {
 static struct platform_driver abx500_clk_driver = {
 	.driver = {
 		.name = "abx500-clk",
-		.of_match_table = abx500_clk_match,
+		.of_match_table = of_match_ptr(abx500_clk_match),
 	},
 	.probe	= abx500_clk_probe,
 };

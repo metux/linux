@@ -86,7 +86,7 @@ static struct platform_driver qcom_hfpll_driver = {
 	.probe		= qcom_hfpll_probe,
 	.driver		= {
 		.name	= "qcom-hfpll",
-		.of_match_table = qcom_hfpll_match_table,
+		.of_match_table = of_match_ptr(qcom_hfpll_match_table),
 	},
 };
 module_platform_driver(qcom_hfpll_driver);

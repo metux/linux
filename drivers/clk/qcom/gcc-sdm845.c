@@ -3620,7 +3620,7 @@ static struct platform_driver gcc_sdm845_driver = {
 	.probe		= gcc_sdm845_probe,
 	.driver		= {
 		.name	= "gcc-sdm845",
-		.of_match_table = gcc_sdm845_match_table,
+		.of_match_table = of_match_ptr(gcc_sdm845_match_table),
 	},
 };
 

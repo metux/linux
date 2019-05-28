@@ -972,7 +972,7 @@ static const struct of_device_id r9a06g032_match[] = {
 static struct platform_driver r9a06g032_clock_driver = {
 	.driver		= {
 		.name	= "renesas,r9a06g032-sysctrl",
-		.of_match_table = r9a06g032_match,
+		.of_match_table = of_match_ptr(r9a06g032_match),
 	},
 };
 

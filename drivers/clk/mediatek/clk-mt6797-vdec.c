@@ -78,7 +78,7 @@ static struct platform_driver clk_mt6797_vdec_drv = {
 	.probe = clk_mt6797_vdec_probe,
 	.driver = {
 		.name = "clk-mt6797-vdec",
-		.of_match_table = of_match_clk_mt6797_vdec,
+		.of_match_table = of_match_ptr(of_match_clk_mt6797_vdec),
 	},
 };
 

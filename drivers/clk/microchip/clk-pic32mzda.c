@@ -254,7 +254,7 @@ static struct platform_driver pic32mzda_clk_driver = {
 	.probe		= pic32mzda_clk_probe,
 	.driver		= {
 		.name	= "clk-pic32mzda",
-		.of_match_table = pic32mzda_clk_match_table,
+		.of_match_table = of_match_ptr(pic32mzda_clk_match_table),
 	},
 };
 

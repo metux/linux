@@ -2043,7 +2043,7 @@ static struct platform_driver sc9860_clk_driver = {
 	.probe	= sc9860_clk_probe,
 	.driver	= {
 		.name	= "sc9860-clk",
-		.of_match_table	= sprd_sc9860_clk_ids,
+		.of_match_table	= of_match_ptr(sprd_sc9860_clk_ids),
 	},
 };
 module_platform_driver(sc9860_clk_driver);

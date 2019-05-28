@@ -774,7 +774,7 @@ static struct platform_driver da8xx_cfgchip_driver = {
 	.probe		= da8xx_cfgchip_probe,
 	.driver		= {
 		.name		= "da8xx-cfgchip-clk",
-		.of_match_table	= da8xx_cfgchip_of_match,
+		.of_match_table	= of_match_ptr(da8xx_cfgchip_of_match),
 	},
 	.id_table	= da8xx_cfgchip_id_table,
 };

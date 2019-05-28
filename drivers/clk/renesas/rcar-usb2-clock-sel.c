@@ -174,7 +174,7 @@ static const struct dev_pm_ops rcar_usb2_clock_sel_pm_ops = {
 static struct platform_driver rcar_usb2_clock_sel_driver = {
 	.driver		= {
 		.name	= "rcar-usb2-clock-sel",
-		.of_match_table = rcar_usb2_clock_sel_match,
+		.of_match_table = of_match_ptr(rcar_usb2_clock_sel_match),
 		.pm	= &rcar_usb2_clock_sel_pm_ops,
 	},
 	.probe		= rcar_usb2_clock_sel_probe,

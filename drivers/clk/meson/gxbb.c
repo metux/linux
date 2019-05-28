@@ -3263,7 +3263,7 @@ static struct platform_driver gxbb_driver = {
 	.probe		= meson_eeclkc_probe,
 	.driver		= {
 		.name	= "gxbb-clkc",
-		.of_match_table = clkc_match_table,
+		.of_match_table = of_match_ptr(clkc_match_table),
 	},
 };
 

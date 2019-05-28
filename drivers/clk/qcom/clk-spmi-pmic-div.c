@@ -283,7 +283,7 @@ MODULE_DEVICE_TABLE(of, spmi_pmic_clkdiv_match_table);
 static struct platform_driver spmi_pmic_clkdiv_driver = {
 	.driver		= {
 		.name	= "qcom,spmi-pmic-clkdiv",
-		.of_match_table = spmi_pmic_clkdiv_match_table,
+		.of_match_table = of_match_ptr(spmi_pmic_clkdiv_match_table),
 	},
 	.probe		= spmi_pmic_clkdiv_probe,
 };

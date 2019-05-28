@@ -232,7 +232,7 @@ static struct platform_driver gpu_cc_sdm845_driver = {
 	.probe = gpu_cc_sdm845_probe,
 	.driver = {
 		.name = "sdm845-gpucc",
-		.of_match_table = gpu_cc_sdm845_match_table,
+		.of_match_table = of_match_ptr(gpu_cc_sdm845_match_table),
 	},
 };
 

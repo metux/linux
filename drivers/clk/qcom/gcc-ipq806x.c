@@ -3094,7 +3094,7 @@ static struct platform_driver gcc_ipq806x_driver = {
 	.probe		= gcc_ipq806x_probe,
 	.driver		= {
 		.name	= "gcc-ipq806x",
-		.of_match_table = gcc_ipq806x_match_table,
+		.of_match_table = of_match_ptr(gcc_ipq806x_match_table),
 	},
 };
 

@@ -183,7 +183,7 @@ static struct platform_driver hi3519_clk_driver = {
 	.remove		= hi3519_clk_remove,
 	.driver         = {
 		.name   = "hi3519-clk",
-		.of_match_table = hi3519_clk_match_table,
+		.of_match_table = of_match_ptr(hi3519_clk_match_table),
 	},
 };
 

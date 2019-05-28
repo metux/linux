@@ -615,7 +615,7 @@ MODULE_DEVICE_TABLE(of, sifive_fu540_prci_of_match);
 static struct platform_driver sifive_fu540_prci_driver = {
 	.driver	= {
 		.name = "sifive-fu540-prci",
-		.of_match_table = sifive_fu540_prci_of_match,
+		.of_match_table = of_match_ptr(sifive_fu540_prci_of_match),
 	},
 	.probe = sifive_fu540_prci_probe,
 };

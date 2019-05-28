@@ -982,7 +982,7 @@ static struct i2c_driver vc5_driver = {
 	.driver = {
 		.name = "vc5",
 		.pm	= &vc5_pm_ops,
-		.of_match_table = clk_vc5_of_match,
+		.of_match_table = of_match_ptr(clk_vc5_of_match),
 	},
 	.probe		= vc5_probe,
 	.remove		= vc5_remove,

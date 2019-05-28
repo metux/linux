@@ -514,7 +514,7 @@ static struct platform_driver s500_clk_driver = {
 	.probe = s500_clk_probe,
 	.driver = {
 		.name = "s500-cmu",
-		.of_match_table = s500_clk_of_match,
+		.of_match_table = of_match_ptr(s500_clk_of_match),
 	},
 };
 

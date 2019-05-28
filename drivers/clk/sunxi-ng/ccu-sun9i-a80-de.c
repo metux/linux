@@ -269,7 +269,7 @@ static struct platform_driver sun9i_a80_de_clk_driver = {
 	.probe	= sun9i_a80_de_clk_probe,
 	.driver	= {
 		.name	= "sun9i-a80-de-clks",
-		.of_match_table	= sun9i_a80_de_clk_ids,
+		.of_match_table	= of_match_ptr(sun9i_a80_de_clk_ids),
 	},
 };
 builtin_platform_driver(sun9i_a80_de_clk_driver);

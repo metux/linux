@@ -155,7 +155,7 @@ static struct platform_driver clk_mt2712_mm_drv = {
 	.probe = clk_mt2712_mm_probe,
 	.driver = {
 		.name = "clk-mt2712-mm",
-		.of_match_table = of_match_clk_mt2712_mm,
+		.of_match_table = of_match_ptr(of_match_clk_mt2712_mm),
 	},
 };
 

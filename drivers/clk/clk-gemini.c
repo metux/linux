@@ -383,7 +383,7 @@ static struct platform_driver gemini_clk_driver = {
 	.probe  = gemini_clk_probe,
 	.driver = {
 		.name = "gemini-clk",
-		.of_match_table = gemini_clk_dt_ids,
+		.of_match_table = of_match_ptr(gemini_clk_dt_ids),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -180,7 +180,7 @@ static const struct of_device_id exynos5_clk_of_match[] = {
 static struct platform_driver exynos5_clk_driver __refdata = {
 	.driver	= {
 		.name = "exynos5-clock",
-		.of_match_table = exynos5_clk_of_match,
+		.of_match_table = of_match_ptr(exynos5_clk_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = exynos5_clk_probe,

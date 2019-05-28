@@ -602,7 +602,7 @@ static struct platform_driver m10v_clk_driver = {
 	.probe  = m10v_clk_probe,
 	.driver = {
 		.name = "m10v-ccu",
-		.of_match_table = m10v_clk_dt_ids,
+		.of_match_table = of_match_ptr(m10v_clk_dt_ids),
 	},
 };
 builtin_platform_driver(m10v_clk_driver);

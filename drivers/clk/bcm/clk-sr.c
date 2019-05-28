@@ -414,7 +414,7 @@ static int sr_clk_probe(struct platform_device *pdev)
 static struct platform_driver sr_clk_driver = {
 	.driver = {
 		.name = "sr-clk",
-		.of_match_table = sr_clk_dt_ids,
+		.of_match_table = of_match_ptr(sr_clk_dt_ids),
 	},
 	.probe = sr_clk_probe,
 };

@@ -3396,7 +3396,7 @@ static struct platform_driver mmcc_apq8084_driver = {
 	.probe		= mmcc_apq8084_probe,
 	.driver		= {
 		.name	= "mmcc-apq8084",
-		.of_match_table = mmcc_apq8084_match_table,
+		.of_match_table = of_match_ptr(mmcc_apq8084_match_table),
 	},
 };
 module_platform_driver(mmcc_apq8084_driver);

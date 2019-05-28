@@ -196,7 +196,7 @@ static struct platform_driver sun9i_a80_mmc_config_clk_driver = {
 	.driver = {
 		.name = "sun9i-a80-mmc-config-clk",
 		.suppress_bind_attrs = true,
-		.of_match_table = sun9i_a80_mmc_config_clk_dt_ids,
+		.of_match_table = of_match_ptr(sun9i_a80_mmc_config_clk_dt_ids),
 	},
 	.probe = sun9i_a80_mmc_config_clk_probe,
 };

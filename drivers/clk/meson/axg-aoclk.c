@@ -320,7 +320,7 @@ static struct platform_driver axg_aoclkc_driver = {
 	.probe		= meson_aoclkc_probe,
 	.driver		= {
 		.name	= "axg-aoclkc",
-		.of_match_table = axg_aoclkc_match_table,
+		.of_match_table = of_match_ptr(axg_aoclkc_match_table),
 	},
 };
 

@@ -247,7 +247,7 @@ static struct platform_driver oxnas_stdclk_driver = {
 	.driver	= {
 		.name = "oxnas-stdclk",
 		.suppress_bind_attrs = true,
-		.of_match_table = oxnas_stdclk_dt_ids,
+		.of_match_table = of_match_ptr(oxnas_stdclk_dt_ids),
 	},
 };
 builtin_platform_driver(oxnas_stdclk_driver);

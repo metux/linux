@@ -1243,7 +1243,7 @@ static struct platform_driver sun50i_h6_ccu_driver = {
 	.probe	= sun50i_h6_ccu_probe,
 	.driver	= {
 		.name	= "sun50i-h6-ccu",
-		.of_match_table	= sun50i_h6_ccu_ids,
+		.of_match_table	= of_match_ptr(sun50i_h6_ccu_ids),
 	},
 };
 builtin_platform_driver(sun50i_h6_ccu_driver);

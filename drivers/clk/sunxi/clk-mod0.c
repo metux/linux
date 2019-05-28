@@ -112,7 +112,7 @@ static const struct of_device_id sun4i_a10_mod0_clk_dt_ids[] = {
 static struct platform_driver sun4i_a10_mod0_clk_driver = {
 	.driver = {
 		.name = "sun4i-a10-mod0-clk",
-		.of_match_table = sun4i_a10_mod0_clk_dt_ids,
+		.of_match_table = of_match_ptr(sun4i_a10_mod0_clk_dt_ids),
 	},
 	.probe = sun4i_a10_mod0_clk_probe,
 };

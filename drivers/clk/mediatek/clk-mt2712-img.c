@@ -65,7 +65,7 @@ static struct platform_driver clk_mt2712_img_drv = {
 	.probe = clk_mt2712_img_probe,
 	.driver = {
 		.name = "clk-mt2712-img",
-		.of_match_table = of_match_clk_mt2712_img,
+		.of_match_table = of_match_ptr(of_match_clk_mt2712_img),
 	},
 };
 

@@ -232,7 +232,7 @@ static struct platform_driver artpec6_clkctrl_driver = {
 	.probe = artpec6_clkctrl_probe,
 	.driver = {
 		   .name = "artpec6_clkctrl",
-		   .of_match_table = artpec_clkctrl_of_match,
+		   .of_match_table = of_match_ptr(artpec_clkctrl_of_match),
 	},
 };
 

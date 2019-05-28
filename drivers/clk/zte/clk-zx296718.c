@@ -1074,7 +1074,7 @@ static struct platform_driver zx_clk_driver = {
 	.probe		= zx_clkc_probe,
 	.driver		= {
 		.name	= "zx296718-clkc",
-		.of_match_table = zx_clkc_match_table,
+		.of_match_table = of_match_ptr(zx_clkc_match_table),
 	},
 };
 

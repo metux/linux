@@ -939,7 +939,7 @@ static struct platform_driver davinci_pll_driver = {
 	.probe		= davinci_pll_probe,
 	.driver		= {
 		.name		= "davinci-pll-clk",
-		.of_match_table	= davinci_pll_of_match,
+		.of_match_table	= of_match_ptr(davinci_pll_of_match),
 	},
 	.id_table	= davinci_pll_id_table,
 };

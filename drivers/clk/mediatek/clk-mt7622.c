@@ -760,7 +760,7 @@ static struct platform_driver clk_mt7622_drv = {
 	.probe = clk_mt7622_probe,
 	.driver = {
 		.name = "clk-mt7622",
-		.of_match_table = of_match_clk_mt7622,
+		.of_match_table = of_match_ptr(of_match_clk_mt7622),
 	},
 };
 

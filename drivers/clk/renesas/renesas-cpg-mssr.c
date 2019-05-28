@@ -1012,7 +1012,7 @@ static int __init cpg_mssr_probe(struct platform_device *pdev)
 static struct platform_driver cpg_mssr_driver = {
 	.driver		= {
 		.name	= "renesas-cpg-mssr",
-		.of_match_table = cpg_mssr_match,
+		.of_match_table = of_match_ptr(cpg_mssr_match),
 		.pm = DEV_PM_OPS,
 	},
 };

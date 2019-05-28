@@ -297,7 +297,7 @@ static struct platform_driver gpio_clk_driver = {
 	.probe		= gpio_clk_driver_probe,
 	.driver		= {
 		.name	= "gpio-clk",
-		.of_match_table = gpio_clk_match_table,
+		.of_match_table = of_match_ptr(gpio_clk_match_table),
 	},
 };
 builtin_platform_driver(gpio_clk_driver);

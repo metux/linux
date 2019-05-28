@@ -375,7 +375,7 @@ static struct i2c_driver max9485_driver = {
 	.driver = {
 		.name		= "max9485",
 		.pm		= &max9485_pm_ops,
-		.of_match_table	= max9485_dt_ids,
+		.of_match_table	= of_match_ptr(max9485_dt_ids),
 	},
 	.probe = max9485_i2c_probe,
 	.id_table = max9485_i2c_ids,

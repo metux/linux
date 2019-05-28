@@ -229,7 +229,7 @@ MODULE_DEVICE_TABLE(of, of_fixed_clk_ids);
 static struct platform_driver of_fixed_clk_driver = {
 	.driver = {
 		.name = "of_fixed_clk",
-		.of_match_table = of_fixed_clk_ids,
+		.of_match_table = of_match_ptr(of_fixed_clk_ids),
 	},
 	.probe = of_fixed_clk_probe,
 	.remove = of_fixed_clk_remove,

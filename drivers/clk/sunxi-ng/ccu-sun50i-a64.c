@@ -951,7 +951,7 @@ static struct platform_driver sun50i_a64_ccu_driver = {
 	.probe	= sun50i_a64_ccu_probe,
 	.driver	= {
 		.name	= "sun50i-a64-ccu",
-		.of_match_table	= sun50i_a64_ccu_ids,
+		.of_match_table	= of_match_ptr(sun50i_a64_ccu_ids),
 	},
 };
 builtin_platform_driver(sun50i_a64_ccu_driver);

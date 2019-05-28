@@ -3615,7 +3615,7 @@ static struct platform_driver gcc_apq8084_driver = {
 	.probe		= gcc_apq8084_probe,
 	.driver		= {
 		.name	= "gcc-apq8084",
-		.of_match_table = gcc_apq8084_match_table,
+		.of_match_table = of_match_ptr(gcc_apq8084_match_table),
 	},
 };
 

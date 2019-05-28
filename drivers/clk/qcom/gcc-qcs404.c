@@ -2817,7 +2817,7 @@ static struct platform_driver gcc_qcs404_driver = {
 	.probe = gcc_qcs404_probe,
 	.driver = {
 		.name = "gcc-qcs404",
-		.of_match_table = gcc_qcs404_match_table,
+		.of_match_table = of_match_ptr(gcc_qcs404_match_table),
 	},
 };
 

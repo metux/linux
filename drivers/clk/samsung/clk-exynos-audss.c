@@ -293,7 +293,7 @@ static const struct dev_pm_ops exynos_audss_clk_pm_ops = {
 static struct platform_driver exynos_audss_clk_driver = {
 	.driver	= {
 		.name = "exynos-audss-clk",
-		.of_match_table = exynos_audss_clk_of_match,
+		.of_match_table = of_match_ptr(exynos_audss_clk_of_match),
 		.pm = &exynos_audss_clk_pm_ops,
 	},
 	.probe = exynos_audss_clk_probe,

@@ -448,7 +448,7 @@ static struct platform_driver lcc_ipq806x_driver = {
 	.probe		= lcc_ipq806x_probe,
 	.driver		= {
 		.name	= "lcc-ipq806x",
-		.of_match_table = lcc_ipq806x_match_table,
+		.of_match_table = of_match_ptr(lcc_ipq806x_match_table),
 	},
 };
 module_platform_driver(lcc_ipq806x_driver);

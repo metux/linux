@@ -5697,7 +5697,7 @@ static const struct dev_pm_ops exynos5433_cmu_pm_ops = {
 static struct platform_driver exynos5433_cmu_driver __refdata = {
 	.driver	= {
 		.name = "exynos5433-cmu",
-		.of_match_table = exynos5433_cmu_of_match,
+		.of_match_table = of_match_ptr(exynos5433_cmu_of_match),
 		.suppress_bind_attrs = true,
 		.pm = &exynos5433_cmu_pm_ops,
 	},

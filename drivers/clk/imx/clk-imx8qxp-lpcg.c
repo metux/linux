@@ -209,7 +209,7 @@ static const struct of_device_id imx8qxp_lpcg_match[] = {
 static struct platform_driver imx8qxp_lpcg_clk_driver = {
 	.driver = {
 		.name = "imx8qxp-lpcg-clk",
-		.of_match_table = imx8qxp_lpcg_match,
+		.of_match_table = of_match_ptr(imx8qxp_lpcg_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = imx8qxp_lpcg_clk_probe,

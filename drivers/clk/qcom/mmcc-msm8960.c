@@ -3051,7 +3051,7 @@ static struct platform_driver mmcc_msm8960_driver = {
 	.probe		= mmcc_msm8960_probe,
 	.driver		= {
 		.name	= "mmcc-msm8960",
-		.of_match_table = mmcc_msm8960_match_table,
+		.of_match_table = of_match_ptr(mmcc_msm8960_match_table),
 	},
 };
 

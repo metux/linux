@@ -98,7 +98,7 @@ static struct platform_driver qcom_a53pll_driver = {
 	.probe = qcom_a53pll_probe,
 	.driver = {
 		.name = "qcom-a53pll",
-		.of_match_table = qcom_a53pll_match_table,
+		.of_match_table = of_match_ptr(qcom_a53pll_match_table),
 	},
 };
 module_platform_driver(qcom_a53pll_driver);

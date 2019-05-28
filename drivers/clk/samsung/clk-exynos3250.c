@@ -1085,7 +1085,7 @@ static struct platform_driver exynos3250_cmu_isp_driver __initdata = {
 	.driver = {
 		.name = "exynos3250-cmu-isp",
 		.suppress_bind_attrs = true,
-		.of_match_table = exynos3250_cmu_isp_of_match,
+		.of_match_table = of_match_ptr(exynos3250_cmu_isp_of_match),
 	},
 };
 

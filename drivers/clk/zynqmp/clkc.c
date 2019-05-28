@@ -756,7 +756,7 @@ MODULE_DEVICE_TABLE(of, zynqmp_clock_of_match);
 static struct platform_driver zynqmp_clock_driver = {
 	.driver = {
 		.name = "zynqmp_clock",
-		.of_match_table = zynqmp_clock_of_match,
+		.of_match_table = of_match_ptr(zynqmp_clock_of_match),
 	},
 	.probe = zynqmp_clock_probe,
 };

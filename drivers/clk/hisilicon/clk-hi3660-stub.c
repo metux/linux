@@ -167,7 +167,7 @@ static struct platform_driver hi3660_stub_clk_driver = {
 	.probe	= hi3660_stub_clk_probe,
 	.driver = {
 		.name = "hi3660-stub-clk",
-		.of_match_table = hi3660_stub_clk_of_match,
+		.of_match_table = of_match_ptr(hi3660_stub_clk_of_match),
 	},
 };
 

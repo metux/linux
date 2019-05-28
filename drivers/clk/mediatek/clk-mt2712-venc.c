@@ -62,7 +62,7 @@ static struct platform_driver clk_mt2712_venc_drv = {
 	.probe = clk_mt2712_venc_probe,
 	.driver = {
 		.name = "clk-mt2712-venc",
-		.of_match_table = of_match_clk_mt2712_venc,
+		.of_match_table = of_match_ptr(of_match_clk_mt2712_venc),
 	},
 };
 

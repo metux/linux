@@ -563,7 +563,7 @@ static struct platform_driver davinci_psc_driver = {
 	.probe		= davinci_psc_probe,
 	.driver		= {
 		.name		= "davinci-psc-clk",
-		.of_match_table	= davinci_psc_of_match,
+		.of_match_table	= of_match_ptr(davinci_psc_of_match),
 	},
 	.id_table	= davinci_psc_id_table,
 };

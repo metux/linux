@@ -47,7 +47,7 @@ static struct platform_driver clk_mt8183_mfg_drv = {
 	.probe = clk_mt8183_mfg_probe,
 	.driver = {
 		.name = "clk-mt8183-mfg",
-		.of_match_table = of_match_clk_mt8183_mfg,
+		.of_match_table = of_match_ptr(of_match_clk_mt8183_mfg),
 	},
 };
 

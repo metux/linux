@@ -360,7 +360,7 @@ static struct platform_driver sunxi_de2_clk_driver = {
 	.probe	= sunxi_de2_clk_probe,
 	.driver	= {
 		.name	= "sunxi-de2-clks",
-		.of_match_table	= sunxi_de2_clk_ids,
+		.of_match_table	= of_match_ptr(sunxi_de2_clk_ids),
 	},
 };
 builtin_platform_driver(sunxi_de2_clk_driver);

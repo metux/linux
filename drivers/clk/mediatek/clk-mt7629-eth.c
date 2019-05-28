@@ -152,7 +152,7 @@ static struct platform_driver clk_mt7629_eth_drv = {
 	.probe = clk_mt7629_eth_probe,
 	.driver = {
 		.name = "clk-mt7629-eth",
-		.of_match_table = of_match_clk_mt7629_eth,
+		.of_match_table = of_match_ptr(of_match_clk_mt7629_eth),
 	},
 };
 

@@ -605,7 +605,7 @@ static struct platform_driver aspeed_clk_driver = {
 	.probe  = aspeed_clk_probe,
 	.driver = {
 		.name = "aspeed-clk",
-		.of_match_table = aspeed_clk_dt_ids,
+		.of_match_table = of_match_ptr(aspeed_clk_dt_ids),
 		.suppress_bind_attrs = true,
 	},
 };

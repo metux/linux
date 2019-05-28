@@ -1772,7 +1772,7 @@ static struct platform_driver gcc_ipq4019_driver = {
 	.remove		= gcc_ipq4019_remove,
 	.driver		= {
 		.name	= "qcom,gcc-ipq4019",
-		.of_match_table = gcc_ipq4019_match_table,
+		.of_match_table = of_match_ptr(gcc_ipq4019_match_table),
 	},
 };
 

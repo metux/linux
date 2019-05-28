@@ -288,7 +288,7 @@ static int palmas_clks_remove(struct platform_device *pdev)
 static struct platform_driver palmas_clks_driver = {
 	.driver = {
 		.name = "palmas-clk",
-		.of_match_table = palmas_clks_of_match,
+		.of_match_table = of_match_ptr(palmas_clks_of_match),
 	},
 	.probe = palmas_clks_probe,
 	.remove = palmas_clks_remove,

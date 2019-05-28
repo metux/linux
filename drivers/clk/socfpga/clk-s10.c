@@ -339,7 +339,7 @@ static struct platform_driver stratix10_clkmgr_driver = {
 	.driver		= {
 		.name	= "stratix10-clkmgr",
 		.suppress_bind_attrs = true,
-		.of_match_table = stratix10_clkmgr_match_table,
+		.of_match_table = of_match_ptr(stratix10_clkmgr_match_table),
 	},
 };
 

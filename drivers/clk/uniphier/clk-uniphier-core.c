@@ -207,7 +207,7 @@ static struct platform_driver uniphier_clk_driver = {
 	.remove = uniphier_clk_remove,
 	.driver = {
 		.name = "uniphier-clk",
-		.of_match_table = uniphier_clk_match,
+		.of_match_table = of_match_ptr(uniphier_clk_match),
 	},
 };
 builtin_platform_driver(uniphier_clk_driver);

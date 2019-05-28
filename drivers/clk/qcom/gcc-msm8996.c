@@ -3643,7 +3643,7 @@ static struct platform_driver gcc_msm8996_driver = {
 	.probe		= gcc_msm8996_probe,
 	.driver		= {
 		.name	= "gcc-msm8996",
-		.of_match_table = gcc_msm8996_match_table,
+		.of_match_table = of_match_ptr(gcc_msm8996_match_table),
 	},
 };
 

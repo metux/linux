@@ -638,7 +638,7 @@ static struct platform_driver tegra124_dfll_fcpu_driver = {
 	.remove = tegra124_dfll_fcpu_remove,
 	.driver = {
 		.name = "tegra124-dfll",
-		.of_match_table = tegra124_dfll_fcpu_of_match,
+		.of_match_table = of_match_ptr(tegra124_dfll_fcpu_of_match),
 		.pm = &tegra124_dfll_pm_ops,
 	},
 };

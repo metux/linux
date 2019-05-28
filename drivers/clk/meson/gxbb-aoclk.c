@@ -293,7 +293,7 @@ static struct platform_driver gxbb_aoclkc_driver = {
 	.probe		= meson_aoclkc_probe,
 	.driver		= {
 		.name	= "gxbb-aoclkc",
-		.of_match_table = gxbb_aoclkc_match_table,
+		.of_match_table = of_match_ptr(gxbb_aoclkc_match_table),
 	},
 };
 builtin_platform_driver(gxbb_aoclkc_driver);

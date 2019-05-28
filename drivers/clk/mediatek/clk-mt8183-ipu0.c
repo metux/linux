@@ -49,7 +49,7 @@ static struct platform_driver clk_mt8183_ipu_core0_drv = {
 	.probe = clk_mt8183_ipu_core0_probe,
 	.driver = {
 		.name = "clk-mt8183-ipu_core0",
-		.of_match_table = of_match_clk_mt8183_ipu_core0,
+		.of_match_table = of_match_ptr(of_match_clk_mt8183_ipu_core0),
 	},
 };
 

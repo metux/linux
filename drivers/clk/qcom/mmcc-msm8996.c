@@ -3369,7 +3369,7 @@ static struct platform_driver mmcc_msm8996_driver = {
 	.probe		= mmcc_msm8996_probe,
 	.driver		= {
 		.name	= "mmcc-msm8996",
-		.of_match_table = mmcc_msm8996_match_table,
+		.of_match_table = of_match_ptr(mmcc_msm8996_match_table),
 	},
 };
 module_platform_driver(mmcc_msm8996_driver);

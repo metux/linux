@@ -3665,7 +3665,7 @@ static struct platform_driver gcc_msm8960_driver = {
 	.remove		= gcc_msm8960_remove,
 	.driver		= {
 		.name	= "gcc-msm8960",
-		.of_match_table = gcc_msm8960_match_table,
+		.of_match_table = of_match_ptr(gcc_msm8960_match_table),
 	},
 };
 

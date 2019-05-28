@@ -447,7 +447,7 @@ static struct platform_driver g12a_aoclkc_driver = {
 	.probe		= meson_aoclkc_probe,
 	.driver		= {
 		.name	= "g12a-aoclkc",
-		.of_match_table = g12a_aoclkc_match_table,
+		.of_match_table = of_match_ptr(g12a_aoclkc_match_table),
 	},
 };
 

@@ -292,7 +292,7 @@ static int lochnagar_clk_probe(struct platform_device *pdev)
 static struct platform_driver lochnagar_clk_driver = {
 	.driver = {
 		.name = "lochnagar-clk",
-		.of_match_table = lochnagar_of_match,
+		.of_match_table = of_match_ptr(lochnagar_of_match),
 	},
 	.probe = lochnagar_clk_probe,
 };

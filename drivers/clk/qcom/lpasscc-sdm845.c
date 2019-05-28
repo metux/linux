@@ -159,7 +159,7 @@ static struct platform_driver lpass_cc_sdm845_driver = {
 	.probe		= lpass_cc_sdm845_probe,
 	.driver		= {
 		.name	= "sdm845-lpasscc",
-		.of_match_table = lpass_cc_sdm845_match_table,
+		.of_match_table = of_match_ptr(lpass_cc_sdm845_match_table),
 	},
 };
 

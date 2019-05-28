@@ -646,7 +646,7 @@ static struct platform_driver s700_clk_driver = {
 	.probe = s700_clk_probe,
 	.driver = {
 		.name = "s700-cmu",
-		.of_match_table = s700_clk_of_match
+		.of_match_table = of_match_ptr(s700_clk_of_match),
 	},
 };
 

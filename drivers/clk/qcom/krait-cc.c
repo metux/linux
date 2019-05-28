@@ -387,7 +387,7 @@ static struct platform_driver krait_cc_driver = {
 	.probe = krait_cc_probe,
 	.driver = {
 		.name = "krait-cc",
-		.of_match_table = krait_cc_match_table,
+		.of_match_table = of_match_ptr(krait_cc_match_table),
 	},
 };
 module_platform_driver(krait_cc_driver);

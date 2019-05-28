@@ -335,7 +335,7 @@ MODULE_DEVICE_TABLE(of, axs10x_pll_clk_id);
 static struct platform_driver axs10x_pll_clk_driver = {
 	.driver = {
 		.name = "axs10x-pll-clock",
-		.of_match_table = axs10x_pll_clk_id,
+		.of_match_table = of_match_ptr(axs10x_pll_clk_id),
 	},
 	.probe = axs10x_pll_clk_probe,
 	.remove = axs10x_pll_clk_remove,

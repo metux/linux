@@ -455,7 +455,7 @@ static struct platform_driver clk_rpmh_driver = {
 	.probe		= clk_rpmh_probe,
 	.driver		= {
 		.name	= "clk-rpmh",
-		.of_match_table = clk_rpmh_match_table,
+		.of_match_table = of_match_ptr(clk_rpmh_match_table),
 	},
 };
 

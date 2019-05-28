@@ -790,7 +790,8 @@ static struct platform_driver armada_3700_periph_clock_driver = {
 	.remove = armada_3700_periph_clock_remove,
 	.driver		= {
 		.name	= "marvell-armada-3700-periph-clock",
-		.of_match_table = armada_3700_periph_clock_of_match,
+		.of_match_table = of_match_ptr(
+			armada_3700_periph_clock_of_match),
 		.pm	= &armada_3700_periph_clock_pm_ops,
 	},
 };

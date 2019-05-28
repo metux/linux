@@ -1032,7 +1032,7 @@ static struct platform_driver axg_audio_driver = {
 	.probe		= axg_audio_clkc_probe,
 	.driver		= {
 		.name	= "axg-audio-clkc",
-		.of_match_table = clkc_match_table,
+		.of_match_table = of_match_ptr(clkc_match_table),
 	},
 };
 module_platform_driver(axg_audio_driver);

@@ -636,7 +636,7 @@ static int rpm_clk_remove(struct platform_device *pdev)
 static struct platform_driver rpm_clk_driver = {
 	.driver = {
 		.name = "qcom-clk-rpm",
-		.of_match_table = rpm_clk_match_table,
+		.of_match_table = of_match_ptr(rpm_clk_match_table),
 	},
 	.probe = rpm_clk_probe,
 	.remove = rpm_clk_remove,

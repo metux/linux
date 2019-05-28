@@ -1719,7 +1719,7 @@ static struct platform_driver gcc_mdm9615_driver = {
 	.probe		= gcc_mdm9615_probe,
 	.driver		= {
 		.name	= "gcc-mdm9615",
-		.of_match_table = gcc_mdm9615_match_table,
+		.of_match_table = of_match_ptr(gcc_mdm9615_match_table),
 	},
 };
 

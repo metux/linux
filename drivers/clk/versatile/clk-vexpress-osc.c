@@ -112,7 +112,7 @@ static const struct of_device_id vexpress_osc_of_match[] = {
 static struct platform_driver vexpress_osc_driver = {
 	.driver	= {
 		.name = "vexpress-osc",
-		.of_match_table = vexpress_osc_of_match,
+		.of_match_table = of_match_ptr(vexpress_osc_of_match),
 	},
 	.probe = vexpress_osc_probe,
 };

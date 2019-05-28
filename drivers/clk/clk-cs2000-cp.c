@@ -553,7 +553,7 @@ static struct i2c_driver cs2000_driver = {
 	.driver = {
 		.name = "cs2000-cp",
 		.pm	= &cs2000_pm_ops,
-		.of_match_table = cs2000_of_match,
+		.of_match_table = of_match_ptr(cs2000_of_match),
 	},
 	.probe		= cs2000_probe,
 	.remove		= cs2000_remove,

@@ -302,7 +302,7 @@ MODULE_DEVICE_TABLE(of, scpi_clocks_ids);
 static struct platform_driver scpi_clocks_driver = {
 	.driver	= {
 		.name = "scpi_clocks",
-		.of_match_table = scpi_clocks_ids,
+		.of_match_table = of_match_ptr(scpi_clocks_ids),
 	},
 	.probe = scpi_clocks_probe,
 	.remove = scpi_clocks_remove,

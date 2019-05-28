@@ -424,7 +424,7 @@ static const struct of_device_id hsdk_pll_clk_id[] = {
 static struct platform_driver hsdk_pll_clk_driver = {
 	.driver = {
 		.name = "hsdk-gp-pll-clock",
-		.of_match_table = hsdk_pll_clk_id,
+		.of_match_table = of_match_ptr(hsdk_pll_clk_id),
 	},
 	.probe = hsdk_pll_clk_probe,
 	.remove = hsdk_pll_clk_remove,

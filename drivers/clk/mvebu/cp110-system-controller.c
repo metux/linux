@@ -428,7 +428,7 @@ static struct platform_driver cp110_syscon_legacy_driver = {
 	.probe = cp110_syscon_legacy_clk_probe,
 	.driver		= {
 		.name	= "marvell-cp110-system-controller0",
-		.of_match_table = cp110_syscon_legacy_of_match,
+		.of_match_table = of_match_ptr(cp110_syscon_legacy_of_match),
 		.suppress_bind_attrs = true,
 	},
 };
@@ -443,7 +443,7 @@ static struct platform_driver cp110_clock_driver = {
 	.probe = cp110_clk_probe,
 	.driver		= {
 		.name	= "marvell-cp110-clock",
-		.of_match_table = cp110_clock_of_match,
+		.of_match_table = of_match_ptr(cp110_clock_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -665,7 +665,7 @@ static struct platform_driver disp_cc_sdm845_driver = {
 	.probe		= disp_cc_sdm845_probe,
 	.driver		= {
 		.name	= "disp_cc-sdm845",
-		.of_match_table = disp_cc_sdm845_match_table,
+		.of_match_table = of_match_ptr(disp_cc_sdm845_match_table),
 	},
 };
 

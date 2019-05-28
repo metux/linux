@@ -792,7 +792,7 @@ static struct platform_driver s900_clk_driver = {
 	.probe = s900_clk_probe,
 	.driver = {
 		.name = "s900-cmu",
-		.of_match_table = s900_clk_of_match,
+		.of_match_table = of_match_ptr(s900_clk_of_match),
 	},
 };
 

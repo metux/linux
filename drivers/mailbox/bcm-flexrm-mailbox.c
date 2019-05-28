@@ -1690,7 +1690,7 @@ MODULE_DEVICE_TABLE(of, flexrm_mbox_of_match);
 static struct platform_driver flexrm_mbox_driver = {
 	.driver = {
 		.name = "brcm-flexrm-mbox",
-		.of_match_table = flexrm_mbox_of_match,
+		.of_match_table = of_match_ptr(flexrm_mbox_of_match),
 	},
 	.probe		= flexrm_mbox_probe,
 	.remove		= flexrm_mbox_remove,

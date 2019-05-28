@@ -214,7 +214,7 @@ static struct platform_driver armada_37xx_mbox_driver = {
 	.remove	= armada_37xx_mbox_remove,
 	.driver	= {
 		.name		= DRIVER_NAME,
-		.of_match_table	= armada_37xx_mbox_match,
+		.of_match_table	= of_match_ptr(armada_37xx_mbox_match),
 	},
 };
 

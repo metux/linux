@@ -175,7 +175,7 @@ static struct platform_driver platform_mhu_driver = {
 	.probe	= platform_mhu_probe,
 	.driver = {
 		.name = "platform-mhu",
-		.of_match_table	= platform_mhu_dt_ids,
+		.of_match_table	= of_match_ptr(platform_mhu_dt_ids),
 	},
 };
 

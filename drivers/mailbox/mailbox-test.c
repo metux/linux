@@ -433,7 +433,7 @@ MODULE_DEVICE_TABLE(of, mbox_test_match);
 static struct platform_driver mbox_test_driver = {
 	.driver = {
 		.name = "mailbox_test",
-		.of_match_table = mbox_test_match,
+		.of_match_table = of_match_ptr(mbox_test_match),
 	},
 	.probe  = mbox_test_probe,
 	.remove = mbox_test_remove,

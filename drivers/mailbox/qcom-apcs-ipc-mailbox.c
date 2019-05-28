@@ -128,7 +128,7 @@ static struct platform_driver qcom_apcs_ipc_driver = {
 	.remove = qcom_apcs_ipc_remove,
 	.driver = {
 		.name = "qcom_apcs_ipc",
-		.of_match_table = qcom_apcs_ipc_of_match,
+		.of_match_table = of_match_ptr(qcom_apcs_ipc_of_match),
 	},
 };
 

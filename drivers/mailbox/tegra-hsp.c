@@ -823,7 +823,7 @@ static const struct of_device_id tegra_hsp_match[] = {
 static struct platform_driver tegra_hsp_driver = {
 	.driver = {
 		.name = "tegra-hsp",
-		.of_match_table = tegra_hsp_match,
+		.of_match_table = of_match_ptr(tegra_hsp_match),
 		.pm = &tegra_hsp_pm_ops,
 	},
 	.probe = tegra_hsp_probe,

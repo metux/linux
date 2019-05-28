@@ -355,7 +355,7 @@ static struct platform_driver hi6220_mbox_driver = {
 	.driver = {
 		.name = "hi6220-mbox",
 		.owner = THIS_MODULE,
-		.of_match_table = hi6220_mbox_of_match,
+		.of_match_table = of_match_ptr(hi6220_mbox_of_match),
 	},
 	.probe	= hi6220_mbox_probe,
 };

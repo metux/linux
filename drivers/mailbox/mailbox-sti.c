@@ -488,7 +488,7 @@ static struct platform_driver sti_mbox_driver = {
 	.probe = sti_mbox_probe,
 	.driver = {
 		.name = "sti-mailbox",
-		.of_match_table = sti_mailbox_match,
+		.of_match_table = of_match_ptr(sti_mailbox_match),
 	},
 };
 module_platform_driver(sti_mbox_driver);

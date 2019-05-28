@@ -345,7 +345,7 @@ static struct platform_driver imx_mu_driver = {
 	.remove		= imx_mu_remove,
 	.driver = {
 		.name	= "imx_mu",
-		.of_match_table = imx_mu_dt_ids,
+		.of_match_table = of_match_ptr(imx_mu_dt_ids),
 	},
 };
 module_platform_driver(imx_mu_driver);

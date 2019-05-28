@@ -352,7 +352,7 @@ static struct platform_driver altera_mbox_driver = {
 	.probe	= altera_mbox_probe,
 	.driver	= {
 		.name	= DRIVER_NAME,
-		.of_match_table	= altera_mbox_match,
+		.of_match_table	= of_match_ptr(altera_mbox_match),
 	},
 };
 

@@ -546,7 +546,7 @@ static struct platform_driver cmdq_drv = {
 	.driver = {
 		.name = "mtk_cmdq",
 		.pm = &cmdq_pm_ops,
-		.of_match_table = cmdq_of_ids,
+		.of_match_table = of_match_ptr(cmdq_of_ids),
 	}
 };
 

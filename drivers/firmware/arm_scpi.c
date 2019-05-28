@@ -1029,7 +1029,7 @@ MODULE_DEVICE_TABLE(of, scpi_of_match);
 static struct platform_driver scpi_driver = {
 	.driver = {
 		.name = "scpi_protocol",
-		.of_match_table = scpi_of_match,
+		.of_match_table = of_match_ptr(scpi_of_match),
 	},
 	.probe = scpi_probe,
 	.remove = scpi_remove,

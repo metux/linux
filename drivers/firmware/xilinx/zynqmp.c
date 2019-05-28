@@ -777,7 +777,7 @@ MODULE_DEVICE_TABLE(of, zynqmp_firmware_of_match);
 static struct platform_driver zynqmp_firmware_driver = {
 	.driver = {
 		.name = "zynqmp_firmware",
-		.of_match_table = zynqmp_firmware_of_match,
+		.of_match_table = of_match_ptr(zynqmp_firmware_of_match),
 	},
 	.probe = zynqmp_firmware_probe,
 	.remove = zynqmp_firmware_remove,

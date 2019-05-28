@@ -618,7 +618,7 @@ static const struct of_device_id qcom_scm_dt_match[] = {
 static struct platform_driver qcom_scm_driver = {
 	.driver = {
 		.name	= "qcom_scm",
-		.of_match_table = qcom_scm_dt_match,
+		.of_match_table = of_match_ptr(qcom_scm_dt_match),
 	},
 	.probe = qcom_scm_probe,
 	.shutdown = qcom_scm_shutdown,

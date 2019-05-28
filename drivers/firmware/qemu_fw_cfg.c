@@ -761,7 +761,7 @@ static struct platform_driver fw_cfg_sysfs_driver = {
 	.remove = fw_cfg_sysfs_remove,
 	.driver = {
 		.name = "fw_cfg",
-		.of_match_table = fw_cfg_sysfs_mmio_match,
+		.of_match_table = of_match_ptr(fw_cfg_sysfs_mmio_match),
 		.acpi_match_table = ACPI_PTR(fw_cfg_sysfs_acpi_match),
 	},
 };

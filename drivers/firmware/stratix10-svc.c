@@ -1001,7 +1001,7 @@ static struct platform_driver stratix10_svc_driver = {
 	.remove = stratix10_svc_drv_remove,
 	.driver = {
 		.name = "stratix10-svc",
-		.of_match_table = stratix10_svc_drv_match,
+		.of_match_table = of_match_ptr(stratix10_svc_drv_match),
 	},
 };
 

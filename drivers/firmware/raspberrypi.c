@@ -295,7 +295,7 @@ MODULE_DEVICE_TABLE(of, rpi_firmware_of_match);
 static struct platform_driver rpi_firmware_driver = {
 	.driver = {
 		.name = "raspberrypi-firmware",
-		.of_match_table = rpi_firmware_of_match,
+		.of_match_table = of_match_ptr(rpi_firmware_of_match),
 	},
 	.probe		= rpi_firmware_probe,
 	.shutdown	= rpi_firmware_shutdown,

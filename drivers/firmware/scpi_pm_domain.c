@@ -141,7 +141,7 @@ MODULE_DEVICE_TABLE(of, scpi_power_domain_ids);
 static struct platform_driver scpi_power_domain_driver = {
 	.driver	= {
 		.name = "scpi_power_domain",
-		.of_match_table = scpi_power_domain_ids,
+		.of_match_table = of_match_ptr(scpi_power_domain_ids),
 	},
 	.probe = scpi_pm_domain_probe,
 };

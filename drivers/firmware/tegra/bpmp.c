@@ -867,7 +867,7 @@ static const struct of_device_id tegra_bpmp_match[] = {
 static struct platform_driver tegra_bpmp_driver = {
 	.driver = {
 		.name = "tegra-bpmp",
-		.of_match_table = tegra_bpmp_match,
+		.of_match_table = of_match_ptr(tegra_bpmp_match),
 		.pm = &tegra_bpmp_pm_ops,
 	},
 	.probe = tegra_bpmp_probe,

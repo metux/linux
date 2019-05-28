@@ -336,7 +336,7 @@ static const struct of_device_id imx_sc_pd_match[] = {
 static struct platform_driver imx_sc_pd_driver = {
 	.driver = {
 		.name = "imx-scu-pd",
-		.of_match_table = imx_sc_pd_match,
+		.of_match_table = of_match_ptr(imx_sc_pd_match),
 	},
 	.probe = imx_sc_pd_probe,
 };

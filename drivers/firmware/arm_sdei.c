@@ -1073,7 +1073,7 @@ static struct platform_driver sdei_driver = {
 	.driver		= {
 		.name			= "sdei",
 		.pm			= &sdei_pm_ops,
-		.of_match_table		= sdei_of_match,
+		.of_match_table		= of_match_ptr(sdei_of_match),
 	},
 	.probe		= sdei_probe,
 };

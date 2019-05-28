@@ -58,7 +58,7 @@ static struct platform_driver vmmc_driver = {
 	.probe = vmmc_probe,
 	.driver = {
 		.name = "lantiq,vmmc",
-		.of_match_table = vmmc_match,
+		.of_match_table = of_match_ptr(vmmc_match),
 	},
 };
 builtin_platform_driver(vmmc_driver);

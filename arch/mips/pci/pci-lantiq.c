@@ -236,7 +236,7 @@ static struct platform_driver ltq_pci_driver = {
 	.probe = ltq_pci_probe,
 	.driver = {
 		.name = "pci-xway",
-		.of_match_table = ltq_pci_match,
+		.of_match_table = of_match_ptr(ltq_pci_match),
 	},
 };
 

@@ -129,7 +129,7 @@ MODULE_DEVICE_TABLE(of, of_flash_match);
 static struct platform_driver of_flash_driver = {
 	.driver = {
 		.name = "octeon-of-flash",
-		.of_match_table = of_flash_match,
+		.of_match_table = of_match_ptr(of_flash_match),
 	},
 	.probe		= octeon_flash_probe,
 };

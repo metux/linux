@@ -146,7 +146,7 @@ static struct platform_driver rt_timer_driver = {
 	.probe = rt_timer_probe,
 	.driver = {
 		.name			= "rt-timer",
-		.of_match_table		= rt_timer_match,
+		.of_match_table		= of_match_ptr(rt_timer_match),
 		.suppress_bind_attrs	= true,
 	},
 };

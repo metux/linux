@@ -190,7 +190,7 @@ static struct platform_driver dma_driver = {
 	.probe = gptu_probe,
 	.driver = {
 		.name = "gptu-xway",
-		.of_match_table = gptu_match,
+		.of_match_table = of_match_ptr(gptu_match),
 	},
 };
 

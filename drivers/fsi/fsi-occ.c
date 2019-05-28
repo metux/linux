@@ -582,7 +582,7 @@ static const struct of_device_id occ_match[] = {
 static struct platform_driver occ_driver = {
 	.driver = {
 		.name = "occ",
-		.of_match_table	= occ_match,
+		.of_match_table	= of_match_ptr(occ_match),
 	},
 	.probe	= occ_probe,
 	.remove = occ_remove,

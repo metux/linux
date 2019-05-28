@@ -1430,7 +1430,7 @@ static const struct of_device_id fsi_master_acf_match[] = {
 static struct platform_driver fsi_master_acf = {
 	.driver = {
 		.name		= "fsi-master-acf",
-		.of_match_table	= fsi_master_acf_match,
+		.of_match_table	= of_match_ptr(fsi_master_acf_match),
 	},
 	.probe	= fsi_master_acf_probe,
 	.remove = fsi_master_acf_remove,

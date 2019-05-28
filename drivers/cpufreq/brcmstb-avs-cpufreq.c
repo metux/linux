@@ -729,7 +729,7 @@ MODULE_DEVICE_TABLE(of, brcm_avs_cpufreq_match);
 static struct platform_driver brcm_avs_cpufreq_platdrv = {
 	.driver = {
 		.name	= BRCM_AVS_CPUFREQ_NAME,
-		.of_match_table = brcm_avs_cpufreq_match,
+		.of_match_table = of_match_ptr(brcm_avs_cpufreq_match),
 	},
 	.probe		= brcm_avs_cpufreq_probe,
 	.remove		= brcm_avs_cpufreq_remove,

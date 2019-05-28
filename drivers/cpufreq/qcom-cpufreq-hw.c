@@ -319,7 +319,7 @@ static struct platform_driver qcom_cpufreq_hw_driver = {
 	.remove = qcom_cpufreq_hw_driver_remove,
 	.driver = {
 		.name = "qcom-cpufreq-hw",
-		.of_match_table = qcom_cpufreq_hw_match,
+		.of_match_table = of_match_ptr(qcom_cpufreq_hw_match),
 	},
 };
 

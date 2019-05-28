@@ -677,7 +677,7 @@ static struct platform_driver tango_nand_driver = {
 	.remove	= tango_nand_remove,
 	.driver	= {
 		.name		= "tango-nand",
-		.of_match_table	= tango_nand_ids,
+		.of_match_table	= of_match_ptr(tango_nand_ids),
 	},
 };
 

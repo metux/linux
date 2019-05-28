@@ -892,7 +892,7 @@ static struct platform_driver aspeed_smc_driver = {
 	.remove = aspeed_smc_remove,
 	.driver = {
 		.name = DEVICE_NAME,
-		.of_match_table = aspeed_smc_matches,
+		.of_match_table = of_match_ptr(aspeed_smc_matches),
 	}
 };
 

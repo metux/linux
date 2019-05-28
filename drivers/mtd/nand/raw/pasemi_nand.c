@@ -202,7 +202,7 @@ static struct platform_driver pasemi_nand_driver =
 {
 	.driver = {
 		.name = driver_name,
-		.of_match_table = pasemi_nand_match,
+		.of_match_table = of_match_ptr(pasemi_nand_match),
 	},
 	.probe		= pasemi_nand_probe,
 	.remove		= pasemi_nand_remove,

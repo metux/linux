@@ -553,7 +553,7 @@ static struct platform_driver mtk_nor_driver = {
 	.driver = {
 		.name = "mtk-nor",
 		.pm = MTK_NOR_DEV_PM_OPS,
-		.of_match_table = mtk_nor_of_ids,
+		.of_match_table = of_match_ptr(mtk_nor_of_ids),
 	},
 };
 

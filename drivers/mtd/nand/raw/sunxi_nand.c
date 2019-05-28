@@ -2211,7 +2211,7 @@ MODULE_DEVICE_TABLE(of, sunxi_nfc_ids);
 static struct platform_driver sunxi_nfc_driver = {
 	.driver = {
 		.name = "sunxi_nand",
-		.of_match_table = sunxi_nfc_ids,
+		.of_match_table = of_match_ptr(sunxi_nfc_ids),
 	},
 	.probe = sunxi_nfc_probe,
 	.remove = sunxi_nfc_remove,

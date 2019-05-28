@@ -168,7 +168,7 @@ MODULE_DEVICE_TABLE(of, parse_bcm63xx_cfe_match_table);
 static struct mtd_part_parser bcm63xx_cfe_parser = {
 	.parse_fn = bcm63xx_parse_cfe_partitions,
 	.name = "bcm63xxpart",
-	.of_match_table = parse_bcm63xx_cfe_match_table,
+	.of_match_table = of_match_ptr(parse_bcm63xx_cfe_match_table),
 };
 module_mtd_part_parser(bcm63xx_cfe_parser);
 

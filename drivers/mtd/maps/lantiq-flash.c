@@ -194,7 +194,7 @@ static struct platform_driver ltq_mtd_driver = {
 	.remove = ltq_mtd_remove,
 	.driver = {
 		.name = "ltq-nor",
-		.of_match_table = ltq_mtd_match,
+		.of_match_table = of_match_ptr(ltq_mtd_match),
 	},
 };
 

@@ -1119,7 +1119,7 @@ MODULE_DEVICE_TABLE(of, fsl_ifc_nand_match);
 static struct platform_driver fsl_ifc_nand_driver = {
 	.driver = {
 		.name	= "fsl,ifc-nand",
-		.of_match_table = fsl_ifc_nand_match,
+		.of_match_table = of_match_ptr(fsl_ifc_nand_match),
 	},
 	.probe       = fsl_ifc_nand_probe,
 	.remove      = fsl_ifc_nand_remove,

@@ -237,7 +237,7 @@ static struct platform_driver xway_nand_driver = {
 	.remove	= xway_nand_remove,
 	.driver	= {
 		.name		= "lantiq,nand-xway",
-		.of_match_table = xway_nand_match,
+		.of_match_table = of_match_ptr(xway_nand_match),
 	},
 };
 

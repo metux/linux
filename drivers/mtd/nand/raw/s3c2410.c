@@ -1282,7 +1282,7 @@ static struct platform_driver s3c24xx_nand_driver = {
 	.id_table	= s3c24xx_driver_ids,
 	.driver		= {
 		.name	= "s3c24xx-nand",
-		.of_match_table = s3c24xx_nand_dt_ids,
+		.of_match_table = of_match_ptr(s3c24xx_nand_dt_ids),
 	},
 };
 

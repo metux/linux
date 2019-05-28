@@ -278,7 +278,7 @@ static const struct of_device_id powernv_flash_match[] = {
 static struct platform_driver powernv_flash_driver = {
 	.driver		= {
 		.name		= "powernv_flash",
-		.of_match_table	= powernv_flash_match,
+		.of_match_table	= of_match_ptr(powernv_flash_match),
 	},
 	.remove		= powernv_flash_release,
 	.probe		= powernv_flash_probe,

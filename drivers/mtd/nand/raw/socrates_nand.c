@@ -203,7 +203,7 @@ MODULE_DEVICE_TABLE(of, socrates_nand_match);
 static struct platform_driver socrates_nand_driver = {
 	.driver = {
 		.name = "socrates_nand",
-		.of_match_table = socrates_nand_match,
+		.of_match_table = of_match_ptr(socrates_nand_match),
 	},
 	.probe		= socrates_nand_probe,
 	.remove		= socrates_nand_remove,

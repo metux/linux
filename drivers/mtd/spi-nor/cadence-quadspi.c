@@ -1534,7 +1534,7 @@ static struct platform_driver cqspi_platform_driver = {
 	.driver = {
 		.name = CQSPI_NAME,
 		.pm = CQSPI_DEV_PM_OPS,
-		.of_match_table = cqspi_dt_ids,
+		.of_match_table = of_match_ptr(cqspi_dt_ids),
 	},
 };
 

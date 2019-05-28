@@ -949,7 +949,7 @@ static SIMPLE_DEV_PM_OPS(vf610_nfc_pm_ops, vf610_nfc_suspend, vf610_nfc_resume);
 static struct platform_driver vf610_nfc_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = vf610_nfc_dt_ids,
+		.of_match_table = of_match_ptr(vf610_nfc_dt_ids),
 		.pm	= &vf610_nfc_pm_ops,
 	},
 	.probe		= vf610_nfc_probe,

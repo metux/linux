@@ -2070,7 +2070,7 @@ static struct platform_driver stm32_fmc2_driver = {
 	.remove	= stm32_fmc2_remove,
 	.driver	= {
 		.name = "stm32_fmc2_nand",
-		.of_match_table = stm32_fmc2_match,
+		.of_match_table = of_match_ptr(stm32_fmc2_match),
 		.pm = &stm32_fmc2_pm_ops,
 	},
 };

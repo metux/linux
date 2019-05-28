@@ -309,7 +309,7 @@ MODULE_DEVICE_TABLE(of, bcm47xxpart_of_match_table);
 static struct mtd_part_parser bcm47xxpart_mtd_parser = {
 	.parse_fn = bcm47xxpart_parse,
 	.name = "bcm47xxpart",
-	.of_match_table = bcm47xxpart_of_match_table,
+	.of_match_table = of_match_ptr(bcm47xxpart_of_match_table),
 };
 module_mtd_part_parser(bcm47xxpart_mtd_parser);
 

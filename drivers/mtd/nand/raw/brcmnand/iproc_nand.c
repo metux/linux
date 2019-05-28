@@ -141,7 +141,7 @@ static struct platform_driver iproc_nand_driver = {
 	.driver = {
 		.name		= "iproc_nand",
 		.pm		= &brcmnand_pm_ops,
-		.of_match_table	= iproc_nand_of_match,
+		.of_match_table	= of_match_ptr(iproc_nand_of_match),
 	}
 };
 module_platform_driver(iproc_nand_driver);

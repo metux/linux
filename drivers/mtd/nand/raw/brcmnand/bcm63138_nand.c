@@ -91,7 +91,7 @@ static struct platform_driver bcm63138_nand_driver = {
 	.driver = {
 		.name		= "bcm63138_nand",
 		.pm		= &brcmnand_pm_ops,
-		.of_match_table	= bcm63138_nand_of_match,
+		.of_match_table	= of_match_ptr(bcm63138_nand_of_match),
 	}
 };
 module_platform_driver(bcm63138_nand_driver);

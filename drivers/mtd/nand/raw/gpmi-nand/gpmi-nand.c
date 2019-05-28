@@ -2756,7 +2756,7 @@ static struct platform_driver gpmi_nand_driver = {
 	.driver = {
 		.name = "gpmi-nand",
 		.pm = &gpmi_pm_ops,
-		.of_match_table = gpmi_nand_id_table,
+		.of_match_table = of_match_ptr(gpmi_nand_id_table),
 	},
 	.probe   = gpmi_nand_probe,
 	.remove  = gpmi_nand_remove,

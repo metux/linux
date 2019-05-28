@@ -1636,7 +1636,7 @@ static struct platform_driver mtk_nfc_driver = {
 	.remove = mtk_nfc_remove,
 	.driver = {
 		.name  = MTK_NAME,
-		.of_match_table = mtk_nfc_id_table,
+		.of_match_table = of_match_ptr(mtk_nfc_id_table),
 #ifdef CONFIG_PM_SLEEP
 		.pm = &mtk_nfc_pm_ops,
 #endif

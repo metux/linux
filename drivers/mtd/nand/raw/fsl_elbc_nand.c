@@ -982,7 +982,7 @@ MODULE_DEVICE_TABLE(of, fsl_elbc_nand_match);
 static struct platform_driver fsl_elbc_nand_driver = {
 	.driver = {
 		.name = "fsl,elbc-fcm-nand",
-		.of_match_table = fsl_elbc_nand_match,
+		.of_match_table = of_match_ptr(fsl_elbc_nand_match),
 	},
 	.probe = fsl_elbc_nand_probe,
 	.remove = fsl_elbc_nand_remove,

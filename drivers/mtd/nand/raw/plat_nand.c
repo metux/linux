@@ -125,7 +125,7 @@ static struct platform_driver plat_nand_driver = {
 	.remove	= plat_nand_remove,
 	.driver	= {
 		.name		= "gen_nand",
-		.of_match_table = plat_nand_match,
+		.of_match_table = of_match_ptr(plat_nand_match),
 	},
 };
 

@@ -859,7 +859,7 @@ MODULE_DEVICE_TABLE(of, nfc_id_table);
 static struct platform_driver hisi_nfc_driver = {
 	.driver = {
 		.name  = "hisi_nand",
-		.of_match_table = nfc_id_table,
+		.of_match_table = of_match_ptr(nfc_id_table),
 		.pm = &hisi_nfc_pm_ops,
 	},
 	.probe		= hisi_nfc_probe,

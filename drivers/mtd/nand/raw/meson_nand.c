@@ -1458,7 +1458,7 @@ static struct platform_driver meson_nfc_driver = {
 	.remove = meson_nfc_remove,
 	.driver = {
 		.name  = "meson-nand",
-		.of_match_table = meson_nfc_id_table,
+		.of_match_table = of_match_ptr(meson_nfc_id_table),
 	},
 };
 module_platform_driver(meson_nfc_driver);

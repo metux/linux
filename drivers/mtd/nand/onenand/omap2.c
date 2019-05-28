@@ -606,7 +606,7 @@ static struct platform_driver omap2_onenand_driver = {
 	.shutdown	= omap2_onenand_shutdown,
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.of_match_table = omap2_onenand_id_table,
+		.of_match_table = of_match_ptr(omap2_onenand_id_table),
 	},
 };
 

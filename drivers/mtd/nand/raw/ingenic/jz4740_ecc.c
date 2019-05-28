@@ -187,7 +187,7 @@ static struct platform_driver jz4740_ecc_driver = {
 	.probe		= ingenic_ecc_probe,
 	.driver	= {
 		.name	= "jz4740-ecc",
-		.of_match_table = jz4740_ecc_dt_match,
+		.of_match_table = of_match_ptr(jz4740_ecc_dt_match),
 	},
 };
 module_platform_driver(jz4740_ecc_driver);

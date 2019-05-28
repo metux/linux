@@ -205,7 +205,7 @@ MODULE_DEVICE_TABLE(of, parse_bcm963xx_imagetag_match_table);
 static struct mtd_part_parser bcm963xx_imagetag_parser = {
 	.parse_fn = bcm963xx_parse_imagetag_partitions,
 	.name = "bcm963xx-imagetag",
-	.of_match_table = parse_bcm963xx_imagetag_match_table,
+	.of_match_table = of_match_ptr(parse_bcm963xx_imagetag_match_table),
 };
 module_mtd_part_parser(bcm963xx_imagetag_parser);
 

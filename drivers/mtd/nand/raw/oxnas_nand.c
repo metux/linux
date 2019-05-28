@@ -187,7 +187,7 @@ static struct platform_driver oxnas_nand_driver = {
 	.remove	= oxnas_nand_remove,
 	.driver	= {
 		.name		= "oxnas_nand",
-		.of_match_table = oxnas_nand_match,
+		.of_match_table = of_match_ptr(oxnas_nand_match),
 	},
 };
 

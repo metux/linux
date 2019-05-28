@@ -3077,7 +3077,7 @@ MODULE_DEVICE_TABLE(of, marvell_nfc_of_ids);
 static struct platform_driver marvell_nfc_driver = {
 	.driver	= {
 		.name		= "marvell-nfc",
-		.of_match_table = marvell_nfc_of_ids,
+		.of_match_table = of_match_ptr(marvell_nfc_of_ids),
 		.pm		= &marvell_nfc_pm_ops,
 	},
 	.id_table = marvell_nfc_platform_ids,

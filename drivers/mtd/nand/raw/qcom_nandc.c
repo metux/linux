@@ -3040,7 +3040,7 @@ MODULE_DEVICE_TABLE(of, qcom_nandc_of_match);
 static struct platform_driver qcom_nandc_driver = {
 	.driver = {
 		.name = "qcom-nandc",
-		.of_match_table = qcom_nandc_of_match,
+		.of_match_table = of_match_ptr(qcom_nandc_of_match),
 	},
 	.probe   = qcom_nandc_probe,
 	.remove  = qcom_nandc_remove,

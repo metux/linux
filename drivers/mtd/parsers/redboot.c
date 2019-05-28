@@ -307,7 +307,7 @@ MODULE_DEVICE_TABLE(of, mtd_parser_redboot_of_match_table);
 static struct mtd_part_parser redboot_parser = {
 	.parse_fn = parse_redboot_partitions,
 	.name = "RedBoot",
-	.of_match_table = mtd_parser_redboot_of_match_table,
+	.of_match_table = of_match_ptr(mtd_parser_redboot_of_match_table),
 };
 module_mtd_part_parser(redboot_parser);
 

@@ -260,7 +260,7 @@ static struct platform_driver denali_dt_driver = {
 	.remove		= denali_dt_remove,
 	.driver		= {
 		.name	= "denali-nand-dt",
-		.of_match_table	= denali_nand_dt_ids,
+		.of_match_table	= of_match_ptr(denali_nand_dt_ids),
 	},
 };
 module_platform_driver(denali_dt_driver);

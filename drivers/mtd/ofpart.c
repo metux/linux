@@ -145,7 +145,7 @@ MODULE_DEVICE_TABLE(of, parse_ofpart_match_table);
 static struct mtd_part_parser ofpart_parser = {
 	.parse_fn = parse_fixed_partitions,
 	.name = "fixed-partitions",
-	.of_match_table = parse_ofpart_match_table,
+	.of_match_table = of_match_ptr(parse_ofpart_match_table),
 };
 
 static int parse_ofoldpart_partitions(struct mtd_info *master,

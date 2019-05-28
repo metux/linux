@@ -388,7 +388,7 @@ MODULE_DEVICE_TABLE(of, mtd_parser_afs_of_match_table);
 static struct mtd_part_parser afs_parser = {
 	.parse_fn = parse_afs_partitions,
 	.name = "afs",
-	.of_match_table = mtd_parser_afs_of_match_table,
+	.of_match_table = of_match_ptr(mtd_parser_afs_of_match_table),
 };
 module_mtd_part_parser(afs_parser);
 

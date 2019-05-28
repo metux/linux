@@ -484,7 +484,7 @@ MODULE_DEVICE_TABLE(of, hisi_spi_nor_dt_ids);
 static struct platform_driver hisi_spi_nor_driver = {
 	.driver = {
 		.name	= "hisi-sfc",
-		.of_match_table = hisi_spi_nor_dt_ids,
+		.of_match_table = of_match_ptr(hisi_spi_nor_dt_ids),
 	},
 	.probe	= hisi_spi_nor_probe,
 	.remove	= hisi_spi_nor_remove,

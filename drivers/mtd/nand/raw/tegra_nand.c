@@ -1228,7 +1228,7 @@ MODULE_DEVICE_TABLE(of, tegra_nand_of_match);
 static struct platform_driver tegra_nand_driver = {
 	.driver = {
 		.name = "tegra-nand",
-		.of_match_table = tegra_nand_of_match,
+		.of_match_table = of_match_ptr(tegra_nand_of_match),
 	},
 	.probe = tegra_nand_probe,
 	.remove = tegra_nand_remove,

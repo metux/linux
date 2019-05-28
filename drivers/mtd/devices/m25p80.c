@@ -326,7 +326,7 @@ static struct spi_mem_driver m25p80_driver = {
 	.spidrv = {
 		.driver = {
 			.name	= "m25p80",
-			.of_match_table = m25p_of_table,
+			.of_match_table = of_match_ptr(m25p_of_table),
 		},
 		.id_table	= m25p_ids,
 	},

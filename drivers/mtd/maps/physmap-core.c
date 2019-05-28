@@ -601,7 +601,7 @@ static struct platform_driver physmap_flash_driver = {
 	.shutdown	= physmap_flash_shutdown,
 	.driver		= {
 		.name	= "physmap-flash",
-		.of_match_table = of_flash_match,
+		.of_match_table = of_match_ptr(of_flash_match),
 	},
 };
 

@@ -1290,7 +1290,7 @@ static struct platform_driver rk_iommu_driver = {
 	.shutdown = rk_iommu_shutdown,
 	.driver = {
 		   .name = "rk_iommu",
-		   .of_match_table = rk_iommu_dt_ids,
+		   .of_match_table = of_match_ptr(rk_iommu_dt_ids),
 		   .pm = &rk_iommu_pm_ops,
 		   .suppress_bind_attrs = true,
 	},

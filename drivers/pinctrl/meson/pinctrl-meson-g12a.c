@@ -1397,7 +1397,7 @@ static struct platform_driver meson_g12a_pinctrl_driver = {
 	.probe  = meson_pinctrl_probe,
 	.driver = {
 		.name	= "meson-g12a-pinctrl",
-		.of_match_table = meson_g12a_pinctrl_dt_match,
+		.of_match_table = of_match_ptr(meson_g12a_pinctrl_dt_match),
 	},
 };
 

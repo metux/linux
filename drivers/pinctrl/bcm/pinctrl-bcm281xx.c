@@ -1442,7 +1442,7 @@ static const struct of_device_id bcm281xx_pinctrl_of_match[] = {
 static struct platform_driver bcm281xx_pinctrl_driver = {
 	.driver = {
 		.name = "bcm281xx-pinctrl",
-		.of_match_table = bcm281xx_pinctrl_of_match,
+		.of_match_table = of_match_ptr(bcm281xx_pinctrl_of_match),
 	},
 };
 builtin_platform_driver_probe(bcm281xx_pinctrl_driver, bcm281xx_pinctrl_probe);

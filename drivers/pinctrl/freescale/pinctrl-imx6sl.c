@@ -378,7 +378,7 @@ static int imx6sl_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver imx6sl_pinctrl_driver = {
 	.driver = {
 		.name = "imx6sl-pinctrl",
-		.of_match_table = imx6sl_pinctrl_of_match,
+		.of_match_table = of_match_ptr(imx6sl_pinctrl_of_match),
 	},
 	.probe = imx6sl_pinctrl_probe,
 };

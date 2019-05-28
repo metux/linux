@@ -1430,7 +1430,7 @@ static struct platform_driver mtk_pinctrl_driver = {
 	.probe = mt7623_pinctrl_probe,
 	.driver = {
 		.name = "mt7623-moore-pinctrl",
-		.of_match_table = mt7623_pctrl_match,
+		.of_match_table = of_match_ptr(mt7623_pctrl_match),
 	},
 };
 

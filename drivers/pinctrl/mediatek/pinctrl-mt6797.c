@@ -70,7 +70,7 @@ static int mt6797_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver mt6797_pinctrl_driver = {
 	.driver = {
 		.name = "mt6797-pinctrl",
-		.of_match_table = mt6797_pinctrl_of_match,
+		.of_match_table = of_match_ptr(mt6797_pinctrl_of_match),
 	},
 	.probe = mt6797_pinctrl_probe,
 };

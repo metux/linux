@@ -1168,7 +1168,7 @@ static int __init armada_37xx_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver armada_37xx_pinctrl_driver = {
 	.driver = {
 		.name = "armada-37xx-pinctrl",
-		.of_match_table = armada_37xx_pinctrl_of_match,
+		.of_match_table = of_match_ptr(armada_37xx_pinctrl_of_match),
 		.pm = PINCTRL_ARMADA_37XX_DEV_PM_OPS,
 	},
 };

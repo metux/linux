@@ -314,7 +314,7 @@ static struct platform_driver mtk_pinctrl_driver = {
 	.probe = mt8127_pinctrl_probe,
 	.driver = {
 		.name = "mediatek-mt8127-pinctrl",
-		.of_match_table = mt8127_pctrl_match,
+		.of_match_table = of_match_ptr(mt8127_pctrl_match),
 	},
 };
 

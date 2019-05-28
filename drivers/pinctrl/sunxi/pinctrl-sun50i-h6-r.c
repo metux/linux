@@ -122,7 +122,7 @@ static struct platform_driver sun50i_h6_r_pinctrl_driver = {
 	.probe	= sun50i_h6_r_pinctrl_probe,
 	.driver	= {
 		.name		= "sun50i-h6-r-pinctrl",
-		.of_match_table	= sun50i_h6_r_pinctrl_match,
+		.of_match_table	= of_match_ptr(sun50i_h6_r_pinctrl_match),
 	},
 };
 builtin_platform_driver(sun50i_h6_r_pinctrl_driver);

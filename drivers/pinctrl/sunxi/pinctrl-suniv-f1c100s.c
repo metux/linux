@@ -410,7 +410,7 @@ static struct platform_driver suniv_f1c100s_pinctrl_driver = {
 	.probe	= suniv_pinctrl_probe,
 	.driver	= {
 		.name		= "suniv-f1c100s-pinctrl",
-		.of_match_table	= suniv_f1c100s_pinctrl_match,
+		.of_match_table	= of_match_ptr(suniv_f1c100s_pinctrl_match),
 	},
 };
 builtin_platform_driver(suniv_f1c100s_pinctrl_driver);

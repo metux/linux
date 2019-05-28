@@ -744,7 +744,7 @@ static struct platform_driver sun5i_pinctrl_driver = {
 	.probe	= sun5i_pinctrl_probe,
 	.driver	= {
 		.name		= "sun5i-pinctrl",
-		.of_match_table	= sun5i_pinctrl_match,
+		.of_match_table	= of_match_ptr(sun5i_pinctrl_match),
 	},
 };
 builtin_platform_driver(sun5i_pinctrl_driver);

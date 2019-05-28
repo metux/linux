@@ -1952,7 +1952,7 @@ static struct platform_driver pcs_driver = {
 	.remove		= pcs_remove,
 	.driver = {
 		.name		= DRIVER_NAME,
-		.of_match_table	= pcs_of_match,
+		.of_match_table	= of_match_ptr(pcs_of_match),
 	},
 #ifdef CONFIG_PM
 	.suspend = pinctrl_single_suspend,

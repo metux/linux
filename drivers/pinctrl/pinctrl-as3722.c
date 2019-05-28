@@ -616,7 +616,7 @@ MODULE_DEVICE_TABLE(of, as3722_pinctrl_of_match);
 static struct platform_driver as3722_pinctrl_driver = {
 	.driver = {
 		.name = "as3722-pinctrl",
-		.of_match_table = as3722_pinctrl_of_match,
+		.of_match_table = of_match_ptr(as3722_pinctrl_of_match),
 	},
 	.probe = as3722_pinctrl_probe,
 	.remove = as3722_pinctrl_remove,

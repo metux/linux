@@ -339,7 +339,7 @@ static const struct of_device_id dc_pinctrl_ids[] = {
 static struct platform_driver dc_pinctrl_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = dc_pinctrl_ids,
+		.of_match_table = of_match_ptr(dc_pinctrl_ids),
 		.suppress_bind_attrs = true,
 	},
 	.probe = dc_pinctrl_probe,

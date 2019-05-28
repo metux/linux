@@ -1649,7 +1649,7 @@ static const struct of_device_id qcs404_pinctrl_of_match[] = {
 static struct platform_driver qcs404_pinctrl_driver = {
 	.driver = {
 		.name = "qcs404-pinctrl",
-		.of_match_table = qcs404_pinctrl_of_match,
+		.of_match_table = of_match_ptr(qcs404_pinctrl_of_match),
 	},
 	.probe = qcs404_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

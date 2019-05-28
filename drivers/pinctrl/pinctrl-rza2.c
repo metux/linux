@@ -503,7 +503,7 @@ static const struct of_device_id rza2_pinctrl_of_match[] = {
 static struct platform_driver rza2_pinctrl_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = rza2_pinctrl_of_match,
+		.of_match_table = of_match_ptr(rza2_pinctrl_of_match),
 	},
 	.probe = rza2_pinctrl_probe,
 };

@@ -1051,7 +1051,7 @@ static int palmas_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver palmas_pinctrl_driver = {
 	.driver = {
 		.name = "palmas-pinctrl",
-		.of_match_table = palmas_pinctrl_of_match,
+		.of_match_table = of_match_ptr(palmas_pinctrl_of_match),
 	},
 	.probe = palmas_pinctrl_probe,
 };

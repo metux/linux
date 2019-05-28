@@ -975,7 +975,7 @@ static struct platform_driver uniphier_pxs2_pinctrl_driver = {
 	.probe = uniphier_pxs2_pinctrl_probe,
 	.driver = {
 		.name = "uniphier-pxs2-pinctrl",
-		.of_match_table = uniphier_pxs2_pinctrl_match,
+		.of_match_table = of_match_ptr(uniphier_pxs2_pinctrl_match),
 		.pm = &uniphier_pinctrl_pm_ops,
 	},
 };

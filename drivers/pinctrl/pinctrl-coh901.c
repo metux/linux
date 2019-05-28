@@ -757,7 +757,7 @@ static const struct of_device_id u300_gpio_match[] = {
 static struct platform_driver u300_gpio_driver = {
 	.driver		= {
 		.name	= "u300-gpio",
-		.of_match_table = u300_gpio_match,
+		.of_match_table = of_match_ptr(u300_gpio_match),
 	},
 	.remove		= __exit_p(u300_gpio_remove),
 };

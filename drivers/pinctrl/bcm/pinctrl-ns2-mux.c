@@ -1103,7 +1103,7 @@ static const struct of_device_id ns2_pinmux_of_match[] = {
 static struct platform_driver ns2_pinmux_driver = {
 	.driver = {
 		.name = "ns2-pinmux",
-		.of_match_table = ns2_pinmux_of_match,
+		.of_match_table = of_match_ptr(ns2_pinmux_of_match),
 	},
 	.probe = ns2_pinmux_probe,
 };

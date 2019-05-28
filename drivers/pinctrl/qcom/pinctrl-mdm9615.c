@@ -451,7 +451,7 @@ static const struct of_device_id mdm9615_pinctrl_of_match[] = {
 static struct platform_driver mdm9615_pinctrl_driver = {
 	.driver = {
 		.name = "mdm9615-pinctrl",
-		.of_match_table = mdm9615_pinctrl_of_match,
+		.of_match_table = of_match_ptr(mdm9615_pinctrl_of_match),
 	},
 	.probe = mdm9615_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

@@ -182,7 +182,7 @@ static struct platform_driver berlin2cd_pinctrl_driver = {
 	.probe	= berlin2cd_pinctrl_probe,
 	.driver	= {
 		.name = "berlin-bg2cd-pinctrl",
-		.of_match_table = berlin2cd_pinctrl_match,
+		.of_match_table = of_match_ptr(berlin2cd_pinctrl_match),
 	},
 };
 builtin_platform_driver(berlin2cd_pinctrl_driver);

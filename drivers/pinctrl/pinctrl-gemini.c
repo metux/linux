@@ -2613,7 +2613,7 @@ static const struct of_device_id gemini_pinctrl_match[] = {
 static struct platform_driver gemini_pmx_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = gemini_pinctrl_match,
+		.of_match_table = of_match_ptr(gemini_pinctrl_match),
 	},
 	.probe = gemini_pmx_probe,
 };

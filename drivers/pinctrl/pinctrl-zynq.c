@@ -1203,7 +1203,7 @@ static const struct of_device_id zynq_pinctrl_of_match[] = {
 static struct platform_driver zynq_pinctrl_driver = {
 	.driver = {
 		.name = "zynq-pinctrl",
-		.of_match_table = zynq_pinctrl_of_match,
+		.of_match_table = of_match_ptr(zynq_pinctrl_of_match),
 	},
 	.probe = zynq_pinctrl_probe,
 };

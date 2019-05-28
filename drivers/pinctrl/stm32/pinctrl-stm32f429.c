@@ -1581,7 +1581,7 @@ static struct platform_driver stm32f429_pinctrl_driver = {
 	.probe = stm32_pctl_probe,
 	.driver = {
 		.name = "stm32f429-pinctrl",
-		.of_match_table = stm32f429_pctrl_match,
+		.of_match_table = of_match_ptr(stm32f429_pctrl_match),
 	},
 };
 

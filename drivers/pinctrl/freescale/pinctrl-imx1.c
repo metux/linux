@@ -261,7 +261,7 @@ static const struct of_device_id imx1_pinctrl_of_match[] = {
 static struct platform_driver imx1_pinctrl_driver = {
 	.driver	= {
 		.name		= "imx1-pinctrl",
-		.of_match_table	= imx1_pinctrl_of_match,
+		.of_match_table	= of_match_ptr(imx1_pinctrl_of_match),
 	},
 };
 builtin_platform_driver_probe(imx1_pinctrl_driver, imx1_pinctrl_probe);

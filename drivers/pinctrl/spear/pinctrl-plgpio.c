@@ -707,7 +707,7 @@ static struct platform_driver plgpio_driver = {
 	.driver = {
 		.name = "spear-plgpio",
 		.pm = &plgpio_dev_pm_ops,
-		.of_match_table = plgpio_of_match,
+		.of_match_table = of_match_ptr(plgpio_of_match),
 	},
 };
 

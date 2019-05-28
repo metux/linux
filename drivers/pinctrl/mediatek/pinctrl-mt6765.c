@@ -1096,7 +1096,7 @@ static int mt6765_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver mt6765_pinctrl_driver = {
 	.driver = {
 		.name = "mt6765-pinctrl",
-		.of_match_table = mt6765_pinctrl_of_match,
+		.of_match_table = of_match_ptr(mt6765_pinctrl_of_match),
 	},
 	.probe = mt6765_pinctrl_probe,
 };

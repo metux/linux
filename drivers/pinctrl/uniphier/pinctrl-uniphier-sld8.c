@@ -667,7 +667,7 @@ static struct platform_driver uniphier_sld8_pinctrl_driver = {
 	.probe = uniphier_sld8_pinctrl_probe,
 	.driver = {
 		.name = "uniphier-sld8-pinctrl",
-		.of_match_table = uniphier_sld8_pinctrl_match,
+		.of_match_table = of_match_ptr(uniphier_sld8_pinctrl_match),
 		.pm = &uniphier_pinctrl_pm_ops,
 	},
 };

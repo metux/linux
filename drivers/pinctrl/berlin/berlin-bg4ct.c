@@ -481,7 +481,7 @@ static struct platform_driver berlin4ct_pinctrl_driver = {
 	.probe	= berlin4ct_pinctrl_probe,
 	.driver	= {
 		.name = "berlin4ct-pinctrl",
-		.of_match_table = berlin4ct_pinctrl_match,
+		.of_match_table = of_match_ptr(berlin4ct_pinctrl_match),
 	},
 };
 builtin_platform_driver(berlin4ct_pinctrl_driver);

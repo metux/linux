@@ -52,7 +52,7 @@ static struct platform_driver mtk_pinctrl_driver = {
 	.probe = mt6397_pinctrl_probe,
 	.driver = {
 		.name = "mediatek-mt6397-pinctrl",
-		.of_match_table = mt6397_pctrl_match,
+		.of_match_table = of_match_ptr(mt6397_pctrl_match),
 	},
 };
 

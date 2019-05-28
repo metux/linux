@@ -5594,7 +5594,7 @@ static const struct of_device_id atlas7_pinmux_ids[] = {
 static struct platform_driver atlas7_pinmux_driver = {
 	.driver = {
 		.name = "atlas7-ioc",
-		.of_match_table = atlas7_pinmux_ids,
+		.of_match_table = of_match_ptr(atlas7_pinmux_ids),
 #ifdef CONFIG_PM_SLEEP
 		.pm = &atlas7_pinmux_pm_ops,
 #endif
@@ -6144,7 +6144,7 @@ static const struct dev_pm_ops atlas7_gpio_pm_ops = {
 static struct platform_driver atlas7_gpio_driver = {
 	.driver = {
 		.name = "atlas7-gpio",
-		.of_match_table = atlas7_gpio_ids,
+		.of_match_table = of_match_ptr(atlas7_gpio_ids),
 #ifdef CONFIG_PM_SLEEP
 		.pm = &atlas7_gpio_pm_ops,
 #endif

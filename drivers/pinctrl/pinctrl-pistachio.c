@@ -1467,7 +1467,7 @@ static int pistachio_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver pistachio_pinctrl_driver = {
 	.driver = {
 		.name = "pistachio-pinctrl",
-		.of_match_table = pistachio_pinctrl_of_match,
+		.of_match_table = of_match_ptr(pistachio_pinctrl_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = pistachio_pinctrl_probe,

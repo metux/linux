@@ -1285,7 +1285,7 @@ static struct platform_driver samsung_pinctrl_driver = {
 	.probe		= samsung_pinctrl_probe,
 	.driver = {
 		.name	= "samsung-pinctrl",
-		.of_match_table = samsung_pinctrl_dt_match,
+		.of_match_table = of_match_ptr(samsung_pinctrl_dt_match),
 		.suppress_bind_attrs = true,
 		.pm = &samsung_pinctrl_pm_ops,
 	},

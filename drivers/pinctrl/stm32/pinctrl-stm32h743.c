@@ -1973,7 +1973,7 @@ static struct platform_driver stm32h743_pinctrl_driver = {
 	.probe = stm32_pctl_probe,
 	.driver = {
 		.name = "stm32h743-pinctrl",
-		.of_match_table = stm32h743_pctrl_match,
+		.of_match_table = of_match_ptr(stm32h743_pctrl_match),
 	},
 };
 

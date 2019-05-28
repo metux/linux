@@ -472,7 +472,7 @@ static struct platform_driver wmt_pinctrl_driver = {
 	.probe	= vt8500_pinctrl_probe,
 	.driver = {
 		.name	= "pinctrl-vt8500",
-		.of_match_table	= wmt_pinctrl_of_match,
+		.of_match_table	= of_match_ptr(wmt_pinctrl_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

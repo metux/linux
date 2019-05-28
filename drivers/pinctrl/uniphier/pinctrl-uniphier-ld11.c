@@ -705,7 +705,7 @@ static struct platform_driver uniphier_ld11_pinctrl_driver = {
 	.probe = uniphier_ld11_pinctrl_probe,
 	.driver = {
 		.name = "uniphier-ld11-pinctrl",
-		.of_match_table = uniphier_ld11_pinctrl_match,
+		.of_match_table = of_match_ptr(uniphier_ld11_pinctrl_match),
 		.pm = &uniphier_pinctrl_pm_ops,
 	},
 };

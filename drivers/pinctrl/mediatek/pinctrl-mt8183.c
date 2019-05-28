@@ -582,7 +582,7 @@ static int mt8183_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver mt8183_pinctrl_driver = {
 	.driver = {
 		.name = "mt8183-pinctrl",
-		.of_match_table = mt8183_pinctrl_of_match,
+		.of_match_table = of_match_ptr(mt8183_pinctrl_of_match),
 		.pm = &mtk_paris_pinctrl_pm_ops,
 	},
 	.probe = mt8183_pinctrl_probe,

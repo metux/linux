@@ -1015,7 +1015,7 @@ static struct platform_driver zx296718_pinctrl_driver = {
 	.probe  = zx296718_pinctrl_probe,
 	.driver = {
 		.name = "zx296718-pinctrl",
-		.of_match_table = zx296718_pinctrl_match,
+		.of_match_table = of_match_ptr(zx296718_pinctrl_match),
 	},
 };
 builtin_platform_driver(zx296718_pinctrl_driver);

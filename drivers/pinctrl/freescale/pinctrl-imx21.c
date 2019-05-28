@@ -324,7 +324,7 @@ static const struct of_device_id imx21_pinctrl_of_match[] = {
 static struct platform_driver imx21_pinctrl_driver = {
 	.driver	= {
 		.name		= "imx21-pinctrl",
-		.of_match_table	= imx21_pinctrl_of_match,
+		.of_match_table	= of_match_ptr(imx21_pinctrl_of_match),
 	},
 };
 builtin_platform_driver_probe(imx21_pinctrl_driver, imx21_pinctrl_probe);

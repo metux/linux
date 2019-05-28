@@ -932,7 +932,7 @@ static struct platform_driver rzn1_pinctrl_driver = {
 	.remove = rzn1_pinctrl_remove,
 	.driver	= {
 		.name		= "rzn1-pinctrl",
-		.of_match_table	= rzn1_pinctrl_match,
+		.of_match_table	= of_match_ptr(rzn1_pinctrl_match),
 	},
 };
 

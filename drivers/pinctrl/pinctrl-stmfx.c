@@ -807,7 +807,7 @@ MODULE_DEVICE_TABLE(of, stmfx_pinctrl_of_match);
 static struct platform_driver stmfx_pinctrl_driver = {
 	.driver = {
 		.name = "stmfx-pinctrl",
-		.of_match_table = stmfx_pinctrl_of_match,
+		.of_match_table = of_match_ptr(stmfx_pinctrl_of_match),
 		.pm = &stmfx_pinctrl_dev_pm_ops,
 	},
 	.probe = stmfx_pinctrl_probe,

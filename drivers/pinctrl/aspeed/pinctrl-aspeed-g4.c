@@ -2539,7 +2539,7 @@ static struct platform_driver aspeed_g4_pinctrl_driver = {
 	.probe = aspeed_g4_pinctrl_probe,
 	.driver = {
 		.name = "aspeed-g4-pinctrl",
-		.of_match_table = aspeed_g4_pinctrl_of_match,
+		.of_match_table = of_match_ptr(aspeed_g4_pinctrl_of_match),
 	},
 };
 

@@ -2272,7 +2272,7 @@ static const struct of_device_id pic32_pinctrl_of_match[] = {
 static struct platform_driver pic32_pinctrl_driver = {
 	.driver = {
 		.name = "pic32-pinctrl",
-		.of_match_table = pic32_pinctrl_of_match,
+		.of_match_table = of_match_ptr(pic32_pinctrl_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = pic32_pinctrl_probe,
@@ -2286,7 +2286,7 @@ static const struct of_device_id pic32_gpio_of_match[] = {
 static struct platform_driver pic32_gpio_driver = {
 	.driver = {
 		.name = "pic32-gpio",
-		.of_match_table = pic32_gpio_of_match,
+		.of_match_table = of_match_ptr(pic32_gpio_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = pic32_gpio_probe,

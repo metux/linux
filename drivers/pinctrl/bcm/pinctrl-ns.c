@@ -370,7 +370,7 @@ static struct platform_driver ns_pinctrl_driver = {
 	.probe = ns_pinctrl_probe,
 	.driver = {
 		.name = "ns-pinmux",
-		.of_match_table = ns_pinctrl_of_match_table,
+		.of_match_table = of_match_ptr(ns_pinctrl_of_match_table),
 	},
 };
 

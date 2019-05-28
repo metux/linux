@@ -595,7 +595,7 @@ static struct platform_driver a64_pinctrl_driver = {
 	.probe	= a64_pinctrl_probe,
 	.driver	= {
 		.name		= "sun50i-a64-pinctrl",
-		.of_match_table	= a64_pinctrl_match,
+		.of_match_table	= of_match_ptr(a64_pinctrl_match),
 	},
 };
 builtin_platform_driver(a64_pinctrl_driver);

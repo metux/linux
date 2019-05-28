@@ -2350,7 +2350,7 @@ static struct platform_driver stm32mp157_pinctrl_driver = {
 	.probe = stm32_pctl_probe,
 	.driver = {
 		.name = "stm32mp157-pinctrl",
-		.of_match_table = stm32mp157_pctrl_match,
+		.of_match_table = of_match_ptr(stm32mp157_pctrl_match),
 		.pm = &stm32_pinctrl_dev_pm_ops,
 	},
 };

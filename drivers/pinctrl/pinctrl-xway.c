@@ -1799,7 +1799,7 @@ static struct platform_driver pinmux_xway_driver = {
 	.probe	= pinmux_xway_probe,
 	.driver = {
 		.name	= "pinctrl-xway",
-		.of_match_table = xway_match,
+		.of_match_table = of_match_ptr(xway_match),
 	},
 };
 

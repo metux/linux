@@ -510,7 +510,7 @@ static struct platform_driver sun8i_h3_pinctrl_driver = {
 	.probe	= sun8i_h3_pinctrl_probe,
 	.driver	= {
 		.name		= "sun8i-h3-pinctrl",
-		.of_match_table	= sun8i_h3_pinctrl_match,
+		.of_match_table	= of_match_ptr(sun8i_h3_pinctrl_match),
 	},
 };
 builtin_platform_driver(sun8i_h3_pinctrl_driver);

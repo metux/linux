@@ -1320,7 +1320,7 @@ static struct platform_driver sun4i_a10_pinctrl_driver = {
 	.probe	= sun4i_a10_pinctrl_probe,
 	.driver	= {
 		.name		= "sun4i-pinctrl",
-		.of_match_table	= sun4i_a10_pinctrl_match,
+		.of_match_table	= of_match_ptr(sun4i_a10_pinctrl_match),
 	},
 };
 builtin_platform_driver(sun4i_a10_pinctrl_driver);

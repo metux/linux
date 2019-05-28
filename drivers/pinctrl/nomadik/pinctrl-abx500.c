@@ -1087,7 +1087,7 @@ static int abx500_gpio_remove(struct platform_device *pdev)
 static struct platform_driver abx500_gpio_driver = {
 	.driver = {
 		.name = "abx500-gpio",
-		.of_match_table = abx500_gpio_match,
+		.of_match_table = of_match_ptr(abx500_gpio_match),
 	},
 	.probe = abx500_gpio_probe,
 	.remove = abx500_gpio_remove,

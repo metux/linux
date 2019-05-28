@@ -1009,7 +1009,7 @@ static const struct of_device_id cygnus_pinmux_of_match[] = {
 static struct platform_driver cygnus_pinmux_driver = {
 	.driver = {
 		.name = "cygnus-pinmux",
-		.of_match_table = cygnus_pinmux_of_match,
+		.of_match_table = of_match_ptr(cygnus_pinmux_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = cygnus_pinmux_probe,

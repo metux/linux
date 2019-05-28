@@ -260,7 +260,7 @@ static struct platform_driver pxa25x_pinctrl_driver = {
 	.probe	= pxa25x_pinctrl_probe,
 	.driver	= {
 		.name		= "pxa25x-pinctrl",
-		.of_match_table	= pxa25x_pinctrl_match,
+		.of_match_table	= of_match_ptr(pxa25x_pinctrl_match),
 	},
 };
 module_platform_driver(pxa25x_pinctrl_driver);

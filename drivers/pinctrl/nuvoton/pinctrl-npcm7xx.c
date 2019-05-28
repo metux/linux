@@ -2051,7 +2051,7 @@ static struct platform_driver npcm7xx_pinctrl_driver = {
 	.probe = npcm7xx_pinctrl_probe,
 	.driver = {
 		.name = "npcm7xx-pinctrl",
-		.of_match_table = npcm7xx_pinctrl_match,
+		.of_match_table = of_match_ptr(npcm7xx_pinctrl_match),
 		.suppress_bind_attrs = true,
 	},
 };

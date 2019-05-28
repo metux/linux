@@ -1434,7 +1434,7 @@ static const struct of_device_id sdm660_pinctrl_of_match[] = {
 static struct platform_driver sdm660_pinctrl_driver = {
 	.driver = {
 		.name = "sdm660-pinctrl",
-		.of_match_table = sdm660_pinctrl_of_match,
+		.of_match_table = of_match_ptr(sdm660_pinctrl_of_match),
 	},
 	.probe = sdm660_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

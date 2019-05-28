@@ -740,7 +740,7 @@ static struct platform_driver sun9i_a80_pinctrl_driver = {
 	.probe	= sun9i_a80_pinctrl_probe,
 	.driver	= {
 		.name		= "sun9i-a80-pinctrl",
-		.of_match_table	= sun9i_a80_pinctrl_match,
+		.of_match_table	= of_match_ptr(sun9i_a80_pinctrl_match),
 	},
 };
 builtin_platform_driver(sun9i_a80_pinctrl_driver);

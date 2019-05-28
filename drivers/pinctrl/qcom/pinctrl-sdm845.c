@@ -1334,7 +1334,7 @@ static struct platform_driver sdm845_pinctrl_driver = {
 	.driver = {
 		.name = "sdm845-pinctrl",
 		.pm = &msm_pinctrl_dev_pm_ops,
-		.of_match_table = sdm845_pinctrl_of_match,
+		.of_match_table = of_match_ptr(sdm845_pinctrl_of_match),
 		.acpi_match_table = ACPI_PTR(sdm845_pinctrl_acpi_match),
 	},
 	.probe = sdm845_pinctrl_probe,

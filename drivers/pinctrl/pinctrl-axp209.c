@@ -479,7 +479,7 @@ static struct platform_driver axp20x_pctl_driver = {
 	.probe		= axp20x_pctl_probe,
 	.driver = {
 		.name		= "axp20x-gpio",
-		.of_match_table	= axp20x_pctl_match,
+		.of_match_table	= of_match_ptr(axp20x_pctl_match),
 	},
 };
 

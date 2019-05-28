@@ -341,7 +341,7 @@ static struct platform_driver wmt_pinctrl_driver = {
 	.probe	= wm8650_pinctrl_probe,
 	.driver = {
 		.name	= "pinctrl-wm8650",
-		.of_match_table	= wmt_pinctrl_of_match,
+		.of_match_table	= of_match_ptr(wmt_pinctrl_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -1570,7 +1570,7 @@ static const struct of_device_id tegra210_pinctrl_of_match[] = {
 static struct platform_driver tegra210_pinctrl_driver = {
 	.driver = {
 		.name = "tegra210-pinctrl",
-		.of_match_table = tegra210_pinctrl_of_match,
+		.of_match_table = of_match_ptr(tegra210_pinctrl_of_match),
 	},
 	.probe = tegra210_pinctrl_probe,
 };

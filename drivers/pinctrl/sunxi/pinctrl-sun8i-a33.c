@@ -506,7 +506,7 @@ static struct platform_driver sun8i_a33_pinctrl_driver = {
 	.probe	= sun8i_a33_pinctrl_probe,
 	.driver	= {
 		.name		= "sun8i-a33-pinctrl",
-		.of_match_table	= sun8i_a33_pinctrl_match,
+		.of_match_table	= of_match_ptr(sun8i_a33_pinctrl_match),
 	},
 };
 builtin_platform_driver(sun8i_a33_pinctrl_driver);

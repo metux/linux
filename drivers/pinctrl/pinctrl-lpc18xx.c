@@ -1375,7 +1375,7 @@ static struct platform_driver lpc18xx_scu_driver = {
 	.probe		= lpc18xx_scu_probe,
 	.driver = {
 		.name		= "lpc18xx-scu",
-		.of_match_table	= lpc18xx_scu_match,
+		.of_match_table	= of_match_ptr(lpc18xx_scu_match),
 		.suppress_bind_attrs = true,
 	},
 };

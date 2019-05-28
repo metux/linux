@@ -1045,7 +1045,7 @@ static const struct of_device_id ipq8074_pinctrl_of_match[] = {
 static struct platform_driver ipq8074_pinctrl_driver = {
 	.driver = {
 		.name = "ipq8074-pinctrl",
-		.of_match_table = ipq8074_pinctrl_of_match,
+		.of_match_table = of_match_ptr(ipq8074_pinctrl_of_match),
 	},
 	.probe = ipq8074_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

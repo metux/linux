@@ -1129,7 +1129,7 @@ clk_prepare_enable_error:
 static struct platform_driver atmel_pinctrl_driver = {
 	.driver = {
 		.name = "pinctrl-at91-pio4",
-		.of_match_table = atmel_pctrl_of_match,
+		.of_match_table = of_match_ptr(atmel_pctrl_of_match),
 		.pm = &atmel_pctrl_pm_ops,
 		.suppress_bind_attrs = true,
 	},

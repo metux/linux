@@ -3862,7 +3862,7 @@ static struct platform_driver rockchip_pinctrl_driver = {
 	.driver = {
 		.name	= "rockchip-pinctrl",
 		.pm = &rockchip_pinctrl_dev_pm_ops,
-		.of_match_table = rockchip_pinctrl_dt_match,
+		.of_match_table = of_match_ptr(rockchip_pinctrl_dt_match),
 	},
 };
 

@@ -1932,7 +1932,7 @@ err:
 static struct platform_driver at91_gpio_driver = {
 	.driver = {
 		.name = "gpio-at91",
-		.of_match_table = at91_gpio_of_match,
+		.of_match_table = of_match_ptr(at91_gpio_of_match),
 	},
 	.probe = at91_gpio_probe,
 };
@@ -1940,7 +1940,7 @@ static struct platform_driver at91_gpio_driver = {
 static struct platform_driver at91_pinctrl_driver = {
 	.driver = {
 		.name = "pinctrl-at91",
-		.of_match_table = at91_pinctrl_of_match,
+		.of_match_table = of_match_ptr(at91_pinctrl_of_match),
 	},
 	.probe = at91_pinctrl_probe,
 };

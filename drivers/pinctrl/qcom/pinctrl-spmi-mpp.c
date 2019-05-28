@@ -926,7 +926,7 @@ MODULE_DEVICE_TABLE(of, pmic_mpp_of_match);
 static struct platform_driver pmic_mpp_driver = {
 	.driver = {
 		   .name = "qcom-spmi-mpp",
-		   .of_match_table = pmic_mpp_of_match,
+		   .of_match_table = of_match_ptr(pmic_mpp_of_match),
 	},
 	.probe	= pmic_mpp_probe,
 	.remove = pmic_mpp_remove,

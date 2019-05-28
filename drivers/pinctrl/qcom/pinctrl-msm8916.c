@@ -974,7 +974,7 @@ static const struct of_device_id msm8916_pinctrl_of_match[] = {
 static struct platform_driver msm8916_pinctrl_driver = {
 	.driver = {
 		.name = "msm8916-pinctrl",
-		.of_match_table = msm8916_pinctrl_of_match,
+		.of_match_table = of_match_ptr(msm8916_pinctrl_of_match),
 	},
 	.probe = msm8916_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

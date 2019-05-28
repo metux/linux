@@ -864,7 +864,7 @@ static int pm8xxx_mpp_remove(struct platform_device *pdev)
 static struct platform_driver pm8xxx_mpp_driver = {
 	.driver = {
 		.name = "qcom-ssbi-mpp",
-		.of_match_table = pm8xxx_mpp_of_match,
+		.of_match_table = of_match_ptr(pm8xxx_mpp_of_match),
 	},
 	.probe = pm8xxx_mpp_probe,
 	.remove = pm8xxx_mpp_remove,

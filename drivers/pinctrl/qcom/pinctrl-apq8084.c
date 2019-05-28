@@ -1212,7 +1212,7 @@ static const struct of_device_id apq8084_pinctrl_of_match[] = {
 static struct platform_driver apq8084_pinctrl_driver = {
 	.driver = {
 		.name = "apq8084-pinctrl",
-		.of_match_table = apq8084_pinctrl_of_match,
+		.of_match_table = of_match_ptr(apq8084_pinctrl_of_match),
 	},
 	.probe = apq8084_pinctrl_probe,
 	.remove = msm_pinctrl_remove,

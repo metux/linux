@@ -189,7 +189,7 @@ MODULE_DEVICE_TABLE(of, da850_pupd_of_match);
 static struct platform_driver da850_pupd_driver = {
 	.driver	= {
 		.name		= "ti-da850-pupd",
-		.of_match_table	= da850_pupd_of_match,
+		.of_match_table	= of_match_ptr(da850_pupd_of_match),
 	},
 	.probe	= da850_pupd_probe,
 	.remove	= da850_pupd_remove,

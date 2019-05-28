@@ -839,7 +839,7 @@ err_rm_gpiochip:
 static struct platform_driver iproc_gpio_driver = {
 	.driver = {
 		.name = "iproc-gpio",
-		.of_match_table = iproc_gpio_of_match,
+		.of_match_table = of_match_ptr(iproc_gpio_of_match),
 	},
 	.probe = iproc_gpio_probe,
 };

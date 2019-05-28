@@ -1084,7 +1084,7 @@ static struct platform_driver meson_axg_pinctrl_driver = {
 	.probe		= meson_pinctrl_probe,
 	.driver = {
 		.name	= "meson-axg-pinctrl",
-		.of_match_table = meson_axg_pinctrl_dt_match,
+		.of_match_table = of_match_ptr(meson_axg_pinctrl_dt_match),
 	},
 };
 

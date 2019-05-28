@@ -719,7 +719,7 @@ err_rm_gpiochip:
 static struct platform_driver nsp_gpio_driver = {
 	.driver = {
 		.name = "nsp-gpio-a",
-		.of_match_table = nsp_gpio_of_match,
+		.of_match_table = of_match_ptr(nsp_gpio_of_match),
 	},
 	.probe = nsp_gpio_probe,
 };

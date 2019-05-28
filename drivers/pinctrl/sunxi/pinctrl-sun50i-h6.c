@@ -609,7 +609,7 @@ static struct platform_driver h6_pinctrl_driver = {
 	.probe	= h6_pinctrl_probe,
 	.driver	= {
 		.name		= "sun50i-h6-pinctrl",
-		.of_match_table	= h6_pinctrl_match,
+		.of_match_table	= of_match_ptr(h6_pinctrl_match),
 	},
 };
 builtin_platform_driver(h6_pinctrl_driver);

@@ -392,7 +392,7 @@ static const struct dev_pm_ops sirfsoc_pinmux_pm_ops = {
 static struct platform_driver sirfsoc_pinmux_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = pinmux_ids,
+		.of_match_table = of_match_ptr(pinmux_ids),
 #ifdef CONFIG_PM_SLEEP
 		.pm = &sirfsoc_pinmux_pm_ops,
 #endif

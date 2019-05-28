@@ -362,7 +362,7 @@ static struct platform_driver as370_pinctrl_driver = {
 	.probe	= as370_pinctrl_probe,
 	.driver	= {
 		.name = "as370-pinctrl",
-		.of_match_table = as370_pinctrl_match,
+		.of_match_table = of_match_ptr(as370_pinctrl_match),
 	},
 };
 builtin_platform_driver(as370_pinctrl_driver);

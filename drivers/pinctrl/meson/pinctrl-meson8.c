@@ -1129,7 +1129,7 @@ static struct platform_driver meson8_pinctrl_driver = {
 	.probe		= meson_pinctrl_probe,
 	.driver = {
 		.name	= "meson8-pinctrl",
-		.of_match_table = meson8_pinctrl_dt_match,
+		.of_match_table = of_match_ptr(meson8_pinctrl_dt_match),
 	},
 };
 builtin_platform_driver(meson8_pinctrl_driver);

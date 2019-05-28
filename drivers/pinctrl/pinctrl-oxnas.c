@@ -1263,7 +1263,7 @@ static int oxnas_gpio_probe(struct platform_device *pdev)
 static struct platform_driver oxnas_pinctrl_driver = {
 	.driver = {
 		.name = "oxnas-pinctrl",
-		.of_match_table = oxnas_pinctrl_of_match,
+		.of_match_table = of_match_ptr(oxnas_pinctrl_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = oxnas_pinctrl_probe,
@@ -1278,7 +1278,7 @@ static const struct of_device_id oxnas_gpio_of_match[] = {
 static struct platform_driver oxnas_gpio_driver = {
 	.driver = {
 		.name = "oxnas-gpio",
-		.of_match_table = oxnas_gpio_of_match,
+		.of_match_table = of_match_ptr(oxnas_gpio_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = oxnas_gpio_probe,

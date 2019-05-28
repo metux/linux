@@ -924,7 +924,7 @@ static struct platform_driver ti_iodelay_driver = {
 	.remove = ti_iodelay_remove,
 	.driver = {
 		   .name = DRIVER_NAME,
-		   .of_match_table = ti_iodelay_of_match,
+		   .of_match_table = of_match_ptr(ti_iodelay_of_match),
 	},
 };
 module_platform_driver(ti_iodelay_driver);

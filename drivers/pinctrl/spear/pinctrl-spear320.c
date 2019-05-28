@@ -3443,7 +3443,7 @@ static int spear320_pinctrl_probe(struct platform_device *pdev)
 static struct platform_driver spear320_pinctrl_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = spear320_pinctrl_of_match,
+		.of_match_table = of_match_ptr(spear320_pinctrl_of_match),
 	},
 	.probe = spear320_pinctrl_probe,
 };

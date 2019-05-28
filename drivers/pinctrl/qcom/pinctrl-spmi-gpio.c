@@ -1163,7 +1163,7 @@ MODULE_DEVICE_TABLE(of, pmic_gpio_of_match);
 static struct platform_driver pmic_gpio_driver = {
 	.driver = {
 		   .name = "qcom-spmi-gpio",
-		   .of_match_table = pmic_gpio_of_match,
+		   .of_match_table = of_match_ptr(pmic_gpio_of_match),
 	},
 	.probe	= pmic_gpio_probe,
 	.remove = pmic_gpio_remove,

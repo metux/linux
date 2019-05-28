@@ -634,7 +634,7 @@ MODULE_DEVICE_TABLE(of, match_table);
 static struct platform_driver ptp_qoriq_driver = {
 	.driver = {
 		.name		= "ptp_qoriq",
-		.of_match_table	= match_table,
+		.of_match_table	= of_match_ptr(match_table),
 	},
 	.probe       = ptp_qoriq_probe,
 	.remove      = ptp_qoriq_remove,

@@ -340,7 +340,7 @@ static struct platform_driver ptp_dte_driver = {
 	.driver = {
 		.name = "ptp-dte",
 		.pm = PTP_DTE_PM_OPS,
-		.of_match_table = ptp_dte_of_match,
+		.of_match_table = of_match_ptr(ptp_dte_of_match),
 	},
 	.probe    = ptp_dte_probe,
 	.remove   = ptp_dte_remove,

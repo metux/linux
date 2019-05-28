@@ -263,7 +263,7 @@ static struct platform_driver pps_gpio_driver = {
 	.remove		= pps_gpio_remove,
 	.driver		= {
 		.name	= PPS_GPIO_NAME,
-		.of_match_table	= pps_gpio_dt_ids,
+		.of_match_table	= of_match_ptr(pps_gpio_dt_ids),
 	},
 };
 

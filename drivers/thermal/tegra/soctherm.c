@@ -2312,7 +2312,7 @@ static struct platform_driver tegra_soctherm_driver = {
 	.driver = {
 		.name = "tegra_soctherm",
 		.pm = &tegra_soctherm_pm,
-		.of_match_table = tegra_soctherm_of_match,
+		.of_match_table = of_match_ptr(tegra_soctherm_of_match),
 	},
 };
 module_platform_driver(tegra_soctherm_driver);

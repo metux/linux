@@ -660,7 +660,7 @@ static struct platform_driver hisi_thermal_driver = {
 	.driver = {
 		.name		= "hisi_thermal",
 		.pm		= &hisi_thermal_pm_ops,
-		.of_match_table = of_hisi_thermal_match,
+		.of_match_table = of_match_ptr(of_hisi_thermal_match),
 	},
 	.probe	= hisi_thermal_probe,
 	.remove	= hisi_thermal_remove,

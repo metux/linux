@@ -103,7 +103,7 @@ static struct platform_driver sr_thermal_driver = {
 	.probe		= sr_thermal_probe,
 	.driver = {
 		.name = "sr-thermal",
-		.of_match_table = sr_thermal_of_match,
+		.of_match_table = of_match_ptr(sr_thermal_of_match),
 	},
 };
 module_platform_driver(sr_thermal_driver);

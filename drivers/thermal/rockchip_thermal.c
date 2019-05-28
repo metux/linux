@@ -1425,7 +1425,7 @@ static struct platform_driver rockchip_thermal_driver = {
 	.driver = {
 		.name = "rockchip-thermal",
 		.pm = &rockchip_thermal_pm_ops,
-		.of_match_table = of_rockchip_thermal_match,
+		.of_match_table = of_match_ptr(of_rockchip_thermal_match),
 	},
 	.probe = rockchip_thermal_probe,
 	.remove = rockchip_thermal_remove,

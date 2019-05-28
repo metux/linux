@@ -244,7 +244,7 @@ static struct platform_driver zx2967_thermal_driver = {
 	.remove = zx2967_thermal_exit,
 	.driver = {
 		.name = "zx2967_thermal",
-		.of_match_table = zx2967_thermal_id_table,
+		.of_match_table = of_match_ptr(zx2967_thermal_id_table),
 		.pm = &zx2967_thermal_pm_ops,
 	},
 };

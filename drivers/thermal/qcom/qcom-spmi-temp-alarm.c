@@ -446,7 +446,7 @@ MODULE_DEVICE_TABLE(of, qpnp_tm_match_table);
 static struct platform_driver qpnp_tm_driver = {
 	.driver = {
 		.name = "spmi-temp-alarm",
-		.of_match_table = qpnp_tm_match_table,
+		.of_match_table = of_match_ptr(qpnp_tm_match_table),
 	},
 	.probe  = qpnp_tm_probe,
 };

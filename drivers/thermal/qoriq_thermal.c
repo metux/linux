@@ -288,7 +288,7 @@ static struct platform_driver qoriq_tmu = {
 	.driver	= {
 		.name		= "qoriq_thermal",
 		.pm		= &qoriq_tmu_pm_ops,
-		.of_match_table	= qoriq_tmu_match,
+		.of_match_table	= of_match_ptr(qoriq_tmu_match),
 	},
 	.probe	= qoriq_tmu_probe,
 	.remove	= qoriq_tmu_remove,

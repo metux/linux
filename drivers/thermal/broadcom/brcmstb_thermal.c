@@ -352,7 +352,7 @@ static struct platform_driver brcmstb_thermal_driver = {
 	.probe = brcmstb_thermal_probe,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = brcmstb_thermal_id_table,
+		.of_match_table = of_match_ptr(brcmstb_thermal_id_table),
 	},
 };
 module_platform_driver(brcmstb_thermal_driver);

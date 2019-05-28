@@ -294,7 +294,7 @@ static struct platform_driver da9062_thermal_driver = {
 	.remove	= da9062_thermal_remove,
 	.driver	= {
 		.name	= "da9062-thermal",
-		.of_match_table = da9062_compatible_reg_id_table,
+		.of_match_table = of_match_ptr(da9062_compatible_reg_id_table),
 	},
 };
 

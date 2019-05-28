@@ -114,7 +114,7 @@ static struct platform_driver tango_thermal_driver = {
 	.probe	= tango_thermal_probe,
 	.driver	= {
 		.name		= "tango-thermal",
-		.of_match_table	= tango_sensor_ids,
+		.of_match_table	= of_match_ptr(tango_sensor_ids),
 		.pm		= &tango_thermal_pm,
 	},
 };

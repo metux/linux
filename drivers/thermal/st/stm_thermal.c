@@ -745,7 +745,7 @@ static struct platform_driver stm_thermal_driver = {
 	.driver = {
 		.name	= "stm_thermal",
 		.pm     = &stm_thermal_pm_ops,
-		.of_match_table = stm_thermal_of_match,
+		.of_match_table = of_match_ptr(stm_thermal_of_match),
 	},
 	.probe		= stm_thermal_probe,
 	.remove		= stm_thermal_remove,

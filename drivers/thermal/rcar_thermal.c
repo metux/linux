@@ -663,7 +663,7 @@ static struct platform_driver rcar_thermal_driver = {
 	.driver	= {
 		.name	= "rcar_thermal",
 		.pm = &rcar_thermal_pm_ops,
-		.of_match_table = rcar_thermal_dt_ids,
+		.of_match_table = of_match_ptr(rcar_thermal_dt_ids),
 	},
 	.probe		= rcar_thermal_probe,
 	.remove		= rcar_thermal_remove,

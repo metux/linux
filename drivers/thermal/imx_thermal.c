@@ -927,7 +927,7 @@ static struct platform_driver imx_thermal = {
 	.driver = {
 		.name	= "imx_thermal",
 		.pm	= &imx_thermal_pm_ops,
-		.of_match_table = of_imx_thermal_match,
+		.of_match_table = of_match_ptr(of_imx_thermal_match),
 	},
 	.probe		= imx_thermal_probe,
 	.remove		= imx_thermal_remove,

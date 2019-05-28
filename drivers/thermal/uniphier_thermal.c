@@ -367,7 +367,7 @@ static struct platform_driver uniphier_tm_driver = {
 	.remove = uniphier_tm_remove,
 	.driver = {
 		.name = "uniphier-thermal",
-		.of_match_table = uniphier_tm_dt_ids,
+		.of_match_table = of_match_ptr(uniphier_tm_dt_ids),
 	},
 };
 module_platform_driver(uniphier_tm_driver);

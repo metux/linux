@@ -963,7 +963,7 @@ static struct platform_driver armada_thermal_driver = {
 	.remove = armada_thermal_exit,
 	.driver = {
 		.name = "armada_thermal",
-		.of_match_table = armada_thermal_id_table,
+		.of_match_table = of_match_ptr(armada_thermal_id_table),
 	},
 };
 

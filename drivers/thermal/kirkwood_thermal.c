@@ -105,7 +105,7 @@ static struct platform_driver kirkwood_thermal_driver = {
 	.remove = kirkwood_thermal_exit,
 	.driver = {
 		.name = "kirkwood_thermal",
-		.of_match_table = kirkwood_thermal_id_table,
+		.of_match_table = of_match_ptr(kirkwood_thermal_id_table),
 	},
 };
 

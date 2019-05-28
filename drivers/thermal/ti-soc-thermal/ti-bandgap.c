@@ -1241,7 +1241,7 @@ static struct platform_driver ti_bandgap_sensor_driver = {
 	.driver = {
 			.name = "ti-soc-thermal",
 			.pm = DEV_PM_OPS,
-			.of_match_table	= of_ti_bandgap_match,
+			.of_match_table	= of_match_ptr(of_ti_bandgap_match),
 	},
 };
 

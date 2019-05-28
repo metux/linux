@@ -302,7 +302,7 @@ static struct platform_driver bcm2835_thermal_driver = {
 	.remove = bcm2835_thermal_remove,
 	.driver = {
 		.name = "bcm2835_thermal",
-		.of_match_table = bcm2835_thermal_of_match_table,
+		.of_match_table = of_match_ptr(bcm2835_thermal_of_match_table),
 	},
 };
 module_platform_driver(bcm2835_thermal_driver);

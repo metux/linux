@@ -983,7 +983,7 @@ static struct platform_driver mtk_thermal_driver = {
 	.remove = mtk_thermal_remove,
 	.driver = {
 		.name = "mtk-thermal",
-		.of_match_table = mtk_thermal_of_match,
+		.of_match_table = of_match_ptr(mtk_thermal_of_match),
 	},
 };
 

@@ -191,7 +191,7 @@ static struct platform_driver tsens_driver = {
 	.driver = {
 		.name = "qcom-tsens",
 		.pm	= &tsens_pm_ops,
-		.of_match_table = tsens_table,
+		.of_match_table = of_match_ptr(tsens_table),
 	},
 };
 module_platform_driver(tsens_driver);

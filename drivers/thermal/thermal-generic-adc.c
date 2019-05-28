@@ -159,7 +159,7 @@ MODULE_DEVICE_TABLE(of, of_adc_thermal_match);
 static struct platform_driver gadc_thermal_driver = {
 	.driver = {
 		.name = "generic-adc-thermal",
-		.of_match_table = of_adc_thermal_match,
+		.of_match_table = of_match_ptr(of_adc_thermal_match),
 	},
 	.probe = gadc_thermal_probe,
 };

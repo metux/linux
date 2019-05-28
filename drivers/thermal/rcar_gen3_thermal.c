@@ -506,7 +506,7 @@ static struct platform_driver rcar_gen3_thermal_driver = {
 	.driver	= {
 		.name	= "rcar_gen3_thermal",
 		.pm = &rcar_gen3_thermal_pm_ops,
-		.of_match_table = rcar_gen3_thermal_dt_ids,
+		.of_match_table = of_match_ptr(rcar_gen3_thermal_dt_ids),
 	},
 	.probe		= rcar_gen3_thermal_probe,
 	.remove		= rcar_gen3_thermal_remove,

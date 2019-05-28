@@ -244,7 +244,7 @@ static struct platform_driver tegra_bpmp_thermal_driver = {
 	.remove = tegra_bpmp_thermal_remove,
 	.driver = {
 		.name = "tegra-bpmp-thermal",
-		.of_match_table = tegra_bpmp_thermal_of_match,
+		.of_match_table = of_match_ptr(tegra_bpmp_thermal_of_match),
 	},
 };
 module_platform_driver(tegra_bpmp_thermal_driver);

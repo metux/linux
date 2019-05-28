@@ -1175,7 +1175,7 @@ static struct platform_driver exynos_tmu_driver = {
 	.driver = {
 		.name   = "exynos-tmu",
 		.pm     = EXYNOS_TMU_PM,
-		.of_match_table = exynos_tmu_match,
+		.of_match_table = of_match_ptr(exynos_tmu_match),
 	},
 	.probe = exynos_tmu_probe,
 	.remove	= exynos_tmu_remove,

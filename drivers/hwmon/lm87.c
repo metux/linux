@@ -992,7 +992,7 @@ static struct i2c_driver lm87_driver = {
 	.class		= I2C_CLASS_HWMON,
 	.driver = {
 		.name	= "lm87",
-		.of_match_table = lm87_of_match,
+		.of_match_table = of_match_ptr(lm87_of_match),
 	},
 	.probe		= lm87_probe,
 	.id_table	= lm87_id,

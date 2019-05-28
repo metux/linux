@@ -458,7 +458,7 @@ static struct platform_driver pwm_fan_driver = {
 	.driver	= {
 		.name		= "pwm-fan",
 		.pm		= &pwm_fan_pm,
-		.of_match_table	= of_pwm_fan_match,
+		.of_match_table	= of_match_ptr(of_pwm_fan_match),
 	},
 };
 

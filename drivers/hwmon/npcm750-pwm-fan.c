@@ -1026,7 +1026,7 @@ static struct platform_driver npcm7xx_pwm_fan_driver = {
 	.probe		= npcm7xx_pwm_fan_probe,
 	.driver		= {
 		.name	= "npcm7xx_pwm_fan",
-		.of_match_table = of_pwm_fan_match_table,
+		.of_match_table = of_match_ptr(of_pwm_fan_match_table),
 	},
 };
 

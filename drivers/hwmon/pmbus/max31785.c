@@ -390,7 +390,7 @@ MODULE_DEVICE_TABLE(of, max31785_of_match);
 static struct i2c_driver max31785_driver = {
 	.driver = {
 		.name = "max31785",
-		.of_match_table = max31785_of_match,
+		.of_match_table = of_match_ptr(max31785_of_match),
 	},
 	.probe = max31785_probe,
 	.remove = pmbus_do_remove,

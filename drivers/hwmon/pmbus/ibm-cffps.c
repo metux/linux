@@ -419,7 +419,7 @@ MODULE_DEVICE_TABLE(of, ibm_cffps_of_match);
 static struct i2c_driver ibm_cffps_driver = {
 	.driver = {
 		.name = "ibm-cffps",
-		.of_match_table = ibm_cffps_of_match,
+		.of_match_table = of_match_ptr(ibm_cffps_of_match),
 	},
 	.probe = ibm_cffps_probe,
 	.remove = pmbus_do_remove,

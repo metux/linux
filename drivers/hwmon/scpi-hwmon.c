@@ -288,7 +288,7 @@ static int scpi_hwmon_probe(struct platform_device *pdev)
 static struct platform_driver scpi_hwmon_platdrv = {
 	.driver = {
 		.name	= "scpi-hwmon",
-		.of_match_table = scpi_of_match,
+		.of_match_table = of_match_ptr(scpi_of_match),
 	},
 	.probe		= scpi_hwmon_probe,
 };

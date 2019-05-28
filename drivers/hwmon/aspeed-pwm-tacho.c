@@ -964,7 +964,7 @@ static struct platform_driver aspeed_pwm_tacho_driver = {
 	.probe		= aspeed_pwm_tacho_probe,
 	.driver		= {
 		.name	= "aspeed_pwm_tacho",
-		.of_match_table = of_pwm_tacho_match_table,
+		.of_match_table = of_match_ptr(of_pwm_tacho_match_table),
 	},
 };
 

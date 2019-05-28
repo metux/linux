@@ -901,7 +901,7 @@ static struct i2c_driver ina3221_i2c_driver = {
 	.remove = ina3221_remove,
 	.driver = {
 		.name = INA3221_DRIVER_NAME,
-		.of_match_table = ina3221_of_match_table,
+		.of_match_table = of_match_ptr(ina3221_of_match_table),
 		.pm = &ina3221_pm,
 	},
 	.id_table = ina3221_ids,

@@ -708,7 +708,7 @@ static struct platform_driver ibmpowernv_driver = {
 	.id_table	= opal_sensor_driver_ids,
 	.driver		= {
 		.name	= DRVNAME,
-		.of_match_table	= opal_sensor_match,
+		.of_match_table	= of_match_ptr(opal_sensor_match),
 	},
 };
 

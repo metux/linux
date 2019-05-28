@@ -401,7 +401,7 @@ static int lochnagar_hwmon_probe(struct platform_device *pdev)
 static struct platform_driver lochnagar_hwmon_driver = {
 	.driver = {
 		.name = "lochnagar-hwmon",
-		.of_match_table = lochnagar_of_match,
+		.of_match_table = of_match_ptr(lochnagar_of_match),
 	},
 	.probe = lochnagar_hwmon_probe,
 };

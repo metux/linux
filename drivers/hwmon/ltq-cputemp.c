@@ -122,7 +122,7 @@ static struct platform_driver ltq_cputemp_driver = {
 	.probe = ltq_cputemp_probe,
 	.driver = {
 		.name = "ltq-cputemp",
-		.of_match_table = ltq_cputemp_match,
+		.of_match_table = of_match_ptr(ltq_cputemp_match),
 	},
 };
 

@@ -235,7 +235,7 @@ static struct platform_driver vexpress_hwmon_driver = {
 	.probe = vexpress_hwmon_probe,
 	.driver	= {
 		.name = DRVNAME,
-		.of_match_table = vexpress_hwmon_of_match,
+		.of_match_table = of_match_ptr(vexpress_hwmon_of_match),
 	},
 };
 

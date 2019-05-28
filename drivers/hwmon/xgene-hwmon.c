@@ -789,7 +789,7 @@ static struct platform_driver xgene_hwmon_driver __refdata = {
 	.remove = xgene_hwmon_remove,
 	.driver = {
 		.name = "xgene-slimpro-hwmon",
-		.of_match_table = xgene_hwmon_of_match,
+		.of_match_table = of_match_ptr(xgene_hwmon_of_match),
 		.acpi_match_table = ACPI_PTR(xgene_hwmon_acpi_match),
 	},
 };

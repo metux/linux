@@ -99,7 +99,7 @@ err0:
 static struct platform_driver gef_gpio_driver = {
 	.driver = {
 		.name		= "gef-gpio",
-		.of_match_table	= gef_gpio_ids,
+		.of_match_table	= of_match_ptr(gef_gpio_ids),
 	},
 };
 module_platform_driver_probe(gef_gpio_driver, gef_gpio_probe);

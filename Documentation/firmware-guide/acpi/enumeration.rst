@@ -250,7 +250,7 @@ input driver::
 			.name	= "mpu3050",
 			.owner	= THIS_MODULE,
 			.pm	= &mpu3050_pm,
-			.of_match_table = mpu3050_of_match,
+			.of_match_table = of_match_ptr(mpu3050_of_match),
 			.acpi_match_table = ACPI_PTR(mpu3050_acpi_match),
 		},
 		.probe		= mpu3050_probe,

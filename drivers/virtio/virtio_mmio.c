@@ -764,7 +764,7 @@ static struct platform_driver virtio_mmio_driver = {
 	.remove		= virtio_mmio_remove,
 	.driver		= {
 		.name	= "virtio-mmio",
-		.of_match_table	= virtio_mmio_match,
+		.of_match_table	= of_match_ptr(virtio_mmio_match),
 		.acpi_match_table = ACPI_PTR(virtio_mmio_acpi_match),
 	},
 };

@@ -610,7 +610,7 @@ static struct platform_driver artpec6_pcie_driver = {
 	.probe = artpec6_pcie_probe,
 	.driver = {
 		.name	= "artpec6-pcie",
-		.of_match_table = artpec6_pcie_of_match,
+		.of_match_table = of_match_ptr(artpec6_pcie_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

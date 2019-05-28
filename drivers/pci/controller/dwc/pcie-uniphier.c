@@ -466,7 +466,7 @@ static struct platform_driver uniphier_pcie_driver = {
 	.remove = uniphier_pcie_remove,
 	.driver = {
 		.name = "uniphier-pcie",
-		.of_match_table = uniphier_pcie_match,
+		.of_match_table = of_match_ptr(uniphier_pcie_match),
 	},
 };
 builtin_platform_driver(uniphier_pcie_driver);

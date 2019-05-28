@@ -307,7 +307,7 @@ static struct platform_driver tango_pcie_driver = {
 	.probe	= tango_pcie_probe,
 	.driver	= {
 		.name = KBUILD_MODNAME,
-		.of_match_table = tango_pcie_ids,
+		.of_match_table = of_match_ptr(tango_pcie_ids),
 		.suppress_bind_attrs = true,
 	},
 };

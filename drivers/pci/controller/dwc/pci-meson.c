@@ -586,7 +586,7 @@ static struct platform_driver meson_pcie_driver = {
 	.probe = meson_pcie_probe,
 	.driver = {
 		.name = "meson-pcie",
-		.of_match_table = meson_pcie_of_match,
+		.of_match_table = of_match_ptr(meson_pcie_of_match),
 	},
 };
 

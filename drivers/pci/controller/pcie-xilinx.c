@@ -696,7 +696,7 @@ static const struct of_device_id xilinx_pcie_of_match[] = {
 static struct platform_driver xilinx_pcie_driver = {
 	.driver = {
 		.name = "xilinx-pcie",
-		.of_match_table = xilinx_pcie_of_match,
+		.of_match_table = of_match_ptr(xilinx_pcie_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = xilinx_pcie_probe,

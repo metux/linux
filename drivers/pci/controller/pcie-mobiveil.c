@@ -948,7 +948,7 @@ static struct platform_driver mobiveil_pcie_driver = {
 	.probe = mobiveil_pcie_probe,
 	.driver = {
 		.name = "mobiveil-pcie",
-		.of_match_table = mobiveil_pcie_of_match,
+		.of_match_table = of_match_ptr(mobiveil_pcie_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

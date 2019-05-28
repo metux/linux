@@ -938,7 +938,7 @@ static const struct dev_pm_ops dra7xx_pcie_pm_ops = {
 static struct platform_driver dra7xx_pcie_driver = {
 	.driver = {
 		.name	= "dra7-pcie",
-		.of_match_table = of_dra7xx_pcie_match,
+		.of_match_table = of_match_ptr(of_dra7xx_pcie_match),
 		.suppress_bind_attrs = true,
 		.pm	= &dra7xx_pcie_pm_ops,
 	},

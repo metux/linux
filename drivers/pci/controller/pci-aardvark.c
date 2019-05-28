@@ -1040,7 +1040,7 @@ static const struct of_device_id advk_pcie_of_match_table[] = {
 static struct platform_driver advk_pcie_driver = {
 	.driver = {
 		.name = "advk-pcie",
-		.of_match_table = advk_pcie_of_match_table,
+		.of_match_table = of_match_ptr(advk_pcie_of_match_table),
 		/* Driver unloading/unbinding currently not supported */
 		.suppress_bind_attrs = true,
 	},

@@ -2964,7 +2964,7 @@ static const struct dev_pm_ops tegra_pcie_pm_ops = {
 static struct platform_driver tegra_pcie_driver = {
 	.driver = {
 		.name = "tegra-pcie",
-		.of_match_table = tegra_pcie_of_match,
+		.of_match_table = of_match_ptr(tegra_pcie_of_match),
 		.suppress_bind_attrs = true,
 		.pm = &tegra_pcie_pm_ops,
 	},

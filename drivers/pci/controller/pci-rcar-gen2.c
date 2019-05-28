@@ -421,7 +421,7 @@ static struct platform_driver rcar_pci_driver = {
 	.driver = {
 		.name = "pci-rcar-gen2",
 		.suppress_bind_attrs = true,
-		.of_match_table = rcar_pci_of_match,
+		.of_match_table = of_match_ptr(rcar_pci_of_match),
 	},
 	.probe = rcar_pci_probe,
 };

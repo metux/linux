@@ -462,7 +462,7 @@ static struct platform_driver histb_pcie_platform_driver = {
 	.remove	= histb_pcie_remove,
 	.driver = {
 		.name = "histb-pcie",
-		.of_match_table = histb_pcie_of_match,
+		.of_match_table = of_match_ptr(histb_pcie_of_match),
 	},
 };
 module_platform_driver(histb_pcie_platform_driver);

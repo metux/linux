@@ -325,9 +325,9 @@ static const struct of_device_id hisi_pcie_of_match[] = {
 static struct platform_driver hisi_pcie_driver = {
 	.probe  = hisi_pcie_probe,
 	.driver = {
-		   .name = "hisi-pcie",
-		   .of_match_table = hisi_pcie_of_match,
-		   .suppress_bind_attrs = true,
+		.name = "hisi-pcie",
+		.of_match_table = of_match_ptr(hisi_pcie_of_match),
+		.suppress_bind_attrs = true,
 	},
 };
 builtin_platform_driver(hisi_pcie_driver);
@@ -387,9 +387,9 @@ static const struct of_device_id hisi_pcie_almost_ecam_of_match[] = {
 static struct platform_driver hisi_pcie_almost_ecam_driver = {
 	.probe  = hisi_pcie_almost_ecam_probe,
 	.driver = {
-		   .name = "hisi-pcie-almost-ecam",
-		   .of_match_table = hisi_pcie_almost_ecam_of_match,
-		   .suppress_bind_attrs = true,
+		.name = "hisi-pcie-almost-ecam",
+		.of_match_table = of_match_ptr(hisi_pcie_almost_ecam_of_match),
+		.suppress_bind_attrs = true,
 	},
 };
 builtin_platform_driver(hisi_pcie_almost_ecam_driver);

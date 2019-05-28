@@ -1130,7 +1130,7 @@ MODULE_DEVICE_TABLE(of, rockchip_pcie_of_match);
 static struct platform_driver rockchip_pcie_driver = {
 	.driver = {
 		.name = "rockchip-pcie",
-		.of_match_table = rockchip_pcie_of_match,
+		.of_match_table = of_match_ptr(rockchip_pcie_of_match),
 		.pm = &rockchip_pcie_pm_ops,
 	},
 	.probe = rockchip_pcie_probe,

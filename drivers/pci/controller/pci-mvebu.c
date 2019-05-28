@@ -1146,7 +1146,7 @@ static const struct dev_pm_ops mvebu_pcie_pm_ops = {
 static struct platform_driver mvebu_pcie_driver = {
 	.driver = {
 		.name = "mvebu-pcie",
-		.of_match_table = mvebu_pcie_of_match_table,
+		.of_match_table = of_match_ptr(mvebu_pcie_of_match_table),
 		/* driver unloading/unbinding currently not supported */
 		.suppress_bind_attrs = true,
 		.pm = &mvebu_pcie_pm_ops,

@@ -149,7 +149,7 @@ static int __init ls_pcie_ep_probe(struct platform_device *pdev)
 static struct platform_driver ls_pcie_ep_driver = {
 	.driver = {
 		.name = "layerscape-pcie-ep",
-		.of_match_table = ls_pcie_ep_of_match,
+		.of_match_table = of_match_ptr(ls_pcie_ep_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

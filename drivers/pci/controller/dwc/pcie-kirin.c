@@ -536,7 +536,7 @@ static struct platform_driver kirin_pcie_driver = {
 	.probe			= kirin_pcie_probe,
 	.driver			= {
 		.name			= "kirin-pcie",
-		.of_match_table = kirin_pcie_match,
+		.of_match_table = of_match_ptr(kirin_pcie_match),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -899,7 +899,7 @@ static struct platform_driver nwl_pcie_driver = {
 	.driver = {
 		.name = "nwl-pcie",
 		.suppress_bind_attrs = true,
-		.of_match_table = nwl_pcie_of_match,
+		.of_match_table = of_match_ptr(nwl_pcie_of_match),
 	},
 	.probe = nwl_pcie_probe,
 };

@@ -895,7 +895,7 @@ static struct platform_driver altera_pcie_driver = {
 	.remove		= altera_pcie_remove,
 	.driver = {
 		.name	= "altera-pcie",
-		.of_match_table = altera_pcie_of_match,
+		.of_match_table = of_match_ptr(altera_pcie_of_match),
 	},
 };
 

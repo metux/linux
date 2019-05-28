@@ -353,7 +353,7 @@ static void cdns_pcie_shutdown(struct platform_device *pdev)
 static struct platform_driver cdns_pcie_host_driver = {
 	.driver = {
 		.name = "cdns-pcie-host",
-		.of_match_table = cdns_pcie_host_of_match,
+		.of_match_table = of_match_ptr(cdns_pcie_host_of_match),
 		.pm	= &cdns_pcie_pm_ops,
 	},
 	.probe = cdns_pcie_host_probe,

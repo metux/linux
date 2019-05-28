@@ -279,7 +279,7 @@ static const struct of_device_id altera_msi_of_match[] = {
 static struct platform_driver altera_msi_driver = {
 	.driver = {
 		.name = "altera-msi",
-		.of_match_table = altera_msi_of_match,
+		.of_match_table = of_match_ptr(altera_msi_of_match),
 	},
 	.probe = altera_msi_probe,
 	.remove = altera_msi_remove,

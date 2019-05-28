@@ -1296,7 +1296,7 @@ static struct platform_driver qcom_pcie_driver = {
 	.driver = {
 		.name = "qcom-pcie",
 		.suppress_bind_attrs = true,
-		.of_match_table = qcom_pcie_match,
+		.of_match_table = of_match_ptr(qcom_pcie_match),
 	},
 };
 builtin_platform_driver(qcom_pcie_driver);

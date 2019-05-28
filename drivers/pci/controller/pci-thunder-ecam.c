@@ -369,7 +369,7 @@ static int thunder_ecam_probe(struct platform_device *pdev)
 static struct platform_driver thunder_ecam_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = thunder_ecam_of_match,
+		.of_match_table = of_match_ptr(thunder_ecam_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = thunder_ecam_probe,

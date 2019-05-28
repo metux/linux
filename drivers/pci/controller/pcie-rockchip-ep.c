@@ -644,7 +644,7 @@ err_disable_clocks:
 static struct platform_driver rockchip_pcie_ep_driver = {
 	.driver = {
 		.name = "rockchip-pcie-ep",
-		.of_match_table = rockchip_pcie_ep_of_match,
+		.of_match_table = of_match_ptr(rockchip_pcie_ep_of_match),
 	},
 	.probe = rockchip_pcie_ep_probe,
 };

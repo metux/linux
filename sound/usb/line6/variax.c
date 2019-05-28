@@ -43,6 +43,8 @@ struct usb_line6_variax {
 	int startup_progress;
 };
 
+#define line6_to_variax(x)	container_of(x, struct usb_line6_variax, line6)
+
 #define VARIAX_OFFSET_ACTIVATE 7
 
 /*
@@ -82,7 +84,7 @@ static void variax_activate_async(struct usb_line6_variax *variax, int a)
 
 static void variax_startup(struct usb_line6 *line6)
 {
-	struct usb_line6_variax *variax = (struct usb_line6_variax *)line6;
+	struct usb_line6_variax *variax = line6_to_variax(line6);
 
 	switch (variax->startup_progress) {
 	case VARIAX_STARTUP_VERSIONREQ:
@@ -111,7 +113,7 @@ static void variax_startup(struct usb_line6 *line6)
 */
 static void line6_variax_process_message(struct usb_line6 *line6)
 {
-	struct usb_line6_variax *variax = (struct usb_line6_variax *) line6;
+	struct usb_line6_variax *variax = line6_to_variax(line6);
 	const unsigned char *buf = variax->line6.buffer_message;
 
 	switch (buf[0]) {
@@ -145,7 +147,7 @@ static void line6_variax_process_message(struct usb_line6 *line6)
 */
 static void line6_variax_disconnect(struct usb_line6 *line6)
 {
-	struct usb_line6_variax *variax = (struct usb_line6_variax *)line6;
+	struct usb_line6_variax *variax = line6_to_variax(line6);
 
 	kfree(variax->buffer_activate);
 }
@@ -156,7 +158,7 @@ static void line6_variax_disconnect(struct usb_line6 *line6)
 static int variax_init(struct usb_line6 *line6,
 		       const struct usb_device_id *id)
 {
-	struct usb_line6_variax *variax = (struct usb_line6_variax *) line6;
+	struct usb_line6_variax *variax = line6_to_variax(line6);
 	int err;
 
 	line6->process_message = line6_variax_process_message;

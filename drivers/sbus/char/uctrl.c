@@ -426,7 +426,7 @@ MODULE_DEVICE_TABLE(of, uctrl_match);
 static struct platform_driver uctrl_driver = {
 	.driver = {
 		.name = "uctrl",
-		.of_match_table = uctrl_match,
+		.of_match_table = of_match_ptr(uctrl_match),
 	},
 	.probe		= uctrl_probe,
 	.remove		= uctrl_remove,

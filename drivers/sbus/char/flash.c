@@ -208,7 +208,7 @@ MODULE_DEVICE_TABLE(of, flash_match);
 static struct platform_driver flash_driver = {
 	.driver = {
 		.name = "flash",
-		.of_match_table = flash_match,
+		.of_match_table = of_match_ptr(flash_match),
 	},
 	.probe		= flash_probe,
 	.remove		= flash_remove,

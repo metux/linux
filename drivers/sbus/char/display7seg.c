@@ -264,7 +264,7 @@ MODULE_DEVICE_TABLE(of, d7s_match);
 static struct platform_driver d7s_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = d7s_match,
+		.of_match_table = of_match_ptr(d7s_match),
 	},
 	.probe		= d7s_probe,
 	.remove		= d7s_remove,

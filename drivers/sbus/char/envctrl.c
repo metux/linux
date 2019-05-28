@@ -1128,7 +1128,7 @@ MODULE_DEVICE_TABLE(of, envctrl_match);
 static struct platform_driver envctrl_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = envctrl_match,
+		.of_match_table = of_match_ptr(envctrl_match),
 	},
 	.probe		= envctrl_probe,
 	.remove		= envctrl_remove,

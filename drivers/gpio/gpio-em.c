@@ -370,7 +370,7 @@ static struct platform_driver em_gio_device_driver = {
 	.probe		= em_gio_probe,
 	.driver		= {
 		.name	= "em_gio",
-		.of_match_table = em_gio_dt_ids,
+		.of_match_table = of_match_ptr(em_gio_dt_ids),
 	}
 };
 postcore_platform_driver(em_gio_device_driver);

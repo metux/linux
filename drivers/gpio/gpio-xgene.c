@@ -209,7 +209,7 @@ static const struct acpi_device_id xgene_gpio_acpi_match[] = {
 static struct platform_driver xgene_gpio_driver = {
 	.driver = {
 		.name = "xgene-gpio",
-		.of_match_table = xgene_gpio_of_match,
+		.of_match_table = of_match_ptr(xgene_gpio_of_match),
 		.acpi_match_table = ACPI_PTR(xgene_gpio_acpi_match),
 		.pm     = &xgene_gpio_pm,
 	},

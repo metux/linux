@@ -219,7 +219,7 @@ static const struct of_device_id mcu_of_match_table[] = {
 static struct i2c_driver mcu_driver = {
 	.driver = {
 		.name = "mcu-mpc8349emitx",
-		.of_match_table = mcu_of_match_table,
+		.of_match_table = of_match_ptr(mcu_of_match_table),
 	},
 	.probe = mcu_probe,
 	.remove	= mcu_remove,

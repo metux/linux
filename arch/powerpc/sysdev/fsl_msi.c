@@ -605,7 +605,7 @@ static const struct of_device_id fsl_of_msi_ids[] = {
 static struct platform_driver fsl_of_msi_driver = {
 	.driver = {
 		.name = "fsl-msi",
-		.of_match_table = fsl_of_msi_ids,
+		.of_match_table = of_match_ptr(fsl_of_msi_ids),
 	},
 	.probe = fsl_of_msi_probe,
 	.remove = fsl_of_msi_remove,

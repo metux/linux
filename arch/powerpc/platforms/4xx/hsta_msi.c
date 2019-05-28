@@ -198,7 +198,7 @@ static struct platform_driver hsta_msi_driver = {
 	.probe = hsta_msi_probe,
 	.driver = {
 		.name = "hsta-msi",
-		.of_match_table = hsta_msi_ids,
+		.of_match_table = of_match_ptr(hsta_msi_ids),
 	},
 };
 

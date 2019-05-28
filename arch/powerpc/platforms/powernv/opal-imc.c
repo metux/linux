@@ -333,7 +333,7 @@ static const struct of_device_id opal_imc_match[] = {
 static struct platform_driver opal_imc_driver = {
 	.driver = {
 		.name = "opal-imc-counters",
-		.of_match_table = opal_imc_match,
+		.of_match_table = of_match_ptr(opal_imc_match),
 	},
 	.probe = opal_imc_counters_probe,
 	.shutdown = opal_imc_counters_shutdown,

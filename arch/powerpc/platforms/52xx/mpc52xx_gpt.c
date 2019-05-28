@@ -771,7 +771,7 @@ static const struct of_device_id mpc52xx_gpt_match[] = {
 static struct platform_driver mpc52xx_gpt_driver = {
 	.driver = {
 		.name = "mpc52xx-gpt",
-		.of_match_table = mpc52xx_gpt_match,
+		.of_match_table = of_match_ptr(mpc52xx_gpt_match),
 	},
 	.probe = mpc52xx_gpt_probe,
 	.remove = mpc52xx_gpt_remove,

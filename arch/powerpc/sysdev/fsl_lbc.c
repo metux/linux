@@ -416,7 +416,7 @@ static struct syscore_ops lbc_syscore_pm_ops = {
 static struct platform_driver fsl_lbc_ctrl_driver = {
 	.driver = {
 		.name = "fsl-lbc",
-		.of_match_table = fsl_lbc_match,
+		.of_match_table = of_match_ptr(fsl_lbc_match),
 	},
 	.probe = fsl_lbc_ctrl_probe,
 };

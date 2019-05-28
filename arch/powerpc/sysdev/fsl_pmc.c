@@ -76,7 +76,7 @@ static const struct of_device_id pmc_ids[] = {
 static struct platform_driver pmc_driver = {
 	.driver = {
 		.name = "fsl-pmc",
-		.of_match_table = pmc_ids,
+		.of_match_table = of_match_ptr(pmc_ids),
 	},
 	.probe = pmc_probe,
 };

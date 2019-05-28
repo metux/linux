@@ -63,7 +63,7 @@ static struct platform_driver cpm_gpio_driver = {
 	.probe		= cpm_gpio_probe,
 	.driver		= {
 		.name	= "cpm-gpio",
-		.of_match_table	= cpm_gpio_match,
+		.of_match_table	= of_match_ptr(cpm_gpio_match),
 	},
 };
 

@@ -433,7 +433,7 @@ static const struct of_device_id pmc_match[] = {
 static struct platform_driver pmc_driver = {
 	.driver = {
 		.name = "mpc83xx-pmc",
-		.of_match_table = pmc_match,
+		.of_match_table = of_match_ptr(pmc_match),
 	},
 	.probe = pmc_probe,
 	.remove = pmc_remove

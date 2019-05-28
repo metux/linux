@@ -197,7 +197,7 @@ static struct platform_driver pmi_of_platform_driver = {
 	.remove		= pmi_of_remove,
 	.driver = {
 		.name = "pmi",
-		.of_match_table = pmi_match,
+		.of_match_table = of_match_ptr(pmi_match),
 	},
 };
 module_platform_driver(pmi_of_platform_driver);

@@ -461,7 +461,7 @@ static struct platform_driver papr_scm_driver = {
 	.driver = {
 		.name = "papr_scm",
 		.owner = THIS_MODULE,
-		.of_match_table = papr_scm_match,
+		.of_match_table = of_match_ptr(papr_scm_match),
 	},
 };
 

@@ -290,7 +290,7 @@ static struct platform_driver gpio_mdio_driver =
 	.remove		= gpio_mdio_remove,
 	.driver = {
 		.name = "gpio-mdio-bitbang",
-		.of_match_table = gpio_mdio_match,
+		.of_match_table = of_match_ptr(gpio_mdio_match),
 	},
 };
 

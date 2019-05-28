@@ -193,7 +193,7 @@ static const struct of_device_id mpc85xx_l2ctlr_of_match[] = {
 static struct platform_driver mpc85xx_l2ctlr_of_platform_driver = {
 	.driver	= {
 		.name		= "fsl-l2ctlr",
-		.of_match_table	= mpc85xx_l2ctlr_of_match,
+		.of_match_table	= of_match_ptr(mpc85xx_l2ctlr_of_match),
 	},
 	.probe		= mpc85xx_l2ctlr_of_probe,
 	.remove		= mpc85xx_l2ctlr_of_remove,

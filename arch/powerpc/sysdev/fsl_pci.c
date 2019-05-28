@@ -1326,7 +1326,7 @@ static int fsl_pci_probe(struct platform_device *pdev)
 static struct platform_driver fsl_pci_driver = {
 	.driver = {
 		.name = "fsl-pci",
-		.of_match_table = pci_ids,
+		.of_match_table = of_match_ptr(pci_ids),
 	},
 	.probe = fsl_pci_probe,
 };

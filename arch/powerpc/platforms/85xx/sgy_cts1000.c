@@ -159,7 +159,7 @@ MODULE_DEVICE_TABLE(of, gpio_halt_match);
 static struct platform_driver gpio_halt_driver = {
 	.driver = {
 		.name		= "gpio-halt",
-		.of_match_table = gpio_halt_match,
+		.of_match_table = of_match_ptr(gpio_halt_match),
 	},
 	.probe		= gpio_halt_probe,
 	.remove		= gpio_halt_remove,

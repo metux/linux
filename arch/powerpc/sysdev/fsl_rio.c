@@ -782,7 +782,7 @@ static const struct of_device_id fsl_of_rio_rpn_ids[] = {
 static struct platform_driver fsl_of_rio_rpn_driver = {
 	.driver = {
 		.name = "fsl-of-rio",
-		.of_match_table = fsl_of_rio_rpn_ids,
+		.of_match_table = of_match_ptr(fsl_of_rio_rpn_ids),
 	},
 	.probe = fsl_of_rio_rpn_probe,
 };

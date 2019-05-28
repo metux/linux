@@ -311,7 +311,7 @@ static struct platform_driver st_rtc_platform_driver = {
 	.driver = {
 		.name = "st-lpc-rtc",
 		.pm = &st_rtc_pm_ops,
-		.of_match_table = st_rtc_match,
+		.of_match_table = of_match_ptr(st_rtc_match),
 	},
 	.probe = st_rtc_probe,
 };

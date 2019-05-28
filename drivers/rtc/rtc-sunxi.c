@@ -489,7 +489,7 @@ static struct platform_driver sunxi_rtc_driver = {
 	.probe		= sunxi_rtc_probe,
 	.driver		= {
 		.name		= "sunxi-rtc",
-		.of_match_table = sunxi_rtc_dt_ids,
+		.of_match_table = of_match_ptr(sunxi_rtc_dt_ids),
 	},
 };
 

@@ -679,7 +679,7 @@ MODULE_DEVICE_TABLE(of, x1205_dt_ids);
 static struct i2c_driver x1205_driver = {
 	.driver		= {
 		.name	= "rtc-x1205",
-		.of_match_table = x1205_dt_ids,
+		.of_match_table = of_match_ptr(x1205_dt_ids),
 	},
 	.probe		= x1205_probe,
 	.remove		= x1205_remove,

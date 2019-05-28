@@ -647,7 +647,7 @@ static struct platform_driver twl4030rtc_driver = {
 	.driver		= {
 		.name		= "twl_rtc",
 		.pm		= &twl_rtc_pm_ops,
-		.of_match_table = twl_rtc_of_match,
+		.of_match_table = of_match_ptr(twl_rtc_of_match),
 	},
 };
 

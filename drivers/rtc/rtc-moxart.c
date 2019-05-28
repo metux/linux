@@ -318,7 +318,7 @@ static struct platform_driver moxart_rtc_driver = {
 	.probe	= moxart_rtc_probe,
 	.driver	= {
 		.name		= "moxart-rtc",
-		.of_match_table	= moxart_rtc_match,
+		.of_match_table	= of_match_ptr(moxart_rtc_match),
 	},
 };
 module_platform_driver(moxart_rtc_driver);

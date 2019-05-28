@@ -409,7 +409,7 @@ MODULE_DEVICE_TABLE(of, cdns_rtc_of_match);
 static struct platform_driver cdns_rtc_driver = {
 	.driver = {
 		.name = "cdns-rtc",
-		.of_match_table = cdns_rtc_of_match,
+		.of_match_table = of_match_ptr(cdns_rtc_of_match),
 		.pm = &cdns_rtc_pm_ops,
 	},
 	.probe = cdns_rtc_probe,

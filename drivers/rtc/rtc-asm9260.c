@@ -330,7 +330,7 @@ static struct platform_driver asm9260_rtc_driver = {
 	.remove		= asm9260_rtc_remove,
 	.driver		= {
 		.name	= "asm9260-rtc",
-		.of_match_table = asm9260_dt_ids,
+		.of_match_table = of_match_ptr(asm9260_dt_ids),
 	},
 };
 

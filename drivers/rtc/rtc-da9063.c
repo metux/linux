@@ -498,7 +498,7 @@ static struct platform_driver da9063_rtc_driver = {
 	.probe		= da9063_rtc_probe,
 	.driver		= {
 		.name	= DA9063_DRVNAME_RTC,
-		.of_match_table = da9063_compatible_reg_id_table,
+		.of_match_table = of_match_ptr(da9063_compatible_reg_id_table),
 	},
 };
 

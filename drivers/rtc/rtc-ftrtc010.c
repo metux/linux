@@ -201,7 +201,7 @@ MODULE_DEVICE_TABLE(of, ftrtc010_rtc_dt_match);
 static struct platform_driver ftrtc010_rtc_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = ftrtc010_rtc_dt_match,
+		.of_match_table = of_match_ptr(ftrtc010_rtc_dt_match),
 	},
 	.probe		= ftrtc010_rtc_probe,
 	.remove		= ftrtc010_rtc_remove,

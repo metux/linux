@@ -311,7 +311,7 @@ static struct platform_driver cpcap_rtc_driver = {
 	.probe		= cpcap_rtc_probe,
 	.driver		= {
 		.name	= "cpcap-rtc",
-		.of_match_table = cpcap_rtc_of_match,
+		.of_match_table = of_match_ptr(cpcap_rtc_of_match),
 	},
 };
 

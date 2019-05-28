@@ -673,7 +673,7 @@ static struct platform_driver sh_rtc_platform_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
 		.pm	= &sh_rtc_pm_ops,
-		.of_match_table = sh_rtc_of_match,
+		.of_match_table = of_match_ptr(sh_rtc_of_match),
 	},
 	.remove		= __exit_p(sh_rtc_remove),
 };

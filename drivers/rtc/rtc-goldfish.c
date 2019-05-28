@@ -212,7 +212,7 @@ static struct platform_driver goldfish_rtc = {
 	.probe = goldfish_rtc_probe,
 	.driver = {
 		.name = "goldfish_rtc",
-		.of_match_table = goldfish_rtc_of_match,
+		.of_match_table = of_match_ptr(goldfish_rtc_of_match),
 	}
 };
 

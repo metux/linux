@@ -402,7 +402,7 @@ static struct platform_driver mtk_rtc_driver = {
 	.remove	= mtk_rtc_remove,
 	.driver = {
 		.name = MTK_RTC_DEV,
-		.of_match_table = mtk_rtc_match,
+		.of_match_table = of_match_ptr(mtk_rtc_match),
 		.pm = MTK_RTC_PM_OPS,
 	},
 };

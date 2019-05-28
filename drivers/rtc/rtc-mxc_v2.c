@@ -379,7 +379,7 @@ static const struct of_device_id mxc_ids[] = {
 static struct platform_driver mxc_rtc_driver = {
 	.driver = {
 		.name = "mxc_rtc_v2",
-		.of_match_table = mxc_ids,
+		.of_match_table = of_match_ptr(mxc_ids),
 	},
 	.probe = mxc_rtc_probe,
 	.remove = mxc_rtc_remove,

@@ -270,7 +270,7 @@ static struct platform_driver vt8500_rtc_driver = {
 	.remove		= vt8500_rtc_remove,
 	.driver		= {
 		.name	= "vt8500-rtc",
-		.of_match_table = wmt_dt_ids,
+		.of_match_table = of_match_ptr(wmt_dt_ids),
 	},
 };
 

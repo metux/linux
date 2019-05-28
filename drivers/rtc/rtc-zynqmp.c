@@ -301,7 +301,7 @@ static struct platform_driver xlnx_rtc_driver = {
 	.driver		= {
 		.name	= KBUILD_MODNAME,
 		.pm	= &xlnx_rtc_pm_ops,
-		.of_match_table	= xlnx_rtc_of_match,
+		.of_match_table	= of_match_ptr(xlnx_rtc_of_match),
 	},
 };
 

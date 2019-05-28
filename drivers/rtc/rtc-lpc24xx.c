@@ -295,7 +295,7 @@ static struct platform_driver lpc24xx_rtc_driver = {
 	.remove	= lpc24xx_rtc_remove,
 	.driver	= {
 		.name = "lpc24xx-rtc",
-		.of_match_table	= lpc24xx_rtc_match,
+		.of_match_table	= of_match_ptr(lpc24xx_rtc_match),
 	},
 };
 module_platform_driver(lpc24xx_rtc_driver);

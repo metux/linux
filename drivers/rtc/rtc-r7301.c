@@ -442,7 +442,7 @@ MODULE_DEVICE_TABLE(of, rtc7301_dt_match);
 static struct platform_driver rtc7301_rtc_driver = {
 	.driver	= {
 		.name = DRV_NAME,
-		.of_match_table = rtc7301_dt_match,
+		.of_match_table = of_match_ptr(rtc7301_dt_match),
 		.pm = &rtc7301_pm_ops,
 	},
 };

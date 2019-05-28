@@ -236,7 +236,7 @@ static struct platform_driver rtd119x_rtc_driver = {
 	.remove = rtd119x_rtc_remove,
 	.driver = {
 		.name = "rtd1295-rtc",
-		.of_match_table	= rtd119x_rtc_dt_ids,
+		.of_match_table	= of_match_ptr(rtd119x_rtc_dt_ids),
 	},
 };
 builtin_platform_driver(rtd119x_rtc_driver);

@@ -186,7 +186,7 @@ MODULE_DEVICE_TABLE(of, imx_sc_dt_ids);
 static struct platform_driver imx_sc_rtc_driver = {
 	.driver = {
 		.name	= "imx-sc-rtc",
-		.of_match_table = imx_sc_dt_ids,
+		.of_match_table = of_match_ptr(imx_sc_dt_ids),
 	},
 	.probe		= imx_sc_rtc_probe,
 };

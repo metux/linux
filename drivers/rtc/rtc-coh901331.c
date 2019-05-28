@@ -279,7 +279,7 @@ static struct platform_driver coh901331_driver = {
 	.driver = {
 		.name = "rtc-coh901331",
 		.pm = &coh901331_pm_ops,
-		.of_match_table = coh901331_dt_match,
+		.of_match_table = of_match_ptr(coh901331_dt_match),
 	},
 	.remove = __exit_p(coh901331_remove),
 	.shutdown = coh901331_shutdown,

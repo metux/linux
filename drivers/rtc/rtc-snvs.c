@@ -394,7 +394,7 @@ static struct platform_driver snvs_rtc_driver = {
 	.driver = {
 		.name	= "snvs_rtc",
 		.pm	= &snvs_rtc_pm_ops,
-		.of_match_table = snvs_dt_ids,
+		.of_match_table = of_match_ptr(snvs_dt_ids),
 	},
 	.probe		= snvs_rtc_probe,
 };

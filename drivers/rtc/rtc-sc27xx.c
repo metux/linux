@@ -679,7 +679,7 @@ MODULE_DEVICE_TABLE(of, sprd_rtc_of_match);
 static struct platform_driver sprd_rtc_driver = {
 	.driver = {
 		.name = "sprd-rtc",
-		.of_match_table = sprd_rtc_of_match,
+		.of_match_table = of_match_ptr(sprd_rtc_of_match),
 	},
 	.probe	= sprd_rtc_probe,
 	.remove = sprd_rtc_remove,

@@ -398,7 +398,7 @@ MODULE_DEVICE_TABLE(of, mt6397_rtc_of_match);
 static struct platform_driver mtk_rtc_driver = {
 	.driver = {
 		.name = "mt6397-rtc",
-		.of_match_table = mt6397_rtc_of_match,
+		.of_match_table = of_match_ptr(mt6397_rtc_of_match),
 		.pm = &mt6397_pm_ops,
 	},
 	.probe	= mtk_rtc_probe,

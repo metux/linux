@@ -223,7 +223,7 @@ static struct platform_driver hi3660_phy_driver = {
 	.probe	= hi3660_phy_probe,
 	.driver = {
 		.name	= "hi3660-usb-phy",
-		.of_match_table	= hi3660_phy_of_match,
+		.of_match_table	= of_match_ptr(hi3660_phy_of_match),
 	}
 };
 module_platform_driver(hi3660_phy_driver);

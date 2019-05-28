@@ -270,7 +270,7 @@ static int exynos_pcie_phy_probe(struct platform_device *pdev)
 static struct platform_driver exynos_pcie_phy_driver = {
 	.probe	= exynos_pcie_phy_probe,
 	.driver = {
-		.of_match_table	= exynos_pcie_phy_match,
+		.of_match_table	= of_match_ptr(exynos_pcie_phy_match),
 		.name		= "exynos_pcie_phy",
 	}
 };

@@ -210,7 +210,7 @@ MODULE_DEVICE_TABLE(of, cygnus_pcie_phy_match_table);
 static struct platform_driver cygnus_pcie_phy_driver = {
 	.driver = {
 		.name = "cygnus-pcie-phy",
-		.of_match_table = cygnus_pcie_phy_match_table,
+		.of_match_table = of_match_ptr(cygnus_pcie_phy_match_table),
 	},
 	.probe = cygnus_pcie_phy_probe,
 };

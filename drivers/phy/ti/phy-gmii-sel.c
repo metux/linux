@@ -339,7 +339,7 @@ static struct platform_driver phy_gmii_sel_driver = {
 	.probe		= phy_gmii_sel_probe,
 	.driver		= {
 		.name	= "phy-gmii-sel",
-		.of_match_table = phy_gmii_sel_id_table,
+		.of_match_table = of_match_ptr(phy_gmii_sel_id_table),
 	},
 };
 module_platform_driver(phy_gmii_sel_driver);

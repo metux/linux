@@ -247,7 +247,7 @@ static struct mdio_driver bcm_ns_usb3_mdio_driver = {
 	.mdiodrv = {
 		.driver = {
 			.name = "bcm_ns_mdio_usb3",
-			.of_match_table = bcm_ns_usb3_id_table,
+			.of_match_table = of_match_ptr(bcm_ns_usb3_id_table),
 		},
 	},
 	.probe = bcm_ns_usb3_mdio_probe,
@@ -365,7 +365,7 @@ static struct platform_driver bcm_ns_usb3_driver = {
 	.probe		= bcm_ns_usb3_probe,
 	.driver = {
 		.name = "bcm_ns_usb3",
-		.of_match_table = bcm_ns_usb3_id_table,
+		.of_match_table = of_match_ptr(bcm_ns_usb3_id_table),
 	},
 };
 

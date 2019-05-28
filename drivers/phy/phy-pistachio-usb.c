@@ -193,7 +193,7 @@ static struct platform_driver pistachio_usb_phy_driver = {
 	.probe		= pistachio_usb_phy_probe,
 	.driver		= {
 		.name	= "pistachio-usb-phy",
-		.of_match_table = pistachio_usb_phy_of_match,
+		.of_match_table = of_match_ptr(pistachio_usb_phy_of_match),
 	},
 };
 module_platform_driver(pistachio_usb_phy_driver);

@@ -123,7 +123,7 @@ static struct platform_driver phy_mvebu_sata_driver = {
 	.probe	= phy_mvebu_sata_probe,
 	.driver = {
 		.name	= "phy-mvebu-sata",
-		.of_match_table	= phy_mvebu_sata_of_match,
+		.of_match_table	= of_match_ptr(phy_mvebu_sata_of_match),
 	}
 };
 builtin_platform_driver(phy_mvebu_sata_driver);

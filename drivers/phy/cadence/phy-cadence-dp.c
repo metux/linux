@@ -531,7 +531,7 @@ static struct platform_driver cdns_dp_phy_driver = {
 	.probe	= cdns_dp_phy_probe,
 	.driver = {
 		.name	= "cdns-dp-phy",
-		.of_match_table	= cdns_dp_phy_of_match,
+		.of_match_table	= of_match_ptr(cdns_dp_phy_of_match),
 	}
 };
 module_platform_driver(cdns_dp_phy_driver);

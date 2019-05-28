@@ -2125,7 +2125,7 @@ static struct platform_driver qcom_qmp_phy_driver = {
 	.driver = {
 		.name	= "qcom-qmp-phy",
 		.pm	= &qcom_qmp_phy_pm_ops,
-		.of_match_table = qcom_qmp_phy_of_match_table,
+		.of_match_table = of_match_ptr(qcom_qmp_phy_of_match_table),
 	},
 };
 

@@ -381,7 +381,7 @@ static struct platform_driver cdns_dphy_platform_driver = {
 	.remove		= cdns_dphy_remove,
 	.driver		= {
 		.name		= "cdns-mipi-dphy",
-		.of_match_table	= cdns_dphy_of_match,
+		.of_match_table	= of_match_ptr(cdns_dphy_of_match),
 	},
 };
 module_platform_driver(cdns_dphy_platform_driver);

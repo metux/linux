@@ -235,7 +235,7 @@ MODULE_DEVICE_TABLE(of, exynos_sata_phy_of_match);
 static struct platform_driver exynos_sata_phy_driver = {
 	.probe	= exynos_sata_phy_probe,
 	.driver = {
-		.of_match_table	= exynos_sata_phy_of_match,
+		.of_match_table	= of_match_ptr(exynos_sata_phy_of_match),
 		.name  = "samsung,sata-phy",
 	}
 };

@@ -430,7 +430,7 @@ static struct platform_driver rockchip_pcie_driver = {
 	.probe		= rockchip_pcie_phy_probe,
 	.driver		= {
 		.name	= "rockchip-pcie-phy",
-		.of_match_table = rockchip_pcie_phy_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_pcie_phy_dt_ids),
 	},
 };
 

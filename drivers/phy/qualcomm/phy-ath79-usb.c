@@ -97,7 +97,7 @@ MODULE_DEVICE_TABLE(of, ath79_usb_phy_of_match);
 static struct platform_driver ath79_usb_phy_driver = {
 	.probe	= ath79_usb_phy_probe,
 	.driver = {
-		.of_match_table	= ath79_usb_phy_of_match,
+		.of_match_table	= of_match_ptr(ath79_usb_phy_of_match),
 		.name		= "ath79-usb-phy",
 	}
 };

@@ -386,7 +386,7 @@ static struct platform_driver rockchip_emmc_driver = {
 	.probe		= rockchip_emmc_phy_probe,
 	.driver		= {
 		.name	= "rockchip-emmc-phy",
-		.of_match_table = rockchip_emmc_phy_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_emmc_phy_dt_ids),
 	},
 };
 

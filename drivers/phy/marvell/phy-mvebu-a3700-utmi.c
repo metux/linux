@@ -266,7 +266,7 @@ static struct platform_driver mvebu_a3700_utmi_driver = {
 	.probe	= mvebu_a3700_utmi_phy_probe,
 	.driver	= {
 		.name		= "mvebu-a3700-utmi-phy",
-		.of_match_table	= mvebu_a3700_utmi_of_match,
+		.of_match_table	= of_match_ptr(mvebu_a3700_utmi_of_match),
 	 },
 };
 module_platform_driver(mvebu_a3700_utmi_driver);

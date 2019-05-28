@@ -589,7 +589,7 @@ static struct platform_driver mtk_xsphy_driver = {
 	.probe		= mtk_xsphy_probe,
 	.driver		= {
 		.name	= "mtk-xsphy",
-		.of_match_table = mtk_xsphy_id_table,
+		.of_match_table = of_match_ptr(mtk_xsphy_id_table),
 	},
 };
 

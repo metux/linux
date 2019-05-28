@@ -238,7 +238,7 @@ static struct platform_driver ltq_rcu_usb2_phy_driver = {
 	.probe	= ltq_rcu_usb2_phy_probe,
 	.driver = {
 		.name	= "lantiq-rcu-usb2-phy",
-		.of_match_table	= ltq_rcu_usb2_phy_of_match,
+		.of_match_table	= of_match_ptr(ltq_rcu_usb2_phy_of_match),
 	}
 };
 module_platform_driver(ltq_rcu_usb2_phy_driver);

@@ -444,7 +444,7 @@ static struct platform_driver brcm_usb_driver = {
 	.driver		= {
 		.name	= "brcmstb-usb-phy",
 		.pm = &brcm_usb_phy_pm_ops,
-		.of_match_table = brcm_usb_dt_ids,
+		.of_match_table = of_match_ptr(brcm_usb_dt_ids),
 	},
 };
 

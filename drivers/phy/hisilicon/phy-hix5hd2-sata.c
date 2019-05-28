@@ -176,7 +176,7 @@ static struct platform_driver hix5hd2_sata_phy_driver = {
 	.probe	= hix5hd2_sata_phy_probe,
 	.driver = {
 		.name	= "hix5hd2-sata-phy",
-		.of_match_table	= hix5hd2_sata_phy_of_match,
+		.of_match_table	= of_match_ptr(hix5hd2_sata_phy_of_match),
 	}
 };
 module_platform_driver(hix5hd2_sata_phy_driver);

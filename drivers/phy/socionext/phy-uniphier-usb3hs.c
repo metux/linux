@@ -407,7 +407,7 @@ static struct platform_driver uniphier_u3hsphy_driver = {
 	.probe = uniphier_u3hsphy_probe,
 	.driver	= {
 		.name = "uniphier-usb3-hsphy",
-		.of_match_table	= uniphier_u3hsphy_match,
+		.of_match_table	= of_match_ptr(uniphier_u3hsphy_match),
 	},
 };
 

@@ -994,7 +994,7 @@ static struct platform_driver sun4i_usb_phy_driver = {
 	.probe	= sun4i_usb_phy_probe,
 	.remove	= sun4i_usb_phy_remove,
 	.driver = {
-		.of_match_table	= sun4i_usb_phy_of_match,
+		.of_match_table	= of_match_ptr(sun4i_usb_phy_of_match),
 		.name  = "sun4i-usb-phy",
 	}
 };

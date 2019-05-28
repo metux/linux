@@ -138,7 +138,7 @@ static int rcar_gen3_phy_pcie_remove(struct platform_device *pdev)
 static struct platform_driver rcar_gen3_phy_driver = {
 	.driver = {
 		.name		= "phy_rcar_gen3_pcie",
-		.of_match_table	= rcar_gen3_phy_pcie_match_table,
+		.of_match_table	= of_match_ptr(rcar_gen3_phy_pcie_match_table),
 	},
 	.probe	= rcar_gen3_phy_pcie_probe,
 	.remove = rcar_gen3_phy_pcie_remove,

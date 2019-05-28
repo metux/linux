@@ -192,7 +192,7 @@ static struct platform_driver qcom_ipq806x_sata_phy_driver = {
 	.remove	= qcom_ipq806x_sata_phy_remove,
 	.driver = {
 		.name	= "qcom-ipq806x-sata-phy",
-		.of_match_table	= qcom_ipq806x_sata_phy_of_match,
+		.of_match_table	= of_match_ptr(qcom_ipq806x_sata_phy_of_match),
 	}
 };
 module_platform_driver(qcom_ipq806x_sata_phy_driver);

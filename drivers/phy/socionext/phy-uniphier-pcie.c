@@ -230,7 +230,7 @@ static struct platform_driver uniphier_pciephy_driver = {
 	.probe = uniphier_pciephy_probe,
 	.driver = {
 		.name = "uniphier-pcie-phy",
-		.of_match_table = uniphier_pciephy_match,
+		.of_match_table = of_match_ptr(uniphier_pciephy_match),
 	},
 };
 module_platform_driver(uniphier_pciephy_driver);

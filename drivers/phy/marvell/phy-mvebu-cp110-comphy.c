@@ -662,7 +662,7 @@ static struct platform_driver mvebu_comphy_driver = {
 	.probe	= mvebu_comphy_probe,
 	.driver	= {
 		.name = "mvebu-comphy",
-		.of_match_table = mvebu_comphy_of_match_table,
+		.of_match_table = of_match_ptr(mvebu_comphy_of_match_table),
 	},
 };
 module_platform_driver(mvebu_comphy_driver);

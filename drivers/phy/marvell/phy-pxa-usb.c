@@ -335,7 +335,7 @@ static struct platform_driver pxa_usb_phy_driver = {
 	.probe		= pxa_usb_phy_probe,
 	.driver		= {
 		.name	= "pxa-usb-phy",
-		.of_match_table = pxa_usb_phy_of_match,
+		.of_match_table = of_match_ptr(pxa_usb_phy_of_match),
 	},
 };
 module_platform_driver(pxa_usb_phy_driver);

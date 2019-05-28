@@ -294,7 +294,7 @@ MODULE_DEVICE_TABLE(of, sr_pcie_phy_match_table);
 static struct platform_driver sr_pcie_phy_driver = {
 	.driver = {
 		.name		= "sr-pcie-phy",
-		.of_match_table	= sr_pcie_phy_match_table,
+		.of_match_table	= of_match_ptr(sr_pcie_phy_match_table),
 	},
 	.probe	= sr_pcie_phy_probe,
 };

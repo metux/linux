@@ -648,7 +648,7 @@ static struct platform_driver serdes_am654_driver = {
 	.remove		= serdes_am654_remove,
 	.driver		= {
 		.name	= "phy-am654",
-		.of_match_table = serdes_am654_id_table,
+		.of_match_table = of_match_ptr(serdes_am654_id_table),
 	},
 };
 module_platform_driver(serdes_am654_driver);

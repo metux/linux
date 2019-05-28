@@ -289,7 +289,7 @@ static struct platform_driver phy_meson_gxl_usb2_driver = {
 	.probe	= phy_meson_gxl_usb2_probe,
 	.driver	= {
 		.name		= "phy-meson-gxl-usb2",
-		.of_match_table	= phy_meson_gxl_usb2_of_match,
+		.of_match_table	= of_match_ptr(phy_meson_gxl_usb2_of_match),
 	},
 };
 module_platform_driver(phy_meson_gxl_usb2_driver);

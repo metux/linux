@@ -176,7 +176,7 @@ static struct platform_driver hisi_inno_phy_driver = {
 	.probe	= hisi_inno_phy_probe,
 	.driver = {
 		.name	= "hisi-inno-phy",
-		.of_match_table	= hisi_inno_phy_of_match,
+		.of_match_table	= of_match_ptr(hisi_inno_phy_of_match),
 	}
 };
 module_platform_driver(hisi_inno_phy_driver);

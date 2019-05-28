@@ -1436,7 +1436,7 @@ static struct platform_driver rockchip_usb2phy_driver = {
 	.probe		= rockchip_usb2phy_probe,
 	.driver		= {
 		.name	= "rockchip-usb2phy",
-		.of_match_table = rockchip_usb2phy_dt_match,
+		.of_match_table = of_match_ptr(rockchip_usb2phy_dt_match),
 	},
 };
 module_platform_driver(rockchip_usb2phy_driver);

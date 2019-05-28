@@ -951,7 +951,7 @@ static int exynos5_usbdrd_phy_probe(struct platform_device *pdev)
 static struct platform_driver exynos5_usb3drd_phy = {
 	.probe	= exynos5_usbdrd_phy_probe,
 	.driver = {
-		.of_match_table	= exynos5_usbdrd_phy_of_match,
+		.of_match_table	= of_match_ptr(exynos5_usbdrd_phy_of_match),
 		.name		= "exynos5_usb3drd_phy",
 	}
 };

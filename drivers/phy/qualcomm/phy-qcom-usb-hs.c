@@ -277,7 +277,7 @@ static struct ulpi_driver qcom_usb_hs_phy_driver = {
 	.probe = qcom_usb_hs_phy_probe,
 	.driver = {
 		.name = "qcom_usb_hs_phy",
-		.of_match_table = qcom_usb_hs_phy_match,
+		.of_match_table = of_match_ptr(qcom_usb_hs_phy_match),
 	},
 };
 module_ulpi_driver(qcom_usb_hs_phy_driver);

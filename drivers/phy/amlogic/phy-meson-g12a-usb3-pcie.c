@@ -403,7 +403,7 @@ static struct platform_driver phy_g12a_usb3_pcie_driver = {
 	.probe	= phy_g12a_usb3_pcie_probe,
 	.driver	= {
 		.name		= "phy-g12a-usb3-pcie",
-		.of_match_table	= phy_g12a_usb3_pcie_of_match,
+		.of_match_table	= of_match_ptr(phy_g12a_usb3_pcie_of_match),
 	},
 };
 module_platform_driver(phy_g12a_usb3_pcie_driver);

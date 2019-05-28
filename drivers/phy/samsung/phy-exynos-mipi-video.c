@@ -357,7 +357,7 @@ MODULE_DEVICE_TABLE(of, exynos_mipi_video_phy_of_match);
 static struct platform_driver exynos_mipi_video_phy_driver = {
 	.probe	= exynos_mipi_video_phy_probe,
 	.driver = {
-		.of_match_table	= exynos_mipi_video_phy_of_match,
+		.of_match_table	= of_match_ptr(exynos_mipi_video_phy_of_match),
 		.name  = "exynos-mipi-video-phy",
 	}
 };

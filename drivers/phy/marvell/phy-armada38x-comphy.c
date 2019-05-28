@@ -227,7 +227,7 @@ static struct platform_driver a38x_comphy_driver = {
 	.probe	= a38x_comphy_probe,
 	.driver	= {
 		.name = "armada-38x-comphy",
-		.of_match_table = a38x_comphy_of_match_table,
+		.of_match_table = of_match_ptr(a38x_comphy_of_match_table),
 	},
 };
 module_platform_driver(a38x_comphy_driver);

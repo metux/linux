@@ -308,7 +308,8 @@ static struct platform_driver mvebu_a3700_comphy_driver = {
 	.probe	= mvebu_a3700_comphy_probe,
 	.driver	= {
 		.name = "mvebu-a3700-comphy",
-		.of_match_table = mvebu_a3700_comphy_of_match_table,
+		.of_match_table = of_match_ptr(
+			mvebu_a3700_comphy_of_match_table),
 	},
 };
 module_platform_driver(mvebu_a3700_comphy_driver);

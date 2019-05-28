@@ -234,7 +234,7 @@ static struct platform_driver da8xx_usb_phy_driver = {
 	.remove	= da8xx_usb_phy_remove,
 	.driver	= {
 		.name	= "da8xx-usb-phy",
-		.of_match_table = da8xx_usb_phy_ids,
+		.of_match_table = of_match_ptr(da8xx_usb_phy_ids),
 	},
 };
 

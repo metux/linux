@@ -154,7 +154,7 @@ static struct platform_driver hi6220_phy_driver = {
 	.probe	= hi6220_phy_probe,
 	.driver = {
 		.name	= "hi6220-usb-phy",
-		.of_match_table	= hi6220_phy_of_match,
+		.of_match_table	= of_match_ptr(hi6220_phy_of_match),
 	}
 };
 module_platform_driver(hi6220_phy_driver);

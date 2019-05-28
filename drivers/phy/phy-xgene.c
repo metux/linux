@@ -1712,7 +1712,7 @@ static struct platform_driver xgene_phy_driver = {
 	.probe = xgene_phy_probe,
 	.driver = {
 		   .name = "xgene-phy",
-		   .of_match_table = xgene_phy_of_match,
+		   .of_match_table = of_match_ptr(xgene_phy_of_match),
 	},
 };
 module_platform_driver(xgene_phy_driver);

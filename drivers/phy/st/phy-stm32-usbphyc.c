@@ -449,7 +449,7 @@ static struct platform_driver stm32_usbphyc_driver = {
 	.probe = stm32_usbphyc_probe,
 	.remove = stm32_usbphyc_remove,
 	.driver = {
-		.of_match_table = stm32_usbphyc_of_match,
+		.of_match_table = of_match_ptr(stm32_usbphyc_of_match),
 		.name = "stm32-usbphyc",
 	}
 };

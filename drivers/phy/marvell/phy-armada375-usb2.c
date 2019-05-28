@@ -142,7 +142,7 @@ static const struct of_device_id of_usb_cluster_table[] = {
 static struct platform_driver armada375_usb_phy_driver = {
 	.probe	= armada375_usb_phy_probe,
 	.driver = {
-		.of_match_table	= of_usb_cluster_table,
+		.of_match_table	= of_match_ptr(of_usb_cluster_table),
 		.name  = "armada-375-usb-cluster",
 	}
 };

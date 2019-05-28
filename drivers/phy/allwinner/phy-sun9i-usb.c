@@ -182,7 +182,7 @@ MODULE_DEVICE_TABLE(of, sun9i_usb_phy_of_match);
 static struct platform_driver sun9i_usb_phy_driver = {
 	.probe	= sun9i_usb_phy_probe,
 	.driver = {
-		.of_match_table	= sun9i_usb_phy_of_match,
+		.of_match_table	= of_match_ptr(sun9i_usb_phy_of_match),
 		.name  = "sun9i-usb-phy",
 	}
 };

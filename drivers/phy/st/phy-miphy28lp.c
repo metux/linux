@@ -1271,7 +1271,7 @@ static struct platform_driver miphy28lp_driver = {
 	.probe = miphy28lp_probe,
 	.driver = {
 		.name = "miphy28lp-phy",
-		.of_match_table = miphy28lp_of_match,
+		.of_match_table = of_match_ptr(miphy28lp_of_match),
 	}
 };
 

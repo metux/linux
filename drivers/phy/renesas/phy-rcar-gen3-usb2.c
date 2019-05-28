@@ -711,7 +711,7 @@ static int rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
 static struct platform_driver rcar_gen3_phy_usb2_driver = {
 	.driver = {
 		.name		= "phy_rcar_gen3_usb2",
-		.of_match_table	= rcar_gen3_phy_usb2_match_table,
+		.of_match_table	= of_match_ptr(rcar_gen3_phy_usb2_match_table),
 	},
 	.probe	= rcar_gen3_phy_usb2_probe,
 	.remove = rcar_gen3_phy_usb2_remove,

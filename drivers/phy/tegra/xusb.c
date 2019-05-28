@@ -978,7 +978,7 @@ static int tegra_xusb_padctl_remove(struct platform_device *pdev)
 static struct platform_driver tegra_xusb_padctl_driver = {
 	.driver = {
 		.name = "tegra-xusb-padctl",
-		.of_match_table = tegra_xusb_padctl_of_match,
+		.of_match_table = of_match_ptr(tegra_xusb_padctl_of_match),
 	},
 	.probe = tegra_xusb_padctl_probe,
 	.remove = tegra_xusb_padctl_remove,

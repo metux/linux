@@ -430,7 +430,7 @@ static int rcar_gen2_phy_probe(struct platform_device *pdev)
 static struct platform_driver rcar_gen2_phy_driver = {
 	.driver = {
 		.name		= "phy_rcar_gen2",
-		.of_match_table	= rcar_gen2_phy_match_table,
+		.of_match_table	= of_match_ptr(rcar_gen2_phy_match_table),
 	},
 	.probe	= rcar_gen2_phy_probe,
 };

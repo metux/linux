@@ -273,7 +273,7 @@ static struct platform_driver phy_meson_gxl_usb3_driver = {
 	.probe	= phy_meson_gxl_usb3_probe,
 	.driver	= {
 		.name		= "phy-meson-gxl-usb3",
-		.of_match_table	= phy_meson_gxl_usb3_of_match,
+		.of_match_table	= of_match_ptr(phy_meson_gxl_usb3_of_match),
 	},
 };
 module_platform_driver(phy_meson_gxl_usb3_driver);

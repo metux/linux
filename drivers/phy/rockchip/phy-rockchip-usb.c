@@ -512,7 +512,7 @@ static struct platform_driver rockchip_usb_driver = {
 	.probe		= rockchip_usb_phy_probe,
 	.driver		= {
 		.name	= "rockchip-usb-phy",
-		.of_match_table = rockchip_usb_phy_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_usb_phy_dt_ids),
 	},
 };
 

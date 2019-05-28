@@ -277,7 +277,7 @@ static struct platform_driver histb_combphy_driver = {
 	.probe	= histb_combphy_probe,
 	.driver = {
 		.name = "combphy",
-		.of_match_table = histb_combphy_of_match,
+		.of_match_table = of_match_ptr(histb_combphy_of_match),
 	},
 };
 module_platform_driver(histb_combphy_driver);

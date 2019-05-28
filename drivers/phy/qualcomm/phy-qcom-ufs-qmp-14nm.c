@@ -161,7 +161,7 @@ MODULE_DEVICE_TABLE(of, ufs_qcom_phy_qmp_14nm_of_match);
 static struct platform_driver ufs_qcom_phy_qmp_14nm_driver = {
 	.probe = ufs_qcom_phy_qmp_14nm_probe,
 	.driver = {
-		.of_match_table = ufs_qcom_phy_qmp_14nm_of_match,
+		.of_match_table = of_match_ptr(ufs_qcom_phy_qmp_14nm_of_match),
 		.name = "ufs_qcom_phy_qmp_14nm",
 	},
 };

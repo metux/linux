@@ -1267,7 +1267,7 @@ static struct platform_driver inno_hdmi_phy_driver = {
 	.remove = inno_hdmi_phy_remove,
 	.driver = {
 		.name = "inno-hdmi-phy",
-		.of_match_table = inno_hdmi_phy_of_match,
+		.of_match_table = of_match_ptr(inno_hdmi_phy_of_match),
 	},
 };
 module_platform_driver(inno_hdmi_phy_driver);

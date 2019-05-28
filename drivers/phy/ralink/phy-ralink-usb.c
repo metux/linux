@@ -229,7 +229,7 @@ static int ralink_usb_phy_probe(struct platform_device *pdev)
 static struct platform_driver ralink_usb_phy_driver = {
 	.probe	= ralink_usb_phy_probe,
 	.driver = {
-		.of_match_table	= ralink_usb_phy_of_match,
+		.of_match_table	= of_match_ptr(ralink_usb_phy_of_match),
 		.name  = "ralink-usb-phy",
 	}
 };

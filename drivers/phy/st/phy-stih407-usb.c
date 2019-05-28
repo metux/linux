@@ -164,9 +164,9 @@ MODULE_DEVICE_TABLE(of, stih407_usb2_picophy_of_match);
 static struct platform_driver stih407_usb2_picophy_driver = {
 	.probe = stih407_usb2_picophy_probe,
 	.driver = {
-		   .name = "stih407-usb-genphy",
-		   .of_match_table = stih407_usb2_picophy_of_match,
-		   }
+		.name = "stih407-usb-genphy",
+		.of_match_table = of_match_ptr(stih407_usb2_picophy_of_match),
+	}
 };
 
 module_platform_driver(stih407_usb2_picophy_driver);

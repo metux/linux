@@ -1177,7 +1177,7 @@ static struct platform_driver mtk_tphy_driver = {
 	.probe		= mtk_tphy_probe,
 	.driver		= {
 		.name	= "mtk-tphy",
-		.of_match_table = mtk_tphy_id_table,
+		.of_match_table = of_match_ptr(mtk_tphy_id_table),
 	},
 };
 

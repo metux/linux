@@ -130,7 +130,7 @@ static struct platform_driver imx8mq_usb_phy_driver = {
 	.probe	= imx8mq_usb_phy_probe,
 	.driver = {
 		.name	= "imx8mq-usb-phy",
-		.of_match_table	= imx8mq_usb_phy_of_match,
+		.of_match_table	= of_match_ptr(imx8mq_usb_phy_of_match),
 	}
 };
 module_platform_driver(imx8mq_usb_phy_driver);

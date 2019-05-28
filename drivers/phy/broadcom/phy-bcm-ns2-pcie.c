@@ -88,7 +88,7 @@ static struct mdio_driver ns2_pci_phy_driver = {
 	.mdiodrv = {
 		.driver = {
 			.name = "phy-bcm-ns2-pci",
-			.of_match_table = ns2_pci_phy_of_match,
+			.of_match_table = of_match_ptr(ns2_pci_phy_of_match),
 		},
 	},
 	.probe = ns2_pci_phy_probe,

@@ -328,7 +328,7 @@ static struct platform_driver omap_control_phy_driver = {
 	.probe		= omap_control_phy_probe,
 	.driver		= {
 		.name	= "omap-control-phy",
-		.of_match_table = omap_control_phy_id_table,
+		.of_match_table = of_match_ptr(omap_control_phy_id_table),
 	},
 };
 

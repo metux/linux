@@ -1218,7 +1218,7 @@ static struct platform_driver rockchip_typec_phy_driver = {
 	.remove		= rockchip_typec_phy_remove,
 	.driver		= {
 		.name	= "rockchip-typec-phy",
-		.of_match_table = rockchip_typec_phy_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_typec_phy_dt_ids),
 	},
 };
 

@@ -234,7 +234,7 @@ MODULE_DEVICE_TABLE(of, ufs_mtk_phy_of_match);
 static struct platform_driver ufs_mtk_phy_driver = {
 	.probe = ufs_mtk_phy_probe,
 	.driver = {
-		.of_match_table = ufs_mtk_phy_of_match,
+		.of_match_table = of_match_ptr(ufs_mtk_phy_of_match),
 		.name = "ufs_mtk_phy",
 	},
 };

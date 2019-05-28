@@ -234,7 +234,7 @@ static struct platform_driver uniphier_u2phy_driver = {
 	.probe = uniphier_u2phy_probe,
 	.driver = {
 		.name = "uniphier-usb2-phy",
-		.of_match_table = uniphier_u2phy_match,
+		.of_match_table = of_match_ptr(uniphier_u2phy_match),
 	},
 };
 module_platform_driver(uniphier_u2phy_driver);

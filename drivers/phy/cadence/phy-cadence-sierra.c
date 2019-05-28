@@ -384,7 +384,7 @@ static struct platform_driver cdns_sierra_driver = {
 	.remove		= cdns_sierra_phy_remove,
 	.driver		= {
 		.name	= "cdns-sierra-phy",
-		.of_match_table = cdns_sierra_id_table,
+		.of_match_table = of_match_ptr(cdns_sierra_id_table),
 	},
 };
 module_platform_driver(cdns_sierra_driver);

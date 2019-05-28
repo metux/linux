@@ -717,7 +717,7 @@ put_child:
 static struct platform_driver brcm_sata_phy_driver = {
 	.probe	= brcm_sata_phy_probe,
 	.driver	= {
-		.of_match_table	= brcm_sata_phy_of_match,
+		.of_match_table	= of_match_ptr(brcm_sata_phy_of_match),
 		.name		= "brcm-sata-phy",
 	}
 };

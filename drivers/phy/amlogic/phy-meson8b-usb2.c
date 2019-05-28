@@ -271,7 +271,7 @@ static struct platform_driver phy_meson8b_usb2_driver = {
 	.probe	= phy_meson8b_usb2_probe,
 	.driver	= {
 		.name		= "phy-meson-usb2",
-		.of_match_table	= phy_meson8b_usb2_of_match,
+		.of_match_table	= of_match_ptr(phy_meson8b_usb2_of_match),
 	},
 };
 module_platform_driver(phy_meson8b_usb2_driver);

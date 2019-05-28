@@ -920,7 +920,7 @@ static struct platform_driver qusb2_phy_driver = {
 	.driver = {
 		.name	= "qcom-qusb2-phy",
 		.pm	= &qusb2_phy_pm_ops,
-		.of_match_table = qusb2_phy_of_match_table,
+		.of_match_table = of_match_ptr(qusb2_phy_of_match_table),
 	},
 };
 

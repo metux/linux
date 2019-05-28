@@ -125,7 +125,7 @@ static struct platform_driver bcm_ns_usb2_driver = {
 	.probe		= bcm_ns_usb2_probe,
 	.driver = {
 		.name = "bcm_ns_usb2",
-		.of_match_table = bcm_ns_usb2_id_table,
+		.of_match_table = of_match_ptr(bcm_ns_usb2_id_table),
 	},
 };
 module_platform_driver(bcm_ns_usb2_driver);

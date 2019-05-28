@@ -140,7 +140,7 @@ static struct platform_driver rockchip_dp_phy_driver = {
 	.probe		= rockchip_dp_phy_probe,
 	.driver		= {
 		.name	= "rockchip-dp-phy",
-		.of_match_table = rockchip_dp_phy_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_dp_phy_dt_ids),
 	},
 };
 

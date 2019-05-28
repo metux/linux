@@ -287,7 +287,7 @@ static struct platform_driver phy_berlin_sata_driver = {
 	.probe	= phy_berlin_sata_probe,
 	.driver	= {
 		.name		= "phy-berlin-sata",
-		.of_match_table	= phy_berlin_sata_of_match,
+		.of_match_table	= of_match_ptr(phy_berlin_sata_of_match),
 	},
 };
 module_platform_driver(phy_berlin_sata_driver);

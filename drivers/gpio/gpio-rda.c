@@ -283,7 +283,7 @@ static struct platform_driver rda_gpio_driver = {
 	.probe = rda_gpio_probe,
 	.driver = {
 		.name = "rda-gpio",
-		.of_match_table	= rda_gpio_of_match,
+		.of_match_table	= of_match_ptr(rda_gpio_of_match),
 	},
 };
 

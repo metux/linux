@@ -366,7 +366,7 @@ out_iounmap:
 static struct platform_driver mxs_gpio_driver = {
 	.driver		= {
 		.name	= "gpio-mxs",
-		.of_match_table = mxs_gpio_dt_ids,
+		.of_match_table = of_match_ptr(mxs_gpio_dt_ids),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= mxs_gpio_probe,

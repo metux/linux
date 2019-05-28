@@ -158,7 +158,7 @@ MODULE_DEVICE_TABLE(of, logicivc_gpio_of_table);
 static struct platform_driver logicvc_gpio_driver = {
 	.driver	= {
 		.name		= "gpio-logicvc",
-		.of_match_table	= logicivc_gpio_of_table,
+		.of_match_table	= of_match_ptr(logicivc_gpio_of_table),
 	},
 	.probe	= logicvc_gpio_probe,
 };

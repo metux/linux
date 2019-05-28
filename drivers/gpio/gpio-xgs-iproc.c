@@ -307,7 +307,7 @@ MODULE_DEVICE_TABLE(of, bcm_iproc_gpio_of_match);
 static struct platform_driver bcm_iproc_gpio_driver = {
 	.driver = {
 		.name = "iproc-xgs-gpio",
-		.of_match_table = bcm_iproc_gpio_of_match,
+		.of_match_table = of_match_ptr(bcm_iproc_gpio_of_match),
 	},
 	.probe = iproc_gpio_probe,
 	.remove = iproc_gpio_remove,

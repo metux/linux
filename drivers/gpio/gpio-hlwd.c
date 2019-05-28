@@ -294,7 +294,7 @@ MODULE_DEVICE_TABLE(of, hlwd_gpio_match);
 static struct platform_driver hlwd_gpio_driver = {
 	.driver	= {
 		.name		= "gpio-hlwd",
-		.of_match_table	= hlwd_gpio_match,
+		.of_match_table	= of_match_ptr(hlwd_gpio_match),
 	},
 	.probe	= hlwd_gpio_probe,
 };

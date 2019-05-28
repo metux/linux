@@ -1981,7 +1981,7 @@ static struct platform_driver xgene_pmu_driver = {
 	.remove = xgene_pmu_remove,
 	.driver = {
 		.name		= "xgene-pmu",
-		.of_match_table = xgene_pmu_of_match,
+		.of_match_table = of_match_ptr(xgene_pmu_of_match),
 		.acpi_match_table = ACPI_PTR(xgene_pmu_acpi_match),
 	},
 };

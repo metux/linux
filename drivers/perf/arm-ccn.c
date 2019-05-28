@@ -1544,7 +1544,7 @@ MODULE_DEVICE_TABLE(of, arm_ccn_match);
 static struct platform_driver arm_ccn_driver = {
 	.driver = {
 		.name = "arm-ccn",
-		.of_match_table = arm_ccn_match,
+		.of_match_table = of_match_ptr(arm_ccn_match),
 	},
 	.probe = arm_ccn_probe,
 	.remove = arm_ccn_remove,

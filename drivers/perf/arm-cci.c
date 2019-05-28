@@ -1719,7 +1719,7 @@ static int cci_pmu_remove(struct platform_device *pdev)
 static struct platform_driver cci_pmu_driver = {
 	.driver = {
 		   .name = DRIVER_NAME,
-		   .of_match_table = arm_cci_pmu_matches,
+		   .of_match_table = of_match_ptr(arm_cci_pmu_matches),
 		  },
 	.probe = cci_pmu_probe,
 	.remove = cci_pmu_remove,

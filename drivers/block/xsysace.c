@@ -1226,8 +1226,6 @@ static const struct of_device_id ace_of_match[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, ace_of_match);
-#else /* CONFIG_OF */
-#define ace_of_match NULL
 #endif /* CONFIG_OF */
 
 static struct platform_driver ace_platform_driver = {
@@ -1235,7 +1233,7 @@ static struct platform_driver ace_platform_driver = {
 	.remove = ace_remove,
 	.driver = {
 		.name = "xsysace",
-		.of_match_table = ace_of_match,
+		.of_match_table = of_match_ptr(ace_of_match),
 	},
 };
 

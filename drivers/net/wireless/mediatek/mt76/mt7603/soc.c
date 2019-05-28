@@ -80,6 +80,6 @@ struct platform_driver mt76_wmac_driver = {
 	.remove		= mt76_wmac_remove,
 	.driver = {
 		.name = "mt76_wmac",
-		.of_match_table = of_wmac_match,
+		.of_match_table = of_match_ptr(of_wmac_match),
 	},
 };

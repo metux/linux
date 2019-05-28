@@ -413,7 +413,7 @@ static struct platform_driver orion_mdio_driver = {
 	.remove = orion_mdio_remove,
 	.driver = {
 		.name = "orion-mdio",
-		.of_match_table = orion_mdio_match,
+		.of_match_table = of_match_ptr(orion_mdio_match),
 	},
 };
 

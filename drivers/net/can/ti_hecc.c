@@ -1053,7 +1053,7 @@ static int ti_hecc_resume(struct platform_device *pdev)
 static struct platform_driver ti_hecc_driver = {
 	.driver = {
 		.name    = DRV_NAME,
-		.of_match_table = ti_hecc_dt_ids,
+		.of_match_table = of_match_ptr(ti_hecc_dt_ids),
 	},
 	.probe = ti_hecc_probe,
 	.remove = ti_hecc_remove,

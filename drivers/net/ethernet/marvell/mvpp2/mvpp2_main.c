@@ -5821,7 +5821,7 @@ static struct platform_driver mvpp2_driver = {
 	.remove = mvpp2_remove,
 	.driver = {
 		.name = MVPP2_DRIVER_NAME,
-		.of_match_table = mvpp2_match,
+		.of_match_table = of_match_ptr(mvpp2_match),
 		.acpi_match_table = ACPI_PTR(mvpp2_acpi_match),
 	},
 };

@@ -2198,7 +2198,7 @@ static struct platform_driver netsec_driver = {
 	.driver = {
 		.name = "netsec",
 		.pm = &netsec_pm_ops,
-		.of_match_table = netsec_dt_ids,
+		.of_match_table = of_match_ptr(netsec_dt_ids),
 		.acpi_match_table = ACPI_PTR(netsec_acpi_ids),
 	},
 };

@@ -1288,7 +1288,7 @@ static struct platform_driver ucc_hdlc_driver = {
 	.driver	= {
 		.name		= DRV_NAME,
 		.pm		= HDLC_PM_OPS,
-		.of_match_table	= fsl_ucc_hdlc_of_match,
+		.of_match_table	= of_match_ptr(fsl_ucc_hdlc_of_match),
 	},
 };
 

@@ -1596,7 +1596,7 @@ MODULE_DEVICE_TABLE(of, ks8851_match_table);
 static struct spi_driver ks8851_driver = {
 	.driver = {
 		.name = "ks8851",
-		.of_match_table = ks8851_match_table,
+		.of_match_table = of_match_ptr(ks8851_match_table),
 		.pm = &ks8851_pm_ops,
 	},
 	.probe = ks8851_probe,

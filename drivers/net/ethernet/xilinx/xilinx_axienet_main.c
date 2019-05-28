@@ -1916,7 +1916,7 @@ static struct platform_driver axienet_driver = {
 	.shutdown = axienet_shutdown,
 	.driver = {
 		 .name = "xilinx_axienet",
-		 .of_match_table = axienet_of_match,
+		 .of_match_table = of_match_ptr(axienet_of_match),
 	},
 };
 

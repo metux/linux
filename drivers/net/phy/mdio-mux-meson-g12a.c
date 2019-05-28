@@ -370,7 +370,7 @@ static struct platform_driver g12a_mdio_mux_driver = {
 	.remove		= g12a_mdio_mux_remove,
 	.driver		= {
 		.name	= "g12a-mdio_mux",
-		.of_match_table = g12a_mdio_mux_match,
+		.of_match_table = of_match_ptr(g12a_mdio_mux_match),
 	},
 };
 module_platform_driver(g12a_mdio_mux_driver);

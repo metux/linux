@@ -241,7 +241,7 @@ static struct macio_driver airport_driver = {
 	.driver = {
 		.name		= DRIVER_NAME,
 		.owner		= THIS_MODULE,
-		.of_match_table	= airport_match,
+		.of_match_table	= of_match_ptr(airport_match),
 	},
 	.probe		= airport_attach,
 	.remove		= airport_detach,

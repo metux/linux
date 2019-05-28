@@ -302,7 +302,7 @@ static const struct of_device_id zmii_match[] =
 static struct platform_driver zmii_driver = {
 	.driver = {
 		.name = "emac-zmii",
-		.of_match_table = zmii_match,
+		.of_match_table = of_match_ptr(zmii_match),
 	},
 	.probe = zmii_probe,
 	.remove = zmii_remove,

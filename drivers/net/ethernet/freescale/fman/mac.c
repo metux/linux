@@ -877,7 +877,7 @@ _return:
 static struct platform_driver mac_driver = {
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= mac_match,
+		.of_match_table	= of_match_ptr(mac_match),
 	},
 	.probe		= mac_probe,
 };

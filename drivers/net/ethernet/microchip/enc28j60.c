@@ -1635,7 +1635,7 @@ MODULE_DEVICE_TABLE(of, enc28j60_dt_ids);
 static struct spi_driver enc28j60_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = enc28j60_dt_ids,
+		.of_match_table = of_match_ptr(enc28j60_dt_ids),
 	 },
 	.probe = enc28j60_probe,
 	.remove = enc28j60_remove,

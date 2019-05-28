@@ -1550,7 +1550,7 @@ MODULE_DEVICE_TABLE(of, octeon_mgmt_match);
 static struct platform_driver octeon_mgmt_driver = {
 	.driver = {
 		.name		= "octeon_mgmt",
-		.of_match_table = octeon_mgmt_match,
+		.of_match_table = of_match_ptr(octeon_mgmt_match),
 	},
 	.probe		= octeon_mgmt_probe,
 	.remove		= octeon_mgmt_remove,

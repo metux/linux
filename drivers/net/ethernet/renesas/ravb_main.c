@@ -2348,7 +2348,7 @@ static struct platform_driver ravb_driver = {
 	.driver = {
 		.name	= "ravb",
 		.pm	= &ravb_dev_pm_ops,
-		.of_match_table = ravb_match_table,
+		.of_match_table = of_match_ptr(ravb_match_table),
 	},
 };
 

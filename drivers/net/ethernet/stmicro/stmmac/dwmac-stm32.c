@@ -524,7 +524,7 @@ static struct platform_driver stm32_dwmac_driver = {
 	.driver = {
 		.name           = "stm32-dwmac",
 		.pm		= &stm32_dwmac_pm_ops,
-		.of_match_table = stm32_dwmac_match,
+		.of_match_table = of_match_ptr(stm32_dwmac_match),
 	},
 };
 module_platform_driver(stm32_dwmac_driver);

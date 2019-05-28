@@ -1494,7 +1494,7 @@ static struct platform_driver rk_gmac_dwmac_driver = {
 	.driver = {
 		.name           = "rk_gmac-dwmac",
 		.pm		= &rk_gmac_pm_ops,
-		.of_match_table = rk_gmac_dwmac_match,
+		.of_match_table = of_match_ptr(rk_gmac_dwmac_match),
 	},
 };
 module_platform_driver(rk_gmac_dwmac_driver);

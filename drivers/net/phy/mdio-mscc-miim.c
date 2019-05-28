@@ -182,7 +182,7 @@ static struct platform_driver mscc_miim_driver = {
 	.remove = mscc_miim_remove,
 	.driver = {
 		.name = "mscc-miim",
-		.of_match_table = mscc_miim_match,
+		.of_match_table = of_match_ptr(mscc_miim_match),
 	},
 };
 

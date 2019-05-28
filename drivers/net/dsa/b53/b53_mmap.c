@@ -278,7 +278,7 @@ static struct platform_driver b53_mmap_driver = {
 	.remove = b53_mmap_remove,
 	.driver = {
 		.name = "b53-switch",
-		.of_match_table = b53_mmap_of_table,
+		.of_match_table = of_match_ptr(b53_mmap_of_table),
 	},
 };
 

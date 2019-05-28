@@ -421,7 +421,7 @@ static struct platform_driver sti_dwmac_driver = {
 	.driver = {
 		.name           = "sti-dwmac",
 		.pm		= &sti_dwmac_pm_ops,
-		.of_match_table = sti_dwmac_match,
+		.of_match_table = of_match_ptr(sti_dwmac_match),
 	},
 };
 module_platform_driver(sti_dwmac_driver);

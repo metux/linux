@@ -310,7 +310,7 @@ MODULE_DEVICE_TABLE(of, mdio_mux_iproc_match);
 static struct platform_driver mdiomux_iproc_driver = {
 	.driver = {
 		.name		= "mdio-mux-iproc",
-		.of_match_table = mdio_mux_iproc_match,
+		.of_match_table = of_match_ptr(mdio_mux_iproc_match),
 		.pm		= &mdio_mux_iproc_pm_ops,
 	},
 	.probe		= mdio_mux_iproc_probe,

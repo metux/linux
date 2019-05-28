@@ -3315,7 +3315,7 @@ MODULE_DEVICE_TABLE(of, emac_match);
 static struct platform_driver emac_driver = {
 	.driver = {
 		.name = "emac",
-		.of_match_table = emac_match,
+		.of_match_table = of_match_ptr(emac_match),
 	},
 	.probe = emac_probe,
 	.remove = emac_remove,

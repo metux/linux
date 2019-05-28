@@ -528,7 +528,7 @@ static int fsl_pq_mdio_remove(struct platform_device *pdev)
 static struct platform_driver fsl_pq_mdio_driver = {
 	.driver = {
 		.name = "fsl-pq_mdio",
-		.of_match_table = fsl_pq_mdio_match,
+		.of_match_table = of_match_ptr(fsl_pq_mdio_match),
 	},
 	.probe = fsl_pq_mdio_probe,
 	.remove = fsl_pq_mdio_remove,

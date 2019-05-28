@@ -1951,7 +1951,7 @@ static struct platform_driver gswip_driver = {
 	.remove = gswip_remove,
 	.driver = {
 		.name = "gswip",
-		.of_match_table = gswip_of_match,
+		.of_match_table = of_match_ptr(gswip_of_match),
 	},
 };
 

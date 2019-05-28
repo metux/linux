@@ -1247,7 +1247,7 @@ static struct platform_driver sun8i_dwmac_driver = {
 	.driver = {
 		.name           = "dwmac-sun8i",
 		.pm		= &stmmac_pltfr_pm_ops,
-		.of_match_table = sun8i_dwmac_match,
+		.of_match_table = of_match_ptr(sun8i_dwmac_match),
 	},
 };
 module_platform_driver(sun8i_dwmac_driver);

@@ -178,7 +178,7 @@ static struct platform_driver oxnas_dwmac_driver = {
 	.driver = {
 		.name           = "oxnas-dwmac",
 		.pm		= &stmmac_pltfr_pm_ops,
-		.of_match_table = oxnas_dwmac_match,
+		.of_match_table = of_match_ptr(oxnas_dwmac_match),
 	},
 };
 module_platform_driver(oxnas_dwmac_driver);

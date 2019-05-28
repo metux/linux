@@ -3781,7 +3781,7 @@ static struct platform_driver gfar_driver = {
 	.driver = {
 		.name = "fsl-gianfar",
 		.pm = GFAR_PM_OPS,
-		.of_match_table = gfar_match,
+		.of_match_table = of_match_ptr(gfar_match),
 	},
 	.probe = gfar_probe,
 	.remove = gfar_remove,

@@ -558,7 +558,7 @@ static struct platform_driver hns_mdio_driver = {
 	.remove = hns_mdio_remove,
 	.driver = {
 		   .name = MDIO_DRV_NAME,
-		   .of_match_table = hns_mdio_match,
+		   .of_match_table = of_match_ptr(hns_mdio_match),
 		   .acpi_match_table = ACPI_PTR(hns_mdio_acpi_match),
 		   },
 };

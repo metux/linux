@@ -2815,7 +2815,7 @@ static struct platform_driver bcm_sysport_driver = {
 	.remove	= bcm_sysport_remove,
 	.driver =  {
 		.name = "brcm-systemport",
-		.of_match_table = bcm_sysport_of_match,
+		.of_match_table = of_match_ptr(bcm_sysport_of_match),
 		.pm = &bcm_sysport_pm_ops,
 	},
 };

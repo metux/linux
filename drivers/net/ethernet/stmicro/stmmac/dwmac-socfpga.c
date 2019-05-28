@@ -499,7 +499,7 @@ static struct platform_driver socfpga_dwmac_driver = {
 	.driver = {
 		.name           = "socfpga-dwmac",
 		.pm		= &socfpga_dwmac_pm_ops,
-		.of_match_table = socfpga_dwmac_match,
+		.of_match_table = of_match_ptr(socfpga_dwmac_match),
 	},
 };
 module_platform_driver(socfpga_dwmac_driver);

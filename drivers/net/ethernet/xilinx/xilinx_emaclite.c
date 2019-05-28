@@ -1287,7 +1287,7 @@ MODULE_DEVICE_TABLE(of, xemaclite_of_match);
 static struct platform_driver xemaclite_of_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = xemaclite_of_match,
+		.of_match_table = of_match_ptr(xemaclite_of_match),
 	},
 	.probe		= xemaclite_of_probe,
 	.remove		= xemaclite_of_remove,

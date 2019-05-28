@@ -295,7 +295,7 @@ MODULE_DEVICE_TABLE(of, bgmac_of_enet_match);
 static struct platform_driver bgmac_enet_driver = {
 	.driver = {
 		.name  = "bgmac-enet",
-		.of_match_table = bgmac_of_enet_match,
+		.of_match_table = of_match_ptr(bgmac_of_enet_match),
 		.pm = BGMAC_PM_OPS
 	},
 	.probe = bgmac_probe,

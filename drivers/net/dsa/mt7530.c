@@ -1448,7 +1448,7 @@ static struct mdio_driver mt7530_mdio_driver = {
 	.remove = mt7530_remove,
 	.mdiodrv.driver = {
 		.name = "mt7530",
-		.of_match_table = mt7530_of_match,
+		.of_match_table = of_match_ptr(mt7530_of_match),
 	},
 };
 

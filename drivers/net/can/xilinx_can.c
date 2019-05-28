@@ -1654,7 +1654,7 @@ static struct platform_driver xcan_driver = {
 	.driver	= {
 		.name = DRIVER_NAME,
 		.pm = &xcan_dev_pm_ops,
-		.of_match_table	= xcan_of_match,
+		.of_match_table	= of_match_ptr(xcan_of_match),
 	},
 };
 

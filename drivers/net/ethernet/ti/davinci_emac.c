@@ -2033,7 +2033,7 @@ static struct platform_driver davinci_emac_driver = {
 	.driver = {
 		.name	 = "davinci_emac",
 		.pm	 = &davinci_emac_pm_ops,
-		.of_match_table = davinci_emac_of_match,
+		.of_match_table = of_match_ptr(davinci_emac_of_match),
 	},
 	.probe = davinci_emac_probe,
 	.remove = davinci_emac_remove,

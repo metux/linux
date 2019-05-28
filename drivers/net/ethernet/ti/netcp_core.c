@@ -2272,7 +2272,7 @@ MODULE_DEVICE_TABLE(of, of_match);
 static struct platform_driver netcp_driver = {
 	.driver = {
 		.name		= "netcp-1.0",
-		.of_match_table	= of_match,
+		.of_match_table	= of_match_ptr(of_match),
 	},
 	.probe = netcp_probe,
 	.remove = netcp_remove,

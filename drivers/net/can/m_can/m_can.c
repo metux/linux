@@ -1818,7 +1818,7 @@ MODULE_DEVICE_TABLE(of, m_can_of_table);
 static struct platform_driver m_can_plat_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = m_can_of_table,
+		.of_match_table = of_match_ptr(m_can_of_table),
 		.pm     = &m_can_pmops,
 	},
 	.probe = m_can_plat_probe,

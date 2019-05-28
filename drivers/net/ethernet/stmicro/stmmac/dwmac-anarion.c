@@ -142,7 +142,7 @@ static struct platform_driver anarion_dwmac_driver = {
 	.driver = {
 		.name           = "anarion-dwmac",
 		.pm		= &stmmac_pltfr_pm_ops,
-		.of_match_table = anarion_dwmac_match,
+		.of_match_table = of_match_ptr(anarion_dwmac_match),
 	},
 };
 module_platform_driver(anarion_dwmac_driver);

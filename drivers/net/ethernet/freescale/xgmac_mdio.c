@@ -318,7 +318,7 @@ MODULE_DEVICE_TABLE(of, xgmac_mdio_match);
 static struct platform_driver xgmac_mdio_driver = {
 	.driver = {
 		.name = "fsl-fman_xmdio",
-		.of_match_table = xgmac_mdio_match,
+		.of_match_table = of_match_ptr(xgmac_mdio_match),
 	},
 	.probe = xgmac_mdio_probe,
 	.remove = xgmac_mdio_remove,

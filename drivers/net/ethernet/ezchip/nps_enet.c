@@ -664,7 +664,7 @@ static struct platform_driver nps_enet_driver = {
 	.remove = nps_enet_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table  = nps_enet_dt_ids,
+		.of_match_table = of_match_ptr(nps_enet_dt_ids),
 	},
 };
 

@@ -3028,7 +3028,7 @@ static struct platform_driver g_dsaf_driver = {
 	.remove = hns_dsaf_remove,
 	.driver = {
 		.name = DSAF_DRV_NAME,
-		.of_match_table = g_dsaf_match,
+		.of_match_table = of_match_ptr(g_dsaf_match),
 		.acpi_match_table = hns_dsaf_acpi_match,
 	},
 };

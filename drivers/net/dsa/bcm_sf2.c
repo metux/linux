@@ -1251,7 +1251,7 @@ static struct platform_driver bcm_sf2_driver = {
 	.shutdown = bcm_sf2_sw_shutdown,
 	.driver = {
 		.name = "brcm-sf2",
-		.of_match_table = bcm_sf2_of_match,
+		.of_match_table = of_match_ptr(bcm_sf2_of_match),
 		.pm = &bcm_sf2_pm_ops,
 	},
 };

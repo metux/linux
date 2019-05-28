@@ -191,7 +191,7 @@ MODULE_DEVICE_TABLE(of, mdio_mux_mmioreg_match);
 static struct platform_driver mdio_mux_mmioreg_driver = {
 	.driver = {
 		.name		= "mdio-mux-mmioreg",
-		.of_match_table = mdio_mux_mmioreg_match,
+		.of_match_table = of_match_ptr(mdio_mux_mmioreg_match),
 	},
 	.probe		= mdio_mux_mmioreg_probe,
 	.remove		= mdio_mux_mmioreg_remove,

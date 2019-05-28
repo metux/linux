@@ -4865,7 +4865,7 @@ static struct platform_driver mvneta_driver = {
 	.remove = mvneta_remove,
 	.driver = {
 		.name = MVNETA_DRIVER_NAME,
-		.of_match_table = mvneta_match,
+		.of_match_table = of_match_ptr(mvneta_match),
 		.pm = &mvneta_pm_ops,
 	},
 };

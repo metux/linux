@@ -1175,7 +1175,7 @@ static struct platform_driver ftmac100_driver = {
 	.remove		= ftmac100_remove,
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = ftmac100_of_ids
+		.of_match_table = of_match_ptr(ftmac100_of_ids)
 	},
 };
 

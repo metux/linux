@@ -265,7 +265,7 @@ static struct platform_driver emac_rockchip_driver = {
 	.remove = emac_rockchip_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table  = emac_rockchip_dt_ids,
+		.of_match_table  = of_match_ptr(emac_rockchip_dt_ids),
 	},
 };
 

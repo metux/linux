@@ -362,7 +362,7 @@ static struct platform_driver ipq806x_gmac_dwmac_driver = {
 	.driver = {
 		.name		= "ipq806x-gmac-dwmac",
 		.pm		= &stmmac_pltfr_pm_ops,
-		.of_match_table	= ipq806x_gmac_dwmac_match,
+		.of_match_table	= of_match_ptr(ipq806x_gmac_dwmac_match),
 	},
 };
 module_platform_driver(ipq806x_gmac_dwmac_driver);

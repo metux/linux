@@ -1563,7 +1563,7 @@ MODULE_DEVICE_TABLE(of, greth_of_match);
 static struct platform_driver greth_of_driver = {
 	.driver = {
 		.name = "grlib-greth",
-		.of_match_table = greth_of_match,
+		.of_match_table = of_match_ptr(greth_of_match),
 	},
 	.probe = greth_of_probe,
 	.remove = greth_of_remove,

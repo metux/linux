@@ -849,7 +849,7 @@ exit:
 static struct platform_driver sun4i_can_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = sun4ican_of_match,
+		.of_match_table = of_match_ptr(sun4ican_of_match),
 	},
 	.probe = sun4ican_probe,
 	.remove = sun4ican_remove,

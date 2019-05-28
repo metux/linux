@@ -556,7 +556,7 @@ static struct platform_driver xrx200_driver = {
 	.remove = xrx200_remove,
 	.driver = {
 		.name = "lantiq,xrx200-net",
-		.of_match_table = xrx200_match,
+		.of_match_table = of_match_ptr(xrx200_match),
 	},
 };
 

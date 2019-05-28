@@ -302,7 +302,7 @@ static struct mdio_driver mv88e6060_driver = {
 	.remove = mv88e6060_remove,
 	.mdiodrv.driver = {
 		.name = "mv88e6060",
-		.of_match_table = mv88e6060_of_match,
+		.of_match_table = of_match_ptr(mv88e6060_of_match),
 	},
 };
 

@@ -996,7 +996,7 @@ static struct macio_driver mace_driver =
 	.driver = {
 		.name 		= "mace",
 		.owner		= THIS_MODULE,
-		.of_match_table	= mace_match,
+		.of_match_table	= of_match_ptr(mace_match),
 	},
 	.probe		= mace_probe,
 	.remove		= mace_remove,

@@ -1908,7 +1908,7 @@ static struct platform_driver ftgmac100_driver = {
 	.remove	= ftgmac100_remove,
 	.driver	= {
 		.name		= DRV_NAME,
-		.of_match_table	= ftgmac100_of_match,
+		.of_match_table	= of_match_ptr(ftgmac100_of_match),
 	},
 };
 module_platform_driver(ftgmac100_driver);

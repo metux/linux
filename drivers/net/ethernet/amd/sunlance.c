@@ -1525,7 +1525,7 @@ MODULE_DEVICE_TABLE(of, sunlance_sbus_match);
 static struct platform_driver sunlance_sbus_driver = {
 	.driver = {
 		.name = "sunlance",
-		.of_match_table = sunlance_sbus_match,
+		.of_match_table = of_match_ptr(sunlance_sbus_match),
 	},
 	.probe		= sunlance_sbus_probe,
 	.remove		= sunlance_sbus_remove,

@@ -1040,7 +1040,7 @@ MODULE_DEVICE_TABLE(of, ifi_canfd_of_table);
 static struct platform_driver ifi_canfd_plat_driver = {
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= ifi_canfd_of_table,
+		.of_match_table	= of_match_ptr(ifi_canfd_of_table),
 	},
 	.probe	= ifi_canfd_plat_probe,
 	.remove	= ifi_canfd_plat_remove,

@@ -969,7 +969,7 @@ MODULE_DEVICE_TABLE(of, emac_of_match);
 static struct platform_driver emac_driver = {
 	.driver = {
 		.name = "sun4i-emac",
-		.of_match_table = emac_of_match,
+		.of_match_table = of_match_ptr(emac_of_match),
 	},
 	.probe = emac_probe,
 	.remove = emac_remove,

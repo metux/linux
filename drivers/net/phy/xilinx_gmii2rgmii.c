@@ -106,7 +106,7 @@ static struct mdio_driver xgmiitorgmii_driver = {
 	.probe	= xgmiitorgmii_probe,
 	.mdiodrv.driver = {
 		.name = "xgmiitorgmii",
-		.of_match_table = xgmiitorgmii_of_match,
+		.of_match_table = of_match_ptr(xgmiitorgmii_of_match),
 	},
 };
 

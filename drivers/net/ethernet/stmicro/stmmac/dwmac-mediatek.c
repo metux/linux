@@ -386,7 +386,7 @@ static struct platform_driver mediatek_dwmac_driver = {
 	.driver = {
 		.name           = "dwmac-mediatek",
 		.pm		= &stmmac_pltfr_pm_ops,
-		.of_match_table = mediatek_dwmac_match,
+		.of_match_table = of_match_ptr(mediatek_dwmac_match),
 	},
 };
 module_platform_driver(mediatek_dwmac_driver);

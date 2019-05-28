@@ -76,7 +76,7 @@ static struct platform_driver emac_arc_driver = {
 	.remove = emac_arc_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table  = emac_arc_dt_ids,
+		.of_match_table  = of_match_ptr(emac_arc_dt_ids),
 	},
 };
 

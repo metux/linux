@@ -1680,7 +1680,7 @@ static struct platform_driver flexcan_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &flexcan_pm_ops,
-		.of_match_table = flexcan_of_match,
+		.of_match_table = of_match_ptr(flexcan_of_match),
 	},
 	.probe = flexcan_probe,
 	.remove = flexcan_remove,

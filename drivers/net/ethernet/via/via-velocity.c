@@ -3247,7 +3247,7 @@ static struct platform_driver velocity_platform_driver = {
 	.remove		= velocity_platform_remove,
 	.driver = {
 		.name = "via-velocity",
-		.of_match_table = velocity_of_ids,
+		.of_match_table = of_match_ptr(velocity_of_ids),
 		.pm = &velocity_pm_ops,
 	},
 };

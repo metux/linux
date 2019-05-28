@@ -1913,7 +1913,7 @@ MODULE_DEVICE_TABLE(of, xgmac_of_match);
 static struct platform_driver xgmac_driver = {
 	.driver = {
 		.name = "calxedaxgmac",
-		.of_match_table = xgmac_of_match,
+		.of_match_table = of_match_ptr(xgmac_of_match),
 	},
 	.probe = xgmac_probe,
 	.remove = xgmac_remove,

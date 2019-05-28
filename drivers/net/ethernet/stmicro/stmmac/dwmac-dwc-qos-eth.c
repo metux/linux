@@ -510,7 +510,7 @@ static struct platform_driver dwc_eth_dwmac_driver = {
 	.driver = {
 		.name           = "dwc-eth-dwmac",
 		.pm             = &stmmac_pltfr_pm_ops,
-		.of_match_table = dwc_eth_dwmac_match,
+		.of_match_table = of_match_ptr(dwc_eth_dwmac_match),
 	},
 };
 module_platform_driver(dwc_eth_dwmac_driver);

@@ -143,7 +143,7 @@ static struct platform_driver hisi_femac_mdio_driver = {
 	.remove = hisi_femac_mdio_remove,
 	.driver = {
 		.name = "hisi-femac-mdio",
-		.of_match_table = hisi_femac_mdio_dt_ids,
+		.of_match_table = of_match_ptr(hisi_femac_mdio_dt_ids),
 	},
 };
 

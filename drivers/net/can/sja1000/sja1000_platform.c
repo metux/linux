@@ -311,7 +311,7 @@ static struct platform_driver sp_driver = {
 	.remove = sp_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = sp_of_table,
+		.of_match_table = of_match_ptr(sp_of_table),
 	},
 };
 

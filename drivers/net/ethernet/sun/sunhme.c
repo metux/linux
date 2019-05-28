@@ -3327,7 +3327,7 @@ MODULE_DEVICE_TABLE(of, hme_sbus_match);
 static struct platform_driver hme_sbus_driver = {
 	.driver = {
 		.name = "hme",
-		.of_match_table = hme_sbus_match,
+		.of_match_table = of_match_ptr(hme_sbus_match),
 	},
 	.probe		= hme_sbus_probe,
 	.remove		= hme_sbus_remove,

@@ -1678,7 +1678,7 @@ static struct platform_driver altera_tse_driver = {
 	.resume		= NULL,
 	.driver		= {
 		.name	= ALTERA_TSE_RESOURCE_NAME,
-		.of_match_table = altera_tse_ids,
+		.of_match_table = of_match_ptr(altera_tse_ids),
 	},
 };
 

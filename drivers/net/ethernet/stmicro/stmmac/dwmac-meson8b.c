@@ -413,7 +413,7 @@ static struct platform_driver meson8b_dwmac_driver = {
 	.driver = {
 		.name           = "meson8b-dwmac",
 		.pm		= &stmmac_pltfr_pm_ops,
-		.of_match_table = meson8b_dwmac_match,
+		.of_match_table = of_match_ptr(meson8b_dwmac_match),
 	},
 };
 module_platform_driver(meson8b_dwmac_driver);

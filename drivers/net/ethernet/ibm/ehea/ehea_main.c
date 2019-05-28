@@ -114,7 +114,7 @@ static struct platform_driver ehea_driver = {
 	.driver = {
 		.name = "ehea",
 		.owner = THIS_MODULE,
-		.of_match_table = ehea_device_table,
+		.of_match_table = of_match_ptr(ehea_device_table),
 	},
 	.probe = ehea_probe_adapter,
 	.remove = ehea_remove,

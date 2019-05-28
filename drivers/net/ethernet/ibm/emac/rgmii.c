@@ -297,7 +297,7 @@ static const struct of_device_id rgmii_match[] =
 static struct platform_driver rgmii_driver = {
 	.driver = {
 		.name = "emac-rgmii",
-		.of_match_table = rgmii_match,
+		.of_match_table = of_match_ptr(rgmii_match),
 	},
 	.probe = rgmii_probe,
 	.remove = rgmii_remove,

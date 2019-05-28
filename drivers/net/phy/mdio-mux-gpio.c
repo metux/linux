@@ -89,7 +89,7 @@ MODULE_DEVICE_TABLE(of, mdio_mux_gpio_match);
 static struct platform_driver mdio_mux_gpio_driver = {
 	.driver = {
 		.name		= "mdio-mux-gpio",
-		.of_match_table = mdio_mux_gpio_match,
+		.of_match_table = of_match_ptr(mdio_mux_gpio_match),
 	},
 	.probe		= mdio_mux_gpio_probe,
 	.remove		= mdio_mux_gpio_remove,

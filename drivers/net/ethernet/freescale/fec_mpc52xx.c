@@ -1048,7 +1048,7 @@ MODULE_DEVICE_TABLE(of, mpc52xx_fec_match);
 static struct platform_driver mpc52xx_fec_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = mpc52xx_fec_match,
+		.of_match_table = of_match_ptr(mpc52xx_fec_match),
 	},
 	.probe		= mpc52xx_fec_probe,
 	.remove		= mpc52xx_fec_remove,

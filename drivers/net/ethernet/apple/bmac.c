@@ -1634,7 +1634,7 @@ static struct macio_driver bmac_driver =
 	.driver = {
 		.name 		= "bmac",
 		.owner		= THIS_MODULE,
-		.of_match_table	= bmac_match,
+		.of_match_table	= of_match_ptr(bmac_match),
 	},
 	.probe		= bmac_probe,
 	.remove		= bmac_remove,

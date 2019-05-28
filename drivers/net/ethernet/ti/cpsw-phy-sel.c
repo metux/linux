@@ -240,7 +240,7 @@ static struct platform_driver cpsw_phy_sel_driver = {
 	.probe		= cpsw_phy_sel_probe,
 	.driver		= {
 		.name	= "cpsw-phy-sel",
-		.of_match_table = cpsw_phy_sel_id_table,
+		.of_match_table = of_match_ptr(cpsw_phy_sel_id_table),
 	},
 };
 builtin_platform_driver(cpsw_phy_sel_driver);

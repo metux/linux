@@ -1124,7 +1124,7 @@ MODULE_DEVICE_TABLE(of, fs_enet_match);
 static struct platform_driver fs_enet_driver = {
 	.driver = {
 		.name = "fs_enet",
-		.of_match_table = fs_enet_match,
+		.of_match_table = of_match_ptr(fs_enet_match),
 	},
 	.probe = fs_enet_probe,
 	.remove = fs_enet_remove,

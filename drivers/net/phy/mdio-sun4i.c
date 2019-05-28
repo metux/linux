@@ -168,7 +168,7 @@ static struct platform_driver sun4i_mdio_driver = {
 	.remove = sun4i_mdio_remove,
 	.driver = {
 		.name = "sun4i-mdio",
-		.of_match_table = sun4i_mdio_dt_ids,
+		.of_match_table = of_match_ptr(sun4i_mdio_dt_ids),
 	},
 };
 

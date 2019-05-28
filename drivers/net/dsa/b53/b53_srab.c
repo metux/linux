@@ -647,7 +647,7 @@ static struct platform_driver b53_srab_driver = {
 	.remove = b53_srab_remove,
 	.driver = {
 		.name = "b53-srab-switch",
-		.of_match_table = b53_srab_of_match,
+		.of_match_table = of_match_ptr(b53_srab_of_match),
 	},
 };
 

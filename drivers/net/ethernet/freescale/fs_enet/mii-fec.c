@@ -217,7 +217,7 @@ MODULE_DEVICE_TABLE(of, fs_enet_mdio_fec_match);
 static struct platform_driver fs_enet_fec_mdio_driver = {
 	.driver = {
 		.name = "fsl-fec-mdio",
-		.of_match_table = fs_enet_mdio_fec_match,
+		.of_match_table = of_match_ptr(fs_enet_mdio_fec_match),
 	},
 	.probe = fs_enet_mdio_probe,
 	.remove = fs_enet_mdio_remove,

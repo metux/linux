@@ -155,7 +155,7 @@ static const struct of_device_id tah_match[] =
 static struct platform_driver tah_driver = {
 	.driver = {
 		.name = "emac-tah",
-		.of_match_table = tah_match,
+		.of_match_table = of_match_ptr(tah_match),
 	},
 	.probe = tah_probe,
 	.remove = tah_remove,

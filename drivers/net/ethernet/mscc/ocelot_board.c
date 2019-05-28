@@ -369,7 +369,7 @@ static struct platform_driver mscc_ocelot_driver = {
 	.remove = mscc_ocelot_remove,
 	.driver = {
 		.name = "ocelot-switch",
-		.of_match_table = mscc_ocelot_match,
+		.of_match_table = of_match_ptr(mscc_ocelot_match),
 	},
 };
 

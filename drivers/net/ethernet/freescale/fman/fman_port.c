@@ -1895,7 +1895,7 @@ MODULE_DEVICE_TABLE(of, fman_port_match);
 static struct platform_driver fman_port_driver = {
 	.driver = {
 		.name = "fsl-fman-port",
-		.of_match_table = fman_port_match,
+		.of_match_table = of_match_ptr(fman_port_match),
 	},
 	.probe = fman_port_probe,
 };

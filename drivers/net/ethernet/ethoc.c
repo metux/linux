@@ -1301,7 +1301,7 @@ static struct platform_driver ethoc_driver = {
 	.resume  = ethoc_resume,
 	.driver  = {
 		.name = "ethoc",
-		.of_match_table = ethoc_match,
+		.of_match_table = of_match_ptr(ethoc_match),
 	},
 };
 

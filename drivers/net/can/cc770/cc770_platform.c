@@ -256,7 +256,7 @@ MODULE_DEVICE_TABLE(of, cc770_platform_table);
 static struct platform_driver cc770_platform_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = cc770_platform_table,
+		.of_match_table = of_match_ptr(cc770_platform_table),
 	},
 	.probe = cc770_platform_probe,
 	.remove = cc770_platform_remove,

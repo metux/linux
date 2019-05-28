@@ -1321,7 +1321,7 @@ MODULE_DEVICE_TABLE(of, hix5hd2_of_match);
 static struct platform_driver hix5hd2_dev_driver = {
 	.driver = {
 		.name = "hisi-gmac",
-		.of_match_table = hix5hd2_of_match,
+		.of_match_table = of_match_ptr(hix5hd2_of_match),
 	},
 	.probe = hix5hd2_dev_probe,
 	.remove = hix5hd2_dev_remove,

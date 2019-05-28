@@ -1514,7 +1514,7 @@ static int nb8800_remove(struct platform_device *pdev)
 static struct platform_driver nb8800_driver = {
 	.driver = {
 		.name		= "nb8800",
-		.of_match_table	= nb8800_dt_ids,
+		.of_match_table	= of_match_ptr(nb8800_dt_ids),
 	},
 	.probe	= nb8800_probe,
 	.remove	= nb8800_remove,

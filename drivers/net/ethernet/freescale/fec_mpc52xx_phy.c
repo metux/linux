@@ -142,7 +142,7 @@ struct platform_driver mpc52xx_fec_mdio_driver = {
 	.driver = {
 		.name = "mpc5200b-fec-phy",
 		.owner = THIS_MODULE,
-		.of_match_table = mpc52xx_fec_mdio_match,
+		.of_match_table = of_match_ptr(mpc52xx_fec_mdio_match),
 	},
 	.probe = mpc52xx_fec_mdio_probe,
 	.remove = mpc52xx_fec_mdio_remove,

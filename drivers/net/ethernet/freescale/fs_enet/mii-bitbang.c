@@ -216,7 +216,7 @@ MODULE_DEVICE_TABLE(of, fs_enet_mdio_bb_match);
 static struct platform_driver fs_enet_bb_mdio_driver = {
 	.driver = {
 		.name = "fsl-bb-mdio",
-		.of_match_table = fs_enet_mdio_bb_match,
+		.of_match_table = of_match_ptr(fs_enet_mdio_bb_match),
 	},
 	.probe = fs_enet_mdio_probe,
 	.remove = fs_enet_mdio_remove,

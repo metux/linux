@@ -864,7 +864,7 @@ static int ath10k_ahb_remove(struct platform_device *pdev)
 static struct platform_driver ath10k_ahb_driver = {
 	.driver         = {
 		.name   = "ath10k_ahb",
-		.of_match_table = ath10k_ahb_of_match,
+		.of_match_table = of_match_ptr(ath10k_ahb_of_match),
 	},
 	.probe  = ath10k_ahb_probe,
 	.remove = ath10k_ahb_remove,

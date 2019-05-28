@@ -103,7 +103,7 @@ MODULE_DEVICE_TABLE(of, octeon_mdiobus_match);
 static struct platform_driver octeon_mdiobus_driver = {
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table = octeon_mdiobus_match,
+		.of_match_table = of_match_ptr(octeon_mdiobus_match),
 	},
 	.probe		= octeon_mdiobus_probe,
 	.remove		= octeon_mdiobus_remove,

@@ -1140,7 +1140,7 @@ static struct mdio_driver qca8kmdio_driver = {
 	.remove = qca8k_sw_remove,
 	.mdiodrv.driver = {
 		.name = "qca8k",
-		.of_match_table = qca8k_of_match,
+		.of_match_table = of_match_ptr(qca8k_of_match),
 		.pm = &qca8k_pm_ops,
 	},
 };

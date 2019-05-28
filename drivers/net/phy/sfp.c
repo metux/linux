@@ -1974,7 +1974,7 @@ static struct platform_driver sfp_driver = {
 	.shutdown = sfp_shutdown,
 	.driver = {
 		.name = "sfp",
-		.of_match_table = sfp_of_match,
+		.of_match_table = of_match_ptr(sfp_of_match),
 	},
 };
 

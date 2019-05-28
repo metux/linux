@@ -3718,7 +3718,7 @@ static struct platform_driver fec_driver = {
 	.driver	= {
 		.name	= DRIVER_NAME,
 		.pm	= &fec_pm_ops,
-		.of_match_table = fec_dt_ids,
+		.of_match_table = of_match_ptr(fec_dt_ids),
 	},
 	.id_table = fec_devtype,
 	.probe	= fec_probe,

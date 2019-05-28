@@ -1766,7 +1766,7 @@ static struct platform_driver ath10k_snoc_driver = {
 	.remove = ath10k_snoc_remove,
 	.driver = {
 		.name   = "ath10k_snoc",
-		.of_match_table = ath10k_snoc_dt_match,
+		.of_match_table = of_match_ptr(ath10k_snoc_dt_match),
 	},
 };
 module_platform_driver(ath10k_snoc_driver);

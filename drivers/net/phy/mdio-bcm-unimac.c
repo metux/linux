@@ -351,7 +351,7 @@ MODULE_DEVICE_TABLE(of, unimac_mdio_ids);
 static struct platform_driver unimac_mdio_driver = {
 	.driver = {
 		.name = UNIMAC_MDIO_DRV_NAME,
-		.of_match_table = unimac_mdio_ids,
+		.of_match_table = of_match_ptr(unimac_mdio_ids),
 		.pm = &unimac_mdio_pm_ops,
 	},
 	.probe	= unimac_mdio_probe,

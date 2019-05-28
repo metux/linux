@@ -1520,7 +1520,7 @@ static struct platform_driver lpc_eth_driver = {
 #endif
 	.driver		= {
 		.name	= MODNAME,
-		.of_match_table = lpc_eth_match,
+		.of_match_table = of_match_ptr(lpc_eth_match),
 	},
 };
 

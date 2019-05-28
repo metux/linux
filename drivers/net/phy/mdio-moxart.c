@@ -179,7 +179,7 @@ static struct platform_driver moxart_mdio_driver = {
 	.remove = moxart_mdio_remove,
 	.driver = {
 		.name = "moxart-mdio",
-		.of_match_table = moxart_mdio_dt_ids,
+		.of_match_table = of_match_ptr(moxart_mdio_dt_ids),
 	},
 };
 

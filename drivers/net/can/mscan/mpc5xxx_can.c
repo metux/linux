@@ -435,7 +435,7 @@ MODULE_DEVICE_TABLE(of, mpc5xxx_can_table);
 static struct platform_driver mpc5xxx_can_driver = {
 	.driver = {
 		.name = "mpc5xxx_can",
-		.of_match_table = mpc5xxx_can_table,
+		.of_match_table = of_match_ptr(mpc5xxx_can_table),
 	},
 	.probe = mpc5xxx_can_probe,
 	.remove = mpc5xxx_can_remove,

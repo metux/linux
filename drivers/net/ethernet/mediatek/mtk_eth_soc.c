@@ -2682,7 +2682,7 @@ static struct platform_driver mtk_driver = {
 	.remove = mtk_remove,
 	.driver = {
 		.name = "mtk_soc_eth",
-		.of_match_table = of_mtk_match,
+		.of_match_table = of_match_ptr(of_mtk_match),
 	},
 };
 

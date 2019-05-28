@@ -973,7 +973,7 @@ MODULE_DEVICE_TABLE(of, hisi_femac_match);
 static struct platform_driver hisi_femac_driver = {
 	.driver = {
 		.name = "hisi-femac",
-		.of_match_table = hisi_femac_match,
+		.of_match_table = of_match_ptr(hisi_femac_match),
 	},
 	.probe = hisi_femac_drv_probe,
 	.remove = hisi_femac_drv_remove,

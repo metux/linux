@@ -1969,7 +1969,7 @@ static struct platform_driver ave_driver = {
 	.driver	= {
 		.name = "ave",
 		.pm   = AVE_PM_OPS,
-		.of_match_table	= of_ave_match,
+		.of_match_table	= of_match_ptr(of_ave_match),
 	},
 };
 module_platform_driver(ave_driver);

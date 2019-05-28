@@ -768,7 +768,7 @@ static struct platform_driver emac_platform_driver = {
 	.remove	= emac_remove,
 	.driver = {
 		.name		= "qcom-emac",
-		.of_match_table = emac_dt_match,
+		.of_match_table = of_match_ptr(emac_dt_match),
 		.acpi_match_table = ACPI_PTR(emac_acpi_match),
 	},
 	.shutdown = emac_shutdown,

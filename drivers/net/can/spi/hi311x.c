@@ -1060,7 +1060,7 @@ static SIMPLE_DEV_PM_OPS(hi3110_can_pm_ops, hi3110_can_suspend, hi3110_can_resum
 static struct spi_driver hi3110_can_driver = {
 	.driver = {
 		.name = DEVICE_NAME,
-		.of_match_table = hi3110_of_match,
+		.of_match_table = of_match_ptr(hi3110_of_match),
 		.pm = &hi3110_can_pm_ops,
 	},
 	.id_table = hi3110_id_table,

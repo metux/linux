@@ -1417,7 +1417,7 @@ static struct platform_driver temac_driver = {
 	.remove = temac_remove,
 	.driver = {
 		.name = "xilinx_temac",
-		.of_match_table = temac_of_match,
+		.of_match_table = of_match_ptr(temac_of_match),
 	},
 };
 

@@ -594,7 +594,7 @@ static struct platform_driver xlp9xx_i2c_driver = {
 	.remove = xlp9xx_i2c_remove,
 	.driver = {
 		.name = "xlp9xx-i2c",
-		.of_match_table = xlp9xx_i2c_of_match,
+		.of_match_table = of_match_ptr(xlp9xx_i2c_of_match),
 		.acpi_match_table = ACPI_PTR(xlp9xx_i2c_acpi_ids),
 	},
 };

@@ -844,7 +844,7 @@ static struct platform_driver mpc_i2c_driver = {
 	.remove		= fsl_i2c_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = mpc_i2c_of_match,
+		.of_match_table = of_match_ptr(mpc_i2c_of_match),
 		.pm = MPC_I2C_PM_OPS,
 	},
 };

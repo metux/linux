@@ -1751,7 +1751,7 @@ static struct platform_driver tegra_i2c_driver = {
 	.remove  = tegra_i2c_remove,
 	.driver  = {
 		.name  = "tegra-i2c",
-		.of_match_table = tegra_i2c_of_match,
+		.of_match_table = of_match_ptr(tegra_i2c_of_match),
 		.pm    = TEGRA_I2C_PM,
 	},
 };

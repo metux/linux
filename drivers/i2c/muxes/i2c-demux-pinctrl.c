@@ -307,7 +307,7 @@ MODULE_DEVICE_TABLE(of, i2c_demux_pinctrl_of_match);
 static struct platform_driver i2c_demux_pinctrl_driver = {
 	.driver	= {
 		.name = "i2c-demux-pinctrl",
-		.of_match_table = i2c_demux_pinctrl_of_match,
+		.of_match_table = of_match_ptr(i2c_demux_pinctrl_of_match),
 	},
 	.probe	= i2c_demux_pinctrl_probe,
 	.remove	= i2c_demux_pinctrl_remove,

@@ -456,7 +456,7 @@ static struct platform_driver xlr_i2c_driver = {
 	.remove = xlr_i2c_remove,
 	.driver = {
 		.name   = "xlr-i2cbus",
-		.of_match_table	= xlr_i2c_dt_ids,
+		.of_match_table	= of_match_ptr(xlr_i2c_dt_ids),
 	},
 };
 

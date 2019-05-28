@@ -878,7 +878,7 @@ static struct platform_driver exynos5_i2c_driver = {
 	.driver		= {
 		.name	= "exynos5-hsi2c",
 		.pm	= &exynos5_i2c_dev_pm_ops,
-		.of_match_table = exynos5_i2c_match,
+		.of_match_table = of_match_ptr(exynos5_i2c_match),
 	},
 };
 

@@ -881,7 +881,7 @@ MODULE_DEVICE_TABLE(of, stm32f4_i2c_match);
 static struct platform_driver stm32f4_i2c_driver = {
 	.driver = {
 		.name = "stm32f4-i2c",
-		.of_match_table = stm32f4_i2c_match,
+		.of_match_table = of_match_ptr(stm32f4_i2c_match),
 	},
 	.probe = stm32f4_i2c_probe,
 	.remove = stm32f4_i2c_remove,

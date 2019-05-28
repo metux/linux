@@ -1376,7 +1376,7 @@ static struct platform_driver i2c_pxa_driver = {
 	.driver		= {
 		.name	= "pxa2xx-i2c",
 		.pm	= I2C_PXA_DEV_PM_OPS,
-		.of_match_table = i2c_pxa_dt_ids,
+		.of_match_table = of_match_ptr(i2c_pxa_dt_ids),
 	},
 	.id_table	= i2c_pxa_id_table,
 };

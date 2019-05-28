@@ -1506,7 +1506,7 @@ MODULE_DEVICE_TABLE(of, img_scb_i2c_match);
 static struct platform_driver img_scb_i2c_driver = {
 	.driver = {
 		.name		= "img-i2c-scb",
-		.of_match_table	= img_scb_i2c_match,
+		.of_match_table	= of_match_ptr(img_scb_i2c_match),
 		.pm		= &img_i2c_pm,
 	},
 	.probe = img_i2c_probe,

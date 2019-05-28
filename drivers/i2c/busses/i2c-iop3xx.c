@@ -528,7 +528,7 @@ static struct platform_driver iop3xx_i2c_driver = {
 	.remove		= iop3xx_i2c_remove,
 	.driver		= {
 		.name	= "IOP3xx-I2C",
-		.of_match_table = i2c_iop3xx_match,
+		.of_match_table = of_match_ptr(i2c_iop3xx_match),
 	},
 };
 

@@ -275,7 +275,7 @@ static struct platform_driver octeon_i2c_driver = {
 	.remove		= octeon_i2c_remove,
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = octeon_i2c_match,
+		.of_match_table = of_match_ptr(octeon_i2c_match),
 	},
 };
 

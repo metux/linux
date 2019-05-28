@@ -960,7 +960,7 @@ static struct platform_driver davinci_i2c_driver = {
 	.driver		= {
 		.name	= "i2c_davinci",
 		.pm	= davinci_i2c_pm_ops,
-		.of_match_table = davinci_i2c_of_match,
+		.of_match_table = of_match_ptr(davinci_i2c_of_match),
 	},
 };
 

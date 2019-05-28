@@ -795,7 +795,7 @@ MODULE_DEVICE_TABLE(of, ibm_iic_match);
 static struct platform_driver ibm_iic_driver = {
 	.driver = {
 		.name = "ibm-iic",
-		.of_match_table = ibm_iic_match,
+		.of_match_table = of_match_ptr(ibm_iic_match),
 	},
 	.probe	= iic_probe,
 	.remove	= iic_remove,

@@ -511,7 +511,7 @@ static struct platform_driver bcm2835_i2c_driver = {
 	.remove		= bcm2835_i2c_remove,
 	.driver		= {
 		.name	= "i2c-bcm2835",
-		.of_match_table = bcm2835_i2c_of_match,
+		.of_match_table = of_match_ptr(bcm2835_i2c_of_match),
 	},
 };
 module_platform_driver(bcm2835_i2c_driver);

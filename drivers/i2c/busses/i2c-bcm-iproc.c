@@ -1058,7 +1058,7 @@ MODULE_DEVICE_TABLE(of, bcm_iproc_i2c_of_match);
 static struct platform_driver bcm_iproc_i2c_driver = {
 	.driver = {
 		.name = "bcm-iproc-i2c",
-		.of_match_table = bcm_iproc_i2c_of_match,
+		.of_match_table = of_match_ptr(bcm_iproc_i2c_of_match),
 		.pm = BCM_IPROC_I2C_PM_OPS,
 	},
 	.probe = bcm_iproc_i2c_probe,

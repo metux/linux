@@ -489,7 +489,7 @@ static struct platform_driver altr_i2c_driver = {
 	.remove = altr_i2c_remove,
 	.driver = {
 		.name = "altera-i2c",
-		.of_match_table = altr_i2c_of_match,
+		.of_match_table = of_match_ptr(altr_i2c_of_match),
 	},
 };
 

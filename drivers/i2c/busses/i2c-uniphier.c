@@ -447,7 +447,7 @@ static struct platform_driver uniphier_i2c_drv = {
 	.remove = uniphier_i2c_remove,
 	.driver = {
 		.name  = "uniphier-i2c",
-		.of_match_table = uniphier_i2c_match,
+		.of_match_table = of_match_ptr(uniphier_i2c_match),
 		.pm = &uniphier_i2c_pm_ops,
 	},
 };

@@ -333,7 +333,7 @@ static struct platform_driver p2wi_driver = {
 	.remove	= p2wi_remove,
 	.driver	= {
 		.name = "i2c-sunxi-p2wi",
-		.of_match_table = p2wi_of_match_table,
+		.of_match_table = of_match_ptr(p2wi_of_match_table),
 	},
 };
 module_platform_driver(p2wi_driver);

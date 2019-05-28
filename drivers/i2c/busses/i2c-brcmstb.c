@@ -712,7 +712,7 @@ MODULE_DEVICE_TABLE(of, brcmstb_i2c_of_match);
 static struct platform_driver brcmstb_i2c_driver = {
 	.driver = {
 		   .name = "brcmstb-i2c",
-		   .of_match_table = brcmstb_i2c_of_match,
+		   .of_match_table = of_match_ptr(brcmstb_i2c_of_match),
 		   .pm = &brcmstb_i2c_pm,
 		   },
 	.probe = brcmstb_i2c_probe,

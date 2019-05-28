@@ -804,7 +804,7 @@ static struct platform_driver ocores_i2c_driver = {
 	.remove  = ocores_i2c_remove,
 	.driver  = {
 		.name = "ocores-i2c",
-		.of_match_table = ocores_i2c_match,
+		.of_match_table = of_match_ptr(ocores_i2c_match),
 		.pm = OCORES_I2C_PM,
 	},
 };

@@ -1008,7 +1008,7 @@ static int cdns_i2c_remove(struct platform_device *pdev)
 static struct platform_driver cdns_i2c_drv = {
 	.driver = {
 		.name  = DRIVER_NAME,
-		.of_match_table = cdns_i2c_of_match,
+		.of_match_table = of_match_ptr(cdns_i2c_of_match),
 		.pm = &cdns_i2c_dev_pm_ops,
 	},
 	.probe  = cdns_i2c_probe,

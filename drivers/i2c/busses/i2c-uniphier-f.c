@@ -660,7 +660,7 @@ static struct platform_driver uniphier_fi2c_drv = {
 	.remove = uniphier_fi2c_remove,
 	.driver = {
 		.name  = "uniphier-fi2c",
-		.of_match_table = uniphier_fi2c_match,
+		.of_match_table = of_match_ptr(uniphier_fi2c_match),
 		.pm = &uniphier_fi2c_pm_ops,
 	},
 };

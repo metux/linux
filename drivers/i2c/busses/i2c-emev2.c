@@ -430,7 +430,7 @@ static struct platform_driver em_i2c_driver = {
 	.remove = em_i2c_remove,
 	.driver = {
 		.name = "em-i2c",
-		.of_match_table = em_i2c_ids,
+		.of_match_table = of_match_ptr(em_i2c_ids),
 	}
 };
 module_platform_driver(em_i2c_driver);

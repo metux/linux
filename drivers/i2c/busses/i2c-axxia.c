@@ -695,7 +695,7 @@ static struct platform_driver axxia_i2c_driver = {
 	.remove = axxia_i2c_remove,
 	.driver = {
 		.name = "axxia-i2c",
-		.of_match_table = axxia_i2c_of_match,
+		.of_match_table = of_match_ptr(axxia_i2c_of_match),
 	},
 };
 

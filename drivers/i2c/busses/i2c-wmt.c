@@ -458,7 +458,7 @@ static struct platform_driver wmt_i2c_driver = {
 	.remove		= wmt_i2c_remove,
 	.driver		= {
 		.name	= "wmt-i2c",
-		.of_match_table = wmt_i2c_dt_ids,
+		.of_match_table = of_match_ptr(wmt_i2c_dt_ids),
 	},
 };
 

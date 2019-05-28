@@ -491,7 +491,7 @@ static struct platform_driver i2c_lpc2k_driver = {
 	.driver	= {
 		.name		= "lpc2k-i2c",
 		.pm		= I2C_LPC2K_DEV_PM_OPS,
-		.of_match_table	= lpc2k_i2c_match,
+		.of_match_table	= of_match_ptr(lpc2k_i2c_match),
 	},
 };
 module_platform_driver(i2c_lpc2k_driver);

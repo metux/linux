@@ -919,7 +919,7 @@ static int sh_mobile_i2c_remove(struct platform_device *dev)
 static struct platform_driver sh_mobile_i2c_driver = {
 	.driver		= {
 		.name		= "i2c-sh_mobile",
-		.of_match_table = sh_mobile_i2c_dt_ids,
+		.of_match_table = of_match_ptr(sh_mobile_i2c_dt_ids),
 	},
 	.probe		= sh_mobile_i2c_probe,
 	.remove		= sh_mobile_i2c_remove,

@@ -465,7 +465,7 @@ static struct platform_driver i2c_sirfsoc_driver = {
 #ifdef CONFIG_PM
 		.pm = &i2c_sirfsoc_pm_ops,
 #endif
-		.of_match_table = sirfsoc_i2c_of_match,
+		.of_match_table = of_match_ptr(sirfsoc_i2c_of_match),
 	},
 	.probe = i2c_sirfsoc_probe,
 	.remove = i2c_sirfsoc_remove,

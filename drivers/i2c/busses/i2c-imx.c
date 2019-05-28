@@ -1252,7 +1252,7 @@ static struct platform_driver i2c_imx_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
 		.pm = &i2c_imx_pm_ops,
-		.of_match_table = i2c_imx_dt_ids,
+		.of_match_table = of_match_ptr(i2c_imx_dt_ids),
 	},
 	.id_table = imx_i2c_devtype,
 };

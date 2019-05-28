@@ -254,7 +254,7 @@ static struct platform_driver i2c_opal_driver = {
 	.remove	= i2c_opal_remove,
 	.driver	= {
 		.name		= "i2c-opal",
-		.of_match_table	= i2c_opal_of_match,
+		.of_match_table	= of_match_ptr(i2c_opal_of_match),
 	},
 };
 

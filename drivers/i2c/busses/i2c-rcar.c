@@ -1051,7 +1051,7 @@ static const struct dev_pm_ops rcar_i2c_pm_ops = {
 static struct platform_driver rcar_i2c_driver = {
 	.driver	= {
 		.name	= "i2c-rcar",
-		.of_match_table = rcar_i2c_dt_ids,
+		.of_match_table = of_match_ptr(rcar_i2c_dt_ids),
 		.pm	= DEV_PM_OPS,
 	},
 	.probe		= rcar_i2c_probe,

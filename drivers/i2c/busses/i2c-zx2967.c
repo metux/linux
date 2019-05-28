@@ -593,7 +593,7 @@ static struct platform_driver zx2967_i2c_driver = {
 	.remove	= zx2967_i2c_remove,
 	.driver	= {
 		.name  = "zx2967_i2c",
-		.of_match_table = zx2967_i2c_of_match,
+		.of_match_table = of_match_ptr(zx2967_i2c_of_match),
 		.pm = &zx2967_i2c_dev_pm_ops,
 	},
 };

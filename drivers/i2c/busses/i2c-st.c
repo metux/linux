@@ -899,7 +899,7 @@ MODULE_DEVICE_TABLE(of, st_i2c_match);
 static struct platform_driver st_i2c_driver = {
 	.driver = {
 		.name = "st-i2c",
-		.of_match_table = st_i2c_match,
+		.of_match_table = of_match_ptr(st_i2c_match),
 		.pm = ST_I2C_PM,
 	},
 	.probe = st_i2c_probe,

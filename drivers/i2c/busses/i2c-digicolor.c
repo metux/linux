@@ -372,7 +372,7 @@ static struct platform_driver dc_i2c_driver = {
 	.remove  = dc_i2c_remove,
 	.driver  = {
 		.name  = "digicolor-i2c",
-		.of_match_table = dc_i2c_match,
+		.of_match_table = of_match_ptr(dc_i2c_match),
 	},
 };
 module_platform_driver(dc_i2c_driver);

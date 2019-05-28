@@ -639,7 +639,7 @@ static struct platform_driver sprd_i2c_driver = {
 	.remove = sprd_i2c_remove,
 	.driver = {
 		   .name = "sprd-i2c",
-		   .of_match_table = sprd_i2c_of_match,
+		   .of_match_table = of_match_ptr(sprd_i2c_of_match),
 		   .pm = &sprd_i2c_pm_ops,
 	},
 };

@@ -1056,7 +1056,7 @@ static struct platform_driver aspeed_i2c_bus_driver = {
 	.remove		= aspeed_i2c_remove_bus,
 	.driver		= {
 		.name		= "aspeed-i2c-bus",
-		.of_match_table	= aspeed_i2c_bus_of_table,
+		.of_match_table	= of_match_ptr(aspeed_i2c_bus_of_table),
 	},
 };
 module_platform_driver(aspeed_i2c_bus_driver);

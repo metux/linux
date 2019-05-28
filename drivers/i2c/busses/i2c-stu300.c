@@ -979,7 +979,7 @@ static struct platform_driver stu300_i2c_driver = {
 	.driver = {
 		.name	= NAME,
 		.pm	= STU300_I2C_PM,
-		.of_match_table = stu300_dt_match,
+		.of_match_table = of_match_ptr(stu300_dt_match),
 	},
 	.probe = stu300_probe,
 	.remove = stu300_remove,

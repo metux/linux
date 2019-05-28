@@ -1992,7 +1992,7 @@ static struct platform_driver qup_i2c_driver = {
 	.driver = {
 		.name = "i2c_qup",
 		.pm = &qup_i2c_qup_pm_ops,
-		.of_match_table = qup_i2c_dt_match,
+		.of_match_table = of_match_ptr(qup_i2c_dt_match),
 		.acpi_match_table = ACPI_PTR(qup_i2c_acpi_match),
 	},
 };

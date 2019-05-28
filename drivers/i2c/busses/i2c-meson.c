@@ -473,7 +473,7 @@ static struct platform_driver meson_i2c_driver = {
 	.remove  = meson_i2c_remove,
 	.driver  = {
 		.name  = "meson-i2c",
-		.of_match_table = meson_i2c_match,
+		.of_match_table = of_match_ptr(meson_i2c_match),
 	},
 };
 

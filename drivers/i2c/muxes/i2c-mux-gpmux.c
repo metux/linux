@@ -160,7 +160,7 @@ static struct platform_driver i2c_mux_driver = {
 	.remove	= i2c_mux_remove,
 	.driver	= {
 		.name	= "i2c-mux-gpmux",
-		.of_match_table = i2c_mux_of_match,
+		.of_match_table = of_match_ptr(i2c_mux_of_match),
 	},
 };
 module_platform_driver(i2c_mux_driver);

@@ -676,7 +676,7 @@ static struct platform_driver lpi2c_imx_driver = {
 	.remove = lpi2c_imx_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = lpi2c_imx_of_match,
+		.of_match_table = of_match_ptr(lpi2c_imx_of_match),
 		.pm = &lpi2c_pm_ops,
 	},
 };

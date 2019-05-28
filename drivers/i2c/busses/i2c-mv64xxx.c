@@ -1007,7 +1007,7 @@ static struct platform_driver mv64xxx_i2c_driver = {
 	.driver	= {
 		.name	= MV64XXX_I2C_CTLR_NAME,
 		.pm     = mv64xxx_i2c_pm_ops,
-		.of_match_table = mv64xxx_i2c_of_match_table,
+		.of_match_table = of_match_ptr(mv64xxx_i2c_of_match_table),
 	},
 };
 

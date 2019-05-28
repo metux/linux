@@ -410,7 +410,7 @@ static struct platform_driver imx_rproc_driver = {
 	.remove = imx_rproc_remove,
 	.driver = {
 		.name = "imx-rproc",
-		.of_match_table = imx_rproc_of_match,
+		.of_match_table = of_match_ptr(imx_rproc_of_match),
 	},
 };
 

@@ -240,7 +240,7 @@ static struct platform_driver wkup_m3_rproc_driver = {
 	.remove = wkup_m3_rproc_remove,
 	.driver = {
 		.name = "wkup_m3_rproc",
-		.of_match_table = wkup_m3_rproc_of_match,
+		.of_match_table = of_match_ptr(wkup_m3_rproc_of_match),
 		.pm = &wkup_m3_rproc_pm_ops,
 	},
 };

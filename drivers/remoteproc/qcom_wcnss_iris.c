@@ -170,6 +170,6 @@ struct platform_driver qcom_iris_driver = {
 	.remove = qcom_iris_remove,
 	.driver = {
 		.name = "qcom-iris",
-		.of_match_table = iris_of_match,
+		.of_match_table = of_match_ptr(iris_of_match),
 	},
 };

@@ -507,7 +507,7 @@ static struct platform_driver keystone_rproc_driver = {
 	.remove	= keystone_rproc_remove,
 	.driver	= {
 		.name = "keystone-rproc",
-		.of_match_table = keystone_rproc_of_match,
+		.of_match_table = of_match_ptr(keystone_rproc_of_match),
 	},
 };
 

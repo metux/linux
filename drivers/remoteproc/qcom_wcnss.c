@@ -591,7 +591,7 @@ static struct platform_driver wcnss_driver = {
 	.remove = wcnss_remove,
 	.driver = {
 		.name = "qcom-wcnss-pil",
-		.of_match_table = wcnss_of_match,
+		.of_match_table = of_match_ptr(wcnss_of_match),
 	},
 };
 

@@ -1687,7 +1687,7 @@ static struct platform_driver q6v5_driver = {
 	.remove = q6v5_remove,
 	.driver = {
 		.name = "qcom-q6v5-mss",
-		.of_match_table = q6v5_of_match,
+		.of_match_table = of_match_ptr(q6v5_of_match),
 	},
 };
 module_platform_driver(q6v5_driver);

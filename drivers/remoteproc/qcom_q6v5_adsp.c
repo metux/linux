@@ -529,7 +529,7 @@ static struct platform_driver adsp_pil_driver = {
 	.remove = adsp_remove,
 	.driver = {
 		.name = "qcom_q6v5_adsp",
-		.of_match_table = adsp_of_match,
+		.of_match_table = of_match_ptr(adsp_of_match),
 	},
 };
 

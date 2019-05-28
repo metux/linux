@@ -395,7 +395,7 @@ static struct platform_driver qcom_ebi2_driver = {
 	.probe = qcom_ebi2_probe,
 	.driver = {
 		.name = "qcom-ebi2",
-		.of_match_table = qcom_ebi2_of_match,
+		.of_match_table = of_match_ptr(qcom_ebi2_of_match),
 	},
 };
 module_platform_driver(qcom_ebi2_driver);

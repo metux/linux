@@ -47,7 +47,7 @@ static struct platform_driver simple_pm_bus_driver = {
 	.remove = simple_pm_bus_remove,
 	.driver = {
 		.name = "simple-pm-bus",
-		.of_match_table = simple_pm_bus_of_match,
+		.of_match_table = of_match_ptr(simple_pm_bus_of_match),
 	},
 };
 

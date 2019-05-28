@@ -925,7 +925,7 @@ static struct platform_driver fsl_mc_bus_driver = {
 	.driver = {
 		   .name = "fsl_mc_bus",
 		   .pm = NULL,
-		   .of_match_table = fsl_mc_bus_match_table,
+		   .of_match_table = of_match_ptr(fsl_mc_bus_match_table),
 		   },
 	.probe = fsl_mc_bus_probe,
 	.remove = fsl_mc_bus_remove,

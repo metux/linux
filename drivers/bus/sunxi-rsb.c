@@ -754,7 +754,7 @@ static struct platform_driver sunxi_rsb_driver = {
 	.remove	= sunxi_rsb_remove,
 	.driver	= {
 		.name = RSB_CTRL_NAME,
-		.of_match_table = sunxi_rsb_of_match_table,
+		.of_match_table = of_match_ptr(sunxi_rsb_of_match_table),
 	},
 };
 

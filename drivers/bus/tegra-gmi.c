@@ -274,7 +274,7 @@ static struct platform_driver tegra_gmi_driver = {
 	.remove = tegra_gmi_remove,
 	.driver = {
 		.name		= "tegra-gmi",
-		.of_match_table	= tegra_gmi_id_table,
+		.of_match_table	= of_match_ptr(tegra_gmi_id_table),
 	},
 };
 module_platform_driver(tegra_gmi_driver);

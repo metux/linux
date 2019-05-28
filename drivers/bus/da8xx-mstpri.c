@@ -254,7 +254,7 @@ static struct platform_driver da8xx_mstpri_driver = {
 	.probe = da8xx_mstpri_probe,
 	.driver = {
 		.name = "da8xx-mstpri",
-		.of_match_table = da8xx_mstpri_of_match,
+		.of_match_table = of_match_ptr(da8xx_mstpri_of_match),
 	},
 };
 module_platform_driver(da8xx_mstpri_driver);

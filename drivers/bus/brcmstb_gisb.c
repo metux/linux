@@ -439,7 +439,7 @@ static const struct dev_pm_ops brcmstb_gisb_arb_pm_ops = {
 static struct platform_driver brcmstb_gisb_arb_driver = {
 	.driver = {
 		.name	= "brcm-gisb-arb",
-		.of_match_table = brcmstb_gisb_arb_of_match,
+		.of_match_table = of_match_ptr(brcmstb_gisb_arb_of_match),
 		.pm	= &brcmstb_gisb_arb_pm_ops,
 	},
 };

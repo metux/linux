@@ -2513,7 +2513,7 @@ static struct platform_driver sysc_driver = {
 	.remove		= sysc_remove,
 	.driver         = {
 		.name   = "ti-sysc",
-		.of_match_table	= sysc_match,
+		.of_match_table	= of_match_ptr(sysc_match),
 		.pm = &sysc_pm_ops,
 	},
 };

@@ -109,7 +109,7 @@ static struct platform_driver tegra_aconnect_driver = {
 	.remove = tegra_aconnect_remove,
 	.driver = {
 		.name = "tegra-aconnect",
-		.of_match_table = tegra_aconnect_of_match,
+		.of_match_table = of_match_ptr(tegra_aconnect_of_match),
 		.pm = &tegra_aconnect_pm_ops,
 	},
 };

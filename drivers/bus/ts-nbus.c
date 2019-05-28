@@ -357,7 +357,7 @@ static struct platform_driver ts_nbus_driver = {
 	.remove		= ts_nbus_remove,
 	.driver		= {
 		.name	= "ts_nbus",
-		.of_match_table = ts_nbus_of_match,
+		.of_match_table = of_match_ptr(ts_nbus_of_match),
 	},
 };
 

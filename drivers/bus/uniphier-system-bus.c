@@ -274,7 +274,7 @@ static struct platform_driver uniphier_system_bus_driver = {
 	.probe		= uniphier_system_bus_probe,
 	.driver = {
 		.name	= "uniphier-system-bus",
-		.of_match_table = uniphier_system_bus_match,
+		.of_match_table = of_match_ptr(uniphier_system_bus_match),
 		.pm = &uniphier_system_bus_pm_ops,
 	},
 };

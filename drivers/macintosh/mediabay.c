@@ -727,7 +727,7 @@ static struct macio_driver media_bay_driver =
 {
 	.driver = {
 		.name		= "media-bay",
-		.of_match_table	= media_bay_match,
+		.of_match_table	= of_match_ptr(media_bay_match),
 	},
 	.probe		= media_bay_attach,
 	.suspend	= media_bay_suspend,

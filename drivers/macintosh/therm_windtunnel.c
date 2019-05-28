@@ -486,7 +486,7 @@ MODULE_DEVICE_TABLE(of, therm_of_match);
 static struct platform_driver therm_of_driver = {
 	.driver = {
 		.name = "temperature",
-		.of_match_table = therm_of_match,
+		.of_match_table = of_match_ptr(therm_of_match),
 	},
 	.probe		= therm_of_probe,
 	.remove		= therm_of_remove,

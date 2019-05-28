@@ -588,7 +588,7 @@ static struct macio_driver rackmeter_driver = {
 	.driver = {
 		.name = "rackmeter",
 		.owner = THIS_MODULE,
-		.of_match_table = rackmeter_match,
+		.of_match_table = of_match_ptr(rackmeter_match),
 	},
 	.probe = rackmeter_probe,
 	.remove = rackmeter_remove,

@@ -540,7 +540,7 @@ static struct platform_driver meson_msr_driver = {
 	.probe	= meson_msr_probe,
 	.driver = {
 		.name		= "meson_msr",
-		.of_match_table	= meson_msr_match_table,
+		.of_match_table	= of_match_ptr(meson_msr_match_table),
 	},
 };
 builtin_platform_driver(meson_msr_driver);

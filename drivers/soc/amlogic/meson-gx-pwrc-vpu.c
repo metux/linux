@@ -370,7 +370,7 @@ static struct platform_driver meson_gx_pwrc_vpu_driver = {
 	.shutdown = meson_gx_pwrc_vpu_shutdown,
 	.driver = {
 		.name		= "meson_gx_pwrc_vpu",
-		.of_match_table	= meson_gx_pwrc_vpu_match_table,
+		.of_match_table	= of_match_ptr(meson_gx_pwrc_vpu_match_table),
 	},
 };
 builtin_platform_driver(meson_gx_pwrc_vpu_driver);

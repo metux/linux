@@ -544,7 +544,7 @@ static int imx_gpc_remove(struct platform_device *pdev)
 static struct platform_driver imx_gpc_driver = {
 	.driver = {
 		.name = "imx-gpc",
-		.of_match_table = imx_gpc_dt_ids,
+		.of_match_table = of_match_ptr(imx_gpc_dt_ids),
 	},
 	.probe = imx_gpc_probe,
 	.remove = imx_gpc_remove,

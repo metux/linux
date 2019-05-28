@@ -647,7 +647,7 @@ static const struct of_device_id imx_gpcv2_dt_ids[] = {
 static struct platform_driver imx_gpc_driver = {
 	.driver = {
 		.name = "imx-gpcv2",
-		.of_match_table = imx_gpcv2_dt_ids,
+		.of_match_table = of_match_ptr(imx_gpcv2_dt_ids),
 	},
 	.probe = imx_gpcv2_probe,
 };

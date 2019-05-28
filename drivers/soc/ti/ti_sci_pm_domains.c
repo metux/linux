@@ -187,7 +187,7 @@ static struct platform_driver ti_sci_pm_domains_driver = {
 	.probe = ti_sci_pm_domain_probe,
 	.driver = {
 		.name = "ti_sci_pm_domains",
-		.of_match_table = ti_sci_pm_domain_matches,
+		.of_match_table = of_match_ptr(ti_sci_pm_domain_matches),
 	},
 };
 module_platform_driver(ti_sci_pm_domains_driver);

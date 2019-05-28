@@ -201,7 +201,7 @@ MODULE_DEVICE_TABLE(of, bman_portal_ids);
 static struct platform_driver bman_portal_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = bman_portal_ids,
+		.of_match_table = of_match_ptr(bman_portal_ids),
 	},
 	.probe = bman_portal_probe,
 };

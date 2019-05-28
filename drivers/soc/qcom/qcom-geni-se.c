@@ -755,7 +755,7 @@ MODULE_DEVICE_TABLE(of, geni_se_dt_match);
 static struct platform_driver geni_se_driver = {
 	.driver = {
 		.name = "geni_se_qup",
-		.of_match_table = geni_se_dt_match,
+		.of_match_table = of_match_ptr(geni_se_dt_match),
 	},
 	.probe = geni_se_probe,
 };

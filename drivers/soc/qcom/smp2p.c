@@ -589,7 +589,7 @@ static struct platform_driver qcom_smp2p_driver = {
 	.remove = qcom_smp2p_remove,
 	.driver  = {
 		.name  = "qcom_smp2p",
-		.of_match_table = qcom_smp2p_of_match,
+		.of_match_table = of_match_ptr(qcom_smp2p_of_match),
 	},
 };
 module_platform_driver(qcom_smp2p_driver);

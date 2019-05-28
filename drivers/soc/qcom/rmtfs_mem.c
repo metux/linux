@@ -292,7 +292,7 @@ static struct platform_driver qcom_rmtfs_mem_driver = {
 	.remove = qcom_rmtfs_mem_remove,
 	.driver  = {
 		.name  = "qcom_rmtfs_mem",
-		.of_match_table = qcom_rmtfs_mem_of_match,
+		.of_match_table = of_match_ptr(qcom_rmtfs_mem_of_match),
 	},
 };
 

@@ -612,7 +612,7 @@ static struct platform_driver qcom_smsm_driver = {
 	.remove = qcom_smsm_remove,
 	.driver  = {
 		.name  = "qcom-smsm",
-		.of_match_table = qcom_smsm_of_match,
+		.of_match_table = of_match_ptr(qcom_smsm_of_match),
 	},
 };
 module_platform_driver(qcom_smsm_driver);

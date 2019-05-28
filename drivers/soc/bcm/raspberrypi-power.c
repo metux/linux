@@ -234,7 +234,7 @@ MODULE_DEVICE_TABLE(of, rpi_power_of_match);
 static struct platform_driver rpi_power_driver = {
 	.driver = {
 		.name = "raspberrypi-power",
-		.of_match_table = rpi_power_of_match,
+		.of_match_table = of_match_ptr(rpi_power_of_match),
 	},
 	.probe		= rpi_power_probe,
 };

@@ -718,7 +718,7 @@ static const struct of_device_id qe_ids[] = {
 static struct platform_driver qe_driver = {
 	.driver = {
 		.name = "fsl-qe",
-		.of_match_table = qe_ids,
+		.of_match_table = of_match_ptr(qe_ids),
 	},
 	.probe = qe_probe,
 	.resume = qe_resume,

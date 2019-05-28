@@ -412,7 +412,7 @@ static struct rpmsg_driver apr_driver = {
 	.callback = apr_callback,
 	.drv = {
 		.name = "qcom,apr",
-		.of_match_table = apr_of_match,
+		.of_match_table = of_match_ptr(apr_of_match),
 	},
 };
 

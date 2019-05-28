@@ -331,7 +331,7 @@ static const struct of_device_id aspeed_lpc_snoop_match[] = {
 static struct platform_driver aspeed_lpc_snoop_driver = {
 	.driver = {
 		.name		= DEVICE_NAME,
-		.of_match_table = aspeed_lpc_snoop_match,
+		.of_match_table = of_match_ptr(aspeed_lpc_snoop_match),
 	},
 	.probe = aspeed_lpc_snoop_probe,
 	.remove = aspeed_lpc_snoop_remove,

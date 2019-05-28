@@ -394,7 +394,7 @@ MODULE_DEVICE_TABLE(of, sunxi_sram_dt_match);
 static struct platform_driver sunxi_sram_driver = {
 	.driver = {
 		.name		= "sunxi-sram",
-		.of_match_table	= sunxi_sram_dt_match,
+		.of_match_table	= of_match_ptr(sunxi_sram_dt_match),
 	},
 	.probe	= sunxi_sram_probe,
 };

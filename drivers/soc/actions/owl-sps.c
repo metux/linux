@@ -308,7 +308,7 @@ static struct platform_driver owl_sps_platform_driver = {
 	.probe = owl_sps_probe,
 	.driver = {
 		.name = "owl-sps",
-		.of_match_table = owl_sps_of_matches,
+		.of_match_table = of_match_ptr(owl_sps_of_matches),
 		.suppress_bind_attrs = true,
 	},
 };

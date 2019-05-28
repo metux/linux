@@ -2778,7 +2778,7 @@ static struct platform_driver tegra_pmc_driver = {
 	.driver = {
 		.name = "tegra-pmc",
 		.suppress_bind_attrs = true,
-		.of_match_table = tegra_pmc_match,
+		.of_match_table = of_match_ptr(tegra_pmc_match),
 #if defined(CONFIG_PM_SLEEP) && defined(CONFIG_ARM)
 		.pm = &tegra_pmc_pm_ops,
 #endif

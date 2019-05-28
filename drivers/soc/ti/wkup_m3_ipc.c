@@ -564,7 +564,7 @@ static struct platform_driver wkup_m3_ipc_driver = {
 	.remove = wkup_m3_ipc_remove,
 	.driver = {
 		.name = "wkup_m3_ipc",
-		.of_match_table = wkup_m3_ipc_of_match,
+		.of_match_table = of_match_ptr(wkup_m3_ipc_of_match),
 		.pm = &wkup_m3_ipc_pm_ops,
 	},
 };

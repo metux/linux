@@ -393,7 +393,7 @@ static int rpmhpd_probe(struct platform_device *pdev)
 static struct platform_driver rpmhpd_driver = {
 	.driver = {
 		.name = "qcom-rpmhpd",
-		.of_match_table = rpmhpd_match_table,
+		.of_match_table = of_match_ptr(rpmhpd_match_table),
 		.suppress_bind_attrs = true,
 	},
 	.probe = rpmhpd_probe,

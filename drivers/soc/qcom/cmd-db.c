@@ -271,7 +271,7 @@ static struct platform_driver cmd_db_dev_driver = {
 	.probe  = cmd_db_dev_probe,
 	.driver = {
 		   .name = "cmd-db",
-		   .of_match_table = cmd_db_match_table,
+		   .of_match_table = of_match_ptr(cmd_db_match_table),
 	},
 };
 

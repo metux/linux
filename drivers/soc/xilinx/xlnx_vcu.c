@@ -617,7 +617,7 @@ MODULE_DEVICE_TABLE(of, xvcu_of_id_table);
 static struct platform_driver xvcu_driver = {
 	.driver = {
 		.name           = "xilinx-vcu",
-		.of_match_table = xvcu_of_id_table,
+		.of_match_table = of_match_ptr(xvcu_of_id_table),
 	},
 	.probe                  = xvcu_probe,
 	.remove                 = xvcu_remove,

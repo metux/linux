@@ -165,7 +165,7 @@ static int tegra_fuse_probe(struct platform_device *pdev)
 static struct platform_driver tegra_fuse_driver = {
 	.driver = {
 		.name = "tegra-fuse",
-		.of_match_table = tegra_fuse_match,
+		.of_match_table = of_match_ptr(tegra_fuse_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = tegra_fuse_probe,

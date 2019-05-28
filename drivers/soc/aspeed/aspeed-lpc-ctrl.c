@@ -297,7 +297,7 @@ static const struct of_device_id aspeed_lpc_ctrl_match[] = {
 static struct platform_driver aspeed_lpc_ctrl_driver = {
 	.driver = {
 		.name		= DEVICE_NAME,
-		.of_match_table = aspeed_lpc_ctrl_match,
+		.of_match_table = of_match_ptr(aspeed_lpc_ctrl_match),
 	},
 	.probe = aspeed_lpc_ctrl_probe,
 	.remove = aspeed_lpc_ctrl_remove,

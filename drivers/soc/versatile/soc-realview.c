@@ -128,7 +128,7 @@ static struct platform_driver realview_soc_driver = {
 	.probe = realview_soc_probe,
 	.driver = {
 		.name = "realview-soc",
-		.of_match_table = realview_soc_of_match,
+		.of_match_table = of_match_ptr(realview_soc_of_match),
 	},
 };
 builtin_platform_driver(realview_soc_driver);

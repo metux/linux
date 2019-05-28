@@ -166,7 +166,7 @@ static struct platform_driver tegra_flowctrl_driver = {
 	.driver = {
 		.name = "tegra-flowctrl",
 		.suppress_bind_attrs = true,
-		.of_match_table = tegra_flowctrl_match,
+		.of_match_table = of_match_ptr(tegra_flowctrl_match),
 	},
 	.probe = tegra_flowctrl_probe,
 };

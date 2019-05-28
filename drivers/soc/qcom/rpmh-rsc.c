@@ -684,7 +684,7 @@ static struct platform_driver rpmh_driver = {
 	.probe = rpmh_rsc_probe,
 	.driver = {
 		  .name = "rpmh",
-		  .of_match_table = rpmh_drv_match,
+		  .of_match_table = of_match_ptr(rpmh_drv_match),
 	},
 };
 

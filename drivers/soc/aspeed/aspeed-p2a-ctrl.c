@@ -430,7 +430,7 @@ static const struct of_device_id aspeed_p2a_ctrl_match[] = {
 static struct platform_driver aspeed_p2a_ctrl_driver = {
 	.driver = {
 		.name		= DEVICE_NAME,
-		.of_match_table = aspeed_p2a_ctrl_match,
+		.of_match_table = of_match_ptr(aspeed_p2a_ctrl_match),
 	},
 	.probe = aspeed_p2a_ctrl_probe,
 	.remove = aspeed_p2a_ctrl_remove,

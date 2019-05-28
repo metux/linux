@@ -371,7 +371,7 @@ static struct platform_driver spm_driver = {
 	.probe = spm_dev_probe,
 	.driver = {
 		.name = "saw",
-		.of_match_table = spm_match_table,
+		.of_match_table = of_match_ptr(spm_match_table),
 	},
 };
 

@@ -231,7 +231,7 @@ MODULE_DEVICE_TABLE(of, fsl_guts_of_match);
 static struct platform_driver fsl_guts_driver = {
 	.driver = {
 		.name = "fsl-guts",
-		.of_match_table = fsl_guts_of_match,
+		.of_match_table = of_match_ptr(fsl_guts_of_match),
 	},
 	.probe = fsl_guts_probe,
 	.remove = fsl_guts_remove,

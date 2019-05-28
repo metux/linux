@@ -348,7 +348,7 @@ MODULE_DEVICE_TABLE(of, qman_portal_ids);
 static struct platform_driver qman_portal_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = qman_portal_ids,
+		.of_match_table = of_match_ptr(qman_portal_ids),
 	},
 	.probe = qman_portal_probe,
 };

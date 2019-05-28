@@ -75,7 +75,7 @@ static struct platform_driver ltq_fpi_driver = {
 	.probe = ltq_fpi_probe,
 	.driver = {
 		.name = "fpi-xway",
-		.of_match_table = ltq_fpi_match,
+		.of_match_table = of_match_ptr(ltq_fpi_match),
 	},
 };
 

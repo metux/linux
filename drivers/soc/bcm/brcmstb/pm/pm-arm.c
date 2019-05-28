@@ -818,7 +818,7 @@ out:
 static struct platform_driver brcmstb_pm_driver = {
 	.driver = {
 		.name	= "brcmstb-pm",
-		.of_match_table = aon_ctrl_dt_ids,
+		.of_match_table = of_match_ptr(aon_ctrl_dt_ids),
 	},
 };
 

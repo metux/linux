@@ -174,7 +174,7 @@ static struct platform_driver zynqmp_pm_platform_driver = {
 	.remove = zynqmp_pm_remove,
 	.driver = {
 		.name = "zynqmp_power",
-		.of_match_table = pm_of_match,
+		.of_match_table = of_match_ptr(pm_of_match),
 	},
 };
 module_platform_driver(zynqmp_pm_platform_driver);

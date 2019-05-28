@@ -985,7 +985,7 @@ static struct platform_driver qcom_smem_driver = {
 	.remove = qcom_smem_remove,
 	.driver  = {
 		.name = "qcom-smem",
-		.of_match_table = qcom_smem_of_match,
+		.of_match_table = of_match_ptr(qcom_smem_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

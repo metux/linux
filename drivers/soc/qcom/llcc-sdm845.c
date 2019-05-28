@@ -89,7 +89,7 @@ static const struct of_device_id sdm845_qcom_llcc_of_match[] = {
 static struct platform_driver sdm845_qcom_llcc_driver = {
 	.driver = {
 		.name = "sdm845-llcc",
-		.of_match_table = sdm845_qcom_llcc_of_match,
+		.of_match_table = of_match_ptr(sdm845_qcom_llcc_of_match),
 	},
 	.probe = sdm845_qcom_llcc_probe,
 	.remove = sdm845_qcom_llcc_remove,

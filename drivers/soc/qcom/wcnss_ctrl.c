@@ -348,7 +348,7 @@ static struct rpmsg_driver wcnss_ctrl_driver = {
 	.drv  = {
 		.name  = "qcom_wcnss_ctrl",
 		.owner = THIS_MODULE,
-		.of_match_table = wcnss_ctrl_of_match,
+		.of_match_table = of_match_ptr(wcnss_ctrl_of_match),
 	},
 };
 

@@ -852,7 +852,7 @@ static const struct of_device_id fsl_qman_ids[] = {
 static struct platform_driver fsl_qman_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = fsl_qman_ids,
+		.of_match_table = of_match_ptr(fsl_qman_ids),
 		.suppress_bind_attrs = true,
 	},
 	.probe = fsl_qman_probe,

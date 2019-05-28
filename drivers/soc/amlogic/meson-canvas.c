@@ -201,7 +201,7 @@ static struct platform_driver meson_canvas_driver = {
 	.probe = meson_canvas_probe,
 	.driver = {
 		.name = "amlogic-canvas",
-		.of_match_table = canvas_dt_match,
+		.of_match_table = of_match_ptr(canvas_dt_match),
 	},
 };
 module_platform_driver(meson_canvas_driver);

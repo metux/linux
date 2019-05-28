@@ -231,7 +231,7 @@ static struct rpmsg_driver qcom_smd_rpm_driver = {
 	.callback = qcom_smd_rpm_callback,
 	.drv  = {
 		.name  = "qcom_smd_rpm",
-		.of_match_table = qcom_smd_rpm_of_match,
+		.of_match_table = of_match_ptr(qcom_smd_rpm_of_match),
 	},
 };
 

@@ -1343,7 +1343,7 @@ static struct platform_driver spmi_pmic_arb_driver = {
 	.remove		= spmi_pmic_arb_remove,
 	.driver		= {
 		.name	= "spmi_pmic_arb",
-		.of_match_table = spmi_pmic_arb_match_table,
+		.of_match_table = of_match_ptr(spmi_pmic_arb_match_table),
 	},
 };
 module_platform_driver(spmi_pmic_arb_driver);

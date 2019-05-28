@@ -47,7 +47,7 @@ static struct platform_driver alt_pr_platform_driver = {
 	.remove = alt_pr_platform_remove,
 	.driver = {
 		.name	= "alt_a10_pr_ip",
-		.of_match_table = alt_pr_of_match,
+		.of_match_table = of_match_ptr(alt_pr_of_match),
 	},
 };
 

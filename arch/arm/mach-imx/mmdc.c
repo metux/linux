@@ -578,7 +578,7 @@ int imx_mmdc_get_ddr_type(void)
 static struct platform_driver imx_mmdc_driver = {
 	.driver		= {
 		.name	= "imx-mmdc",
-		.of_match_table = imx_mmdc_dt_ids,
+		.of_match_table = of_match_ptr(imx_mmdc_dt_ids),
 	},
 	.probe		= imx_mmdc_probe,
 	.remove		= imx_mmdc_remove,

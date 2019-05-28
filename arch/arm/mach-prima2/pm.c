@@ -135,7 +135,7 @@ static struct platform_driver sirfsoc_memc_driver = {
 	.probe		= sirfsoc_memc_probe,
 	.driver = {
 		.name = "sirfsoc-memc",
-		.of_match_table	= memc_ids,
+		.of_match_table	= of_match_ptr(memc_ids),
 	},
 };
 

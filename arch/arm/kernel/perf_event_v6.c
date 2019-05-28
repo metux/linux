@@ -581,7 +581,7 @@ static int armv6_pmu_device_probe(struct platform_device *pdev)
 static struct platform_driver armv6_pmu_driver = {
 	.driver		= {
 		.name	= "armv6-pmu",
-		.of_match_table = armv6_pmu_of_device_ids,
+		.of_match_table = of_match_ptr(armv6_pmu_of_device_ids),
 	},
 	.probe		= armv6_pmu_device_probe,
 };

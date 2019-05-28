@@ -91,7 +91,7 @@ static struct platform_driver vexpress_regulator_driver = {
 	.probe = vexpress_regulator_probe,
 	.driver	= {
 		.name = DRVNAME,
-		.of_match_table = vexpress_regulator_of_match,
+		.of_match_table = of_match_ptr(vexpress_regulator_of_match),
 	},
 };
 

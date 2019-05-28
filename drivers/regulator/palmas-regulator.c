@@ -1666,7 +1666,7 @@ static int palmas_regulators_probe(struct platform_device *pdev)
 static struct platform_driver palmas_driver = {
 	.driver = {
 		.name = "palmas-pmic",
-		.of_match_table = of_palmas_match_tbl,
+		.of_match_table = of_match_ptr(of_palmas_match_tbl),
 	},
 	.probe = palmas_regulators_probe,
 };

@@ -205,7 +205,7 @@ static struct platform_driver uniphier_regulator_driver = {
 	.remove = uniphier_regulator_remove,
 	.driver = {
 		.name  = "uniphier-regulator",
-		.of_match_table = uniphier_regulator_match,
+		.of_match_table = of_match_ptr(uniphier_regulator_match),
 	},
 };
 module_platform_driver(uniphier_regulator_driver);

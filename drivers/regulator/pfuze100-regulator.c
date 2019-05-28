@@ -852,7 +852,7 @@ static struct i2c_driver pfuze_driver = {
 	.id_table = pfuze_device_id,
 	.driver = {
 		.name = "pfuze100-regulator",
-		.of_match_table = pfuze_dt_ids,
+		.of_match_table = of_match_ptr(pfuze_dt_ids),
 	},
 	.probe = pfuze100_regulator_probe,
 	.remove = pfuze100_regulator_remove,

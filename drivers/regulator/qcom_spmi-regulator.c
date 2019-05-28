@@ -2089,7 +2089,7 @@ static int qcom_spmi_regulator_remove(struct platform_device *pdev)
 static struct platform_driver qcom_spmi_regulator_driver = {
 	.driver		= {
 		.name	= "qcom-spmi-regulator",
-		.of_match_table = qcom_spmi_regulator_match,
+		.of_match_table = of_match_ptr(qcom_spmi_regulator_match),
 	},
 	.probe		= qcom_spmi_regulator_probe,
 	.remove		= qcom_spmi_regulator_remove,

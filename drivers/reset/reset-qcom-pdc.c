@@ -115,7 +115,7 @@ static struct platform_driver qcom_pdc_reset_driver = {
 	.probe = qcom_pdc_reset_probe,
 	.driver = {
 		.name = "qcom_pdc_reset",
-		.of_match_table = qcom_pdc_reset_of_match,
+		.of_match_table = of_match_ptr(qcom_pdc_reset_of_match),
 	},
 };
 module_platform_driver(qcom_pdc_reset_driver);

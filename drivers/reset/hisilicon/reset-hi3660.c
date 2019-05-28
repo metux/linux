@@ -107,7 +107,7 @@ static struct platform_driver hi3660_reset_driver = {
 	.probe = hi3660_reset_probe,
 	.driver = {
 		.name = "hi3660-reset",
-		.of_match_table = hi3660_reset_match,
+		.of_match_table = of_match_ptr(hi3660_reset_match),
 	},
 };
 

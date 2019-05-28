@@ -147,7 +147,7 @@ static struct platform_driver stih407_reset_driver = {
 	.probe = syscfg_reset_probe,
 	.driver = {
 		.name = "reset-stih407",
-		.of_match_table = stih407_reset_match,
+		.of_match_table = of_match_ptr(stih407_reset_match),
 	},
 };
 

@@ -123,7 +123,7 @@ static struct platform_driver qcom_aoss_reset_driver = {
 	.probe = qcom_aoss_reset_probe,
 	.driver  = {
 		.name = "qcom_aoss_reset",
-		.of_match_table = qcom_aoss_reset_of_match,
+		.of_match_table = of_match_ptr(qcom_aoss_reset_of_match),
 	},
 };
 

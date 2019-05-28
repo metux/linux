@@ -290,7 +290,7 @@ static struct platform_driver imx7_reset_driver = {
 	.probe	= imx7_reset_probe,
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= imx7_reset_dt_ids,
+		.of_match_table	= of_match_ptr(imx7_reset_dt_ids),
 	},
 };
 builtin_platform_driver(imx7_reset_driver);

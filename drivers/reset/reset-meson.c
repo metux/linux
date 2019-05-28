@@ -167,7 +167,7 @@ static struct platform_driver meson_reset_driver = {
 	.probe	= meson_reset_probe,
 	.driver = {
 		.name		= "meson_reset",
-		.of_match_table	= meson_reset_dt_ids,
+		.of_match_table	= of_match_ptr(meson_reset_dt_ids),
 	},
 };
 builtin_platform_driver(meson_reset_driver);

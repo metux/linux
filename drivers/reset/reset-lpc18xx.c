@@ -223,7 +223,7 @@ static struct platform_driver lpc18xx_rgu_driver = {
 	.probe	= lpc18xx_rgu_probe,
 	.driver	= {
 		.name			= "lpc18xx-reset",
-		.of_match_table		= lpc18xx_rgu_match,
+		.of_match_table		= of_match_ptr(lpc18xx_rgu_match),
 		.suppress_bind_attrs	= true,
 	},
 };

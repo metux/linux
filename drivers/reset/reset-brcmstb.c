@@ -122,7 +122,7 @@ static struct platform_driver brcmstb_reset_driver = {
 	.probe	= brcmstb_reset_probe,
 	.driver	= {
 		.name = "brcmstb-reset",
-		.of_match_table = brcmstb_reset_of_match,
+		.of_match_table = of_match_ptr(brcmstb_reset_of_match),
 	},
 };
 module_platform_driver(brcmstb_reset_driver);

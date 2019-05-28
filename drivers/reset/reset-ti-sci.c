@@ -259,7 +259,7 @@ static struct platform_driver ti_sci_reset_driver = {
 	.remove = ti_sci_reset_remove,
 	.driver = {
 		.name = "ti-sci-reset",
-		.of_match_table = ti_sci_reset_of_match,
+		.of_match_table = of_match_ptr(ti_sci_reset_of_match),
 	},
 };
 module_platform_driver(ti_sci_reset_driver);

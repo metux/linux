@@ -142,7 +142,7 @@ static struct platform_driver hi6220_reset_driver = {
 	.probe = hi6220_reset_probe,
 	.driver = {
 		.name = "reset-hi6220",
-		.of_match_table = hi6220_reset_match,
+		.of_match_table = of_match_ptr(hi6220_reset_match),
 	},
 };
 

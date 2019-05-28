@@ -200,7 +200,7 @@ static struct platform_driver lantiq_rcu_reset_driver = {
 	.probe	= lantiq_rcu_reset_probe,
 	.driver = {
 		.name		= "lantiq-reset",
-		.of_match_table	= lantiq_rcu_reset_dt_ids,
+		.of_match_table	= of_match_ptr(lantiq_rcu_reset_dt_ids),
 	},
 };
 module_platform_driver(lantiq_rcu_reset_driver);

@@ -173,7 +173,7 @@ static struct platform_driver uniphier_glue_reset_driver = {
 	.remove = uniphier_glue_reset_remove,
 	.driver = {
 		.name = "uniphier-glue-reset",
-		.of_match_table = uniphier_glue_reset_match,
+		.of_match_table = of_match_ptr(uniphier_glue_reset_match),
 	},
 };
 module_platform_driver(uniphier_glue_reset_driver);

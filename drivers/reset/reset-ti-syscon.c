@@ -227,7 +227,7 @@ static struct platform_driver ti_syscon_reset_driver = {
 	.probe = ti_syscon_reset_probe,
 	.driver = {
 		.name = "ti-syscon-reset",
-		.of_match_table = ti_syscon_reset_of_match,
+		.of_match_table = of_match_ptr(ti_syscon_reset_of_match),
 	},
 };
 module_platform_driver(ti_syscon_reset_driver);

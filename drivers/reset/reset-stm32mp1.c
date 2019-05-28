@@ -108,7 +108,7 @@ static struct platform_driver stm32_reset_driver = {
 	.probe	= stm32_reset_probe,
 	.driver = {
 		.name		= "stm32mp1-reset",
-		.of_match_table	= stm32_reset_dt_ids,
+		.of_match_table	= of_match_ptr(stm32_reset_dt_ids),
 	},
 };
 

@@ -484,7 +484,7 @@ static struct platform_driver uniphier_reset_driver = {
 	.probe = uniphier_reset_probe,
 	.driver = {
 		.name = "uniphier-reset",
-		.of_match_table = uniphier_reset_match,
+		.of_match_table = of_match_ptr(uniphier_reset_match),
 	},
 };
 module_platform_driver(uniphier_reset_driver);

@@ -74,7 +74,7 @@ static struct platform_driver axs10x_reset_driver = {
 	.probe	= axs10x_reset_probe,
 	.driver	= {
 		.name = "axs10x-reset",
-		.of_match_table = axs10x_reset_dt_match,
+		.of_match_table = of_match_ptr(axs10x_reset_dt_match),
 	},
 };
 builtin_platform_driver(axs10x_reset_driver);

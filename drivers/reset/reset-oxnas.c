@@ -108,7 +108,7 @@ static struct platform_driver oxnas_reset_driver = {
 	.probe	= oxnas_reset_probe,
 	.driver = {
 		.name		= "oxnas-reset",
-		.of_match_table	= oxnas_reset_dt_ids,
+		.of_match_table	= of_match_ptr(oxnas_reset_dt_ids),
 	},
 };
 builtin_platform_driver(oxnas_reset_driver);

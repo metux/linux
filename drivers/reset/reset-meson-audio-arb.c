@@ -159,7 +159,7 @@ static struct platform_driver meson_audio_arb_pdrv = {
 	.remove = meson_audio_arb_remove,
 	.driver = {
 		.name = "meson-audio-arb-reset",
-		.of_match_table = meson_audio_arb_of_match,
+		.of_match_table = of_match_ptr(meson_audio_arb_of_match),
 	},
 };
 module_platform_driver(meson_audio_arb_pdrv);

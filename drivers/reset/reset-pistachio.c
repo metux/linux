@@ -130,7 +130,7 @@ static struct platform_driver pistachio_reset_driver = {
 	.probe	= pistachio_reset_probe,
 	.driver = {
 		.name		= "pistachio-reset",
-		.of_match_table	= pistachio_reset_dt_ids,
+		.of_match_table	= of_match_ptr(pistachio_reset_dt_ids),
 	},
 };
 builtin_platform_driver(pistachio_reset_driver);

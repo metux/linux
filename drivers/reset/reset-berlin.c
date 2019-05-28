@@ -98,7 +98,7 @@ static struct platform_driver berlin_reset_driver = {
 	.probe	= berlin2_reset_probe,
 	.driver	= {
 		.name = "berlin2-reset",
-		.of_match_table = berlin_reset_dt_match,
+		.of_match_table = of_match_ptr(berlin_reset_dt_match),
 	},
 };
 builtin_platform_driver(berlin_reset_driver);

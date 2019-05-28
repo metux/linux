@@ -174,7 +174,7 @@ static struct platform_driver reset_simple_driver = {
 	.probe	= reset_simple_probe,
 	.driver = {
 		.name		= "simple-reset",
-		.of_match_table	= reset_simple_dt_ids,
+		.of_match_table	= of_match_ptr(reset_simple_dt_ids),
 	},
 };
 builtin_platform_driver(reset_simple_driver);

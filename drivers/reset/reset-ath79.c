@@ -131,7 +131,7 @@ static struct platform_driver ath79_reset_driver = {
 	.probe	= ath79_reset_probe,
 	.driver = {
 		.name			= "ath79-reset",
-		.of_match_table		= ath79_reset_dt_ids,
+		.of_match_table		= of_match_ptr(ath79_reset_dt_ids),
 		.suppress_bind_attrs	= true,
 	},
 };

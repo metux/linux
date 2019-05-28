@@ -128,7 +128,7 @@ static struct platform_driver hsdk_reset_driver = {
 	.probe	= hsdk_reset_probe,
 	.driver	= {
 		.name = "hsdk-reset",
-		.of_match_table = hsdk_reset_dt_match,
+		.of_match_table = of_match_ptr(hsdk_reset_dt_match),
 	},
 };
 builtin_platform_driver(hsdk_reset_driver);

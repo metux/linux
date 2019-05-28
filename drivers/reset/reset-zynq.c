@@ -128,7 +128,7 @@ static struct platform_driver zynq_reset_driver = {
 	.probe	= zynq_reset_probe,
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= zynq_reset_dt_ids,
+		.of_match_table	= of_match_ptr(zynq_reset_dt_ids),
 	},
 };
 builtin_platform_driver(zynq_reset_driver);

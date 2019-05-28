@@ -286,7 +286,7 @@ static struct platform_driver tegra_ahb_driver = {
 	.probe = tegra_ahb_probe,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = tegra_ahb_of_match,
+		.of_match_table = of_match_ptr(tegra_ahb_of_match),
 		.pm = &tegra_ahb_pm,
 	},
 };

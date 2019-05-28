@@ -606,7 +606,7 @@ static struct platform_driver mxic_spi_driver = {
 	.remove = mxic_spi_remove,
 	.driver = {
 		.name = "mxic-spi",
-		.of_match_table = mxic_spi_of_ids,
+		.of_match_table = of_match_ptr(mxic_spi_of_ids),
 		.pm = &mxic_spi_dev_pm_ops,
 	},
 };

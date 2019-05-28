@@ -162,7 +162,7 @@ MODULE_DEVICE_TABLE(of, clps711x_spi_dt_ids);
 static struct platform_driver clps711x_spi_driver = {
 	.driver	= {
 		.name	= DRIVER_NAME,
-		.of_match_table = clps711x_spi_dt_ids,
+		.of_match_table = of_match_ptr(clps711x_spi_dt_ids),
 	},
 	.probe	= spi_clps711x_probe,
 };

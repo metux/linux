@@ -1579,7 +1579,7 @@ static struct platform_driver omap2_mcspi_driver = {
 	.driver = {
 		.name =		"omap2_mcspi",
 		.pm =		&omap2_mcspi_pm_ops,
-		.of_match_table = omap_mcspi_of_match,
+		.of_match_table = of_match_ptr(omap_mcspi_of_match),
 	},
 	.probe =	omap2_mcspi_probe,
 	.remove =	omap2_mcspi_remove,

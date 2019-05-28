@@ -521,7 +521,7 @@ MODULE_DEVICE_TABLE(of, sprd_adi_of_match);
 static struct platform_driver sprd_adi_driver = {
 	.driver = {
 		.name = "sprd-adi",
-		.of_match_table = sprd_adi_of_match,
+		.of_match_table = of_match_ptr(sprd_adi_of_match),
 	},
 	.probe = sprd_adi_probe,
 	.remove = sprd_adi_remove,

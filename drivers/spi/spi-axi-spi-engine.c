@@ -583,7 +583,7 @@ static struct platform_driver spi_engine_driver = {
 	.remove = spi_engine_remove,
 	.driver = {
 		.name = "spi-engine",
-		.of_match_table = spi_engine_match_table,
+		.of_match_table = of_match_ptr(spi_engine_match_table),
 	},
 };
 module_platform_driver(spi_engine_driver);

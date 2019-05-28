@@ -353,7 +353,7 @@ static struct spi_driver spi_loopback_test_driver = {
 	.driver = {
 		.name = "spi-loopback-test",
 		.owner = THIS_MODULE,
-		.of_match_table = spi_loopback_test_of_match,
+		.of_match_table = of_match_ptr(spi_loopback_test_of_match),
 	},
 	.probe = spi_loopback_test_probe,
 };

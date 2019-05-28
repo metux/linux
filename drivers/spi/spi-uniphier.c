@@ -519,7 +519,7 @@ static struct platform_driver uniphier_spi_driver = {
 	.remove = uniphier_spi_remove,
 	.driver = {
 		.name = "uniphier-spi",
-		.of_match_table = uniphier_spi_match,
+		.of_match_table = of_match_ptr(uniphier_spi_match),
 	},
 };
 module_platform_driver(uniphier_spi_driver);

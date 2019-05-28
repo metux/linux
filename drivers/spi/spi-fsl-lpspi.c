@@ -1014,7 +1014,7 @@ static const struct dev_pm_ops fsl_lpspi_pm_ops = {
 static struct platform_driver fsl_lpspi_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = fsl_lpspi_dt_ids,
+		.of_match_table = of_match_ptr(fsl_lpspi_dt_ids),
 		.pm = &fsl_lpspi_pm_ops,
 	},
 	.probe = fsl_lpspi_probe,

@@ -222,7 +222,7 @@ static struct platform_driver jcore_spi_driver = {
 	.probe = jcore_spi_probe,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = jcore_spi_of_match,
+		.of_match_table = of_match_ptr(jcore_spi_of_match),
 	},
 };
 

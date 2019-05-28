@@ -618,7 +618,7 @@ MODULE_DEVICE_TABLE(of, atmel_qspi_dt_ids);
 static struct platform_driver atmel_qspi_driver = {
 	.driver = {
 		.name	= "atmel_qspi",
-		.of_match_table	= atmel_qspi_dt_ids,
+		.of_match_table	= of_match_ptr(atmel_qspi_dt_ids),
 		.pm	= &atmel_qspi_pm_ops,
 	},
 	.probe		= atmel_qspi_probe,

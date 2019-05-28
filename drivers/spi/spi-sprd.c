@@ -1071,7 +1071,7 @@ static const struct of_device_id sprd_spi_of_match[] = {
 static struct platform_driver sprd_spi_driver = {
 	.driver = {
 		.name = "sprd-spi",
-		.of_match_table = sprd_spi_of_match,
+		.of_match_table = of_match_ptr(sprd_spi_of_match),
 		.pm = &sprd_spi_pm_ops,
 	},
 	.probe = sprd_spi_probe,

@@ -851,7 +851,7 @@ static struct platform_driver mtk_spi_driver = {
 	.driver = {
 		.name = "mtk-spi",
 		.pm	= &mtk_spi_pm,
-		.of_match_table = mtk_spi_of_match,
+		.of_match_table = of_match_ptr(mtk_spi_of_match),
 	},
 	.probe = mtk_spi_probe,
 	.remove = mtk_spi_remove,

@@ -403,7 +403,7 @@ MODULE_ALIAS("platform:" DRIVER_NAME);
 static struct platform_driver mt7621_spi_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = mt7621_spi_match,
+		.of_match_table = of_match_ptr(mt7621_spi_match),
 	},
 	.probe = mt7621_spi_probe,
 	.remove = mt7621_spi_remove,

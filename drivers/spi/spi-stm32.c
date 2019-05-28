@@ -2052,7 +2052,7 @@ static struct platform_driver stm32_spi_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
 		.pm = &stm32_spi_pm_ops,
-		.of_match_table = stm32_spi_of_match,
+		.of_match_table = of_match_ptr(stm32_spi_of_match),
 	},
 };
 

@@ -1298,7 +1298,7 @@ static struct platform_driver spi_qup_driver = {
 	.driver = {
 		.name		= "spi_qup",
 		.pm		= &spi_qup_dev_pm_ops,
-		.of_match_table = spi_qup_dt_match,
+		.of_match_table = of_match_ptr(spi_qup_dt_match),
 	},
 	.probe = spi_qup_probe,
 	.remove = spi_qup_remove,

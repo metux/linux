@@ -830,7 +830,7 @@ MODULE_DEVICE_TABLE(of, of_fsl_espi_match);
 static struct platform_driver fsl_espi_driver = {
 	.driver = {
 		.name = "fsl_espi",
-		.of_match_table = of_fsl_espi_match,
+		.of_match_table = of_match_ptr(of_fsl_espi_match),
 		.pm = &espi_pm,
 	},
 	.probe		= of_fsl_espi_probe,

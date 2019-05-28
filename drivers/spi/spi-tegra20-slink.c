@@ -1235,7 +1235,7 @@ static struct platform_driver tegra_slink_driver = {
 	.driver = {
 		.name		= "spi-tegra-slink",
 		.pm		= &slink_pm_ops,
-		.of_match_table	= tegra_slink_of_match,
+		.of_match_table	= of_match_ptr(tegra_slink_of_match),
 	},
 	.probe =	tegra_slink_probe,
 	.remove =	tegra_slink_remove,

@@ -559,7 +559,7 @@ static struct platform_driver sun6i_spi_driver = {
 	.remove	= sun6i_spi_remove,
 	.driver	= {
 		.name		= "sun6i-spi",
-		.of_match_table	= sun6i_spi_match,
+		.of_match_table	= of_match_ptr(sun6i_spi_match),
 		.pm		= &sun6i_spi_pm_ops,
 	},
 };

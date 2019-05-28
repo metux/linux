@@ -910,7 +910,7 @@ static int of_fsl_spi_remove(struct platform_device *ofdev)
 static struct platform_driver of_fsl_spi_driver = {
 	.driver = {
 		.name = "fsl_spi",
-		.of_match_table = of_fsl_spi_match,
+		.of_match_table = of_match_ptr(of_fsl_spi_match),
 	},
 	.probe		= of_fsl_spi_probe,
 	.remove		= of_fsl_spi_remove,

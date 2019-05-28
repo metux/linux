@@ -483,7 +483,7 @@ MODULE_DEVICE_TABLE(of, npcm_pspi_match);
 static struct platform_driver npcm_pspi_driver = {
 	.driver		= {
 		.name		= DRIVER_NAME,
-		.of_match_table	= npcm_pspi_match,
+		.of_match_table	= of_match_ptr(npcm_pspi_match),
 	},
 	.probe		= npcm_pspi_probe,
 	.remove		= npcm_pspi_remove,

@@ -438,7 +438,7 @@ static struct platform_driver sifive_spi_driver = {
 	.remove = sifive_spi_remove,
 	.driver = {
 		.name = SIFIVE_SPI_DRIVER_NAME,
-		.of_match_table = sifive_spi_of_match,
+		.of_match_table = of_match_ptr(sifive_spi_of_match),
 	},
 };
 module_platform_driver(sifive_spi_driver);

@@ -653,7 +653,7 @@ static struct platform_driver bcm63xx_spi_driver = {
 	.driver = {
 		.name	= "bcm63xx-spi",
 		.pm	= &bcm63xx_spi_pm_ops,
-		.of_match_table = bcm63xx_spi_of_match,
+		.of_match_table = of_match_ptr(bcm63xx_spi_of_match),
 	},
 	.id_table	= bcm63xx_spi_dev_match,
 	.probe		= bcm63xx_spi_probe,

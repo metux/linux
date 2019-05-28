@@ -843,7 +843,7 @@ static struct platform_driver ti_qspi_driver = {
 	.driver = {
 		.name	= "ti-qspi",
 		.pm =   &ti_qspi_pm_ops,
-		.of_match_table = ti_qspi_match,
+		.of_match_table = of_match_ptr(ti_qspi_match),
 	}
 };
 

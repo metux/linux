@@ -1225,7 +1225,7 @@ static struct platform_driver spi_sirfsoc_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
 		.pm     = &spi_sirfsoc_pm_ops,
-		.of_match_table = spi_sirfsoc_of_match,
+		.of_match_table = of_match_ptr(spi_sirfsoc_of_match),
 	},
 	.probe = spi_sirfsoc_probe,
 	.remove = spi_sirfsoc_remove,

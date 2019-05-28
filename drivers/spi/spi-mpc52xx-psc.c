@@ -493,7 +493,7 @@ static struct platform_driver mpc52xx_psc_spi_of_driver = {
 	.remove = mpc52xx_psc_spi_of_remove,
 	.driver = {
 		.name = "mpc52xx-psc-spi",
-		.of_match_table = mpc52xx_psc_spi_of_match,
+		.of_match_table = of_match_ptr(mpc52xx_psc_spi_of_match),
 	},
 };
 module_platform_driver(mpc52xx_psc_spi_of_driver);

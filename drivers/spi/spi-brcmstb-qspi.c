@@ -32,7 +32,7 @@ static struct platform_driver brcmstb_qspi_driver = {
 	.driver = {
 		.name		= "brcmstb_qspi",
 		.pm		= &bcm_qspi_pm_ops,
-		.of_match_table = brcmstb_qspi_of_match,
+		.of_match_table = of_match_ptr(brcmstb_qspi_of_match),
 	}
 };
 module_platform_driver(brcmstb_qspi_driver);

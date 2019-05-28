@@ -613,7 +613,7 @@ MODULE_DEVICE_TABLE(of, bcm2835aux_spi_match);
 static struct platform_driver bcm2835aux_spi_driver = {
 	.driver		= {
 		.name		= "spi-bcm2835aux",
-		.of_match_table	= bcm2835aux_spi_match,
+		.of_match_table	= of_match_ptr(bcm2835aux_spi_match),
 	},
 	.probe		= bcm2835aux_spi_probe,
 	.remove		= bcm2835aux_spi_remove,

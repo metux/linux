@@ -676,7 +676,7 @@ static struct platform_driver stm32_qspi_driver = {
 	.remove	= stm32_qspi_remove,
 	.driver	= {
 		.name = "stm32-qspi",
-		.of_match_table = stm32_qspi_match,
+		.of_match_table = of_match_ptr(stm32_qspi_match),
 		.pm = &stm32_qspi_pm_ops,
 	},
 };

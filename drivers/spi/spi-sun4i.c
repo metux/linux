@@ -542,7 +542,7 @@ static struct platform_driver sun4i_spi_driver = {
 	.remove	= sun4i_spi_remove,
 	.driver	= {
 		.name		= "sun4i-spi",
-		.of_match_table	= sun4i_spi_match,
+		.of_match_table	= of_match_ptr(sun4i_spi_match),
 		.pm		= &sun4i_spi_pm_ops,
 	},
 };

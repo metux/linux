@@ -511,7 +511,7 @@ static struct platform_driver bcm63xx_hsspi_driver = {
 	.driver = {
 		.name	= "bcm63xx-hsspi",
 		.pm	= &bcm63xx_hsspi_pm_ops,
-		.of_match_table = bcm63xx_hsspi_of_match,
+		.of_match_table = of_match_ptr(bcm63xx_hsspi_of_match),
 	},
 	.probe		= bcm63xx_hsspi_probe,
 	.remove		= bcm63xx_hsspi_remove,

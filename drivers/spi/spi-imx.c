@@ -1798,7 +1798,7 @@ static int spi_imx_remove(struct platform_device *pdev)
 static struct platform_driver spi_imx_driver = {
 	.driver = {
 		   .name = DRIVER_NAME,
-		   .of_match_table = spi_imx_dt_ids,
+		   .of_match_table = of_match_ptr(spi_imx_dt_ids),
 		   },
 	.id_table = spi_imx_devtype,
 	.probe = spi_imx_probe,

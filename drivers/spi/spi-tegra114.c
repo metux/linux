@@ -1519,7 +1519,7 @@ static struct platform_driver tegra_spi_driver = {
 	.driver = {
 		.name		= "spi-tegra114",
 		.pm		= &tegra_spi_pm_ops,
-		.of_match_table	= tegra_spi_of_match,
+		.of_match_table	= of_match_ptr(tegra_spi_of_match),
 	},
 	.probe =	tegra_spi_probe,
 	.remove =	tegra_spi_remove,

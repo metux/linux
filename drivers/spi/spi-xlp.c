@@ -450,7 +450,7 @@ static struct platform_driver xlp_spi_driver = {
 	.probe	= xlp_spi_probe,
 	.driver = {
 		.name	= "xlp-spi",
-		.of_match_table = xlp_spi_dt_id,
+		.of_match_table = of_match_ptr(xlp_spi_dt_id),
 		.acpi_match_table = ACPI_PTR(xlp_spi_acpi_match),
 	},
 };

@@ -618,7 +618,7 @@ static struct platform_driver mpc512x_psc_spi_of_driver = {
 	.remove = mpc512x_psc_spi_of_remove,
 	.driver = {
 		.name = "mpc512x-psc-spi",
-		.of_match_table = mpc512x_psc_spi_of_match,
+		.of_match_table = of_match_ptr(mpc512x_psc_spi_of_match),
 	},
 };
 module_platform_driver(mpc512x_psc_spi_of_driver);

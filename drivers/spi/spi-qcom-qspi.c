@@ -570,7 +570,7 @@ static struct platform_driver qcom_qspi_driver = {
 	.driver = {
 		.name		= "qcom_qspi",
 		.pm		= &qcom_qspi_dev_pm_ops,
-		.of_match_table = qcom_qspi_dt_match,
+		.of_match_table = of_match_ptr(qcom_qspi_dt_match),
 	},
 	.probe = qcom_qspi_probe,
 	.remove = qcom_qspi_remove,

@@ -529,7 +529,7 @@ static struct platform_driver xilinx_spi_driver = {
 	.remove = xilinx_spi_remove,
 	.driver = {
 		.name = XILINX_SPI_NAME,
-		.of_match_table = xilinx_spi_of_match,
+		.of_match_table = of_match_ptr(xilinx_spi_of_match),
 	},
 };
 module_platform_driver(xilinx_spi_driver);

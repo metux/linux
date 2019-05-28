@@ -1160,7 +1160,7 @@ static struct platform_driver zynqmp_qspi_driver = {
 	.remove = zynqmp_qspi_remove,
 	.driver = {
 		.name = "zynqmp-qspi",
-		.of_match_table = zynqmp_qspi_of_match,
+		.of_match_table = of_match_ptr(zynqmp_qspi_of_match),
 		.pm = &zynqmp_qspi_dev_pm_ops,
 	},
 };

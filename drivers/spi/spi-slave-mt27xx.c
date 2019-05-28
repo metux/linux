@@ -540,7 +540,7 @@ static struct platform_driver mtk_spi_slave_driver = {
 	.driver = {
 		.name = "mtk-spi-slave",
 		.pm	= &mtk_spi_slave_pm,
-		.of_match_table = mtk_spi_slave_of_match,
+		.of_match_table = of_match_ptr(mtk_spi_slave_of_match),
 	},
 	.probe = mtk_spi_slave_probe,
 	.remove = mtk_spi_slave_remove,

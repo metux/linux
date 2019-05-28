@@ -1090,7 +1090,7 @@ static const struct dev_pm_ops nxp_fspi_pm_ops = {
 static struct platform_driver nxp_fspi_driver = {
 	.driver = {
 		.name	= "nxp-fspi",
-		.of_match_table = nxp_fspi_dt_ids,
+		.of_match_table = of_match_ptr(nxp_fspi_dt_ids),
 		.pm =   &nxp_fspi_pm_ops,
 	},
 	.probe          = nxp_fspi_probe,

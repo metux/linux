@@ -598,7 +598,7 @@ static struct platform_driver tegra_sflash_driver = {
 	.driver = {
 		.name		= "spi-tegra-sflash",
 		.pm		= &slink_pm_ops,
-		.of_match_table	= tegra_sflash_of_match,
+		.of_match_table	= of_match_ptr(tegra_sflash_of_match),
 	},
 	.probe =	tegra_sflash_probe,
 	.remove =	tegra_sflash_remove,

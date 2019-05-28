@@ -242,7 +242,7 @@ static struct platform_driver ath79_spi_driver = {
 	.shutdown	= ath79_spi_shutdown,
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = ath79_spi_of_match,
+		.of_match_table = of_match_ptr(ath79_spi_of_match),
 	},
 };
 module_platform_driver(ath79_spi_driver);

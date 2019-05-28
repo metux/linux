@@ -91,7 +91,7 @@ MODULE_DEVICE_TABLE(of, octeon_spi_match);
 static struct platform_driver octeon_spi_driver = {
 	.driver = {
 		.name		= "spi-octeon",
-		.of_match_table = octeon_spi_match,
+		.of_match_table = of_match_ptr(octeon_spi_match),
 	},
 	.probe		= octeon_spi_probe,
 	.remove		= octeon_spi_remove,

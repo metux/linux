@@ -422,7 +422,7 @@ static struct platform_driver falcon_sflash_driver = {
 	.probe	= falcon_sflash_probe,
 	.driver = {
 		.name	= DRV_NAME,
-		.of_match_table = falcon_sflash_match,
+		.of_match_table = of_match_ptr(falcon_sflash_match),
 	}
 };
 

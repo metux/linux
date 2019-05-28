@@ -322,7 +322,7 @@ MODULE_DEVICE_TABLE(i2c, ptn5150_i2c_id);
 static struct i2c_driver ptn5150_i2c_driver = {
 	.driver		= {
 		.name	= "ptn5150",
-		.of_match_table = ptn5150_dt_match,
+		.of_match_table = of_match_ptr(ptn5150_dt_match),
 	},
 	.probe	= ptn5150_i2c_probe,
 	.id_table = ptn5150_i2c_id,

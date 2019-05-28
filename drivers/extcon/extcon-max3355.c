@@ -133,7 +133,7 @@ static struct platform_driver max3355_driver = {
 	.remove		= max3355_remove,
 	.driver		= {
 		.name	= "extcon-max3355",
-		.of_match_table = max3355_match_table,
+		.of_match_table = of_match_ptr(max3355_match_table),
 	},
 };
 

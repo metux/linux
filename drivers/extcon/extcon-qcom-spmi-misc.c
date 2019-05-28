@@ -153,7 +153,7 @@ static struct platform_driver qcom_usb_extcon_driver = {
 	.driver		= {
 		.name	= "extcon-pm8941-misc",
 		.pm	= &qcom_usb_extcon_pm_ops,
-		.of_match_table = qcom_usb_extcon_dt_match,
+		.of_match_table = of_match_ptr(qcom_usb_extcon_dt_match),
 	},
 };
 module_platform_driver(qcom_usb_extcon_driver);

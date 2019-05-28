@@ -301,7 +301,7 @@ static struct platform_driver usb_extcon_driver = {
 	.driver		= {
 		.name	= "extcon-usb-gpio",
 		.pm	= &usb_extcon_pm_ops,
-		.of_match_table = usb_extcon_dt_match,
+		.of_match_table = of_match_ptr(usb_extcon_dt_match),
 	},
 	.id_table = usb_extcon_platform_ids,
 };

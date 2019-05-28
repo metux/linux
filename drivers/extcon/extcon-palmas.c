@@ -427,7 +427,7 @@ static struct platform_driver palmas_usb_driver = {
 	.remove = palmas_usb_remove,
 	.driver = {
 		.name = "palmas-usb",
-		.of_match_table = of_palmas_match_tbl,
+		.of_match_table = of_match_ptr(of_palmas_match_tbl),
 		.pm = &palmas_pm_ops,
 	},
 };

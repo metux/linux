@@ -697,7 +697,7 @@ static struct i2c_driver rt8973a_muic_i2c_driver = {
 	.driver		= {
 		.name	= "rt8973a",
 		.pm	= &rt8973a_muic_pm_ops,
-		.of_match_table = rt8973a_dt_match,
+		.of_match_table = of_match_ptr(rt8973a_dt_match),
 	},
 	.probe	= rt8973a_muic_i2c_probe,
 	.remove	= rt8973a_muic_i2c_remove,

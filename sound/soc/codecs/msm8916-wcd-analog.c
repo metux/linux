@@ -1254,8 +1254,9 @@ MODULE_DEVICE_TABLE(of, pm8916_wcd_analog_spmi_match_table);
 
 static struct platform_driver pm8916_wcd_analog_spmi_driver = {
 	.driver = {
-		   .name = "qcom,pm8916-wcd-spmi-codec",
-		   .of_match_table = pm8916_wcd_analog_spmi_match_table,
+		.name = "qcom,pm8916-wcd-spmi-codec",
+		.of_match_table = of_match_ptr(
+			pm8916_wcd_analog_spmi_match_table),
 	},
 	.probe = pm8916_wcd_analog_spmi_probe,
 	.remove = pm8916_wcd_analog_spmi_remove,

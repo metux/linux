@@ -663,7 +663,7 @@ static struct platform_driver tm2_driver = {
 	.driver = {
 		.name		= "tm2-audio",
 		.pm		= &tm2_pm_ops,
-		.of_match_table	= tm2_of_match,
+		.of_match_table	= of_match_ptr(tm2_of_match),
 	},
 	.probe	= tm2_probe,
 };

@@ -219,7 +219,7 @@ MODULE_DEVICE_TABLE(of, imx_tlv320_dt_ids);
 static struct platform_driver eukrea_tlv320_driver = {
 	.driver = {
 		.name = "eukrea_tlv320",
-		.of_match_table = imx_tlv320_dt_ids,
+		.of_match_table = of_match_ptr(imx_tlv320_dt_ids),
 	},
 	.probe = eukrea_tlv320_probe,
 	.remove = eukrea_tlv320_remove,

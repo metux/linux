@@ -556,7 +556,7 @@ MODULE_DEVICE_TABLE(of, sprd_pcm_of_match);
 static struct platform_driver sprd_pcm_driver = {
 	.driver = {
 		.name = "sprd-pcm-audio",
-		.of_match_table = sprd_pcm_of_match,
+		.of_match_table = of_match_ptr(sprd_pcm_of_match),
 	},
 
 	.probe = sprd_soc_platform_probe,

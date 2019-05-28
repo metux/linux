@@ -157,7 +157,7 @@ MODULE_DEVICE_TABLE(of, snd_soc_mop500_match);
 static struct platform_driver snd_soc_mop500_driver = {
 	.driver = {
 		.name = "snd-soc-mop500",
-		.of_match_table = snd_soc_mop500_match,
+		.of_match_table = of_match_ptr(snd_soc_mop500_match),
 	},
 	.probe = mop500_probe,
 	.remove = mop500_remove,

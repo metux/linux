@@ -621,7 +621,7 @@ static const struct dev_pm_ops sun8i_codec_pm_ops = {
 static struct platform_driver sun8i_codec_driver = {
 	.driver = {
 		.name = "sun8i-codec",
-		.of_match_table = sun8i_codec_of_match,
+		.of_match_table = of_match_ptr(sun8i_codec_of_match),
 		.pm = &sun8i_codec_pm_ops,
 	},
 	.probe = sun8i_codec_probe,

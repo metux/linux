@@ -327,7 +327,7 @@ static int xlnx_spdif_remove(struct platform_device *pdev)
 static struct platform_driver xlnx_spdif_driver = {
 	.driver = {
 		.name = "xlnx-spdif",
-		.of_match_table = xlnx_spdif_of_match,
+		.of_match_table = of_match_ptr(xlnx_spdif_of_match),
 	},
 	.probe = xlnx_spdif_probe,
 	.remove = xlnx_spdif_remove,

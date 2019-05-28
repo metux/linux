@@ -566,7 +566,7 @@ static struct platform_driver fsl_audmix_driver = {
 	.remove = fsl_audmix_remove,
 	.driver = {
 		.name = "fsl-audmix",
-		.of_match_table = fsl_audmix_ids,
+		.of_match_table = of_match_ptr(fsl_audmix_ids),
 		.pm = &fsl_audmix_pm,
 	},
 };

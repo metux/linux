@@ -606,7 +606,7 @@ static const struct dev_pm_ops img_i2s_in_pm_ops = {
 static struct platform_driver img_i2s_in_driver = {
 	.driver = {
 		.name = "img-i2s-in",
-		.of_match_table = img_i2s_in_of_match,
+		.of_match_table = of_match_ptr(img_i2s_in_of_match),
 		.pm = &img_i2s_in_pm_ops
 	},
 	.probe = img_i2s_in_probe,

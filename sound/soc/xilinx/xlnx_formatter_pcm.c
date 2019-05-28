@@ -700,7 +700,7 @@ static struct platform_driver xlnx_formatter_pcm_driver = {
 	.remove	= xlnx_formatter_pcm_remove,
 	.driver	= {
 		.name	= DRV_NAME,
-		.of_match_table	= xlnx_formatter_pcm_of_match,
+		.of_match_table	= of_match_ptr(xlnx_formatter_pcm_of_match),
 	},
 };
 

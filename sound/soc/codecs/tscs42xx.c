@@ -1503,7 +1503,7 @@ MODULE_DEVICE_TABLE(of, tscs42xx_of_match);
 static struct i2c_driver tscs42xx_i2c_driver = {
 	.driver = {
 		.name = "tscs42xx",
-		.of_match_table = tscs42xx_of_match,
+		.of_match_table = of_match_ptr(tscs42xx_of_match),
 	},
 	.probe =    tscs42xx_i2c_probe,
 	.id_table = tscs42xx_i2c_id,

@@ -241,7 +241,7 @@ static struct platform_driver wm8524_codec_driver = {
 	.probe		= wm8524_codec_probe,
 	.driver		= {
 		.name	= "wm8524-codec",
-		.of_match_table = wm8524_of_match,
+		.of_match_table = of_match_ptr(wm8524_of_match),
 	},
 };
 module_platform_driver(wm8524_codec_driver);

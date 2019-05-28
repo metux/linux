@@ -638,7 +638,7 @@ static int wm8510_spi_probe(struct spi_device *spi)
 static struct spi_driver wm8510_spi_driver = {
 	.driver = {
 		.name	= "wm8510",
-		.of_match_table = wm8510_of_match,
+		.of_match_table = of_match_ptr(wm8510_of_match),
 	},
 	.probe		= wm8510_spi_probe,
 };
@@ -677,7 +677,7 @@ MODULE_DEVICE_TABLE(i2c, wm8510_i2c_id);
 static struct i2c_driver wm8510_i2c_driver = {
 	.driver = {
 		.name = "wm8510",
-		.of_match_table = wm8510_of_match,
+		.of_match_table = of_match_ptr(wm8510_of_match),
 	},
 	.probe =    wm8510_i2c_probe,
 	.id_table = wm8510_i2c_id,

@@ -2358,7 +2358,7 @@ MODULE_DEVICE_TABLE(of, mt6358_of_match);
 static struct platform_driver mt6358_platform_driver = {
 	.driver = {
 		.name = "mt6358-sound",
-		.of_match_table = mt6358_of_match,
+		.of_match_table = of_match_ptr(mt6358_of_match),
 	},
 	.probe = mt6358_platform_driver_probe,
 };

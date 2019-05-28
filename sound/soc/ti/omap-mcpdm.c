@@ -591,7 +591,7 @@ MODULE_DEVICE_TABLE(of, omap_mcpdm_of_match);
 static struct platform_driver asoc_mcpdm_driver = {
 	.driver = {
 		.name	= "omap-mcpdm",
-		.of_match_table = omap_mcpdm_of_match,
+		.of_match_table = of_match_ptr(omap_mcpdm_of_match),
 	},
 
 	.probe	= asoc_mcpdm_probe,

@@ -3484,7 +3484,7 @@ MODULE_DEVICE_TABLE(of, tscs454_of_match);
 static struct i2c_driver tscs454_i2c_driver = {
 	.driver = {
 		.name = "tscs454",
-		.of_match_table = tscs454_of_match,
+		.of_match_table = of_match_ptr(tscs454_of_match),
 	},
 	.probe =    tscs454_i2c_probe,
 	.id_table = tscs454_i2c_id,

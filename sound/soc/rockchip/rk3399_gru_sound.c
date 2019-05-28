@@ -566,7 +566,7 @@ static struct platform_driver rockchip_sound_driver = {
 	.probe = rockchip_sound_probe,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = rockchip_sound_of_match,
+		.of_match_table = of_match_ptr(rockchip_sound_of_match),
 #ifdef CONFIG_PM
 		.pm = &snd_soc_pm_ops,
 #endif

@@ -2366,7 +2366,7 @@ static struct platform_driver davinci_mcasp_driver = {
 	.driver		= {
 		.name	= "davinci-mcasp",
 		.pm     = &davinci_mcasp_pm_ops,
-		.of_match_table = mcasp_dt_ids,
+		.of_match_table = of_match_ptr(mcasp_dt_ids),
 	},
 };
 

@@ -1070,7 +1070,7 @@ MODULE_DEVICE_TABLE(of, amd7930_match);
 static struct platform_driver amd7930_sbus_driver = {
 	.driver = {
 		.name = "audio",
-		.of_match_table = amd7930_match,
+		.of_match_table = of_match_ptr(amd7930_match),
 	},
 	.probe		= amd7930_sbus_probe,
 };

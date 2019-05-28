@@ -558,7 +558,7 @@ static const struct dev_pm_ops tegra30_i2s_pm_ops = {
 static struct platform_driver tegra30_i2s_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = tegra30_i2s_of_match,
+		.of_match_table = of_match_ptr(tegra30_i2s_of_match),
 		.pm = &tegra30_i2s_pm_ops,
 	},
 	.probe = tegra30_i2s_platform_probe,

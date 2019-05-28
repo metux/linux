@@ -284,7 +284,7 @@ static struct platform_driver tegra_max98090_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = tegra_max98090_of_match,
+		.of_match_table = of_match_ptr(tegra_max98090_of_match),
 	},
 	.probe = tegra_max98090_probe,
 	.remove = tegra_max98090_remove,

@@ -1002,7 +1002,7 @@ static struct platform_driver fsl_sai_driver = {
 	.driver = {
 		.name = "fsl-sai",
 		.pm = &fsl_sai_pm_ops,
-		.of_match_table = fsl_sai_ids,
+		.of_match_table = of_match_ptr(fsl_sai_ids),
 	},
 };
 module_platform_driver(fsl_sai_driver);

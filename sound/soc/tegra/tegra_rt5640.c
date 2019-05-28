@@ -230,7 +230,7 @@ static struct platform_driver tegra_rt5640_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = tegra_rt5640_of_match,
+		.of_match_table = of_match_ptr(tegra_rt5640_of_match),
 	},
 	.probe = tegra_rt5640_probe,
 	.remove = tegra_rt5640_remove,

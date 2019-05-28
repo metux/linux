@@ -1045,7 +1045,7 @@ static const struct dev_pm_ops stm32_spdifrx_pm_ops = {
 static struct platform_driver stm32_spdifrx_driver = {
 	.driver = {
 		.name = "st,stm32-spdifrx",
-		.of_match_table = stm32_spdifrx_ids,
+		.of_match_table = of_match_ptr(stm32_spdifrx_ids),
 		.pm = &stm32_spdifrx_pm_ops,
 	},
 	.probe = stm32_spdifrx_probe,

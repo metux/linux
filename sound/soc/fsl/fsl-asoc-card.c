@@ -727,7 +727,7 @@ static struct platform_driver fsl_asoc_card_driver = {
 	.driver = {
 		.name = "fsl-asoc-card",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = fsl_asoc_card_dt_ids,
+		.of_match_table = of_match_ptr(fsl_asoc_card_dt_ids),
 	},
 };
 module_platform_driver(fsl_asoc_card_driver);

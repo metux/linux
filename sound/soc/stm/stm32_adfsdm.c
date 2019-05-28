@@ -388,7 +388,7 @@ static int stm32_adfsdm_remove(struct platform_device *pdev)
 static struct platform_driver stm32_adfsdm_driver = {
 	.driver = {
 		   .name = STM32_ADFSDM_DRV_NAME,
-		   .of_match_table = stm32_adfsdm_of_match,
+		   .of_match_table = of_match_ptr(stm32_adfsdm_of_match),
 		   },
 	.probe = stm32_adfsdm_probe,
 	.remove = stm32_adfsdm_remove,

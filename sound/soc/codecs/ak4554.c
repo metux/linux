@@ -86,7 +86,7 @@ MODULE_DEVICE_TABLE(of, ak4554_of_match);
 static struct platform_driver ak4554_driver = {
 	.driver = {
 		.name = "ak4554-adc-dac",
-		.of_match_table = ak4554_of_match,
+		.of_match_table = of_match_ptr(ak4554_of_match),
 	},
 	.probe	= ak4554_soc_probe,
 };

@@ -202,7 +202,7 @@ static struct platform_driver tegra_sgtl5000_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = tegra_sgtl5000_of_match,
+		.of_match_table = of_match_ptr(tegra_sgtl5000_of_match),
 	},
 	.probe = tegra_sgtl5000_driver_probe,
 	.remove = tegra_sgtl5000_driver_remove,

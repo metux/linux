@@ -172,7 +172,7 @@ static int xlnx_i2s_probe(struct platform_device *pdev)
 static struct platform_driver xlnx_i2s_aud_driver = {
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = xlnx_i2s_of_match,
+		.of_match_table = of_match_ptr(xlnx_i2s_of_match),
 	},
 	.probe = xlnx_i2s_probe,
 };

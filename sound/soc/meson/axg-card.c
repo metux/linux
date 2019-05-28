@@ -708,7 +708,7 @@ static struct platform_driver axg_card_pdrv = {
 	.remove = axg_card_remove,
 	.driver = {
 		.name = "axg-sound-card",
-		.of_match_table = axg_card_of_match,
+		.of_match_table = of_match_ptr(axg_card_of_match),
 	},
 };
 module_platform_driver(axg_card_pdrv);

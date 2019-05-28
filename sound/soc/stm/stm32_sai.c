@@ -285,7 +285,7 @@ MODULE_DEVICE_TABLE(of, stm32_sai_ids);
 static struct platform_driver stm32_sai_driver = {
 	.driver = {
 		.name = "st,stm32-sai",
-		.of_match_table = stm32_sai_ids,
+		.of_match_table = of_match_ptr(stm32_sai_ids),
 		.pm = &stm32_sai_pm_ops,
 	},
 	.probe = stm32_sai_probe,

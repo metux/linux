@@ -45,7 +45,7 @@ MODULE_DEVICE_TABLE(of, ssm2602_of_match);
 static struct i2c_driver ssm2602_i2c_driver = {
 	.driver = {
 		.name = "ssm2602",
-		.of_match_table = ssm2602_of_match,
+		.of_match_table = of_match_ptr(ssm2602_of_match),
 	},
 	.probe = ssm2602_i2c_probe,
 	.id_table = ssm2602_i2c_id,

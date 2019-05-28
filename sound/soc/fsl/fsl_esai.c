@@ -1019,7 +1019,7 @@ static struct platform_driver fsl_esai_driver = {
 	.driver = {
 		.name = "fsl-esai-dai",
 		.pm = &fsl_esai_pm_ops,
-		.of_match_table = fsl_esai_dt_ids,
+		.of_match_table = of_match_ptr(fsl_esai_dt_ids),
 	},
 };
 

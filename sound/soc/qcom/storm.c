@@ -131,8 +131,7 @@ MODULE_DEVICE_TABLE(of, storm_device_id);
 static struct platform_driver storm_platform_driver = {
 	.driver = {
 		.name = "storm-audio",
-		.of_match_table =
-			of_match_ptr(storm_device_id),
+		.of_match_table = of_match_ptr(storm_device_id),
 	},
 	.probe = storm_platform_probe,
 };

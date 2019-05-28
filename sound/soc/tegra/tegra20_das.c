@@ -204,7 +204,7 @@ static struct platform_driver tegra20_das_driver = {
 	.remove = tegra20_das_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = tegra20_das_of_match,
+		.of_match_table = of_match_ptr(tegra20_das_of_match),
 	},
 };
 module_platform_driver(tegra20_das_driver);

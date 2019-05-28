@@ -540,7 +540,7 @@ static struct platform_driver axg_tdm_iface_pdrv = {
 	.probe = axg_tdm_iface_probe,
 	.driver = {
 		.name = "axg-tdm-iface",
-		.of_match_table = axg_tdm_iface_of_match,
+		.of_match_table = of_match_ptr(axg_tdm_iface_of_match),
 	},
 };
 module_platform_driver(axg_tdm_iface_pdrv);

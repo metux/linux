@@ -514,7 +514,7 @@ MODULE_DEVICE_TABLE(of, omap_dmic_of_match);
 static struct platform_driver asoc_dmic_driver = {
 	.driver = {
 		.name = "omap-dmic",
-		.of_match_table = omap_dmic_of_match,
+		.of_match_table = of_match_ptr(omap_dmic_of_match),
 	},
 	.probe = asoc_dmic_probe,
 };

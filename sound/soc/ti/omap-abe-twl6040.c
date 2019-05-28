@@ -320,7 +320,7 @@ static struct platform_driver omap_abe_driver = {
 	.driver = {
 		.name = "omap-abe-twl6040",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = omap_abe_of_match,
+		.of_match_table = of_match_ptr(omap_abe_of_match),
 	},
 	.probe = omap_abe_probe,
 };

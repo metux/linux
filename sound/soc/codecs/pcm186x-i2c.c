@@ -50,7 +50,7 @@ static struct i2c_driver pcm186x_i2c_driver = {
 	.id_table	= pcm186x_i2c_id,
 	.driver		= {
 		.name	= "pcm186x",
-		.of_match_table = pcm186x_of_match,
+		.of_match_table = of_match_ptr(pcm186x_of_match),
 	},
 };
 module_i2c_driver(pcm186x_i2c_driver);

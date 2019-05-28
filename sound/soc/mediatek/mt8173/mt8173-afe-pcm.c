@@ -1192,7 +1192,7 @@ static const struct dev_pm_ops mt8173_afe_pm_ops = {
 static struct platform_driver mt8173_afe_pcm_driver = {
 	.driver = {
 		   .name = "mt8173-afe-pcm",
-		   .of_match_table = mt8173_afe_pcm_dt_match,
+		   .of_match_table = of_match_ptr(mt8173_afe_pcm_dt_match),
 		   .pm = &mt8173_afe_pm_ops,
 	},
 	.probe = mt8173_afe_pcm_dev_probe,

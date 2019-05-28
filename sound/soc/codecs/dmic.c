@@ -179,7 +179,7 @@ MODULE_DEVICE_TABLE(of, dmic_dev_match);
 static struct platform_driver dmic_driver = {
 	.driver = {
 		.name = "dmic-codec",
-		.of_match_table = dmic_dev_match,
+		.of_match_table = of_match_ptr(dmic_dev_match),
 	},
 	.probe = dmic_dev_probe,
 };

@@ -472,7 +472,7 @@ static const struct dev_pm_ops img_spdif_out_pm_ops = {
 static struct platform_driver img_spdif_out_driver = {
 	.driver = {
 		.name = "img-spdif-out",
-		.of_match_table = img_spdif_out_of_match,
+		.of_match_table = of_match_ptr(img_spdif_out_of_match),
 		.pm = &img_spdif_out_pm_ops
 	},
 	.probe = img_spdif_out_probe,

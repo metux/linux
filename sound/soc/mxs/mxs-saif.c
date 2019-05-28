@@ -844,7 +844,7 @@ static struct platform_driver mxs_saif_driver = {
 
 	.driver = {
 		.name = "mxs-saif",
-		.of_match_table = mxs_saif_dt_ids,
+		.of_match_table = of_match_ptr(mxs_saif_dt_ids),
 	},
 };
 

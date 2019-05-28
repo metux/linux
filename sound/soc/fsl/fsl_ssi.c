@@ -1688,7 +1688,7 @@ static const struct dev_pm_ops fsl_ssi_pm = {
 static struct platform_driver fsl_ssi_driver = {
 	.driver = {
 		.name = "fsl-ssi-dai",
-		.of_match_table = fsl_ssi_ids,
+		.of_match_table = of_match_ptr(fsl_ssi_ids),
 		.pm = &fsl_ssi_pm,
 	},
 	.probe = fsl_ssi_probe,

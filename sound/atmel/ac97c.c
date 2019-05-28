@@ -884,7 +884,7 @@ static struct platform_driver atmel_ac97c_driver = {
 	.driver		= {
 		.name	= "atmel_ac97c",
 		.pm	= ATMEL_AC97C_PM_OPS,
-		.of_match_table = atmel_ac97c_dt_ids,
+		.of_match_table = of_match_ptr(atmel_ac97c_dt_ids),
 	},
 };
 module_platform_driver(atmel_ac97c_driver);

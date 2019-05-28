@@ -1418,7 +1418,7 @@ MODULE_DEVICE_TABLE(of, mtk_btcvsd_snd_dt_match);
 static struct platform_driver mtk_btcvsd_snd_driver = {
 	.driver = {
 		.name = "mtk-btcvsd-snd",
-		.of_match_table = mtk_btcvsd_snd_dt_match,
+		.of_match_table = of_match_ptr(mtk_btcvsd_snd_dt_match),
 	},
 	.probe = mtk_btcvsd_snd_probe,
 	.remove = mtk_btcvsd_snd_remove,

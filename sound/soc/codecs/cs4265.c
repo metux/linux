@@ -636,7 +636,7 @@ MODULE_DEVICE_TABLE(i2c, cs4265_id);
 static struct i2c_driver cs4265_i2c_driver = {
 	.driver = {
 		.name = "cs4265",
-		.of_match_table = cs4265_of_match,
+		.of_match_table = of_match_ptr(cs4265_of_match),
 	},
 	.id_table = cs4265_id,
 	.probe =    cs4265_i2c_probe,

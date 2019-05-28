@@ -310,7 +310,7 @@ MODULE_DEVICE_TABLE(of, tfa9879_of_match);
 static struct i2c_driver tfa9879_i2c_driver = {
 	.driver = {
 		.name = "tfa9879",
-		.of_match_table = tfa9879_of_match,
+		.of_match_table = of_match_ptr(tfa9879_of_match),
 	},
 	.probe_new = tfa9879_i2c_probe,
 	.id_table = tfa9879_i2c_id,

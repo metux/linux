@@ -615,7 +615,7 @@ MODULE_DEVICE_TABLE(i2c, wm8741_i2c_id);
 static struct i2c_driver wm8741_i2c_driver = {
 	.driver = {
 		.name = "wm8741",
-		.of_match_table = wm8741_of_match,
+		.of_match_table = of_match_ptr(wm8741_of_match),
 	},
 	.probe =    wm8741_i2c_probe,
 	.id_table = wm8741_i2c_id,
@@ -666,7 +666,7 @@ static int wm8741_spi_probe(struct spi_device *spi)
 static struct spi_driver wm8741_spi_driver = {
 	.driver = {
 		.name	= "wm8741",
-		.of_match_table = wm8741_of_match,
+		.of_match_table = of_match_ptr(wm8741_of_match),
 	},
 	.probe		= wm8741_spi_probe,
 };

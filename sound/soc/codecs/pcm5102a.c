@@ -47,7 +47,7 @@ static struct platform_driver pcm5102a_codec_driver = {
 	.probe		= pcm5102a_probe,
 	.driver		= {
 		.name	= "pcm5102a-codec",
-		.of_match_table = pcm5102a_of_match,
+		.of_match_table = of_match_ptr(pcm5102a_of_match),
 	},
 };
 

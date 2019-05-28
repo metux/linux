@@ -1475,7 +1475,7 @@ MODULE_DEVICE_TABLE(of, wm8960_of_match);
 static struct i2c_driver wm8960_i2c_driver = {
 	.driver = {
 		.name = "wm8960",
-		.of_match_table = wm8960_of_match,
+		.of_match_table = of_match_ptr(wm8960_of_match),
 	},
 	.probe =    wm8960_i2c_probe,
 	.remove =   wm8960_i2c_remove,

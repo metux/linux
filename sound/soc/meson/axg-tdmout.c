@@ -267,7 +267,7 @@ static struct platform_driver axg_tdmout_pdrv = {
 	.probe = axg_tdm_formatter_probe,
 	.driver = {
 		.name = "axg-tdmout",
-		.of_match_table = axg_tdmout_of_match,
+		.of_match_table = of_match_ptr(axg_tdmout_of_match),
 	},
 };
 module_platform_driver(axg_tdmout_pdrv);

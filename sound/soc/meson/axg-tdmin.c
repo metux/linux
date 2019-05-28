@@ -224,7 +224,7 @@ static struct platform_driver axg_tdmin_pdrv = {
 	.probe = axg_tdm_formatter_probe,
 	.driver = {
 		.name = "axg-tdmin",
-		.of_match_table = axg_tdmin_of_match,
+		.of_match_table = of_match_ptr(axg_tdmin_of_match),
 	},
 };
 module_platform_driver(axg_tdmin_pdrv);

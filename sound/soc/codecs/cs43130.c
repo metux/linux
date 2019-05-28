@@ -2693,7 +2693,7 @@ MODULE_DEVICE_TABLE(i2c, cs43130_i2c_id);
 static struct i2c_driver cs43130_i2c_driver = {
 	.driver = {
 		.name		= "cs43130",
-		.of_match_table	= cs43130_of_match,
+		.of_match_table	= of_match_ptr(cs43130_of_match),
 		.pm             = &cs43130_runtime_pm,
 	},
 	.id_table	= cs43130_i2c_id,

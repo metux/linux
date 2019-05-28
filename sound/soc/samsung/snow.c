@@ -249,7 +249,7 @@ static struct platform_driver snow_driver = {
 	.driver = {
 		.name = "snow-audio",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = snow_of_match,
+		.of_match_table = of_match_ptr(snow_of_match),
 	},
 	.probe = snow_probe,
 	.remove = snow_remove,

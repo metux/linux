@@ -378,7 +378,7 @@ MODULE_DEVICE_TABLE(of, sta529_of_match);
 static struct i2c_driver sta529_i2c_driver = {
 	.driver = {
 		.name = "sta529",
-		.of_match_table = sta529_of_match,
+		.of_match_table = of_match_ptr(sta529_of_match),
 	},
 	.probe		= sta529_i2c_probe,
 	.id_table	= sta529_i2c_id,

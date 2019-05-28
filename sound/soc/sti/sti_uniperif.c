@@ -502,7 +502,7 @@ static int sti_uniperiph_probe(struct platform_device *pdev)
 static struct platform_driver sti_uniperiph_driver = {
 	.driver = {
 		.name = "sti-uniperiph-dai",
-		.of_match_table = snd_soc_sti_match,
+		.of_match_table = of_match_ptr(snd_soc_sti_match),
 	},
 	.probe = sti_uniperiph_probe,
 };

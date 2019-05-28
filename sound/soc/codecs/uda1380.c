@@ -798,7 +798,7 @@ MODULE_DEVICE_TABLE(of, uda1380_of_match);
 static struct i2c_driver uda1380_i2c_driver = {
 	.driver = {
 		.name =  "uda1380-codec",
-		.of_match_table = uda1380_of_match,
+		.of_match_table = of_match_ptr(uda1380_of_match),
 	},
 	.probe =    uda1380_i2c_probe,
 	.id_table = uda1380_i2c_id,

@@ -601,7 +601,7 @@ static struct platform_driver tegra_platform_hda = {
 	.driver = {
 		.name = "tegra-hda",
 		.pm = &hda_tegra_pm,
-		.of_match_table = hda_tegra_match,
+		.of_match_table = of_match_ptr(hda_tegra_match),
 	},
 	.probe = hda_tegra_probe,
 	.remove = hda_tegra_remove,

@@ -644,7 +644,7 @@ static struct platform_driver axg_pdm_pdrv = {
 	.probe = axg_pdm_probe,
 	.driver = {
 		.name = "axg-pdm",
-		.of_match_table = axg_pdm_of_match,
+		.of_match_table = of_match_ptr(axg_pdm_of_match),
 	},
 };
 module_platform_driver(axg_pdm_pdrv);

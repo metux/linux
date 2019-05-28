@@ -429,7 +429,7 @@ static struct macio_driver i2sbus_drv = {
 	.driver = {
 		.name = "soundbus-i2s",
 		.owner = THIS_MODULE,
-		.of_match_table = i2sbus_match,
+		.of_match_table = of_match_ptr(i2sbus_match),
 	},
 	.probe = i2sbus_probe,
 	.remove = i2sbus_remove,

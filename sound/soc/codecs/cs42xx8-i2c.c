@@ -49,7 +49,7 @@ static struct i2c_driver cs42xx8_i2c_driver = {
 	.driver = {
 		.name = "cs42xx8",
 		.pm = &cs42xx8_pm,
-		.of_match_table = cs42xx8_of_match,
+		.of_match_table = of_match_ptr(cs42xx8_of_match),
 	},
 	.probe = cs42xx8_i2c_probe,
 	.remove = cs42xx8_i2c_remove,

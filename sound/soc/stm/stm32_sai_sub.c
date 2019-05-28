@@ -1516,7 +1516,7 @@ static const struct dev_pm_ops stm32_sai_sub_pm_ops = {
 static struct platform_driver stm32_sai_sub_driver = {
 	.driver = {
 		.name = "st,stm32-sai-sub",
-		.of_match_table = stm32_sai_sub_ids,
+		.of_match_table = of_match_ptr(stm32_sai_sub_ids),
 		.pm = &stm32_sai_sub_pm_ops,
 	},
 	.probe = stm32_sai_sub_probe,

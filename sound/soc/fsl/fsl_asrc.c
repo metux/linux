@@ -1082,7 +1082,7 @@ static struct platform_driver fsl_asrc_driver = {
 	.probe = fsl_asrc_probe,
 	.driver = {
 		.name = "fsl-asrc",
-		.of_match_table = fsl_asrc_ids,
+		.of_match_table = of_match_ptr(fsl_asrc_ids),
 		.pm = &fsl_asrc_pm,
 	},
 };

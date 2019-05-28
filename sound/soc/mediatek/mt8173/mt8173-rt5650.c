@@ -321,7 +321,7 @@ MODULE_DEVICE_TABLE(of, mt8173_rt5650_dt_match);
 static struct platform_driver mt8173_rt5650_driver = {
 	.driver = {
 		   .name = "mtk-rt5650",
-		   .of_match_table = mt8173_rt5650_dt_match,
+		   .of_match_table = of_match_ptr(mt8173_rt5650_dt_match),
 #ifdef CONFIG_PM
 		   .pm = &snd_soc_pm_ops,
 #endif

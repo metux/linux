@@ -237,7 +237,7 @@ static struct platform_driver axg_toddr_pdrv = {
 	.probe = axg_fifo_probe,
 	.driver = {
 		.name = "axg-toddr",
-		.of_match_table = axg_toddr_of_match,
+		.of_match_table = of_match_ptr(axg_toddr_of_match),
 	},
 };
 module_platform_driver(axg_toddr_pdrv);

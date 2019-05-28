@@ -353,7 +353,7 @@ static struct platform_driver spdif_driver = {
 	.probe = zx_spdif_probe,
 	.driver = {
 		.name = "zx-spdif",
-		.of_match_table = zx_spdif_dt_ids,
+		.of_match_table = of_match_ptr(zx_spdif_dt_ids),
 	},
 };
 

@@ -330,7 +330,7 @@ static struct platform_driver omap_twl4030_driver = {
 	.driver = {
 		.name = "omap-twl4030",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = omap_twl4030_of_match,
+		.of_match_table = of_match_ptr(omap_twl4030_of_match),
 	},
 	.probe = omap_twl4030_probe,
 };

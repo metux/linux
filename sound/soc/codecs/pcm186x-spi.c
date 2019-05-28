@@ -50,7 +50,7 @@ static struct spi_driver pcm186x_spi_driver = {
 	.id_table	= pcm186x_spi_id,
 	.driver		= {
 		.name	= "pcm186x",
-		.of_match_table = pcm186x_of_match,
+		.of_match_table = of_match_ptr(pcm186x_of_match),
 	},
 };
 module_spi_driver(pcm186x_spi_driver);

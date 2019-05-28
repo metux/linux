@@ -665,7 +665,7 @@ static struct platform_driver tegra30_ahub_driver = {
 	.remove = tegra30_ahub_remove,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = tegra30_ahub_of_match,
+		.of_match_table = of_match_ptr(tegra30_ahub_of_match),
 		.pm = &tegra30_ahub_pm_ops,
 	},
 };

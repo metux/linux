@@ -1204,8 +1204,9 @@ MODULE_DEVICE_TABLE(of, msm8916_wcd_digital_match_table);
 
 static struct platform_driver msm8916_wcd_digital_driver = {
 	.driver = {
-		   .name = "msm8916-wcd-digital-codec",
-		   .of_match_table = msm8916_wcd_digital_match_table,
+		.name = "msm8916-wcd-digital-codec",
+		.of_match_table = of_match_ptr(
+			msm8916_wcd_digital_match_table),
 	},
 	.probe = msm8916_wcd_digital_probe,
 	.remove = msm8916_wcd_digital_remove,

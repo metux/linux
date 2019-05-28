@@ -813,7 +813,7 @@ static struct platform_driver fsl_micfil_driver = {
 	.driver = {
 		.name = "fsl-micfil-dai",
 		.pm = &fsl_micfil_pm_ops,
-		.of_match_table = fsl_micfil_dt_ids,
+		.of_match_table = of_match_ptr(fsl_micfil_dt_ids),
 	},
 };
 module_platform_driver(fsl_micfil_driver);

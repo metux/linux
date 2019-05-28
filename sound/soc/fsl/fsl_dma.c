@@ -964,7 +964,7 @@ MODULE_DEVICE_TABLE(of, fsl_soc_dma_ids);
 static struct platform_driver fsl_soc_dma_driver = {
 	.driver = {
 		.name = "fsl-pcm-audio",
-		.of_match_table = fsl_soc_dma_ids,
+		.of_match_table = of_match_ptr(fsl_soc_dma_ids),
 	},
 	.probe = fsl_soc_dma_probe,
 	.remove = fsl_soc_dma_remove,

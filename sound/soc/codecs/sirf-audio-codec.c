@@ -563,7 +563,7 @@ static const struct dev_pm_ops sirf_audio_codec_pm_ops = {
 static struct platform_driver sirf_audio_codec_driver = {
 	.driver = {
 		.name = "sirf-audio-codec",
-		.of_match_table = sirf_audio_codec_of_match,
+		.of_match_table = of_match_ptr(sirf_audio_codec_of_match),
 		.pm = &sirf_audio_codec_pm_ops,
 	},
 	.probe = sirf_audio_codec_driver_probe,

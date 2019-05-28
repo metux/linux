@@ -40,7 +40,7 @@ static struct spi_driver wm8804_spi_driver = {
 	.driver = {
 		.name = "wm8804",
 		.pm = &wm8804_pm,
-		.of_match_table = wm8804_of_match,
+		.of_match_table = of_match_ptr(wm8804_of_match),
 	},
 	.probe = wm8804_spi_probe,
 	.remove = wm8804_spi_remove

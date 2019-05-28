@@ -257,7 +257,7 @@ MODULE_DEVICE_TABLE(of, axi_spdif_of_match);
 static struct platform_driver axi_spdif_driver = {
 	.driver = {
 		.name = "axi-spdif",
-		.of_match_table = axi_spdif_of_match,
+		.of_match_table = of_match_ptr(axi_spdif_of_match),
 	},
 	.probe = axi_spdif_probe,
 	.remove = axi_spdif_dev_remove,

@@ -679,7 +679,7 @@ static struct platform_driver graph_card = {
 	.driver = {
 		.name = "asoc-audio-graph-card",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = graph_of_match,
+		.of_match_table = of_match_ptr(graph_of_match),
 	},
 	.probe = graph_probe,
 	.remove = graph_remove,

@@ -213,7 +213,7 @@ static struct platform_driver imx_sgtl5000_driver = {
 	.driver = {
 		.name = "imx-sgtl5000",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = imx_sgtl5000_dt_ids,
+		.of_match_table = of_match_ptr(imx_sgtl5000_dt_ids),
 	},
 	.probe = imx_sgtl5000_probe,
 	.remove = imx_sgtl5000_remove,

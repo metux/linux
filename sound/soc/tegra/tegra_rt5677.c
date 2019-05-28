@@ -315,7 +315,7 @@ static struct platform_driver tegra_rt5677_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = tegra_rt5677_of_match,
+		.of_match_table = of_match_ptr(tegra_rt5677_of_match),
 	},
 	.probe = tegra_rt5677_probe,
 	.remove = tegra_rt5677_remove,

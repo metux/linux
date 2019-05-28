@@ -1828,7 +1828,7 @@ static struct platform_driver rsnd_driver = {
 	.driver	= {
 		.name	= "rcar_sound",
 		.pm	= &rsnd_pm_ops,
-		.of_match_table = rsnd_of_match,
+		.of_match_table = of_match_ptr(rsnd_of_match),
 	},
 	.probe		= rsnd_probe,
 	.remove		= rsnd_remove,

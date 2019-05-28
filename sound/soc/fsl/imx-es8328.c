@@ -225,7 +225,7 @@ MODULE_DEVICE_TABLE(of, imx_es8328_dt_ids);
 static struct platform_driver imx_es8328_driver = {
 	.driver = {
 		.name = "imx-es8328",
-		.of_match_table = imx_es8328_dt_ids,
+		.of_match_table = of_match_ptr(imx_es8328_dt_ids),
 	},
 	.probe = imx_es8328_probe,
 	.remove = imx_es8328_remove,

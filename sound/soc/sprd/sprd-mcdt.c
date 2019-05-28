@@ -1001,7 +1001,7 @@ static struct platform_driver sprd_mcdt_driver = {
 	.remove = sprd_mcdt_remove,
 	.driver = {
 		.name = "sprd-mcdt",
-		.of_match_table = sprd_mcdt_of_match,
+		.of_match_table = of_match_ptr(sprd_mcdt_of_match),
 	},
 };
 

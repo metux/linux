@@ -127,7 +127,7 @@ static struct platform_driver pcm030_fabric_driver = {
 	.remove		= pcm030_fabric_remove,
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table    = pcm030_audio_match,
+		.of_match_table = of_match_ptr(pcm030_audio_match),
 	},
 };
 

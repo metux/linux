@@ -52,7 +52,7 @@ MODULE_DEVICE_TABLE(of, aic32x4_of_id);
 static struct i2c_driver aic32x4_i2c_driver = {
 	.driver = {
 		.name = "tlv320aic32x4",
-		.of_match_table = aic32x4_of_id,
+		.of_match_table = of_match_ptr(aic32x4_of_id),
 	},
 	.probe =    aic32x4_i2c_probe,
 	.remove =   aic32x4_i2c_remove,

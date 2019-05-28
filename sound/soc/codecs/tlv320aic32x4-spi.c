@@ -54,7 +54,7 @@ static struct spi_driver aic32x4_spi_driver = {
 	.driver = {
 		.name = "tlv320aic32x4",
 		.owner = THIS_MODULE,
-		.of_match_table = aic32x4_of_id,
+		.of_match_table = of_match_ptr(aic32x4_of_id),
 	},
 	.probe =    aic32x4_spi_probe,
 	.remove =   aic32x4_spi_remove,

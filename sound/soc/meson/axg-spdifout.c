@@ -446,7 +446,7 @@ static struct platform_driver axg_spdifout_pdrv = {
 	.probe = axg_spdifout_probe,
 	.driver = {
 		.name = "axg-spdifout",
-		.of_match_table = axg_spdifout_of_match,
+		.of_match_table = of_match_ptr(axg_spdifout_of_match),
 	},
 };
 module_platform_driver(axg_spdifout_pdrv);

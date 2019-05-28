@@ -265,7 +265,7 @@ static int wm8728_spi_probe(struct spi_device *spi)
 static struct spi_driver wm8728_spi_driver = {
 	.driver = {
 		.name	= "wm8728",
-		.of_match_table = wm8728_of_match,
+		.of_match_table = of_match_ptr(wm8728_of_match),
 	},
 	.probe		= wm8728_spi_probe,
 };
@@ -304,7 +304,7 @@ MODULE_DEVICE_TABLE(i2c, wm8728_i2c_id);
 static struct i2c_driver wm8728_i2c_driver = {
 	.driver = {
 		.name = "wm8728",
-		.of_match_table = wm8728_of_match,
+		.of_match_table = of_match_ptr(wm8728_of_match),
 	},
 	.probe =    wm8728_i2c_probe,
 	.id_table = wm8728_i2c_id,

@@ -389,7 +389,7 @@ MODULE_DEVICE_TABLE(of, aud96p22_dt_ids);
 static struct i2c_driver aud96p22_i2c_driver = {
 	.driver = {
 		.name = "zx_aud96p22",
-		.of_match_table = aud96p22_dt_ids,
+		.of_match_table = of_match_ptr(aud96p22_dt_ids),
 	},
 	.probe = aud96p22_i2c_probe,
 	.remove = aud96p22_i2c_remove,

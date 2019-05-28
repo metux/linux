@@ -473,7 +473,7 @@ static int sti_sas_driver_probe(struct platform_device *pdev)
 static struct platform_driver sti_sas_platform_driver = {
 	.driver = {
 		.name = "sti-sas-codec",
-		.of_match_table = sti_sas_dev_match,
+		.of_match_table = of_match_ptr(sti_sas_dev_match),
 	},
 	.probe = sti_sas_driver_probe,
 };

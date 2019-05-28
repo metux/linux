@@ -192,7 +192,7 @@ MODULE_DEVICE_TABLE(of, mt8173_max98090_dt_match);
 static struct platform_driver mt8173_max98090_driver = {
 	.driver = {
 		   .name = "mt8173-max98090",
-		   .of_match_table = mt8173_max98090_dt_match,
+		   .of_match_table = of_match_ptr(mt8173_max98090_dt_match),
 #ifdef CONFIG_PM
 		   .pm = &snd_soc_pm_ops,
 #endif

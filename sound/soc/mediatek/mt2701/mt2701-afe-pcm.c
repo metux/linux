@@ -1477,7 +1477,7 @@ static const struct dev_pm_ops mt2701_afe_pm_ops = {
 static struct platform_driver mt2701_afe_pcm_driver = {
 	.driver = {
 		   .name = "mt2701-audio",
-		   .of_match_table = mt2701_afe_pcm_dt_match,
+		   .of_match_table = of_match_ptr(mt2701_afe_pcm_dt_match),
 #ifdef CONFIG_PM
 		   .pm = &mt2701_afe_pm_ops,
 #endif

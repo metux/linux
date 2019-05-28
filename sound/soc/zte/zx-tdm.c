@@ -450,7 +450,7 @@ static struct platform_driver tdm_driver = {
 	.probe = zx_tdm_probe,
 	.driver = {
 		.name = "zx-tdm",
-		.of_match_table = zx_tdm_dt_ids,
+		.of_match_table = of_match_ptr(zx_tdm_dt_ids),
 	},
 };
 module_platform_driver(tdm_driver);

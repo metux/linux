@@ -28,7 +28,7 @@ static int es8328_spi_probe(struct spi_device *spi)
 static struct spi_driver es8328_spi_driver = {
 	.driver = {
 		.name		= "es8328",
-		.of_match_table	= es8328_of_match,
+		.of_match_table	= of_match_ptr(es8328_of_match),
 	},
 	.probe	= es8328_spi_probe,
 };

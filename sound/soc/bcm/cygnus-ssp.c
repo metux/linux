@@ -1381,7 +1381,7 @@ static struct platform_driver cygnus_ssp_driver = {
 	.remove		= cygnus_ssp_remove,
 	.driver		= {
 		.name	= "cygnus-ssp",
-		.of_match_table = cygnus_ssp_of_match,
+		.of_match_table = of_match_ptr(cygnus_ssp_of_match),
 	},
 };
 

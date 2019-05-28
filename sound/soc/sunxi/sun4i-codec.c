@@ -1854,7 +1854,7 @@ static int sun4i_codec_remove(struct platform_device *pdev)
 static struct platform_driver sun4i_codec_driver = {
 	.driver = {
 		.name = "sun4i-codec",
-		.of_match_table = sun4i_codec_of_match,
+		.of_match_table = of_match_ptr(sun4i_codec_of_match),
 	},
 	.probe = sun4i_codec_probe,
 	.remove = sun4i_codec_remove,

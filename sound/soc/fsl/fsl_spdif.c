@@ -1370,7 +1370,7 @@ MODULE_DEVICE_TABLE(of, fsl_spdif_dt_ids);
 static struct platform_driver fsl_spdif_driver = {
 	.driver = {
 		.name = "fsl-spdif-dai",
-		.of_match_table = fsl_spdif_dt_ids,
+		.of_match_table = of_match_ptr(fsl_spdif_dt_ids),
 		.pm = &fsl_spdif_pm,
 	},
 	.probe = fsl_spdif_probe,

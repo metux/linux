@@ -734,7 +734,7 @@ static struct i2c_driver max9860_i2c_driver = {
 	.id_table       = max9860_i2c_id,
 	.driver         = {
 		.name           = "max9860",
-		.of_match_table = max9860_of_match,
+		.of_match_table = of_match_ptr(max9860_of_match),
 		.pm             = &max9860_pm_ops,
 	},
 };

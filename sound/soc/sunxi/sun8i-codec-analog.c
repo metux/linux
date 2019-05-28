@@ -844,7 +844,7 @@ static int sun8i_codec_analog_probe(struct platform_device *pdev)
 static struct platform_driver sun8i_codec_analog_driver = {
 	.driver = {
 		.name = "sun8i-codec-analog",
-		.of_match_table = sun8i_codec_analog_of_match,
+		.of_match_table = of_match_ptr(sun8i_codec_analog_of_match),
 	},
 	.probe = sun8i_codec_analog_probe,
 };

@@ -1071,7 +1071,7 @@ MODULE_DEVICE_TABLE(of, wm8978_of_match);
 static struct i2c_driver wm8978_i2c_driver = {
 	.driver = {
 		.name = "wm8978",
-		.of_match_table = wm8978_of_match,
+		.of_match_table = of_match_ptr(wm8978_of_match),
 	},
 	.probe =    wm8978_i2c_probe,
 	.id_table = wm8978_i2c_id,

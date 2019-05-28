@@ -1048,7 +1048,7 @@ MODULE_DEVICE_TABLE(i2c, wm8580_i2c_id);
 static struct i2c_driver wm8580_i2c_driver = {
 	.driver = {
 		.name = "wm8580",
-		.of_match_table = wm8580_of_match,
+		.of_match_table = of_match_ptr(wm8580_of_match),
 	},
 	.probe =    wm8580_i2c_probe,
 	.id_table = wm8580_i2c_id,

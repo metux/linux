@@ -273,7 +273,7 @@ MODULE_DEVICE_TABLE(of, pistachio_internal_dac_of_match);
 static struct platform_driver pistachio_internal_dac_plat_driver = {
 	.driver = {
 		.name = "img-pistachio-internal-dac",
-		.of_match_table = pistachio_internal_dac_of_match,
+		.of_match_table = of_match_ptr(pistachio_internal_dac_of_match),
 		.pm = &pistachio_internal_dac_pm_ops
 	},
 	.probe = pistachio_internal_dac_probe,

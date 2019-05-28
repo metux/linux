@@ -599,7 +599,7 @@ static struct platform_driver hi6210_i2s_driver = {
 	.probe = hi6210_i2s_probe,
 	.driver = {
 		.name = "hi6210_i2s",
-		.of_match_table = hi6210_i2s_dt_ids,
+		.of_match_table = of_match_ptr(hi6210_i2s_dt_ids),
 	},
 };
 

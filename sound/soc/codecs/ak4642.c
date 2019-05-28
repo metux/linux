@@ -695,7 +695,7 @@ MODULE_DEVICE_TABLE(i2c, ak4642_i2c_id);
 static struct i2c_driver ak4642_i2c_driver = {
 	.driver = {
 		.name = "ak4642-codec",
-		.of_match_table = ak4642_of_match,
+		.of_match_table = of_match_ptr(ak4642_of_match),
 	},
 	.probe		= ak4642_i2c_probe,
 	.id_table	= ak4642_i2c_id,

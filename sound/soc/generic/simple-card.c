@@ -713,7 +713,7 @@ static struct platform_driver asoc_simple_card = {
 	.driver = {
 		.name = "asoc-simple-card",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = simple_of_match,
+		.of_match_table = of_match_ptr(simple_of_match),
 	},
 	.probe = asoc_simple_probe,
 	.remove = asoc_simple_remove,

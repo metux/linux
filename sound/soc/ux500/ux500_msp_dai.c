@@ -847,7 +847,7 @@ MODULE_DEVICE_TABLE(of, ux500_msp_i2s_match);
 static struct platform_driver msp_i2s_driver = {
 	.driver = {
 		.name = "ux500-msp-i2s",
-		.of_match_table = ux500_msp_i2s_match,
+		.of_match_table = of_match_ptr(ux500_msp_i2s_match),
 	},
 	.probe = ux500_msp_drv_probe,
 	.remove = ux500_msp_drv_remove,

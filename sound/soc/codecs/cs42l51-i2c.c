@@ -41,7 +41,7 @@ static const struct dev_pm_ops cs42l51_pm_ops = {
 static struct i2c_driver cs42l51_i2c_driver = {
 	.driver = {
 		.name = "cs42l51",
-		.of_match_table = cs42l51_of_match,
+		.of_match_table = of_match_ptr(cs42l51_of_match),
 		.pm = &cs42l51_pm_ops,
 	},
 	.probe = cs42l51_i2c_probe,

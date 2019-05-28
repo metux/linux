@@ -39,7 +39,7 @@ static int es8328_i2c_probe(struct i2c_client *i2c,
 static struct i2c_driver es8328_i2c_driver = {
 	.driver = {
 		.name		= "es8328",
-		.of_match_table = es8328_of_match,
+		.of_match_table = of_match_ptr(es8328_of_match),
 	},
 	.probe    = es8328_i2c_probe,
 	.id_table = es8328_id,

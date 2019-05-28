@@ -720,7 +720,7 @@ static struct i2c_driver ak4458_i2c_driver = {
 	.driver = {
 		.name = "ak4458",
 		.pm = &ak4458_pm,
-		.of_match_table = ak4458_of_match,
+		.of_match_table = of_match_ptr(ak4458_of_match),
 		},
 	.probe_new = ak4458_i2c_probe,
 	.remove = ak4458_i2c_remove,

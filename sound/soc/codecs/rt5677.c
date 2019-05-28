@@ -5397,7 +5397,7 @@ static int rt5677_i2c_remove(struct i2c_client *i2c)
 static struct i2c_driver rt5677_i2c_driver = {
 	.driver = {
 		.name = RT5677_DRV_NAME,
-		.of_match_table = rt5677_of_match,
+		.of_match_table = of_match_ptr(rt5677_of_match),
 		.acpi_match_table = ACPI_PTR(rt5677_acpi_match),
 	},
 	.probe_new = rt5677_i2c_probe,

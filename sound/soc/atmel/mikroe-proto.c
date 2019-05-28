@@ -162,7 +162,7 @@ MODULE_DEVICE_TABLE(of, snd_proto_of_match);
 static struct platform_driver snd_proto_driver = {
 	.driver = {
 		.name   = "snd-mikroe-proto",
-		.of_match_table = snd_proto_of_match,
+		.of_match_table = of_match_ptr(snd_proto_of_match),
 	},
 	.probe	  = snd_proto_probe,
 	.remove	 = snd_proto_remove,

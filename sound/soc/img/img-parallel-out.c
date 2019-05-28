@@ -315,7 +315,7 @@ static const struct dev_pm_ops img_prl_out_pm_ops = {
 static struct platform_driver img_prl_out_driver = {
 	.driver = {
 		.name = "img-parallel-out",
-		.of_match_table = img_prl_out_of_match,
+		.of_match_table = of_match_ptr(img_prl_out_of_match),
 		.pm = &img_prl_out_pm_ops
 	},
 	.probe = img_prl_out_probe,

@@ -352,7 +352,7 @@ MODULE_DEVICE_TABLE(of, odroid_audio_of_match);
 static struct platform_driver odroid_audio_driver = {
 	.driver = {
 		.name		= "odroid-audio",
-		.of_match_table	= odroid_audio_of_match,
+		.of_match_table	= of_match_ptr(odroid_audio_of_match),
 		.pm		= &snd_soc_pm_ops,
 	},
 	.probe	= odroid_audio_probe,

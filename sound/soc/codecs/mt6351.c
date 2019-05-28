@@ -1490,7 +1490,7 @@ static const struct of_device_id mt6351_of_match[] = {
 static struct platform_driver mt6351_codec_driver = {
 	.driver = {
 		.name = "mt6351-sound",
-		.of_match_table = mt6351_of_match,
+		.of_match_table = of_match_ptr(mt6351_of_match),
 	},
 	.probe = mt6351_codec_driver_probe,
 };

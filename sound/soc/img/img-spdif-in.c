@@ -878,7 +878,7 @@ static const struct dev_pm_ops img_spdif_in_pm_ops = {
 static struct platform_driver img_spdif_in_driver = {
 	.driver = {
 		.name = "img-spdif-in",
-		.of_match_table = img_spdif_in_of_match,
+		.of_match_table = of_match_ptr(img_spdif_in_of_match),
 		.pm = &img_spdif_in_pm_ops
 	},
 	.probe = img_spdif_in_probe,

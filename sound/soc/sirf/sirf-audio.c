@@ -149,7 +149,7 @@ static struct platform_driver sirf_audio_driver = {
 	.driver = {
 		.name = "sirf-audio-card",
 		.pm = &snd_soc_pm_ops,
-		.of_match_table = sirf_audio_of_match,
+		.of_match_table = of_match_ptr(sirf_audio_of_match),
 	},
 	.probe = sirf_audio_probe,
 };

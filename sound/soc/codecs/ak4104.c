@@ -330,7 +330,7 @@ MODULE_DEVICE_TABLE(spi, ak4104_id_table);
 static struct spi_driver ak4104_spi_driver = {
 	.driver  = {
 		.name   = "ak4104",
-		.of_match_table = ak4104_of_match,
+		.of_match_table = of_match_ptr(ak4104_of_match),
 	},
 	.id_table = ak4104_id_table,
 	.probe  = ak4104_spi_probe,

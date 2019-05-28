@@ -2094,7 +2094,7 @@ static struct platform_driver fsi_driver = {
 	.driver 	= {
 		.name	= "fsi-pcm-audio",
 		.pm	= &fsi_pm_ops,
-		.of_match_table = fsi_of_match,
+		.of_match_table = of_match_ptr(fsi_of_match),
 	},
 	.probe		= fsi_probe,
 	.remove		= fsi_remove,

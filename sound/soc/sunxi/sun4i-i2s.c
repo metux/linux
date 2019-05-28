@@ -1232,7 +1232,7 @@ static struct platform_driver sun4i_i2s_driver = {
 	.remove	= sun4i_i2s_remove,
 	.driver	= {
 		.name		= "sun4i-i2s",
-		.of_match_table	= sun4i_i2s_match,
+		.of_match_table	= of_match_ptr(sun4i_i2s_match),
 		.pm		= &sun4i_i2s_pm_ops,
 	},
 };

@@ -343,7 +343,7 @@ static const struct of_device_id ftm_quaddec_match[] = {
 static struct platform_driver ftm_quaddec_driver = {
 	.driver = {
 		.name = "ftm-quaddec",
-		.of_match_table = ftm_quaddec_match,
+		.of_match_table = of_match_ptr(ftm_quaddec_match),
 	},
 	.probe = ftm_quaddec_probe,
 	.remove = ftm_quaddec_remove,

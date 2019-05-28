@@ -742,7 +742,7 @@ static struct platform_driver stm32_lptim_cnt_driver = {
 	.probe = stm32_lptim_cnt_probe,
 	.driver = {
 		.name = "stm32-lptimer-counter",
-		.of_match_table = stm32_lptim_cnt_of_match,
+		.of_match_table = of_match_ptr(stm32_lptim_cnt_of_match),
 		.pm = &stm32_lptim_cnt_pm_ops,
 	},
 };

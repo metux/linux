@@ -354,7 +354,7 @@ static struct platform_driver em_sti_device_driver = {
 	.remove		= em_sti_remove,
 	.driver		= {
 		.name	= "em_sti",
-		.of_match_table = em_sti_dt_ids,
+		.of_match_table = of_match_ptr(em_sti_dt_ids),
 	}
 };
 

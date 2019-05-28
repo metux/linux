@@ -706,7 +706,7 @@ MODULE_DEVICE_TABLE(platform, sun4i_gpadc_id);
 static struct platform_driver sun4i_gpadc_driver = {
 	.driver = {
 		.name = "sun4i-gpadc-iio",
-		.of_match_table = sun4i_gpadc_of_id,
+		.of_match_table = of_match_ptr(sun4i_gpadc_of_id),
 		.pm = &sun4i_gpadc_pm_ops,
 	},
 	.id_table = sun4i_gpadc_id,

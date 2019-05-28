@@ -66,7 +66,7 @@ MODULE_DEVICE_TABLE(of, adxl345_of_match);
 static struct spi_driver adxl345_spi_driver = {
 	.driver = {
 		.name	= "adxl345_spi",
-		.of_match_table = adxl345_of_match,
+		.of_match_table = of_match_ptr(adxl345_of_match),
 	},
 	.probe		= adxl345_spi_probe,
 	.remove		= adxl345_spi_remove,

@@ -548,7 +548,7 @@ MODULE_DEVICE_TABLE(i2c, srf08_id);
 static struct i2c_driver srf08_driver = {
 	.driver = {
 		.name	= "srf08",
-		.of_match_table	= of_srf08_match,
+		.of_match_table	= of_match_ptr(of_srf08_match),
 	},
 	.probe = srf08_probe,
 	.id_table = srf08_id,

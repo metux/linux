@@ -732,7 +732,7 @@ MODULE_DEVICE_TABLE(of, cm36651_of_match);
 static struct i2c_driver cm36651_driver = {
 	.driver = {
 		.name	= "cm36651",
-		.of_match_table = cm36651_of_match,
+		.of_match_table = of_match_ptr(cm36651_of_match),
 	},
 	.probe		= cm36651_probe,
 	.remove		= cm36651_remove,

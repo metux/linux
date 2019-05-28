@@ -536,7 +536,7 @@ MODULE_DEVICE_TABLE(of, sps30_of_match);
 static struct i2c_driver sps30_driver = {
 	.driver = {
 		.name = "sps30",
-		.of_match_table = sps30_of_match,
+		.of_match_table = of_match_ptr(sps30_of_match),
 	},
 	.id_table = sps30_id,
 	.probe_new = sps30_probe,

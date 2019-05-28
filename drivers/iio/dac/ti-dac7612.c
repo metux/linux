@@ -172,7 +172,7 @@ MODULE_DEVICE_TABLE(of, dac7612_of_match);
 static struct spi_driver dac7612_driver = {
 	.driver = {
 		   .name = "ti-dac7612",
-		   .of_match_table = dac7612_of_match,
+		   .of_match_table = of_match_ptr(dac7612_of_match),
 		   },
 	.probe = dac7612_probe,
 	.id_table = dac7612_id,

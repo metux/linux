@@ -59,7 +59,7 @@ static struct i2c_driver bme680_i2c_driver = {
 	.driver = {
 		.name			= "bme680_i2c",
 		.acpi_match_table       = ACPI_PTR(bme680_acpi_match),
-		.of_match_table		= bme680_of_i2c_match,
+		.of_match_table		= of_match_ptr(bme680_of_i2c_match),
 	},
 	.probe = bme680_i2c_probe,
 	.id_table = bme680_i2c_id,

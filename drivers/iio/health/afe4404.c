@@ -613,7 +613,7 @@ MODULE_DEVICE_TABLE(i2c, afe4404_ids);
 static struct i2c_driver afe4404_i2c_driver = {
 	.driver = {
 		.name = AFE4404_DRIVER_NAME,
-		.of_match_table = afe4404_of_match,
+		.of_match_table = of_match_ptr(afe4404_of_match),
 		.pm = &afe4404_pm_ops,
 	},
 	.probe = afe4404_probe,

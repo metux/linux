@@ -388,7 +388,7 @@ static struct platform_driver rockchip_saradc_driver = {
 	.remove		= rockchip_saradc_remove,
 	.driver		= {
 		.name	= "rockchip-saradc",
-		.of_match_table = rockchip_saradc_match,
+		.of_match_table = of_match_ptr(rockchip_saradc_match),
 		.pm	= &rockchip_saradc_pm_ops,
 	},
 };

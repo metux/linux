@@ -555,7 +555,7 @@ static struct platform_driver imx7d_adc_driver = {
 	.probe		= imx7d_adc_probe,
 	.driver		= {
 		.name	= "imx7d_adc",
-		.of_match_table = imx7d_adc_match,
+		.of_match_table = of_match_ptr(imx7d_adc_match),
 		.pm	= &imx7d_adc_pm_ops,
 	},
 };

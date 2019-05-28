@@ -599,7 +599,7 @@ static struct platform_driver sc27xx_adc_driver = {
 	.probe = sc27xx_adc_probe,
 	.driver = {
 		.name = "sc27xx-adc",
-		.of_match_table = sc27xx_adc_of_match,
+		.of_match_table = of_match_ptr(sc27xx_adc_of_match),
 	},
 };
 

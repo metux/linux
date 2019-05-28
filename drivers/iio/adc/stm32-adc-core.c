@@ -639,7 +639,7 @@ static struct platform_driver stm32_adc_driver = {
 	.remove = stm32_adc_remove,
 	.driver = {
 		.name = "stm32-adc-core",
-		.of_match_table = stm32_adc_of_match,
+		.of_match_table = of_match_ptr(stm32_adc_of_match),
 		.pm = &stm32_adc_core_pm_ops,
 	},
 };

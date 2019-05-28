@@ -452,7 +452,7 @@ static struct platform_driver mux_driver = {
 	.probe = mux_probe,
 	.driver = {
 		.name = "iio-mux",
-		.of_match_table = mux_match,
+		.of_match_table = of_match_ptr(mux_match),
 	},
 };
 module_platform_driver(mux_driver);

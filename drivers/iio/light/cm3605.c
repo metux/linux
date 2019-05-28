@@ -317,7 +317,7 @@ MODULE_DEVICE_TABLE(of, cm3605_of_match);
 static struct platform_driver cm3605_driver = {
 	.driver = {
 		.name = "cm3605",
-		.of_match_table = cm3605_of_match,
+		.of_match_table = of_match_ptr(cm3605_of_match),
 		.pm = &cm3605_dev_pm_ops,
 	},
 	.probe = cm3605_probe,

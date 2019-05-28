@@ -607,7 +607,7 @@ MODULE_DEVICE_TABLE(spi, afe4403_ids);
 static struct spi_driver afe4403_spi_driver = {
 	.driver = {
 		.name = AFE4403_DRIVER_NAME,
-		.of_match_table = afe4403_of_match,
+		.of_match_table = of_match_ptr(afe4403_of_match),
 		.pm = &afe4403_pm_ops,
 	},
 	.probe = afe4403_probe,

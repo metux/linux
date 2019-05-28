@@ -260,7 +260,7 @@ MODULE_DEVICE_TABLE(i2c, mb1232_id);
 static struct i2c_driver mb1232_driver = {
 	.driver = {
 		.name	= "maxbotix-mb1232",
-		.of_match_table	= of_mb1232_match,
+		.of_match_table	= of_match_ptr(of_mb1232_match),
 	},
 	.probe = mb1232_probe,
 	.id_table = mb1232_id,

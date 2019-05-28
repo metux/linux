@@ -53,7 +53,7 @@ MODULE_DEVICE_TABLE(of, rm3100_dt_match);
 static struct spi_driver rm3100_driver = {
 	.driver = {
 		.name = "rm3100-spi",
-		.of_match_table = rm3100_dt_match,
+		.of_match_table = of_match_ptr(rm3100_dt_match),
 	},
 	.probe = rm3100_probe,
 };

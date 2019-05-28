@@ -1088,7 +1088,7 @@ MODULE_DEVICE_TABLE(of, ina2xx_of_match);
 static struct i2c_driver ina2xx_driver = {
 	.driver = {
 		   .name = KBUILD_MODNAME,
-		   .of_match_table = ina2xx_of_match,
+		   .of_match_table = of_match_ptr(ina2xx_of_match),
 	},
 	.probe = ina2xx_probe,
 	.remove = ina2xx_remove,

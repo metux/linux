@@ -326,7 +326,7 @@ MODULE_DEVICE_TABLE(of, mpl3115_of_match);
 static struct i2c_driver mpl3115_driver = {
 	.driver = {
 		.name	= "mpl3115",
-		.of_match_table = mpl3115_of_match,
+		.of_match_table = of_match_ptr(mpl3115_of_match),
 		.pm	= MPL3115_PM_OPS,
 	},
 	.probe = mpl3115_probe,

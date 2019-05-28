@@ -430,7 +430,7 @@ MODULE_DEVICE_TABLE(of, cc10001_adc_dt_ids);
 static struct platform_driver cc10001_adc_driver = {
 	.driver = {
 		.name   = "cc10001-adc",
-		.of_match_table = cc10001_adc_dt_ids,
+		.of_match_table = of_match_ptr(cc10001_adc_dt_ids),
 	},
 	.probe	= cc10001_adc_probe,
 	.remove	= cc10001_adc_remove,

@@ -302,7 +302,7 @@ static struct platform_driver srf04_driver = {
 	.probe		= srf04_probe,
 	.driver		= {
 		.name		= "srf04-gpio",
-		.of_match_table	= of_srf04_match,
+		.of_match_table	= of_match_ptr(of_srf04_match),
 	},
 };
 

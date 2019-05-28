@@ -51,7 +51,7 @@ static struct i2c_driver mma7455_i2c_driver = {
 	.id_table = mma7455_i2c_ids,
 	.driver = {
 		.name	= "mma7455-i2c",
-		.of_match_table = mma7455_of_match,
+		.of_match_table = of_match_ptr(mma7455_of_match),
 	},
 };
 module_i2c_driver(mma7455_i2c_driver);

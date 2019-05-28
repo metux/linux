@@ -334,7 +334,7 @@ static int dht11_probe(struct platform_device *pdev)
 static struct platform_driver dht11_driver = {
 	.driver = {
 		.name	= DRIVER_NAME,
-		.of_match_table = dht11_dt_ids,
+		.of_match_table = of_match_ptr(dht11_dt_ids),
 	},
 	.probe  = dht11_probe,
 };

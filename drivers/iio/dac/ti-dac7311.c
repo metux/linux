@@ -325,7 +325,7 @@ MODULE_DEVICE_TABLE(spi, ti_dac_spi_id);
 static struct spi_driver ti_dac_driver = {
 	.driver = {
 		.name		= "ti-dac7311",
-		.of_match_table	= ti_dac_of_id,
+		.of_match_table	= of_match_ptr(ti_dac_of_id),
 	},
 	.probe	  = ti_dac_probe,
 	.remove   = ti_dac_remove,

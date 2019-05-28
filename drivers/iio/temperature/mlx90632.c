@@ -744,7 +744,7 @@ static UNIVERSAL_DEV_PM_OPS(mlx90632_pm_ops, mlx90632_pm_suspend,
 static struct i2c_driver mlx90632_driver = {
 	.driver = {
 		.name	= "mlx90632",
-		.of_match_table = mlx90632_of_match,
+		.of_match_table = of_match_ptr(mlx90632_of_match),
 		.pm	= &mlx90632_pm_ops,
 	},
 	.probe = mlx90632_probe,

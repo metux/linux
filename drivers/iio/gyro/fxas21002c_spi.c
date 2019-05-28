@@ -57,7 +57,7 @@ static struct spi_driver fxas21002c_spi_driver = {
 	.driver = {
 		.name = "fxas21002c_spi",
 		.pm = &fxas21002c_pm_ops,
-		.of_match_table = fxas21002c_spi_of_match,
+		.of_match_table = of_match_ptr(fxas21002c_spi_of_match),
 	},
 	.probe		= fxas21002c_spi_probe,
 	.remove		= fxas21002c_spi_remove,

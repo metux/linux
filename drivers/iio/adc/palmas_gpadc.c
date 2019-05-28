@@ -833,7 +833,7 @@ static struct platform_driver palmas_gpadc_driver = {
 	.driver = {
 		.name = MOD_NAME,
 		.pm = &palmas_pm_ops,
-		.of_match_table = of_palmas_gpadc_match_tbl,
+		.of_match_table = of_match_ptr(of_palmas_gpadc_match_tbl),
 	},
 };
 

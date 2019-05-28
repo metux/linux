@@ -334,7 +334,7 @@ MODULE_DEVICE_TABLE(of, pms7003_of_match);
 static struct serdev_device_driver pms7003_driver = {
 	.driver = {
 		.name = PMS7003_DRIVER_NAME,
-		.of_match_table = pms7003_of_match,
+		.of_match_table = of_match_ptr(pms7003_of_match),
 	},
 	.probe = pms7003_probe,
 };

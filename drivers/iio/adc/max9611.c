@@ -569,7 +569,7 @@ static int max9611_probe(struct i2c_client *client,
 static struct i2c_driver max9611_driver = {
 	.driver = {
 		   .name = DRIVER_NAME,
-		   .of_match_table = max9611_of_table,
+		   .of_match_table = of_match_ptr(max9611_of_table),
 	},
 	.probe = max9611_probe,
 };

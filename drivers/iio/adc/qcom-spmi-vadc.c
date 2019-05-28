@@ -927,7 +927,7 @@ MODULE_DEVICE_TABLE(of, vadc_match_table);
 static struct platform_driver vadc_driver = {
 	.driver = {
 		   .name = "qcom-spmi-vadc",
-		   .of_match_table = vadc_match_table,
+		   .of_match_table = of_match_ptr(vadc_match_table),
 	},
 	.probe = vadc_probe,
 };

@@ -181,7 +181,7 @@ static struct platform_driver stm32_dac_driver = {
 	.remove = stm32_dac_remove,
 	.driver = {
 		.name = "stm32-dac-core",
-		.of_match_table = stm32_dac_of_match,
+		.of_match_table = of_match_ptr(stm32_dac_of_match),
 	},
 };
 module_platform_driver(stm32_dac_driver);

@@ -408,7 +408,7 @@ static struct platform_driver envelope_detector_driver = {
 	.probe = envelope_detector_probe,
 	.driver = {
 		.name = "iio-envelope-detector",
-		.of_match_table = envelope_detector_match,
+		.of_match_table = of_match_ptr(envelope_detector_match),
 	},
 };
 module_platform_driver(envelope_detector_driver);

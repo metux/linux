@@ -266,7 +266,7 @@ static struct i2c_driver mma7660_driver = {
 	.driver = {
 		.name = "mma7660",
 		.pm = MMA7660_PM_OPS,
-		.of_match_table = mma7660_of_match,
+		.of_match_table = of_match_ptr(mma7660_of_match),
 		.acpi_match_table = ACPI_PTR(mma7660_acpi_id),
 	},
 	.probe		= mma7660_probe,

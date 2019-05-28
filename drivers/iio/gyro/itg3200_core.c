@@ -402,7 +402,7 @@ MODULE_DEVICE_TABLE(of, itg3200_of_match);
 static struct i2c_driver itg3200_driver = {
 	.driver = {
 		.name	= "itg3200",
-		.of_match_table = itg3200_of_match,
+		.of_match_table = of_match_ptr(itg3200_of_match),
 		.pm	= &itg3200_pm_ops,
 	},
 	.id_table	= itg3200_id,

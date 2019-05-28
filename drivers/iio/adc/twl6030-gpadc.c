@@ -982,7 +982,7 @@ static struct platform_driver twl6030_gpadc_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.pm	= &twl6030_gpadc_pm_ops,
-		.of_match_table = of_twl6030_match_tbl,
+		.of_match_table = of_match_ptr(of_twl6030_match_tbl),
 	},
 };
 

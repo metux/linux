@@ -935,7 +935,7 @@ static struct i2c_driver tsl2583_driver = {
 	.driver = {
 		.name = "tsl2583",
 		.pm = &tsl2583_pm_ops,
-		.of_match_table = tsl2583_of_match,
+		.of_match_table = of_match_ptr(tsl2583_of_match),
 	},
 	.id_table = tsl2583_idtable,
 	.probe = tsl2583_probe,

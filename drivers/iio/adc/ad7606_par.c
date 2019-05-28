@@ -95,7 +95,7 @@ static struct platform_driver ad7606_driver = {
 	.driver = {
 		.name = "ad7606",
 		.pm = AD7606_PM_OPS,
-		.of_match_table = ad7606_of_match,
+		.of_match_table = of_match_ptr(ad7606_of_match),
 	},
 };
 module_platform_driver(ad7606_driver);

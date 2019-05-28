@@ -383,7 +383,7 @@ MODULE_DEVICE_TABLE(of, max5821_of_match);
 static struct i2c_driver max5821_driver = {
 	.driver = {
 		.name	= "max5821",
-		.of_match_table = max5821_of_match,
+		.of_match_table = of_match_ptr(max5821_of_match),
 		.pm     = &max5821_pm_ops,
 	},
 	.probe		= max5821_probe,

@@ -1125,7 +1125,7 @@ MODULE_DEVICE_TABLE(of, apds9960_of_match);
 static struct i2c_driver apds9960_driver = {
 	.driver = {
 		.name	= APDS9960_DRV_NAME,
-		.of_match_table = apds9960_of_match,
+		.of_match_table = of_match_ptr(apds9960_of_match),
 		.pm	= &apds9960_pm_ops,
 	},
 	.probe		= apds9960_probe,

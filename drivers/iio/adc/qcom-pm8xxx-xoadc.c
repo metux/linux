@@ -1020,7 +1020,7 @@ MODULE_DEVICE_TABLE(of, pm8xxx_xoadc_id_table);
 static struct platform_driver pm8xxx_xoadc_driver = {
 	.driver		= {
 		.name	= "pm8xxx-adc",
-		.of_match_table = pm8xxx_xoadc_id_table,
+		.of_match_table = of_match_ptr(pm8xxx_xoadc_id_table),
 	},
 	.probe		= pm8xxx_xoadc_probe,
 	.remove		= pm8xxx_xoadc_remove,

@@ -302,7 +302,7 @@ MODULE_DEVICE_TABLE(of, hp03_of_match);
 static struct i2c_driver hp03_driver = {
 	.driver = {
 		.name	= "hp03",
-		.of_match_table = hp03_of_match,
+		.of_match_table = of_match_ptr(hp03_of_match),
 	},
 	.probe		= hp03_probe,
 	.remove		= hp03_remove,

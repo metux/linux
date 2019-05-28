@@ -349,7 +349,7 @@ static struct platform_driver rescale_driver = {
 	.probe = rescale_probe,
 	.driver = {
 		.name = "iio-rescale",
-		.of_match_table = rescale_match,
+		.of_match_table = of_match_ptr(rescale_match),
 	},
 };
 module_platform_driver(rescale_driver);

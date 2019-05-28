@@ -973,7 +973,7 @@ static struct i2c_driver us5182d_driver = {
 	.driver = {
 		.name = US5182D_DRV_NAME,
 		.pm = &us5182d_pm_ops,
-		.of_match_table = us5182d_of_match,
+		.of_match_table = of_match_ptr(us5182d_of_match),
 		.acpi_match_table = ACPI_PTR(us5182d_acpi_match),
 	},
 	.probe = us5182d_probe,

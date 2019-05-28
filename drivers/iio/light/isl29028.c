@@ -703,7 +703,7 @@ static struct i2c_driver isl29028_driver = {
 	.driver  = {
 		.name = "isl29028",
 		.pm = &isl29028_pm_ops,
-		.of_match_table = isl29028_of_match,
+		.of_match_table = of_match_ptr(isl29028_of_match),
 	},
 	.probe	 = isl29028_probe,
 	.remove  = isl29028_remove,

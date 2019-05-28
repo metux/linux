@@ -574,7 +574,7 @@ MODULE_DEVICE_TABLE(of, iadc_match_table);
 static struct platform_driver iadc_driver = {
 	.driver = {
 		   .name = "qcom-spmi-iadc",
-		   .of_match_table = iadc_match_table,
+		   .of_match_table = of_match_ptr(iadc_match_table),
 	},
 	.probe = iadc_probe,
 };

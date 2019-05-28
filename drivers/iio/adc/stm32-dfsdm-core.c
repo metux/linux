@@ -452,7 +452,7 @@ static struct platform_driver stm32_dfsdm_driver = {
 	.remove = stm32_dfsdm_core_remove,
 	.driver = {
 		.name = "stm32-dfsdm",
-		.of_match_table = stm32_dfsdm_of_match,
+		.of_match_table = of_match_ptr(stm32_dfsdm_of_match),
 		.pm = &stm32_dfsdm_core_pm_ops,
 	},
 };

@@ -1124,7 +1124,7 @@ MODULE_DEVICE_TABLE(of, ads1015_of_match);
 static struct i2c_driver ads1015_driver = {
 	.driver = {
 		.name = ADS1015_DRV_NAME,
-		.of_match_table = ads1015_of_match,
+		.of_match_table = of_match_ptr(ads1015_of_match),
 		.pm = &ads1015_pm_ops,
 	},
 	.probe		= ads1015_probe,

@@ -1295,7 +1295,7 @@ MODULE_DEVICE_TABLE(of, adis16480_of_match);
 static struct spi_driver adis16480_driver = {
 	.driver = {
 		.name = "adis16480",
-		.of_match_table = adis16480_of_match,
+		.of_match_table = of_match_ptr(adis16480_of_match),
 	},
 	.id_table = adis16480_ids,
 	.probe = adis16480_probe,

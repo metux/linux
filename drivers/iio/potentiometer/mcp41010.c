@@ -190,7 +190,7 @@ MODULE_DEVICE_TABLE(spi, mcp41010_id);
 static struct spi_driver mcp41010_driver = {
 	.driver = {
 		.name	= "mcp41010",
-		.of_match_table = mcp41010_match,
+		.of_match_table = of_match_ptr(mcp41010_match),
 	},
 	.probe		= mcp41010_probe,
 	.id_table	= mcp41010_id,

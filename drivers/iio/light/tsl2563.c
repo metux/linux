@@ -881,7 +881,7 @@ MODULE_DEVICE_TABLE(of, tsl2563_of_match);
 static struct i2c_driver tsl2563_i2c_driver = {
 	.driver = {
 		.name	 = "tsl2563",
-		.of_match_table = tsl2563_of_match,
+		.of_match_table = of_match_ptr(tsl2563_of_match),
 		.pm	= TSL2563_PM_OPS,
 	},
 	.probe		= tsl2563_probe,

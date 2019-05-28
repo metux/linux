@@ -309,7 +309,7 @@ static struct platform_driver stm32_dac_driver = {
 	.probe = stm32_dac_probe,
 	.driver = {
 		.name = "stm32-dac",
-		.of_match_table = stm32_dac_of_match,
+		.of_match_table = of_match_ptr(stm32_dac_of_match),
 	},
 };
 module_platform_driver(stm32_dac_driver);

@@ -320,7 +320,7 @@ MODULE_DEVICE_TABLE(of, bh1750_of_match);
 static struct i2c_driver bh1750_driver = {
 	.driver = {
 		.name = "bh1750",
-		.of_match_table = bh1750_of_match,
+		.of_match_table = of_match_ptr(bh1750_of_match),
 		.pm = &bh1750_pm_ops,
 	},
 	.probe = bh1750_probe,

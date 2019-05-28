@@ -323,7 +323,7 @@ static struct platform_driver aspeed_adc_driver = {
 	.remove = aspeed_adc_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = aspeed_adc_matches,
+		.of_match_table = of_match_ptr(aspeed_adc_matches),
 	}
 };
 

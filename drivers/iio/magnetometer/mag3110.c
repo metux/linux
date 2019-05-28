@@ -646,7 +646,7 @@ MODULE_DEVICE_TABLE(of, mag3110_of_match);
 static struct i2c_driver mag3110_driver = {
 	.driver = {
 		.name	= "mag3110",
-		.of_match_table = mag3110_of_match,
+		.of_match_table = of_match_ptr(mag3110_of_match),
 		.pm	= MAG3110_PM_OPS,
 	},
 	.probe = mag3110_probe,

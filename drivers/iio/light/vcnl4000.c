@@ -419,7 +419,7 @@ MODULE_DEVICE_TABLE(of, vcnl_4000_of_match);
 static struct i2c_driver vcnl4000_driver = {
 	.driver = {
 		.name   = VCNL4000_DRV_NAME,
-		.of_match_table = vcnl_4000_of_match,
+		.of_match_table = of_match_ptr(vcnl_4000_of_match),
 	},
 	.probe  = vcnl4000_probe,
 	.id_table = vcnl4000_id,

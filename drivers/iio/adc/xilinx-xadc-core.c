@@ -1334,7 +1334,7 @@ static struct platform_driver xadc_driver = {
 	.remove = xadc_remove,
 	.driver = {
 		.name = "xadc",
-		.of_match_table = xadc_of_match_table,
+		.of_match_table = of_match_ptr(xadc_of_match_table),
 	},
 };
 module_platform_driver(xadc_driver);

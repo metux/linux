@@ -71,7 +71,7 @@ MODULE_DEVICE_TABLE(of, ad7606_of_match);
 static struct spi_driver ad7606_driver = {
 	.driver = {
 		.name = "ad7606",
-		.of_match_table = ad7606_of_match,
+		.of_match_table = of_match_ptr(ad7606_of_match),
 		.pm = AD7606_PM_OPS,
 	},
 	.probe = ad7606_spi_probe,

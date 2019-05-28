@@ -1353,7 +1353,7 @@ static struct platform_driver meson_sar_adc_driver = {
 	.remove		= meson_sar_adc_remove,
 	.driver		= {
 		.name	= "meson-saradc",
-		.of_match_table = meson_sar_adc_of_match,
+		.of_match_table = of_match_ptr(meson_sar_adc_of_match),
 		.pm = &meson_sar_adc_pm_ops,
 	},
 };

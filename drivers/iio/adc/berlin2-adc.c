@@ -368,7 +368,7 @@ MODULE_DEVICE_TABLE(of, berlin2_adc_match);
 static struct platform_driver berlin2_adc_driver = {
 	.driver	= {
 		.name		= "berlin2-adc",
-		.of_match_table	= berlin2_adc_match,
+		.of_match_table	= of_match_ptr(berlin2_adc_match),
 	},
 	.probe	= berlin2_adc_probe,
 	.remove	= berlin2_adc_remove,

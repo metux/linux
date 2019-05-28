@@ -252,7 +252,7 @@ static struct platform_driver dpot_dac_driver = {
 	.remove = dpot_dac_remove,
 	.driver = {
 		.name = "iio-dpot-dac",
-		.of_match_table = dpot_dac_match,
+		.of_match_table = of_match_ptr(dpot_dac_match),
 	},
 };
 module_platform_driver(dpot_dac_driver);

@@ -1974,7 +1974,7 @@ static const struct dev_pm_ops tsl2772_pm_ops = {
 static struct i2c_driver tsl2772_driver = {
 	.driver = {
 		.name = "tsl2772",
-		.of_match_table = tsl2772_of_match,
+		.of_match_table = of_match_ptr(tsl2772_of_match),
 		.pm = &tsl2772_pm_ops,
 	},
 	.id_table = tsl2772_idtable,

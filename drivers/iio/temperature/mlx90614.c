@@ -645,7 +645,7 @@ static const struct dev_pm_ops mlx90614_pm_ops = {
 static struct i2c_driver mlx90614_driver = {
 	.driver = {
 		.name	= "mlx90614",
-		.of_match_table = mlx90614_of_match,
+		.of_match_table = of_match_ptr(mlx90614_of_match),
 		.pm	= &mlx90614_pm_ops,
 	},
 	.probe = mlx90614_probe,

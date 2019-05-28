@@ -872,7 +872,7 @@ static struct platform_driver stm32_timer_trigger_driver = {
 	.probe = stm32_timer_trigger_probe,
 	.driver = {
 		.name = "stm32-timer-trigger",
-		.of_match_table = stm32_trig_of_match,
+		.of_match_table = of_match_ptr(stm32_trig_of_match),
 	},
 };
 module_platform_driver(stm32_timer_trigger_driver);

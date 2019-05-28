@@ -316,7 +316,7 @@ MODULE_DEVICE_TABLE(of, ds4424_of_match);
 static struct i2c_driver ds4424_driver = {
 	.driver = {
 		.name	= "ds4424",
-		.of_match_table = ds4424_of_match,
+		.of_match_table = of_match_ptr(ds4424_of_match),
 		.pm     = &ds4424_pm_ops,
 	},
 	.probe		= ds4424_probe,

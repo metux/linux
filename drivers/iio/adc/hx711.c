@@ -622,7 +622,7 @@ static struct platform_driver hx711_driver = {
 	.remove		= hx711_remove,
 	.driver		= {
 		.name		= "hx711-gpio",
-		.of_match_table	= of_hx711_match,
+		.of_match_table	= of_match_ptr(of_hx711_match),
 	},
 };
 

@@ -196,7 +196,7 @@ static struct platform_driver lpc18xx_dac_driver = {
 	.remove	= lpc18xx_dac_remove,
 	.driver	= {
 		.name = "lpc18xx-dac",
-		.of_match_table = lpc18xx_dac_match,
+		.of_match_table = of_match_ptr(lpc18xx_dac_match),
 	},
 };
 module_platform_driver(lpc18xx_dac_driver);

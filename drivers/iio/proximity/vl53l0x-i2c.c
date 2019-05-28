@@ -153,7 +153,7 @@ MODULE_DEVICE_TABLE(of, st_vl53l0x_dt_match);
 static struct i2c_driver vl53l0x_driver = {
 	.driver = {
 		.name = "vl53l0x-i2c",
-		.of_match_table = st_vl53l0x_dt_match,
+		.of_match_table = of_match_ptr(st_vl53l0x_dt_match),
 	},
 	.probe_new = vl53l0x_probe,
 };

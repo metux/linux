@@ -663,7 +663,7 @@ static struct i2c_driver vcnl4035_driver = {
 	.driver = {
 		.name   = VCNL4035_DRV_NAME,
 		.pm	= &vcnl4035_pm_ops,
-		.of_match_table = vcnl4035_of_match,
+		.of_match_table = of_match_ptr(vcnl4035_of_match),
 	},
 	.probe  = vcnl4035_probe,
 	.remove	= vcnl4035_remove,

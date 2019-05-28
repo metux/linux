@@ -715,7 +715,7 @@ MODULE_DEVICE_TABLE(of, ads7950_of_table);
 static struct spi_driver ti_ads7950_driver = {
 	.driver = {
 		.name	= "ads7950",
-		.of_match_table = ads7950_of_table,
+		.of_match_table = of_match_ptr(ads7950_of_table),
 	},
 	.probe		= ti_ads7950_probe,
 	.remove		= ti_ads7950_remove,

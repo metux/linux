@@ -324,7 +324,7 @@ static struct platform_driver npcm_adc_driver = {
 	.remove		= npcm_adc_remove,
 	.driver		= {
 		.name	= "npcm_adc",
-		.of_match_table = npcm_adc_match,
+		.of_match_table = of_match_ptr(npcm_adc_match),
 	},
 };
 

@@ -62,7 +62,7 @@ MODULE_DEVICE_TABLE(of, adxl345_of_match);
 static struct i2c_driver adxl345_i2c_driver = {
 	.driver = {
 		.name	= "adxl345_i2c",
-		.of_match_table = adxl345_of_match,
+		.of_match_table = of_match_ptr(adxl345_of_match),
 	},
 	.probe		= adxl345_i2c_probe,
 	.remove		= adxl345_i2c_remove,

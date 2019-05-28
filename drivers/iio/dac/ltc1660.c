@@ -236,7 +236,7 @@ MODULE_DEVICE_TABLE(spi, ltc1660_id);
 static struct spi_driver ltc1660_driver = {
 	.driver = {
 		.name = "ltc1660",
-		.of_match_table = ltc1660_dt_ids,
+		.of_match_table = of_match_ptr(ltc1660_dt_ids),
 		.pm = &ltc1660_pm_ops,
 	},
 	.probe	= ltc1660_probe,

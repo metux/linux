@@ -335,7 +335,7 @@ MODULE_DEVICE_TABLE(of, mt6577_auxadc_of_match);
 static struct platform_driver mt6577_auxadc_driver = {
 	.driver = {
 		.name   = "mt6577-auxadc",
-		.of_match_table = mt6577_auxadc_of_match,
+		.of_match_table = of_match_ptr(mt6577_auxadc_of_match),
 		.pm = &mt6577_auxadc_pm_ops,
 	},
 	.probe	= mt6577_auxadc_probe,

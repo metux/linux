@@ -608,7 +608,7 @@ static struct platform_driver rcar_gyroadc_driver = {
 	.remove         = rcar_gyroadc_remove,
 	.driver         = {
 		.name		= DRIVER_NAME,
-		.of_match_table	= rcar_gyroadc_match,
+		.of_match_table	= of_match_ptr(rcar_gyroadc_match),
 		.pm		= &rcar_gyroadc_pm_ops,
 	},
 };

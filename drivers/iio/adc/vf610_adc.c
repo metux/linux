@@ -968,7 +968,7 @@ static struct platform_driver vf610_adc_driver = {
 	.remove         = vf610_adc_remove,
 	.driver         = {
 		.name   = DRIVER_NAME,
-		.of_match_table = vf610_adc_match,
+		.of_match_table = of_match_ptr(vf610_adc_match),
 		.pm     = &vf610_adc_pm_ops,
 	},
 };

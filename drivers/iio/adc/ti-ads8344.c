@@ -192,7 +192,7 @@ MODULE_DEVICE_TABLE(of, ads8344_of_match);
 static struct spi_driver ads8344_driver = {
 	.driver = {
 		.name = "ads8344",
-		.of_match_table = ads8344_of_match,
+		.of_match_table = of_match_ptr(ads8344_of_match),
 	},
 	.probe = ads8344_probe,
 	.remove = ads8344_remove,

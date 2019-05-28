@@ -43,7 +43,7 @@ MODULE_DEVICE_TABLE(of, rm3100_dt_match);
 static struct i2c_driver rm3100_driver = {
 	.driver = {
 		.name = "rm3100-i2c",
-		.of_match_table = rm3100_dt_match,
+		.of_match_table = of_match_ptr(rm3100_dt_match),
 	},
 	.probe_new = rm3100_probe,
 };

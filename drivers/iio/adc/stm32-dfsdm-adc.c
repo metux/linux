@@ -1706,7 +1706,7 @@ static SIMPLE_DEV_PM_OPS(stm32_dfsdm_adc_pm_ops,
 static struct platform_driver stm32_dfsdm_adc_driver = {
 	.driver = {
 		.name = "stm32-dfsdm-adc",
-		.of_match_table = stm32_dfsdm_adc_match,
+		.of_match_table = of_match_ptr(stm32_dfsdm_adc_match),
 		.pm = &stm32_dfsdm_adc_pm_ops,
 	},
 	.probe = stm32_dfsdm_adc_probe,

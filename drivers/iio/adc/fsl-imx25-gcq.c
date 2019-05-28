@@ -409,7 +409,7 @@ MODULE_DEVICE_TABLE(of, mx25_gcq_ids);
 static struct platform_driver mx25_gcq_driver = {
 	.driver		= {
 		.name	= "mx25-gcq",
-		.of_match_table = mx25_gcq_ids,
+		.of_match_table = of_match_ptr(mx25_gcq_ids),
 	},
 	.probe		= mx25_gcq_probe,
 	.remove		= mx25_gcq_remove,

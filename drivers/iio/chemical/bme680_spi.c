@@ -162,7 +162,7 @@ static struct spi_driver bme680_spi_driver = {
 	.driver = {
 		.name			= "bme680_spi",
 		.acpi_match_table	= ACPI_PTR(bme680_acpi_match),
-		.of_match_table		= bme680_of_spi_match,
+		.of_match_table		= of_match_ptr(bme680_of_spi_match),
 	},
 	.probe = bme680_spi_probe,
 	.id_table = bme680_spi_id,

@@ -684,7 +684,7 @@ MODULE_DEVICE_TABLE(of, ad7124_of_match);
 static struct spi_driver ad71124_driver = {
 	.driver = {
 		.name = "ad7124",
-		.of_match_table = ad7124_of_match,
+		.of_match_table = of_match_ptr(ad7124_of_match),
 	},
 	.probe = ad7124_probe,
 	.remove	= ad7124_remove,

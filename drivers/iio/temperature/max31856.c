@@ -343,7 +343,7 @@ MODULE_DEVICE_TABLE(of, max31856_of_match);
 static struct spi_driver max31856_driver = {
 	.driver = {
 		.name = "max31856",
-		.of_match_table = max31856_of_match,
+		.of_match_table = of_match_ptr(max31856_of_match),
 	},
 	.probe = max31856_probe,
 	.id_table = max31856_id,

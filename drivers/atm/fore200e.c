@@ -2593,7 +2593,7 @@ MODULE_DEVICE_TABLE(of, fore200e_sba_match);
 static struct platform_driver fore200e_sba_driver = {
 	.driver = {
 		.name = "fore_200e",
-		.of_match_table = fore200e_sba_match,
+		.of_match_table = of_match_ptr(fore200e_sba_match),
 	},
 	.probe		= fore200e_sba_probe,
 	.remove		= fore200e_sba_remove,

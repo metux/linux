@@ -158,7 +158,7 @@ static const struct of_device_id ab8500_sysctrl_match[] = {
 static struct platform_driver ab8500_sysctrl_driver = {
 	.driver = {
 		.name = "ab8500-sysctrl",
-		.of_match_table = ab8500_sysctrl_match,
+		.of_match_table = of_match_ptr(ab8500_sysctrl_match),
 	},
 	.probe = ab8500_sysctrl_probe,
 	.remove = ab8500_sysctrl_remove,

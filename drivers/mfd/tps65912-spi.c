@@ -66,7 +66,7 @@ MODULE_DEVICE_TABLE(spi, tps65912_spi_id_table);
 static struct spi_driver tps65912_spi_driver = {
 	.driver		= {
 		.name	= "tps65912",
-		.of_match_table = tps65912_spi_of_match_table,
+		.of_match_table = of_match_ptr(tps65912_spi_of_match_table),
 	},
 	.probe		= tps65912_spi_probe,
 	.remove		= tps65912_spi_remove,

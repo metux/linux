@@ -238,7 +238,7 @@ MODULE_DEVICE_TABLE(of, stw481x_match);
 static struct i2c_driver stw481x_driver = {
 	.driver = {
 		.name	= "stw481x",
-		.of_match_table = stw481x_match,
+		.of_match_table = of_match_ptr(stw481x_match),
 	},
 	.probe		= stw481x_probe,
 	.id_table	= stw481x_id,

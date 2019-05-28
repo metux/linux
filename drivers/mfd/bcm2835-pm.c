@@ -82,7 +82,7 @@ static struct platform_driver bcm2835_pm_driver = {
 	.probe		= bcm2835_pm_probe,
 	.driver = {
 		.name =	"bcm2835-pm",
-		.of_match_table = bcm2835_pm_of_match,
+		.of_match_table = of_match_ptr(bcm2835_pm_of_match),
 	},
 };
 module_platform_driver(bcm2835_pm_driver);

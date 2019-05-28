@@ -233,7 +233,7 @@ static struct spi_driver sprd_pmic_driver = {
 	.driver = {
 		.name = "sc27xx-pmic",
 		.bus = &spi_bus_type,
-		.of_match_table = sprd_pmic_match,
+		.of_match_table = of_match_ptr(sprd_pmic_match),
 	},
 	.probe = sprd_pmic_probe,
 };

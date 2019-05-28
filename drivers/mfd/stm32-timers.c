@@ -266,7 +266,7 @@ static struct platform_driver stm32_timers_driver = {
 	.remove = stm32_timers_remove,
 	.driver	= {
 		.name = "stm32-timers",
-		.of_match_table = stm32_timers_of_match,
+		.of_match_table = of_match_ptr(stm32_timers_of_match),
 	},
 };
 module_platform_driver(stm32_timers_driver);

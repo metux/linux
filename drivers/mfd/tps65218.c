@@ -354,7 +354,7 @@ MODULE_DEVICE_TABLE(i2c, tps65218_id_table);
 static struct i2c_driver tps65218_driver = {
 	.driver		= {
 		.name	= "tps65218",
-		.of_match_table = of_tps65218_match_table,
+		.of_match_table = of_match_ptr(of_tps65218_match_table),
 	},
 	.probe		= tps65218_probe,
 	.id_table       = tps65218_id_table,

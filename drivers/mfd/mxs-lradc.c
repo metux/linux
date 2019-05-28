@@ -247,7 +247,7 @@ static int mxs_lradc_remove(struct platform_device *pdev)
 static struct platform_driver mxs_lradc_driver = {
 	.driver = {
 		.name = "mxs-lradc",
-		.of_match_table = mxs_lradc_dt_ids,
+		.of_match_table = of_match_ptr(mxs_lradc_dt_ids),
 	},
 	.probe = mxs_lradc_probe,
 	.remove = mxs_lradc_remove,

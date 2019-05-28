@@ -115,7 +115,7 @@ static struct platform_driver atmel_flexcom_driver = {
 	.driver	= {
 		.name		= "atmel_flexcom",
 		.pm		= &atmel_flexcom_pm_ops,
-		.of_match_table	= atmel_flexcom_of_match,
+		.of_match_table	= of_match_ptr(atmel_flexcom_of_match),
 	},
 };
 

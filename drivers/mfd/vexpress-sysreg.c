@@ -210,7 +210,7 @@ static const struct of_device_id vexpress_sysreg_match[] = {
 static struct platform_driver vexpress_sysreg_driver = {
 	.driver = {
 		.name = "vexpress-sysreg",
-		.of_match_table = vexpress_sysreg_match,
+		.of_match_table = of_match_ptr(vexpress_sysreg_match),
 	},
 	.probe = vexpress_sysreg_probe,
 };

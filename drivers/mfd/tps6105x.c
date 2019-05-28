@@ -182,7 +182,7 @@ MODULE_DEVICE_TABLE(of, tps6105x_of_match);
 static struct i2c_driver tps6105x_driver = {
 	.driver = {
 		.name	= "tps6105x",
-		.of_match_table = tps6105x_of_match,
+		.of_match_table = of_match_ptr(tps6105x_of_match),
 	},
 	.probe		= tps6105x_probe,
 	.remove		= tps6105x_remove,

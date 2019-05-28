@@ -3181,7 +3181,7 @@ static const struct of_device_id db8500_prcmu_match[] = {
 static struct platform_driver db8500_prcmu_driver = {
 	.driver = {
 		.name = "db8500-prcmu",
-		.of_match_table = db8500_prcmu_match,
+		.of_match_table = of_match_ptr(db8500_prcmu_match),
 	},
 	.probe = db8500_prcmu_probe,
 };

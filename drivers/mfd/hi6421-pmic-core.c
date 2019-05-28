@@ -117,7 +117,7 @@ static int hi6421_pmic_probe(struct platform_device *pdev)
 static struct platform_driver hi6421_pmic_driver = {
 	.driver = {
 		.name = "hi6421_pmic",
-		.of_match_table = of_hi6421_pmic_match,
+		.of_match_table = of_match_ptr(of_hi6421_pmic_match),
 	},
 	.probe	= hi6421_pmic_probe,
 };

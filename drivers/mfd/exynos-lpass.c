@@ -187,7 +187,7 @@ static struct platform_driver exynos_lpass_driver = {
 	.driver = {
 		.name		= "exynos-lpass",
 		.pm		= &lpass_pm_ops,
-		.of_match_table	= exynos_lpass_of_match,
+		.of_match_table	= of_match_ptr(exynos_lpass_of_match),
 	},
 	.probe	= exynos_lpass_probe,
 	.remove	= exynos_lpass_remove,

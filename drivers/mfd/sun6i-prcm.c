@@ -177,7 +177,7 @@ static int sun6i_prcm_probe(struct platform_device *pdev)
 static struct platform_driver sun6i_prcm_driver = {
 	.driver = {
 		.name = "sun6i-prcm",
-		.of_match_table = sun6i_prcm_dt_ids,
+		.of_match_table = of_match_ptr(sun6i_prcm_dt_ids),
 	},
 	.probe = sun6i_prcm_probe,
 };

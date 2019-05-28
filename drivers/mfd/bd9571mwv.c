@@ -220,7 +220,7 @@ MODULE_DEVICE_TABLE(i2c, bd9571mwv_id_table);
 static struct i2c_driver bd9571mwv_driver = {
 	.driver		= {
 		.name	= "bd9571mwv",
-		.of_match_table = bd9571mwv_of_match_table,
+		.of_match_table = of_match_ptr(bd9571mwv_of_match_table),
 	},
 	.probe		= bd9571mwv_probe,
 	.remove		= bd9571mwv_remove,

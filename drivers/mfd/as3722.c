@@ -453,7 +453,7 @@ static const struct dev_pm_ops as3722_pm_ops = {
 static struct i2c_driver as3722_i2c_driver = {
 	.driver = {
 		.name = "as3722",
-		.of_match_table = as3722_of_match,
+		.of_match_table = of_match_ptr(as3722_of_match),
 		.pm = &as3722_pm_ops,
 	},
 	.probe = as3722_i2c_probe,

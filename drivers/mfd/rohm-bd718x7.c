@@ -195,7 +195,7 @@ MODULE_DEVICE_TABLE(of, bd718xx_of_match);
 static struct i2c_driver bd718xx_i2c_driver = {
 	.driver = {
 		.name = "rohm-bd718x7",
-		.of_match_table = bd718xx_of_match,
+		.of_match_table = of_match_ptr(bd718xx_of_match),
 	},
 	.probe = bd718xx_i2c_probe,
 };

@@ -136,7 +136,7 @@ MODULE_DEVICE_TABLE(i2c, tps65086_id_table);
 static struct i2c_driver tps65086_driver = {
 	.driver		= {
 		.name	= "tps65086",
-		.of_match_table = tps65086_of_match_table,
+		.of_match_table = of_match_ptr(tps65086_of_match_table),
 	},
 	.probe		= tps65086_probe,
 	.remove		= tps65086_remove,

@@ -842,7 +842,7 @@ static struct platform_driver usbhs_omap_driver = {
 	.driver = {
 		.name		= (char *)usbhs_driver_name,
 		.pm		= &usbhsomap_dev_pm_ops,
-		.of_match_table = usbhs_omap_dt_ids,
+		.of_match_table = of_match_ptr(usbhs_omap_dt_ids),
 	},
 	.probe		= usbhs_omap_probe,
 	.remove		= usbhs_omap_remove,

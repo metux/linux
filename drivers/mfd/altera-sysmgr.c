@@ -190,7 +190,7 @@ static struct platform_driver altr_sysmgr_driver = {
 	.probe =  sysmgr_probe,
 	.driver = {
 		.name = "altr,system_manager",
-		.of_match_table = altr_sysmgr_of_match,
+		.of_match_table = of_match_ptr(altr_sysmgr_of_match),
 	},
 };
 

@@ -611,7 +611,7 @@ static struct platform_driver pm8xxx_driver = {
 	.remove		= pm8xxx_remove,
 	.driver		= {
 		.name	= "pm8xxx-core",
-		.of_match_table = pm8xxx_id_table,
+		.of_match_table = of_match_ptr(pm8xxx_id_table),
 	},
 };
 

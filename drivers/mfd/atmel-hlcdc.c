@@ -139,7 +139,7 @@ static struct platform_driver atmel_hlcdc_driver = {
 	.probe = atmel_hlcdc_probe,
 	.driver = {
 		.name = "atmel-hlcdc",
-		.of_match_table = atmel_hlcdc_match,
+		.of_match_table = of_match_ptr(atmel_hlcdc_match),
 	},
 };
 module_platform_driver(atmel_hlcdc_driver);

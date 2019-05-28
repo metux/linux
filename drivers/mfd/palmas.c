@@ -732,7 +732,7 @@ MODULE_DEVICE_TABLE(i2c, palmas_i2c_id);
 static struct i2c_driver palmas_i2c_driver = {
 	.driver = {
 		   .name = "palmas",
-		   .of_match_table = of_palmas_match_tbl,
+		   .of_match_table = of_match_ptr(of_palmas_match_tbl),
 	},
 	.probe = palmas_i2c_probe,
 	.remove = palmas_i2c_remove,

@@ -94,7 +94,7 @@ static struct i2c_driver mc13xxx_i2c_driver = {
 	.id_table = mc13xxx_i2c_device_id,
 	.driver = {
 		.name = "mc13xxx",
-		.of_match_table = mc13xxx_dt_ids,
+		.of_match_table = of_match_ptr(mc13xxx_dt_ids),
 	},
 	.probe = mc13xxx_i2c_probe,
 	.remove = mc13xxx_i2c_remove,

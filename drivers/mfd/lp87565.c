@@ -88,7 +88,7 @@ MODULE_DEVICE_TABLE(i2c, lp87565_id_table);
 static struct i2c_driver lp87565_driver = {
 	.driver	= {
 		.name	= "lp87565",
-		.of_match_table = of_lp87565_match_table,
+		.of_match_table = of_match_ptr(of_lp87565_match_table),
 	},
 	.probe = lp87565_probe,
 	.id_table = lp87565_id_table,

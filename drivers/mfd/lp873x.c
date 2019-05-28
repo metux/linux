@@ -85,7 +85,7 @@ MODULE_DEVICE_TABLE(i2c, lp873x_id_table);
 static struct i2c_driver lp873x_driver = {
 	.driver	= {
 		.name	= "lp873x",
-		.of_match_table = of_lp873x_match_table,
+		.of_match_table = of_match_ptr(of_lp873x_match_table),
 	},
 	.probe		= lp873x_probe,
 	.id_table	= lp873x_id_table,

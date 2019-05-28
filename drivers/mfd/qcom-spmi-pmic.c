@@ -137,7 +137,7 @@ static struct spmi_driver pmic_spmi_driver = {
 	.probe = pmic_spmi_probe,
 	.driver = {
 		.name = "pmic-spmi",
-		.of_match_table = pmic_spmi_id_table,
+		.of_match_table = of_match_ptr(pmic_spmi_id_table),
 	},
 };
 module_spmi_driver(pmic_spmi_driver);

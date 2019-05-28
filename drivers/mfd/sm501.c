@@ -1718,7 +1718,7 @@ MODULE_DEVICE_TABLE(of, of_sm501_match_tbl);
 static struct platform_driver sm501_plat_driver = {
 	.driver		= {
 		.name	= "sm501",
-		.of_match_table = of_sm501_match_tbl,
+		.of_match_table = of_match_ptr(of_sm501_match_tbl),
 	},
 	.probe		= sm501_plat_probe,
 	.remove		= sm501_plat_remove,

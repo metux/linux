@@ -697,7 +697,7 @@ static struct platform_driver qcom_rpm_driver = {
 	.remove = qcom_rpm_remove,
 	.driver  = {
 		.name  = "qcom_rpm",
-		.of_match_table = qcom_rpm_of_match,
+		.of_match_table = of_match_ptr(qcom_rpm_of_match),
 	},
 };
 

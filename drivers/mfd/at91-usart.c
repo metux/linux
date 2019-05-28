@@ -61,7 +61,7 @@ static struct platform_driver at91_usart_mfd = {
 	.probe	= at91_usart_mode_probe,
 	.driver	= {
 		.name		= "at91_usart_mode",
-		.of_match_table	= at91_usart_mode_of_match,
+		.of_match_table	= of_match_ptr(at91_usart_mode_of_match),
 	},
 };
 

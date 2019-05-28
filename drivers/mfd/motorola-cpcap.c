@@ -312,7 +312,7 @@ static int cpcap_probe(struct spi_device *spi)
 static struct spi_driver cpcap_driver = {
 	.driver = {
 		.name = "cpcap-core",
-		.of_match_table = cpcap_of_match,
+		.of_match_table = of_match_ptr(cpcap_of_match),
 	},
 	.probe = cpcap_probe,
 };

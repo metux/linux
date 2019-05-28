@@ -317,7 +317,7 @@ static struct platform_driver ssbi_driver = {
 	.probe		= ssbi_probe,
 	.driver		= {
 		.name	= "ssbi",
-		.of_match_table = ssbi_match_table,
+		.of_match_table = of_match_ptr(ssbi_match_table),
 	},
 };
 module_platform_driver(ssbi_driver);

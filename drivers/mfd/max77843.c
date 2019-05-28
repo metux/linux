@@ -205,7 +205,7 @@ static struct i2c_driver max77843_i2c_driver = {
 	.driver	= {
 		.name = "max77843",
 		.pm = &max77843_pm,
-		.of_match_table = max77843_dt_match,
+		.of_match_table = of_match_ptr(max77843_dt_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe = max77843_probe,

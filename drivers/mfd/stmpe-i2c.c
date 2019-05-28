@@ -117,7 +117,7 @@ static struct i2c_driver stmpe_i2c_driver = {
 #ifdef CONFIG_PM
 		.pm = &stmpe_dev_pm_ops,
 #endif
-		.of_match_table = stmpe_of_match,
+		.of_match_table = of_match_ptr(stmpe_of_match),
 	},
 	.probe		= stmpe_i2c_probe,
 	.remove		= stmpe_i2c_remove,

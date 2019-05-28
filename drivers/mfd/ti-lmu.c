@@ -219,7 +219,7 @@ static struct i2c_driver ti_lmu_driver = {
 	.probe = ti_lmu_probe,
 	.driver = {
 		.name = "ti-lmu",
-		.of_match_table = ti_lmu_of_match,
+		.of_match_table = of_match_ptr(ti_lmu_of_match),
 	},
 	.id_table = ti_lmu_ids,
 };

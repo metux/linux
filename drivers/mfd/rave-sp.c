@@ -831,7 +831,7 @@ static struct serdev_device_driver rave_sp_drv = {
 	.probe			= rave_sp_probe,
 	.driver = {
 		.name		= "rave-sp",
-		.of_match_table	= rave_sp_dt_ids,
+		.of_match_table	= of_match_ptr(rave_sp_dt_ids),
 	},
 };
 module_serdev_device_driver(rave_sp_drv);

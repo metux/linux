@@ -773,7 +773,7 @@ SIMPLE_DEV_PM_OPS(rk8xx_pm_ops, rk8xx_suspend, rk8xx_resume);
 static struct i2c_driver rk808_i2c_driver = {
 	.driver = {
 		.name = "rk808",
-		.of_match_table = rk808_of_match,
+		.of_match_table = of_match_ptr(rk808_of_match),
 		.pm = &rk8xx_pm_ops,
 	},
 	.probe    = rk808_probe,

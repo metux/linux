@@ -275,7 +275,7 @@ MODULE_DEVICE_TABLE(of, twl4030_audio_of_match);
 static struct platform_driver twl4030_audio_driver = {
 	.driver		= {
 		.name	= "twl4030-audio",
-		.of_match_table = twl4030_audio_of_match,
+		.of_match_table = of_match_ptr(twl4030_audio_of_match),
 	},
 	.probe		= twl4030_audio_probe,
 	.remove		= twl4030_audio_remove,

@@ -92,7 +92,7 @@ static struct platform_driver stm32_lptimer_driver = {
 	.probe = stm32_lptimer_probe,
 	.driver = {
 		.name = "stm32-lptimer",
-		.of_match_table = stm32_lptimer_of_match,
+		.of_match_table = of_match_ptr(stm32_lptimer_of_match),
 	},
 };
 module_platform_driver(stm32_lptimer_driver);

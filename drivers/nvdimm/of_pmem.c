@@ -109,7 +109,7 @@ static struct platform_driver of_pmem_region_driver = {
 	.remove = of_pmem_region_remove,
 	.driver = {
 		.name = "of_pmem",
-		.of_match_table = of_pmem_region_match,
+		.of_match_table = of_match_ptr(of_pmem_region_match),
 	},
 };
 

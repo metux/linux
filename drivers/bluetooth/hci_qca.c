@@ -1581,7 +1581,7 @@ static struct serdev_device_driver qca_serdev_driver = {
 	.remove = qca_serdev_remove,
 	.driver = {
 		.name = "hci_uart_qca",
-		.of_match_table = qca_bluetooth_of_match,
+		.of_match_table = of_match_ptr(qca_bluetooth_of_match),
 	},
 };
 

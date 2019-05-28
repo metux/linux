@@ -195,7 +195,7 @@ static struct platform_driver btqcomsmd_driver = {
 	.remove = btqcomsmd_remove,
 	.driver  = {
 		.name  = "btqcomsmd",
-		.of_match_table = btqcomsmd_of_match,
+		.of_match_table = of_match_ptr(btqcomsmd_of_match),
 	},
 };
 

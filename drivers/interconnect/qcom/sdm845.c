@@ -828,7 +828,7 @@ static struct platform_driver qnoc_driver = {
 	.remove = qnoc_remove,
 	.driver = {
 		.name = "qnoc-sdm845",
-		.of_match_table = qnoc_of_match,
+		.of_match_table = of_match_ptr(qnoc_of_match),
 	},
 };
 module_platform_driver(qnoc_driver);

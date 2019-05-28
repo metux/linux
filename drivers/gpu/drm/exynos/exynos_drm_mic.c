@@ -467,6 +467,6 @@ struct platform_driver mic_driver = {
 		.name	= "exynos-mic",
 		.pm	= &exynos_mic_pm_ops,
 		.owner	= THIS_MODULE,
-		.of_match_table = exynos_mic_of_match,
+		.of_match_table = of_match_ptr(exynos_mic_of_match),
 	},
 };

@@ -891,7 +891,7 @@ static struct platform_driver dsi_driver = {
 	.remove = dsi_remove,
 	.driver = {
 		.name = "dw-dsi",
-		.of_match_table = dsi_of_match,
+		.of_match_table = of_match_ptr(dsi_of_match),
 	},
 };
 

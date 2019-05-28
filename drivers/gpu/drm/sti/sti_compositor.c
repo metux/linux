@@ -270,7 +270,7 @@ static int sti_compositor_remove(struct platform_device *pdev)
 struct platform_driver sti_compositor_driver = {
 	.driver = {
 		.name = "sti-compositor",
-		.of_match_table = compositor_of_match,
+		.of_match_table = of_match_ptr(compositor_of_match),
 	},
 	.probe = sti_compositor_probe,
 	.remove = sti_compositor_remove,

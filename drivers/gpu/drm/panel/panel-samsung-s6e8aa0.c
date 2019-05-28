@@ -1053,7 +1053,7 @@ static struct mipi_dsi_driver s6e8aa0_driver = {
 	.remove = s6e8aa0_remove,
 	.driver = {
 		.name = "panel-samsung-s6e8aa0",
-		.of_match_table = s6e8aa0_of_match,
+		.of_match_table = of_match_ptr(s6e8aa0_of_match),
 	},
 };
 module_mipi_dsi_driver(s6e8aa0_driver);

@@ -396,7 +396,7 @@ static int gr3d_remove(struct platform_device *pdev)
 struct platform_driver tegra_gr3d_driver = {
 	.driver = {
 		.name = "tegra-gr3d",
-		.of_match_table = tegra_gr3d_match,
+		.of_match_table = of_match_ptr(tegra_gr3d_match),
 	},
 	.probe = gr3d_probe,
 	.remove = gr3d_remove,

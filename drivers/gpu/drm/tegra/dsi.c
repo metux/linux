@@ -1679,7 +1679,7 @@ MODULE_DEVICE_TABLE(of, tegra_dsi_of_match);
 struct platform_driver tegra_dsi_driver = {
 	.driver = {
 		.name = "tegra-dsi",
-		.of_match_table = tegra_dsi_of_match,
+		.of_match_table = of_match_ptr(tegra_dsi_of_match),
 		.pm = &tegra_dsi_pm_ops,
 	},
 	.probe = tegra_dsi_probe,

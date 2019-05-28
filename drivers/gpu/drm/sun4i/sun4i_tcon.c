@@ -1510,7 +1510,7 @@ static struct platform_driver sun4i_tcon_platform_driver = {
 	.remove		= sun4i_tcon_remove,
 	.driver		= {
 		.name		= "sun4i-tcon",
-		.of_match_table	= sun4i_tcon_of_table,
+		.of_match_table	= of_match_ptr(sun4i_tcon_of_table),
 	},
 };
 module_platform_driver(sun4i_tcon_platform_driver);

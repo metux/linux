@@ -887,7 +887,7 @@ struct platform_driver sti_tvout_driver = {
 	.driver = {
 		.name = "sti-tvout",
 		.owner = THIS_MODULE,
-		.of_match_table = tvout_of_match,
+		.of_match_table = of_match_ptr(tvout_of_match),
 	},
 	.probe = sti_tvout_probe,
 	.remove = sti_tvout_remove,

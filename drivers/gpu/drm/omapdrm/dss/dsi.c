@@ -5476,7 +5476,7 @@ struct platform_driver omap_dsihw_driver = {
 	.driver         = {
 		.name   = "omapdss_dsi",
 		.pm	= &dsi_pm_ops,
-		.of_match_table = dsi_of_match,
+		.of_match_table = of_match_ptr(dsi_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

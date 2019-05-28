@@ -1286,6 +1286,6 @@ struct platform_driver fimd_driver = {
 		.name	= "exynos4-fb",
 		.owner	= THIS_MODULE,
 		.pm	= &exynos_fimd_pm_ops,
-		.of_match_table = fimd_driver_dt_match,
+		.of_match_table = of_match_ptr(fimd_driver_dt_match),
 	},
 };

@@ -406,7 +406,7 @@ static int host1x_remove(struct platform_device *pdev)
 static struct platform_driver tegra_host1x_driver = {
 	.driver = {
 		.name = "tegra-host1x",
-		.of_match_table = host1x_of_match,
+		.of_match_table = of_match_ptr(host1x_of_match),
 	},
 	.probe = host1x_probe,
 	.remove = host1x_remove,

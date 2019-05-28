@@ -1744,7 +1744,7 @@ static const struct dev_pm_ops tegra_hdmi_pm_ops = {
 struct platform_driver tegra_hdmi_driver = {
 	.driver = {
 		.name = "tegra-hdmi",
-		.of_match_table = tegra_hdmi_of_match,
+		.of_match_table = of_match_ptr(tegra_hdmi_of_match),
 		.pm = &tegra_hdmi_pm_ops,
 	},
 	.probe = tegra_hdmi_probe,

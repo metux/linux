@@ -1070,7 +1070,7 @@ struct platform_driver dw_mipi_dsi_rockchip_driver = {
 	.probe		= dw_mipi_dsi_rockchip_probe,
 	.remove		= dw_mipi_dsi_rockchip_remove,
 	.driver		= {
-		.of_match_table = dw_mipi_dsi_rockchip_dt_ids,
+		.of_match_table = of_match_ptr(dw_mipi_dsi_rockchip_dt_ids),
 		.name	= "dw-mipi-dsi-rockchip",
 	},
 };

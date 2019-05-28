@@ -3092,7 +3092,7 @@ static void panel_simple_platform_shutdown(struct platform_device *pdev)
 static struct platform_driver panel_simple_platform_driver = {
 	.driver = {
 		.name = "panel-simple",
-		.of_match_table = platform_of_match,
+		.of_match_table = of_match_ptr(platform_of_match),
 	},
 	.probe = panel_simple_platform_probe,
 	.remove = panel_simple_platform_remove,
@@ -3386,7 +3386,7 @@ static void panel_simple_dsi_shutdown(struct mipi_dsi_device *dsi)
 static struct mipi_dsi_driver panel_simple_dsi_driver = {
 	.driver = {
 		.name = "panel-simple-dsi",
-		.of_match_table = dsi_of_match,
+		.of_match_table = of_match_ptr(dsi_of_match),
 	},
 	.probe = panel_simple_dsi_probe,
 	.remove = panel_simple_dsi_remove,

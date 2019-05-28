@@ -85,7 +85,7 @@ static struct platform_driver tvc_connector_driver = {
 	.remove	= __exit_p(tvc_remove),
 	.driver	= {
 		.name	= "connector-analog-tv",
-		.of_match_table = tvc_of_match,
+		.of_match_table = of_match_ptr(tvc_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

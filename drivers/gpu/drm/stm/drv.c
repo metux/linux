@@ -247,7 +247,7 @@ static struct platform_driver stm_drm_platform_driver = {
 	.remove = stm_drm_platform_remove,
 	.driver = {
 		.name = "stm32-display",
-		.of_match_table = drv_dt_ids,
+		.of_match_table = of_match_ptr(drv_dt_ids),
 		.pm = &drv_pm_ops,
 	},
 };

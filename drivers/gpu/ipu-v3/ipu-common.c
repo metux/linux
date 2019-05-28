@@ -1529,7 +1529,7 @@ static int ipu_remove(struct platform_device *pdev)
 static struct platform_driver imx_ipu_driver = {
 	.driver = {
 		.name = "imx-ipuv3",
-		.of_match_table = imx_ipu_dt_ids,
+		.of_match_table = of_match_ptr(imx_ipu_dt_ids),
 	},
 	.probe = ipu_probe,
 	.remove = ipu_remove,

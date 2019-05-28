@@ -298,7 +298,7 @@ static struct platform_driver sun8i_tcon_top_platform_driver = {
 	.remove		= sun8i_tcon_top_remove,
 	.driver		= {
 		.name		= "sun8i-tcon-top",
-		.of_match_table	= sun8i_tcon_top_of_table,
+		.of_match_table	= of_match_ptr(sun8i_tcon_top_of_table),
 	},
 };
 module_platform_driver(sun8i_tcon_top_platform_driver);

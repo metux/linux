@@ -770,7 +770,7 @@ MODULE_DEVICE_TABLE(of, ti_sn_bridge_match_table);
 static struct i2c_driver ti_sn_bridge_driver = {
 	.driver = {
 		.name = "ti_sn65dsi86",
-		.of_match_table = ti_sn_bridge_match_table,
+		.of_match_table = of_match_ptr(ti_sn_bridge_match_table),
 		.pm = &ti_sn_bridge_pm_ops,
 	},
 	.probe = ti_sn_bridge_probe,

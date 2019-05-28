@@ -462,7 +462,7 @@ static void kingdisplay_panel_shutdown(struct mipi_dsi_device *dsi)
 static struct mipi_dsi_driver kingdisplay_panel_driver = {
 	.driver = {
 		.name = "panel-kingdisplay-kd097d04",
-		.of_match_table = kingdisplay_of_match,
+		.of_match_table = of_match_ptr(kingdisplay_of_match),
 	},
 	.probe = kingdisplay_panel_probe,
 	.remove = kingdisplay_panel_remove,

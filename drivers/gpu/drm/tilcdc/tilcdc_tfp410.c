@@ -370,7 +370,7 @@ struct platform_driver tfp410_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "tfp410",
-		.of_match_table = tfp410_of_match,
+		.of_match_table = of_match_ptr(tfp410_of_match),
 	},
 };
 

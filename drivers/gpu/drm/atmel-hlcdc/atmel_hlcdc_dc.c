@@ -942,7 +942,7 @@ static struct platform_driver atmel_hlcdc_dc_platform_driver = {
 	.driver	= {
 		.name	= "atmel-hlcdc-display-controller",
 		.pm	= &atmel_hlcdc_dc_drm_pm_ops,
-		.of_match_table = atmel_hlcdc_dc_of_match,
+		.of_match_table = of_match_ptr(atmel_hlcdc_dc_of_match),
 	},
 };
 module_platform_driver(atmel_hlcdc_dc_platform_driver);

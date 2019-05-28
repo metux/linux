@@ -339,6 +339,6 @@ struct platform_driver mtk_disp_ovl_driver = {
 	.driver		= {
 		.name	= "mediatek-disp-ovl",
 		.owner	= THIS_MODULE,
-		.of_match_table = mtk_disp_ovl_driver_dt_match,
+		.of_match_table = of_match_ptr(mtk_disp_ovl_driver_dt_match),
 	},
 };

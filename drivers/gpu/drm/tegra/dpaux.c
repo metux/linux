@@ -652,7 +652,7 @@ MODULE_DEVICE_TABLE(of, tegra_dpaux_of_match);
 struct platform_driver tegra_dpaux_driver = {
 	.driver = {
 		.name = "tegra-dpaux",
-		.of_match_table = tegra_dpaux_of_match,
+		.of_match_table = of_match_ptr(tegra_dpaux_of_match),
 		.pm = &tegra_dpaux_pm_ops,
 	},
 	.probe = tegra_dpaux_probe,

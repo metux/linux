@@ -248,7 +248,7 @@ static struct platform_driver thc63_driver = {
 	.remove	= thc63_remove,
 	.driver	= {
 		.name		= "thc63lvd1024",
-		.of_match_table	= thc63_match,
+		.of_match_table	= of_match_ptr(thc63_match),
 	},
 };
 module_platform_driver(thc63_driver);

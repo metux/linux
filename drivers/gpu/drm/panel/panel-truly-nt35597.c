@@ -669,7 +669,7 @@ MODULE_DEVICE_TABLE(of, truly_nt35597_of_match);
 static struct mipi_dsi_driver truly_nt35597_driver = {
 	.driver = {
 		.name = "panel-truly-nt35597",
-		.of_match_table = truly_nt35597_of_match,
+		.of_match_table = of_match_ptr(truly_nt35597_of_match),
 	},
 	.probe = truly_nt35597_probe,
 	.remove = truly_nt35597_remove,

@@ -1021,7 +1021,7 @@ static struct platform_driver meson_dw_hdmi_platform_driver = {
 	.remove		= meson_dw_hdmi_remove,
 	.driver		= {
 		.name		= DRIVER_NAME,
-		.of_match_table	= meson_dw_hdmi_of_table,
+		.of_match_table	= of_match_ptr(meson_dw_hdmi_of_table),
 	},
 };
 module_platform_driver(meson_dw_hdmi_platform_driver);

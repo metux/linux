@@ -439,7 +439,7 @@ static struct spi_driver st7789v_driver = {
 	.remove = st7789v_remove,
 	.driver = {
 		.name = "st7789v",
-		.of_match_table = st7789v_of_match,
+		.of_match_table = of_match_ptr(st7789v_of_match),
 	},
 };
 module_spi_driver(st7789v_driver);

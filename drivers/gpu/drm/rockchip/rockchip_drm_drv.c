@@ -460,7 +460,7 @@ static struct platform_driver rockchip_drm_platform_driver = {
 	.shutdown = rockchip_drm_platform_shutdown,
 	.driver = {
 		.name = "rockchip-drm",
-		.of_match_table = rockchip_drm_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_drm_dt_ids),
 		.pm = &rockchip_drm_pm_ops,
 	},
 };

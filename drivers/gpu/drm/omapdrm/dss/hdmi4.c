@@ -810,7 +810,7 @@ struct platform_driver omapdss_hdmi4hw_driver = {
 	.remove		= hdmi4_remove,
 	.driver         = {
 		.name   = "omapdss_hdmi",
-		.of_match_table = hdmi_of_match,
+		.of_match_table = of_match_ptr(hdmi_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

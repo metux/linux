@@ -635,7 +635,7 @@ static struct platform_driver tilcdc_platform_driver = {
 	.driver     = {
 		.name   = "tilcdc",
 		.pm     = &tilcdc_pm_ops,
-		.of_match_table = tilcdc_of_match,
+		.of_match_table = of_match_ptr(tilcdc_of_match),
 	},
 };
 

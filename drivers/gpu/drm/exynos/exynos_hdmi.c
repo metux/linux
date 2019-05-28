@@ -2112,6 +2112,6 @@ struct platform_driver hdmi_driver = {
 		.name	= "exynos-hdmi",
 		.owner	= THIS_MODULE,
 		.pm	= &exynos_hdmi_pm_ops,
-		.of_match_table = hdmi_match_types,
+		.of_match_table = of_match_ptr(hdmi_match_types),
 	},
 };

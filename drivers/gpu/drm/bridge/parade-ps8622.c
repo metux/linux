@@ -621,7 +621,7 @@ static struct i2c_driver ps8622_driver = {
 	.remove		= ps8622_remove,
 	.driver		= {
 		.name	= "ps8622",
-		.of_match_table = ps8622_devices,
+		.of_match_table = of_match_ptr(ps8622_devices),
 	},
 };
 module_i2c_driver(ps8622_driver);

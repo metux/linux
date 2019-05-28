@@ -481,7 +481,7 @@ static const struct dev_pm_ops vic_pm_ops = {
 struct platform_driver tegra_vic_driver = {
 	.driver = {
 		.name = "tegra-vic",
-		.of_match_table = vic_match,
+		.of_match_table = of_match_ptr(vic_match),
 		.pm = &vic_pm_ops
 	},
 	.probe = vic_probe,

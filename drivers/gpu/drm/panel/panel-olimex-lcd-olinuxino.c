@@ -316,7 +316,7 @@ MODULE_DEVICE_TABLE(of, lcd_olinuxino_of_ids);
 static struct i2c_driver lcd_olinuxino_driver = {
 	.driver = {
 		.name = "lcd_olinuxino",
-		.of_match_table = lcd_olinuxino_of_ids,
+		.of_match_table = of_match_ptr(lcd_olinuxino_of_ids),
 	},
 	.probe = lcd_olinuxino_probe,
 	.remove = lcd_olinuxino_remove,

@@ -139,7 +139,7 @@ static struct platform_driver komeda_platform_driver = {
 	.remove	= komeda_platform_remove,
 	.driver	= {
 		.name = "komeda",
-		.of_match_table	= komeda_of_match,
+		.of_match_table	= of_match_ptr(komeda_of_match),
 		.pm = NULL,
 	},
 };

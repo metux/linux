@@ -670,7 +670,7 @@ static struct platform_driver sun4i_tv_platform_driver = {
 	.remove		= sun4i_tv_remove,
 	.driver		= {
 		.name		= "sun4i-tve",
-		.of_match_table	= sun4i_tv_of_table,
+		.of_match_table	= of_match_ptr(sun4i_tv_of_table),
 	},
 };
 module_platform_driver(sun4i_tv_platform_driver);

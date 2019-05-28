@@ -1618,6 +1618,6 @@ struct platform_driver g2d_driver = {
 		.name	= "exynos-drm-g2d",
 		.owner	= THIS_MODULE,
 		.pm	= &g2d_pm_ops,
-		.of_match_table = exynos_g2d_match,
+		.of_match_table = of_match_ptr(exynos_g2d_match),
 	},
 };

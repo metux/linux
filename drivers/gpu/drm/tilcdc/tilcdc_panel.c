@@ -412,7 +412,7 @@ struct platform_driver panel_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = "tilcdc-panel",
-		.of_match_table = panel_of_match,
+		.of_match_table = of_match_ptr(panel_of_match),
 	},
 };
 

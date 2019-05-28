@@ -492,7 +492,7 @@ static struct mipi_dsi_driver tc358764_driver = {
 	.driver = {
 		.name = "tc358764",
 		.owner = THIS_MODULE,
-		.of_match_table = tc358764_of_match,
+		.of_match_table = of_match_ptr(tc358764_of_match),
 	},
 };
 module_mipi_dsi_driver(tc358764_driver);

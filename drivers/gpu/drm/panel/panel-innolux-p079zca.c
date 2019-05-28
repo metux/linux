@@ -558,7 +558,7 @@ static void innolux_panel_shutdown(struct mipi_dsi_device *dsi)
 static struct mipi_dsi_driver innolux_panel_driver = {
 	.driver = {
 		.name = "panel-innolux-p079zca",
-		.of_match_table = innolux_of_match,
+		.of_match_table = of_match_ptr(innolux_of_match),
 	},
 	.probe = innolux_panel_probe,
 	.remove = innolux_panel_remove,

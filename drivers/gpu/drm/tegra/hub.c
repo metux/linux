@@ -959,7 +959,7 @@ MODULE_DEVICE_TABLE(of, tegra_display_hub_of_match);
 struct platform_driver tegra_display_hub_driver = {
 	.driver = {
 		.name = "tegra-display-hub",
-		.of_match_table = tegra_display_hub_of_match,
+		.of_match_table = of_match_ptr(tegra_display_hub_of_match),
 		.pm = &tegra_display_hub_pm_ops,
 	},
 	.probe = tegra_display_hub_probe,

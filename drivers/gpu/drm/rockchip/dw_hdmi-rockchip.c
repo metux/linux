@@ -610,6 +610,6 @@ struct platform_driver dw_hdmi_rockchip_pltfm_driver = {
 	.driver = {
 		.name = "dwhdmi-rockchip",
 		.pm = &dw_hdmi_rockchip_pm,
-		.of_match_table = dw_hdmi_rockchip_dt_ids,
+		.of_match_table = of_match_ptr(dw_hdmi_rockchip_dt_ids),
 	},
 };

@@ -840,6 +840,6 @@ struct platform_driver decon_driver = {
 	.driver		= {
 		.name	= "exynos-decon",
 		.pm	= &exynos7_decon_pm_ops,
-		.of_match_table = decon_driver_dt_match,
+		.of_match_table = of_match_ptr(decon_driver_dt_match),
 	},
 };

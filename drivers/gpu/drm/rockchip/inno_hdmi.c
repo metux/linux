@@ -933,6 +933,6 @@ struct platform_driver inno_hdmi_driver = {
 	.remove = inno_hdmi_remove,
 	.driver = {
 		.name = "innohdmi-rockchip",
-		.of_match_table = inno_hdmi_dt_ids,
+		.of_match_table = of_match_ptr(inno_hdmi_dt_ids),
 	},
 };

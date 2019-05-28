@@ -522,6 +522,6 @@ struct platform_driver zx_vga_driver = {
 	.remove = zx_vga_remove,
 	.driver	= {
 		.name = "zx-vga",
-		.of_match_table	= zx_vga_of_match,
+		.of_match_table	= of_match_ptr(zx_vga_of_match),
 	},
 };

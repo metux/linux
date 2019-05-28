@@ -1559,7 +1559,7 @@ MODULE_DEVICE_TABLE(of, tc358767_of_ids);
 static struct i2c_driver tc358767_driver = {
 	.driver = {
 		.name = "tc358767",
-		.of_match_table = tc358767_of_ids,
+		.of_match_table = of_match_ptr(tc358767_of_ids),
 	},
 	.id_table = tc358767_i2c_ids,
 	.probe = tc_probe,

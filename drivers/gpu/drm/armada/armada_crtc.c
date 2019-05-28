@@ -1087,7 +1087,7 @@ struct platform_driver armada_lcd_platform_driver = {
 	.driver = {
 		.name	= "armada-lcd",
 		.owner	=  THIS_MODULE,
-		.of_match_table = armada_lcd_of_match,
+		.of_match_table = of_match_ptr(armada_lcd_of_match),
 	},
 	.id_table = armada_lcd_platform_ids,
 };

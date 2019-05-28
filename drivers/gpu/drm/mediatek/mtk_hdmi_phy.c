@@ -202,7 +202,7 @@ struct platform_driver mtk_hdmi_phy_driver = {
 	.probe = mtk_hdmi_phy_probe,
 	.driver = {
 		.name = "mediatek-hdmi-phy",
-		.of_match_table = mtk_hdmi_phy_match,
+		.of_match_table = of_match_ptr(mtk_hdmi_phy_match),
 	},
 };
 

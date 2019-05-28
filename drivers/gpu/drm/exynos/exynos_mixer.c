@@ -1325,7 +1325,7 @@ struct platform_driver mixer_driver = {
 		.name = "exynos-mixer",
 		.owner = THIS_MODULE,
 		.pm = &exynos_mixer_pm_ops,
-		.of_match_table = mixer_match_types,
+		.of_match_table = of_match_ptr(mixer_match_types),
 	},
 	.probe = mixer_probe,
 	.remove = mixer_remove,

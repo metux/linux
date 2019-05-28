@@ -172,7 +172,7 @@ static struct platform_driver zx_drm_platform_driver = {
 	.remove = zx_drm_remove,
 	.driver	= {
 		.name = "zx-drm",
-		.of_match_table	= zx_drm_of_match,
+		.of_match_table	= of_match_ptr(zx_drm_of_match),
 	},
 };
 

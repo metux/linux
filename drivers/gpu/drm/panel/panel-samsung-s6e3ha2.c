@@ -778,7 +778,7 @@ static struct mipi_dsi_driver s6e3ha2_driver = {
 	.remove = s6e3ha2_remove,
 	.driver = {
 		.name = "panel-samsung-s6e3ha2",
-		.of_match_table = s6e3ha2_of_match,
+		.of_match_table = of_match_ptr(s6e3ha2_of_match),
 	},
 };
 module_mipi_dsi_driver(s6e3ha2_driver);

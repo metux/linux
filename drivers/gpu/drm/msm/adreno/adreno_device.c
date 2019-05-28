@@ -446,7 +446,7 @@ static struct platform_driver adreno_driver = {
 	.remove = adreno_remove,
 	.driver = {
 		.name = "adreno",
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 		.pm = &adreno_pm_ops,
 	},
 };

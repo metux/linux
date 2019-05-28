@@ -1196,6 +1196,6 @@ struct platform_driver mtk_dsi_driver = {
 	.remove = mtk_dsi_remove,
 	.driver = {
 		.name = "mtk-dsi",
-		.of_match_table = mtk_dsi_of_match,
+		.of_match_table = of_match_ptr(mtk_dsi_of_match),
 	},
 };

@@ -810,7 +810,7 @@ struct platform_driver sti_hda_driver = {
 	.driver = {
 		.name = "sti-hda",
 		.owner = THIS_MODULE,
-		.of_match_table = hda_of_match,
+		.of_match_table = of_match_ptr(hda_of_match),
 	},
 	.probe = sti_hda_probe,
 	.remove = sti_hda_remove,

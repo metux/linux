@@ -480,7 +480,7 @@ static struct platform_driver panfrost_driver = {
 	.driver		= {
 		.name	= "panfrost",
 		.pm	= &panfrost_pm_ops,
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 	},
 };
 module_platform_driver(panfrost_driver);

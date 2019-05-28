@@ -466,7 +466,7 @@ static struct platform_driver dw_mipi_dsi_stm_driver = {
 	.probe		= dw_mipi_dsi_stm_probe,
 	.remove		= dw_mipi_dsi_stm_remove,
 	.driver		= {
-		.of_match_table = dw_mipi_dsi_stm_dt_ids,
+		.of_match_table = of_match_ptr(dw_mipi_dsi_stm_dt_ids),
 		.name	= "stm32-display-dsi",
 		.pm = &dw_mipi_dsi_stm_pm_ops,
 	},

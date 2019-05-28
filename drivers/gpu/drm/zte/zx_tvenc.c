@@ -397,6 +397,6 @@ struct platform_driver zx_tvenc_driver = {
 	.remove = zx_tvenc_remove,
 	.driver	= {
 		.name = "zx-tvenc",
-		.of_match_table	= zx_tvenc_of_match,
+		.of_match_table	= of_match_ptr(zx_tvenc_of_match),
 	},
 };

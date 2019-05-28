@@ -456,7 +456,7 @@ static struct platform_driver meson_drm_platform_driver = {
 	.probe      = meson_drv_probe,
 	.driver     = {
 		.name	= "meson-drm",
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 	},
 };
 

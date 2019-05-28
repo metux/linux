@@ -286,7 +286,7 @@ static struct platform_driver dumb_vga_driver = {
 	.remove	= dumb_vga_remove,
 	.driver		= {
 		.name		= "dumb-vga-dac",
-		.of_match_table	= dumb_vga_match,
+		.of_match_table	= of_match_ptr(dumb_vga_match),
 	},
 };
 module_platform_driver(dumb_vga_driver);

@@ -262,7 +262,7 @@ static int gr2d_remove(struct platform_device *pdev)
 struct platform_driver tegra_gr2d_driver = {
 	.driver = {
 		.name = "tegra-gr2d",
-		.of_match_table = gr2d_match,
+		.of_match_table = of_match_ptr(gr2d_match),
 	},
 	.probe = gr2d_probe,
 	.remove = gr2d_remove,

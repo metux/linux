@@ -252,7 +252,7 @@ static void ili9341_shutdown(struct spi_device *spi)
 static struct spi_driver ili9341_spi_driver = {
 	.driver = {
 		.name = "ili9341",
-		.of_match_table = ili9341_of_match,
+		.of_match_table = of_match_ptr(ili9341_of_match),
 	},
 	.id_table = ili9341_id,
 	.probe = ili9341_probe,

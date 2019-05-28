@@ -411,7 +411,7 @@ static struct platform_driver tfp410_platform_driver = {
 	.remove	= tfp410_remove,
 	.driver	= {
 		.name		= "tfp410-bridge",
-		.of_match_table	= tfp410_match,
+		.of_match_table	= of_match_ptr(tfp410_match),
 	},
 };
 

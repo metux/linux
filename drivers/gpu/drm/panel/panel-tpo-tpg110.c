@@ -484,7 +484,7 @@ static struct spi_driver tpg110_driver = {
 	.remove		= tpg110_remove,
 	.driver		= {
 		.name	= "tpo-tpg110-panel",
-		.of_match_table = tpg110_match,
+		.of_match_table = of_match_ptr(tpg110_match),
 	},
 };
 module_spi_driver(tpg110_driver);

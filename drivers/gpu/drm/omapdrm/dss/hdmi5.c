@@ -795,7 +795,7 @@ struct platform_driver omapdss_hdmi5hw_driver = {
 	.remove		= hdmi5_remove,
 	.driver         = {
 		.name   = "omapdss_hdmi5",
-		.of_match_table = hdmi_of_match,
+		.of_match_table = of_match_ptr(hdmi_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

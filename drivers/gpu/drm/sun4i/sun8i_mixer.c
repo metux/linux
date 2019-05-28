@@ -657,7 +657,7 @@ static struct platform_driver sun8i_mixer_platform_driver = {
 	.remove		= sun8i_mixer_remove,
 	.driver		= {
 		.name		= "sun8i-mixer",
-		.of_match_table	= sun8i_mixer_of_table,
+		.of_match_table	= of_match_ptr(sun8i_mixer_of_table),
 	},
 };
 module_platform_driver(sun8i_mixer_platform_driver);

@@ -253,6 +253,6 @@ struct platform_driver mtk_cec_driver = {
 	.remove = mtk_cec_remove,
 	.driver = {
 		.name = "mediatek-cec",
-		.of_match_table = mtk_cec_of_ids,
+		.of_match_table = of_match_ptr(mtk_cec_of_ids),
 	},
 };

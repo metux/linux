@@ -421,7 +421,7 @@ static struct platform_driver hdlcd_platform_driver = {
 	.driver	= {
 		.name = "hdlcd",
 		.pm = &hdlcd_pm_ops,
-		.of_match_table	= hdlcd_of_match,
+		.of_match_table	= of_match_ptr(hdlcd_of_match),
 	},
 };
 

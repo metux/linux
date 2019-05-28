@@ -112,7 +112,7 @@ static struct platform_driver rcar_dw_hdmi_platform_driver = {
 	.remove		= rcar_dw_hdmi_remove,
 	.driver		= {
 		.name	= "rcar-dw-hdmi",
-		.of_match_table = rcar_dw_hdmi_of_table,
+		.of_match_table = of_match_ptr(rcar_dw_hdmi_of_table),
 	},
 };
 

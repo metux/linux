@@ -256,7 +256,7 @@ static struct spi_driver nec_8048_driver = {
 	.driver = {
 		.name	= "panel-nec-nl8048hl11",
 		.pm	= NEC_8048_PM_OPS,
-		.of_match_table = nec_8048_of_match,
+		.of_match_table = of_match_ptr(nec_8048_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe	= nec_8048_probe,

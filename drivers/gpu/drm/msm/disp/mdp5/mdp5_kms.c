@@ -1125,7 +1125,7 @@ static struct platform_driver mdp5_driver = {
 	.remove = mdp5_dev_remove,
 	.driver = {
 		.name = "msm_mdp",
-		.of_match_table = mdp5_dt_match,
+		.of_match_table = of_match_ptr(mdp5_dt_match),
 		.pm = &mdp5_pm_ops,
 	},
 };

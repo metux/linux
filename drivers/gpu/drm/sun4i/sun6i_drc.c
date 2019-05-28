@@ -109,7 +109,7 @@ static struct platform_driver sun6i_drc_platform_driver = {
 	.remove		= sun6i_drc_remove,
 	.driver		= {
 		.name		= "sun6i-drc",
-		.of_match_table	= sun6i_drc_of_table,
+		.of_match_table	= of_match_ptr(sun6i_drc_of_table),
 	},
 };
 module_platform_driver(sun6i_drc_platform_driver);

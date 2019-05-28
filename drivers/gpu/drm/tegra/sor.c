@@ -3577,7 +3577,7 @@ static const struct dev_pm_ops tegra_sor_pm_ops = {
 struct platform_driver tegra_sor_driver = {
 	.driver = {
 		.name = "tegra-sor",
-		.of_match_table = tegra_sor_of_match,
+		.of_match_table = of_match_ptr(tegra_sor_of_match),
 		.pm = &tegra_sor_pm_ops,
 	},
 	.probe = tegra_sor_probe,

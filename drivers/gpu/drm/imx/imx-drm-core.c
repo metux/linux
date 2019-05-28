@@ -339,7 +339,7 @@ static struct platform_driver imx_drm_pdrv = {
 	.driver		= {
 		.name	= "imx-drm",
 		.pm	= &imx_drm_pm_ops,
-		.of_match_table = imx_drm_dt_ids,
+		.of_match_table = of_match_ptr(imx_drm_dt_ids),
 	},
 };
 

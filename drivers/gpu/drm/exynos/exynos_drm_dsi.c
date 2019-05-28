@@ -1902,7 +1902,7 @@ struct platform_driver dsi_driver = {
 		   .name = "exynos-dsi",
 		   .owner = THIS_MODULE,
 		   .pm = &exynos_dsi_pm_ops,
-		   .of_match_table = exynos_dsi_of_match,
+		   .of_match_table = of_match_ptr(exynos_dsi_of_match),
 	},
 };
 

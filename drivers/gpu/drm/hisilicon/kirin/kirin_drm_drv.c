@@ -232,7 +232,7 @@ static struct platform_driver kirin_drm_platform_driver = {
 	.remove = kirin_drm_platform_remove,
 	.driver = {
 		.name = "kirin-drm",
-		.of_match_table = kirin_drm_dt_ids,
+		.of_match_table = of_match_ptr(kirin_drm_dt_ids),
 	},
 };
 

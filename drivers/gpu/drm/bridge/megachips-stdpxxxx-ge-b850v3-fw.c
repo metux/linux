@@ -347,7 +347,7 @@ static struct i2c_driver stdp4028_ge_b850v3_fw_driver = {
 	.remove		= stdp4028_ge_b850v3_fw_remove,
 	.driver		= {
 		.name		= "stdp4028-ge-b850v3-fw",
-		.of_match_table = stdp4028_ge_b850v3_fw_match,
+		.of_match_table = of_match_ptr(stdp4028_ge_b850v3_fw_match),
 	},
 };
 
@@ -389,7 +389,7 @@ static struct i2c_driver stdp2690_ge_b850v3_fw_driver = {
 	.remove		= stdp2690_ge_b850v3_fw_remove,
 	.driver		= {
 		.name		= "stdp2690-ge-b850v3-fw",
-		.of_match_table = stdp2690_ge_b850v3_fw_match,
+		.of_match_table = of_match_ptr(stdp2690_ge_b850v3_fw_match),
 	},
 };
 

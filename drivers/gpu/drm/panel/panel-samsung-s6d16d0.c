@@ -251,7 +251,7 @@ static struct mipi_dsi_driver s6d16d0_driver = {
 	.remove = s6d16d0_remove,
 	.driver = {
 		.name = "panel-samsung-s6d16d0",
-		.of_match_table = s6d16d0_of_match,
+		.of_match_table = of_match_ptr(s6d16d0_of_match),
 	},
 };
 module_mipi_dsi_driver(s6d16d0_driver);

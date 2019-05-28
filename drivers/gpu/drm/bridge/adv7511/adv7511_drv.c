@@ -1291,7 +1291,7 @@ static struct mipi_dsi_driver adv7533_dsi_driver = {
 static struct i2c_driver adv7511_driver = {
 	.driver = {
 		.name = "adv7511",
-		.of_match_table = adv7511_of_ids,
+		.of_match_table = of_match_ptr(adv7511_of_ids),
 	},
 	.id_table = adv7511_i2c_ids,
 	.probe = adv7511_probe,

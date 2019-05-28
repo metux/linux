@@ -1847,7 +1847,7 @@ struct platform_driver etnaviv_gpu_driver = {
 		.name = "etnaviv-gpu",
 		.owner = THIS_MODULE,
 		.pm = &etnaviv_gpu_pm_ops,
-		.of_match_table = etnaviv_gpu_match,
+		.of_match_table = of_match_ptr(etnaviv_gpu_match),
 	},
 	.probe = etnaviv_gpu_platform_probe,
 	.remove = etnaviv_gpu_platform_remove,

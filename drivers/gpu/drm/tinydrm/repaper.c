@@ -1151,7 +1151,7 @@ static struct spi_driver repaper_spi_driver = {
 	.driver = {
 		.name = "repaper",
 		.owner = THIS_MODULE,
-		.of_match_table = repaper_of_match,
+		.of_match_table = of_match_ptr(repaper_of_match),
 	},
 	.id_table = repaper_id,
 	.probe = repaper_probe,

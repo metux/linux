@@ -278,7 +278,7 @@ static struct spi_driver mi0283qt_spi_driver = {
 	.driver = {
 		.name = "mi0283qt",
 		.owner = THIS_MODULE,
-		.of_match_table = mi0283qt_of_match,
+		.of_match_table = of_match_ptr(mi0283qt_of_match),
 		.pm = &mi0283qt_pm_ops,
 	},
 	.id_table = mi0283qt_id,

@@ -1224,7 +1224,7 @@ static struct platform_driver sun6i_dsi_platform_driver = {
 	.remove		= sun6i_dsi_remove,
 	.driver		= {
 		.name		= "sun6i-mipi-dsi",
-		.of_match_table	= sun6i_dsi_of_table,
+		.of_match_table	= of_match_ptr(sun6i_dsi_of_table),
 		.pm		= &sun6i_dsi_pm_ops,
 	},
 };

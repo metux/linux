@@ -367,7 +367,7 @@ static struct platform_driver versatile_panel_driver = {
 	.probe		= versatile_panel_probe,
 	.driver		= {
 		.name	= "versatile-tft-panel",
-		.of_match_table = versatile_panel_match,
+		.of_match_table = of_match_ptr(versatile_panel_match),
 	},
 };
 module_platform_driver(versatile_panel_driver);

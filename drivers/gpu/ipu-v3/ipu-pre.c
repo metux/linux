@@ -341,6 +341,6 @@ struct platform_driver ipu_pre_drv = {
 	.remove		= ipu_pre_remove,
 	.driver		= {
 		.name	= "imx-ipu-pre",
-		.of_match_table = ipu_pre_dt_ids,
+		.of_match_table = of_match_ptr(ipu_pre_dt_ids),
 	},
 };

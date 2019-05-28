@@ -478,6 +478,6 @@ struct platform_driver mtk_mipi_tx_driver = {
 	.remove = mtk_mipi_tx_remove,
 	.driver = {
 		.name = "mediatek-mipi-tx",
-		.of_match_table = mtk_mipi_tx_match,
+		.of_match_table = of_match_ptr(mtk_mipi_tx_match),
 	},
 };

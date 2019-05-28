@@ -275,7 +275,7 @@ static struct platform_driver sun8i_dw_hdmi_pltfm_driver = {
 	.remove = sun8i_dw_hdmi_remove,
 	.driver = {
 		.name = "sun8i-dw-hdmi",
-		.of_match_table = sun8i_dw_hdmi_dt_ids,
+		.of_match_table = of_match_ptr(sun8i_dw_hdmi_dt_ids),
 	},
 };
 module_platform_driver(sun8i_dw_hdmi_pltfm_driver);

@@ -460,6 +460,6 @@ struct platform_driver rotator_driver = {
 		.name	= "exynos-rotator",
 		.owner	= THIS_MODULE,
 		.pm	= &rotator_pm_ops,
-		.of_match_table = exynos_rotator_match,
+		.of_match_table = of_match_ptr(exynos_rotator_match),
 	},
 };

@@ -719,7 +719,7 @@ static struct platform_driver sun4i_hdmi_driver = {
 	.remove		= sun4i_hdmi_remove,
 	.driver		= {
 		.name		= "sun4i-hdmi",
-		.of_match_table	= sun4i_hdmi_of_table,
+		.of_match_table	= of_match_ptr(sun4i_hdmi_of_table),
 	},
 };
 module_platform_driver(sun4i_hdmi_driver);

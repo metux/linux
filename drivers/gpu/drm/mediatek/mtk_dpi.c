@@ -775,6 +775,6 @@ struct platform_driver mtk_dpi_driver = {
 	.remove = mtk_dpi_remove,
 	.driver = {
 		.name = "mediatek-dpi",
-		.of_match_table = mtk_dpi_of_ids,
+		.of_match_table = of_match_ptr(mtk_dpi_of_ids),
 	},
 };

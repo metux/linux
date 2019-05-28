@@ -695,7 +695,7 @@ static struct platform_driver imx_tve_driver = {
 	.probe		= imx_tve_probe,
 	.remove		= imx_tve_remove,
 	.driver		= {
-		.of_match_table = imx_tve_dt_ids,
+		.of_match_table = of_match_ptr(imx_tve_dt_ids),
 		.name	= "imx-tve",
 	},
 };

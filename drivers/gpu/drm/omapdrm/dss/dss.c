@@ -1601,7 +1601,7 @@ struct platform_driver omap_dsshw_driver = {
 	.driver         = {
 		.name   = "omapdss_dss",
 		.pm	= &dss_pm_ops,
-		.of_match_table = dss_of_match,
+		.of_match_table = of_match_ptr(dss_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

@@ -428,7 +428,7 @@ static struct platform_driver mxsfb_platform_driver = {
 	.id_table	= mxsfb_devtype,
 	.driver	= {
 		.name		= "mxsfb",
-		.of_match_table	= mxsfb_dt_ids,
+		.of_match_table	= of_match_ptr(mxsfb_dt_ids),
 		.pm		= &mxsfb_pm_ops,
 	},
 };

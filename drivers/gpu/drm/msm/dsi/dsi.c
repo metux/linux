@@ -168,7 +168,7 @@ static struct platform_driver dsi_driver = {
 	.remove = dsi_dev_remove,
 	.driver = {
 		.name = "msm_dsi",
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 		.pm = &dsi_pm_ops,
 	},
 };

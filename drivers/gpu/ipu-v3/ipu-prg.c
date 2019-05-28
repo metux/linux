@@ -478,6 +478,6 @@ struct platform_driver ipu_prg_drv = {
 	.driver		= {
 		.name	= "imx-ipu-prg",
 		.pm	= &prg_pm_ops,
-		.of_match_table = ipu_prg_dt_ids,
+		.of_match_table = of_match_ptr(ipu_prg_dt_ids),
 	},
 };

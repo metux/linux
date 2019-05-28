@@ -379,7 +379,7 @@ static struct spi_driver ld9040_driver = {
 	.remove = ld9040_remove,
 	.driver = {
 		.name = "panel-samsung-ld9040",
-		.of_match_table = ld9040_of_match,
+		.of_match_table = of_match_ptr(ld9040_of_match),
 	},
 };
 module_spi_driver(ld9040_driver);

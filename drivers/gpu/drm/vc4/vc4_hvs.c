@@ -347,6 +347,6 @@ struct platform_driver vc4_hvs_driver = {
 	.remove = vc4_hvs_dev_remove,
 	.driver = {
 		.name = "vc4_hvs",
-		.of_match_table = vc4_hvs_dt_match,
+		.of_match_table = of_match_ptr(vc4_hvs_dt_match),
 	},
 };

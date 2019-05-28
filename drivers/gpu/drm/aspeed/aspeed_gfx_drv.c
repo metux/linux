@@ -258,7 +258,7 @@ static struct platform_driver aspeed_gfx_platform_driver = {
 	.remove		= aspeed_gfx_remove,
 	.driver = {
 		.name = "aspeed_gfx",
-		.of_match_table = aspeed_gfx_match,
+		.of_match_table = of_match_ptr(aspeed_gfx_match),
 	},
 };
 

@@ -435,7 +435,7 @@ static void sharp_panel_shutdown(struct mipi_dsi_device *dsi)
 static struct mipi_dsi_driver sharp_panel_driver = {
 	.driver = {
 		.name = "panel-sharp-lq101r1sx01",
-		.of_match_table = sharp_of_match,
+		.of_match_table = of_match_ptr(sharp_of_match),
 	},
 	.probe = sharp_panel_probe,
 	.remove = sharp_panel_remove,

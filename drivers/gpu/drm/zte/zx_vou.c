@@ -913,6 +913,6 @@ struct platform_driver zx_crtc_driver = {
 	.remove = zx_crtc_remove,
 	.driver	= {
 		.name = "zx-crtc",
-		.of_match_table	= zx_crtc_of_match,
+		.of_match_table	= of_match_ptr(zx_crtc_of_match),
 	},
 };

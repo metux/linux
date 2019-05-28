@@ -299,7 +299,7 @@ static struct platform_driver panel_lvds_driver = {
 	.remove		= panel_lvds_remove,
 	.driver		= {
 		.name	= "panel-lvds",
-		.of_match_table = panel_lvds_of_table,
+		.of_match_table = of_match_ptr(panel_lvds_of_table),
 	},
 };
 

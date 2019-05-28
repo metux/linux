@@ -590,7 +590,7 @@ struct platform_driver sti_dvo_driver = {
 	.driver = {
 		.name = "sti-dvo",
 		.owner = THIS_MODULE,
-		.of_match_table = dvo_of_match,
+		.of_match_table = of_match_ptr(dvo_of_match),
 	},
 	.probe = sti_dvo_probe,
 	.remove = sti_dvo_remove,

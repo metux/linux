@@ -357,7 +357,7 @@ static int seiko_panel_platform_probe(struct platform_device *pdev)
 static struct platform_driver seiko_panel_platform_driver = {
 	.driver = {
 		.name = "seiko_panel",
-		.of_match_table = platform_of_match,
+		.of_match_table = of_match_ptr(platform_of_match),
 	},
 	.probe = seiko_panel_platform_probe,
 	.remove = seiko_panel_remove,

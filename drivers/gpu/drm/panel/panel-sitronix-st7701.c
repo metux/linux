@@ -416,7 +416,7 @@ static struct mipi_dsi_driver st7701_dsi_driver = {
 	.remove		= st7701_dsi_remove,
 	.driver = {
 		.name		= "st7701",
-		.of_match_table	= st7701_of_match,
+		.of_match_table	= of_match_ptr(st7701_of_match),
 	},
 };
 module_mipi_dsi_driver(st7701_dsi_driver);

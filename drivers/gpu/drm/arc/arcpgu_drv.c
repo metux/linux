@@ -215,7 +215,7 @@ static struct platform_driver arcpgu_platform_driver = {
 	.remove = arcpgu_remove,
 	.driver = {
 		   .name = "arcpgu",
-		   .of_match_table = arcpgu_of_table,
+		   .of_match_table = of_match_ptr(arcpgu_of_table),
 		   },
 };
 

@@ -1290,7 +1290,7 @@ static struct platform_driver cdns_dsi_platform_driver = {
 	.remove = cdns_dsi_drm_remove,
 	.driver = {
 		.name   = "cdns-dsi",
-		.of_match_table = cdns_dsi_of_match,
+		.of_match_table = of_match_ptr(cdns_dsi_of_match),
 		.pm = &cdns_dsi_pm_ops,
 	},
 };

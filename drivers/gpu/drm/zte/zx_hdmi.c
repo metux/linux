@@ -756,6 +756,6 @@ struct platform_driver zx_hdmi_driver = {
 	.remove = zx_hdmi_remove,
 	.driver	= {
 		.name = "zx-hdmi",
-		.of_match_table	= zx_hdmi_of_match,
+		.of_match_table	= of_match_ptr(zx_hdmi_of_match),
 	},
 };

@@ -432,7 +432,7 @@ struct platform_driver sti_vtg_driver = {
 	.driver = {
 		.name = "sti-vtg",
 		.owner = THIS_MODULE,
-		.of_match_table = vtg_of_match,
+		.of_match_table = of_match_ptr(vtg_of_match),
 	},
 	.probe	= vtg_probe,
 };

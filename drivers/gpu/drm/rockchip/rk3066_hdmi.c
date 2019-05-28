@@ -871,6 +871,6 @@ struct platform_driver rk3066_hdmi_driver = {
 	.remove = rk3066_hdmi_remove,
 	.driver = {
 		.name = "rockchip-rk3066-hdmi",
-		.of_match_table = rk3066_hdmi_dt_ids,
+		.of_match_table = of_match_ptr(rk3066_hdmi_dt_ids),
 	},
 };

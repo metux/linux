@@ -730,6 +730,6 @@ struct platform_driver scaler_driver = {
 		.name	= "exynos-scaler",
 		.owner	= THIS_MODULE,
 		.pm	= &scaler_pm_ops,
-		.of_match_table = exynos_scaler_match,
+		.of_match_table = of_match_ptr(exynos_scaler_match),
 	},
 };

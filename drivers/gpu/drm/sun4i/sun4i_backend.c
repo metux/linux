@@ -1032,7 +1032,7 @@ static struct platform_driver sun4i_backend_platform_driver = {
 	.remove		= sun4i_backend_remove,
 	.driver		= {
 		.name		= "sun4i-backend",
-		.of_match_table	= sun4i_backend_of_table,
+		.of_match_table	= of_match_ptr(sun4i_backend_of_table),
 	},
 };
 module_platform_driver(sun4i_backend_platform_driver);

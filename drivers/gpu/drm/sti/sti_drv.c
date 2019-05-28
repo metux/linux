@@ -296,7 +296,7 @@ static struct platform_driver sti_platform_driver = {
 	.remove = sti_platform_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = sti_dt_ids,
+		.of_match_table = of_match_ptr(sti_dt_ids),
 	},
 };
 

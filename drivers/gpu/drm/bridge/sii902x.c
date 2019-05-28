@@ -1038,7 +1038,7 @@ static struct i2c_driver sii902x_driver = {
 	.remove = sii902x_remove,
 	.driver = {
 		.name = "sii902x",
-		.of_match_table = sii902x_dt_ids,
+		.of_match_table = of_match_ptr(sii902x_dt_ids),
 	},
 	.id_table = sii902x_i2c_ids,
 };

@@ -1028,7 +1028,7 @@ static struct platform_driver malidp_platform_driver = {
 	.driver	= {
 		.name = "mali-dp",
 		.pm = &malidp_pm_ops,
-		.of_match_table	= malidp_drm_of_match,
+		.of_match_table	= of_match_ptr(malidp_drm_of_match),
 	},
 };
 

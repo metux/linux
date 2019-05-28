@@ -618,7 +618,7 @@ static struct platform_driver mtk_drm_platform_driver = {
 	.remove	= mtk_drm_remove,
 	.driver	= {
 		.name	= "mediatek-drm",
-		.of_match_table = mtk_drm_of_ids,
+		.of_match_table = of_match_ptr(mtk_drm_of_ids),
 		.pm     = &mtk_drm_pm_ops,
 	},
 };

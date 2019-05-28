@@ -506,7 +506,7 @@ static void jdi_panel_shutdown(struct mipi_dsi_device *dsi)
 static struct mipi_dsi_driver jdi_panel_driver = {
 	.driver = {
 		.name = "panel-jdi-lt070me05000",
-		.of_match_table = jdi_of_match,
+		.of_match_table = of_match_ptr(jdi_of_match),
 	},
 	.probe = jdi_panel_probe,
 	.remove = jdi_panel_remove,

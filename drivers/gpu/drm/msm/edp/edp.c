@@ -119,7 +119,7 @@ static struct platform_driver edp_driver = {
 	.remove = edp_dev_remove,
 	.driver = {
 		.name = "msm_edp",
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 	},
 };
 

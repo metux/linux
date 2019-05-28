@@ -508,7 +508,7 @@ static struct mipi_dsi_driver orisetech_otm8009a_driver = {
 	.remove = otm8009a_remove,
 	.driver = {
 		.name = "panel-orisetech-otm8009a",
-		.of_match_table = orisetech_otm8009a_of_match,
+		.of_match_table = of_match_ptr(orisetech_otm8009a_of_match),
 	},
 };
 module_mipi_dsi_driver(orisetech_otm8009a_driver);

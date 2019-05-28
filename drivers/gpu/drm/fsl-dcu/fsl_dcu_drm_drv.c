@@ -361,7 +361,7 @@ static struct platform_driver fsl_dcu_drm_platform_driver = {
 	.driver		= {
 		.name	= "fsl-dcu",
 		.pm	= &fsl_dcu_drm_pm_ops,
-		.of_match_table = fsl_dcu_of_match,
+		.of_match_table = of_match_ptr(fsl_dcu_of_match),
 	},
 };
 

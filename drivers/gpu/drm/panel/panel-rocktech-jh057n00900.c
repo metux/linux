@@ -369,7 +369,7 @@ static struct mipi_dsi_driver jh057n_driver = {
 	.shutdown = jh057n_shutdown,
 	.driver = {
 		.name = DRV_NAME,
-		.of_match_table = jh057n_of_match,
+		.of_match_table = of_match_ptr(jh057n_of_match),
 	},
 };
 module_mipi_dsi_driver(jh057n_driver);

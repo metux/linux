@@ -441,7 +441,7 @@ static struct mipi_dsi_driver raydium_rm68200_driver = {
 	.remove = rm68200_remove,
 	.driver = {
 		.name = "panel-raydium-rm68200",
-		.of_match_table = raydium_rm68200_of_match,
+		.of_match_table = of_match_ptr(raydium_rm68200_of_match),
 	},
 };
 module_mipi_dsi_driver(raydium_rm68200_driver);

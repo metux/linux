@@ -355,7 +355,7 @@ static struct platform_driver lima_platform_driver = {
 	.remove     = lima_pdev_remove,
 	.driver     = {
 		.name   = "lima",
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 	},
 };
 

@@ -1767,7 +1767,7 @@ static struct platform_driver mtk_hdmi_driver = {
 	.remove = mtk_drm_hdmi_remove,
 	.driver = {
 		.name = "mediatek-drm-hdmi",
-		.of_match_table = mtk_drm_hdmi_of_ids,
+		.of_match_table = of_match_ptr(mtk_drm_hdmi_of_ids),
 		.pm = &mtk_hdmi_pm_ops,
 	},
 };

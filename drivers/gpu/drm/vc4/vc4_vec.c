@@ -626,6 +626,6 @@ struct platform_driver vc4_vec_driver = {
 	.remove = vc4_vec_dev_remove,
 	.driver = {
 		.name = "vc4_vec",
-		.of_match_table = vc4_vec_dt_match,
+		.of_match_table = of_match_ptr(vc4_vec_dt_match),
 	},
 };

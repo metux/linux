@@ -453,7 +453,7 @@ static struct spi_driver ili9225_spi_driver = {
 	.driver = {
 		.name = "ili9225",
 		.owner = THIS_MODULE,
-		.of_match_table = ili9225_of_match,
+		.of_match_table = of_match_ptr(ili9225_of_match),
 	},
 	.id_table = ili9225_id,
 	.probe = ili9225_probe,

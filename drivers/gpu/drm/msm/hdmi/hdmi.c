@@ -650,7 +650,7 @@ static struct platform_driver msm_hdmi_driver = {
 	.remove = msm_hdmi_dev_remove,
 	.driver = {
 		.name = "hdmi_msm",
-		.of_match_table = msm_hdmi_dt_match,
+		.of_match_table = of_match_ptr(msm_hdmi_dt_match),
 	},
 };
 

@@ -280,7 +280,7 @@ static struct platform_driver imx_pd_driver = {
 	.probe		= imx_pd_probe,
 	.remove		= imx_pd_remove,
 	.driver		= {
-		.of_match_table = imx_pd_dt_ids,
+		.of_match_table = of_match_ptr(imx_pd_dt_ids),
 		.name	= "imx-parallel-display",
 	},
 };

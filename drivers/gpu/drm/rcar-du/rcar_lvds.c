@@ -952,7 +952,7 @@ static struct platform_driver rcar_lvds_platform_driver = {
 	.remove		= rcar_lvds_remove,
 	.driver		= {
 		.name	= "rcar-lvds",
-		.of_match_table = rcar_lvds_of_table,
+		.of_match_table = of_match_ptr(rcar_lvds_of_table),
 	},
 };
 

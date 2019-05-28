@@ -603,6 +603,6 @@ struct platform_driver mtk_ddp_driver = {
 	.driver		= {
 		.name	= "mediatek-ddp",
 		.owner	= THIS_MODULE,
-		.of_match_table = ddp_driver_dt_match,
+		.of_match_table = of_match_ptr(ddp_driver_dt_match),
 	},
 };

@@ -740,7 +740,7 @@ MODULE_DEVICE_TABLE(of, acx565akm_of_match);
 static struct spi_driver acx565akm_driver = {
 	.driver = {
 		.name	= "acx565akm",
-		.of_match_table = acx565akm_of_match,
+		.of_match_table = of_match_ptr(acx565akm_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe	= acx565akm_probe,

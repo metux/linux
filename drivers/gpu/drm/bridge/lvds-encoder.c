@@ -144,7 +144,7 @@ static struct platform_driver lvds_encoder_driver = {
 	.remove	= lvds_encoder_remove,
 	.driver		= {
 		.name		= "lvds-encoder",
-		.of_match_table	= lvds_encoder_match,
+		.of_match_table	= of_match_ptr(lvds_encoder_match),
 	},
 };
 module_platform_driver(lvds_encoder_driver);

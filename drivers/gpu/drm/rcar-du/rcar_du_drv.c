@@ -573,7 +573,7 @@ static struct platform_driver rcar_du_platform_driver = {
 	.driver		= {
 		.name	= "rcar-du",
 		.pm	= &rcar_du_pm_ops,
-		.of_match_table = rcar_du_of_table,
+		.of_match_table = of_match_ptr(rcar_du_of_table),
 	},
 };
 

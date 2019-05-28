@@ -476,7 +476,7 @@ MODULE_DEVICE_TABLE(of, rpi_touchscreen_of_ids);
 static struct i2c_driver rpi_touchscreen_driver = {
 	.driver = {
 		.name = "rpi_touchscreen",
-		.of_match_table = rpi_touchscreen_of_ids,
+		.of_match_table = of_match_ptr(rpi_touchscreen_of_ids),
 	},
 	.probe = rpi_touchscreen_probe,
 	.remove = rpi_touchscreen_remove,

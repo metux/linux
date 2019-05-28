@@ -1359,7 +1359,7 @@ static struct platform_driver msm_platform_driver = {
 	.remove     = msm_pdev_remove,
 	.driver     = {
 		.name   = "msm",
-		.of_match_table = dt_match,
+		.of_match_table = of_match_ptr(dt_match),
 		.pm     = &msm_pm_ops,
 	},
 };

@@ -262,7 +262,7 @@ static struct mipi_dsi_driver feiyang_driver = {
 	.remove = feiyang_dsi_remove,
 	.driver = {
 		.name = "feiyang-fy07024di26a30d",
-		.of_match_table = feiyang_of_match,
+		.of_match_table = of_match_ptr(feiyang_of_match),
 	},
 };
 module_mipi_dsi_driver(feiyang_driver);

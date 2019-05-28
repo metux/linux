@@ -1104,7 +1104,7 @@ static struct platform_driver dpu_driver = {
 	.remove = dpu_dev_remove,
 	.driver = {
 		.name = "msm_dpu",
-		.of_match_table = dpu_dt_match,
+		.of_match_table = of_match_ptr(dpu_dt_match),
 		.pm = &dpu_pm_ops,
 	},
 };

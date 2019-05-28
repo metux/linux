@@ -247,7 +247,7 @@ static struct mipi_dsi_driver rb070d30_panel_driver = {
 	.remove = rb070d30_panel_dsi_remove,
 	.driver = {
 		.name = "panel-ronbo-rb070d30",
-		.of_match_table	= rb070d30_panel_of_match,
+		.of_match_table	= of_match_ptr(rb070d30_panel_of_match),
 	},
 };
 module_mipi_dsi_driver(rb070d30_panel_driver);

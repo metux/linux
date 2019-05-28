@@ -493,7 +493,7 @@ static struct mipi_dsi_driver ili9881c_dsi_driver = {
 	.remove		= ili9881c_dsi_remove,
 	.driver = {
 		.name		= "ili9881c-dsi",
-		.of_match_table	= ili9881c_of_match,
+		.of_match_table	= of_match_ptr(ili9881c_of_match),
 	},
 };
 module_mipi_dsi_driver(ili9881c_dsi_driver);

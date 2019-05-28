@@ -1469,7 +1469,7 @@ struct platform_driver sti_hdmi_driver = {
 	.driver = {
 		.name = "sti-hdmi",
 		.owner = THIS_MODULE,
-		.of_match_table = hdmi_of_match,
+		.of_match_table = of_match_ptr(hdmi_of_match),
 	},
 	.probe = sti_hdmi_probe,
 	.remove = sti_hdmi_remove,

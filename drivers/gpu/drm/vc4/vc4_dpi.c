@@ -367,6 +367,6 @@ struct platform_driver vc4_dpi_driver = {
 	.remove = vc4_dpi_dev_remove,
 	.driver = {
 		.name = "vc4_dpi",
-		.of_match_table = vc4_dpi_dt_match,
+		.of_match_table = of_match_ptr(vc4_dpi_dt_match),
 	},
 };

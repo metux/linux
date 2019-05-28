@@ -290,7 +290,7 @@ static void hx8357d_shutdown(struct spi_device *spi)
 static struct spi_driver hx8357d_spi_driver = {
 	.driver = {
 		.name = "hx8357d",
-		.of_match_table = hx8357d_of_match,
+		.of_match_table = of_match_ptr(hx8357d_of_match),
 	},
 	.id_table = hx8357d_id,
 	.probe = hx8357d_probe,

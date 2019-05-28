@@ -295,7 +295,7 @@ struct platform_driver dp_driver = {
 		.name	= "exynos-dp",
 		.owner	= THIS_MODULE,
 		.pm	= &exynos_dp_pm_ops,
-		.of_match_table = exynos_dp_match,
+		.of_match_table = of_match_ptr(exynos_dp_match),
 	},
 };
 

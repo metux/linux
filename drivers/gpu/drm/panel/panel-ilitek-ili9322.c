@@ -948,7 +948,7 @@ static struct spi_driver ili9322_driver = {
 	.remove = ili9322_remove,
 	.driver = {
 		.name = "panel-ilitek-ili9322",
-		.of_match_table = ili9322_of_match,
+		.of_match_table = of_match_ptr(ili9322_of_match),
 	},
 };
 module_spi_driver(ili9322_driver);

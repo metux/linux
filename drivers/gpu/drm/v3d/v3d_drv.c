@@ -358,7 +358,7 @@ static struct platform_driver v3d_platform_driver = {
 	.remove		= v3d_platform_drm_remove,
 	.driver		= {
 		.name	= "v3d",
-		.of_match_table = v3d_of_match,
+		.of_match_table = of_match_ptr(v3d_of_match),
 	},
 };
 

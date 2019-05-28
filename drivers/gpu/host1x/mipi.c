@@ -546,7 +546,7 @@ static int tegra_mipi_remove(struct platform_device *pdev)
 struct platform_driver tegra_mipi_driver = {
 	.driver = {
 		.name = "tegra-mipi",
-		.of_match_table = tegra_mipi_of_match,
+		.of_match_table = of_match_ptr(tegra_mipi_of_match),
 	},
 	.probe = tegra_mipi_probe,
 	.remove = tegra_mipi_remove,

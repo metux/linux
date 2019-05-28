@@ -338,7 +338,7 @@ MODULE_DEVICE_TABLE(of, sharp_nt_of_match);
 static struct mipi_dsi_driver sharp_nt_panel_driver = {
 	.driver = {
 		.name = "panel-sharp-ls043t1le01-qhd",
-		.of_match_table = sharp_nt_of_match,
+		.of_match_table = of_match_ptr(sharp_nt_of_match),
 	},
 	.probe = sharp_nt_panel_probe,
 	.remove = sharp_nt_panel_remove,

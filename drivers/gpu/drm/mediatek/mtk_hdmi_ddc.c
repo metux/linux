@@ -341,7 +341,7 @@ struct platform_driver mtk_hdmi_ddc_driver = {
 	.remove = mtk_hdmi_ddc_remove,
 	.driver = {
 		.name = "mediatek-hdmi-ddc",
-		.of_match_table = mtk_hdmi_ddc_match,
+		.of_match_table = of_match_ptr(mtk_hdmi_ddc_match),
 	},
 };
 

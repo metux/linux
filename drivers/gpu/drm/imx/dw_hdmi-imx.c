@@ -283,7 +283,7 @@ static struct platform_driver dw_hdmi_imx_platform_driver = {
 	.remove = dw_hdmi_imx_remove,
 	.driver = {
 		.name = "dwhdmi-imx",
-		.of_match_table = dw_hdmi_imx_dt_ids,
+		.of_match_table = of_match_ptr(dw_hdmi_imx_dt_ids),
 	},
 };
 

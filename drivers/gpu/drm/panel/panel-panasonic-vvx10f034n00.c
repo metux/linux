@@ -304,7 +304,7 @@ static void wuxga_nt_panel_shutdown(struct mipi_dsi_device *dsi)
 static struct mipi_dsi_driver wuxga_nt_panel_driver = {
 	.driver = {
 		.name = "panel-panasonic-vvx10f034n00",
-		.of_match_table = wuxga_nt_of_match,
+		.of_match_table = of_match_ptr(wuxga_nt_of_match),
 	},
 	.probe = wuxga_nt_panel_probe,
 	.remove = wuxga_nt_panel_remove,

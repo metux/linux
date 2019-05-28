@@ -749,7 +749,7 @@ static struct platform_driver imx_ldb_driver = {
 	.probe		= imx_ldb_probe,
 	.remove		= imx_ldb_remove,
 	.driver		= {
-		.of_match_table = imx_ldb_dt_ids,
+		.of_match_table = of_match_ptr(imx_ldb_dt_ids),
 		.name	= DRIVER_NAME,
 	},
 };

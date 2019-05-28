@@ -126,7 +126,7 @@ MODULE_DEVICE_TABLE(of, gw_pld_dt_ids);
 static struct i2c_driver gw_pld_driver = {
 	.driver = {
 		.name = "gw_pld",
-		.of_match_table = gw_pld_dt_ids,
+		.of_match_table = of_match_ptr(gw_pld_dt_ids),
 	},
 	.probe = gw_pld_probe,
 	.id_table = gw_pld_id,

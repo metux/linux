@@ -125,7 +125,7 @@ MODULE_DEVICE_TABLE(of, octeon_gpio_match);
 static struct platform_driver octeon_gpio_driver = {
 	.driver = {
 		.name		= "octeon_gpio",
-		.of_match_table = octeon_gpio_match,
+		.of_match_table = of_match_ptr(octeon_gpio_match),
 	},
 	.probe		= octeon_gpio_probe,
 };

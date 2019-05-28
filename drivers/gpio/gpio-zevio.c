@@ -208,7 +208,7 @@ static const struct of_device_id zevio_gpio_of_match[] = {
 static struct platform_driver zevio_gpio_driver = {
 	.driver		= {
 		.name	= "gpio-zevio",
-		.of_match_table = zevio_gpio_of_match,
+		.of_match_table = of_match_ptr(zevio_gpio_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= zevio_gpio_probe,

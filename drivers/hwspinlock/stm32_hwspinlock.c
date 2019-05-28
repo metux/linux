@@ -140,7 +140,7 @@ static struct platform_driver stm32_hwspinlock_driver = {
 	.remove		= stm32_hwspinlock_remove,
 	.driver		= {
 		.name	= "stm32_hwspinlock",
-		.of_match_table = stm32_hwpinlock_ids,
+		.of_match_table = of_match_ptr(stm32_hwpinlock_ids),
 		.pm	= &stm32_hwspinlock_pm_ops,
 	},
 };

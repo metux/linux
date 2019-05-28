@@ -1390,8 +1390,8 @@ EXPORT_SYMBOL_GPL(phylink_ethtool_set_eee);
  *
  * FIXME: should deal with negotiation state too.
  */
-static int phylink_mii_emul_read(struct net_device *ndev, unsigned int reg,
-				 struct phylink_link_state *state, bool aneg)
+static int phylink_mii_emul_read(unsigned int reg,
+				 struct phylink_link_state *state)
 {
 	struct fixed_phy_status fs;
 	int val;
@@ -1406,8 +1406,6 @@ static int phylink_mii_emul_read(struct net_device *ndev, unsigned int reg,
 	if (reg == MII_BMSR) {
 		if (!state->an_complete)
 			val &= ~BMSR_ANEGCOMPLETE;
-		if (!aneg)
-			val &= ~BMSR_ANEGCAPABLE;
 	}
 	return val;
 }
@@ -1503,8 +1501,7 @@ static int phylink_mii_read(struct phylink *pl, unsigned int phy_id,
 	case MLO_AN_FIXED:
 		if (phy_id == 0) {
 			phylink_get_fixed_state(pl, &state);
-			val = phylink_mii_emul_read(pl->netdev, reg, &state,
-						    true);
+			val = phylink_mii_emul_read(reg, &state);
 		}
 		break;
 
@@ -1517,8 +1514,7 @@ static int phylink_mii_read(struct phylink *pl, unsigned int phy_id,
 			if (val < 0)
 				return val;
 
-			val = phylink_mii_emul_read(pl->netdev, reg, &state,
-						    true);
+			val = phylink_mii_emul_read(reg, &state);
 		}
 		break;
 	}

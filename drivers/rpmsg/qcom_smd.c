@@ -1569,7 +1569,7 @@ static struct platform_driver qcom_smd_driver = {
 	.remove = qcom_smd_remove,
 	.driver = {
 		.name = "qcom-smd",
-		.of_match_table = qcom_smd_of_match,
+		.of_match_table = of_match_ptr(qcom_smd_of_match),
 	},
 };
 

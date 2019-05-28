@@ -330,7 +330,7 @@ static struct platform_driver glink_rpm_driver = {
 	.remove = glink_rpm_remove,
 	.driver = {
 		.name = "qcom_glink_rpm",
-		.of_match_table = glink_rpm_of_match,
+		.of_match_table = of_match_ptr(glink_rpm_of_match),
 	},
 };
 

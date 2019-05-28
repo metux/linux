@@ -1647,7 +1647,7 @@ static struct platform_driver cdns_i3c_master = {
 	.remove = cdns_i3c_master_remove,
 	.driver = {
 		.name = "cdns-i3c-master",
-		.of_match_table = cdns_i3c_master_of_ids,
+		.of_match_table = of_match_ptr(cdns_i3c_master_of_ids),
 	},
 };
 module_platform_driver(cdns_i3c_master);

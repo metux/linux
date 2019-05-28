@@ -427,7 +427,7 @@ static int sram_remove(struct platform_device *pdev)
 static struct platform_driver sram_driver = {
 	.driver = {
 		.name = "sram",
-		.of_match_table = sram_dt_ids,
+		.of_match_table = of_match_ptr(sram_dt_ids),
 	},
 	.probe = sram_probe,
 	.remove = sram_remove,

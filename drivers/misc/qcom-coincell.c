@@ -134,7 +134,7 @@ MODULE_DEVICE_TABLE(of, qcom_coincell_match_table);
 static struct platform_driver qcom_coincell_driver = {
 	.driver	= {
 		.name		= "qcom-spmi-coincell",
-		.of_match_table	= qcom_coincell_match_table,
+		.of_match_table	= of_match_ptr(qcom_coincell_match_table),
 	},
 	.probe		= qcom_coincell_probe,
 };

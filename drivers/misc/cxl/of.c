@@ -498,7 +498,7 @@ MODULE_DEVICE_TABLE(of, cxl_of_match);
 struct platform_driver cxl_of_driver = {
 	.driver = {
 		.name = "cxl_of",
-		.of_match_table = cxl_of_match,
+		.of_match_table = of_match_ptr(cxl_of_match),
 		.owner = THIS_MODULE
 	},
 	.probe = cxl_of_probe,

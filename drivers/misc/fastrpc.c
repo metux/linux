@@ -1383,7 +1383,7 @@ static struct platform_driver fastrpc_cb_driver = {
 	.remove = fastrpc_cb_remove,
 	.driver = {
 		.name = "qcom,fastrpc-cb",
-		.of_match_table = fastrpc_match_table,
+		.of_match_table = of_match_ptr(fastrpc_match_table),
 		.suppress_bind_attrs = true,
 	},
 };
@@ -1510,7 +1510,7 @@ static struct rpmsg_driver fastrpc_driver = {
 	.callback = fastrpc_rpmsg_callback,
 	.drv = {
 		.name = "qcom,fastrpc",
-		.of_match_table = fastrpc_rpmsg_of_match,
+		.of_match_table = of_match_ptr(fastrpc_rpmsg_of_match),
 	},
 };
 

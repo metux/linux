@@ -1583,7 +1583,7 @@ MODULE_DEVICE_TABLE(of, idt_of_match);
 static struct i2c_driver idt_driver = {
 	.driver = {
 		.name = IDT_NAME,
-		.of_match_table = idt_of_match,
+		.of_match_table = of_match_ptr(idt_of_match),
 	},
 	.probe = idt_probe,
 	.remove = idt_remove,

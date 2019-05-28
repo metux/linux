@@ -170,7 +170,7 @@ static const struct of_device_id pvpanic_mmio_match[] = {
 static struct platform_driver pvpanic_mmio_driver = {
 	.driver = {
 		.name = "pvpanic-mmio",
-		.of_match_table = pvpanic_mmio_match,
+		.of_match_table = of_match_ptr(pvpanic_mmio_match),
 	},
 	.probe = pvpanic_mmio_probe,
 	.remove = pvpanic_mmio_remove,

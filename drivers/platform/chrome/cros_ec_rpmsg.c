@@ -245,7 +245,7 @@ MODULE_DEVICE_TABLE(of, cros_ec_rpmsg_of_match);
 static struct rpmsg_driver cros_ec_driver_rpmsg = {
 	.drv = {
 		.name   = "cros-ec-rpmsg",
-		.of_match_table = cros_ec_rpmsg_of_match,
+		.of_match_table = of_match_ptr(cros_ec_rpmsg_of_match),
 	},
 	.probe		= cros_ec_rpmsg_probe,
 	.remove		= cros_ec_rpmsg_remove,

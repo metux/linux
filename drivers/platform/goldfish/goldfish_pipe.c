@@ -959,7 +959,7 @@ static struct platform_driver goldfish_pipe_driver = {
 	.remove = goldfish_pipe_remove,
 	.driver = {
 		.name = "goldfish_pipe",
-		.of_match_table = goldfish_pipe_of_match,
+		.of_match_table = of_match_ptr(goldfish_pipe_of_match),
 		.acpi_match_table = ACPI_PTR(goldfish_pipe_acpi_match),
 	}
 };

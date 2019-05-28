@@ -629,7 +629,7 @@ static SIMPLE_DEV_PM_OPS(atmel_ebi_pm_ops, NULL, atmel_ebi_resume);
 static struct platform_driver atmel_ebi_driver = {
 	.driver = {
 		.name = "atmel-ebi",
-		.of_match_table	= atmel_ebi_id_table,
+		.of_match_table	= of_match_ptr(atmel_ebi_id_table),
 		.pm = &atmel_ebi_pm_ops,
 	},
 };

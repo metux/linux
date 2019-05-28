@@ -160,7 +160,7 @@ static struct platform_driver da8xx_ddrctl_driver = {
 	.probe = da8xx_ddrctl_probe,
 	.driver = {
 		.name = "da850-ddr-controller",
-		.of_match_table = da8xx_ddrctl_of_match,
+		.of_match_table = of_match_ptr(da8xx_ddrctl_of_match),
 	},
 };
 module_platform_driver(da8xx_ddrctl_driver);

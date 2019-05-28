@@ -204,7 +204,7 @@ static struct platform_driver exynos_srom_driver = {
 	.probe = exynos_srom_probe,
 	.driver = {
 		.name = "exynos-srom",
-		.of_match_table = of_exynos_srom_ids,
+		.of_match_table = of_match_ptr(of_exynos_srom_ids),
 		.pm = &exynos_srom_pm_ops,
 		.suppress_bind_attrs = true,
 	},

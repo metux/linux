@@ -579,7 +579,7 @@ static struct platform_driver tegra_emc_driver = {
 	.probe = tegra_emc_probe,
 	.driver = {
 		.name = "tegra20-emc",
-		.of_match_table = tegra_emc_of_match,
+		.of_match_table = of_match_ptr(tegra_emc_of_match),
 		.suppress_bind_attrs = true,
 	},
 };

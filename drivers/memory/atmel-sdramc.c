@@ -69,7 +69,7 @@ static struct platform_driver atmel_ramc_driver = {
 	.probe		= atmel_ramc_probe,
 	.driver		= {
 		.name	= "atmel-ramc",
-		.of_match_table = atmel_ramc_of_match,
+		.of_match_table = of_match_ptr(atmel_ramc_of_match),
 	},
 };
 

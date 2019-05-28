@@ -266,7 +266,7 @@ static int ccf_remove(struct platform_device *pdev)
 static struct platform_driver ccf_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = ccf_matches,
+		.of_match_table = of_match_ptr(ccf_matches),
 	},
 	.probe = ccf_probe,
 	.remove = ccf_remove,

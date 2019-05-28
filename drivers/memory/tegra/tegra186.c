@@ -585,7 +585,7 @@ MODULE_DEVICE_TABLE(of, tegra186_mc_of_match);
 static struct platform_driver tegra186_mc_driver = {
 	.driver = {
 		.name = "tegra186-mc",
-		.of_match_table = tegra186_mc_of_match,
+		.of_match_table = of_match_ptr(tegra186_mc_of_match),
 		.suppress_bind_attrs = true,
 	},
 	.prevent_deferred_probe = true,

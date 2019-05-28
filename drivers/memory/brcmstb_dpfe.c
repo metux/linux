@@ -889,7 +889,7 @@ MODULE_DEVICE_TABLE(of, brcmstb_dpfe_of_match);
 static struct platform_driver brcmstb_dpfe_driver = {
 	.driver	= {
 		.name = DRVNAME,
-		.of_match_table = brcmstb_dpfe_of_match,
+		.of_match_table = of_match_ptr(brcmstb_dpfe_of_match),
 	},
 	.probe = brcmstb_dpfe_probe,
 	.remove	= brcmstb_dpfe_remove,

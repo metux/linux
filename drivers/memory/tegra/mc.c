@@ -756,7 +756,7 @@ static const struct dev_pm_ops tegra_mc_pm_ops = {
 static struct platform_driver tegra_mc_driver = {
 	.driver = {
 		.name = "tegra-mc",
-		.of_match_table = tegra_mc_of_match,
+		.of_match_table = of_match_ptr(tegra_mc_of_match),
 		.pm = &tegra_mc_pm_ops,
 		.suppress_bind_attrs = true,
 	},

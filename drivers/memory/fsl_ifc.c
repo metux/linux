@@ -308,7 +308,7 @@ static const struct of_device_id fsl_ifc_match[] = {
 static struct platform_driver fsl_ifc_ctrl_driver = {
 	.driver = {
 		.name	= "fsl-ifc",
-		.of_match_table = fsl_ifc_match,
+		.of_match_table = of_match_ptr(fsl_ifc_match),
 	},
 	.probe       = fsl_ifc_ctrl_probe,
 	.remove      = fsl_ifc_ctrl_remove,

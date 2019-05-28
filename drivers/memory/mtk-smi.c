@@ -341,7 +341,7 @@ static struct platform_driver mtk_smi_larb_driver = {
 	.remove	= mtk_smi_larb_remove,
 	.driver	= {
 		.name = "mtk-smi-larb",
-		.of_match_table = mtk_smi_larb_of_ids,
+		.of_match_table = of_match_ptr(mtk_smi_larb_of_ids),
 	}
 };
 
@@ -419,7 +419,7 @@ static struct platform_driver mtk_smi_common_driver = {
 	.remove = mtk_smi_common_remove,
 	.driver	= {
 		.name = "mtk-smi-common",
-		.of_match_table = mtk_smi_common_of_ids,
+		.of_match_table = of_match_ptr(mtk_smi_common_of_ids),
 	}
 };
 

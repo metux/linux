@@ -1514,7 +1514,7 @@ static struct platform_driver qcom_slim_ngd_ctrl_driver = {
 	.remove = qcom_slim_ngd_ctrl_remove,
 	.driver	= {
 		.name = "qcom,slim-ngd-ctrl",
-		.of_match_table = qcom_slim_ngd_dt_match,
+		.of_match_table = of_match_ptr(qcom_slim_ngd_dt_match),
 	},
 };
 

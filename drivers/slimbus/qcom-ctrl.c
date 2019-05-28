@@ -732,7 +732,7 @@ static struct platform_driver qcom_slim_driver = {
 	.remove = qcom_slim_remove,
 	.driver	= {
 		.name = "qcom_slim_ctrl",
-		.of_match_table = qcom_slim_dt_match,
+		.of_match_table = of_match_ptr(qcom_slim_dt_match),
 		.pm = &qcom_slim_dev_pm_ops,
 	},
 };

@@ -306,7 +306,7 @@ static struct platform_driver static_funnel_driver = {
 	.probe          = static_funnel_probe,
 	.driver         = {
 		.name   = "coresight-static-funnel",
-		.of_match_table = static_funnel_match,
+		.of_match_table = of_match_ptr(static_funnel_match),
 		.pm	= &funnel_dev_pm_ops,
 		.suppress_bind_attrs = true,
 	},

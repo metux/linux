@@ -1664,7 +1664,7 @@ static SIMPLE_DEV_PM_OPS(sdhci_tegra_dev_pm_ops, sdhci_tegra_suspend,
 static struct platform_driver sdhci_tegra_driver = {
 	.driver		= {
 		.name	= "sdhci-tegra",
-		.of_match_table = sdhci_tegra_dt_match,
+		.of_match_table = of_match_ptr(sdhci_tegra_dt_match),
 		.pm	= &sdhci_tegra_dev_pm_ops,
 	},
 	.probe		= sdhci_tegra_probe,

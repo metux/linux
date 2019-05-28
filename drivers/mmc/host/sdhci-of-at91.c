@@ -437,7 +437,7 @@ static int sdhci_at91_remove(struct platform_device *pdev)
 static struct platform_driver sdhci_at91_driver = {
 	.driver		= {
 		.name	= "sdhci-at91",
-		.of_match_table = sdhci_at91_dt_match,
+		.of_match_table = of_match_ptr(sdhci_at91_dt_match),
 		.pm	= &sdhci_at91_dev_pm_ops,
 	},
 	.probe		= sdhci_at91_probe,

@@ -1563,7 +1563,7 @@ static struct platform_driver sh_mmcif_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.pm	= &sh_mmcif_dev_pm_ops,
-		.of_match_table = sh_mmcif_of_match,
+		.of_match_table = of_match_ptr(sh_mmcif_of_match),
 	},
 };
 

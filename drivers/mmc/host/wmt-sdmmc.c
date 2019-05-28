@@ -991,7 +991,7 @@ static struct platform_driver wmt_mci_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
 		.pm = wmt_mci_pm_ops,
-		.of_match_table = wmt_mci_dt_ids,
+		.of_match_table = of_match_ptr(wmt_mci_dt_ids),
 	},
 };
 

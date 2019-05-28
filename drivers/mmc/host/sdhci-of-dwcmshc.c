@@ -143,7 +143,7 @@ MODULE_DEVICE_TABLE(of, sdhci_dwcmshc_dt_ids);
 static struct platform_driver sdhci_dwcmshc_driver = {
 	.driver	= {
 		.name	= "sdhci-dwcmshc",
-		.of_match_table = sdhci_dwcmshc_dt_ids,
+		.of_match_table = of_match_ptr(sdhci_dwcmshc_dt_ids),
 	},
 	.probe	= dwcmshc_probe,
 	.remove	= dwcmshc_remove,

@@ -691,7 +691,7 @@ static struct platform_driver uniphier_sd_driver = {
 	.remove = uniphier_sd_remove,
 	.driver = {
 		.name = "uniphier-sd",
-		.of_match_table = uniphier_sd_match,
+		.of_match_table = of_match_ptr(uniphier_sd_match),
 	},
 };
 module_platform_driver(uniphier_sd_driver);

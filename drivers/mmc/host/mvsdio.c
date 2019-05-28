@@ -828,7 +828,7 @@ static struct platform_driver mvsd_driver = {
 	.remove		= mvsd_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.of_match_table = mvsdio_dt_ids,
+		.of_match_table = of_match_ptr(mvsdio_dt_ids),
 	},
 };
 

@@ -383,7 +383,7 @@ static struct platform_driver dw_mci_rockchip_pltfm_driver = {
 	.remove		= dw_mci_rockchip_remove,
 	.driver		= {
 		.name		= "dwmmc_rockchip",
-		.of_match_table	= dw_mci_rockchip_match,
+		.of_match_table	= of_match_ptr(dw_mci_rockchip_match),
 		.pm		= &dw_mci_rockchip_dev_pm_ops,
 	},
 };

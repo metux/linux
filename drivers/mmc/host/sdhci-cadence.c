@@ -439,7 +439,7 @@ static struct platform_driver sdhci_cdns_driver = {
 	.driver = {
 		.name = "sdhci-cdns",
 		.pm = &sdhci_cdns_pm_ops,
-		.of_match_table = sdhci_cdns_match,
+		.of_match_table = of_match_ptr(sdhci_cdns_match),
 	},
 	.probe = sdhci_cdns_probe,
 	.remove = sdhci_pltfm_unregister,

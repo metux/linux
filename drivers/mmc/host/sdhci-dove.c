@@ -106,7 +106,7 @@ static struct platform_driver sdhci_dove_driver = {
 	.driver		= {
 		.name	= "sdhci-dove",
 		.pm	= &sdhci_pltfm_pmops,
-		.of_match_table = sdhci_dove_of_match_table,
+		.of_match_table = of_match_ptr(sdhci_dove_of_match_table),
 	},
 	.probe		= sdhci_dove_probe,
 	.remove		= sdhci_pltfm_unregister,

@@ -729,7 +729,7 @@ static struct platform_driver mxs_mmc_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.pm	= &mxs_mmc_pm_ops,
-		.of_match_table = mxs_mmc_dt_ids,
+		.of_match_table = of_match_ptr(mxs_mmc_dt_ids),
 	},
 };
 

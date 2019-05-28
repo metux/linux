@@ -1180,7 +1180,7 @@ static struct platform_driver sdhci_omap_driver = {
 	.remove = sdhci_omap_remove,
 	.driver = {
 		   .name = "sdhci-omap",
-		   .of_match_table = omap_sdhci_match,
+		   .of_match_table = of_match_ptr(omap_sdhci_match),
 		  },
 };
 

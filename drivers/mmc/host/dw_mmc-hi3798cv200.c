@@ -200,7 +200,7 @@ static struct platform_driver dw_mci_hi3798cv200_driver = {
 	.remove = dw_mci_hi3798cv200_remove,
 	.driver = {
 		.name = "dwmmc_hi3798cv200",
-		.of_match_table = dw_mci_hi3798cv200_match,
+		.of_match_table = of_match_ptr(dw_mci_hi3798cv200_match),
 	},
 };
 module_platform_driver(dw_mci_hi3798cv200_driver);

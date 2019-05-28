@@ -220,7 +220,7 @@ MODULE_DEVICE_TABLE(of, sdhci_sirf_of_match);
 static struct platform_driver sdhci_sirf_driver = {
 	.driver		= {
 		.name	= "sdhci-sirf",
-		.of_match_table = sdhci_sirf_of_match,
+		.of_match_table = of_match_ptr(sdhci_sirf_of_match),
 		.pm	= &sdhci_pltfm_pmops,
 	},
 	.probe		= sdhci_sirf_probe,

@@ -1397,7 +1397,7 @@ static struct platform_driver davinci_mmcsd_driver = {
 	.driver		= {
 		.name	= "davinci_mmc",
 		.pm	= davinci_mmcsd_pm_ops,
-		.of_match_table = davinci_mmc_dt_ids,
+		.of_match_table = of_match_ptr(davinci_mmc_dt_ids),
 	},
 	.probe		= davinci_mmcsd_probe,
 	.remove		= __exit_p(davinci_mmcsd_remove),

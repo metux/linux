@@ -514,7 +514,7 @@ static int sdhci_am654_remove(struct platform_device *pdev)
 static struct platform_driver sdhci_am654_driver = {
 	.driver = {
 		.name = "sdhci-am654",
-		.of_match_table = sdhci_am654_of_match,
+		.of_match_table = of_match_ptr(sdhci_am654_of_match),
 	},
 	.probe = sdhci_am654_probe,
 	.remove = sdhci_am654_remove,

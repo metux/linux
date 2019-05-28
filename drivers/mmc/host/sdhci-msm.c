@@ -2037,7 +2037,7 @@ static struct platform_driver sdhci_msm_driver = {
 	.remove = sdhci_msm_remove,
 	.driver = {
 		   .name = "sdhci_msm",
-		   .of_match_table = sdhci_msm_dt_match,
+		   .of_match_table = of_match_ptr(sdhci_msm_dt_match),
 		   .pm = &sdhci_msm_pm_ops,
 	},
 };

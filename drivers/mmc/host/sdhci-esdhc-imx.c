@@ -1738,7 +1738,7 @@ static const struct dev_pm_ops sdhci_esdhc_pmops = {
 static struct platform_driver sdhci_esdhc_imx_driver = {
 	.driver		= {
 		.name	= "sdhci-esdhc-imx",
-		.of_match_table = imx_esdhc_dt_ids,
+		.of_match_table = of_match_ptr(imx_esdhc_dt_ids),
 		.pm	= &sdhci_esdhc_pmops,
 	},
 	.id_table	= imx_esdhc_devtype,

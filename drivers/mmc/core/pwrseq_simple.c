@@ -156,7 +156,7 @@ static struct platform_driver mmc_pwrseq_simple_driver = {
 	.remove = mmc_pwrseq_simple_remove,
 	.driver = {
 		.name = "pwrseq_simple",
-		.of_match_table = mmc_pwrseq_simple_of_match,
+		.of_match_table = of_match_ptr(mmc_pwrseq_simple_of_match),
 	},
 };
 

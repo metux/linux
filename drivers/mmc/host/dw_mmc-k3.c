@@ -473,7 +473,7 @@ static struct platform_driver dw_mci_k3_pltfm_driver = {
 	.remove		= dw_mci_pltfm_remove,
 	.driver		= {
 		.name		= "dwmmc_k3",
-		.of_match_table	= dw_mci_k3_match,
+		.of_match_table	= of_match_ptr(dw_mci_k3_match),
 		.pm		= &dw_mci_k3_dev_pm_ops,
 	},
 };

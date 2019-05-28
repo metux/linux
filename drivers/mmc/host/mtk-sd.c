@@ -2455,7 +2455,7 @@ static struct platform_driver mt_msdc_driver = {
 	.remove = msdc_drv_remove,
 	.driver = {
 		.name = "mtk-msdc",
-		.of_match_table = msdc_of_ids,
+		.of_match_table = of_match_ptr(msdc_of_ids),
 		.pm = &msdc_dev_pm_ops,
 	},
 };

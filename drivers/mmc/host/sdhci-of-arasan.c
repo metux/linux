@@ -880,7 +880,7 @@ static int sdhci_arasan_remove(struct platform_device *pdev)
 static struct platform_driver sdhci_arasan_driver = {
 	.driver = {
 		.name = "sdhci-arasan",
-		.of_match_table = sdhci_arasan_of_match,
+		.of_match_table = of_match_ptr(sdhci_arasan_of_match),
 		.pm = &sdhci_arasan_dev_pm_ops,
 	},
 	.probe = sdhci_arasan_probe,

@@ -341,7 +341,7 @@ err:
 static struct platform_driver sdhci_iproc_driver = {
 	.driver = {
 		.name = "sdhci-iproc",
-		.of_match_table = sdhci_iproc_of_match,
+		.of_match_table = of_match_ptr(sdhci_iproc_of_match),
 		.acpi_match_table = ACPI_PTR(sdhci_iproc_acpi_ids),
 		.pm = &sdhci_pltfm_pmops,
 	},

@@ -1238,7 +1238,7 @@ static struct platform_driver mxcmci_driver = {
 	.driver		= {
 		.name		= DRIVER_NAME,
 		.pm	= &mxcmci_pm_ops,
-		.of_match_table	= mxcmci_of_match,
+		.of_match_table	= of_match_ptr(mxcmci_of_match),
 	}
 };
 

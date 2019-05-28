@@ -99,7 +99,7 @@ static struct platform_driver mmc_pwrseq_sd8787_driver = {
 	.remove = mmc_pwrseq_sd8787_remove,
 	.driver = {
 		.name = "pwrseq_sd8787",
-		.of_match_table = mmc_pwrseq_sd8787_of_match,
+		.of_match_table = of_match_ptr(mmc_pwrseq_sd8787_of_match),
 	},
 };
 

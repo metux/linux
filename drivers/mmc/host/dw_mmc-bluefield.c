@@ -55,7 +55,7 @@ static struct platform_driver dw_mci_bluefield_pltfm_driver = {
 	.remove		= dw_mci_pltfm_remove,
 	.driver		= {
 		.name		= "dwmmc_bluefield",
-		.of_match_table	= dw_mci_bluefield_match,
+		.of_match_table	= of_match_ptr(dw_mci_bluefield_match),
 		.pm		= &dw_mci_pltfm_pmops,
 	},
 };

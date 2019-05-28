@@ -338,7 +338,7 @@ static struct platform_driver octeon_mmc_driver = {
 	.remove		= octeon_mmc_remove,
 	.driver		= {
 		.name	= KBUILD_MODNAME,
-		.of_match_table = octeon_mmc_match,
+		.of_match_table = of_match_ptr(octeon_mmc_match),
 	},
 };
 

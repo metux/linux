@@ -717,7 +717,7 @@ static struct platform_driver moxart_mmc_driver = {
 	.remove     = moxart_remove,
 	.driver     = {
 		.name		= "mmc-moxart",
-		.of_match_table	= moxart_mmc_match,
+		.of_match_table	= of_match_ptr(moxart_mmc_match),
 	},
 };
 module_platform_driver(moxart_mmc_driver);

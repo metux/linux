@@ -325,7 +325,7 @@ static struct platform_driver sdhci_bcm_kona_driver = {
 	.driver		= {
 		.name	= "sdhci-kona",
 		.pm	= &sdhci_pltfm_pmops,
-		.of_match_table = sdhci_bcm_kona_of_match,
+		.of_match_table = of_match_ptr(sdhci_bcm_kona_of_match),
 	},
 	.probe		= sdhci_bcm_kona_probe,
 	.remove		= sdhci_pltfm_unregister,

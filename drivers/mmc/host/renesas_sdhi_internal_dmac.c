@@ -352,7 +352,8 @@ static struct platform_driver renesas_internal_dmac_sdhi_driver = {
 	.driver		= {
 		.name	= "renesas_sdhi_internal_dmac",
 		.pm	= &renesas_sdhi_internal_dmac_dev_pm_ops,
-		.of_match_table = renesas_sdhi_internal_dmac_of_match,
+		.of_match_table = of_match_ptr(
+			renesas_sdhi_internal_dmac_of_match),
 	},
 	.probe		= renesas_sdhi_internal_dmac_probe,
 	.remove		= renesas_sdhi_remove,

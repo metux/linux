@@ -230,7 +230,7 @@ static struct platform_driver rockchip_dfi_driver = {
 	.probe	= rockchip_dfi_probe,
 	.driver = {
 		.name	= "rockchip-dfi",
-		.of_match_table = rockchip_dfi_id_match,
+		.of_match_table = of_match_ptr(rockchip_dfi_id_match),
 	},
 };
 module_platform_driver(rockchip_dfi_driver);

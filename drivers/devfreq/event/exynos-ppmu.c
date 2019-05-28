@@ -666,7 +666,7 @@ static struct platform_driver exynos_ppmu_driver = {
 	.remove	= exynos_ppmu_remove,
 	.driver = {
 		.name	= "exynos-ppmu",
-		.of_match_table = exynos_ppmu_id_match,
+		.of_match_table = of_match_ptr(exynos_ppmu_id_match),
 	},
 };
 module_platform_driver(exynos_ppmu_driver);

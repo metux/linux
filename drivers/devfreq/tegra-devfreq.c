@@ -734,7 +734,7 @@ static struct platform_driver tegra_devfreq_driver = {
 	.remove	= tegra_devfreq_remove,
 	.driver = {
 		.name = "tegra-devfreq",
-		.of_match_table = tegra_devfreq_of_match,
+		.of_match_table = of_match_ptr(tegra_devfreq_of_match),
 	},
 };
 

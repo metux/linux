@@ -290,7 +290,7 @@ static struct platform_driver exynos_nocp_driver = {
 	.remove	= exynos_nocp_remove,
 	.driver = {
 		.name	= "exynos-nocp",
-		.of_match_table = exynos_nocp_id_match,
+		.of_match_table = of_match_ptr(exynos_nocp_id_match),
 	},
 };
 module_platform_driver(exynos_nocp_driver);

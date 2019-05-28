@@ -493,7 +493,7 @@ static struct platform_driver rk3399_dmcfreq_driver = {
 	.driver = {
 		.name	= "rk3399-dmc-freq",
 		.pm	= &rk3399_dmcfreq_pm,
-		.of_match_table = rk3399dmc_devfreq_of_match,
+		.of_match_table = of_match_ptr(rk3399dmc_devfreq_of_match),
 	},
 };
 module_platform_driver(rk3399_dmcfreq_driver);

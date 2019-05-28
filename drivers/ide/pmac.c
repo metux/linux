@@ -1388,7 +1388,7 @@ static struct macio_driver pmac_ide_macio_driver =
 	.driver = {
 		.name 		= "ide-pmac",
 		.owner		= THIS_MODULE,
-		.of_match_table	= pmac_ide_macio_match,
+		.of_match_table	= of_match_ptr(pmac_ide_macio_match),
 	},
 	.probe		= pmac_ide_macio_attach,
 	.suspend	= pmac_ide_macio_suspend,

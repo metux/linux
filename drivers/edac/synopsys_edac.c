@@ -1407,7 +1407,7 @@ static int mc_remove(struct platform_device *pdev)
 static struct platform_driver synps_edac_mc_driver = {
 	.driver = {
 		   .name = "synopsys-edac",
-		   .of_match_table = synps_edac_match,
+		   .of_match_table = of_match_ptr(synps_edac_match),
 		   },
 	.probe = mc_probe,
 	.remove = mc_remove,

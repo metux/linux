@@ -388,7 +388,7 @@ static const struct of_device_id aspeed_of_match[] = {
 static struct platform_driver aspeed_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = aspeed_of_match
+		.of_match_table = of_match_ptr(aspeed_of_match)
 	},
 	.probe		= aspeed_probe,
 	.remove		= aspeed_remove

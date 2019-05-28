@@ -131,7 +131,7 @@ static struct platform_driver highbank_l2_edac_driver = {
 	.remove = highbank_l2_err_remove,
 	.driver = {
 		.name = "hb_l2_edac",
-		.of_match_table = hb_l2_err_of_match,
+		.of_match_table = of_match_ptr(hb_l2_err_of_match),
 	},
 };
 

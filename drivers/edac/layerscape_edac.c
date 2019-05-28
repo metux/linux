@@ -30,7 +30,7 @@ static struct platform_driver fsl_ddr_mc_err_driver = {
 	.remove = fsl_mc_err_remove,
 	.driver = {
 		.name = "fsl_ddr_mc_err",
-		.of_match_table = fsl_ddr_mc_err_of_match,
+		.of_match_table = of_match_ptr(fsl_ddr_mc_err_of_match),
 	},
 };
 

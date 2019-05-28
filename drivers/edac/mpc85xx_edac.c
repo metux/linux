@@ -639,7 +639,7 @@ static struct platform_driver mpc85xx_l2_err_driver = {
 	.remove = mpc85xx_l2_err_remove,
 	.driver = {
 		.name = "mpc85xx_l2_err",
-		.of_match_table = mpc85xx_l2_err_of_match,
+		.of_match_table = of_match_ptr(mpc85xx_l2_err_of_match),
 	},
 };
 
@@ -675,7 +675,7 @@ static struct platform_driver mpc85xx_mc_err_driver = {
 	.remove = fsl_mc_err_remove,
 	.driver = {
 		.name = "mpc85xx_mc_err",
-		.of_match_table = mpc85xx_mc_err_of_match,
+		.of_match_table = of_match_ptr(mpc85xx_mc_err_of_match),
 	},
 };
 

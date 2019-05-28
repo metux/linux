@@ -1999,7 +1999,7 @@ static struct platform_driver xgene_edac_driver = {
 	.remove = xgene_edac_remove,
 	.driver = {
 		.name = "xgene-edac",
-		.of_match_table = xgene_edac_of_match,
+		.of_match_table = of_match_ptr(xgene_edac_of_match),
 	},
 };
 

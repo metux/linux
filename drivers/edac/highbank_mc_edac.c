@@ -261,7 +261,7 @@ static struct platform_driver highbank_mc_edac_driver = {
 	.remove = highbank_mc_remove,
 	.driver = {
 		.name = "hb_mc_edac",
-		.of_match_table = hb_ddr_ctrl_of_match,
+		.of_match_table = of_match_ptr(hb_ddr_ctrl_of_match),
 	},
 };
 

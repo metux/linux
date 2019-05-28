@@ -495,7 +495,7 @@ static struct platform_driver altr_sdram_edac_driver = {
 #ifdef CONFIG_PM
 		.pm = &altr_sdram_pm_ops,
 #endif
-		.of_match_table = altr_sdram_ctrl_of_match,
+		.of_match_table = of_match_ptr(altr_sdram_ctrl_of_match),
 	},
 };
 
@@ -586,7 +586,7 @@ static struct platform_driver altr_edac_driver = {
 	.probe =  altr_edac_probe,
 	.driver = {
 		.name = "socfpga_ecc_manager",
-		.of_match_table = altr_edac_of_match,
+		.of_match_table = of_match_ptr(altr_edac_of_match),
 	},
 };
 module_platform_driver(altr_edac_driver);
@@ -883,7 +883,7 @@ static struct platform_driver altr_edac_device_driver = {
 	.remove = altr_edac_device_remove,
 	.driver = {
 		.name = "altr_edac_device",
-		.of_match_table = altr_edac_device_of_match,
+		.of_match_table = of_match_ptr(altr_edac_device_of_match),
 	},
 };
 module_platform_driver(altr_edac_device_driver);
@@ -2258,7 +2258,7 @@ static struct platform_driver altr_edac_a10_driver = {
 	.probe =  altr_edac_a10_probe,
 	.driver = {
 		.name = "socfpga_a10_ecc_manager",
-		.of_match_table = altr_edac_a10_of_match,
+		.of_match_table = of_match_ptr(altr_edac_a10_of_match),
 	},
 };
 module_platform_driver(altr_edac_a10_driver);

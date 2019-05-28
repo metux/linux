@@ -330,7 +330,7 @@ static struct platform_driver ti_edac_driver = {
 	.remove = ti_edac_remove,
 	.driver = {
 		   .name = EDAC_MOD_NAME,
-		   .of_match_table = ti_edac_of_match,
+		   .of_match_table = of_match_ptr(ti_edac_of_match),
 	},
 };
 

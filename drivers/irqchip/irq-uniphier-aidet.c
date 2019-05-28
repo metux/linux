@@ -246,7 +246,7 @@ static struct platform_driver uniphier_aidet_driver = {
 	.probe = uniphier_aidet_probe,
 	.driver = {
 		.name = "uniphier-aidet",
-		.of_match_table = uniphier_aidet_match,
+		.of_match_table = of_match_ptr(uniphier_aidet_match),
 		.pm = &uniphier_aidet_pm_ops,
 	},
 };

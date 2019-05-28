@@ -605,7 +605,7 @@ static struct platform_driver ti_sci_inta_irq_domain_driver = {
 	.probe = ti_sci_inta_irq_domain_probe,
 	.driver = {
 		.name = "ti-sci-inta",
-		.of_match_table = ti_sci_inta_irq_domain_of_match,
+		.of_match_table = of_match_ptr(ti_sci_inta_irq_domain_of_match),
 	},
 };
 module_platform_driver(ti_sci_inta_irq_domain_driver);

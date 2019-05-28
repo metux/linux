@@ -191,7 +191,7 @@ static struct platform_driver st_irq_syscfg_driver = {
 	.driver = {
 		.name = "st_irq_syscfg",
 		.pm = &st_irq_syscfg_pm_ops,
-		.of_match_table = st_irq_syscfg_match,
+		.of_match_table = of_match_ptr(st_irq_syscfg_match),
 	},
 	.probe = st_irq_syscfg_probe,
 };

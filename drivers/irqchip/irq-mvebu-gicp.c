@@ -258,7 +258,7 @@ static struct platform_driver mvebu_gicp_driver = {
 	.probe  = mvebu_gicp_probe,
 	.driver = {
 		.name = "mvebu-gicp",
-		.of_match_table = mvebu_gicp_of_match,
+		.of_match_table = of_match_ptr(mvebu_gicp_of_match),
 	},
 };
 builtin_platform_driver(mvebu_gicp_driver);

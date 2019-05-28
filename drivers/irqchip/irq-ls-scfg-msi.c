@@ -425,7 +425,7 @@ static int ls_scfg_msi_remove(struct platform_device *pdev)
 static struct platform_driver ls_scfg_msi_driver = {
 	.driver = {
 		.name = "ls-scfg-msi",
-		.of_match_table = ls_scfg_msi_id,
+		.of_match_table = of_match_ptr(ls_scfg_msi_id),
 	},
 	.probe = ls_scfg_msi_probe,
 	.remove = ls_scfg_msi_remove,

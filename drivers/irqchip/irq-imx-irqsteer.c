@@ -305,7 +305,7 @@ static const struct of_device_id imx_irqsteer_dt_ids[] = {
 static struct platform_driver imx_irqsteer_driver = {
 	.driver = {
 		.name = "imx-irqsteer",
-		.of_match_table = imx_irqsteer_dt_ids,
+		.of_match_table = of_match_ptr(imx_irqsteer_dt_ids),
 		.pm = &imx_irqsteer_pm_ops,
 	},
 	.probe = imx_irqsteer_probe,

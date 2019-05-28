@@ -265,7 +265,7 @@ static struct platform_driver ti_sci_intr_irq_domain_driver = {
 	.probe = ti_sci_intr_irq_domain_probe,
 	.driver = {
 		.name = "ti-sci-intr",
-		.of_match_table = ti_sci_intr_irq_domain_of_match,
+		.of_match_table = of_match_ptr(ti_sci_intr_irq_domain_of_match),
 	},
 };
 module_platform_driver(ti_sci_intr_irq_domain_driver);

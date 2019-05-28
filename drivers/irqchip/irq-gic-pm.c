@@ -154,7 +154,7 @@ static struct platform_driver gic_driver = {
 	.probe		= gic_probe,
 	.driver		= {
 		.name	= "gic",
-		.of_match_table	= gic_match,
+		.of_match_table	= of_match_ptr(gic_match),
 		.pm	= &gic_pm_ops,
 	}
 };

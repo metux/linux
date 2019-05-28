@@ -589,7 +589,7 @@ static struct platform_driver intc_irqpin_device_driver = {
 	.remove		= intc_irqpin_remove,
 	.driver		= {
 		.name	= "renesas_intc_irqpin",
-		.of_match_table = intc_irqpin_dt_ids,
+		.of_match_table = of_match_ptr(intc_irqpin_dt_ids),
 		.pm	= &intc_irqpin_pm_ops,
 	}
 };

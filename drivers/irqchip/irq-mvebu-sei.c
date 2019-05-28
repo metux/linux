@@ -501,7 +501,7 @@ static struct platform_driver mvebu_sei_driver = {
 	.probe  = mvebu_sei_probe,
 	.driver = {
 		.name = "mvebu-sei",
-		.of_match_table = mvebu_sei_of_match,
+		.of_match_table = of_match_ptr(mvebu_sei_of_match),
 	},
 };
 builtin_platform_driver(mvebu_sei_driver);

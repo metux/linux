@@ -153,7 +153,7 @@ static struct platform_driver ts4800_ic_driver = {
 	.remove = ts4800_ic_remove,
 	.driver = {
 		.name = "ts4800-irqc",
-		.of_match_table = ts4800_ic_of_match,
+		.of_match_table = of_match_ptr(ts4800_ic_of_match),
 	},
 };
 module_platform_driver(ts4800_ic_driver);

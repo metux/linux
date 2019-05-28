@@ -185,7 +185,7 @@ static struct platform_driver mvebu_pic_driver = {
 	.remove = mvebu_pic_remove,
 	.driver = {
 		.name = "mvebu-pic",
-		.of_match_table = mvebu_pic_of_match,
+		.of_match_table = of_match_ptr(mvebu_pic_of_match),
 	},
 };
 module_platform_driver(mvebu_pic_driver);

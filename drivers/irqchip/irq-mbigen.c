@@ -367,7 +367,7 @@ MODULE_DEVICE_TABLE(acpi, mbigen_acpi_match);
 static struct platform_driver mbigen_platform_driver = {
 	.driver = {
 		.name		= "Hisilicon MBIGEN-V2",
-		.of_match_table	= mbigen_of_match,
+		.of_match_table	= of_match_ptr(mbigen_of_match),
 		.acpi_match_table = ACPI_PTR(mbigen_acpi_match),
 	},
 	.probe			= mbigen_device_probe,

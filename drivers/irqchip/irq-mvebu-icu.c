@@ -339,7 +339,7 @@ static struct platform_driver mvebu_icu_subset_driver = {
 	.probe  = mvebu_icu_subset_probe,
 	.driver = {
 		.name = "mvebu-icu-subset",
-		.of_match_table = mvebu_icu_subset_of_match,
+		.of_match_table = of_match_ptr(mvebu_icu_subset_of_match),
 	},
 };
 builtin_platform_driver(mvebu_icu_subset_driver);
@@ -407,7 +407,7 @@ static struct platform_driver mvebu_icu_driver = {
 	.probe  = mvebu_icu_probe,
 	.driver = {
 		.name = "mvebu-icu",
-		.of_match_table = mvebu_icu_of_match,
+		.of_match_table = of_match_ptr(mvebu_icu_of_match),
 	},
 };
 builtin_platform_driver(mvebu_icu_driver);

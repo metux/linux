@@ -488,7 +488,7 @@ static const struct of_device_id pdc_intc_match[] = {
 static struct platform_driver pdc_intc_driver = {
 	.driver = {
 		.name		= "pdc-intc",
-		.of_match_table	= pdc_intc_match,
+		.of_match_table	= of_match_ptr(pdc_intc_match),
 	},
 	.probe = pdc_intc_probe,
 	.remove = pdc_intc_remove,

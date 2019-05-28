@@ -249,7 +249,7 @@ static struct platform_driver irqc_device_driver = {
 	.remove		= irqc_remove,
 	.driver		= {
 		.name	= "renesas_irqc",
-		.of_match_table	= irqc_dt_ids,
+		.of_match_table	= of_match_ptr(irqc_dt_ids),
 		.pm	= &irqc_pm_ops,
 	}
 };

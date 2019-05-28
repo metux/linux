@@ -414,7 +414,7 @@ static struct platform_driver pm8941_wled_driver = {
 	.probe = pm8941_wled_probe,
 	.driver	= {
 		.name = "pm8941-wled",
-		.of_match_table	= pm8941_wled_match_table,
+		.of_match_table	= of_match_ptr(pm8941_wled_match_table),
 	},
 };
 

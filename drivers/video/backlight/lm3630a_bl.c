@@ -609,7 +609,7 @@ MODULE_DEVICE_TABLE(i2c, lm3630a_id);
 static struct i2c_driver lm3630a_i2c_driver = {
 	.driver = {
 		   .name = LM3630A_NAME,
-		   .of_match_table = lm3630a_match_table,
+		   .of_match_table = of_match_ptr(lm3630a_match_table),
 		   },
 	.probe = lm3630a_probe,
 	.remove = lm3630a_remove,

@@ -901,7 +901,7 @@ static struct platform_driver ramoops_driver = {
 	.remove		= ramoops_remove,
 	.driver		= {
 		.name		= "ramoops",
-		.of_match_table	= dt_match,
+		.of_match_table	= of_match_ptr(dt_match),
 	},
 };
 

@@ -302,7 +302,7 @@ static struct spi_driver cr0014114_driver = {
 	.remove		= cr0014114_remove,
 	.driver = {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= cr0014114_dt_ids,
+		.of_match_table	= of_match_ptr(cr0014114_dt_ids),
 	},
 };
 

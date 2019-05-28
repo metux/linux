@@ -496,7 +496,7 @@ MODULE_DEVICE_TABLE(i2c, is31fl32xx_id);
 static struct i2c_driver is31fl32xx_driver = {
 	.driver = {
 		.name	= "is31fl32xx",
-		.of_match_table = of_is31fl32xx_match,
+		.of_match_table = of_match_ptr(of_is31fl32xx_match),
 	},
 	.probe		= is31fl32xx_probe,
 	.remove		= is31fl32xx_remove,

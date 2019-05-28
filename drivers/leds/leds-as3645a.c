@@ -774,7 +774,7 @@ MODULE_DEVICE_TABLE(of, as3645a_of_table);
 
 static struct i2c_driver as3645a_i2c_driver = {
 	.driver	= {
-		.of_match_table = as3645a_of_table,
+		.of_match_table = of_match_ptr(as3645a_of_table),
 		.name = AS_NAME,
 	},
 	.probe_new	= as3645a_probe,

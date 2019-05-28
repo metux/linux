@@ -351,7 +351,7 @@ MODULE_DEVICE_TABLE(of, sc27xx_led_of_match);
 static struct platform_driver sc27xx_led_driver = {
 	.driver = {
 		.name = "sprd-bltc",
-		.of_match_table = sc27xx_led_of_match,
+		.of_match_table = of_match_ptr(sc27xx_led_of_match),
 	},
 	.probe = sc27xx_led_probe,
 	.remove = sc27xx_led_remove,

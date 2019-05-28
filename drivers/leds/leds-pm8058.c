@@ -173,7 +173,7 @@ static struct platform_driver pm8058_led_driver = {
 	.probe		= pm8058_led_probe,
 	.driver		= {
 		.name	= "pm8058-leds",
-		.of_match_table = pm8058_leds_id_table,
+		.of_match_table = of_match_ptr(pm8058_leds_id_table),
 	},
 };
 module_platform_driver(pm8058_led_driver);

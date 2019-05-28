@@ -482,7 +482,7 @@ static struct platform_driver mt6323_led_driver = {
 	.remove		= mt6323_led_remove,
 	.driver		= {
 		.name	= "mt6323-led",
-		.of_match_table = mt6323_led_dt_match,
+		.of_match_table = of_match_ptr(mt6323_led_dt_match),
 	},
 };
 

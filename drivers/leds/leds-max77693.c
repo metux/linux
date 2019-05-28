@@ -1047,7 +1047,7 @@ static struct platform_driver max77693_led_driver = {
 	.remove		= max77693_led_remove,
 	.driver		= {
 		.name	= "max77693-led",
-		.of_match_table = max77693_led_dt_match,
+		.of_match_table = of_match_ptr(max77693_led_dt_match),
 	},
 };
 

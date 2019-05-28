@@ -455,7 +455,7 @@ MODULE_DEVICE_TABLE(of, of_lm3692x_leds_match);
 static struct i2c_driver lm3692x_driver = {
 	.driver = {
 		.name	= "lm3692x",
-		.of_match_table = of_lm3692x_leds_match,
+		.of_match_table = of_match_ptr(of_lm3692x_leds_match),
 	},
 	.probe		= lm3692x_probe,
 	.remove		= lm3692x_remove,

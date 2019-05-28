@@ -338,7 +338,7 @@ static struct platform_driver powernv_led_driver = {
 	.remove = powernv_led_remove,
 	.driver = {
 		.name = "powernv-led-driver",
-		.of_match_table = powernv_led_match,
+		.of_match_table = of_match_ptr(powernv_led_match),
 	},
 };
 

@@ -221,7 +221,7 @@ static struct platform_driver cpcap_led_driver = {
 	.probe = cpcap_led_probe,
 	.driver = {
 		.name = "cpcap-led",
-		.of_match_table = cpcap_led_of_match,
+		.of_match_table = of_match_ptr(cpcap_led_of_match),
 	},
 };
 module_platform_driver(cpcap_led_driver);

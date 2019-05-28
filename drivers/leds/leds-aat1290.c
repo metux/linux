@@ -543,7 +543,7 @@ static struct platform_driver aat1290_led_driver = {
 	.remove		= aat1290_led_remove,
 	.driver		= {
 		.name	= "aat1290",
-		.of_match_table = aat1290_led_dt_match,
+		.of_match_table = of_match_ptr(aat1290_led_dt_match),
 	},
 };
 

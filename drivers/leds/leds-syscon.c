@@ -134,7 +134,7 @@ static struct platform_driver syscon_led_driver = {
 	.probe		= syscon_led_probe,
 	.driver		= {
 		.name	= "leds-syscon",
-		.of_match_table = of_syscon_leds_match,
+		.of_match_table = of_match_ptr(of_syscon_leds_match),
 		.suppress_bind_attrs = true,
 	},
 };

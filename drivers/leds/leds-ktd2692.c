@@ -402,7 +402,7 @@ MODULE_DEVICE_TABLE(of, ktd2692_match);
 static struct platform_driver ktd2692_driver = {
 	.driver = {
 		.name  = "ktd2692",
-		.of_match_table = ktd2692_match,
+		.of_match_table = of_match_ptr(ktd2692_match),
 	},
 	.probe  = ktd2692_probe,
 	.remove = ktd2692_remove,

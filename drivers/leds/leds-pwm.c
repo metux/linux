@@ -209,7 +209,7 @@ static struct platform_driver led_pwm_driver = {
 	.probe		= led_pwm_probe,
 	.driver		= {
 		.name	= "leds_pwm",
-		.of_match_table = of_pwm_leds_match,
+		.of_match_table = of_match_ptr(of_pwm_leds_match),
 	},
 };
 

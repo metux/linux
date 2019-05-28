@@ -487,7 +487,7 @@ MODULE_DEVICE_TABLE(of, of_lp8860_leds_match);
 static struct i2c_driver lp8860_driver = {
 	.driver = {
 		.name	= "lp8860",
-		.of_match_table = of_lp8860_leds_match,
+		.of_match_table = of_match_ptr(of_lp8860_leds_match),
 	},
 	.probe		= lp8860_probe,
 	.remove		= lp8860_remove,

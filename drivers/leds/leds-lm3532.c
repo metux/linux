@@ -673,7 +673,7 @@ static struct i2c_driver lm3532_i2c_driver = {
 	.id_table = lm3532_id,
 	.driver = {
 		.name = LM3532_NAME,
-		.of_match_table = of_lm3532_leds_match,
+		.of_match_table = of_match_ptr(of_lm3532_leds_match),
 	},
 };
 module_i2c_driver(lm3532_i2c_driver);

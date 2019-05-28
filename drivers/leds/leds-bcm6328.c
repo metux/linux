@@ -429,7 +429,7 @@ static struct platform_driver bcm6328_leds_driver = {
 	.probe = bcm6328_leds_probe,
 	.driver = {
 		.name = "leds-bcm6328",
-		.of_match_table = bcm6328_leds_of_match,
+		.of_match_table = of_match_ptr(bcm6328_leds_of_match),
 	},
 };
 

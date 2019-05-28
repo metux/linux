@@ -571,7 +571,7 @@ static int pca955x_probe(struct i2c_client *client,
 static struct i2c_driver pca955x_driver = {
 	.driver = {
 		.name	= "leds-pca955x",
-		.of_match_table = of_pca955x_match,
+		.of_match_table = of_match_ptr(of_pca955x_match),
 	},
 	.probe	= pca955x_probe,
 	.id_table = pca955x_id,

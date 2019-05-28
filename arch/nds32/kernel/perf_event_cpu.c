@@ -1171,9 +1171,9 @@ out_free:
 
 static struct platform_driver cpu_pmu_driver = {
 	.driver = {
-		   .name = "nds32-pfm",
-		   .of_match_table = cpu_pmu_of_device_ids,
-		   },
+		.name = "nds32-pfm",
+		.of_match_table = of_match_ptr(cpu_pmu_of_device_ids),
+	},
 	.probe = cpu_pmu_device_probe,
 	.id_table = cpu_pmu_plat_device_ids,
 };

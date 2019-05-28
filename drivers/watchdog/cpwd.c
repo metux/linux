@@ -671,7 +671,7 @@ MODULE_DEVICE_TABLE(of, cpwd_match);
 static struct platform_driver cpwd_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = cpwd_match,
+		.of_match_table = of_match_ptr(cpwd_match),
 	},
 	.probe		= cpwd_probe,
 	.remove		= cpwd_remove,

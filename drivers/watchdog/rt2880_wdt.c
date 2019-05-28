@@ -181,7 +181,7 @@ static struct platform_driver rt288x_wdt_driver = {
 	.probe		= rt288x_wdt_probe,
 	.driver		= {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= rt288x_wdt_match,
+		.of_match_table	= of_match_ptr(rt288x_wdt_match),
 	},
 };
 

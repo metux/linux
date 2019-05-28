@@ -424,7 +424,7 @@ static struct platform_driver imx2_wdt_driver = {
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.pm     = &imx2_wdt_pm_ops,
-		.of_match_table = imx2_wdt_dt_ids,
+		.of_match_table = of_match_ptr(imx2_wdt_dt_ids),
 	},
 };
 

@@ -236,7 +236,7 @@ static struct platform_driver rza_wdt_driver = {
 	.probe = rza_wdt_probe,
 	.driver = {
 		.name = "rza_wdt",
-		.of_match_table = rza_wdt_of_match,
+		.of_match_table = of_match_ptr(rza_wdt_of_match),
 	},
 };
 

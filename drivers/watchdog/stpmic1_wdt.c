@@ -130,7 +130,7 @@ static struct platform_driver stpmic1_wdt_driver = {
 	.probe = pmic_wdt_probe,
 	.driver = {
 		.name = "stpmic1-wdt",
-		.of_match_table = of_pmic_wdt_match,
+		.of_match_table = of_match_ptr(of_pmic_wdt_match),
 	},
 };
 module_platform_driver(stpmic1_wdt_driver);

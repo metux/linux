@@ -305,7 +305,7 @@ MODULE_DEVICE_TABLE(of, rwdt_ids);
 static struct platform_driver rwdt_driver = {
 	.driver = {
 		.name = "renesas_wdt",
-		.of_match_table = rwdt_ids,
+		.of_match_table = of_match_ptr(rwdt_ids),
 		.pm = &rwdt_pm_ops,
 	},
 	.probe = rwdt_probe,

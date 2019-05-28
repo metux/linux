@@ -233,7 +233,7 @@ static struct platform_driver mtk_wdt_driver = {
 	.driver		= {
 		.name		= DRV_NAME,
 		.pm		= &mtk_wdt_pm_ops,
-		.of_match_table	= mtk_wdt_dt_ids,
+		.of_match_table	= of_match_ptr(mtk_wdt_dt_ids),
 	},
 };
 

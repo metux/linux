@@ -178,7 +178,7 @@ static struct platform_driver mt7621_wdt_driver = {
 	.shutdown	= mt7621_wdt_shutdown,
 	.driver		= {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= mt7621_wdt_match,
+		.of_match_table	= of_match_ptr(mt7621_wdt_match),
 	},
 };
 

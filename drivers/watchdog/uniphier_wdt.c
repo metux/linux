@@ -236,7 +236,7 @@ static struct platform_driver uniphier_wdt_driver = {
 	.probe		= uniphier_wdt_probe,
 	.driver		= {
 		.name		= "uniphier-wdt",
-		.of_match_table	= uniphier_wdt_dt_ids,
+		.of_match_table	= of_match_ptr(uniphier_wdt_dt_ids),
 	},
 };
 

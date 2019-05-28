@@ -243,7 +243,7 @@ static struct platform_driver imx_sc_wdt_driver = {
 	.probe		= imx_sc_wdt_probe,
 	.driver		= {
 		.name	= "imx-sc-wdt",
-		.of_match_table = imx_sc_wdt_dt_ids,
+		.of_match_table = of_match_ptr(imx_sc_wdt_dt_ids),
 		.pm	= &imx_sc_wdt_pm_ops,
 	},
 };

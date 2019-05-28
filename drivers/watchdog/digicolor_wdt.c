@@ -153,7 +153,7 @@ static struct platform_driver dc_wdt_driver = {
 	.probe		= dc_wdt_probe,
 	.driver = {
 		.name =		"digicolor-wdt",
-		.of_match_table = dc_wdt_of_match,
+		.of_match_table = of_match_ptr(dc_wdt_of_match),
 	},
 };
 module_platform_driver(dc_wdt_driver);

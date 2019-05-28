@@ -238,7 +238,7 @@ MODULE_DEVICE_TABLE(of, riowd_match);
 static struct platform_driver riowd_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = riowd_match,
+		.of_match_table = of_match_ptr(riowd_match),
 	},
 	.probe		= riowd_probe,
 	.remove		= riowd_remove,

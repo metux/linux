@@ -367,7 +367,7 @@ static struct platform_driver omap_wdt_driver = {
 	.resume		= omap_wdt_resume,
 	.driver		= {
 		.name	= "omap_wdt",
-		.of_match_table = omap_wdt_of_match,
+		.of_match_table = of_match_ptr(omap_wdt_of_match),
 	},
 };
 

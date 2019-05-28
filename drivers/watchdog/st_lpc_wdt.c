@@ -295,7 +295,7 @@ static struct platform_driver st_wdog_driver = {
 	.driver	= {
 		.name = "st-lpc-wdt",
 		.pm = &st_wdog_pm_ops,
-		.of_match_table = st_wdog_match,
+		.of_match_table = of_match_ptr(st_wdog_match),
 	},
 	.probe = st_wdog_probe,
 	.remove = st_wdog_remove,

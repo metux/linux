@@ -244,7 +244,7 @@ static struct platform_driver mpc8xxx_wdt_driver = {
 	.probe		= mpc8xxx_wdt_probe,
 	.driver = {
 		.name = "mpc8xxx_wdt",
-		.of_match_table = mpc8xxx_wdt_match,
+		.of_match_table = of_match_ptr(mpc8xxx_wdt_match),
 	},
 };
 

@@ -275,7 +275,7 @@ static struct platform_driver sunxi_wdt_driver = {
 	.probe		= sunxi_wdt_probe,
 	.driver		= {
 		.name		= DRV_NAME,
-		.of_match_table	= sunxi_wdt_dt_ids,
+		.of_match_table	= of_match_ptr(sunxi_wdt_dt_ids),
 	},
 };
 

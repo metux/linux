@@ -306,7 +306,7 @@ MODULE_DEVICE_TABLE(of, lpc18xx_wdt_match);
 static struct platform_driver lpc18xx_wdt_driver = {
 	.driver = {
 		.name = "lpc18xx-wdt",
-		.of_match_table	= lpc18xx_wdt_match,
+		.of_match_table	= of_match_ptr(lpc18xx_wdt_match),
 	},
 	.probe = lpc18xx_wdt_probe,
 	.remove = lpc18xx_wdt_remove,

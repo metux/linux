@@ -355,7 +355,7 @@ static struct platform_driver sbsa_gwdt_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.pm = &sbsa_gwdt_pm_ops,
-		.of_match_table = sbsa_gwdt_of_match,
+		.of_match_table = of_match_ptr(sbsa_gwdt_of_match),
 	},
 	.probe = sbsa_gwdt_probe,
 	.id_table = sbsa_gwdt_pdev_match,

@@ -192,7 +192,7 @@ static struct platform_driver ts4800_wdt_driver = {
 	.probe		= ts4800_wdt_probe,
 	.driver		= {
 		.name	= "ts4800_wdt",
-		.of_match_table = ts4800_wdt_of_match,
+		.of_match_table = of_match_ptr(ts4800_wdt_of_match),
 	},
 };
 

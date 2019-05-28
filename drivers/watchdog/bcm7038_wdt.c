@@ -202,7 +202,7 @@ static struct platform_driver bcm7038_wdt_driver = {
 	.probe		= bcm7038_wdt_probe,
 	.driver		= {
 		.name		= "bcm7038-wdt",
-		.of_match_table	= bcm7038_wdt_match,
+		.of_match_table	= of_match_ptr(bcm7038_wdt_match),
 		.pm		= &bcm7038_wdt_pm_ops,
 	}
 };

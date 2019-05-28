@@ -147,7 +147,7 @@ static struct platform_driver rtd119x_wdt_driver = {
 	.probe = rtd119x_wdt_probe,
 	.driver = {
 		.name = "rtd1295-watchdog",
-		.of_match_table	= rtd119x_wdt_dt_ids,
+		.of_match_table = of_match_ptr(rtd119x_wdt_dt_ids),
 	},
 };
 builtin_platform_driver(rtd119x_wdt_driver);

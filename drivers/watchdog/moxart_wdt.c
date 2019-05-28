@@ -154,7 +154,7 @@ static struct platform_driver moxart_wdt_driver = {
 	.probe      = moxart_wdt_probe,
 	.driver     = {
 		.name		= "moxart-watchdog",
-		.of_match_table	= moxart_watchdog_match,
+		.of_match_table	= of_match_ptr(moxart_watchdog_match),
 	},
 };
 module_platform_driver(moxart_wdt_driver);

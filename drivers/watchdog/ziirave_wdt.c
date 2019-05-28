@@ -739,7 +739,7 @@ MODULE_DEVICE_TABLE(of, zrv_wdt_of_match);
 static struct i2c_driver ziirave_wdt_driver = {
 	.driver = {
 		.name = "ziirave_wdt",
-		.of_match_table = zrv_wdt_of_match,
+		.of_match_table = of_match_ptr(zrv_wdt_of_match),
 	},
 	.probe = ziirave_wdt_probe,
 	.remove = ziirave_wdt_remove,

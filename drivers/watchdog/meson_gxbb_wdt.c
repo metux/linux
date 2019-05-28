@@ -195,7 +195,7 @@ static struct platform_driver meson_gxbb_wdt_driver = {
 	.driver = {
 		.name = "meson-gxbb-wdt",
 		.pm = &meson_gxbb_wdt_pm_ops,
-		.of_match_table	= meson_gxbb_wdt_dt_ids,
+		.of_match_table = of_match_ptr(meson_gxbb_wdt_dt_ids),
 	},
 };
 

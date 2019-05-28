@@ -213,7 +213,7 @@ static struct platform_driver meson_wdt_driver = {
 	.probe		= meson_wdt_probe,
 	.driver		= {
 		.name		= DRV_NAME,
-		.of_match_table	= meson_wdt_dt_ids,
+		.of_match_table	= of_match_ptr(meson_wdt_dt_ids),
 	},
 };
 

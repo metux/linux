@@ -365,7 +365,7 @@ MODULE_DEVICE_TABLE(of, asm9260_wdt_of_match);
 static struct platform_driver asm9260_wdt_driver = {
 	.driver = {
 		.name = "asm9260-wdt",
-		.of_match_table	= asm9260_wdt_of_match,
+		.of_match_table	= of_match_ptr(asm9260_wdt_of_match),
 	},
 	.probe = asm9260_wdt_probe,
 };

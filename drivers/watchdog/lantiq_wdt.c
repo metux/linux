@@ -275,7 +275,7 @@ static struct platform_driver ltq_wdt_driver = {
 	.probe = ltq_wdt_probe,
 	.driver = {
 		.name = "wdt",
-		.of_match_table = ltq_wdt_match,
+		.of_match_table = of_match_ptr(ltq_wdt_match),
 	},
 };
 

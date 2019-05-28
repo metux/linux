@@ -264,7 +264,7 @@ static struct platform_driver qcom_watchdog_driver = {
 	.probe	= qcom_wdt_probe,
 	.driver	= {
 		.name		= KBUILD_MODNAME,
-		.of_match_table	= qcom_wdt_of_table,
+		.of_match_table	= of_match_ptr(qcom_wdt_of_table),
 		.pm		= &qcom_wdt_pm_ops,
 	},
 };

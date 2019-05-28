@@ -313,7 +313,7 @@ static struct platform_driver sama5d4_wdt_driver = {
 	.driver		= {
 		.name	= "sama5d4_wdt",
 		.pm	= &sama5d4_wdt_pm_ops,
-		.of_match_table = sama5d4_wdt_of_match,
+		.of_match_table = of_match_ptr(sama5d4_wdt_of_match),
 	}
 };
 module_platform_driver(sama5d4_wdt_driver);

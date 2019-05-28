@@ -216,7 +216,7 @@ static struct platform_driver a21_wdt_driver = {
 	.shutdown = a21_wdt_shutdown,
 	.driver = {
 		.name = "a21-watchdog",
-		.of_match_table = a21_wdt_ids,
+		.of_match_table = of_match_ptr(a21_wdt_ids),
 	},
 };
 

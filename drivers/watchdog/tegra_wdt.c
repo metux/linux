@@ -268,7 +268,7 @@ static struct platform_driver tegra_wdt_driver = {
 	.driver		= {
 		.name	= "tegra-wdt",
 		.pm	= &tegra_wdt_pm_ops,
-		.of_match_table = tegra_wdt_of_match,
+		.of_match_table = of_match_ptr(tegra_wdt_of_match),
 	},
 };
 module_platform_driver(tegra_wdt_driver);

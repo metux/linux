@@ -428,7 +428,7 @@ static struct platform_driver cdns_wdt_driver = {
 	.probe		= cdns_wdt_probe,
 	.driver		= {
 		.name	= "cdns-wdt",
-		.of_match_table = cdns_wdt_of_match,
+		.of_match_table = of_match_ptr(cdns_wdt_of_match),
 		.pm	= &cdns_wdt_pm_ops,
 	},
 };

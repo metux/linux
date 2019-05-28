@@ -395,7 +395,7 @@ static const struct of_device_id coh901327_dt_match[] = {
 static struct platform_driver coh901327_driver = {
 	.driver = {
 		.name	= "coh901327_wdog",
-		.of_match_table = coh901327_dt_match,
+		.of_match_table = of_match_ptr(coh901327_dt_match),
 		.suppress_bind_attrs = true,
 	},
 	.suspend	= coh901327_suspend,

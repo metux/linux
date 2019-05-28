@@ -375,7 +375,7 @@ static struct platform_driver sprd_watchdog_driver = {
 	.probe	= sprd_wdt_probe,
 	.driver	= {
 		.name = "sprd-wdt",
-		.of_match_table = sprd_wdt_match_table,
+		.of_match_table = of_match_ptr(sprd_wdt_match_table),
 		.pm = &sprd_wdt_pm_ops,
 	},
 };

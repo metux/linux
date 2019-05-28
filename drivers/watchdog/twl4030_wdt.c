@@ -115,7 +115,7 @@ static struct platform_driver twl4030_wdt_driver = {
 	.resume		= twl4030_wdt_resume,
 	.driver		= {
 		.name		= "twl4030_wdt",
-		.of_match_table	= twl_wdt_of_match,
+		.of_match_table	= of_match_ptr(twl_wdt_of_match),
 	},
 };
 

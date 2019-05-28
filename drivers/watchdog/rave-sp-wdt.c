@@ -321,7 +321,7 @@ static struct platform_driver rave_sp_wdt_driver = {
 	.probe = rave_sp_wdt_probe,
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = rave_sp_wdt_of_match,
+		.of_match_table = of_match_ptr(rave_sp_wdt_of_match),
 	},
 };
 

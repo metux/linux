@@ -224,7 +224,7 @@ static struct platform_driver da9062_wdt_driver = {
 	.probe = da9062_wdt_probe,
 	.driver = {
 		.name = "da9062-watchdog",
-		.of_match_table = da9062_compatible_id_table,
+		.of_match_table = of_match_ptr(da9062_compatible_id_table),
 	},
 };
 module_platform_driver(da9062_wdt_driver);

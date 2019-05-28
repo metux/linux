@@ -198,7 +198,7 @@ static struct platform_driver tangox_wdt_driver = {
 	.probe	= tangox_wdt_probe,
 	.driver	= {
 		.name		= "tangox-wdt",
-		.of_match_table	= tangox_wdt_dt_ids,
+		.of_match_table	= of_match_ptr(tangox_wdt_dt_ids),
 	},
 };
 

@@ -304,7 +304,7 @@ MODULE_DEVICE_TABLE(of, pdc_wdt_match);
 static struct platform_driver pdc_wdt_driver = {
 	.driver = {
 		.name = "imgpdc-wdt",
-		.of_match_table	= pdc_wdt_match,
+		.of_match_table	= of_match_ptr(pdc_wdt_match),
 	},
 	.probe = pdc_wdt_probe,
 };

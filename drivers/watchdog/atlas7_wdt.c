@@ -209,7 +209,7 @@ static struct platform_driver atlas7_wdt_driver = {
 	.driver = {
 		.name = "atlas7-wdt",
 		.pm = &atlas7_wdt_pm_ops,
-		.of_match_table	= atlas7_wdt_ids,
+		.of_match_table	= of_match_ptr(atlas7_wdt_ids),
 	},
 	.probe = atlas7_wdt_probe,
 };

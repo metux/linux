@@ -298,7 +298,7 @@ static struct platform_driver xwdt_driver = {
 	.probe       = xwdt_probe,
 	.driver = {
 		.name  = WATCHDOG_NAME,
-		.of_match_table = xwdt_of_match,
+		.of_match_table = of_match_ptr(xwdt_of_match),
 		.pm = &xwdt_pm_ops,
 	},
 };

@@ -96,7 +96,7 @@ static struct platform_driver st_reset_driver = {
 	.probe = st_reset_probe,
 	.driver = {
 		.name = "st_reset",
-		.of_match_table = st_reset_of_match,
+		.of_match_table = of_match_ptr(st_reset_of_match),
 	},
 };
 

@@ -169,7 +169,7 @@ static struct platform_driver gemini_poweroff_driver = {
 	.probe = gemini_poweroff_probe,
 	.driver = {
 		.name = "gemini-poweroff",
-		.of_match_table = gemini_poweroff_of_match,
+		.of_match_table = of_match_ptr(gemini_poweroff_of_match),
 	},
 };
 builtin_platform_driver(gemini_poweroff_driver);

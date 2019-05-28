@@ -283,7 +283,7 @@ MODULE_DEVICE_TABLE(of, max17040_of_match);
 static struct i2c_driver max17040_i2c_driver = {
 	.driver	= {
 		.name	= "max17040",
-		.of_match_table = max17040_of_match,
+		.of_match_table = of_match_ptr(max17040_of_match),
 		.pm	= MAX17040_PM_OPS,
 	},
 	.probe		= max17040_probe,

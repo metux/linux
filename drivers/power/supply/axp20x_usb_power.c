@@ -557,7 +557,7 @@ static struct platform_driver axp20x_usb_power_driver = {
 	.remove = axp20x_usb_power_remove,
 	.driver = {
 		.name = DRVNAME,
-		.of_match_table = axp20x_usb_power_match,
+		.of_match_table = of_match_ptr(axp20x_usb_power_match),
 	},
 };
 

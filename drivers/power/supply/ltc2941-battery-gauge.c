@@ -650,7 +650,7 @@ MODULE_DEVICE_TABLE(of, ltc294x_i2c_of_match);
 static struct i2c_driver ltc294x_driver = {
 	.driver = {
 		.name	= "LTC2941",
-		.of_match_table = ltc294x_i2c_of_match,
+		.of_match_table = of_match_ptr(ltc294x_i2c_of_match),
 		.pm	= LTC294X_PM_OPS,
 	},
 	.probe		= ltc294x_i2c_probe,

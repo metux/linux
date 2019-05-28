@@ -66,7 +66,7 @@ static struct platform_driver bcm_kona_reset_driver = {
 	.probe = kona_reset_probe,
 	.driver = {
 		.name = "brcm-kona-reset",
-		.of_match_table = of_match,
+		.of_match_table = of_match_ptr(of_match),
 	},
 };
 

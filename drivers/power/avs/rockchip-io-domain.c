@@ -618,7 +618,7 @@ static struct platform_driver rockchip_iodomain_driver = {
 	.remove  = rockchip_iodomain_remove,
 	.driver  = {
 		.name  = "rockchip-iodomain",
-		.of_match_table = rockchip_iodomain_match,
+		.of_match_table = of_match_ptr(rockchip_iodomain_match),
 	},
 };
 

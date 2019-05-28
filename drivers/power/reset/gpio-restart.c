@@ -129,7 +129,7 @@ static struct platform_driver gpio_restart_driver = {
 	.remove = gpio_restart_remove,
 	.driver = {
 		.name = "restart-gpio",
-		.of_match_table = of_gpio_restart_match,
+		.of_match_table = of_match_ptr(of_gpio_restart_match),
 	},
 };
 

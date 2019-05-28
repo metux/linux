@@ -95,7 +95,7 @@ static struct platform_driver syscon_poweroff_driver = {
 	.remove = syscon_poweroff_remove,
 	.driver = {
 		.name = "syscon-poweroff",
-		.of_match_table = syscon_poweroff_of_match,
+		.of_match_table = of_match_ptr(syscon_poweroff_of_match),
 	},
 };
 

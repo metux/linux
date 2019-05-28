@@ -528,7 +528,7 @@ static const struct of_device_id sc2731_charger_of_match[] = {
 static struct platform_driver sc2731_charger_driver = {
 	.driver = {
 		.name = "sc2731-charger",
-		.of_match_table = sc2731_charger_of_match,
+		.of_match_table = of_match_ptr(sc2731_charger_of_match),
 	},
 	.probe = sc2731_charger_probe,
 	.remove = sc2731_charger_remove,

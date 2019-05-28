@@ -94,7 +94,7 @@ static struct platform_driver ocelot_reset_driver = {
 	.probe = ocelot_reset_probe,
 	.driver = {
 		.name = "ocelot-chip-reset",
-		.of_match_table = ocelot_reset_of_match,
+		.of_match_table = of_match_ptr(ocelot_reset_of_match),
 	},
 };
 builtin_platform_driver(ocelot_reset_driver);

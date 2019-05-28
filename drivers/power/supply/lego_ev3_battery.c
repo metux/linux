@@ -227,7 +227,7 @@ MODULE_DEVICE_TABLE(of, of_lego_ev3_battery_match);
 static struct platform_driver lego_ev3_battery_driver = {
 	.driver	= {
 		.name		= "lego-ev3-battery",
-		.of_match_table = of_lego_ev3_battery_match,
+		.of_match_table = of_match_ptr(of_lego_ev3_battery_match),
 	},
 	.probe	= lego_ev3_battery_probe,
 };

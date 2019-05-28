@@ -348,7 +348,7 @@ MODULE_DEVICE_TABLE(of, of_tps65090_charger_match);
 static struct platform_driver tps65090_charger_driver = {
 	.driver	= {
 		.name	= "tps65090-charger",
-		.of_match_table = of_tps65090_charger_match,
+		.of_match_table = of_match_ptr(of_tps65090_charger_match),
 	},
 	.probe	= tps65090_charger_probe,
 	.remove = tps65090_charger_remove,

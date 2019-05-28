@@ -84,7 +84,7 @@ static struct platform_driver xgene_reboot_driver = {
 	.probe = xgene_reboot_probe,
 	.driver = {
 		.name = "xgene-reboot",
-		.of_match_table = xgene_reboot_of_match,
+		.of_match_table = of_match_ptr(xgene_reboot_of_match),
 	},
 };
 

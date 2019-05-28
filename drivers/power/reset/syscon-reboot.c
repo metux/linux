@@ -91,7 +91,7 @@ static struct platform_driver syscon_reboot_driver = {
 	.probe = syscon_reboot_probe,
 	.driver = {
 		.name = "syscon-reboot",
-		.of_match_table = syscon_reboot_of_match,
+		.of_match_table = of_match_ptr(syscon_reboot_of_match),
 	},
 };
 builtin_platform_driver(syscon_reboot_driver);

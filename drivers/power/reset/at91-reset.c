@@ -265,7 +265,7 @@ static struct platform_driver at91_reset_driver = {
 	.remove = __exit_p(at91_reset_remove),
 	.driver = {
 		.name = "at91-reset",
-		.of_match_table = at91_reset_of_match,
+		.of_match_table = of_match_ptr(at91_reset_of_match),
 	},
 };
 module_platform_driver_probe(at91_reset_driver, at91_reset_probe);

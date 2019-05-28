@@ -77,7 +77,7 @@ static struct platform_driver rmobile_reset_driver = {
 	.remove = rmobile_reset_remove,
 	.driver = {
 		.name = "rmobile_reset",
-		.of_match_table = rmobile_reset_of_match,
+		.of_match_table = of_match_ptr(rmobile_reset_of_match),
 	},
 };
 

@@ -1975,7 +1975,7 @@ static struct platform_driver charger_manager_driver = {
 	.driver = {
 		.name = "charger-manager",
 		.pm = &charger_manager_pm,
-		.of_match_table = charger_manager_match,
+		.of_match_table = of_match_ptr(charger_manager_match),
 	},
 	.probe = charger_manager_probe,
 	.remove = charger_manager_remove,

@@ -229,7 +229,7 @@ static struct platform_driver at91_poweroff_driver = {
 	.remove = __exit_p(at91_poweroff_remove),
 	.driver = {
 		.name = "at91-poweroff",
-		.of_match_table = at91_poweroff_of_match,
+		.of_match_table = of_match_ptr(at91_poweroff_of_match),
 	},
 };
 module_platform_driver_probe(at91_poweroff_driver, at91_poweroff_probe);

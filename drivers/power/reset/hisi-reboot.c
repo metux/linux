@@ -73,7 +73,7 @@ static struct platform_driver hisi_reboot_driver = {
 	.probe = hisi_reboot_probe,
 	.driver = {
 		.name = "hisi-reboot",
-		.of_match_table = hisi_reboot_of_match,
+		.of_match_table = of_match_ptr(hisi_reboot_of_match),
 	},
 };
 module_platform_driver(hisi_reboot_driver);

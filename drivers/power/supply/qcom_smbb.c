@@ -1025,7 +1025,7 @@ static struct platform_driver smbb_charger_driver = {
 	.remove	 = smbb_charger_remove,
 	.driver	 = {
 		.name   = "qcom-smbb",
-		.of_match_table = smbb_charger_id_table,
+		.of_match_table = of_match_ptr(smbb_charger_id_table),
 	},
 };
 module_platform_driver(smbb_charger_driver);

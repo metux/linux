@@ -144,7 +144,7 @@ static struct platform_driver brcmstb_reboot_driver = {
 	.probe = brcmstb_reboot_probe,
 	.driver = {
 		.name = "brcmstb-reboot",
-		.of_match_table = of_match,
+		.of_match_table = of_match_ptr(of_match),
 	},
 };
 

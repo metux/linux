@@ -634,7 +634,7 @@ MODULE_DEVICE_TABLE(of, ucs1002_of_match);
 static struct i2c_driver ucs1002_driver = {
 	.driver = {
 		   .name = "ucs1002",
-		   .of_match_table = ucs1002_of_match,
+		   .of_match_table = of_match_ptr(ucs1002_of_match),
 	},
 	.probe = ucs1002_probe,
 };

@@ -195,7 +195,7 @@ static struct platform_driver lt3651_charger_driver = {
 	.probe = lt3651_charger_probe,
 	.driver = {
 		.name = "lt3651-charger",
-		.of_match_table = lt3651_charger_match,
+		.of_match_table = of_match_ptr(lt3651_charger_match),
 	},
 };
 

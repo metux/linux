@@ -985,7 +985,7 @@ static struct i2c_driver sbs_battery_driver = {
 	.id_table	= sbs_id,
 	.driver = {
 		.name	= "sbs-battery",
-		.of_match_table = sbs_dt_ids,
+		.of_match_table = of_match_ptr(sbs_dt_ids),
 		.pm	= SBS_PM_OPS,
 	},
 };

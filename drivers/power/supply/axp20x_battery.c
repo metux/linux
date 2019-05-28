@@ -637,7 +637,7 @@ static struct platform_driver axp20x_batt_driver = {
 	.probe    = axp20x_power_probe,
 	.driver   = {
 		.name  = "axp20x-battery-power-supply",
-		.of_match_table = axp20x_battery_ps_id,
+		.of_match_table = of_match_ptr(axp20x_battery_ps_id),
 	},
 };
 

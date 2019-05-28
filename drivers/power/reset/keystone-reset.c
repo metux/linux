@@ -161,7 +161,7 @@ static struct platform_driver rsctrl_driver = {
 	.probe = rsctrl_probe,
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = rsctrl_of_match,
+		.of_match_table = of_match_ptr(rsctrl_of_match),
 	},
 };
 module_platform_driver(rsctrl_driver);

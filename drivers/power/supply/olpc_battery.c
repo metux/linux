@@ -717,7 +717,7 @@ MODULE_DEVICE_TABLE(of, olpc_battery_ids);
 static struct platform_driver olpc_battery_driver = {
 	.driver = {
 		.name = "olpc-battery",
-		.of_match_table = olpc_battery_ids,
+		.of_match_table = of_match_ptr(olpc_battery_ids),
 	},
 	.probe = olpc_battery_probe,
 	.suspend = olpc_battery_suspend,

@@ -1147,7 +1147,7 @@ static struct platform_driver sc27xx_fgu_driver = {
 	.probe = sc27xx_fgu_probe,
 	.driver = {
 		.name = "sc27xx-fgu",
-		.of_match_table = sc27xx_fgu_of_match,
+		.of_match_table = of_match_ptr(sc27xx_fgu_of_match),
 		.pm = &sc27xx_fgu_pm_ops,
 	}
 };

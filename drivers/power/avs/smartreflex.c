@@ -1014,7 +1014,7 @@ static struct platform_driver smartreflex_driver = {
 	.shutdown	= omap_sr_shutdown,
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.of_match_table	= omap_sr_match,
+		.of_match_table	= of_match_ptr(omap_sr_match),
 	},
 };
 

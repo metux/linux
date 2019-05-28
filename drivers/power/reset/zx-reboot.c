@@ -76,7 +76,7 @@ static struct platform_driver zx_reboot_driver = {
 	.probe = zx_reboot_probe,
 	.driver = {
 		.name = "zx-reboot",
-		.of_match_table = zx_reboot_of_match,
+		.of_match_table = of_match_ptr(zx_reboot_of_match),
 	},
 };
 module_platform_driver(zx_reboot_driver);

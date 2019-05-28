@@ -262,7 +262,7 @@ static struct platform_driver gpio_charger_driver = {
 	.driver = {
 		.name = "gpio-charger",
 		.pm = &gpio_charger_pm_ops,
-		.of_match_table = gpio_charger_match,
+		.of_match_table = of_match_ptr(gpio_charger_match),
 	},
 };
 

@@ -385,7 +385,7 @@ static struct platform_driver at91_shdwc_driver = {
 	.remove = __exit_p(at91_shdwc_remove),
 	.driver = {
 		.name = "at91-shdwc",
-		.of_match_table = at91_shdwc_of_match,
+		.of_match_table = of_match_ptr(at91_shdwc_of_match),
 	},
 };
 module_platform_driver_probe(at91_shdwc_driver, at91_shdwc_probe);

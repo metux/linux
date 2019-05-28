@@ -433,7 +433,7 @@ static struct platform_driver max8903_driver = {
 	.probe	= max8903_probe,
 	.driver = {
 		.name	= "max8903-charger",
-		.of_match_table = max8903_match_ids
+		.of_match_table = of_match_ptr(max8903_match_ids)
 	},
 };
 

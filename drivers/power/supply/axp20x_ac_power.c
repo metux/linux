@@ -332,7 +332,7 @@ static struct platform_driver axp20x_ac_power_driver = {
 	.probe = axp20x_ac_power_probe,
 	.driver = {
 		.name = DRVNAME,
-		.of_match_table = axp20x_ac_power_match,
+		.of_match_table = of_match_ptr(axp20x_ac_power_match),
 	},
 };
 

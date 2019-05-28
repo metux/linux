@@ -142,7 +142,7 @@ static struct platform_driver vexpress_reset_driver = {
 	.probe = vexpress_reset_probe,
 	.driver = {
 		.name = "vexpress-reset",
-		.of_match_table = vexpress_reset_of_match,
+		.of_match_table = of_match_ptr(vexpress_reset_of_match),
 	},
 };
 

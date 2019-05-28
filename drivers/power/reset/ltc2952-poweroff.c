@@ -303,7 +303,7 @@ static struct platform_driver ltc2952_poweroff_driver = {
 	.remove = ltc2952_poweroff_remove,
 	.driver = {
 		.name = "ltc2952-poweroff",
-		.of_match_table = of_ltc2952_poweroff_match,
+		.of_match_table = of_match_ptr(of_ltc2952_poweroff_match),
 	},
 };
 

@@ -3238,7 +3238,7 @@ static struct platform_driver ab8500_fg_driver = {
 	.resume = ab8500_fg_resume,
 	.driver = {
 		.name = "ab8500-fg",
-		.of_match_table = ab8500_fg_match,
+		.of_match_table = of_match_ptr(ab8500_fg_match),
 	},
 };
 

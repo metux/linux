@@ -277,7 +277,7 @@ static struct platform_driver goldfish_battery_device = {
 	.remove		= goldfish_battery_remove,
 	.driver = {
 		.name = "goldfish-battery",
-		.of_match_table = goldfish_battery_of_match,
+		.of_match_table = of_match_ptr(goldfish_battery_of_match),
 		.acpi_match_table = ACPI_PTR(goldfish_battery_acpi_match),
 	}
 };

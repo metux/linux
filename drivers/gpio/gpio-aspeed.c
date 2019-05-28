@@ -1243,7 +1243,7 @@ static int __init aspeed_gpio_probe(struct platform_device *pdev)
 static struct platform_driver aspeed_gpio_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = aspeed_gpio_of_table,
+		.of_match_table = of_match_ptr(aspeed_gpio_of_table),
 	},
 };
 

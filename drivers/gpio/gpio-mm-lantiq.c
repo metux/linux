@@ -141,7 +141,7 @@ static struct platform_driver ltq_mm_driver = {
 	.remove = ltq_mm_remove,
 	.driver = {
 		.name = "gpio-mm-ltq",
-		.of_match_table = ltq_mm_match,
+		.of_match_table = of_match_ptr(ltq_mm_match),
 	},
 };
 subsys_platform_driver(ltq_mm_driver);

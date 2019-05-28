@@ -268,7 +268,7 @@ static int syscon_gpio_probe(struct platform_device *pdev)
 static struct platform_driver syscon_gpio_driver = {
 	.driver	= {
 		.name		= "gpio-syscon",
-		.of_match_table	= syscon_gpio_ids,
+		.of_match_table	= of_match_ptr(syscon_gpio_ids),
 	},
 	.probe	= syscon_gpio_probe,
 };

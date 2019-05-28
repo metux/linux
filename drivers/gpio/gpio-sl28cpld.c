@@ -151,7 +151,7 @@ static struct platform_driver sl28cpld_gpio_driver = {
 	.probe = sl28cpld_gpio_probe,
 	.driver = {
 		.name = "sl28cpld-gpio",
-		.of_match_table = sl28cpld_gpio_of_match,
+		.of_match_table = of_match_ptr(sl28cpld_gpio_of_match),
 	},
 };
 module_platform_driver(sl28cpld_gpio_driver);

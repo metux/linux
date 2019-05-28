@@ -484,7 +484,7 @@ static struct platform_driver uniphier_gpio_driver = {
 	.remove = uniphier_gpio_remove,
 	.driver = {
 		.name = "uniphier-gpio",
-		.of_match_table = uniphier_gpio_match,
+		.of_match_table = of_match_ptr(uniphier_gpio_match),
 		.pm = &uniphier_gpio_pm_ops,
 	},
 };

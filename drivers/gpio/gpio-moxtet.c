@@ -167,7 +167,7 @@ static const enum turris_mox_module_id moxtet_gpio_module_table[] = {
 static struct moxtet_driver moxtet_gpio_driver = {
 	.driver = {
 		.name		= "moxtet-gpio",
-		.of_match_table	= moxtet_gpio_dt_ids,
+		.of_match_table	= of_match_ptr(moxtet_gpio_dt_ids),
 		.probe		= moxtet_gpio_probe,
 	},
 	.id_table = moxtet_gpio_module_table,

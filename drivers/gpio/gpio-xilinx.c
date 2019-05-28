@@ -393,7 +393,7 @@ static struct platform_driver xgpio_plat_driver = {
 	.remove		= xgpio_remove,
 	.driver		= {
 			.name = "gpio-xilinx",
-			.of_match_table	= xgpio_of_match,
+			.of_match_table	= of_match_ptr(xgpio_of_match),
 	},
 };
 

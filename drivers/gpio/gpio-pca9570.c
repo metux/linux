@@ -134,7 +134,7 @@ MODULE_DEVICE_TABLE(of, pca9570_of_match_table);
 static struct i2c_driver pca9570_driver = {
 	.driver = {
 		.name = "pca9570",
-		.of_match_table = pca9570_of_match_table,
+		.of_match_table = of_match_ptr(pca9570_of_match_table),
 	},
 	.probe_new = pca9570_probe,
 	.id_table = pca9570_id_table,

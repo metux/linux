@@ -182,7 +182,7 @@ static int creg_gpio_probe(struct platform_device *pdev)
 static struct platform_driver creg_gpio_snps_driver = {
 	.driver = {
 		.name = "snps-creg-gpio",
-		.of_match_table = creg_gpio_ids,
+		.of_match_table = of_match_ptr(creg_gpio_ids),
 	},
 	.probe  = creg_gpio_probe,
 };

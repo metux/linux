@@ -2385,7 +2385,7 @@ static struct platform_driver s5p_aes_crypto = {
 	.remove	= s5p_aes_remove,
 	.driver	= {
 		.name	= "s5p-secss",
-		.of_match_table = s5p_sss_dt_match,
+		.of_match_table = of_match_ptr(s5p_sss_dt_match),
 	},
 };
 

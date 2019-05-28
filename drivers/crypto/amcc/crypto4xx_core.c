@@ -1535,7 +1535,7 @@ MODULE_DEVICE_TABLE(of, crypto4xx_match);
 static struct platform_driver crypto4xx_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = crypto4xx_match,
+		.of_match_table = of_match_ptr(crypto4xx_match),
 	},
 	.probe		= crypto4xx_probe,
 	.remove		= crypto4xx_remove,

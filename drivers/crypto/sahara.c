@@ -1558,7 +1558,7 @@ static struct platform_driver sahara_driver = {
 	.remove		= sahara_remove,
 	.driver		= {
 		.name	= SAHARA_NAME,
-		.of_match_table = sahara_dt_ids,
+		.of_match_table = of_match_ptr(sahara_dt_ids),
 	},
 	.id_table = sahara_platform_ids,
 };

@@ -654,7 +654,7 @@ static int ccree_remove(struct platform_device *plat_dev)
 static struct platform_driver ccree_driver = {
 	.driver = {
 		   .name = "ccree",
-		   .of_match_table = arm_ccree_dev_of_match,
+		   .of_match_table = of_match_ptr(arm_ccree_dev_of_match),
 #ifdef CONFIG_PM
 		   .pm = &ccree_pm,
 #endif

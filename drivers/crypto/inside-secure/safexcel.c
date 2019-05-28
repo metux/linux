@@ -1208,7 +1208,7 @@ static struct platform_driver  crypto_safexcel = {
 	.remove		= safexcel_remove,
 	.driver		= {
 		.name	= "crypto-safexcel",
-		.of_match_table = safexcel_of_match_table,
+		.of_match_table = of_match_ptr(safexcel_of_match_table),
 	},
 };
 module_platform_driver(crypto_safexcel);

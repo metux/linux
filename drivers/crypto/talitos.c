@@ -3540,7 +3540,7 @@ MODULE_DEVICE_TABLE(of, talitos_match);
 static struct platform_driver talitos_driver = {
 	.driver = {
 		.name = "talitos",
-		.of_match_table = talitos_match,
+		.of_match_table = of_match_ptr(talitos_match),
 	},
 	.probe = talitos_probe,
 	.remove = talitos_remove,

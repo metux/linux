@@ -1331,7 +1331,7 @@ static struct platform_driver omap_aes_driver = {
 	.driver	= {
 		.name	= "omap-aes",
 		.pm	= &omap_aes_pm_ops,
-		.of_match_table	= omap_aes_of_match,
+		.of_match_table	= of_match_ptr(omap_aes_of_match),
 	},
 };
 

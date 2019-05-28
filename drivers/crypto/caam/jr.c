@@ -601,7 +601,7 @@ MODULE_DEVICE_TABLE(of, caam_jr_match);
 static struct platform_driver caam_jr_driver = {
 	.driver = {
 		.name = "caam_jr",
-		.of_match_table = caam_jr_match,
+		.of_match_table = of_match_ptr(caam_jr_match),
 	},
 	.probe       = caam_jr_probe,
 	.remove      = caam_jr_remove,

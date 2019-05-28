@@ -2200,7 +2200,7 @@ MODULE_DEVICE_TABLE(of, n2_crypto_match);
 static struct platform_driver n2_crypto_driver = {
 	.driver = {
 		.name		=	"n2cp",
-		.of_match_table	=	n2_crypto_match,
+		.of_match_table	=	of_match_ptr(n2_crypto_match),
 	},
 	.probe		=	n2_crypto_probe,
 	.remove		=	n2_crypto_remove,
@@ -2227,7 +2227,7 @@ MODULE_DEVICE_TABLE(of, n2_mau_match);
 static struct platform_driver n2_mau_driver = {
 	.driver = {
 		.name		=	"ncp",
-		.of_match_table	=	n2_mau_match,
+		.of_match_table	=	of_match_ptr(n2_mau_match),
 	},
 	.probe		=	n2_mau_probe,
 	.remove		=	n2_mau_remove,

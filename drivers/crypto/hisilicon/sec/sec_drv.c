@@ -1308,7 +1308,7 @@ static struct platform_driver sec_driver = {
 	.remove = sec_remove,
 	.driver = {
 		.name = "hisi_sec_platform_driver",
-		.of_match_table = sec_match,
+		.of_match_table = of_match_ptr(sec_match),
 		.acpi_match_table = ACPI_PTR(sec_acpi_match),
 	},
 };

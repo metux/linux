@@ -390,7 +390,7 @@ static struct platform_driver exynos_rng_driver = {
 	.driver		= {
 		.name	= "exynos-rng",
 		.pm	= &exynos_rng_pm_ops,
-		.of_match_table = exynos_rng_dt_match,
+		.of_match_table = of_match_ptr(exynos_rng_dt_match),
 	},
 	.probe		= exynos_rng_probe,
 	.remove		= exynos_rng_remove,

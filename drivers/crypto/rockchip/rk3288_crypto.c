@@ -434,7 +434,7 @@ static struct platform_driver crypto_driver = {
 	.remove		= rk_crypto_remove,
 	.driver		= {
 		.name	= "rk3288-crypto",
-		.of_match_table	= crypto_of_id_table,
+		.of_match_table	= of_match_ptr(crypto_of_id_table),
 	},
 };
 

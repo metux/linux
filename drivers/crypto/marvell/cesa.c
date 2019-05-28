@@ -603,7 +603,7 @@ static struct platform_driver marvell_cesa = {
 	.id_table	= mv_cesa_plat_id_table,
 	.driver		= {
 		.name	= "marvell-cesa",
-		.of_match_table = mv_cesa_of_match_table,
+		.of_match_table = of_match_ptr(mv_cesa_of_match_table),
 	},
 };
 module_platform_driver(marvell_cesa);

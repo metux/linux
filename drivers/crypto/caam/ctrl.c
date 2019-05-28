@@ -924,7 +924,7 @@ disable_caam_ipg:
 static struct platform_driver caam_driver = {
 	.driver = {
 		.name = "caam",
-		.of_match_table = caam_match,
+		.of_match_table = of_match_ptr(caam_match),
 	},
 	.probe       = caam_probe,
 	.remove      = caam_remove,

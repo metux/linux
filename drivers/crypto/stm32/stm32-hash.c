@@ -1616,7 +1616,7 @@ static struct platform_driver stm32_hash_driver = {
 	.driver		= {
 		.name	= "stm32-hash",
 		.pm = &stm32_hash_pm_ops,
-		.of_match_table	= stm32_hash_of_match,
+		.of_match_table	= of_match_ptr(stm32_hash_of_match),
 	}
 };
 

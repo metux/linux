@@ -1927,7 +1927,7 @@ static struct platform_driver hash_driver = {
 	.shutdown = ux500_hash_shutdown,
 	.driver = {
 		.name  = "hash1",
-		.of_match_table = ux500_hash_match,
+		.of_match_table = of_match_ptr(ux500_hash_match),
 		.pm    = &ux500_hash_pm,
 	}
 };

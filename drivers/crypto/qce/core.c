@@ -267,7 +267,7 @@ static struct platform_driver qce_crypto_driver = {
 	.remove = qce_crypto_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = qce_crypto_of_match,
+		.of_match_table = of_match_ptr(qce_crypto_of_match),
 	},
 };
 module_platform_driver(qce_crypto_driver);

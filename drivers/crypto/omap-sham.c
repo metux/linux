@@ -2253,7 +2253,7 @@ static struct platform_driver omap_sham_driver = {
 	.driver	= {
 		.name	= "omap-sham",
 		.pm	= &omap_sham_pm_ops,
-		.of_match_table	= omap_sham_of_match,
+		.of_match_table	= of_match_ptr(omap_sham_of_match),
 	},
 };
 

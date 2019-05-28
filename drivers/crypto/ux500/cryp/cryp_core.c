@@ -1666,7 +1666,7 @@ static struct platform_driver cryp_driver = {
 	.shutdown = ux500_cryp_shutdown,
 	.driver = {
 		.name  = "cryp1",
-		.of_match_table = ux500_cryp_match,
+		.of_match_table = of_match_ptr(ux500_cryp_match),
 		.pm    = &ux500_cryp_pm,
 	}
 };

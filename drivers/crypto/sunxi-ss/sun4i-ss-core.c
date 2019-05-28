@@ -436,7 +436,7 @@ static struct platform_driver sun4i_ss_driver = {
 	.remove         = sun4i_ss_remove,
 	.driver         = {
 		.name           = "sun4i-ss",
-		.of_match_table	= a20ss_crypto_of_match_table,
+		.of_match_table	= of_match_ptr(a20ss_crypto_of_match_table),
 	},
 };
 

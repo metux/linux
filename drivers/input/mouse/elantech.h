@@ -147,6 +147,8 @@ struct elantech_device_info {
 	unsigned int y_max;
 	unsigned int x_res;
 	unsigned int y_res;
+	unsigned int x_traces;
+	unsigned int y_traces;
 	unsigned int width;
 	unsigned int bus;
 	bool paritycheck;

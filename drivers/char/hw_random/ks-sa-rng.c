@@ -236,7 +236,7 @@ MODULE_DEVICE_TABLE(of, ks_sa_rng_dt_match);
 static struct platform_driver ks_sa_rng_driver = {
 	.driver		= {
 		.name	= "ks-sa-rng",
-		.of_match_table = ks_sa_rng_dt_match,
+		.of_match_table = of_match_ptr(ks_sa_rng_dt_match),
 	},
 	.probe		= ks_sa_rng_probe,
 	.remove		= ks_sa_rng_remove,

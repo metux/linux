@@ -199,7 +199,7 @@ MODULE_DEVICE_TABLE(of, mxc_rnga_of_match);
 static struct platform_driver mxc_rnga_driver = {
 	.driver = {
 		.name = "mxc_rnga",
-		.of_match_table = mxc_rnga_of_match,
+		.of_match_table = of_match_ptr(mxc_rnga_of_match),
 	},
 	.remove = __exit_p(mxc_rnga_remove),
 };

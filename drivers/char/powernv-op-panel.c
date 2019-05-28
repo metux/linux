@@ -210,7 +210,7 @@ static const struct of_device_id oppanel_match[] = {
 static struct platform_driver oppanel_driver = {
 	.driver	= {
 		.name		= "powernv-op-panel",
-		.of_match_table	= oppanel_match,
+		.of_match_table	= of_match_ptr(oppanel_match),
 	},
 	.probe	= oppanel_probe,
 	.remove	= oppanel_remove,

@@ -230,7 +230,7 @@ MODULE_DEVICE_TABLE(of, iproc_rng200_of_match);
 static struct platform_driver iproc_rng200_driver = {
 	.driver = {
 		.name		= "iproc-rng200",
-		.of_match_table = iproc_rng200_of_match,
+		.of_match_table = of_match_ptr(iproc_rng200_of_match),
 	},
 	.probe		= iproc_rng200_probe,
 };

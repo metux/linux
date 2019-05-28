@@ -109,7 +109,7 @@ MODULE_DEVICE_TABLE(of, rng_match);
 static struct platform_driver rng_driver = {
 	.driver = {
 		.name = "pasemi-rng",
-		.of_match_table = rng_match,
+		.of_match_table = of_match_ptr(rng_match),
 	},
 	.probe		= rng_probe,
 };

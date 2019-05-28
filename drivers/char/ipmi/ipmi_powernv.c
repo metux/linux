@@ -301,7 +301,7 @@ static const struct of_device_id ipmi_powernv_match[] = {
 static struct platform_driver powernv_ipmi_driver = {
 	.driver = {
 		.name		= "ipmi-powernv",
-		.of_match_table	= ipmi_powernv_match,
+		.of_match_table	= of_match_ptr(ipmi_powernv_match),
 	},
 	.probe	= ipmi_powernv_probe,
 	.remove	= ipmi_powernv_remove,

@@ -202,7 +202,7 @@ MODULE_DEVICE_TABLE(of, npcm_kcs_bmc_match);
 static struct platform_driver npcm_kcs_bmc_driver = {
 	.driver = {
 		.name		= DEVICE_NAME,
-		.of_match_table	= npcm_kcs_bmc_match,
+		.of_match_table	= of_match_ptr(npcm_kcs_bmc_match),
 	},
 	.probe	= npcm7xx_kcs_probe,
 	.remove	= npcm7xx_kcs_remove,

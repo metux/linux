@@ -224,7 +224,7 @@ static struct platform_driver exynos_trng_driver = {
 	.driver = {
 		.name = "exynos-trng",
 		.pm = &exynos_trng_pm_ops,
-		.of_match_table = exynos_trng_dt_match,
+		.of_match_table = of_match_ptr(exynos_trng_dt_match),
 	},
 	.probe = exynos_trng_probe,
 	.remove = exynos_trng_remove,

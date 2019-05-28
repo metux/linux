@@ -307,7 +307,7 @@ static struct platform_driver imx_rngc_driver = {
 	.driver = {
 		.name = "imx_rngc",
 		.pm = &imx_rngc_pm_ops,
-		.of_match_table = imx_rngc_dt_ids,
+		.of_match_table = of_match_ptr(imx_rngc_dt_ids),
 	},
 	.remove = __exit_p(imx_rngc_remove),
 };

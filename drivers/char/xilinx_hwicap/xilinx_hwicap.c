@@ -838,8 +838,6 @@ static const struct of_device_id hwicap_of_match[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, hwicap_of_match);
-#else
-#define hwicap_of_match NULL
 #endif
 
 static struct platform_driver hwicap_platform_driver = {
@@ -847,7 +845,7 @@ static struct platform_driver hwicap_platform_driver = {
 	.remove = hwicap_drv_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = hwicap_of_match,
+		.of_match_table = of_match_ptr(hwicap_of_match),
 	},
 };
 

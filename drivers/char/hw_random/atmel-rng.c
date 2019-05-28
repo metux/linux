@@ -156,7 +156,7 @@ static struct platform_driver atmel_trng_driver = {
 #ifdef CONFIG_PM
 		.pm	= &atmel_trng_pm_ops,
 #endif /* CONFIG_PM */
-		.of_match_table = atmel_trng_dt_ids,
+		.of_match_table = of_match_ptr(atmel_trng_dt_ids),
 	},
 };
 

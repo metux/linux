@@ -88,7 +88,7 @@ static struct platform_driver meson_rng_driver = {
 	.probe	= meson_rng_probe,
 	.driver	= {
 		.name = "meson-rng",
-		.of_match_table = meson_rng_of_match,
+		.of_match_table = of_match_ptr(meson_rng_of_match),
 	},
 };
 

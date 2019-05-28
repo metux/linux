@@ -519,7 +519,7 @@ static const struct of_device_id bt_bmc_match[] = {
 static struct platform_driver bt_bmc_driver = {
 	.driver = {
 		.name		= DEVICE_NAME,
-		.of_match_table = bt_bmc_match,
+		.of_match_table = of_match_ptr(bt_bmc_match),
 	},
 	.probe = bt_bmc_probe,
 	.remove = bt_bmc_remove,

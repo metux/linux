@@ -863,7 +863,7 @@ MODULE_DEVICE_TABLE(of, n2rng_match);
 static struct platform_driver n2rng_driver = {
 	.driver = {
 		.name = "n2rng",
-		.of_match_table = n2rng_match,
+		.of_match_table = of_match_ptr(n2rng_match),
 	},
 	.probe		= n2rng_probe,
 	.remove		= n2rng_remove,

@@ -163,7 +163,7 @@ static struct platform_driver xillybus_platform_driver = {
 	.remove = xilly_drv_remove,
 	.driver = {
 		.name = xillyname,
-		.of_match_table = xillybus_of_match,
+		.of_match_table = of_match_ptr(xillybus_of_match),
 	},
 };
 

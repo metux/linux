@@ -206,7 +206,7 @@ static struct platform_driver stm32_rng_driver = {
 	.driver = {
 		.name = "stm32-rng",
 		.pm = &stm32_rng_pm_ops,
-		.of_match_table = stm32_rng_match,
+		.of_match_table = of_match_ptr(stm32_rng_match),
 	},
 	.probe = stm32_rng_probe,
 	.remove = stm32_rng_remove,

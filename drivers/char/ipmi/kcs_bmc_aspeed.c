@@ -308,7 +308,7 @@ MODULE_DEVICE_TABLE(of, ast_kcs_bmc_match);
 static struct platform_driver ast_kcs_bmc_driver = {
 	.driver = {
 		.name           = DEVICE_NAME,
-		.of_match_table = ast_kcs_bmc_match,
+		.of_match_table = of_match_ptr(ast_kcs_bmc_match),
 	},
 	.probe  = aspeed_kcs_probe,
 	.remove = aspeed_kcs_remove,

@@ -191,7 +191,7 @@ static struct platform_driver mtk_rng_driver = {
 	.driver = {
 		.name = MTK_RNG_DEV,
 		.pm = MTK_RNG_PM_OPS,
-		.of_match_table = mtk_rng_match,
+		.of_match_table = of_match_ptr(mtk_rng_match),
 	},
 };
 

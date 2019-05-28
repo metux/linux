@@ -67,7 +67,7 @@ MODULE_DEVICE_TABLE(of, powernv_rng_match);
 static struct platform_driver powernv_rng_driver = {
 	.driver = {
 		.name = "powernv_rng",
-		.of_match_table = powernv_rng_match,
+		.of_match_table = of_match_ptr(powernv_rng_match),
 	},
 	.probe	= powernv_rng_probe,
 	.remove = powernv_rng_remove,

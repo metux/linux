@@ -409,7 +409,7 @@ static struct platform_driver xgene_rng_driver = {
 	.remove	= xgene_rng_remove,
 	.driver = {
 		.name		= "xgene-rng",
-		.of_match_table = xgene_rng_of_match,
+		.of_match_table = of_match_ptr(xgene_rng_of_match),
 		.acpi_match_table = ACPI_PTR(xgene_rng_acpi_match),
 	},
 };

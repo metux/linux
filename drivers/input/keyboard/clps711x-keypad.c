@@ -185,7 +185,7 @@ MODULE_DEVICE_TABLE(of, clps711x_keypad_of_match);
 static struct platform_driver clps711x_keypad_driver = {
 	.driver	= {
 		.name		= "clps711x-keypad",
-		.of_match_table	= clps711x_keypad_of_match,
+		.of_match_table	= of_match_ptr(clps711x_keypad_of_match),
 	},
 	.probe	= clps711x_keypad_probe,
 	.remove	= clps711x_keypad_remove,

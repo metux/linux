@@ -210,7 +210,7 @@ MODULE_DEVICE_TABLE(of, apbps2_of_match);
 static struct platform_driver apbps2_of_driver = {
 	.driver = {
 		.name = "grlib-apbps2",
-		.of_match_table = apbps2_of_match,
+		.of_match_table = of_match_ptr(apbps2_of_match),
 	},
 	.probe = apbps2_of_probe,
 	.remove = apbps2_of_remove,

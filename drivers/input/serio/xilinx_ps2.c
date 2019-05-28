@@ -358,7 +358,7 @@ MODULE_DEVICE_TABLE(of, xps2_of_match);
 static struct platform_driver xps2_of_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = xps2_of_match,
+		.of_match_table = of_match_ptr(xps2_of_match),
 	},
 	.probe		= xps2_of_probe,
 	.remove		= xps2_of_remove,

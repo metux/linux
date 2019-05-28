@@ -265,7 +265,7 @@ static struct i2c_driver icn8318_driver = {
 	.driver = {
 		.name	= "chipone_icn8318",
 		.pm	= &icn8318_pm_ops,
-		.of_match_table = icn8318_of_match,
+		.of_match_table = of_match_ptr(icn8318_of_match),
 	},
 	.probe = icn8318_probe,
 	.id_table = icn8318_i2c_id,

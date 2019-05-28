@@ -182,7 +182,7 @@ static struct i2c_driver ar1021_i2c_driver = {
 	.driver	= {
 		.name	= "ar1021_i2c",
 		.pm	= &ar1021_i2c_pm,
-		.of_match_table = ar1021_i2c_of_match,
+		.of_match_table = of_match_ptr(ar1021_i2c_of_match),
 	},
 
 	.probe		= ar1021_i2c_probe,

@@ -1120,7 +1120,7 @@ MODULE_DEVICE_TABLE(of, iqs5xx_of_match);
 static struct i2c_driver iqs5xx_i2c_driver = {
 	.driver = {
 		.name		= "iqs5xx",
-		.of_match_table	= iqs5xx_of_match,
+		.of_match_table	= of_match_ptr(iqs5xx_of_match),
 		.pm		= &iqs5xx_pm,
 	},
 	.id_table	= iqs5xx_id,

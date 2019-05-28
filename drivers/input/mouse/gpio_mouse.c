@@ -164,7 +164,7 @@ static struct platform_driver gpio_mouse_device_driver = {
 	.probe		= gpio_mouse_probe,
 	.driver		= {
 		.name	= "gpio_mouse",
-		.of_match_table = gpio_mouse_of_match,
+		.of_match_table = of_match_ptr(gpio_mouse_of_match),
 	}
 };
 module_platform_driver(gpio_mouse_device_driver);

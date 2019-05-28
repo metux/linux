@@ -448,7 +448,7 @@ static struct platform_driver omap4_keypad_driver = {
 	.driver		= {
 		.name	= "omap4-keypad",
 		.pm	= &omap4_keypad_pm_ops,
-		.of_match_table = omap_keypad_dt_match,
+		.of_match_table = of_match_ptr(omap_keypad_dt_match),
 	},
 };
 module_platform_driver(omap4_keypad_driver);

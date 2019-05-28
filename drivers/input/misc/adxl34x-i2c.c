@@ -157,7 +157,7 @@ static struct i2c_driver adxl34x_driver = {
 	.driver = {
 		.name = "adxl34x",
 		.pm = &adxl34x_i2c_pm,
-		.of_match_table = adxl34x_of_id,
+		.of_match_table = of_match_ptr(adxl34x_of_id),
 	},
 	.probe    = adxl34x_i2c_probe,
 	.remove   = adxl34x_i2c_remove,

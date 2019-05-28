@@ -322,7 +322,7 @@ static struct platform_driver pmic_keys_pdrv = {
 	.probe = mtk_pmic_keys_probe,
 	.driver = {
 		   .name = "mtk-pmic-keys",
-		   .of_match_table = of_mtk_pmic_keys_match_tbl,
+		   .of_match_table = of_match_ptr(of_mtk_pmic_keys_match_tbl),
 		   .pm = &mtk_pmic_keys_pm_ops,
 	},
 };

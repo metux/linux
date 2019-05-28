@@ -215,7 +215,7 @@ MODULE_DEVICE_TABLE(of, rpi_ts_match);
 static struct platform_driver rpi_ts_driver = {
 	.driver = {
 		.name   = "raspberrypi-ts",
-		.of_match_table = rpi_ts_match,
+		.of_match_table = of_match_ptr(rpi_ts_match),
 	},
 	.probe          = rpi_ts_probe,
 };

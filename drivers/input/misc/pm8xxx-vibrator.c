@@ -251,7 +251,7 @@ static struct platform_driver pm8xxx_vib_driver = {
 	.driver		= {
 		.name	= "pm8xxx-vib",
 		.pm	= &pm8xxx_vib_pm_ops,
-		.of_match_table = pm8xxx_vib_id_table,
+		.of_match_table = of_match_ptr(pm8xxx_vib_id_table),
 	},
 };
 module_platform_driver(pm8xxx_vib_driver);

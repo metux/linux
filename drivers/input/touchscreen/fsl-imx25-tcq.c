@@ -581,7 +581,7 @@ static int mx25_tcq_probe(struct platform_device *pdev)
 static struct platform_driver mx25_tcq_driver = {
 	.driver		= {
 		.name	= "mx25-tcq",
-		.of_match_table = mx25_tcq_ids,
+		.of_match_table = of_match_ptr(mx25_tcq_ids),
 	},
 	.probe		= mx25_tcq_probe,
 };

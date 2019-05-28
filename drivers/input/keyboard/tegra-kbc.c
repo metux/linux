@@ -814,7 +814,7 @@ static struct platform_driver tegra_kbc_driver = {
 	.driver	= {
 		.name	= "tegra-kbc",
 		.pm	= &tegra_kbc_pm_ops,
-		.of_match_table = tegra_kbc_of_match,
+		.of_match_table = of_match_ptr(tegra_kbc_of_match),
 	},
 };
 module_platform_driver(tegra_kbc_driver);

@@ -411,7 +411,7 @@ static struct i2c_driver ili210x_ts_driver = {
 	.driver = {
 		.name = "ili210x_i2c",
 		.pm = &ili210x_i2c_pm,
-		.of_match_table = ili210x_dt_ids,
+		.of_match_table = of_match_ptr(ili210x_dt_ids),
 	},
 	.id_table = ili210x_i2c_id,
 	.probe = ili210x_i2c_probe,

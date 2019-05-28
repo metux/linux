@@ -1025,7 +1025,7 @@ static struct platform_driver gpio_keys_device_driver = {
 	.driver		= {
 		.name	= "gpio-keys",
 		.pm	= &gpio_keys_pm_ops,
-		.of_match_table = gpio_keys_of_match,
+		.of_match_table = of_match_ptr(gpio_keys_of_match),
 	}
 };
 

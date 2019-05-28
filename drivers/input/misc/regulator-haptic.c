@@ -252,7 +252,7 @@ static struct platform_driver regulator_haptic_driver = {
 	.probe		= regulator_haptic_probe,
 	.driver		= {
 		.name		= "regulator-haptic",
-		.of_match_table = regulator_haptic_dt_match,
+		.of_match_table = of_match_ptr(regulator_haptic_dt_match),
 		.pm		= &regulator_haptic_pm_ops,
 	},
 };

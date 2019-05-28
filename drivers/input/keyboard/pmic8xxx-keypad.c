@@ -682,7 +682,7 @@ static struct platform_driver pmic8xxx_kp_driver = {
 	.driver		= {
 		.name = "pm8xxx-keypad",
 		.pm = &pm8xxx_kp_pm_ops,
-		.of_match_table = pm8xxx_match_table,
+		.of_match_table = of_match_ptr(pm8xxx_match_table),
 	},
 };
 module_platform_driver(pmic8xxx_kp_driver);

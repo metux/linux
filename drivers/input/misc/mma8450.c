@@ -210,7 +210,7 @@ MODULE_DEVICE_TABLE(of, mma8450_dt_ids);
 static struct i2c_driver mma8450_driver = {
 	.driver = {
 		.name	= MMA8450_DRV_NAME,
-		.of_match_table = mma8450_dt_ids,
+		.of_match_table = of_match_ptr(mma8450_dt_ids),
 	},
 	.probe		= mma8450_probe,
 	.id_table	= mma8450_id,

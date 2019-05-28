@@ -259,7 +259,7 @@ MODULE_DEVICE_TABLE(of, bbc_beep_match);
 static struct platform_driver bbc_beep_driver = {
 	.driver = {
 		.name = "bbcbeep",
-		.of_match_table = bbc_beep_match,
+		.of_match_table = of_match_ptr(bbc_beep_match),
 	},
 	.probe		= bbc_beep_probe,
 	.remove		= bbc_remove,
@@ -339,7 +339,7 @@ MODULE_DEVICE_TABLE(of, grover_beep_match);
 static struct platform_driver grover_beep_driver = {
 	.driver = {
 		.name = "groverbeep",
-		.of_match_table = grover_beep_match,
+		.of_match_table = of_match_ptr(grover_beep_match),
 	},
 	.probe		= grover_beep_probe,
 	.remove		= grover_remove,

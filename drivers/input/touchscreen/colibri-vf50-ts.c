@@ -368,7 +368,7 @@ MODULE_DEVICE_TABLE(of, vf50_touch_of_match);
 static struct platform_driver vf50_touch_driver = {
 	.driver = {
 		.name = "toradex,vf50_touchctrl",
-		.of_match_table = vf50_touch_of_match,
+		.of_match_table = of_match_ptr(vf50_touch_of_match),
 	},
 	.probe = vf50_ts_probe,
 };

@@ -184,7 +184,7 @@ MODULE_DEVICE_TABLE(of, imx_snvs_pwrkey_ids);
 static struct platform_driver imx_snvs_pwrkey_driver = {
 	.driver = {
 		.name = "snvs_pwrkey",
-		.of_match_table = imx_snvs_pwrkey_ids,
+		.of_match_table = of_match_ptr(imx_snvs_pwrkey_ids),
 	},
 	.probe = imx_snvs_pwrkey_probe,
 };

@@ -189,7 +189,7 @@ static struct platform_driver events_driver = {
 	.probe	= events_probe,
 	.driver	= {
 		.name	= "goldfish_events",
-		.of_match_table = goldfish_events_of_match,
+		.of_match_table = of_match_ptr(goldfish_events_of_match),
 		.acpi_match_table = ACPI_PTR(goldfish_events_acpi_match),
 	},
 };

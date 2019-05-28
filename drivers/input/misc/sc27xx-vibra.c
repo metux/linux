@@ -142,7 +142,7 @@ MODULE_DEVICE_TABLE(of, sc27xx_vibra_of_match);
 static struct platform_driver sc27xx_vibra_driver = {
 	.driver = {
 		.name = "sc27xx-vibrator",
-		.of_match_table = sc27xx_vibra_of_match,
+		.of_match_table = of_match_ptr(sc27xx_vibra_of_match),
 	},
 	.probe = sc27xx_vibra_probe,
 };

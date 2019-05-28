@@ -159,7 +159,7 @@ static struct platform_driver tps6521x_pb_driver = {
 	.probe	= tps6521x_pb_probe,
 	.driver	= {
 		.name	= "tps6521x_pwrbutton",
-		.of_match_table = of_tps6521x_pb_match,
+		.of_match_table = of_match_ptr(of_tps6521x_pb_match),
 	},
 	.id_table = tps6521x_pwrbtn_id_table,
 };

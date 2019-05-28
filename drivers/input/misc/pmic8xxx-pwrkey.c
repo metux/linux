@@ -443,7 +443,7 @@ static struct platform_driver pmic8xxx_pwrkey_driver = {
 	.driver		= {
 		.name	= "pm8xxx-pwrkey",
 		.pm	= &pm8xxx_pwr_key_pm_ops,
-		.of_match_table = pm8xxx_pwr_key_id_table,
+		.of_match_table = of_match_ptr(pm8xxx_pwr_key_id_table),
 	},
 };
 module_platform_driver(pmic8xxx_pwrkey_driver);

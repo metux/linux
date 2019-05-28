@@ -485,7 +485,7 @@ MODULE_DEVICE_TABLE(i2c, cap11xx_i2c_ids);
 static struct i2c_driver cap11xx_i2c_driver = {
 	.driver = {
 		.name	= "cap11xx",
-		.of_match_table = cap11xx_dt_ids,
+		.of_match_table = of_match_ptr(cap11xx_dt_ids),
 	},
 	.id_table	= cap11xx_i2c_ids,
 	.probe		= cap11xx_i2c_probe,

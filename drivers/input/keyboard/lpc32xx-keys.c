@@ -320,7 +320,7 @@ static struct platform_driver lpc32xx_kscan_driver = {
 	.driver		= {
 		.name	= DRV_NAME,
 		.pm	= &lpc32xx_kscan_pm_ops,
-		.of_match_table = lpc32xx_kscan_match,
+		.of_match_table = of_match_ptr(lpc32xx_kscan_match),
 	}
 };
 

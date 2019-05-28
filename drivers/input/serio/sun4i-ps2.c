@@ -330,7 +330,7 @@ static struct platform_driver sun4i_ps2_driver = {
 	.remove		= sun4i_ps2_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = sun4i_ps2_match,
+		.of_match_table = of_match_ptr(sun4i_ps2_match),
 	},
 };
 module_platform_driver(sun4i_ps2_driver);

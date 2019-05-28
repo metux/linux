@@ -565,7 +565,7 @@ MODULE_DEVICE_TABLE(of, imx6ul_tsc_match);
 static struct platform_driver imx6ul_tsc_driver = {
 	.driver		= {
 		.name	= "imx6ul-tsc",
-		.of_match_table	= imx6ul_tsc_match,
+		.of_match_table	= of_match_ptr(imx6ul_tsc_match),
 		.pm	= &imx6ul_tsc_pm_ops,
 	},
 	.probe		= imx6ul_tsc_probe,

@@ -114,7 +114,7 @@ MODULE_DEVICE_TABLE(of, wcd_gpio_of_match);
 static struct platform_driver wcd_gpio_driver = {
 	.driver = {
 		   .name = "wcd934x-gpio",
-		   .of_match_table = wcd_gpio_of_match,
+		   .of_match_table = of_match_ptr(wcd_gpio_of_match),
 	},
 	.probe = wcd_gpio_probe,
 };

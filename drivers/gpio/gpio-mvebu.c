@@ -1275,7 +1275,7 @@ err_pwm:
 static struct platform_driver mvebu_gpio_driver = {
 	.driver		= {
 		.name		= "mvebu-gpio",
-		.of_match_table = mvebu_gpio_of_match,
+		.of_match_table = of_match_ptr(mvebu_gpio_of_match),
 	},
 	.probe		= mvebu_gpio_probe,
 	.suspend        = mvebu_gpio_suspend,

@@ -564,7 +564,7 @@ static int __init aspeed_sgpio_probe(struct platform_device *pdev)
 static struct platform_driver aspeed_sgpio_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
-		.of_match_table = aspeed_sgpio_of_table,
+		.of_match_table = of_match_ptr(aspeed_sgpio_of_table),
 	},
 };
 

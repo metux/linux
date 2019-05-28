@@ -708,7 +708,7 @@ static struct platform_driver tegra_gpio_driver = {
 	.driver		= {
 		.name	= "tegra-gpio",
 		.pm	= &tegra_gpio_pm_ops,
-		.of_match_table = tegra_gpio_of_match,
+		.of_match_table = of_match_ptr(tegra_gpio_of_match),
 	},
 	.probe		= tegra_gpio_probe,
 };

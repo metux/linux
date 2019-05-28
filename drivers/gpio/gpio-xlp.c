@@ -431,7 +431,7 @@ MODULE_DEVICE_TABLE(acpi, xlp_gpio_acpi_match);
 static struct platform_driver xlp_gpio_driver = {
 	.driver		= {
 		.name	= "xlp-gpio",
-		.of_match_table = xlp_gpio_of_ids,
+		.of_match_table = of_match_ptr(xlp_gpio_of_ids),
 		.acpi_match_table = ACPI_PTR(xlp_gpio_acpi_match),
 	},
 	.probe		= xlp_gpio_probe,

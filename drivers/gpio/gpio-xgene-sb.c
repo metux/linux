@@ -324,7 +324,7 @@ MODULE_DEVICE_TABLE(acpi, xgene_gpio_sb_acpi_match);
 static struct platform_driver xgene_gpio_sb_driver = {
 	.driver = {
 		   .name = "xgene-gpio-sb",
-		   .of_match_table = xgene_gpio_sb_of_match,
+		   .of_match_table = of_match_ptr(xgene_gpio_sb_of_match),
 		   .acpi_match_table = ACPI_PTR(xgene_gpio_sb_acpi_match),
 		   },
 	.probe = xgene_gpio_sb_probe,

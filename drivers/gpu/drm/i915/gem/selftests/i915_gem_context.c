@@ -209,7 +209,9 @@ gpu_fill_dw(struct i915_vma *vma, u64 offset, unsigned long count, u32 value)
 	i915_gem_object_flush_map(obj);
 	i915_gem_object_unpin_map(obj);
 
+	i915_gem_object_lock(obj);
 	err = i915_gem_object_set_to_gtt_domain(obj, false);
+	i915_gem_object_unlock(obj);
 	if (err)
 		goto err;
 
@@ -261,7 +263,9 @@ static int gpu_fill(struct drm_i915_gem_object *obj,
 	if (IS_ERR(vma))
 		return PTR_ERR(vma);
 
+	i915_gem_object_lock(obj);
 	err = i915_gem_object_set_to_gtt_domain(obj, false);
+	i915_gem_object_unlock(obj);
 	if (err)
 		return err;
 
@@ -302,11 +306,15 @@ static int gpu_fill(struct drm_i915_gem_object *obj,
 	if (err)
 		goto err_request;
 
+	i915_vma_lock(batch);
 	err = i915_vma_move_to_active(batch, rq, 0);
+	i915_vma_unlock(batch);
 	if (err)
 		goto skip_request;
 
+	i915_vma_lock(vma);
 	err = i915_vma_move_to_active(vma, rq, EXEC_OBJECT_WRITE);
+	i915_vma_unlock(vma);
 	if (err)
 		goto skip_request;
 
@@ -758,7 +766,9 @@ emit_rpcs_query(struct drm_i915_gem_object *obj,
 	if (IS_ERR(vma))
 		return PTR_ERR(vma);
 
+	i915_gem_object_lock(obj);
 	err = i915_gem_object_set_to_gtt_domain(obj, false);
+	i915_gem_object_unlock(obj);
 	if (err)
 		return err;
 
@@ -784,11 +794,15 @@ emit_rpcs_query(struct drm_i915_gem_object *obj,
 	if (err)
 		goto err_request;
 
+	i915_vma_lock(batch);
 	err = i915_vma_move_to_active(batch, rq, 0);
+	i915_vma_unlock(batch);
 	if (err)
 		goto skip_request;
 
+	i915_vma_lock(vma);
 	err = i915_vma_move_to_active(vma, rq, EXEC_OBJECT_WRITE);
+	i915_vma_unlock(vma);
 	if (err)
 		goto skip_request;
 
@@ -1349,7 +1363,9 @@ static int write_to_scratch(struct i915_gem_context *ctx,
 	if (err)
 		goto err_request;
 
+	i915_vma_lock(vma);
 	err = i915_vma_move_to_active(vma, rq, 0);
+	i915_vma_unlock(vma);
 	if (err)
 		goto skip_request;
 
@@ -1444,7 +1460,9 @@ static int read_from_scratch(struct i915_gem_context *ctx,
 	if (err)
 		goto err_request;
 
+	i915_vma_lock(vma);
 	err = i915_vma_move_to_active(vma, rq, EXEC_OBJECT_WRITE);
+	i915_vma_unlock(vma);
 	if (err)
 		goto skip_request;
 
@@ -1453,7 +1471,9 @@ static int read_from_scratch(struct i915_gem_context *ctx,
 
 	i915_request_add(rq);
 
+	i915_gem_object_lock(obj);
 	err = i915_gem_object_set_to_cpu_domain(obj, false);
+	i915_gem_object_unlock(obj);
 	if (err)
 		goto err;
 

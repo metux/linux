@@ -357,7 +357,7 @@ MODULE_DEVICE_TABLE(of, fsl_usb2_mph_dr_of_match);
 static struct platform_driver fsl_usb2_mph_dr_driver = {
 	.driver = {
 		.name = "fsl-usb2-mph-dr",
-		.of_match_table = fsl_usb2_mph_dr_of_match,
+		.of_match_table = of_match_ptr(fsl_usb2_mph_dr_of_match),
 	},
 	.probe	= fsl_usb2_mph_dr_of_probe,
 	.remove	= fsl_usb2_mph_dr_of_remove,

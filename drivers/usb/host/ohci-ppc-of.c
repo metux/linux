@@ -230,7 +230,7 @@ static struct platform_driver ohci_hcd_ppc_of_driver = {
 	.shutdown	= usb_hcd_platform_shutdown,
 	.driver = {
 		.name = "ppc-of-ohci",
-		.of_match_table = ohci_hcd_ppc_of_match,
+		.of_match_table = of_match_ptr(ohci_hcd_ppc_of_match),
 	},
 };
 

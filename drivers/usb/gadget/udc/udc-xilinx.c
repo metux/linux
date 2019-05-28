@@ -2163,7 +2163,7 @@ MODULE_DEVICE_TABLE(of, usb_of_match);
 static struct platform_driver xudc_driver = {
 	.driver = {
 		.name = driver_name,
-		.of_match_table = usb_of_match,
+		.of_match_table = of_match_ptr(usb_of_match),
 	},
 	.probe = xudc_probe,
 	.remove = xudc_remove,

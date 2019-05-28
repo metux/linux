@@ -369,7 +369,7 @@ static struct platform_driver ehci_platform_driver = {
 	.driver		= {
 		.name	= "ehci-platform",
 		.pm	= &ehci_platform_pm_ops,
-		.of_match_table = vt8500_ehci_ids,
+		.of_match_table = of_match_ptr(vt8500_ehci_ids),
 		.acpi_match_table = ACPI_PTR(ehci_acpi_match),
 	}
 };

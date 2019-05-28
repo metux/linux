@@ -363,7 +363,7 @@ static struct platform_driver st_dwc3_driver = {
 	.remove = st_dwc3_remove,
 	.driver = {
 		.name = "usb-st-dwc3",
-		.of_match_table = st_dwc3_match,
+		.of_match_table = of_match_ptr(st_dwc3_match),
 		.pm = &st_dwc3_dev_pm_ops,
 	},
 };

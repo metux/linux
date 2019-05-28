@@ -110,7 +110,7 @@ static struct platform_driver keystone_usbphy_driver = {
 	.remove         = keystone_usbphy_remove,
 	.driver         = {
 		.name   = "keystone-usbphy",
-		.of_match_table = keystone_usbphy_ids,
+		.of_match_table = of_match_ptr(keystone_usbphy_ids),
 	},
 };
 

@@ -246,7 +246,7 @@ static struct platform_driver dwc3_exynos_driver = {
 	.remove		= dwc3_exynos_remove,
 	.driver		= {
 		.name	= "exynos-dwc3",
-		.of_match_table = exynos_dwc3_match,
+		.of_match_table = of_match_ptr(exynos_dwc3_match),
 		.pm	= DEV_PM_OPS,
 	},
 };

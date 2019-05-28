@@ -184,7 +184,7 @@ static struct platform_driver npcm7xx_ehci_hcd_driver = {
 		.name = "npcm7xx-ehci",
 		.bus = &platform_bus_type,
 		.pm = &ehci_npcm7xx_pm_ops,
-		.of_match_table = npcm7xx_ehci_id_table,
+		.of_match_table = of_match_ptr(npcm7xx_ehci_id_table),
 	}
 };
 

@@ -459,7 +459,7 @@ static struct platform_driver ohci_hcd_s3c2410_driver = {
 	.driver		= {
 		.name	= "s3c2410-ohci",
 		.pm	= &ohci_hcd_s3c2410_pm_ops,
-		.of_match_table	= ohci_hcd_s3c2410_dt_ids,
+		.of_match_table	= of_match_ptr(ohci_hcd_s3c2410_dt_ids),
 	},
 };
 

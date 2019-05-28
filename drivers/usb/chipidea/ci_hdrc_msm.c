@@ -300,7 +300,7 @@ static struct platform_driver ci_hdrc_msm_driver = {
 	.remove = ci_hdrc_msm_remove,
 	.driver = {
 		.name = "msm_hsusb",
-		.of_match_table = msm_ci_dt_match,
+		.of_match_table = of_match_ptr(msm_ci_dt_match),
 	},
 };
 

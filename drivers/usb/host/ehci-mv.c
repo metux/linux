@@ -276,7 +276,7 @@ static struct platform_driver ehci_mv_driver = {
 	.driver = {
 		.name = "mv-ehci",
 		.bus = &platform_bus_type,
-		.of_match_table = ehci_mv_dt_ids,
+		.of_match_table = of_match_ptr(ehci_mv_dt_ids),
 	},
 	.id_table = ehci_id_table,
 };

@@ -375,7 +375,7 @@ static struct platform_driver ux500_driver = {
 	.driver		= {
 		.name	= "musb-ux500",
 		.pm	= &ux500_pm_ops,
-		.of_match_table = ux500_match,
+		.of_match_table = of_match_ptr(ux500_match),
 	},
 };
 

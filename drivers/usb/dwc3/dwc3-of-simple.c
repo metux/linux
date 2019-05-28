@@ -192,7 +192,7 @@ static struct platform_driver dwc3_of_simple_driver = {
 	.remove		= dwc3_of_simple_remove,
 	.driver		= {
 		.name	= "dwc3-of-simple",
-		.of_match_table = of_dwc3_simple_match,
+		.of_match_table = of_match_ptr(of_dwc3_simple_match),
 		.pm	= &dwc3_of_simple_dev_pm_ops,
 	},
 };

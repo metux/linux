@@ -330,7 +330,7 @@ static struct platform_driver ohci_platform_driver = {
 	.driver		= {
 		.name	= "ohci-platform",
 		.pm	= &ohci_platform_pm_ops,
-		.of_match_table = ohci_platform_ids,
+		.of_match_table = of_match_ptr(ohci_platform_ids),
 	}
 };
 

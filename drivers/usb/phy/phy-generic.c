@@ -362,7 +362,7 @@ static struct platform_driver usb_phy_generic_driver = {
 	.remove		= usb_phy_generic_remove,
 	.driver		= {
 		.name	= "usb_phy_generic",
-		.of_match_table = nop_xceiv_dt_ids,
+		.of_match_table = of_match_ptr(nop_xceiv_dt_ids),
 	},
 };
 

@@ -1438,7 +1438,7 @@ static struct platform_driver tegra_xusb_driver = {
 	.driver = {
 		.name = "tegra-xusb",
 		.pm = &tegra_xusb_pm_ops,
-		.of_match_table = tegra_xusb_of_match,
+		.of_match_table = of_match_ptr(tegra_xusb_of_match),
 	},
 };
 

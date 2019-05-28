@@ -559,7 +559,7 @@ static const struct dev_pm_ops dwc2_dev_pm_ops = {
 static struct platform_driver dwc2_platform_driver = {
 	.driver = {
 		.name = dwc2_driver_name,
-		.of_match_table = dwc2_of_match_table,
+		.of_match_table = of_match_ptr(dwc2_of_match_table),
 		.pm = &dwc2_dev_pm_ops,
 	},
 	.probe = dwc2_driver_probe,

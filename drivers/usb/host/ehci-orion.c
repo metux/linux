@@ -350,7 +350,7 @@ static struct platform_driver ehci_orion_driver = {
 	.shutdown	= usb_hcd_platform_shutdown,
 	.driver = {
 		.name	= "orion-ehci",
-		.of_match_table = ehci_orion_dt_ids,
+		.of_match_table = of_match_ptr(ehci_orion_dt_ids),
 		.pm = &ehci_orion_pm_ops,
 	},
 };

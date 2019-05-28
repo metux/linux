@@ -2379,7 +2379,7 @@ static struct platform_driver udc_driver = {
 	.driver		= {
 		.name		= "atmel_usba_udc",
 		.pm		= &usba_udc_pm_ops,
-		.of_match_table	= atmel_udc_dt_ids,
+		.of_match_table	= of_match_ptr(atmel_udc_dt_ids),
 	},
 };
 

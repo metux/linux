@@ -339,7 +339,7 @@ static struct platform_driver ehci_platform_driver = {
 #ifdef CONFIG_PM_SLEEP
 		.pm	= &st_ehci_pm_ops,
 #endif
-		.of_match_table = st_ehci_ids,
+		.of_match_table = of_match_ptr(st_ehci_ids),
 	}
 };
 

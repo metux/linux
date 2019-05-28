@@ -623,7 +623,7 @@ static struct platform_driver ci_hdrc_imx_driver = {
 	.shutdown = ci_hdrc_imx_shutdown,
 	.driver = {
 		.name = "imx_usb",
-		.of_match_table = ci_hdrc_imx_dt_ids,
+		.of_match_table = of_match_ptr(ci_hdrc_imx_dt_ids),
 		.pm = &ci_hdrc_imx_pm_ops,
 	 },
 };

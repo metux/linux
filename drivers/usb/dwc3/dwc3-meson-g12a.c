@@ -619,7 +619,7 @@ static struct platform_driver dwc3_meson_g12a_driver = {
 	.remove		= dwc3_meson_g12a_remove,
 	.driver		= {
 		.name	= "dwc3-meson-g12a",
-		.of_match_table = dwc3_meson_g12a_match,
+		.of_match_table = of_match_ptr(dwc3_meson_g12a_match),
 		.pm	= &dwc3_meson_g12a_dev_pm_ops,
 	},
 };

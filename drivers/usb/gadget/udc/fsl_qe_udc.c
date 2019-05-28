@@ -2698,7 +2698,7 @@ MODULE_DEVICE_TABLE(of, qe_udc_match);
 static struct platform_driver udc_driver = {
 	.driver = {
 		.name = driver_name,
-		.of_match_table = qe_udc_match,
+		.of_match_table = of_match_ptr(qe_udc_match),
 	},
 	.probe          = qe_udc_probe,
 	.remove         = qe_udc_remove,

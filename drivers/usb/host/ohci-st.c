@@ -317,7 +317,7 @@ static struct platform_driver ohci_platform_driver = {
 #ifdef CONFIG_PM_SLEEP
 		.pm	= &st_ohci_pm_ops,
 #endif
-		.of_match_table = st_ohci_platform_ids,
+		.of_match_table = of_match_ptr(st_ohci_platform_ids),
 	}
 };
 

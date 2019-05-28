@@ -662,7 +662,7 @@ static struct platform_driver ohci_hcd_at91_driver = {
 	.driver		= {
 		.name	= "at91_ohci",
 		.pm	= &ohci_hcd_at91_pm_ops,
-		.of_match_table	= at91_ohci_dt_ids,
+		.of_match_table	= of_match_ptr(at91_ohci_dt_ids),
 	},
 };
 

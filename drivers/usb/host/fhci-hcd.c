@@ -815,7 +815,7 @@ MODULE_DEVICE_TABLE(of, of_fhci_match);
 static struct platform_driver of_fhci_driver = {
 	.driver = {
 		.name = "fsl,usb-fhci",
-		.of_match_table = of_fhci_match,
+		.of_match_table = of_match_ptr(of_fhci_match),
 	},
 	.probe		= of_fhci_probe,
 	.remove		= of_fhci_remove,

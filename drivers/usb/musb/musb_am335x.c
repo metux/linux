@@ -30,7 +30,7 @@ static struct platform_driver am335x_child_driver = {
 	.probe		= am335x_child_probe,
 	.driver         = {
 		.name   = "am335x-usb-childs",
-		.of_match_table	= am335x_child_of_match,
+		.of_match_table	= of_match_ptr(am335x_child_of_match),
 	},
 };
 

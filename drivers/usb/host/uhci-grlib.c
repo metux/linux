@@ -189,6 +189,6 @@ static struct platform_driver uhci_grlib_driver = {
 	.shutdown	= uhci_hcd_grlib_shutdown,
 	.driver = {
 		.name = "grlib-uhci",
-		.of_match_table = uhci_hcd_grlib_of_match,
+		.of_match_table = of_match_ptr(uhci_hcd_grlib_of_match),
 	},
 };

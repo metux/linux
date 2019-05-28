@@ -415,7 +415,7 @@ static struct platform_driver ast_vhub_driver = {
 	.remove		= ast_vhub_remove,
 	.driver		= {
 		.name	= KBUILD_MODNAME,
-		.of_match_table	= ast_vhub_dt_ids,
+		.of_match_table	= of_match_ptr(ast_vhub_dt_ids),
 	},
 };
 module_platform_driver(ast_vhub_driver);

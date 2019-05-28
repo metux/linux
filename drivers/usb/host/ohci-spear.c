@@ -167,7 +167,7 @@ static struct platform_driver spear_ohci_hcd_driver = {
 #endif
 	.driver = {
 		.name = "spear-ohci",
-		.of_match_table = spear_ohci_id_table,
+		.of_match_table = of_match_ptr(spear_ohci_id_table),
 	},
 };
 

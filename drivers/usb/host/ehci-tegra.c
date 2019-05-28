@@ -550,7 +550,7 @@ static struct platform_driver tegra_ehci_driver = {
 	.shutdown	= tegra_ehci_hcd_shutdown,
 	.driver		= {
 		.name	= DRV_NAME,
-		.of_match_table = tegra_ehci_of_match,
+		.of_match_table = of_match_ptr(tegra_ehci_of_match),
 	}
 };
 

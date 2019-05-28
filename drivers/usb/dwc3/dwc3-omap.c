@@ -613,7 +613,7 @@ static struct platform_driver dwc3_omap_driver = {
 	.remove		= dwc3_omap_remove,
 	.driver		= {
 		.name	= "omap-dwc3",
-		.of_match_table	= of_dwc3_match,
+		.of_match_table	= of_match_ptr(of_dwc3_match),
 		.pm	= DEV_PM_OPS,
 	},
 };

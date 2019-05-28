@@ -186,6 +186,6 @@ static struct platform_driver uhci_platform_driver = {
 	.shutdown	= uhci_hcd_platform_shutdown,
 	.driver = {
 		.name = "platform-uhci",
-		.of_match_table = platform_uhci_ids,
+		.of_match_table = of_match_ptr(platform_uhci_ids),
 	},
 };

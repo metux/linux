@@ -642,7 +642,7 @@ static struct platform_driver bdc_driver = {
 	.driver		= {
 		.name	= BRCM_BDC_NAME,
 		.pm = &bdc_pm_ops,
-		.of_match_table	= bdc_of_match,
+		.of_match_table	= of_match_ptr(bdc_of_match),
 	},
 	.probe		= bdc_probe,
 	.remove		= bdc_remove,

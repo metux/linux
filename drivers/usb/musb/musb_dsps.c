@@ -1036,7 +1036,7 @@ static struct platform_driver dsps_usbss_driver = {
 	.driver         = {
 		.name   = "musb-dsps",
 		.pm	= &dsps_pm_ops,
-		.of_match_table	= musb_dsps_of_match,
+		.of_match_table	= of_match_ptr(musb_dsps_of_match),
 	},
 };
 

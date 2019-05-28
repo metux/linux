@@ -140,7 +140,7 @@ static int tegra_udc_remove(struct platform_device *pdev)
 static struct platform_driver tegra_udc_driver = {
 	.driver = {
 		.name = "tegra-udc",
-		.of_match_table = tegra_udc_of_match,
+		.of_match_table = of_match_ptr(tegra_udc_of_match),
 	},
 	.probe = tegra_udc_probe,
 	.remove = tegra_udc_remove,

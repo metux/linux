@@ -770,7 +770,7 @@ static struct platform_driver dwc3_qcom_driver = {
 	.driver		= {
 		.name	= "dwc3-qcom",
 		.pm	= &dwc3_qcom_dev_pm_ops,
-		.of_match_table	= dwc3_qcom_of_match,
+		.of_match_table   = of_match_ptr(dwc3_qcom_of_match),
 		.acpi_match_table = ACPI_PTR(dwc3_qcom_acpi_match),
 	},
 };

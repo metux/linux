@@ -825,7 +825,7 @@ static struct platform_driver sunxi_musb_driver = {
 	.remove = sunxi_musb_remove,
 	.driver = {
 		.name = "musb-sunxi",
-		.of_match_table = sunxi_musb_match,
+		.of_match_table = of_match_ptr(sunxi_musb_match),
 	},
 };
 module_platform_driver(sunxi_musb_driver);

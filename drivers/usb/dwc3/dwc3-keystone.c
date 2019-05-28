@@ -183,7 +183,7 @@ static struct platform_driver kdwc3_driver = {
 	.remove		= kdwc3_remove,
 	.driver		= {
 		.name	= "keystone-dwc3",
-		.of_match_table	= kdwc3_of_match,
+		.of_match_table	= of_match_ptr(kdwc3_of_match),
 	},
 };
 

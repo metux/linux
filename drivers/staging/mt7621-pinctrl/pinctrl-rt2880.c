@@ -384,7 +384,7 @@ static struct platform_driver rt2880_pinmux_driver = {
 	.probe = rt2880_pinmux_probe,
 	.driver = {
 		.name = "rt2880-pinmux",
-		.of_match_table = rt2880_pinmux_match,
+		.of_match_table = of_match_ptr(rt2880_pinmux_match),
 	},
 };
 

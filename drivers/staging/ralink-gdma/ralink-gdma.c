@@ -910,7 +910,7 @@ static struct platform_driver gdma_dma_driver = {
 	.remove = gdma_dma_remove,
 	.driver = {
 		.name = "gdma-rt2880",
-		.of_match_table = gdma_of_match_table,
+		.of_match_table = of_match_ptr(gdma_of_match_table),
 	},
 };
 module_platform_driver(gdma_dma_driver);

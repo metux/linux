@@ -949,7 +949,7 @@ static struct platform_driver nvec_device_driver = {
 	.driver  = {
 		.name = "nvec",
 		.pm = &nvec_pm_ops,
-		.of_match_table = nvidia_nvec_of_match,
+		.of_match_table = of_match_ptr(nvidia_nvec_of_match),
 	}
 };
 

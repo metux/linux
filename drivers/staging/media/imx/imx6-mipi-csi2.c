@@ -683,7 +683,7 @@ MODULE_DEVICE_TABLE(of, csi2_dt_ids);
 static struct platform_driver csi2_driver = {
 	.driver = {
 		.name = DEVICE_NAME,
-		.of_match_table = csi2_dt_ids,
+		.of_match_table = of_match_ptr(csi2_dt_ids),
 	},
 	.probe = csi2_probe,
 	.remove = csi2_remove,

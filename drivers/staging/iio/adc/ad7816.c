@@ -440,7 +440,7 @@ MODULE_DEVICE_TABLE(spi, ad7816_id);
 static struct spi_driver ad7816_driver = {
 	.driver = {
 		.name = "ad7816",
-		.of_match_table = ad7816_of_match,
+		.of_match_table = of_match_ptr(ad7816_of_match),
 	},
 	.probe = ad7816_probe,
 	.id_table = ad7816_id,

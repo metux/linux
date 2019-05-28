@@ -3269,7 +3269,7 @@ static int vchiq_remove(struct platform_device *pdev)
 static struct platform_driver vchiq_driver = {
 	.driver = {
 		.name = "bcm2835_vchiq",
-		.of_match_table = vchiq_of_match,
+		.of_match_table = of_match_ptr(vchiq_of_match),
 	},
 	.probe = vchiq_probe,
 	.remove = vchiq_remove,

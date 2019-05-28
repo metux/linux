@@ -3709,7 +3709,7 @@ MODULE_DEVICE_TABLE(of, octeon_usb_match);
 static struct platform_driver octeon_usb_driver = {
 	.driver = {
 		.name		= "octeon-hcd",
-		.of_match_table = octeon_usb_match,
+		.of_match_table = of_match_ptr(octeon_usb_match),
 	},
 	.probe      = octeon_usb_probe,
 	.remove     = octeon_usb_remove,

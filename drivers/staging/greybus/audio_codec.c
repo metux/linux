@@ -1090,7 +1090,7 @@ static struct platform_driver gbaudio_codec_driver = {
 #ifdef CONFIG_PM
 		.pm = &gbaudio_codec_pm_ops,
 #endif
-		.of_match_table = greybus_asoc_machine_of_match,
+		.of_match_table = of_match_ptr(greybus_asoc_machine_of_match),
 	},
 	.probe = gbaudio_codec_probe,
 	.remove = gbaudio_codec_remove,

@@ -991,7 +991,7 @@ static struct platform_driver cvm_oct_driver = {
 	.remove		= cvm_oct_remove,
 	.driver		= {
 		.name	= KBUILD_MODNAME,
-		.of_match_table = cvm_oct_match,
+		.of_match_table = of_match_ptr(cvm_oct_match),
 	},
 };
 

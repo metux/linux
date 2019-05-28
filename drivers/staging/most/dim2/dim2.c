@@ -1099,7 +1099,7 @@ static struct platform_driver dim2_driver = {
 	.remove = dim2_remove,
 	.driver = {
 		.name = "hdm_dim2",
-		.of_match_table = dim2_of_match,
+		.of_match_table = of_match_ptr(dim2_of_match),
 	},
 };
 

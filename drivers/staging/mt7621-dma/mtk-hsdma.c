@@ -752,7 +752,7 @@ static struct platform_driver mtk_hsdma_driver = {
 	.remove = mtk_hsdma_remove,
 	.driver = {
 		.name = "hsdma-mt7621",
-		.of_match_table = mtk_hsdma_of_match,
+		.of_match_table = of_match_ptr(mtk_hsdma_of_match),
 	},
 };
 module_platform_driver(mtk_hsdma_driver);

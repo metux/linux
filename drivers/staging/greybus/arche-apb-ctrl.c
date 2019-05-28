@@ -476,7 +476,7 @@ static struct platform_driver arche_apb_ctrl_device_driver = {
 	.driver		= {
 		.name	= "arche-apb-ctrl",
 		.pm	= &arche_apb_ctrl_pm_ops,
-		.of_match_table = arche_apb_ctrl_of_match,
+		.of_match_table = of_match_ptr(arche_apb_ctrl_of_match),
 	}
 };
 

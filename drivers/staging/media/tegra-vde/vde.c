@@ -1199,7 +1199,7 @@ static struct platform_driver tegra_vde_driver = {
 	.remove		= tegra_vde_remove,
 	.driver		= {
 		.name		= "tegra-vde",
-		.of_match_table = tegra_vde_of_match,
+		.of_match_table = of_match_ptr(tegra_vde_of_match),
 		.pm		= &tegra_vde_pm_ops,
 	},
 };

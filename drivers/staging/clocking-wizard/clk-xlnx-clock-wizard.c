@@ -322,7 +322,7 @@ MODULE_DEVICE_TABLE(of, clk_wzrd_ids);
 static struct platform_driver clk_wzrd_driver = {
 	.driver = {
 		.name = "clk-wizard",
-		.of_match_table = clk_wzrd_ids,
+		.of_match_table = of_match_ptr(clk_wzrd_ids),
 		.pm = &clk_wzrd_dev_pm_ops,
 	},
 	.probe = clk_wzrd_probe,

@@ -103,7 +103,7 @@ static struct platform_driver imx_media_pdrv = {
 	.remove		= imx_media_remove,
 	.driver		= {
 		.name	= "imx-media",
-		.of_match_table	= imx_media_dt_ids,
+		.of_match_table	= of_match_ptr(imx_media_dt_ids),
 	},
 };
 

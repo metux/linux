@@ -155,7 +155,7 @@ MODULE_DEVICE_TABLE(of, wilc_of_match);
 static struct spi_driver wilc_spi_driver = {
 	.driver = {
 		.name = MODALIAS,
-		.of_match_table = wilc_of_match,
+		.of_match_table = of_match_ptr(wilc_of_match),
 	},
 	.probe =  wilc_bus_probe,
 	.remove = wilc_bus_remove,

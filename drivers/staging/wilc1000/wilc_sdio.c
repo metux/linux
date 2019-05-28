@@ -1130,7 +1130,7 @@ static struct sdio_driver wilc_sdio_driver = {
 	.remove		= wilc_sdio_remove,
 	.drv = {
 		.pm = &wilc_sdio_pm_ops,
-		.of_match_table = wilc_of_match,
+		.of_match_table = of_match_ptr(wilc_of_match),
 	}
 };
 module_driver(wilc_sdio_driver,

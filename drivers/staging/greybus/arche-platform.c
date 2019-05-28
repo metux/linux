@@ -638,7 +638,7 @@ static struct platform_driver arche_platform_device_driver = {
 	.driver		= {
 		.name	= "arche-platform-ctrl",
 		.pm	= &arche_platform_pm_ops,
-		.of_match_table = arche_platform_of_match,
+		.of_match_table = of_match_ptr(arche_platform_of_match),
 	}
 };
 

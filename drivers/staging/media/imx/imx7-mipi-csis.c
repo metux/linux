@@ -1140,7 +1140,7 @@ static struct platform_driver mipi_csis_driver = {
 	.probe		= mipi_csis_probe,
 	.remove		= mipi_csis_remove,
 	.driver		= {
-		.of_match_table = mipi_csis_of_match,
+		.of_match_table = of_match_ptr(mipi_csis_of_match),
 		.name		= CSIS_DRIVER_NAME,
 		.pm		= &mipi_csis_pm_ops,
 	},

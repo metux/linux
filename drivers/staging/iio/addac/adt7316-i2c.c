@@ -135,7 +135,7 @@ MODULE_DEVICE_TABLE(of, adt7316_of_match);
 static struct i2c_driver adt7316_driver = {
 	.driver = {
 		.name = "adt7316",
-		.of_match_table = adt7316_of_match,
+		.of_match_table = of_match_ptr(adt7316_of_match),
 		.pm = ADT7316_PM_OPS,
 	},
 	.probe = adt7316_i2c_probe,

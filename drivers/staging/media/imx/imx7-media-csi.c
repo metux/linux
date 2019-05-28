@@ -1310,7 +1310,7 @@ static struct platform_driver imx7_csi_driver = {
 	.probe = imx7_csi_probe,
 	.remove = imx7_csi_remove,
 	.driver = {
-		.of_match_table = imx7_csi_of_match,
+		.of_match_table = of_match_ptr(imx7_csi_of_match),
 		.name = "imx7-csi",
 	},
 };

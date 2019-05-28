@@ -173,7 +173,7 @@ MODULE_DEVICE_TABLE(of, mxc_w1_dt_ids);
 static struct platform_driver mxc_w1_driver = {
 	.driver = {
 		.name = "mxc_w1",
-		.of_match_table = mxc_w1_dt_ids,
+		.of_match_table = of_match_ptr(mxc_w1_dt_ids),
 	},
 	.probe = mxc_w1_probe,
 	.remove = mxc_w1_remove,

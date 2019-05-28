@@ -780,7 +780,7 @@ static struct platform_driver omap_hdq_driver = {
 	.remove = omap_hdq_remove,
 	.driver = {
 		.name =	"omap_hdq",
-		.of_match_table = omap_hdq_dt_ids,
+		.of_match_table = of_match_ptr(omap_hdq_dt_ids),
 	},
 };
 module_platform_driver(omap_hdq_driver);

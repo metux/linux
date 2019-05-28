@@ -186,7 +186,7 @@ static struct platform_driver spics_gpio_driver = {
 	.probe = spics_gpio_probe,
 	.driver = {
 		.name = "spear-spics-gpio",
-		.of_match_table = spics_gpio_of_match,
+		.of_match_table = of_match_ptr(spics_gpio_of_match),
 	},
 };
 subsys_platform_driver(spics_gpio_driver);

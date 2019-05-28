@@ -301,7 +301,7 @@ static int ath79_gpio_probe(struct platform_device *pdev)
 static struct platform_driver ath79_gpio_driver = {
 	.driver = {
 		.name = "ath79-gpio",
-		.of_match_table	= ath79_gpio_of_match,
+		.of_match_table	= of_match_ptr(ath79_gpio_of_match),
 	},
 	.probe = ath79_gpio_probe,
 };

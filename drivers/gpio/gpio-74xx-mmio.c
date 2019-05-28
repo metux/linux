@@ -138,7 +138,7 @@ static int mmio_74xx_gpio_probe(struct platform_device *pdev)
 static struct platform_driver mmio_74xx_gpio_driver = {
 	.driver	= {
 		.name		= "74xx-mmio-gpio",
-		.of_match_table	= mmio_74xx_gpio_ids,
+		.of_match_table	= of_match_ptr(mmio_74xx_gpio_ids),
 	},
 	.probe	= mmio_74xx_gpio_probe,
 };

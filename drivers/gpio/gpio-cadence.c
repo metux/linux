@@ -282,7 +282,7 @@ static const struct of_device_id cdns_of_ids[] = {
 static struct platform_driver cdns_gpio_driver = {
 	.driver = {
 		.name = "cdns-gpio",
-		.of_match_table = cdns_of_ids,
+		.of_match_table = of_match_ptr(cdns_of_ids),
 	},
 	.probe = cdns_gpio_probe,
 	.remove = cdns_gpio_remove,

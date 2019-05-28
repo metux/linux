@@ -152,7 +152,7 @@ MODULE_DEVICE_TABLE(i2c, tpic2810_id_table);
 static struct i2c_driver tpic2810_driver = {
 	.driver = {
 		.name = "tpic2810",
-		.of_match_table = tpic2810_of_match_table,
+		.of_match_table = of_match_ptr(tpic2810_of_match_table),
 	},
 	.probe = tpic2810_probe,
 	.remove = tpic2810_remove,

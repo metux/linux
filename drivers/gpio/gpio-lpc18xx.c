@@ -405,7 +405,7 @@ static struct platform_driver lpc18xx_gpio_driver = {
 	.remove	= lpc18xx_gpio_remove,
 	.driver	= {
 		.name		= "lpc18xx-gpio",
-		.of_match_table	= lpc18xx_gpio_match,
+		.of_match_table	= of_match_ptr(lpc18xx_gpio_match),
 	},
 };
 module_platform_driver(lpc18xx_gpio_driver);

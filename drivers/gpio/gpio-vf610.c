@@ -345,7 +345,7 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 static struct platform_driver vf610_gpio_driver = {
 	.driver		= {
 		.name	= "gpio-vf610",
-		.of_match_table = vf610_gpio_dt_ids,
+		.of_match_table = of_match_ptr(vf610_gpio_dt_ids),
 	},
 	.probe		= vf610_gpio_probe,
 };

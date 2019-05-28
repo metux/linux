@@ -1402,7 +1402,7 @@ struct platform_driver ssi_port_pdriver = {
 	.remove	= ssi_port_remove,
 	.driver	= {
 		.name	= "omap_ssi_port",
-		.of_match_table = omap_ssi_port_of_match,
+		.of_match_table = of_match_ptr(omap_ssi_port_of_match),
 		.pm	= DEV_PM_OPS,
 	},
 };

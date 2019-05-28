@@ -619,7 +619,7 @@ static struct platform_driver ssi_pdriver = {
 	.driver	= {
 		.name	= "omap_ssi",
 		.pm     = DEV_PM_OPS,
-		.of_match_table = omap_ssi_of_match,
+		.of_match_table = of_match_ptr(omap_ssi_of_match),
 	},
 };
 

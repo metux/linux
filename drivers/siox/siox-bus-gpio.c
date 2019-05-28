@@ -163,7 +163,7 @@ static struct platform_driver siox_gpio_driver = {
 
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = siox_gpio_dt_ids,
+		.of_match_table = of_match_ptr(siox_gpio_dt_ids),
 	},
 };
 module_platform_driver(siox_gpio_driver);

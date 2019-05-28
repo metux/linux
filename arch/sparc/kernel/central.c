@@ -153,7 +153,7 @@ static struct platform_driver clock_board_driver = {
 	.probe		= clock_board_probe,
 	.driver = {
 		.name = "clock_board",
-		.of_match_table = clock_board_match,
+		.of_match_table = of_match_ptr(clock_board_match),
 	},
 };
 
@@ -257,7 +257,7 @@ static struct platform_driver fhc_driver = {
 	.probe		= fhc_probe,
 	.driver = {
 		.name = "fhc",
-		.of_match_table = fhc_match,
+		.of_match_table = of_match_ptr(fhc_match),
 	},
 };
 

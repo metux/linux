@@ -488,7 +488,7 @@ static struct platform_driver rtc_driver = {
 	.probe		= rtc_probe,
 	.driver = {
 		.name = "rtc",
-		.of_match_table = rtc_match,
+		.of_match_table = of_match_ptr(rtc_match),
 	},
 };
 
@@ -520,7 +520,7 @@ static struct platform_driver bq4802_driver = {
 	.probe		= bq4802_probe,
 	.driver = {
 		.name = "bq4802",
-		.of_match_table = bq4802_match,
+		.of_match_table = of_match_ptr(bq4802_match),
 	},
 };
 
@@ -583,7 +583,7 @@ static struct platform_driver mostek_driver = {
 	.probe		= mostek_probe,
 	.driver = {
 		.name = "mostek",
-		.of_match_table = mostek_match,
+		.of_match_table = of_match_ptr(mostek_match),
 	},
 };
 

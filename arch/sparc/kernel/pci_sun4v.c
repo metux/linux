@@ -1338,7 +1338,7 @@ static const struct of_device_id pci_sun4v_match[] = {
 static struct platform_driver pci_sun4v_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = pci_sun4v_match,
+		.of_match_table = of_match_ptr(pci_sun4v_match),
 	},
 	.probe		= pci_sun4v_probe,
 };

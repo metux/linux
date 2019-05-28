@@ -510,7 +510,7 @@ static const struct of_device_id fire_match[] = {
 static struct platform_driver fire_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = fire_match,
+		.of_match_table = of_match_ptr(fire_match),
 	},
 	.probe		= fire_probe,
 };

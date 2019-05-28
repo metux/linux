@@ -900,7 +900,7 @@ static const struct of_device_id grpci2_of_match[] __initconst = {
 static struct platform_driver grpci2_of_driver = {
 	.driver = {
 		.name = "grpci2",
-		.of_match_table = grpci2_of_match,
+		.of_match_table = of_match_ptr(grpci2_of_match),
 	},
 	.probe = grpci2_of_probe,
 };

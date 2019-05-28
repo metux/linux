@@ -811,7 +811,7 @@ MODULE_DEVICE_TABLE(of, us3mc_match);
 static struct platform_driver us3mc_driver = {
 	.driver = {
 		.name = "us3mc",
-		.of_match_table = us3mc_match,
+		.of_match_table = of_match_ptr(us3mc_match),
 	},
 	.probe		= us3mc_probe,
 	.remove		= us3mc_remove,

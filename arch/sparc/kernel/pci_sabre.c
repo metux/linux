@@ -601,7 +601,7 @@ static const struct of_device_id sabre_match[] = {
 static struct platform_driver sabre_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = sabre_match,
+		.of_match_table = of_match_ptr(sabre_match),
 	},
 	.probe		= sabre_probe,
 };

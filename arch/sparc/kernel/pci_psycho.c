@@ -605,7 +605,7 @@ static const struct of_device_id psycho_match[] = {
 static struct platform_driver psycho_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = psycho_match,
+		.of_match_table = of_match_ptr(psycho_match),
 	},
 	.probe		= psycho_probe,
 };

@@ -135,7 +135,7 @@ static struct platform_driver auxio_driver = {
 	.probe		= auxio_probe,
 	.driver = {
 		.name = "auxio",
-		.of_match_table = auxio_match,
+		.of_match_table = of_match_ptr(auxio_match),
 	},
 };
 

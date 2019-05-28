@@ -83,7 +83,7 @@ MODULE_DEVICE_TABLE(of, pmc_match);
 static struct platform_driver pmc_driver = {
 	.driver = {
 		.name = "pmc",
-		.of_match_table = pmc_match,
+		.of_match_table = of_match_ptr(pmc_match),
 	},
 	.probe		= pmc_probe,
 };

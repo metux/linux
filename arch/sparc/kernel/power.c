@@ -64,7 +64,7 @@ static struct platform_driver power_driver = {
 	.probe		= power_probe,
 	.driver = {
 		.name = "power",
-		.of_match_table = power_match,
+		.of_match_table = of_match_ptr(power_match),
 	},
 };
 

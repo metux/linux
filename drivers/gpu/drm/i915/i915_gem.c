@@ -50,6 +50,7 @@
 #include "gt/intel_workarounds.h"
 
 #include "i915_drv.h"
+#include "i915_scatterlist.h"
 #include "i915_trace.h"
 #include "i915_vgpu.h"
 
@@ -3029,7 +3030,6 @@ void i915_gem_track_fb(struct drm_i915_gem_object *old,
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
-#include "selftests/scatterlist.c"
 #include "selftests/mock_gem_device.c"
 #include "selftests/i915_gem.c"
 #endif

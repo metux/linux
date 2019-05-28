@@ -658,7 +658,7 @@ static struct platform_driver stm32_pwm_driver = {
 	.remove	= stm32_pwm_remove,
 	.driver	= {
 		.name = "stm32-pwm",
-		.of_match_table = stm32_pwm_of_match,
+		.of_match_table = of_match_ptr(stm32_pwm_of_match),
 	},
 };
 module_platform_driver(stm32_pwm_driver);

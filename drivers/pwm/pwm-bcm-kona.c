@@ -331,7 +331,7 @@ MODULE_DEVICE_TABLE(of, bcm_kona_pwmc_dt);
 static struct platform_driver kona_pwmc_driver = {
 	.driver = {
 		.name = "bcm-kona-pwm",
-		.of_match_table = bcm_kona_pwmc_dt,
+		.of_match_table = of_match_ptr(bcm_kona_pwmc_dt),
 	},
 	.probe = kona_pwmc_probe,
 	.remove = kona_pwmc_remove,

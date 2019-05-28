@@ -259,7 +259,7 @@ static struct platform_driver vt8500_pwm_driver = {
 	.remove		= vt8500_pwm_remove,
 	.driver		= {
 		.name	= "vt8500-pwm",
-		.of_match_table = vt8500_pwm_dt_ids,
+		.of_match_table = of_match_ptr(vt8500_pwm_dt_ids),
 	},
 };
 module_platform_driver(vt8500_pwm_driver);

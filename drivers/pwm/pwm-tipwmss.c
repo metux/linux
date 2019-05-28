@@ -42,7 +42,7 @@ static int pwmss_remove(struct platform_device *pdev)
 static struct platform_driver pwmss_driver = {
 	.driver	= {
 		.name	= "pwmss",
-		.of_match_table	= pwmss_of_match,
+		.of_match_table	= of_match_ptr(pwmss_of_match),
 	},
 	.probe	= pwmss_probe,
 	.remove	= pwmss_remove,

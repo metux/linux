@@ -557,7 +557,7 @@ MODULE_DEVICE_TABLE(of, fsl_pwm_dt_ids);
 static struct platform_driver fsl_pwm_driver = {
 	.driver = {
 		.name = "fsl-ftm-pwm",
-		.of_match_table = fsl_pwm_dt_ids,
+		.of_match_table = of_match_ptr(fsl_pwm_dt_ids),
 		.pm = &fsl_pwm_pm_ops,
 	},
 	.probe = fsl_pwm_probe,

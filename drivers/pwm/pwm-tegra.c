@@ -296,7 +296,7 @@ static const struct dev_pm_ops tegra_pwm_pm_ops = {
 static struct platform_driver tegra_pwm_driver = {
 	.driver = {
 		.name = "tegra-pwm",
-		.of_match_table = tegra_pwm_of_match,
+		.of_match_table = of_match_ptr(tegra_pwm_of_match),
 		.pm = &tegra_pwm_pm_ops,
 	},
 	.probe = tegra_pwm_probe,

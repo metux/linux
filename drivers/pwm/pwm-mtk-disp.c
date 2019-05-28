@@ -291,7 +291,7 @@ MODULE_DEVICE_TABLE(of, mtk_disp_pwm_of_match);
 static struct platform_driver mtk_disp_pwm_driver = {
 	.driver = {
 		.name = "mediatek-disp-pwm",
-		.of_match_table = mtk_disp_pwm_of_match,
+		.of_match_table = of_match_ptr(mtk_disp_pwm_of_match),
 	},
 	.probe = mtk_disp_pwm_probe,
 	.remove = mtk_disp_pwm_remove,

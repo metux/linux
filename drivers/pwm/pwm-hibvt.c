@@ -279,7 +279,7 @@ MODULE_DEVICE_TABLE(of, hibvt_pwm_of_match);
 static struct platform_driver hibvt_pwm_driver = {
 	.driver = {
 		.name = "hibvt-pwm",
-		.of_match_table = hibvt_pwm_of_match,
+		.of_match_table = of_match_ptr(hibvt_pwm_of_match),
 	},
 	.probe = hibvt_pwm_probe,
 	.remove	= hibvt_pwm_remove,

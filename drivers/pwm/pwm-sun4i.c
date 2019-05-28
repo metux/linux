@@ -401,7 +401,7 @@ static int sun4i_pwm_remove(struct platform_device *pdev)
 static struct platform_driver sun4i_pwm_driver = {
 	.driver = {
 		.name = "sun4i-pwm",
-		.of_match_table = sun4i_pwm_dt_ids,
+		.of_match_table = of_match_ptr(sun4i_pwm_dt_ids),
 	},
 	.probe = sun4i_pwm_probe,
 	.remove = sun4i_pwm_remove,

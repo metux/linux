@@ -188,7 +188,7 @@ static int pwm_imx1_remove(struct platform_device *pdev)
 static struct platform_driver pwm_imx1_driver = {
 	.driver = {
 		.name = "pwm-imx1",
-		.of_match_table = pwm_imx1_dt_ids,
+		.of_match_table = of_match_ptr(pwm_imx1_dt_ids),
 	},
 	.probe = pwm_imx1_probe,
 	.remove = pwm_imx1_remove,

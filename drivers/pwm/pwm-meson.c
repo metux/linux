@@ -584,7 +584,7 @@ static int meson_pwm_remove(struct platform_device *pdev)
 static struct platform_driver meson_pwm_driver = {
 	.driver = {
 		.name = "meson-pwm",
-		.of_match_table = meson_pwm_matches,
+		.of_match_table = of_match_ptr(meson_pwm_matches),
 	},
 	.probe = meson_pwm_probe,
 	.remove = meson_pwm_remove,

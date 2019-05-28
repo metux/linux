@@ -503,7 +503,7 @@ static SIMPLE_DEV_PM_OPS(atmel_tcb_pwm_pm_ops, atmel_tcb_pwm_suspend,
 static struct platform_driver atmel_tcb_pwm_driver = {
 	.driver = {
 		.name = "atmel-tcb-pwm",
-		.of_match_table = atmel_tcb_pwm_dt_ids,
+		.of_match_table = of_match_ptr(atmel_tcb_pwm_dt_ids),
 		.pm = &atmel_tcb_pwm_pm_ops,
 	},
 	.probe = atmel_tcb_pwm_probe,

@@ -321,7 +321,7 @@ static struct platform_driver brcmstb_pwm_driver = {
 	.remove = brcmstb_pwm_remove,
 	.driver = {
 		.name = "pwm-brcmstb",
-		.of_match_table = brcmstb_pwm_of_match,
+		.of_match_table = of_match_ptr(brcmstb_pwm_of_match),
 		.pm = &brcmstb_pwm_pm_ops,
 	},
 };

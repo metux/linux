@@ -295,7 +295,7 @@ static struct platform_driver berlin_pwm_driver = {
 	.remove = berlin_pwm_remove,
 	.driver = {
 		.name = "berlin-pwm",
-		.of_match_table = berlin_pwm_match,
+		.of_match_table = of_match_ptr(berlin_pwm_match),
 		.pm = &berlin_pwm_pm_ops,
 	},
 };

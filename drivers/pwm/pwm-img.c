@@ -413,7 +413,7 @@ static struct platform_driver img_pwm_driver = {
 	.driver = {
 		.name = "img-pwm",
 		.pm = &img_pwm_pm_ops,
-		.of_match_table = img_pwm_of_match,
+		.of_match_table = of_match_ptr(img_pwm_of_match),
 	},
 	.probe = img_pwm_probe,
 	.remove = img_pwm_remove,

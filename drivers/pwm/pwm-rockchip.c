@@ -413,7 +413,7 @@ static int rockchip_pwm_remove(struct platform_device *pdev)
 static struct platform_driver rockchip_pwm_driver = {
 	.driver = {
 		.name = "rockchip-pwm",
-		.of_match_table = rockchip_pwm_dt_ids,
+		.of_match_table = of_match_ptr(rockchip_pwm_dt_ids),
 	},
 	.probe = rockchip_pwm_probe,
 	.remove = rockchip_pwm_remove,

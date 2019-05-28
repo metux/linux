@@ -303,7 +303,7 @@ static const struct of_device_id atmel_hlcdc_pwm_dt_ids[] = {
 static struct platform_driver atmel_hlcdc_pwm_driver = {
 	.driver = {
 		.name = "atmel-hlcdc-pwm",
-		.of_match_table = atmel_hlcdc_pwm_dt_ids,
+		.of_match_table = of_match_ptr(atmel_hlcdc_pwm_dt_ids),
 		.pm = &atmel_hlcdc_pwm_pm_ops,
 	},
 	.probe = atmel_hlcdc_pwm_probe,

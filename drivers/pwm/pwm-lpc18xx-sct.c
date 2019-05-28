@@ -456,7 +456,7 @@ static int lpc18xx_pwm_remove(struct platform_device *pdev)
 static struct platform_driver lpc18xx_pwm_driver = {
 	.driver = {
 		.name = "lpc18xx-sct-pwm",
-		.of_match_table = lpc18xx_pwm_of_match,
+		.of_match_table = of_match_ptr(lpc18xx_pwm_of_match),
 	},
 	.probe = lpc18xx_pwm_probe,
 	.remove = lpc18xx_pwm_remove,

@@ -680,7 +680,7 @@ MODULE_DEVICE_TABLE(of, sti_pwm_of_match);
 static struct platform_driver sti_pwm_driver = {
 	.driver = {
 		.name = "sti-pwm",
-		.of_match_table = sti_pwm_of_match,
+		.of_match_table = of_match_ptr(sti_pwm_of_match),
 	},
 	.probe = sti_pwm_probe,
 	.remove = sti_pwm_remove,

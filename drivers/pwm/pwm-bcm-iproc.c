@@ -265,7 +265,7 @@ MODULE_DEVICE_TABLE(of, bcm_iproc_pwmc_dt);
 static struct platform_driver iproc_pwmc_driver = {
 	.driver = {
 		.name = "bcm-iproc-pwm",
-		.of_match_table = bcm_iproc_pwmc_dt,
+		.of_match_table = of_match_ptr(bcm_iproc_pwmc_dt),
 	},
 	.probe = iproc_pwmc_probe,
 	.remove = iproc_pwmc_remove,

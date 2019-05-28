@@ -266,7 +266,7 @@ MODULE_DEVICE_TABLE(of, zx_pwm_dt_ids);
 static struct platform_driver zx_pwm_driver = {
 	.driver = {
 		.name = "zx-pwm",
-		.of_match_table = zx_pwm_dt_ids,
+		.of_match_table = of_match_ptr(zx_pwm_dt_ids),
 	},
 	.probe = zx_pwm_probe,
 	.remove = zx_pwm_remove,

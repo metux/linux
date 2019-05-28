@@ -436,7 +436,7 @@ MODULE_DEVICE_TABLE(of, imx_tpm_pwm_dt_ids);
 static struct platform_driver imx_tpm_pwm_driver = {
 	.driver = {
 		.name = "imx7ulp-tpm-pwm",
-		.of_match_table = imx_tpm_pwm_dt_ids,
+		.of_match_table = of_match_ptr(imx_tpm_pwm_dt_ids),
 		.pm = &imx_tpm_pwm_pm,
 	},
 	.probe	= pwm_imx_tpm_probe,

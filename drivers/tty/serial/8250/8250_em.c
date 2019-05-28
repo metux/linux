@@ -146,7 +146,7 @@ MODULE_DEVICE_TABLE(of, serial8250_em_dt_ids);
 static struct platform_driver serial8250_em_platform_driver = {
 	.driver = {
 		.name		= "serial8250-em",
-		.of_match_table = serial8250_em_dt_ids,
+		.of_match_table = of_match_ptr(serial8250_em_dt_ids),
 	},
 	.probe			= serial8250_em_probe,
 	.remove			= serial8250_em_remove,

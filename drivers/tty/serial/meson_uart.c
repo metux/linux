@@ -754,7 +754,7 @@ static  struct platform_driver meson_uart_platform_driver = {
 	.remove		= meson_uart_remove,
 	.driver		= {
 		.name		= "meson_uart",
-		.of_match_table	= meson_uart_dt_match,
+		.of_match_table	= of_match_ptr(meson_uart_dt_match),
 	},
 };
 

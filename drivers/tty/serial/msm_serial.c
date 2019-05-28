@@ -1847,7 +1847,7 @@ static struct platform_driver msm_platform_driver = {
 	.driver = {
 		.name = "msm_serial",
 		.pm = &msm_serial_dev_pm_ops,
-		.of_match_table = msm_match_table,
+		.of_match_table = of_match_ptr(msm_match_table),
 	},
 };
 

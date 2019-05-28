@@ -618,7 +618,7 @@ static struct platform_driver mtk8250_platform_driver = {
 	.driver = {
 		.name		= "mt6577-uart",
 		.pm		= &mtk8250_pm_ops,
-		.of_match_table	= mtk8250_of_match,
+		.of_match_table	= of_match_ptr(mtk8250_of_match),
 	},
 	.probe			= mtk8250_probe,
 	.remove			= mtk8250_remove,

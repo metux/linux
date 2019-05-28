@@ -588,7 +588,7 @@ static struct platform_driver grlib_apbuart_of_driver = {
 	.probe = apbuart_probe,
 	.driver = {
 		.name = "grlib-apbuart",
-		.of_match_table = apbuart_match,
+		.of_match_table = of_match_ptr(apbuart_match),
 	},
 };
 

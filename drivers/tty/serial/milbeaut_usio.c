@@ -578,7 +578,7 @@ static struct platform_driver mlb_usio_driver = {
 	.remove         = mlb_usio_remove,
 	.driver         = {
 		.name   = USIO_NAME,
-		.of_match_table = mlb_usio_dt_ids,
+		.of_match_table = of_match_ptr(mlb_usio_dt_ids),
 	},
 };
 

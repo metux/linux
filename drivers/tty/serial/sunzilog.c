@@ -1542,7 +1542,7 @@ MODULE_DEVICE_TABLE(of, zs_match);
 static struct platform_driver zs_driver = {
 	.driver = {
 		.name = "zs",
-		.of_match_table = zs_match,
+		.of_match_table = of_match_ptr(zs_match),
 	},
 	.probe		= zs_probe,
 	.remove		= zs_remove,

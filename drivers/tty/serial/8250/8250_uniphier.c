@@ -298,7 +298,7 @@ static struct platform_driver uniphier_uart_platform_driver = {
 	.remove		= uniphier_uart_remove,
 	.driver = {
 		.name	= "uniphier-uart",
-		.of_match_table = uniphier_uart_match,
+		.of_match_table = of_match_ptr(uniphier_uart_match),
 		.pm = &uniphier_uart_pm_ops,
 	},
 };

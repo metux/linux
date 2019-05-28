@@ -1847,7 +1847,7 @@ static struct macio_driver pmz_driver = {
 	.driver = {
 		.name 		= "pmac_zilog",
 		.owner		= THIS_MODULE,
-		.of_match_table	= pmz_match,
+		.of_match_table	= of_match_ptr(pmz_match),
 	},
 	.probe		= pmz_attach,
 	.remove		= pmz_detach,

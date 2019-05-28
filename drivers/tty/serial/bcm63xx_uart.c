@@ -894,7 +894,7 @@ static struct platform_driver bcm_uart_platform_driver = {
 	.remove	= bcm_uart_remove,
 	.driver	= {
 		.name  = "bcm63xx_uart",
-		.of_match_table = bcm63xx_of_match,
+		.of_match_table = of_match_ptr(bcm63xx_of_match),
 	},
 };
 

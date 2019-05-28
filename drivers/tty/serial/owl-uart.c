@@ -723,7 +723,7 @@ static struct platform_driver owl_uart_platform_driver = {
 	.remove = owl_uart_remove,
 	.driver = {
 		.name = "owl-uart",
-		.of_match_table = owl_uart_dt_matches,
+		.of_match_table = of_match_ptr(owl_uart_dt_matches),
 	},
 };
 

@@ -1347,7 +1347,7 @@ static struct platform_driver qcom_geni_serial_platform_driver = {
 	.probe = qcom_geni_serial_probe,
 	.driver = {
 		.name = "qcom_geni_serial",
-		.of_match_table = qcom_geni_serial_match_table,
+		.of_match_table = of_match_ptr(qcom_geni_serial_match_table),
 		.pm = &qcom_geni_serial_pm_ops,
 	},
 };

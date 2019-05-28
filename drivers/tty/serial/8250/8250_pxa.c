@@ -163,7 +163,7 @@ static struct platform_driver serial_pxa_driver = {
 	.driver		= {
 		.name	= "pxa2xx-uart",
 		.pm	= &serial_pxa_pm_ops,
-		.of_match_table = serial_pxa_dt_ids,
+		.of_match_table = of_match_ptr(serial_pxa_dt_ids),
 	},
 };
 

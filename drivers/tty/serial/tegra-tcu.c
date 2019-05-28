@@ -286,7 +286,7 @@ static const struct of_device_id tegra_tcu_match[] = {
 static struct platform_driver tegra_tcu_driver = {
 	.driver = {
 		.name = "tegra-tcu",
-		.of_match_table = tegra_tcu_match,
+		.of_match_table = of_match_ptr(tegra_tcu_match),
 	},
 	.probe = tegra_tcu_probe,
 	.remove = tegra_tcu_remove,

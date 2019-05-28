@@ -1470,7 +1470,7 @@ static struct platform_driver sirfsoc_uart_driver = {
 	.remove		= sirfsoc_uart_remove,
 	.driver		= {
 		.name	= SIRFUART_PORT_NAME,
-		.of_match_table = sirfsoc_uart_ids,
+		.of_match_table = of_match_ptr(sirfsoc_uart_ids),
 		.pm	= &sirfsoc_uart_pm_ops,
 	},
 };

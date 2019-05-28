@@ -632,7 +632,7 @@ static const struct of_device_id hv_match[] = {
 static struct platform_driver hv_driver = {
 	.driver = {
 		.name = "hv",
-		.of_match_table = hv_match,
+		.of_match_table = of_match_ptr(hv_match),
 	},
 	.probe		= hv_probe,
 	.remove		= hv_remove,

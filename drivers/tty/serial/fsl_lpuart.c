@@ -2584,7 +2584,7 @@ static struct platform_driver lpuart_driver = {
 	.remove		= lpuart_remove,
 	.driver		= {
 		.name	= "fsl-lpuart",
-		.of_match_table = lpuart_dt_ids,
+		.of_match_table = of_match_ptr(lpuart_dt_ids),
 		.pm	= &lpuart_pm_ops,
 	},
 };

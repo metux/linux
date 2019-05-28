@@ -782,7 +782,7 @@ static const struct of_device_id ltq_asc_match[] = {
 static struct platform_driver lqasc_driver = {
 	.driver		= {
 		.name	= DRVNAME,
-		.of_match_table = ltq_asc_match,
+		.of_match_table = of_match_ptr(ltq_asc_match),
 	},
 };
 

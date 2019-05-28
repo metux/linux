@@ -798,7 +798,7 @@ static struct platform_driver rda_uart_platform_driver = {
 	.remove = rda_uart_remove,
 	.driver = {
 		.name = "rda-uart",
-		.of_match_table = rda_uart_dt_matches,
+		.of_match_table = of_match_ptr(rda_uart_dt_matches),
 	},
 };
 

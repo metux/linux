@@ -2541,7 +2541,7 @@ static struct platform_driver imx_uart_platform_driver = {
 	.id_table = imx_uart_devtype,
 	.driver = {
 		.name = "imx-uart",
-		.of_match_table = imx_uart_dt_ids,
+		.of_match_table = of_match_ptr(imx_uart_dt_ids),
 		.pm = &imx_uart_pm_ops,
 	},
 };

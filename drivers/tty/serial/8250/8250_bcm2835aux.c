@@ -130,7 +130,7 @@ MODULE_DEVICE_TABLE(of, bcm2835aux_serial_match);
 static struct platform_driver bcm2835aux_serial_driver = {
 	.driver = {
 		.name = "bcm2835-aux-uart",
-		.of_match_table = bcm2835aux_serial_match,
+		.of_match_table = of_match_ptr(bcm2835aux_serial_match),
 	},
 	.probe  = bcm2835aux_serial_probe,
 	.remove = bcm2835aux_serial_remove,

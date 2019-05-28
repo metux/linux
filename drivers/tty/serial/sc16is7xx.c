@@ -1430,7 +1430,7 @@ MODULE_DEVICE_TABLE(spi, sc16is7xx_spi_id_table);
 static struct spi_driver sc16is7xx_spi_uart_driver = {
 	.driver = {
 		.name		= SC16IS7XX_NAME,
-		.of_match_table	= sc16is7xx_dt_ids,
+		.of_match_table	= of_match_ptr(sc16is7xx_dt_ids),
 	},
 	.probe		= sc16is7xx_spi_probe,
 	.remove		= sc16is7xx_spi_remove,
@@ -1484,7 +1484,7 @@ MODULE_DEVICE_TABLE(i2c, sc16is7xx_i2c_id_table);
 static struct i2c_driver sc16is7xx_i2c_uart_driver = {
 	.driver = {
 		.name		= SC16IS7XX_NAME,
-		.of_match_table	= sc16is7xx_dt_ids,
+		.of_match_table	= of_match_ptr(sc16is7xx_dt_ids),
 	},
 	.probe		= sc16is7xx_i2c_probe,
 	.remove		= sc16is7xx_i2c_remove,

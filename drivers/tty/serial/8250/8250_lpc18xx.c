@@ -216,7 +216,7 @@ static struct platform_driver lpc18xx_serial_driver = {
 	.remove = lpc18xx_serial_remove,
 	.driver = {
 		.name = "lpc18xx-uart",
-		.of_match_table = lpc18xx_serial_match,
+		.of_match_table = of_match_ptr(lpc18xx_serial_match),
 	},
 };
 module_platform_driver(lpc18xx_serial_driver);

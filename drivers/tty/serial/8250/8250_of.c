@@ -349,7 +349,7 @@ MODULE_DEVICE_TABLE(of, of_platform_serial_table);
 static struct platform_driver of_platform_serial_driver = {
 	.driver = {
 		.name = "of_serial",
-		.of_match_table = of_platform_serial_table,
+		.of_match_table = of_match_ptr(of_platform_serial_table),
 		.pm = &of_serial_pm_ops,
 	},
 	.probe = of_platform_serial_probe,

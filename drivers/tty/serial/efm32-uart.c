@@ -820,7 +820,7 @@ static struct platform_driver efm32_uart_driver = {
 
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = efm32_uart_dt_ids,
+		.of_match_table = of_match_ptr(efm32_uart_dt_ids),
 	},
 };
 

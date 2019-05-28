@@ -1357,7 +1357,7 @@ static struct platform_driver tegra_uart_platform_driver = {
 	.remove		= tegra_uart_remove,
 	.driver		= {
 		.name	= "serial-tegra",
-		.of_match_table = tegra_uart_of_match,
+		.of_match_table = of_match_ptr(tegra_uart_of_match),
 		.pm	= &tegra_uart_pm_ops,
 	},
 };

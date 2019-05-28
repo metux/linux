@@ -252,7 +252,7 @@ static struct platform_driver hvc_opal_driver = {
 	.remove		= hvc_opal_remove,
 	.driver		= {
 		.name	= hvc_opal_name,
-		.of_match_table	= hvc_opal_match,
+		.of_match_table	= of_match_ptr(hvc_opal_match),
 	}
 };
 

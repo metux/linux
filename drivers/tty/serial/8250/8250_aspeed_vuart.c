@@ -438,7 +438,7 @@ static const struct of_device_id aspeed_vuart_table[] = {
 static struct platform_driver aspeed_vuart_driver = {
 	.driver = {
 		.name = "aspeed-vuart",
-		.of_match_table = aspeed_vuart_table,
+		.of_match_table = of_match_ptr(aspeed_vuart_table),
 	},
 	.probe = aspeed_vuart_probe,
 	.remove = aspeed_vuart_remove,

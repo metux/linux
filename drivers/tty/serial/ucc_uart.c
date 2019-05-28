@@ -1486,7 +1486,7 @@ MODULE_DEVICE_TABLE(of, ucc_uart_match);
 static struct platform_driver ucc_uart_of_driver = {
 	.driver = {
 		.name = "ucc_uart",
-		.of_match_table    = ucc_uart_match,
+		.of_match_table = of_match_ptr(ucc_uart_match),
 	},
 	.probe  	= ucc_uart_probe,
 	.remove 	= ucc_uart_remove,

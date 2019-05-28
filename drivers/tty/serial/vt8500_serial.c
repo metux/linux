@@ -725,7 +725,7 @@ static struct platform_driver vt8500_platform_driver = {
 	.probe  = vt8500_serial_probe,
 	.driver = {
 		.name = "vt8500_serial",
-		.of_match_table = wmt_dt_ids,
+		.of_match_table = of_match_ptr(wmt_dt_ids),
 		.suppress_bind_attrs = true,
 	},
 };

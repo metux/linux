@@ -723,7 +723,7 @@ static const struct of_device_id ehv_bc_tty_of_ids[] = {
 static struct platform_driver ehv_bc_tty_driver = {
 	.driver = {
 		.name = "ehv-bc",
-		.of_match_table = ehv_bc_tty_of_ids,
+		.of_match_table = of_match_ptr(ehv_bc_tty_of_ids),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= ehv_bc_tty_probe,

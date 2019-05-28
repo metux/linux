@@ -922,7 +922,7 @@ static struct platform_driver serial_pxa_driver = {
 		.pm	= &serial_pxa_pm_ops,
 #endif
 		.suppress_bind_attrs = true,
-		.of_match_table = serial_pxa_dt_ids,
+		.of_match_table = of_match_ptr(serial_pxa_dt_ids),
 	},
 };
 

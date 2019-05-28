@@ -431,7 +431,7 @@ static int img_ascii_lcd_remove(struct platform_device *pdev)
 static struct platform_driver img_ascii_lcd_driver = {
 	.driver = {
 		.name		= "img-ascii-lcd",
-		.of_match_table	= img_ascii_lcd_matches,
+		.of_match_table	= of_match_ptr(img_ascii_lcd_matches),
 	},
 	.probe	= img_ascii_lcd_probe,
 	.remove	= img_ascii_lcd_remove,

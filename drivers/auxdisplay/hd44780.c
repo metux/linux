@@ -296,7 +296,7 @@ static struct platform_driver hd44780_driver = {
 	.remove = hd44780_remove,
 	.driver		= {
 		.name	= "hd44780",
-		.of_match_table = hd44780_of_match,
+		.of_match_table = of_match_ptr(hd44780_of_match),
 	},
 };
 

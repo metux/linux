@@ -1264,7 +1264,7 @@ static struct i2c_driver pca953x_driver = {
 	.driver = {
 		.name	= "pca953x",
 		.pm	= &pca953x_pm_ops,
-		.of_match_table = pca953x_dt_ids,
+		.of_match_table = of_match_ptr(pca953x_dt_ids),
 		.acpi_match_table = pca953x_acpi_ids,
 	},
 	.probe		= pca953x_probe,

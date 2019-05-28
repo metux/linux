@@ -590,7 +590,7 @@ static struct syscore_ops mxc_gpio_syscore_ops = {
 static struct platform_driver mxc_gpio_driver = {
 	.driver		= {
 		.name	= "gpio-mxc",
-		.of_match_table = mxc_gpio_dt_ids,
+		.of_match_table = of_match_ptr(mxc_gpio_dt_ids),
 		.suppress_bind_attrs = true,
 	},
 	.probe		= mxc_gpio_probe,

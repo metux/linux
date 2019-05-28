@@ -682,7 +682,7 @@ static struct platform_driver sprd_eic_driver = {
 	.probe = sprd_eic_probe,
 	.driver = {
 		.name = "sprd-eic",
-		.of_match_table	= sprd_eic_of_match,
+		.of_match_table	= of_match_ptr(sprd_eic_of_match),
 	},
 };
 

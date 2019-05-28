@@ -1515,7 +1515,7 @@ static struct platform_driver omap_gpio_driver = {
 	.driver		= {
 		.name	= "omap_gpio",
 		.pm	= &gpio_pm_ops,
-		.of_match_table = omap_gpio_match,
+		.of_match_table = of_match_ptr(omap_gpio_match),
 	},
 };
 

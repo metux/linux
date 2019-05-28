@@ -276,7 +276,7 @@ static struct platform_driver sprd_gpio_driver = {
 	.probe = sprd_gpio_probe,
 	.driver = {
 		.name = "sprd-gpio",
-		.of_match_table	= sprd_gpio_of_match,
+		.of_match_table	= of_match_ptr(sprd_gpio_of_match),
 	},
 };
 

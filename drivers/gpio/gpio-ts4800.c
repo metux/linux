@@ -69,7 +69,7 @@ MODULE_DEVICE_TABLE(of, ts4800_gpio_of_match);
 static struct platform_driver ts4800_gpio_driver = {
 	.driver = {
 		   .name = "ts4800-gpio",
-		   .of_match_table = ts4800_gpio_of_match,
+		   .of_match_table = of_match_ptr(ts4800_gpio_of_match),
 		   },
 	.probe = ts4800_gpio_probe,
 };

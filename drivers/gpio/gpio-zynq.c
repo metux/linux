@@ -954,7 +954,7 @@ static struct platform_driver zynq_gpio_driver = {
 	.driver	= {
 		.name = DRIVER_NAME,
 		.pm = &zynq_gpio_dev_pm_ops,
-		.of_match_table = zynq_gpio_of_match,
+		.of_match_table = of_match_ptr(zynq_gpio_of_match),
 	},
 	.probe = zynq_gpio_probe,
 	.remove = zynq_gpio_remove,

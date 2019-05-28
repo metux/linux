@@ -176,7 +176,7 @@ MODULE_DEVICE_TABLE(i2c, ts4900_gpio_id_table);
 static struct i2c_driver ts4900_gpio_driver = {
 	.driver = {
 		.name = "ts4900-gpio",
-		.of_match_table = ts4900_gpio_of_match_table,
+		.of_match_table = of_match_ptr(ts4900_gpio_of_match_table),
 	},
 	.probe = ts4900_gpio_probe,
 	.id_table = ts4900_gpio_id_table,

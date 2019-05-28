@@ -814,7 +814,7 @@ MODULE_DEVICE_TABLE(of, brcmstb_gpio_of_match);
 static struct platform_driver brcmstb_gpio_driver = {
 	.driver = {
 		.name = "brcmstb-gpio",
-		.of_match_table = brcmstb_gpio_of_match,
+		.of_match_table = of_match_ptr(brcmstb_gpio_of_match),
 		.pm = &brcmstb_gpio_pm_ops,
 	},
 	.probe = brcmstb_gpio_probe,

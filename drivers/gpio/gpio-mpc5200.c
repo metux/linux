@@ -182,7 +182,7 @@ static const struct of_device_id mpc52xx_wkup_gpiochip_match[] = {
 static struct platform_driver mpc52xx_wkup_gpiochip_driver = {
 	.driver = {
 		.name = "mpc5200-gpio-wkup",
-		.of_match_table = mpc52xx_wkup_gpiochip_match,
+		.of_match_table = of_match_ptr(mpc52xx_wkup_gpiochip_match),
 	},
 	.probe = mpc52xx_wkup_gpiochip_probe,
 	.remove = mpc52xx_gpiochip_remove,
@@ -335,7 +335,7 @@ static const struct of_device_id mpc52xx_simple_gpiochip_match[] = {
 static struct platform_driver mpc52xx_simple_gpiochip_driver = {
 	.driver = {
 		.name = "mpc5200-gpio",
-		.of_match_table = mpc52xx_simple_gpiochip_match,
+		.of_match_table = of_match_ptr(mpc52xx_simple_gpiochip_match),
 	},
 	.probe = mpc52xx_simple_gpiochip_probe,
 	.remove = mpc52xx_gpiochip_remove,

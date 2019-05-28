@@ -451,7 +451,7 @@ static struct platform_driver mpc8xxx_plat_driver = {
 	.remove		= mpc8xxx_remove,
 	.driver		= {
 		.name = "gpio-mpc8xxx",
-		.of_match_table	= mpc8xxx_gpio_ids,
+		.of_match_table	= of_match_ptr(mpc8xxx_gpio_ids),
 	},
 };
 arch_platform_driver(mpc8xxx_plat_driver);

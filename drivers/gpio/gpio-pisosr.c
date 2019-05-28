@@ -192,7 +192,7 @@ MODULE_DEVICE_TABLE(of, pisosr_gpio_of_match_table);
 static struct spi_driver pisosr_gpio_driver = {
 	.driver = {
 		.name = "pisosr-gpio",
-		.of_match_table = pisosr_gpio_of_match_table,
+		.of_match_table = of_match_ptr(pisosr_gpio_of_match_table),
 	},
 	.probe = pisosr_gpio_probe,
 	.remove = pisosr_gpio_remove,

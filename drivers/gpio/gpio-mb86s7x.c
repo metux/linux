@@ -233,7 +233,7 @@ MODULE_DEVICE_TABLE(acpi, mb86s70_gpio_acpi_ids);
 static struct platform_driver mb86s70_gpio_driver = {
 	.driver = {
 		.name = "mb86s70-gpio",
-		.of_match_table = mb86s70_gpio_dt_ids,
+		.of_match_table = of_match_ptr(mb86s70_gpio_dt_ids),
 		.acpi_match_table = ACPI_PTR(mb86s70_gpio_acpi_ids),
 	},
 	.probe = mb86s70_gpio_probe,

@@ -2039,7 +2039,7 @@ static struct macio_driver mesh_driver =
 	.driver = {
 		.name 		= "mesh",
 		.owner		= THIS_MODULE,
-		.of_match_table	= mesh_match,
+		.of_match_table	= of_match_ptr(mesh_match),
 	},
 	.probe		= mesh_probe,
 	.remove		= mesh_remove,

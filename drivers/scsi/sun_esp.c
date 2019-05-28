@@ -601,7 +601,7 @@ MODULE_DEVICE_TABLE(of, esp_match);
 static struct platform_driver esp_sbus_driver = {
 	.driver = {
 		.name = "esp",
-		.of_match_table = esp_match,
+		.of_match_table = of_match_ptr(esp_match),
 	},
 	.probe		= esp_sbus_probe,
 	.remove		= esp_sbus_remove,

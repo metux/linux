@@ -356,7 +356,7 @@ static struct platform_driver ufs_mtk_pltform = {
 	.driver = {
 		.name   = "ufshcd-mtk",
 		.pm     = &ufs_mtk_pm_ops,
-		.of_match_table = ufs_mtk_of_match,
+		.of_match_table = of_match_ptr(ufs_mtk_of_match),
 	},
 };
 

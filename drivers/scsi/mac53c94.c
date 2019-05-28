@@ -547,7 +547,7 @@ static struct macio_driver mac53c94_driver =
 	.driver = {
 		.name 		= "mac53c94",
 		.owner		= THIS_MODULE,
-		.of_match_table	= mac53c94_match,
+		.of_match_table	= of_match_ptr(mac53c94_match),
 	},
 	.probe		= mac53c94_probe,
 	.remove		= mac53c94_remove,

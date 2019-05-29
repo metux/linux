@@ -230,9 +230,7 @@ static struct platform_driver sp_platform_driver = {
 #ifdef CONFIG_ACPI
 		.acpi_match_table = sp_acpi_match,
 #endif
-#ifdef CONFIG_OF
-		.of_match_table = sp_of_match,
-#endif
+		.of_match_table = of_match_ptr(sp_of_match),
 	},
 	.probe = sp_platform_probe,
 	.remove = sp_platform_remove,

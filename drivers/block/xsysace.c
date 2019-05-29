@@ -1219,7 +1219,6 @@ static int ace_remove(struct platform_device *dev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 /* Match table for of_platform binding */
 static const struct of_device_id ace_of_match[] = {
 	{ .compatible = "xlnx,opb-sysace-1.00.b", },
@@ -1228,17 +1227,14 @@ static const struct of_device_id ace_of_match[] = {
 	{ .compatible = "xlnx,sysace", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, ace_of_match);
-#else /* CONFIG_OF */
-#define ace_of_match NULL
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(ace_of_match);
 
 static struct platform_driver ace_platform_driver = {
 	.probe = ace_probe,
 	.remove = ace_remove,
 	.driver = {
 		.name = "xsysace",
-		.of_match_table = ace_of_match,
+		.of_match_table = of_match_ptr(ace_of_match),
 	},
 };
 

@@ -396,19 +396,16 @@ mt8183_mt6358_ts3a227_max98357_dev_probe(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id mt8183_mt6358_ts3a227_max98357_dt_match[] = {
 	{.compatible = "mediatek,mt8183_mt6358_ts3a227_max98357",},
 	{}
 };
-#endif
 
 static struct platform_driver mt8183_mt6358_ts3a227_max98357_driver = {
 	.driver = {
 		.name = "mt8183_mt6358_ts3a227_max98357",
-#ifdef CONFIG_OF
-		.of_match_table = mt8183_mt6358_ts3a227_max98357_dt_match,
-#endif
+		.of_match_table = of_match_ptr(
+			mt8183_mt6358_ts3a227_max98357_dt_match),
 	},
 	.probe = mt8183_mt6358_ts3a227_max98357_dev_probe,
 };

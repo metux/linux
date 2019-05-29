@@ -45,9 +45,7 @@ MODULE_DEVICE_TABLE(of, pcm3060_of_match);
 static struct i2c_driver pcm3060_i2c_driver = {
 	.driver = {
 		.name = "pcm3060",
-#ifdef CONFIG_OF
-		.of_match_table = pcm3060_of_match,
-#endif /* CONFIG_OF */
+		.of_match_table = of_match_ptr(pcm3060_of_match),
 	},
 	.id_table = pcm3060_i2c_id,
 	.probe = pcm3060_i2c_probe,

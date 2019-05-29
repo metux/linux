@@ -196,19 +196,15 @@ static int mt6797_mt6351_dev_probe(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id mt6797_mt6351_dt_match[] = {
 	{.compatible = "mediatek,mt6797-mt6351-sound",},
 	{}
 };
-#endif
 
 static struct platform_driver mt6797_mt6351_driver = {
 	.driver = {
 		.name = "mt6797-mt6351",
-#ifdef CONFIG_OF
-		.of_match_table = mt6797_mt6351_dt_match,
-#endif
+		.of_match_table = of_match_ptr(mt6797_mt6351_dt_match),
 	},
 	.probe = mt6797_mt6351_dev_probe,
 };

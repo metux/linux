@@ -1167,12 +1167,8 @@ static void rt1305_i2c_shutdown(struct i2c_client *client)
 static struct i2c_driver rt1305_i2c_driver = {
 	.driver = {
 		.name = "rt1305",
-#if defined(CONFIG_OF)
-		.of_match_table = rt1305_of_match,
-#endif
-#if defined(CONFIG_ACPI)
+		.of_match_table = of_match_ptr(rt1305_of_match),
 		.acpi_match_table = ACPI_PTR(rt1305_acpi_match)
-#endif
 	},
 	.probe = rt1305_i2c_probe,
 	.shutdown = rt1305_i2c_shutdown,

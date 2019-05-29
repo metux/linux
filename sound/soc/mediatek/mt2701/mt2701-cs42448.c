@@ -378,19 +378,16 @@ static int mt2701_cs42448_machine_probe(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id mt2701_cs42448_machine_dt_match[] = {
 	{.compatible = "mediatek,mt2701-cs42448-machine",},
 	{}
 };
-#endif
 
 static struct platform_driver mt2701_cs42448_machine = {
 	.driver = {
 		.name = "mt2701-cs42448",
-		   #ifdef CONFIG_OF
-		   .of_match_table = mt2701_cs42448_machine_dt_match,
-		   #endif
+		.of_match_table = of_match_ptr(
+			mt2701_cs42448_machine_dt_match),
 	},
 	.probe = mt2701_cs42448_machine_probe,
 };

@@ -300,6 +300,11 @@ struct device_driver {
 	struct driver_private *p;
 };
 
+#ifdef CONFIG_OF
+#define DECL_DRIVER_OF_MATCH(tbl) .of_match_table = tbl,
+#else
+#define DECL_DRIVER_OF_MATCH(tbl)
+#endif
 
 extern int __must_check driver_register(struct device_driver *drv);
 extern void driver_unregister(struct device_driver *drv);

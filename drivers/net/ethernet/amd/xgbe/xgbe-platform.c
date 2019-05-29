@@ -620,9 +620,7 @@ static struct platform_driver xgbe_driver = {
 #ifdef CONFIG_ACPI
 		.acpi_match_table = xgbe_acpi_match,
 #endif
-#ifdef CONFIG_OF
-		.of_match_table = xgbe_of_match,
-#endif
+		.of_match_table = of_match_ptr(xgbe_of_match),
 		.pm = &xgbe_platform_pm_ops,
 	},
 	.probe = xgbe_platform_probe,

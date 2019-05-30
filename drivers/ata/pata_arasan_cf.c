@@ -943,13 +943,8 @@ static int arasan_cf_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(arasan_cf_pm_ops, arasan_cf_suspend, arasan_cf_resume);
 
-#ifdef CONFIG_OF
-static const struct of_device_id arasan_cf_id_table[] = {
-	{ .compatible = "arasan,cf-spear1340" },
-	{}
-};
-MODULE_DEVICE_TABLE(of, arasan_cf_id_table);
-#endif
+MODULE_DECLARE_OF_TABLE(arasan_cf_id_table,
+	{ .compatible = "arasan,cf-spear1340" });
 
 static struct platform_driver arasan_cf_driver = {
 	.probe		= arasan_cf_probe,

@@ -18,7 +18,6 @@
 #include <linux/iio/common/st_sensors_i2c.h>
 #include "st_accel.h"
 
-#ifdef CONFIG_OF
 static const struct of_device_id st_accel_of_match[] = {
 	{
 		/* An older compatible */
@@ -107,10 +106,7 @@ static const struct of_device_id st_accel_of_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, st_accel_of_match);
-#else
-#define st_accel_of_match NULL
-#endif
+MODULE_OF_TABLE(st_accel_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id st_accel_acpi_match[] = {

@@ -1729,7 +1729,6 @@ static struct at_dma_platform_data at91sam9g45_config = {
 	.nr_channels = 8,
 };
 
-#if defined(CONFIG_OF)
 static const struct of_device_id atmel_dma_dt_ids[] = {
 	{
 		.compatible = "atmel,at91sam9rl-dma",
@@ -1741,9 +1740,7 @@ static const struct of_device_id atmel_dma_dt_ids[] = {
 		/* sentinel */
 	}
 };
-
-MODULE_DEVICE_TABLE(of, atmel_dma_dt_ids);
-#endif
+MODULE_OF_TABLE(atmel_dma_dt_ids);
 
 static const struct platform_device_id atdma_devtypes[] = {
 	{

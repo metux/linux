@@ -419,13 +419,11 @@ static const struct i2c_device_id tmp108_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tmp108_i2c_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id tmp108_of_ids[] = {
 	{ .compatible = "ti,tmp108", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, tmp108_of_ids);
-#endif
+MODULE_OF_TABLE(tmp108_of_ids);
 
 static struct i2c_driver tmp108_driver = {
 	.driver = {

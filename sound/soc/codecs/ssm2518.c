@@ -795,13 +795,11 @@ static int ssm2518_i2c_probe(struct i2c_client *i2c,
 			&ssm2518_dai, 1);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ssm2518_dt_ids[] = {
 	{ .compatible = "adi,ssm2518", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ssm2518_dt_ids);
-#endif
+MODULE_OF_TABLE(ssm2518_dt_ids);
 
 static const struct i2c_device_id ssm2518_i2c_ids[] = {
 	{ "ssm2518", 0 },

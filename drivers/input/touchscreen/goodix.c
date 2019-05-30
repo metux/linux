@@ -1033,7 +1033,6 @@ static const struct acpi_device_id goodix_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, goodix_acpi_match);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id goodix_of_match[] = {
 	{ .compatible = "goodix,gt1151" },
 	{ .compatible = "goodix,gt5663" },
@@ -1047,8 +1046,7 @@ static const struct of_device_id goodix_of_match[] = {
 	{ .compatible = "goodix,gt967" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, goodix_of_match);
-#endif
+MODULE_OF_TABLE(goodix_of_match);
 
 static struct i2c_driver goodix_ts_driver = {
 	.probe = goodix_ts_probe,

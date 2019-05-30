@@ -2680,14 +2680,12 @@ static void infer_hw_params(struct mv643xx_eth_shared_private *msp)
 	}
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id mv643xx_eth_shared_ids[] = {
 	{ .compatible = "marvell,orion-eth", },
 	{ .compatible = "marvell,kirkwood-eth", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, mv643xx_eth_shared_ids);
-#endif
+MODULE_OF_TABLE(mv643xx_eth_shared_ids);
 
 #if defined(CONFIG_OF_IRQ) && !defined(CONFIG_MV64X60)
 #define mv643xx_eth_property(_np, _name, _v)				\

@@ -140,14 +140,12 @@ static const struct i2c_device_id mt6311_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mt6311_i2c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id mt6311_dt_ids[] = {
 	{ .compatible = "mediatek,mt6311-regulator",
 	  .data = &mt6311_i2c_id[0] },
 	{},
 };
-MODULE_DEVICE_TABLE(of, mt6311_dt_ids);
-#endif
+MODULE_OF_TABLE(mt6311_dt_ids);
 
 static struct i2c_driver mt6311_regulator_driver = {
 	.driver = {

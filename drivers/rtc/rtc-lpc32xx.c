@@ -347,13 +347,11 @@ static const struct dev_pm_ops lpc32xx_rtc_pm_ops = {
 #define LPC32XX_RTC_PM_OPS NULL
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id lpc32xx_rtc_match[] = {
 	{ .compatible = "nxp,lpc3220-rtc" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, lpc32xx_rtc_match);
-#endif
+MODULE_OF_TABLE(lpc32xx_rtc_match);
 
 static struct platform_driver lpc32xx_rtc_driver = {
 	.probe		= lpc32xx_rtc_probe,

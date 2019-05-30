@@ -2923,7 +2923,6 @@ static const struct platform_device_id coda_platform_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, coda_platform_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id coda_dt_ids[] = {
 	{ .compatible = "fsl,imx27-vpu", .data = &coda_devdata[CODA_IMX27] },
 	{ .compatible = "fsl,imx51-vpu", .data = &coda_devdata[CODA_IMX51] },
@@ -2932,8 +2931,7 @@ static const struct of_device_id coda_dt_ids[] = {
 	{ .compatible = "fsl,imx6dl-vpu", .data = &coda_devdata[CODA_IMX6DL] },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, coda_dt_ids);
-#endif
+MODULE_OF_TABLE(coda_dt_ids);
 
 static int coda_probe(struct platform_device *pdev)
 {

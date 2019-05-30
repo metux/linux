@@ -1416,7 +1416,6 @@ static void bcm_serdev_remove(struct serdev_device *serdev)
 	hci_uart_unregister_device(&bcmdev->serdev_hu);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id bcm_bluetooth_of_match[] = {
 	{ .compatible = "brcm,bcm20702a1" },
 	{ .compatible = "brcm,bcm4345c5" },
@@ -1424,8 +1423,7 @@ static const struct of_device_id bcm_bluetooth_of_match[] = {
 	{ .compatible = "brcm,bcm43438-bt" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, bcm_bluetooth_of_match);
-#endif
+MODULE_OF_TABLE(bcm_bluetooth_of_match);
 
 static struct serdev_device_driver bcm_serdev_driver = {
 	.probe = bcm_serdev_probe,

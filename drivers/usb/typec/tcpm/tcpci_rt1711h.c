@@ -288,13 +288,11 @@ static const struct i2c_device_id rt1711h_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt1711h_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id rt1711h_of_match[] = {
 	{ .compatible = "richtek,rt1711h", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt1711h_of_match);
-#endif
+MODULE_OF_TABLE(rt1711h_of_match);
 
 static struct i2c_driver rt1711h_i2c_driver = {
 	.driver = {

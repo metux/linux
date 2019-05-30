@@ -96,14 +96,12 @@ struct dataflash {
 	struct mtd_info		mtd;
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id dataflash_dt_ids[] = {
 	{ .compatible = "atmel,at45", },
 	{ .compatible = "atmel,dataflash", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, dataflash_dt_ids);
-#endif
+MODULE_OF_TABLE(dataflash_dt_ids);
 
 /* ......................................................................... */
 

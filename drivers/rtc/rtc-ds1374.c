@@ -59,13 +59,11 @@ static const struct i2c_device_id ds1374_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ds1374_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id ds1374_of_match[] = {
 	{ .compatible = "dallas,ds1374" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ds1374_of_match);
-#endif
+MODULE_OF_TABLE(ds1374_of_match);
 
 struct ds1374 {
 	struct i2c_client *client;

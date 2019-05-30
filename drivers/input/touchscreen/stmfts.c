@@ -789,13 +789,11 @@ static const struct dev_pm_ops stmfts_pm_ops = {
 	SET_RUNTIME_PM_OPS(stmfts_runtime_suspend, stmfts_runtime_resume, NULL)
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id stmfts_of_match[] = {
 	{ .compatible = "st,stmfts", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, stmfts_of_match);
-#endif
+MODULE_OF_TABLE(stmfts_of_match);
 
 static const struct i2c_device_id stmfts_id[] = {
 	{ "stmfts", 0 },

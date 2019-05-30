@@ -565,7 +565,6 @@ static const struct dev_pm_ops omap2430_pm_ops = {
 #define DEV_PM_OPS	NULL
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id omap2430_id_table[] = {
 	{
 		.compatible = "ti,omap4-musb"
@@ -575,8 +574,7 @@ static const struct of_device_id omap2430_id_table[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, omap2430_id_table);
-#endif
+MODULE_OF_TABLE(omap2430_id_table);
 
 static struct platform_driver omap2430_driver = {
 	.probe		= omap2430_probe,

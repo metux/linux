@@ -229,7 +229,6 @@ static const struct platform_device_id s2mps11_clk_id[] = {
 };
 MODULE_DEVICE_TABLE(platform, s2mps11_clk_id);
 
-#ifdef CONFIG_OF
 /*
  * Device is instantiated through parent MFD device and device matching is done
  * through platform_device_id.
@@ -256,8 +255,7 @@ static const struct of_device_id s2mps11_dt_match[] __used = {
 		/* Sentinel */
 	},
 };
-MODULE_DEVICE_TABLE(of, s2mps11_dt_match);
-#endif
+MODULE_OF_TABLE(s2mps11_dt_match);
 
 static struct platform_driver s2mps11_clk_driver = {
 	.driver = {

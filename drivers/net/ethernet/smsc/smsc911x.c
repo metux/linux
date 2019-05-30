@@ -2643,13 +2643,11 @@ static const struct dev_pm_ops smsc911x_pm_ops = {
 #define SMSC911X_PM_OPS NULL
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id smsc911x_dt_ids[] = {
 	{ .compatible = "smsc,lan9115", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, smsc911x_dt_ids);
-#endif
+MODULE_OF_TABLE(smsc911x_dt_ids);
 
 static const struct acpi_device_id smsc911x_acpi_match[] = {
 	{ "ARMH9118", 0 },

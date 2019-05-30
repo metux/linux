@@ -673,13 +673,11 @@ static const struct regmap_config tas6424_regmap_config = {
 	.cache_type = REGCACHE_RBTREE,
 };
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tas6424_of_ids[] = {
 	{ .compatible = "ti,tas6424", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, tas6424_of_ids);
-#endif
+MODULE_OF_TABLE(tas6424_of_ids);
 
 static int tas6424_i2c_probe(struct i2c_client *client,
 			     const struct i2c_device_id *id)

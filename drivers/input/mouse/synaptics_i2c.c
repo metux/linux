@@ -638,13 +638,11 @@ static const struct i2c_device_id synaptics_i2c_id_table[] = {
 };
 MODULE_DEVICE_TABLE(i2c, synaptics_i2c_id_table);
 
-#ifdef CONFIG_OF
 static const struct of_device_id synaptics_i2c_of_match[] = {
 	{ .compatible = "synaptics,synaptics_i2c", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, synaptics_i2c_of_match);
-#endif
+MODULE_OF_TABLE(synaptics_i2c_of_match);
 
 static struct i2c_driver synaptics_i2c_driver = {
 	.driver = {

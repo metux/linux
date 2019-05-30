@@ -1376,7 +1376,6 @@ static struct snd_soc_dai_driver aic31xx_dai_driver[] = {
 	}
 };
 
-#if defined(CONFIG_OF)
 static const struct of_device_id tlv320aic31xx_of_match[] = {
 	{ .compatible = "ti,tlv320aic310x" },
 	{ .compatible = "ti,tlv320aic311x" },
@@ -1388,8 +1387,7 @@ static const struct of_device_id tlv320aic31xx_of_match[] = {
 	{ .compatible = "ti,tlv320dac3101" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tlv320aic31xx_of_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(tlv320aic31xx_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id aic31xx_acpi_match[] = {

@@ -308,15 +308,13 @@ static const struct dev_pm_ops udc_plat_pm_ops = {
 };
 #endif
 
-#if defined(CONFIG_OF)
 static const struct of_device_id of_udc_match[] = {
 	{ .compatible = "brcm,ns2-udc", },
 	{ .compatible = "brcm,cygnus-udc", },
 	{ .compatible = "brcm,iproc-udc", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, of_udc_match);
-#endif
+MODULE_OF_TABLE(of_udc_match);
 
 static struct platform_driver udc_plat_driver = {
 	.probe		= udc_plat_probe,

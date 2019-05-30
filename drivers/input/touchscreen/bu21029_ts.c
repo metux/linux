@@ -460,13 +460,11 @@ static const struct i2c_device_id bu21029_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, bu21029_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id bu21029_of_ids[] = {
 	{ .compatible = "rohm,bu21029" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, bu21029_of_ids);
-#endif
+MODULE_OF_TABLE(bu21029_of_ids);
 
 static struct i2c_driver bu21029_driver = {
 	.driver	= {

@@ -324,7 +324,6 @@ static int davinci_mdio_probe_dt(struct mdio_platform_data *data,
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct davinci_mdio_of_param of_cpsw_mdio_data = {
 	.autosuspend_delay_ms = 100,
 };
@@ -334,8 +333,7 @@ static const struct of_device_id davinci_mdio_of_mtable[] = {
 	{ .compatible = "ti,cpsw-mdio", .data = &of_cpsw_mdio_data},
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, davinci_mdio_of_mtable);
-#endif
+MODULE_OF_TABLE(davinci_mdio_of_mtable);
 
 static int davinci_mdio_probe(struct platform_device *pdev)
 {

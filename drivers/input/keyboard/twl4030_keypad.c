@@ -431,13 +431,11 @@ static int twl4030_kp_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id twl4030_keypad_dt_match_table[] = {
 	{ .compatible = "ti,twl4030-keypad" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, twl4030_keypad_dt_match_table);
-#endif
+MODULE_OF_TABLE(twl4030_keypad_dt_match_table);
 
 /*
  * NOTE: twl4030 are multi-function devices connected via I2C.

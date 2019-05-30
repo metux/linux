@@ -91,14 +91,12 @@ static const struct platform_device_id bt_sco_driver_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, bt_sco_driver_ids);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id bt_sco_codec_of_match[] = {
 	{ .compatible = "delta,dfbmcs320", },
 	{ .compatible = "linux,bt-sco", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, bt_sco_codec_of_match);
-#endif
+MODULE_OF_TABLE(bt_sco_codec_of_match);
 
 static struct platform_driver bt_sco_driver = {
 	.driver = {

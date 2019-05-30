@@ -730,14 +730,11 @@ static int dw_i2s_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id dw_i2s_of_match[] = {
 	{ .compatible = "snps,designware-i2s",	 },
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, dw_i2s_of_match);
-#endif
+MODULE_OF_TABLE(dw_i2s_of_match);
 
 static const struct dev_pm_ops dwc_pm_ops = {
 	SET_RUNTIME_PM_OPS(dw_i2s_runtime_suspend, dw_i2s_runtime_resume, NULL)

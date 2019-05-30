@@ -17,7 +17,6 @@
 #include <linux/iio/common/st_sensors_spi.h>
 #include "st_accel.h"
 
-#ifdef CONFIG_OF
 /*
  * For new single-chip sensors use <device_name> as compatible string.
  * For old single-chip devices keep <device_name>-accel to maintain
@@ -95,10 +94,7 @@ static const struct of_device_id st_accel_of_match[] = {
 	},
 	{}
 };
-MODULE_DEVICE_TABLE(of, st_accel_of_match);
-#else
-#define st_accel_of_match	NULL
-#endif
+MODULE_OF_TABLE(st_accel_of_match);
 
 static int st_accel_spi_probe(struct spi_device *spi)
 {

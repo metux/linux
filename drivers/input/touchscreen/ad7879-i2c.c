@@ -49,13 +49,11 @@ static const struct i2c_device_id ad7879_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ad7879_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id ad7879_i2c_dt_ids[] = {
 	{ .compatible = "adi,ad7879-1", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ad7879_i2c_dt_ids);
-#endif
+MODULE_OF_TABLE(ad7879_i2c_dt_ids);
 
 static struct i2c_driver ad7879_i2c_driver = {
 	.driver = {

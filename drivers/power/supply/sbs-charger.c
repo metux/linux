@@ -237,13 +237,11 @@ static int sbs_remove(struct i2c_client *client)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id sbs_dt_ids[] = {
 	{ .compatible = "sbs,sbs-charger" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, sbs_dt_ids);
-#endif
+MODULE_OF_TABLE(sbs_dt_ids);
 
 static const struct i2c_device_id sbs_id[] = {
 	{ "sbs-charger", 0 },

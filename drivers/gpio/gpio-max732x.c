@@ -114,7 +114,6 @@ static const struct i2c_device_id max732x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, max732x_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id max732x_of_table[] = {
 	{ .compatible = "maxim,max7319" },
 	{ .compatible = "maxim,max7320" },
@@ -127,8 +126,7 @@ static const struct of_device_id max732x_of_table[] = {
 	{ .compatible = "maxim,max7327" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, max732x_of_table);
-#endif
+MODULE_OF_TABLE(max732x_of_table);
 
 struct max732x_chip {
 	struct gpio_chip gpio_chip;

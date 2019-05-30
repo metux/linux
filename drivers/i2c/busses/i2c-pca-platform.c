@@ -235,14 +235,12 @@ static int i2c_pca_pf_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id i2c_pca_of_match_table[] = {
 	{ .compatible = "nxp,pca9564" },
 	{ .compatible = "nxp,pca9665" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, i2c_pca_of_match_table);
-#endif
+MODULE_OF_TABLE(i2c_pca_of_match_table);
 
 static struct platform_driver i2c_pca_pf_driver = {
 	.probe = i2c_pca_pf_probe,

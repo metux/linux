@@ -1360,13 +1360,11 @@ MODULE_DEVICE_TABLE(i2c, elan_id);
 MODULE_DEVICE_TABLE(acpi, elan_acpi_id);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id elan_of_match[] = {
 	{ .compatible = "elan,ekth3000" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, elan_of_match);
-#endif
+MODULE_OF_TABLE(elan_of_match);
 
 static struct i2c_driver elan_driver = {
 	.driver = {

@@ -94,13 +94,11 @@ static int cpcap_power_button_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id cpcap_pwrbutton_dt_match_table[] = {
 	{ .compatible = "motorola,cpcap-pwrbutton" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, cpcap_pwrbutton_dt_match_table);
-#endif
+MODULE_OF_TABLE(cpcap_pwrbutton_dt_match_table);
 
 static struct platform_driver cpcap_power_button_driver = {
 	.probe		= cpcap_power_button_probe,

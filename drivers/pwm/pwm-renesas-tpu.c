@@ -442,7 +442,6 @@ static int tpu_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id tpu_of_table[] = {
 	{ .compatible = "renesas,tpu-r8a73a4", },
 	{ .compatible = "renesas,tpu-r8a7740", },
@@ -450,9 +449,7 @@ static const struct of_device_id tpu_of_table[] = {
 	{ .compatible = "renesas,tpu", },
 	{ },
 };
-
 MODULE_DEVICE_TABLE(of, tpu_of_table);
-#endif
 
 static struct platform_driver tpu_driver = {
 	.probe		= tpu_probe,

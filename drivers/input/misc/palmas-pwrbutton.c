@@ -303,14 +303,11 @@ static int __maybe_unused palmas_pwron_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(palmas_pwron_pm,
 			 palmas_pwron_suspend, palmas_pwron_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id of_palmas_pwr_match[] = {
 	{ .compatible = "ti,palmas-pwrbutton" },
 	{ },
 };
-
-MODULE_DEVICE_TABLE(of, of_palmas_pwr_match);
-#endif
+MODULE_OF_TABLE(of_palmas_pwr_match);
 
 static struct platform_driver palmas_pwron_driver = {
 	.probe	= palmas_pwron_probe,

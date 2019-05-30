@@ -2081,13 +2081,11 @@ static int tda998x_remove(struct i2c_client *client)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id tda998x_dt_ids[] = {
 	{ .compatible = "nxp,tda998x", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, tda998x_dt_ids);
-#endif
+MODULE_OF_TABLE(tda998x_dt_ids);
 
 static const struct i2c_device_id tda998x_ids[] = {
 	{ "tda998x", 0 },

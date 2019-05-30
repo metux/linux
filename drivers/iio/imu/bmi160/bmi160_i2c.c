@@ -47,13 +47,11 @@ static const struct acpi_device_id bmi160_acpi_match[] = {
 };
 MODULE_DEVICE_TABLE(acpi, bmi160_acpi_match);
 
-#ifdef CONFIG_OF
 static const struct of_device_id bmi160_of_match[] = {
 	{ .compatible = "bosch,bmi160" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, bmi160_of_match);
-#endif
+MODULE_OF_TABLE(bmi160_of_match);
 
 static struct i2c_driver bmi160_i2c_driver = {
 	.driver = {

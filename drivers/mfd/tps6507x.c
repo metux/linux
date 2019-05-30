@@ -110,13 +110,11 @@ static const struct i2c_device_id tps6507x_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tps6507x_i2c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id tps6507x_of_match[] = {
 	{.compatible = "ti,tps6507x", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tps6507x_of_match);
-#endif
+MODULE_OF_TABLE(tps6507x_of_match);
 
 static struct i2c_driver tps6507x_i2c_driver = {
 	.driver = {

@@ -170,14 +170,11 @@ spi_lp8841_rtc_setup(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id spi_lp8841_rtc_dt_ids[] = {
 	{ .compatible = "icpdas,lp8841-spi-rtc" },
 	{ }
 };
-
-MODULE_DEVICE_TABLE(of, spi_lp8841_rtc_dt_ids);
-#endif
+MODULE_OF_TABLE(spi_lp8841_rtc_dt_ids);
 
 static int
 spi_lp8841_rtc_probe(struct platform_device *pdev)

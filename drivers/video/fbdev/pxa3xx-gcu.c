@@ -693,13 +693,11 @@ static int pxa3xx_gcu_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pxa3xx_gcu_of_match[] = {
 	{ .compatible = "marvell,pxa300-gcu", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pxa3xx_gcu_of_match);
-#endif
+MODULE_OF_TABLE(pxa3xx_gcu_of_match);
 
 static struct platform_driver pxa3xx_gcu_driver = {
 	.probe	  = pxa3xx_gcu_probe,

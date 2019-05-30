@@ -37,7 +37,6 @@ static const struct i2c_device_id pcf857x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pcf857x_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcf857x_of_table[] = {
 	{ .compatible = "nxp,pcf8574" },
 	{ .compatible = "nxp,pcf8574a" },
@@ -54,8 +53,7 @@ static const struct of_device_id pcf857x_of_table[] = {
 	{ .compatible = "maxim,max7329" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pcf857x_of_table);
-#endif
+MODULE_OF_TABLE(pcf857x_of_table);
 
 /*
  * The pcf857x, pca857x, and pca967x chips only expose one read and one

@@ -184,13 +184,11 @@ static int max9759_probe(struct platform_device *pdev)
 					       NULL, 0);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id max9759_ids[] = {
 	{ .compatible = "maxim,max9759", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, max9759_ids);
-#endif
+MODULE_OF_TABLE(max9759_ids);
 
 static struct platform_driver max9759_driver = {
 	.driver = {

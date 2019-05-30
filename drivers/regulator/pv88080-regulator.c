@@ -196,15 +196,13 @@ static const struct pv88080_compatible_regmap pv88080_ba_regs = {
 	.hvbuck_vsel_mask		  = PV88080_VHVBUCK_MASK,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id pv88080_dt_ids[] = {
 	{ .compatible = "pvs,pv88080",    .data = (void *)TYPE_PV88080_AA },
 	{ .compatible = "pvs,pv88080-aa", .data = (void *)TYPE_PV88080_AA },
 	{ .compatible = "pvs,pv88080-ba", .data = (void *)TYPE_PV88080_BA },
 	{},
 };
-MODULE_DEVICE_TABLE(of, pv88080_dt_ids);
-#endif
+MODULE_OF_TABLE(pv88080_dt_ids);
 
 static unsigned int pv88080_buck_get_mode(struct regulator_dev *rdev)
 {

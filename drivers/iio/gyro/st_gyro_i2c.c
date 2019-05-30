@@ -17,7 +17,6 @@
 #include <linux/iio/common/st_sensors_i2c.h>
 #include "st_gyro.h"
 
-#ifdef CONFIG_OF
 static const struct of_device_id st_gyro_of_match[] = {
 	{
 		.compatible = "st,l3g4200d-gyro",
@@ -57,10 +56,7 @@ static const struct of_device_id st_gyro_of_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, st_gyro_of_match);
-#else
-#define st_gyro_of_match NULL
-#endif
+MODULE_OF_TABLE(st_gyro_of_match);
 
 static int st_gyro_i2c_probe(struct i2c_client *client,
 			     const struct i2c_device_id *id)

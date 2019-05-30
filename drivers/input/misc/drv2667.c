@@ -464,13 +464,11 @@ static const struct i2c_device_id drv2667_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, drv2667_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id drv2667_of_match[] = {
 	{ .compatible = "ti,drv2667", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, drv2667_of_match);
-#endif
+MODULE_OF_TABLE(drv2667_of_match);
 
 static struct i2c_driver drv2667_driver = {
 	.probe		= drv2667_probe,

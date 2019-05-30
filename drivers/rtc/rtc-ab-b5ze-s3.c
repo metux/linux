@@ -935,13 +935,11 @@ static int abb5zes3_rtc_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(abb5zes3_rtc_pm_ops, abb5zes3_rtc_suspend,
 			 abb5zes3_rtc_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id abb5zes3_dt_match[] = {
 	{ .compatible = "abracon,abb5zes3" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, abb5zes3_dt_match);
-#endif
+MODULE_OF_TABLE(abb5zes3_dt_match);
 
 static const struct i2c_device_id abb5zes3_id[] = {
 	{ "abb5zes3", 0 },

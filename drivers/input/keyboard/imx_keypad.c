@@ -408,13 +408,11 @@ open_err:
 	return -EIO;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id imx_keypad_of_match[] = {
 	{ .compatible = "fsl,imx21-kpp", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, imx_keypad_of_match);
-#endif
+MODULE_OF_TABLE(imx_keypad_of_match);
 
 static int imx_keypad_probe(struct platform_device *pdev)
 {

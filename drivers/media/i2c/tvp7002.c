@@ -1061,13 +1061,11 @@ static const struct i2c_device_id tvp7002_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tvp7002_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tvp7002_of_match[] = {
 	{ .compatible = "ti,tvp7002", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, tvp7002_of_match);
-#endif
+MODULE_OF_TABLE(tvp7002_of_match);
 
 /* I2C driver data */
 static struct i2c_driver tvp7002_driver = {

@@ -93,7 +93,6 @@ static const struct mfd_cell s2mpu02_devs[] = {
 	{ .name = "s2mpu02-regulator", },
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id sec_dt_match[] = {
 	{
 		.compatible = "samsung,s5m8767-pmic",
@@ -120,8 +119,7 @@ static const struct of_device_id sec_dt_match[] = {
 		/* Sentinel */
 	},
 };
-MODULE_DEVICE_TABLE(of, sec_dt_match);
-#endif
+MODULE_OF_TABLE(sec_dt_match);
 
 static bool s2mpa01_volatile(struct device *dev, unsigned int reg)
 {

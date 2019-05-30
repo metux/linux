@@ -905,13 +905,11 @@ static int sht15_invalidate_voltage(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id sht15_dt_match[] = {
 	{ .compatible = "sensirion,sht15" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, sht15_dt_match);
-#endif
+MODULE_OF_TABLE(sht15_dt_match);
 
 static int sht15_probe(struct platform_device *pdev)
 {

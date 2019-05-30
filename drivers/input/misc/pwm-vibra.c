@@ -246,13 +246,11 @@ static int __maybe_unused pwm_vibrator_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(pwm_vibrator_pm_ops,
 			 pwm_vibrator_suspend, pwm_vibrator_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pwm_vibra_dt_match_table[] = {
 	{ .compatible = "pwm-vibrator" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, pwm_vibra_dt_match_table);
-#endif
+MODULE_OF_TABLE(pwm_vibra_dt_match_table);
 
 static struct platform_driver pwm_vibrator_driver = {
 	.probe	= pwm_vibrator_probe,

@@ -203,13 +203,11 @@ static int orion_nand_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id orion_nand_of_match_table[] = {
 	{ .compatible = "marvell,orion-nand", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, orion_nand_of_match_table);
-#endif
+MODULE_OF_TABLE(orion_nand_of_match_table);
 
 static struct platform_driver orion_nand_driver = {
 	.remove		= orion_nand_remove,

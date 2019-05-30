@@ -92,13 +92,11 @@ static int gpio_beeper_probe(struct platform_device *pdev)
 	return input_register_device(input);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id gpio_beeper_of_match[] = {
 	{ .compatible = BEEPER_MODNAME, },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, gpio_beeper_of_match);
-#endif
+MODULE_OF_TABLE(gpio_beeper_of_match);
 
 static struct platform_driver gpio_beeper_platform_driver = {
 	.driver	= {

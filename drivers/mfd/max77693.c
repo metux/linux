@@ -352,13 +352,11 @@ static const struct dev_pm_ops max77693_pm = {
 	.resume = max77693_resume,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id max77693_dt_match[] = {
 	{ .compatible = "maxim,max77693" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, max77693_dt_match);
-#endif
+MODULE_OF_TABLE(max77693_dt_match);
 
 static struct i2c_driver max77693_i2c_driver = {
 	.driver = {

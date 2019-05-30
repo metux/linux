@@ -972,7 +972,6 @@ static const struct i2c_device_id ds1307_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ds1307_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id ds1307_of_match[] = {
 	{
 		.compatible = "dallas,ds1307",
@@ -1048,8 +1047,7 @@ static const struct of_device_id ds1307_of_match[] = {
 	},
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ds1307_of_match);
-#endif
+MODULE_OF_TABLE(ds1307_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id ds1307_acpi_ids[] = {

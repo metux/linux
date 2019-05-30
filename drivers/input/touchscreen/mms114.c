@@ -592,7 +592,6 @@ static const struct i2c_device_id mms114_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mms114_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id mms114_dt_match[] = {
 	{
 		.compatible = "melfas,mms114",
@@ -603,8 +602,7 @@ static const struct of_device_id mms114_dt_match[] = {
 	},
 	{ }
 };
-MODULE_DEVICE_TABLE(of, mms114_dt_match);
-#endif
+MODULE_OF_TABLE(mms114_dt_match);
 
 static struct i2c_driver mms114_driver = {
 	.driver = {

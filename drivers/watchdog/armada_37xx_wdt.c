@@ -347,13 +347,11 @@ static const struct dev_pm_ops armada_37xx_wdt_dev_pm_ops = {
 				armada_37xx_wdt_resume)
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id armada_37xx_wdt_match[] = {
 	{ .compatible = "marvell,armada-3700-wdt", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, armada_37xx_wdt_match);
-#endif
+MODULE_OF_TABLE(armada_37xx_wdt_match);
 
 static struct platform_driver armada_37xx_wdt_driver = {
 	.probe		= armada_37xx_wdt_probe,

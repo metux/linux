@@ -116,8 +116,6 @@ static const struct i2c_device_id mcp4018_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mcp4018_id);
 
-#ifdef CONFIG_OF
-
 #define MCP4018_COMPATIBLE(of_compatible, cfg) {	\
 	.compatible = of_compatible,			\
 	.data = &mcp4018_cfg[cfg],			\
@@ -138,9 +136,7 @@ static const struct of_device_id mcp4018_of_match[] = {
 	MCP4018_COMPATIBLE("microchip,mcp4019-104", MCP4018_104),
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, mcp4018_of_match);
-
-#endif
+MODULE_OF_TABLE(mcp4018_of_match);
 
 static int mcp4018_probe(struct i2c_client *client)
 {

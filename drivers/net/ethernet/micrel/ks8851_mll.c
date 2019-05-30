@@ -1214,13 +1214,11 @@ static int ks_hw_init(struct ks_net *ks)
 	return true;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id ks8851_ml_dt_ids[] = {
 	{ .compatible = "micrel,ks8851-mll" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, ks8851_ml_dt_ids);
-#endif
+MODULE_OF_TABLE(ks8851_ml_dt_ids);
 
 static int ks8851_probe(struct platform_device *pdev)
 {

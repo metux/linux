@@ -655,13 +655,11 @@ static struct snd_soc_dai_driver adau1701_dai = {
 	.symmetric_rates = 1,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id adau1701_dt_ids[] = {
 	{ .compatible = "adi,adau1701", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, adau1701_dt_ids);
-#endif
+MODULE_OF_TABLE(adau1701_dt_ids);
 
 static int adau1701_probe(struct snd_soc_component *component)
 {

@@ -52,7 +52,6 @@ static const struct acpi_device_id bmp280_acpi_i2c_match[] = {
 };
 MODULE_DEVICE_TABLE(acpi, bmp280_acpi_i2c_match);
 
-#ifdef CONFIG_OF
 static const struct of_device_id bmp280_of_i2c_match[] = {
 	{ .compatible = "bosch,bme280", .data = (void *)BME280_CHIP_ID },
 	{ .compatible = "bosch,bmp280", .data = (void *)BMP280_CHIP_ID },
@@ -60,10 +59,7 @@ static const struct of_device_id bmp280_of_i2c_match[] = {
 	{ .compatible = "bosch,bmp085", .data = (void *)BMP180_CHIP_ID },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, bmp280_of_i2c_match);
-#else
-#define bmp280_of_i2c_match NULL
-#endif
+MODULE_OF_TABLE(bmp280_of_i2c_match);
 
 static const struct i2c_device_id bmp280_i2c_id[] = {
 	{"bmp280", BMP280_CHIP_ID },

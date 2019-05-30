@@ -257,7 +257,6 @@ static const struct i2c_device_id bq27xxx_i2c_id_table[] = {
 };
 MODULE_DEVICE_TABLE(i2c, bq27xxx_i2c_id_table);
 
-#ifdef CONFIG_OF
 static const struct of_device_id bq27xxx_battery_i2c_of_match_table[] = {
 	{ .compatible = "ti,bq27200" },
 	{ .compatible = "ti,bq27210" },
@@ -288,8 +287,7 @@ static const struct of_device_id bq27xxx_battery_i2c_of_match_table[] = {
 	{ .compatible = "ti,bq27621" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, bq27xxx_battery_i2c_of_match_table);
-#endif
+MODULE_OF_TABLE(bq27xxx_battery_i2c_of_match_table);
 
 static struct i2c_driver bq27xxx_battery_i2c_driver = {
 	.driver = {

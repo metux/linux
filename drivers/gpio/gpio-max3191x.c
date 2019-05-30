@@ -458,7 +458,6 @@ static int __init max3191x_register_driver(struct spi_driver *sdrv)
 	return spi_register_driver(sdrv);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id max3191x_of_id[] = {
 	{ .compatible = "maxim,max31910" },
 	{ .compatible = "maxim,max31911" },
@@ -468,8 +467,7 @@ static const struct of_device_id max3191x_of_id[] = {
 	{ .compatible = "maxim,max31963" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, max3191x_of_id);
-#endif
+MODULE_OF_TABLE(max3191x_of_id);
 
 static const struct spi_device_id max3191x_spi_id[] = {
 	{ "max31910" },

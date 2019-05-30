@@ -376,13 +376,11 @@ static const struct dev_pm_ops xhci_histb_pm_ops = {
 };
 #define DEV_PM_OPS (IS_ENABLED(CONFIG_PM) ? &xhci_histb_pm_ops : NULL)
 
-#ifdef CONFIG_OF
 static const struct of_device_id histb_xhci_of_match[] = {
 	{ .compatible = "hisilicon,hi3798cv200-xhci"},
 	{ },
 };
-MODULE_DEVICE_TABLE(of, histb_xhci_of_match);
-#endif
+MODULE_OF_TABLE(histb_xhci_of_match);
 
 static struct platform_driver histb_xhci_driver = {
 	.probe	= xhci_histb_probe,

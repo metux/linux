@@ -89,13 +89,11 @@ static int twl4030_pwrbutton_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id twl4030_pwrbutton_dt_match_table[] = {
-       { .compatible = "ti,twl4030-pwrbutton" },
-       {},
+	{ .compatible = "ti,twl4030-pwrbutton" },
+	{},
 };
-MODULE_DEVICE_TABLE(of, twl4030_pwrbutton_dt_match_table);
-#endif
+MODULE_OF_TABLE(twl4030_pwrbutton_dt_match_table);
 
 static struct platform_driver twl4030_pwrbutton_driver = {
 	.probe		= twl4030_pwrbutton_probe,

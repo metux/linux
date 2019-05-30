@@ -928,13 +928,11 @@ static const struct i2c_device_id max98927_i2c_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, max98927_i2c_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id max98927_of_match[] = {
 	{ .compatible = "maxim,max98927", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, max98927_of_match);
-#endif
+MODULE_OF_TABLE(max98927_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id max98927_acpi_match[] = {

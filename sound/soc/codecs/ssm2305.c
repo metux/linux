@@ -81,13 +81,11 @@ static int ssm2305_probe(struct platform_device *pdev)
 					       NULL, 0);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ssm2305_of_match[] = {
 	{ .compatible = "adi,ssm2305", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ssm2305_of_match);
-#endif
+MODULE_OF_TABLE(ssm2305_of_match);
 
 static struct platform_driver ssm2305_driver = {
 	.driver = {

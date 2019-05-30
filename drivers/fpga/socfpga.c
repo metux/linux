@@ -590,14 +590,11 @@ static int socfpga_fpga_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id socfpga_fpga_of_match[] = {
 	{ .compatible = "altr,socfpga-fpga-mgr", },
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, socfpga_fpga_of_match);
-#endif
+MODULE_OF_TABLE(socfpga_fpga_of_match);
 
 static struct platform_driver socfpga_fpga_driver = {
 	.probe = socfpga_fpga_probe,

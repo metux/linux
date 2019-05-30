@@ -1657,7 +1657,6 @@ static const struct platform_device_id samsung_i2s_driver_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, samsung_i2s_driver_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id exynos_i2s_match[] = {
 	{
 		.compatible = "samsung,s3c6410-i2s",
@@ -1677,8 +1676,7 @@ static const struct of_device_id exynos_i2s_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, exynos_i2s_match);
-#endif
+MODULE_OF_TABLE(exynos_i2s_match);
 
 static const struct dev_pm_ops samsung_i2s_pm = {
 	SET_RUNTIME_PM_OPS(i2s_runtime_suspend,

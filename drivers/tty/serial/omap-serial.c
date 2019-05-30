@@ -1905,15 +1905,13 @@ static const struct dev_pm_ops serial_omap_dev_pm_ops = {
 	.complete       = serial_omap_complete,
 };
 
-#if defined(CONFIG_OF)
 static const struct of_device_id omap_serial_of_match[] = {
 	{ .compatible = "ti,omap2-uart" },
 	{ .compatible = "ti,omap3-uart" },
 	{ .compatible = "ti,omap4-uart" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, omap_serial_of_match);
-#endif
+MODULE_OF_TABLE(omap_serial_of_match);
 
 static struct platform_driver serial_omap_driver = {
 	.probe          = serial_omap_probe,

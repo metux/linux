@@ -234,13 +234,11 @@ static int cros_ec_pwm_remove(struct platform_device *dev)
 	return pwmchip_remove(chip);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id cros_ec_pwm_of_match[] = {
 	{ .compatible = "google,cros-ec-pwm" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, cros_ec_pwm_of_match);
-#endif
+MODULE_OF_TABLE(cros_ec_pwm_of_match);
 
 static struct platform_driver cros_ec_pwm_driver = {
 	.probe = cros_ec_pwm_probe,

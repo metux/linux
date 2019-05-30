@@ -547,7 +547,6 @@ out_err:
 	return error;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id cpcap_usb_phy_id_table[] = {
 	{
 		.compatible = "motorola,cpcap-usb-phy",
@@ -557,8 +556,7 @@ static const struct of_device_id cpcap_usb_phy_id_table[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, cpcap_usb_phy_id_table);
-#endif
+MODULE_OF_TABLE(cpcap_usb_phy_id_table);
 
 static int cpcap_usb_phy_probe(struct platform_device *pdev)
 {

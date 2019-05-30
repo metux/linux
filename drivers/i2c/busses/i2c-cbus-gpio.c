@@ -255,13 +255,11 @@ static int cbus_i2c_probe(struct platform_device *pdev)
 	return i2c_add_numbered_adapter(adapter);
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id i2c_cbus_dt_ids[] = {
 	{ .compatible = "i2c-cbus-gpio", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, i2c_cbus_dt_ids);
-#endif
+MODULE_OF_TABLE(i2c_cbus_dt_ids);
 
 static struct platform_driver cbus_i2c_driver = {
 	.probe	= cbus_i2c_probe,

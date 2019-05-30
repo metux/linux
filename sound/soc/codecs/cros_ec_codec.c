@@ -417,13 +417,11 @@ static int cros_ec_codec_platform_probe(struct platform_device *pd)
 					  cros_ec_dai, ARRAY_SIZE(cros_ec_dai));
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id cros_ec_codec_of_match[] = {
 	{ .compatible = "google,cros-ec-codec" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, cros_ec_codec_of_match);
-#endif
+MODULE_OF_TABLE(cros_ec_codec_of_match);
 
 static struct platform_driver cros_ec_codec_platform_driver = {
 	.driver = {

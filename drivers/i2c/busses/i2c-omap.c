@@ -1221,7 +1221,6 @@ static const struct i2c_adapter_quirks omap_i2c_quirks = {
 	.flags = I2C_AQ_NO_ZERO_LEN,
 };
 
-#ifdef CONFIG_OF
 static struct omap_i2c_bus_platform_data omap2420_pdata = {
 	.rev = OMAP_I2C_IP_VERSION_1,
 	.flags = OMAP_I2C_FLAG_NO_FIFO |
@@ -1264,8 +1263,7 @@ static const struct of_device_id omap_i2c_of_match[] = {
 	},
 	{ },
 };
-MODULE_DEVICE_TABLE(of, omap_i2c_of_match);
-#endif
+MODULE_OF_TABLE(omap_i2c_of_match);
 
 #define OMAP_I2C_SCHEME(rev)		((rev & 0xc000) >> 14)
 

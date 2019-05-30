@@ -261,13 +261,11 @@ static const struct i2c_device_id qt1070_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, qt1070_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id qt1070_of_match[] = {
 	{ .compatible = "qt1070", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, qt1070_of_match);
-#endif
+MODULE_OF_TABLE(qt1070_of_match);
 
 static struct i2c_driver qt1070_driver = {
 	.driver	= {

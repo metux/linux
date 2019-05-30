@@ -80,7 +80,6 @@ void atmel_tc_free(struct atmel_tc *tc)
 }
 EXPORT_SYMBOL_GPL(atmel_tc_free);
 
-#if defined(CONFIG_OF)
 static struct atmel_tcb_config tcb_rm9200_config = {
 	.counter_width = 16,
 };
@@ -100,9 +99,7 @@ static const struct of_device_id atmel_tcb_dt_ids[] = {
 		/* sentinel */
 	}
 };
-
-MODULE_DEVICE_TABLE(of, atmel_tcb_dt_ids);
-#endif
+MODULE_OF_TABLE(atmel_tcb_dt_ids);
 
 static int __init tc_probe(struct platform_device *pdev)
 {

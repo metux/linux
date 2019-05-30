@@ -143,13 +143,11 @@ static const struct i2c_device_id usb4604_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, usb4604_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id usb4604_of_match[] = {
 	{ .compatible = "smsc,usb4604" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, usb4604_of_match);
-#endif
+MODULE_OF_TABLE(usb4604_of_match);
 
 static struct i2c_driver usb4604_i2c_driver = {
 	.driver = {

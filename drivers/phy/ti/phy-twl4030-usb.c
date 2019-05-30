@@ -810,13 +810,11 @@ static int twl4030_usb_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id twl4030_usb_id_table[] = {
 	{ .compatible = "ti,twl4030-usb" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, twl4030_usb_id_table);
-#endif
+MODULE_OF_TABLE(twl4030_usb_id_table);
 
 static struct platform_driver twl4030_usb_driver = {
 	.probe		= twl4030_usb_probe,

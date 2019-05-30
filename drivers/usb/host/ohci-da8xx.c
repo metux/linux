@@ -361,14 +361,11 @@ check_port:
 			wIndex, buf, wLength);
 }
 
-/*-------------------------------------------------------------------------*/
-#ifdef CONFIG_OF
 static const struct of_device_id da8xx_ohci_ids[] = {
 	{ .compatible = "ti,da830-ohci" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, da8xx_ohci_ids);
-#endif
+MODULE_OF_TABLE(da8xx_ohci_ids);
 
 static int ohci_da8xx_probe(struct platform_device *pdev)
 {

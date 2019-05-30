@@ -334,13 +334,11 @@ static int gpio_regulator_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id regulator_gpio_of_match[] = {
 	{ .compatible = "regulator-gpio", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, regulator_gpio_of_match);
-#endif
+MODULE_OF_TABLE(regulator_gpio_of_match);
 
 static struct platform_driver gpio_regulator_driver = {
 	.probe		= gpio_regulator_probe,

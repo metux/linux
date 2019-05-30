@@ -33,13 +33,11 @@ static const struct spi_device_id pcm3060_spi_id[] = {
 };
 MODULE_DEVICE_TABLE(spi, pcm3060_spi_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcm3060_of_match[] = {
 	{ .compatible = "ti,pcm3060" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, pcm3060_of_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(pcm3060_of_match);
 
 static struct spi_driver pcm3060_spi_driver = {
 	.driver = {

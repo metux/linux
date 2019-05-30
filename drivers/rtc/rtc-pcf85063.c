@@ -472,7 +472,6 @@ static int pcf85063_probe(struct i2c_client *client)
 	return rtc_register_device(pcf85063->rtc);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcf85063_of_match[] = {
 	{ .compatible = "nxp,pcf85063", .data = &pcf85063tp_config },
 	{ .compatible = "nxp,pcf85063tp", .data = &pcf85063tp_config },
@@ -480,8 +479,7 @@ static const struct of_device_id pcf85063_of_match[] = {
 	{ .compatible = "microcrystal,rv8263", .data = &rv8263_config },
 	{}
 };
-MODULE_DEVICE_TABLE(of, pcf85063_of_match);
-#endif
+MODULE_OF_TABLE(pcf85063_of_match);
 
 static struct i2c_driver pcf85063_driver = {
 	.driver		= {

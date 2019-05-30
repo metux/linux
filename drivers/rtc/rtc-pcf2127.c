@@ -536,14 +536,12 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	return rtc_register_device(pcf2127->rtc);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcf2127_of_match[] = {
 	{ .compatible = "nxp,pcf2127" },
 	{ .compatible = "nxp,pcf2129" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, pcf2127_of_match);
-#endif
+MODULE_OF_TABLE(pcf2127_of_match);
 
 #if IS_ENABLED(CONFIG_I2C)
 

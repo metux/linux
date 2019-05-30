@@ -261,13 +261,11 @@ static struct snd_soc_dai_driver pcm1681_dai = {
 	.ops = &pcm1681_dai_ops,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcm1681_dt_ids[] = {
 	{ .compatible = "ti,pcm1681", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pcm1681_dt_ids);
-#endif
+MODULE_OF_TABLE(pcm1681_dt_ids);
 
 static const struct regmap_config pcm1681_regmap = {
 	.reg_bits		= 8,

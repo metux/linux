@@ -121,7 +121,6 @@ ATTRIBUTE_GROUPS(lm70);
 
 /*----------------------------------------------------------------------*/
 
-#ifdef CONFIG_OF
 static const struct of_device_id lm70_of_ids[] = {
 	{
 		.compatible = "ti,lm70",
@@ -145,8 +144,7 @@ static const struct of_device_id lm70_of_ids[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, lm70_of_ids);
-#endif
+MODULE_OF_TABLE(lm70_of_ids);
 
 static int lm70_probe(struct spi_device *spi)
 {

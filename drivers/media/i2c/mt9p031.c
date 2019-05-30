@@ -1173,14 +1173,12 @@ static const struct i2c_device_id mt9p031_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mt9p031_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id mt9p031_of_match[] = {
 	{ .compatible = "aptina,mt9p031", },
 	{ .compatible = "aptina,mt9p031m", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, mt9p031_of_match);
-#endif
+MODULE_OF_TABLE(mt9p031_of_match);
 
 static struct i2c_driver mt9p031_i2c_driver = {
 	.driver = {

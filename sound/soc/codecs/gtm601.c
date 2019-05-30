@@ -67,13 +67,11 @@ static int gtm601_platform_probe(struct platform_device *pdev)
 			&soc_component_dev_gtm601, &gtm601_dai, 1);
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id gtm601_codec_of_match[] = {
 	{ .compatible = "option,gtm601", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, gtm601_codec_of_match);
-#endif
+MODULE_OF_TABLE(gtm601_codec_of_match);
 
 static struct platform_driver gtm601_codec_driver = {
 	.driver = {

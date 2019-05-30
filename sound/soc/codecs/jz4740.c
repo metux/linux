@@ -346,13 +346,11 @@ static int jz4740_codec_probe(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id jz4740_codec_of_matches[] = {
 	{ .compatible = "ingenic,jz4740-codec", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, jz4740_codec_of_matches);
-#endif
+MODULE_OF_TABLE(jz4740_codec_of_matches);
 
 static struct platform_driver jz4740_codec_driver = {
 	.probe = jz4740_codec_probe,

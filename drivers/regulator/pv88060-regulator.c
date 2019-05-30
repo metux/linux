@@ -372,13 +372,11 @@ static const struct i2c_device_id pv88060_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pv88060_i2c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pv88060_dt_ids[] = {
 	{ .compatible = "pvs,pv88060", .data = &pv88060_i2c_id[0] },
 	{},
 };
-MODULE_DEVICE_TABLE(of, pv88060_dt_ids);
-#endif
+MODULE_OF_TABLE(pv88060_dt_ids);
 
 static struct i2c_driver pv88060_regulator_driver = {
 	.driver = {

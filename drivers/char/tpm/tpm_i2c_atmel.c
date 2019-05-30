@@ -193,13 +193,8 @@ static const struct i2c_device_id i2c_atmel_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, i2c_atmel_id);
 
-#ifdef CONFIG_OF
-static const struct of_device_id i2c_atmel_of_match[] = {
-	{.compatible = "atmel,at97sc3204t"},
-	{},
-};
-MODULE_DEVICE_TABLE(of, i2c_atmel_of_match);
-#endif
+MODULE_DECLARE_OF_TABLE(i2c_atmel_of_match,
+	{ .compatible = "atmel,at97sc3204t" });
 
 static SIMPLE_DEV_PM_OPS(i2c_atmel_pm_ops, tpm_pm_suspend, tpm_pm_resume);
 

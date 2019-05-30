@@ -278,17 +278,13 @@ static const struct spi_device_id max1118_id[] = {
 };
 MODULE_DEVICE_TABLE(spi, max1118_id);
 
-#ifdef CONFIG_OF
-
 static const struct of_device_id max1118_dt_ids[] = {
 	{ .compatible = "maxim,max1117" },
 	{ .compatible = "maxim,max1118" },
 	{ .compatible = "maxim,max1119" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, max1118_dt_ids);
-
-#endif
+MODULE_OF_TABLE(max1118_dt_ids);
 
 static struct spi_driver max1118_spi_driver = {
 	.driver = {

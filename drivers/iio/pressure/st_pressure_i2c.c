@@ -18,7 +18,6 @@
 #include <linux/iio/common/st_sensors_i2c.h>
 #include "st_pressure.h"
 
-#ifdef CONFIG_OF
 static const struct of_device_id st_press_of_match[] = {
 	{
 		.compatible = "st,lps001wp-press",
@@ -50,10 +49,7 @@ static const struct of_device_id st_press_of_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, st_press_of_match);
-#else
-#define st_press_of_match NULL
-#endif
+MODULE_OF_TABLE(st_press_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id st_press_acpi_match[] = {
@@ -91,7 +87,8 @@ static int st_press_i2c_probe(struct i2c_client *client,
 	press_data = iio_priv(indio_dev);
 
 	if (client->dev.of_node) {
-		st_sensors_of_name_probe(&client->dev, st_press_of_match,
+		st_sensors_of_name_probe(&client->dev,
+					 of_match_ptr(st_press_of_match),
 					 client->name, sizeof(client->name));
 	} else if (ACPI_HANDLE(&client->dev)) {
 		ret = st_sensors_match_acpi_device(&client->dev);

@@ -1773,14 +1773,11 @@ static const struct dev_pm_ops atmel_spi_pm_ops = {
 #define ATMEL_SPI_PM_OPS	NULL
 #endif
 
-#if defined(CONFIG_OF)
 static const struct of_device_id atmel_spi_dt_ids[] = {
 	{ .compatible = "atmel,at91rm9200-spi" },
 	{ /* sentinel */ }
 };
-
-MODULE_DEVICE_TABLE(of, atmel_spi_dt_ids);
-#endif
+MODULE_OF_TABLE(atmel_spi_dt_ids);
 
 static struct platform_driver atmel_spi_driver = {
 	.driver		= {

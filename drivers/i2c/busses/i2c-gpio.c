@@ -485,14 +485,8 @@ static int i2c_gpio_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
-static const struct of_device_id i2c_gpio_dt_ids[] = {
-	{ .compatible = "i2c-gpio", },
-	{ /* sentinel */ }
-};
-
-MODULE_DEVICE_TABLE(of, i2c_gpio_dt_ids);
-#endif
+MODULE_DECLARE_OF_TABLE(i2c_gpio_dt_ids,
+	{ .compatible = "i2c-gpio", });
 
 static struct platform_driver i2c_gpio_driver = {
 	.driver		= {

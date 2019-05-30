@@ -385,14 +385,11 @@ static const struct i2c_device_id lp8501_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, lp8501_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id of_lp8501_leds_match[] = {
 	{ .compatible = "ti,lp8501", },
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, of_lp8501_leds_match);
-#endif
+MODULE_OF_TABLE(of_lp8501_leds_match);
 
 static struct i2c_driver lp8501_driver = {
 	.driver = {

@@ -477,13 +477,11 @@ static const struct i2c_device_id ssm4567_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ssm4567_i2c_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id ssm4567_of_match[] = {
 	{ .compatible = "adi,ssm4567", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ssm4567_of_match);
-#endif
+MODULE_OF_TABLE(ssm4567_of_match);
 
 #ifdef CONFIG_ACPI
 

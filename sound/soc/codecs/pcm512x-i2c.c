@@ -45,7 +45,6 @@ static const struct i2c_device_id pcm512x_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pcm512x_i2c_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id pcm512x_of_match[] = {
 	{ .compatible = "ti,pcm5121", },
 	{ .compatible = "ti,pcm5122", },
@@ -53,8 +52,7 @@ static const struct of_device_id pcm512x_of_match[] = {
 	{ .compatible = "ti,pcm5142", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pcm512x_of_match);
-#endif
+MODULE_OF_TABLE(pcm512x_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id pcm512x_acpi_match[] = {

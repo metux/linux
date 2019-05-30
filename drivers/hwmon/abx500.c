@@ -461,13 +461,8 @@ static int abx500_temp_resume(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id abx500_temp_match[] = {
-	{ .compatible = "stericsson,abx500-temp" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, abx500_temp_match);
-#endif
+MODULE_DECLARE_OF_TABLE(abx500_temp_match,
+	{ .compatible = "stericsson,abx500-temp" });
 
 static struct platform_driver abx500_temp_driver = {
 	.driver = {

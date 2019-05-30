@@ -864,13 +864,11 @@ static const struct i2c_device_id nau8540_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, nau8540_i2c_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id nau8540_of_ids[] = {
 	{ .compatible = "nuvoton,nau8540", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, nau8540_of_ids);
-#endif
+MODULE_OF_TABLE(nau8540_of_ids);
 
 static struct i2c_driver nau8540_i2c_driver = {
 	.driver = {

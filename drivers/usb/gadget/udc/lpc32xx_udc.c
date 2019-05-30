@@ -3265,13 +3265,11 @@ static int lpc32xx_udc_resume(struct platform_device *pdev)
 #define	lpc32xx_udc_resume	NULL
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id lpc32xx_udc_of_match[] = {
 	{ .compatible = "nxp,lpc3220-udc", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, lpc32xx_udc_of_match);
-#endif
+MODULE_OF_TABLE(lpc32xx_udc_of_match);
 
 static struct platform_driver lpc32xx_udc_driver = {
 	.remove		= lpc32xx_udc_remove,

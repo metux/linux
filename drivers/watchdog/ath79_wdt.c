@@ -311,13 +311,11 @@ static void ath97_wdt_shutdown(struct platform_device *pdev)
 	ath79_wdt_disable();
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ath79_wdt_match[] = {
 	{ .compatible = "qca,ar7130-wdt" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, ath79_wdt_match);
-#endif
+MODULE_OF_TABLE(ath79_wdt_match);
 
 static struct platform_driver ath79_wdt_driver = {
 	.probe		= ath79_wdt_probe,

@@ -17,13 +17,12 @@
 #include <linux/iio/common/st_sensors_spi.h>
 #include "st_accel.h"
 
-#ifdef CONFIG_OF
 /*
  * For new single-chip sensors use <device_name> as compatible string.
  * For old single-chip devices keep <device_name>-accel to maintain
  * compatibility
  */
-static const struct of_device_id st_accel_of_match[] = {
+MODULE_DECLARE_OF_TABLE(st_accel_of_match,
 	{
 		/* An older compatible */
 		.compatible = "st,lis302dl-spi",
@@ -92,13 +91,7 @@ static const struct of_device_id st_accel_of_match[] = {
 	{
 		.compatible = "st,lis3de",
 		.data = LIS3DE_ACCEL_DEV_NAME,
-	},
-	{}
-};
-MODULE_DEVICE_TABLE(of, st_accel_of_match);
-#else
-#define st_accel_of_match	NULL
-#endif
+	});
 
 static int st_accel_spi_probe(struct spi_device *spi)
 {
@@ -112,7 +105,7 @@ static int st_accel_spi_probe(struct spi_device *spi)
 
 	adata = iio_priv(indio_dev);
 
-	st_sensors_of_name_probe(&spi->dev, st_accel_of_match,
+	st_sensors_of_name_probe(&spi->dev, of_match_ptr(st_accel_of_match),
 				 spi->modalias, sizeof(spi->modalias));
 	st_sensors_spi_configure(indio_dev, spi, adata);
 

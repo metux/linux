@@ -308,13 +308,11 @@ static int adc108s102_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id adc108s102_of_match[] = {
 	{ .compatible = "ti,adc108s102" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, adc108s102_of_match);
-#endif
+MODULE_OF_TABLE(adc108s102_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id adc108s102_acpi_ids[] = {

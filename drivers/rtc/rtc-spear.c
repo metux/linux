@@ -471,13 +471,11 @@ static void spear_rtc_shutdown(struct platform_device *pdev)
 	clk_disable(config->clk);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id spear_rtc_id_table[] = {
 	{ .compatible = "st,spear600-rtc" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, spear_rtc_id_table);
-#endif
+MODULE_OF_TABLE(spear_rtc_id_table);
 
 static struct platform_driver spear_rtc_driver = {
 	.probe = spear_rtc_probe,

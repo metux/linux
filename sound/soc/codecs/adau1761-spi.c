@@ -60,7 +60,6 @@ static const struct spi_device_id adau1761_spi_id[] = {
 };
 MODULE_DEVICE_TABLE(spi, adau1761_spi_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id adau1761_spi_dt_ids[] = {
 	{ .compatible = "adi,adau1361", },
 	{ .compatible = "adi,adau1461", },
@@ -68,8 +67,7 @@ static const struct of_device_id adau1761_spi_dt_ids[] = {
 	{ .compatible = "adi,adau1961", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, adau1761_spi_dt_ids);
-#endif
+MODULE_OF_TABLE(adau1761_spi_dt_ids);
 
 static struct spi_driver adau1761_spi_driver = {
 	.driver = {

@@ -368,13 +368,11 @@ static int __maybe_unused spear_kbd_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(spear_kbd_pm_ops, spear_kbd_suspend, spear_kbd_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id spear_kbd_id_table[] = {
 	{ .compatible = "st,spear300-kbd" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, spear_kbd_id_table);
-#endif
+MODULE_OF_TABLE(spear_kbd_id_table);
 
 static struct platform_driver spear_kbd_driver = {
 	.probe		= spear_kbd_probe,

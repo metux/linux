@@ -170,13 +170,11 @@ static int atmel_asoc_wm8904_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id atmel_asoc_wm8904_dt_ids[] = {
 	{ .compatible = "atmel,asoc-wm8904", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, atmel_asoc_wm8904_dt_ids);
-#endif
+MODULE_OF_TABLE(atmel_asoc_wm8904_dt_ids);
 
 static struct platform_driver atmel_asoc_wm8904_driver = {
 	.driver = {

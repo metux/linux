@@ -1205,13 +1205,11 @@ static const struct acpi_device_id raydium_acpi_id[] = {
 MODULE_DEVICE_TABLE(acpi, raydium_acpi_id);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id raydium_of_match[] = {
 	{ .compatible = "raydium,rm32380", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, raydium_of_match);
-#endif
+MODULE_OF_TABLE(raydium_of_match);
 
 static struct i2c_driver raydium_i2c_driver = {
 	.probe = raydium_i2c_probe,

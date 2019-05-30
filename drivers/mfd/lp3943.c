@@ -134,13 +134,11 @@ static const struct i2c_device_id lp3943_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, lp3943_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id lp3943_of_match[] = {
 	{ .compatible = "ti,lp3943", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, lp3943_of_match);
-#endif
+MODULE_OF_TABLE(lp3943_of_match);
 
 static struct i2c_driver lp3943_driver = {
 	.probe = lp3943_probe,

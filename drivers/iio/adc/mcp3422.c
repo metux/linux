@@ -403,13 +403,11 @@ static const struct i2c_device_id mcp3422_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mcp3422_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id mcp3422_of_match[] = {
 	{ .compatible = "mcp3422" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, mcp3422_of_match);
-#endif
+MODULE_OF_TABLE(mcp3422_of_match);
 
 static struct i2c_driver mcp3422_driver = {
 	.driver = {

@@ -83,14 +83,12 @@ static const struct platform_device_id imx_rtc_devtype[] = {
 };
 MODULE_DEVICE_TABLE(platform, imx_rtc_devtype);
 
-#ifdef CONFIG_OF
 static const struct of_device_id imx_rtc_dt_ids[] = {
 	{ .compatible = "fsl,imx1-rtc", .data = (const void *)IMX1_RTC },
 	{ .compatible = "fsl,imx21-rtc", .data = (const void *)IMX21_RTC },
 	{}
 };
-MODULE_DEVICE_TABLE(of, imx_rtc_dt_ids);
-#endif
+MODULE_OF_TABLE(imx_rtc_dt_ids);
 
 static inline int is_imx1_rtc(struct rtc_plat_data *data)
 {

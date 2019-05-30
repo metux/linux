@@ -133,13 +133,11 @@ static const struct i2c_device_id dir685_tk_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, dir685_tk_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id dir685_tk_of_match[] = {
 	{ .compatible = "dlink,dir685-touchkeys" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, dir685_tk_of_match);
-#endif
+MODULE_OF_TABLE(dir685_tk_of_match);
 
 static struct i2c_driver dir685_tk_i2c_driver = {
 	.driver = {

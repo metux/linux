@@ -319,7 +319,6 @@ static const struct at91_rtc_config at91sam9x5_config = {
 	.use_shadow_imr	= true,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id at91_rtc_dt_ids[] = {
 	{
 		.compatible = "atmel,at91rm9200-rtc",
@@ -331,8 +330,7 @@ static const struct of_device_id at91_rtc_dt_ids[] = {
 		/* sentinel */
 	}
 };
-MODULE_DEVICE_TABLE(of, at91_rtc_dt_ids);
-#endif
+MODULE_OF_TABLE(at91_rtc_dt_ids);
 
 static const struct at91_rtc_config *
 at91_rtc_get_config(struct platform_device *pdev)

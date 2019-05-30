@@ -754,13 +754,8 @@ static int i2c_pnx_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id i2c_pnx_of_match[] = {
-	{ .compatible = "nxp,pnx-i2c" },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, i2c_pnx_of_match);
-#endif
+MODULE_DECLARE_OF_TABLE(i2c_pnx_of_match,
+	{ .compatible = "nxp,pnx-i2c" });
 
 static struct platform_driver i2c_pnx_driver = {
 	.driver = {

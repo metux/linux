@@ -369,13 +369,11 @@ static int spear_adc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id spear_adc_dt_ids[] = {
 	{ .compatible = "st,spear600-adc", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, spear_adc_dt_ids);
-#endif
+MODULE_OF_TABLE(spear_adc_dt_ids);
 
 static struct platform_driver spear_adc_driver = {
 	.probe		= spear_adc_probe,

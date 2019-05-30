@@ -3306,13 +3306,11 @@ static const struct i2c_device_id rt5663_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt5663_i2c_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id rt5663_of_match[] = {
 	{ .compatible = "realtek,rt5663", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt5663_of_match);
-#endif
+MODULE_OF_TABLE(rt5663_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5663_acpi_match[] = {

@@ -874,13 +874,11 @@ static const struct snd_soc_component_driver pxa_ssp_component = {
 	.pcm_free	= pxa2xx_pcm_free_dma_buffers,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id pxa_ssp_of_ids[] = {
 	{ .compatible = "mrvl,pxa-ssp-dai" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, pxa_ssp_of_ids);
-#endif
+MODULE_OF_TABLE(pxa_ssp_of_ids);
 
 static int asoc_ssp_probe(struct platform_device *pdev)
 {

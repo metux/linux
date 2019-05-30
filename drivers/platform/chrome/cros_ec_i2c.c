@@ -327,13 +327,11 @@ static const struct dev_pm_ops cros_ec_i2c_pm_ops = {
 	SET_LATE_SYSTEM_SLEEP_PM_OPS(cros_ec_i2c_suspend, cros_ec_i2c_resume)
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id cros_ec_i2c_of_match[] = {
 	{ .compatible = "google,cros-ec-i2c", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, cros_ec_i2c_of_match);
-#endif
+MODULE_OF_TABLE(cros_ec_i2c_of_match);
 
 static const struct i2c_device_id cros_ec_i2c_id[] = {
 	{ "cros-ec-i2c", 0 },

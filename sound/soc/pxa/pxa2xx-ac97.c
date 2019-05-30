@@ -212,16 +212,13 @@ static const struct snd_soc_component_driver pxa_ac97_component = {
 	.pcm_free	= pxa2xx_pcm_free_dma_buffers,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id pxa2xx_ac97_dt_ids[] = {
 	{ .compatible = "marvell,pxa250-ac97", },
 	{ .compatible = "marvell,pxa270-ac97", },
 	{ .compatible = "marvell,pxa300-ac97", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pxa2xx_ac97_dt_ids);
-
-#endif
+MODULE_OF_TABLE(pxa2xx_ac97_dt_ids);
 
 static int pxa2xx_ac97_dev_probe(struct platform_device *pdev)
 {

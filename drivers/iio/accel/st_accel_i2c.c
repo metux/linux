@@ -18,8 +18,7 @@
 #include <linux/iio/common/st_sensors_i2c.h>
 #include "st_accel.h"
 
-#ifdef CONFIG_OF
-static const struct of_device_id st_accel_of_match[] = {
+MODULE_DECLARE_OF_TABLE(st_accel_of_match,
 	{
 		/* An older compatible */
 		.compatible = "st,lis3lv02d",
@@ -104,13 +103,7 @@ static const struct of_device_id st_accel_of_match[] = {
 	{
 		.compatible = "st,lis2de12",
 		.data = LIS2DE12_ACCEL_DEV_NAME,
-	},
-	{},
-};
-MODULE_DEVICE_TABLE(of, st_accel_of_match);
-#else
-#define st_accel_of_match NULL
-#endif
+	});
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id st_accel_acpi_match[] = {

@@ -801,14 +801,11 @@ static struct asc_port *asc_of_get_asc_port(struct platform_device *pdev)
 	return &asc_ports[id];
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id asc_match[] = {
 	{ .compatible = "st,asc", },
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, asc_match);
-#endif
+MODULE_OF_TABLE(asc_match);
 
 static int asc_serial_probe(struct platform_device *pdev)
 {

@@ -235,15 +235,13 @@ static const struct i2c_device_id adc081c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, adc081c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id adc081c_of_match[] = {
 	{ .compatible = "ti,adc081c" },
 	{ .compatible = "ti,adc101c" },
 	{ .compatible = "ti,adc121c" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, adc081c_of_match);
-#endif
+MODULE_OF_TABLE(adc081c_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id adc081c_acpi_match[] = {

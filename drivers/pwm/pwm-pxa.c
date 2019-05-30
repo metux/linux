@@ -125,7 +125,6 @@ static const struct pwm_ops pxa_pwm_ops = {
 	.owner = THIS_MODULE,
 };
 
-#ifdef CONFIG_OF
 /*
  * Device tree users must create one device instance for each PWM channel.
  * Hence we dispense with the HAS_SECONDARY_PWM and "tell" the original driver
@@ -139,14 +138,12 @@ static const struct of_device_id pwm_of_match[] = {
 	{ .compatible = "marvell,pxa910-pwm", .data = &pwm_id_table[0]},
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pwm_of_match);
-#else
-#define pwm_of_match NULL
-#endif
+MODULE_OF_TABLE(pwm_of_match);
 
 static const struct platform_device_id *pxa_pwm_get_id_dt(struct device *dev)
 {
-	const struct of_device_id *id = of_match_device(pwm_of_match, dev);
+	const struct of_device_id *id = of_match_device(
+		of_match_ptr(pwm_of_match), dev);
 
 	return id ? id->data : NULL;
 }
@@ -225,7 +222,7 @@ static int pwm_remove(struct platform_device *pdev)
 static struct platform_driver pwm_driver = {
 	.driver		= {
 		.name	= "pxa25x-pwm",
-		.of_match_table = pwm_of_match,
+		.of_match_table = of_match_ptr(pwm_of_match),
 	},
 	.probe		= pwm_probe,
 	.remove		= pwm_remove,

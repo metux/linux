@@ -549,17 +549,12 @@ static void sirf_remove(struct serdev_device *serdev)
 	gnss_put_device(data->gdev);
 };
 
-#ifdef CONFIG_OF
-static const struct of_device_id sirf_of_match[] = {
+MODULE_DECLARE_OF_TABLE(sirf_of_match,
 	{ .compatible = "fastrax,uc430" },
 	{ .compatible = "linx,r4" },
 	{ .compatible = "wi2wi,w2sg0004" },
 	{ .compatible = "wi2wi,w2sg0008i" },
-	{ .compatible = "wi2wi,w2sg0084i" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, sirf_of_match);
-#endif
+	{ .compatible = "wi2wi,w2sg0084i" });
 
 static struct serdev_device_driver sirf_driver = {
 	.driver	= {

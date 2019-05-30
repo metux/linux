@@ -76,15 +76,13 @@ static const struct spi_device_id max1027_id[] = {
 };
 MODULE_DEVICE_TABLE(spi, max1027_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id max1027_adc_dt_ids[] = {
 	{ .compatible = "maxim,max1027" },
 	{ .compatible = "maxim,max1029" },
 	{ .compatible = "maxim,max1031" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, max1027_adc_dt_ids);
-#endif
+MODULE_OF_TABLE(max1027_adc_dt_ids);
 
 #define MAX1027_V_CHAN(index)						\
 	{								\

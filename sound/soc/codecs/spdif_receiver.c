@@ -67,13 +67,11 @@ static int spdif_dir_probe(struct platform_device *pdev)
 			&dir_stub_dai, 1);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id spdif_dir_dt_ids[] = {
 	{ .compatible = "linux,spdif-dir", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, spdif_dir_dt_ids);
-#endif
+MODULE_OF_TABLE(spdif_dir_dt_ids);
 
 static struct platform_driver spdif_dir_driver = {
 	.probe		= spdif_dir_probe,

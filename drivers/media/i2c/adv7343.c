@@ -511,13 +511,11 @@ static const struct i2c_device_id adv7343_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, adv7343_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id adv7343_of_match[] = {
 	{.compatible = "adi,adv7343", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, adv7343_of_match);
-#endif
+MODULE_OF_TABLE(adv7343_of_match);
 
 static struct i2c_driver adv7343_driver = {
 	.driver = {

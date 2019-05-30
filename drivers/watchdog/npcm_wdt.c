@@ -230,13 +230,11 @@ static int npcm_wdt_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id npcm_wdt_match[] = {
 	{.compatible = "nuvoton,npcm750-wdt"},
 	{},
 };
-MODULE_DEVICE_TABLE(of, npcm_wdt_match);
-#endif
+MODULE_OF_TABLE(npcm_wdt_match);
 
 static struct platform_driver npcm_wdt_driver = {
 	.probe		= npcm_wdt_probe,

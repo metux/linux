@@ -317,14 +317,12 @@ static const struct i2c_device_id tpa6130a2_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tpa6130a2_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tpa6130a2_of_match[] = {
 	{ .compatible = "ti,tpa6130a2", },
 	{ .compatible = "ti,tpa6140a2" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tpa6130a2_of_match);
-#endif
+MODULE_OF_TABLE(tpa6130a2_of_match);
 
 static struct i2c_driver tpa6130a2_i2c_driver = {
 	.driver = {

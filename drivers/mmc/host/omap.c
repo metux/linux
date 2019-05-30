@@ -1494,13 +1494,11 @@ static int mmc_omap_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if IS_BUILTIN(CONFIG_OF)
 static const struct of_device_id mmc_omap_match[] = {
 	{ .compatible = "ti,omap2420-mmc", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, mmc_omap_match);
-#endif
+MODULE_OF_TABLE(mmc_omap_match);
 
 static struct platform_driver mmc_omap_driver = {
 	.probe		= mmc_omap_probe,

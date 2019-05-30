@@ -581,15 +581,13 @@ static const struct power_supply_desc cpcap_charger_usb_desc = {
 	.get_property	= cpcap_charger_get_property,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id cpcap_charger_id_table[] = {
 	{
 		.compatible = "motorola,mapphone-cpcap-charger",
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, cpcap_charger_id_table);
-#endif
+MODULE_OF_TABLE(cpcap_charger_id_table);
 
 static int cpcap_charger_probe(struct platform_device *pdev)
 {

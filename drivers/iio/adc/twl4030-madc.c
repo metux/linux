@@ -929,13 +929,11 @@ static int twl4030_madc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id twl_madc_of_match[] = {
 	{ .compatible = "ti,twl4030-madc", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, twl_madc_of_match);
-#endif
+MODULE_OF_TABLE(twl_madc_of_match);
 
 static struct platform_driver twl4030_madc_driver = {
 	.probe = twl4030_madc_probe,

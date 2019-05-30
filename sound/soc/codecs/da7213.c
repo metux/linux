@@ -1568,14 +1568,11 @@ static int da7213_set_bias_level(struct snd_soc_component *component,
 	return 0;
 }
 
-#if defined(CONFIG_OF)
-/* DT */
 static const struct of_device_id da7213_of_match[] = {
 	{ .compatible = "dlg,da7213", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, da7213_of_match);
-#endif
+MODULE_OF_TABLE(da7213_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id da7213_acpi_match[] = {

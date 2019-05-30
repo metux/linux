@@ -186,13 +186,11 @@ static int adc_keys_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id adc_keys_of_match[] = {
 	{ .compatible = "adc-keys", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, adc_keys_of_match);
-#endif
+MODULE_OF_TABLE(adc_keys_of_match);
 
 static struct platform_driver __refdata adc_keys_driver = {
 	.driver = {

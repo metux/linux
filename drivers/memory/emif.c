@@ -1914,14 +1914,12 @@ static void __attribute__((unused)) freq_post_notify_handling(void)
 	spin_unlock_irqrestore(&emif_lock, irq_state);
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id emif_of_match[] = {
-		{ .compatible = "ti,emif-4d" },
-		{ .compatible = "ti,emif-4d5" },
-		{},
+	{ .compatible = "ti,emif-4d" },
+	{ .compatible = "ti,emif-4d5" },
+	{ },
 };
-MODULE_DEVICE_TABLE(of, emif_of_match);
-#endif
+MODULE_OF_TABLE(emif_of_match);
 
 static struct platform_driver emif_driver = {
 	.remove		= __exit_p(emif_remove),

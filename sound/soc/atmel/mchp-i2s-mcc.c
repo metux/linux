@@ -851,15 +851,13 @@ static const struct snd_soc_component_driver mchp_i2s_mcc_component = {
 	.name	= "mchp-i2s-mcc",
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id mchp_i2s_mcc_dt_ids[] = {
 	{
 		.compatible = "microchip,sam9x60-i2smcc",
 	},
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, mchp_i2s_mcc_dt_ids);
-#endif
+MODULE_OF_TABLE(mchp_i2s_mcc_dt_ids);
 
 static int mchp_i2s_mcc_probe(struct platform_device *pdev)
 {

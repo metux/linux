@@ -305,15 +305,13 @@ static int es7134_probe(struct platform_device *pdev)
 				      priv->chip->dai_drv, 1);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id es7134_ids[] = {
 	{ .compatible = "everest,es7134", .data = &es7134_chip },
 	{ .compatible = "everest,es7144", .data = &es7134_chip },
 	{ .compatible = "everest,es7154", .data = &es7154_chip },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, es7134_ids);
-#endif
+MODULE_OF_TABLE(es7134_ids);
 
 static struct platform_driver es7134_driver = {
 	.driver = {

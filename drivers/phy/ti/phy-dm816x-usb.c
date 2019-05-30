@@ -171,15 +171,13 @@ static UNIVERSAL_DEV_PM_OPS(dm816x_usb_phy_pm_ops,
 			    dm816x_usb_phy_runtime_resume,
 			    NULL);
 
-#ifdef CONFIG_OF
 static const struct of_device_id dm816x_usb_phy_id_table[] = {
 	{
 		.compatible = "ti,dm8168-usb-phy",
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, dm816x_usb_phy_id_table);
-#endif
+MODULE_OF_TABLE(dm816x_usb_phy_id_table);
 
 static int dm816x_usb_phy_probe(struct platform_device *pdev)
 {

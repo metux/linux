@@ -183,13 +183,11 @@ static int __maybe_unused gpio_vibrator_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(gpio_vibrator_pm_ops,
 			 gpio_vibrator_suspend, gpio_vibrator_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id gpio_vibra_dt_match_table[] = {
 	{ .compatible = "gpio-vibrator" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, gpio_vibra_dt_match_table);
-#endif
+MODULE_OF_TABLE(gpio_vibra_dt_match_table);
 
 static struct platform_driver gpio_vibrator_driver = {
 	.probe	= gpio_vibrator_probe,

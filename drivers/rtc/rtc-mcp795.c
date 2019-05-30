@@ -427,13 +427,11 @@ static int mcp795_probe(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id mcp795_of_match[] = {
 	{ .compatible = "maxim,mcp795" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, mcp795_of_match);
-#endif
+MODULE_OF_TABLE(mcp795_of_match);
 
 static struct spi_driver mcp795_driver = {
 		.driver = {

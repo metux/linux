@@ -900,13 +900,8 @@ static int mv_xor_v2_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id mv_xor_v2_dt_ids[] = {
-	{ .compatible = "marvell,xor-v2", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, mv_xor_v2_dt_ids);
-#endif
+MODULE_DECLARE_OF_TABLE(mv_xor_v2_dt_ids,
+	{ .compatible = "marvell,xor-v2", });
 
 static struct platform_driver mv_xor_v2_driver = {
 	.probe		= mv_xor_v2_probe,

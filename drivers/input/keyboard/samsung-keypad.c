@@ -572,14 +572,12 @@ static const struct dev_pm_ops samsung_keypad_pm_ops = {
 			   samsung_keypad_runtime_resume, NULL)
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id samsung_keypad_dt_match[] = {
 	{ .compatible = "samsung,s3c6410-keypad" },
 	{ .compatible = "samsung,s5pv210-keypad" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, samsung_keypad_dt_match);
-#endif
+MODULE_OF_TABLE(samsung_keypad_dt_match);
 
 static const struct platform_device_id samsung_keypad_driver_ids[] = {
 	{

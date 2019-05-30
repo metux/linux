@@ -106,13 +106,11 @@ static int adau7002_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id adau7002_dt_ids[] = {
 	{ .compatible = "adi,adau7002", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, adau7002_dt_ids);
-#endif
+MODULE_OF_TABLE(adau7002_dt_ids);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id adau7002_acpi_match[] = {

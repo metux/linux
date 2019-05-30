@@ -1951,7 +1951,6 @@ static const struct i2c_device_id bq24190_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, bq24190_i2c_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id bq24190_of_match[] = {
 	{ .compatible = "ti,bq24190", },
 	{ .compatible = "ti,bq24192", },
@@ -1959,12 +1958,7 @@ static const struct of_device_id bq24190_of_match[] = {
 	{ .compatible = "ti,bq24196", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, bq24190_of_match);
-#else
-static const struct of_device_id bq24190_of_match[] = {
-	{ },
-};
-#endif
+MODULE_OF_TABLE(bq24190_of_match);
 
 static struct i2c_driver bq24190_driver = {
 	.probe		= bq24190_probe,

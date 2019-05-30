@@ -2581,15 +2581,13 @@ static int vpe_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id vpe_of_match[] = {
 	{
 		.compatible = "ti,vpe",
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, vpe_of_match);
-#endif
+MODULE_OF_TABLE(vpe_of_match);
 
 static struct platform_driver vpe_pdrv = {
 	.probe		= vpe_probe,

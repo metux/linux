@@ -2013,13 +2013,11 @@ static const struct i2c_device_id ov7670_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ov7670_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id ov7670_of_match[] = {
 	{ .compatible = "ovti,ov7670", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, ov7670_of_match);
-#endif
+MODULE_OF_TABLE(ov7670_of_match);
 
 static struct i2c_driver ov7670_driver = {
 	.driver = {

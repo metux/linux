@@ -123,13 +123,11 @@ static int storm_platform_probe(struct platform_device *pdev)
 
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id storm_device_id[]  = {
 	{ .compatible = "google,storm-audio" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, storm_device_id);
-#endif
+MODULE_OF_TABLE(storm_device_id);
 
 static struct platform_driver storm_platform_driver = {
 	.driver = {

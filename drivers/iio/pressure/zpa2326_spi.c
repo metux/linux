@@ -70,13 +70,11 @@ static const struct spi_device_id zpa2326_spi_ids[] = {
 };
 MODULE_DEVICE_TABLE(spi, zpa2326_spi_ids);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id zpa2326_spi_matches[] = {
 	{ .compatible = "murata,zpa2326" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, zpa2326_spi_matches);
-#endif
+MODULE_OF_TABLE(zpa2326_spi_matches);
 
 static struct spi_driver zpa2326_spi_driver = {
 	.driver = {

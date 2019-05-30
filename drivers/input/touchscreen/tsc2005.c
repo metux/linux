@@ -69,13 +69,11 @@ static int tsc2005_remove(struct spi_device *spi)
 	return tsc200x_remove(&spi->dev);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id tsc2005_of_match[] = {
 	{ .compatible = "ti,tsc2005" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, tsc2005_of_match);
-#endif
+MODULE_OF_TABLE(tsc2005_of_match);
 
 static struct spi_driver tsc2005_driver = {
 	.driver	= {

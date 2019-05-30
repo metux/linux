@@ -2632,13 +2632,11 @@ static const struct i2c_device_id nau8825_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, nau8825_i2c_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id nau8825_of_ids[] = {
 	{ .compatible = "nuvoton,nau8825", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, nau8825_of_ids);
-#endif
+MODULE_OF_TABLE(nau8825_of_ids);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id nau8825_acpi_match[] = {

@@ -400,14 +400,12 @@ static int mpc5121_rtc_remove(struct platform_device *op)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id mpc5121_rtc_match[] = {
 	{ .compatible = "fsl,mpc5121-rtc", },
 	{ .compatible = "fsl,mpc5200-rtc", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, mpc5121_rtc_match);
-#endif
+MODULE_OF_TABLE(mpc5121_rtc_match);
 
 static struct platform_driver mpc5121_rtc_driver = {
 	.driver = {

@@ -128,13 +128,8 @@ static void mtk_remove(struct serdev_device *serdev)
 	gnss_serial_free(gserial);
 };
 
-#ifdef CONFIG_OF
-static const struct of_device_id mtk_of_match[] = {
-	{ .compatible = "globaltop,pa6h" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, mtk_of_match);
-#endif
+MODULE_DECLARE_OF_TABLE(mtk_of_match,
+	{ .compatible = "globaltop,pa6h" });
 
 static struct serdev_device_driver mtk_driver = {
 	.driver	= {

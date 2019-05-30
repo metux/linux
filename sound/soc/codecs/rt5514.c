@@ -1212,13 +1212,11 @@ static const struct i2c_device_id rt5514_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt5514_i2c_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id rt5514_of_match[] = {
 	{ .compatible = "realtek,rt5514", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt5514_of_match);
-#endif
+MODULE_OF_TABLE(rt5514_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5514_acpi_match[] = {

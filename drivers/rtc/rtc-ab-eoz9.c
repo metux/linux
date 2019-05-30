@@ -436,13 +436,11 @@ err:
 	return ret;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id abeoz9_dt_match[] = {
 	{ .compatible = "abracon,abeoz9" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, abeoz9_dt_match);
-#endif
+MODULE_OF_TABLE(abeoz9_dt_match);
 
 static const struct i2c_device_id abeoz9_id[] = {
 	{ "abeoz9", 0 },

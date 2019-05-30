@@ -1332,13 +1332,11 @@ static const struct i2c_device_id rt5616_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt5616_i2c_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id rt5616_of_match[] = {
 	{ .compatible = "realtek,rt5616", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt5616_of_match);
-#endif
+MODULE_OF_TABLE(rt5616_of_match);
 
 static int rt5616_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)

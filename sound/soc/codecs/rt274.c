@@ -1093,13 +1093,11 @@ static const struct regmap_config rt274_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(rt274_reg),
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id rt274_of_match[] = {
 	{.compatible = "realtek,rt274"},
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt274_of_match);
-#endif
+MODULE_OF_TABLE(rt274_of_match);
 
 static const struct i2c_device_id rt274_i2c_id[] = {
 	{"rt274", 0},
@@ -1223,9 +1221,7 @@ static struct i2c_driver rt274_i2c_driver = {
 	.driver = {
 		   .name = "rt274",
 		   .acpi_match_table = ACPI_PTR(rt274_acpi_match),
-#ifdef CONFIG_OF
-		   .of_match_table = of_match_ptr(rt274_of_match),
-#endif
+		.of_match_table = of_match_ptr(rt274_of_match),
 		   },
 	.probe = rt274_i2c_probe,
 	.remove = rt274_i2c_remove,

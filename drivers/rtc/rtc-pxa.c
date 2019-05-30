@@ -376,13 +376,11 @@ static int __exit pxa_rtc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pxa_rtc_dt_ids[] = {
 	{ .compatible = "marvell,pxa-rtc" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, pxa_rtc_dt_ids);
-#endif
+MODULE_OF_TABLE(pxa_rtc_dt_ids);
 
 #ifdef CONFIG_PM_SLEEP
 static int pxa_rtc_suspend(struct device *dev)

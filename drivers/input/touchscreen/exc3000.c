@@ -199,13 +199,11 @@ static const struct i2c_device_id exc3000_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, exc3000_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id exc3000_of_match[] = {
 	{ .compatible = "eeti,exc3000" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, exc3000_of_match);
-#endif
+MODULE_OF_TABLE(exc3000_of_match);
 
 static struct i2c_driver exc3000_driver = {
 	.driver = {

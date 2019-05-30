@@ -382,13 +382,11 @@ static int sis_ts_probe(struct i2c_client *client,
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id sis_ts_dt_ids[] = {
 	{ .compatible = "sis,9200-ts" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, sis_ts_dt_ids);
-#endif
+MODULE_OF_TABLE(sis_ts_dt_ids);
 
 static const struct i2c_device_id sis_ts_id[] = {
 	{ SIS_I2C_NAME,	0 },

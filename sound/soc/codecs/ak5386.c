@@ -154,13 +154,11 @@ static struct snd_soc_dai_driver ak5386_dai = {
 	.ops	= &ak5386_dai_ops,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id ak5386_dt_ids[] = {
 	{ .compatible = "asahi-kasei,ak5386", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ak5386_dt_ids);
-#endif
+MODULE_OF_TABLE(ak5386_dt_ids);
 
 static int ak5386_probe(struct platform_device *pdev)
 {

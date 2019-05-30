@@ -2113,7 +2113,6 @@ static const struct regmap_config wm8904_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(wm8904_reg_defaults),
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id wm8904_of_match[] = {
 	{
 		.compatible = "wlf,wm8904",
@@ -2125,8 +2124,7 @@ static const struct of_device_id wm8904_of_match[] = {
 		/* sentinel */
 	}
 };
-MODULE_DEVICE_TABLE(of, wm8904_of_match);
-#endif
+MODULE_OF_TABLE(wm8904_of_match);
 
 static int wm8904_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)

@@ -34,13 +34,11 @@ static const struct i2c_device_id pcm3060_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pcm3060_i2c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcm3060_of_match[] = {
 	{ .compatible = "ti,pcm3060" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, pcm3060_of_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(pcm3060_of_match);
 
 static struct i2c_driver pcm3060_i2c_driver = {
 	.driver = {

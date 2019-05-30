@@ -1202,7 +1202,6 @@ static const struct i2c_device_id tvp514x_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, tvp514x_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tvp514x_of_match[] = {
 	{ .compatible = "ti,tvp5146", },
 	{ .compatible = "ti,tvp5146m2", },
@@ -1210,8 +1209,7 @@ static const struct of_device_id tvp514x_of_match[] = {
 	{ .compatible = "ti,tvp5147m1", },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(of, tvp514x_of_match);
-#endif
+MODULE_OF_TABLE(tvp514x_of_match);
 
 static struct i2c_driver tvp514x_driver = {
 	.driver = {

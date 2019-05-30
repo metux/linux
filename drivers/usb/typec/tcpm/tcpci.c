@@ -593,13 +593,11 @@ static const struct i2c_device_id tcpci_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tcpci_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id tcpci_of_match[] = {
 	{ .compatible = "nxp,ptn5110", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tcpci_of_match);
-#endif
+MODULE_OF_TABLE(tcpci_of_match);
 
 static struct i2c_driver tcpci_i2c_driver = {
 	.driver = {

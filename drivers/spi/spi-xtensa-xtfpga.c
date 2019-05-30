@@ -147,13 +147,11 @@ static int xtfpga_spi_remove(struct platform_device *pdev)
 
 MODULE_ALIAS("platform:" XTFPGA_SPI_NAME);
 
-#ifdef CONFIG_OF
 static const struct of_device_id xtfpga_spi_of_match[] = {
 	{ .compatible = "cdns,xtfpga-spi", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, xtfpga_spi_of_match);
-#endif
+MODULE_OF_TABLE(xtfpga_spi_of_match);
 
 static struct platform_driver xtfpga_spi_driver = {
 	.probe = xtfpga_spi_probe,

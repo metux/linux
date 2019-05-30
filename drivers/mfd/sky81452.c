@@ -78,13 +78,11 @@ static const struct i2c_device_id sky81452_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, sky81452_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id sky81452_of_match[] = {
 	{ .compatible = "skyworks,sky81452", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, sky81452_of_match);
-#endif
+MODULE_OF_TABLE(sky81452_of_match);
 
 static struct i2c_driver sky81452_driver = {
 	.driver = {

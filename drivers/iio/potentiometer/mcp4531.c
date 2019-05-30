@@ -275,8 +275,6 @@ static const struct i2c_device_id mcp4531_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mcp4531_id);
 
-#ifdef CONFIG_OF
-
 #define MCP4531_COMPATIBLE(of_compatible, cfg) {	\
 			.compatible = of_compatible,	\
 			.data = &mcp4531_cfg[cfg],	\
@@ -349,8 +347,7 @@ static const struct of_device_id mcp4531_of_match[] = {
 	MCP4531_COMPATIBLE("microchip,mcp4662-104", MCP466x_104),
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, mcp4531_of_match);
-#endif
+MODULE_OF_TABLE(mcp4531_of_match);
 
 static int mcp4531_probe(struct i2c_client *client)
 {

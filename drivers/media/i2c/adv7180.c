@@ -1473,7 +1473,6 @@ static SIMPLE_DEV_PM_OPS(adv7180_pm_ops, adv7180_suspend, adv7180_resume);
 #define ADV7180_PM_OPS NULL
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id adv7180_of_id[] = {
 	{ .compatible = "adi,adv7180", },
 	{ .compatible = "adi,adv7180cp", },
@@ -1488,9 +1487,7 @@ static const struct of_device_id adv7180_of_id[] = {
 	{ .compatible = "adi,adv7282-m", },
 	{ },
 };
-
-MODULE_DEVICE_TABLE(of, adv7180_of_id);
-#endif
+MODULE_OF_TABLE(adv7180_of_id);
 
 static struct i2c_driver adv7180_driver = {
 	.driver = {

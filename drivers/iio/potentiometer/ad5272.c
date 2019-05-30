@@ -193,7 +193,6 @@ static int ad5272_probe(struct i2c_client *client,
 	return devm_iio_device_register(dev, indio_dev);
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id ad5272_dt_ids[] = {
 	{ .compatible = "adi,ad5272-020", .data = (void *)AD5272_020 },
 	{ .compatible = "adi,ad5272-050", .data = (void *)AD5272_050 },
@@ -202,8 +201,7 @@ static const struct of_device_id ad5272_dt_ids[] = {
 	{ .compatible = "adi,ad5274-100", .data = (void *)AD5274_100 },
 	{}
 };
-MODULE_DEVICE_TABLE(of, ad5272_dt_ids);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(ad5272_dt_ids);
 
 static const struct i2c_device_id ad5272_id[] = {
 	{ "ad5272-020", AD5272_020 },

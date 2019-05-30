@@ -733,16 +733,10 @@ static int atmel_ecc_remove(struct i2c_client *client)
 	return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id atmel_ecc_dt_ids[] = {
-	{
-		.compatible = "atmel,atecc508a",
-	}, {
-		/* sentinel */
-	}
-};
-MODULE_DEVICE_TABLE(of, atmel_ecc_dt_ids);
-#endif
+MODULE_DECLARE_OF_TABLE(atmel_ecc_dt_ids,
+	{ .compatible = "atmel,atecc508a" });
+
+MODULE_OF_TABLE(atmel_ecc_dt_ids);
 
 static const struct i2c_device_id atmel_ecc_id[] = {
 	{ "atecc508a", 0 },

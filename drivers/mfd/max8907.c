@@ -304,13 +304,11 @@ static int max8907_i2c_remove(struct i2c_client *i2c)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id max8907_of_match[] = {
 	{ .compatible = "maxim,max8907" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, max8907_of_match);
-#endif
+MODULE_OF_TABLE(max8907_of_match);
 
 static const struct i2c_device_id max8907_i2c_id[] = {
 	{"max8907", 0},

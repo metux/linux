@@ -467,13 +467,11 @@ static const struct spi_device_id ad5446_spi_ids[] = {
 };
 MODULE_DEVICE_TABLE(spi, ad5446_spi_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id ad5446_of_ids[] = {
 	{ .compatible = "ti,dac7512" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ad5446_of_ids);
-#endif
+MODULE_OF_TABLE(ad5446_of_ids);
 
 static int ad5446_spi_probe(struct spi_device *spi)
 {

@@ -488,14 +488,12 @@ static int isp1704_charger_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id omap_isp1704_of_match[] = {
 	{ .compatible = "nxp,isp1704", },
 	{ .compatible = "nxp,isp1707", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, omap_isp1704_of_match);
-#endif
+MODULE_OF_TABLE(omap_isp1704_of_match);
 
 static struct platform_driver isp1704_charger_driver = {
 	.driver = {

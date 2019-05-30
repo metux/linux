@@ -162,13 +162,11 @@ static int ingenic_battery_probe(struct platform_device *pdev)
 	return ingenic_battery_set_scale(bat);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ingenic_battery_of_match[] = {
 	{ .compatible = "ingenic,jz4740-battery", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, ingenic_battery_of_match);
-#endif
+MODULE_OF_TABLE(ingenic_battery_of_match);
 
 static struct platform_driver ingenic_battery_driver = {
 	.driver = {

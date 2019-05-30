@@ -332,12 +332,10 @@ static const struct dev_pm_ops uio_dmem_genirq_dev_pm_ops = {
 	.runtime_resume = uio_dmem_genirq_runtime_nop,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id uio_of_genirq_match[] = {
 	{ /* empty for now */ },
 };
-MODULE_DEVICE_TABLE(of, uio_of_genirq_match);
-#endif
+MODULE_OF_TABLE(uio_of_genirq_match);
 
 static struct platform_driver uio_dmem_genirq = {
 	.probe = uio_dmem_genirq_probe,

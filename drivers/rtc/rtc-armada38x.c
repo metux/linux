@@ -482,7 +482,6 @@ static const struct armada38x_rtc_data armada8k_data = {
 	.alarm = ALARM2,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id armada38x_rtc_of_match_table[] = {
 	{
 		.compatible = "marvell,armada-380-rtc",
@@ -494,8 +493,7 @@ static const struct of_device_id armada38x_rtc_of_match_table[] = {
 	},
 	{}
 };
-MODULE_DEVICE_TABLE(of, armada38x_rtc_of_match_table);
-#endif
+MODULE_OF_TABLE(armada38x_rtc_of_match_table);
 
 static __init int armada38x_rtc_probe(struct platform_device *pdev)
 {

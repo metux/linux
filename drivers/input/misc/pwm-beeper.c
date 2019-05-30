@@ -238,13 +238,11 @@ static int __maybe_unused pwm_beeper_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(pwm_beeper_pm_ops,
 			 pwm_beeper_suspend, pwm_beeper_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pwm_beeper_match[] = {
 	{ .compatible = "pwm-beeper", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, pwm_beeper_match);
-#endif
+MODULE_OF_TABLE(pwm_beeper_match);
 
 static struct platform_driver pwm_beeper_driver = {
 	.probe	= pwm_beeper_probe,

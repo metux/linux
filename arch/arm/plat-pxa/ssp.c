@@ -97,19 +97,14 @@ void pxa_ssp_free(struct ssp_device *ssp)
 }
 EXPORT_SYMBOL(pxa_ssp_free);
 
-#ifdef CONFIG_OF
-static const struct of_device_id pxa_ssp_of_ids[] = {
+MODULE_DECLARE_OF_TABLE(pxa_ssp_of_ids,
 	{ .compatible = "mrvl,pxa25x-ssp",	.data = (void *) PXA25x_SSP },
 	{ .compatible = "mvrl,pxa25x-nssp",	.data = (void *) PXA25x_NSSP },
 	{ .compatible = "mrvl,pxa27x-ssp",	.data = (void *) PXA27x_SSP },
 	{ .compatible = "mrvl,pxa3xx-ssp",	.data = (void *) PXA3xx_SSP },
 	{ .compatible = "mvrl,pxa168-ssp",	.data = (void *) PXA168_SSP },
 	{ .compatible = "mrvl,pxa910-ssp",	.data = (void *) PXA910_SSP },
-	{ .compatible = "mrvl,ce4100-ssp",	.data = (void *) CE4100_SSP },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, pxa_ssp_of_ids);
-#endif
+	{ .compatible = "mrvl,ce4100-ssp",	.data = (void *) CE4100_SSP });
 
 static int pxa_ssp_probe(struct platform_device *pdev)
 {

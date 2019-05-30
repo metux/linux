@@ -526,13 +526,11 @@ static int si470x_i2c_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(si470x_i2c_pm, si470x_i2c_suspend, si470x_i2c_resume);
 #endif
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id si470x_of_match[] = {
 	{ .compatible = "silabs,si470x" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, si470x_of_match);
-#endif
+MODULE_OF_TABLE(si470x_of_match);
 
 /*
  * si470x_i2c_driver - i2c driver interface

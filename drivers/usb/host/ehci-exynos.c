@@ -295,13 +295,11 @@ static const struct dev_pm_ops exynos_ehci_pm_ops = {
 	.resume		= exynos_ehci_resume,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id exynos_ehci_match[] = {
 	{ .compatible = "samsung,exynos4210-ehci" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, exynos_ehci_match);
-#endif
+MODULE_OF_TABLE(exynos_ehci_match);
 
 static struct platform_driver exynos_ehci_driver = {
 	.probe		= exynos_ehci_probe,

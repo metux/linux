@@ -51,13 +51,11 @@ static int ics43432_probe(struct platform_device *pdev)
 			&ics43432_dai, 1);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ics43432_ids[] = {
 	{ .compatible = "invensense,ics43432", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ics43432_ids);
-#endif
+MODULE_OF_TABLE(ics43432_ids);
 
 static struct platform_driver ics43432_driver = {
 	.driver = {

@@ -329,13 +329,11 @@ static int sky81452_bl_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id sky81452_bl_of_match[] = {
 	{ .compatible = "skyworks,sky81452-backlight", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, sky81452_bl_of_match);
-#endif
+MODULE_OF_TABLE(sky81452_bl_of_match);
 
 static struct platform_driver sky81452_bl_driver = {
 	.driver = {

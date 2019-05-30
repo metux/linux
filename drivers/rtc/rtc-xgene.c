@@ -262,13 +262,11 @@ static int __maybe_unused xgene_rtc_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(xgene_rtc_pm_ops, xgene_rtc_suspend, xgene_rtc_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id xgene_rtc_of_match[] = {
 	{.compatible = "apm,xgene-rtc" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, xgene_rtc_of_match);
-#endif
+MODULE_OF_TABLE(xgene_rtc_of_match);
 
 static struct platform_driver xgene_rtc_driver = {
 	.probe		= xgene_rtc_probe,

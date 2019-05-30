@@ -17,7 +17,6 @@
 #include <linux/iio/common/st_sensors_i2c.h>
 #include "st_magn.h"
 
-#ifdef CONFIG_OF
 static const struct of_device_id st_magn_of_match[] = {
 	{
 		.compatible = "st,lsm303dlh-magn",
@@ -49,10 +48,7 @@ static const struct of_device_id st_magn_of_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, st_magn_of_match);
-#else
-#define st_magn_of_match NULL
-#endif
+MODULE_OF_TABLE(st_magn_of_match);
 
 static int st_magn_i2c_probe(struct i2c_client *client,
 						const struct i2c_device_id *id)
@@ -66,7 +62,7 @@ static int st_magn_i2c_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	mdata = iio_priv(indio_dev);
-	st_sensors_of_name_probe(&client->dev, st_magn_of_match,
+	st_sensors_of_name_probe(&client->dev, of_match_ptr(st_magn_of_match),
 				 client->name, sizeof(client->name));
 
 	st_sensors_i2c_configure(indio_dev, client, mdata);

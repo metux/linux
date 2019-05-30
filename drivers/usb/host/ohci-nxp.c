@@ -241,13 +241,11 @@ static int ohci_hcd_nxp_remove(struct platform_device *pdev)
 /* work with hotplug and coldplug */
 MODULE_ALIAS("platform:usb-ohci");
 
-#ifdef CONFIG_OF
 static const struct of_device_id ohci_hcd_nxp_match[] = {
 	{ .compatible = "nxp,ohci-nxp" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, ohci_hcd_nxp_match);
-#endif
+MODULE_OF_TABLE(ohci_hcd_nxp_match);
 
 static struct platform_driver ohci_hcd_nxp_driver = {
 	.driver = {

@@ -328,7 +328,6 @@ static struct tps62360_regulator_platform_data *
 	return pdata;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id tps62360_of_match[] = {
 	 { .compatible = "ti,tps62360", .data = (void *)TPS62360},
 	 { .compatible = "ti,tps62361", .data = (void *)TPS62361},
@@ -336,8 +335,7 @@ static const struct of_device_id tps62360_of_match[] = {
 	 { .compatible = "ti,tps62363", .data = (void *)TPS62363},
 	{},
 };
-MODULE_DEVICE_TABLE(of, tps62360_of_match);
-#endif
+MODULE_OF_TABLE(tps62360_of_match);
 
 static int tps62360_probe(struct i2c_client *client,
 				     const struct i2c_device_id *id)

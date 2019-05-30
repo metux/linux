@@ -122,13 +122,11 @@ static int max98357a_platform_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id max98357a_device_id[] = {
 	{ .compatible = "maxim,max98357a" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, max98357a_device_id);
-#endif
+MODULE_OF_TABLE(max98357a_device_id);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id max98357a_acpi_match[] = {

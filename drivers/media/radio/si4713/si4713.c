@@ -1647,13 +1647,11 @@ static const struct i2c_device_id si4713_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, si4713_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id si4713_of_match[] = {
 	{ .compatible = "silabs,si4713" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, si4713_of_match);
-#endif
+MODULE_OF_TABLE(si4713_of_match);
 
 static struct i2c_driver si4713_i2c_driver = {
 	.driver		= {

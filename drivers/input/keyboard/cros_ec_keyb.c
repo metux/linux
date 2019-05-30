@@ -641,13 +641,11 @@ static int cros_ec_keyb_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id cros_ec_keyb_of_match[] = {
 	{ .compatible = "google,cros-ec-keyb" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, cros_ec_keyb_of_match);
-#endif
+MODULE_OF_TABLE(cros_ec_keyb_of_match);
 
 static SIMPLE_DEV_PM_OPS(cros_ec_keyb_pm_ops, NULL, cros_ec_keyb_resume);
 

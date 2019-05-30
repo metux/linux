@@ -340,14 +340,12 @@ static int sa1100_rtc_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(sa1100_rtc_pm_ops, sa1100_rtc_suspend,
 			sa1100_rtc_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id sa1100_rtc_dt_ids[] = {
 	{ .compatible = "mrvl,sa1100-rtc", },
 	{ .compatible = "mrvl,mmp-rtc", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, sa1100_rtc_dt_ids);
-#endif
+MODULE_OF_TABLE(sa1100_rtc_dt_ids);
 
 static struct platform_driver sa1100_rtc_driver = {
 	.probe		= sa1100_rtc_probe,

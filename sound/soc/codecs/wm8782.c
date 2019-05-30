@@ -126,13 +126,11 @@ static int wm8782_probe(struct platform_device *pdev)
 			&soc_component_dev_wm8782, &wm8782_dai, 1);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id wm8782_of_match[] = {
 	{ .compatible = "wlf,wm8782", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, wm8782_of_match);
-#endif
+MODULE_OF_TABLE(wm8782_of_match);
 
 static struct platform_driver wm8782_codec_driver = {
 	.driver = {

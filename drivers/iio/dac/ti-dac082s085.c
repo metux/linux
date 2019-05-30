@@ -328,7 +328,6 @@ static int ti_dac_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ti_dac_of_id[] = {
 	{ .compatible = "ti,dac082s085" },
 	{ .compatible = "ti,dac102s085" },
@@ -338,8 +337,7 @@ static const struct of_device_id ti_dac_of_id[] = {
 	{ .compatible = "ti,dac124s085" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ti_dac_of_id);
-#endif
+MODULE_OF_TABLE(ti_dac_of_id);
 
 static const struct spi_device_id ti_dac_spi_id[] = {
 	{ "dac082s085", dual_8bit  },

@@ -523,7 +523,6 @@ static const struct i2c_device_id mcp4725_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mcp4725_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id mcp4725_of_match[] = {
 	{
 		.compatible = "microchip,mcp4725",
@@ -535,8 +534,7 @@ static const struct of_device_id mcp4725_of_match[] = {
 	},
 	{ }
 };
-MODULE_DEVICE_TABLE(of, mcp4725_of_match);
-#endif
+MODULE_OF_TABLE(mcp4725_of_match);
 
 static struct i2c_driver mcp4725_driver = {
 	.driver = {

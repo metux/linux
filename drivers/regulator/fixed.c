@@ -189,13 +189,11 @@ static int reg_fixed_voltage_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id fixed_of_match[] = {
 	{ .compatible = "regulator-fixed", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, fixed_of_match);
-#endif
+MODULE_OF_TABLE(fixed_of_match);
 
 static struct platform_driver regulator_fixed_voltage_driver = {
 	.probe		= reg_fixed_voltage_probe,

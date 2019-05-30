@@ -394,14 +394,11 @@ static int __exit at91wdt_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id at91_wdt_dt_ids[] = {
 	{ .compatible = "atmel,at91sam9260-wdt" },
 	{ /* sentinel */ }
 };
-
-MODULE_DEVICE_TABLE(of, at91_wdt_dt_ids);
-#endif
+MODULE_OF_TABLE(at91_wdt_dt_ids);
 
 static struct platform_driver at91wdt_driver = {
 	.remove		= __exit_p(at91wdt_remove),

@@ -561,13 +561,11 @@ static const struct acpi_device_id pca9685_acpi_ids[] = {
 MODULE_DEVICE_TABLE(acpi, pca9685_acpi_ids);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id pca9685_dt_ids[] = {
 	{ .compatible = "nxp,pca9685-pwm", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, pca9685_dt_ids);
-#endif
+MODULE_OF_TABLE(pca9685_dt_ids);
 
 static const struct dev_pm_ops pca9685_pwm_pm = {
 	SET_RUNTIME_PM_OPS(pca9685_pwm_runtime_suspend,

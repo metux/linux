@@ -143,14 +143,12 @@ static const struct watchdog_ops jz4740_wdt_ops = {
 	.restart = jz4740_wdt_restart,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id jz4740_wdt_of_matches[] = {
 	{ .compatible = "ingenic,jz4740-watchdog", },
 	{ .compatible = "ingenic,jz4780-watchdog", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, jz4740_wdt_of_matches);
-#endif
+MODULE_OF_TABLE(jz4740_wdt_of_matches);
 
 static int jz4740_wdt_probe(struct platform_device *pdev)
 {

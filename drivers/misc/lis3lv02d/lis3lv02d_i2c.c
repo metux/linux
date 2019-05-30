@@ -105,13 +105,11 @@ static int lis3_i2c_init(struct lis3lv02d *lis3)
 static union axis_conversion lis3lv02d_axis_map =
 	{ .as_array = { LIS3_DEV_X, LIS3_DEV_Y, LIS3_DEV_Z } };
 
-#ifdef CONFIG_OF
 static const struct of_device_id lis3lv02d_i2c_dt_ids[] = {
 	{ .compatible = "st,lis3lv02d" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, lis3lv02d_i2c_dt_ids);
-#endif
+MODULE_OF_TABLE(lis3lv02d_i2c_dt_ids);
 
 static int lis3lv02d_i2c_probe(struct i2c_client *client,
 					const struct i2c_device_id *id)

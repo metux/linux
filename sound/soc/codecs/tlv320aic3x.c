@@ -1899,7 +1899,6 @@ static int aic3x_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id tlv320aic3x_of_match[] = {
 	{ .compatible = "ti,tlv320aic3x", },
 	{ .compatible = "ti,tlv320aic33" },
@@ -1908,8 +1907,7 @@ static const struct of_device_id tlv320aic3x_of_match[] = {
 	{ .compatible = "ti,tlv320aic3104" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tlv320aic3x_of_match);
-#endif
+MODULE_OF_TABLE(tlv320aic3x_of_match);
 
 /* machine i2c codec control layer */
 static struct i2c_driver aic3x_i2c_driver = {

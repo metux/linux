@@ -262,13 +262,11 @@ static const struct dev_pm_ops exynos_ohci_pm_ops = {
 	.resume		= exynos_ohci_resume,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id exynos_ohci_match[] = {
 	{ .compatible = "samsung,exynos4210-ohci" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, exynos_ohci_match);
-#endif
+MODULE_OF_TABLE(exynos_ohci_match);
 
 static struct platform_driver exynos_ohci_driver = {
 	.probe		= exynos_ohci_probe,

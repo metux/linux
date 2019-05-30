@@ -473,7 +473,6 @@ static int mcp320x_remove(struct spi_device *spi)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id mcp320x_dt_ids[] = {
 	/* NOTE: The use of compatibles with no vendor prefix is deprecated. */
 	{ .compatible = "mcp3001" },
@@ -500,8 +499,7 @@ static const struct of_device_id mcp320x_dt_ids[] = {
 	{ .compatible = "microchip,mcp3553" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, mcp320x_dt_ids);
-#endif
+MODULE_OF_TABLE(mcp320x_dt_ids);
 
 static const struct spi_device_id mcp320x_id[] = {
 	{ "mcp3001", mcp3001 },

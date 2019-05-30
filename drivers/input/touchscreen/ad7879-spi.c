@@ -46,13 +46,11 @@ static int ad7879_spi_probe(struct spi_device *spi)
 	return ad7879_probe(&spi->dev, regmap, spi->irq, BUS_SPI, AD7879_DEVID);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ad7879_spi_dt_ids[] = {
 	{ .compatible = "adi,ad7879", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, ad7879_spi_dt_ids);
-#endif
+MODULE_OF_TABLE(ad7879_spi_dt_ids);
 
 static struct spi_driver ad7879_spi_driver = {
 	.driver = {

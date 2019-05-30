@@ -746,13 +746,11 @@ static const struct i2c_device_id tas2552_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, tas2552_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tas2552_of_match[] = {
 	{ .compatible = "ti,tas2552", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tas2552_of_match);
-#endif
+MODULE_OF_TABLE(tas2552_of_match);
 
 static struct i2c_driver tas2552_i2c_driver = {
 	.driver = {

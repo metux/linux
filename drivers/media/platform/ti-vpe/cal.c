@@ -1925,13 +1925,11 @@ static int cal_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id cal_of_match[] = {
 	{ .compatible = "ti,dra72-cal", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, cal_of_match);
-#endif
+MODULE_OF_TABLE(cal_of_match);
 
 static struct platform_driver cal_pdrv = {
 	.probe		= cal_probe,

@@ -196,13 +196,11 @@ static int ds1302_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ds1302_dt_ids[] = {
 	{ .compatible = "maxim,ds1302", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, ds1302_dt_ids);
-#endif
+MODULE_OF_TABLE(ds1302_dt_ids);
 
 static struct spi_driver ds1302_driver = {
 	.driver.name	= "rtc-ds1302",

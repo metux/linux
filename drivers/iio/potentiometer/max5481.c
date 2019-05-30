@@ -121,7 +121,6 @@ static const struct iio_info max5481_info = {
 	.write_raw = max5481_write_raw,
 };
 
-#if defined(CONFIG_OF)
 static const struct of_device_id max5481_match[] = {
 	{ .compatible = "maxim,max5481", .data = &max5481_cfg[max5481] },
 	{ .compatible = "maxim,max5482", .data = &max5481_cfg[max5482] },
@@ -129,8 +128,7 @@ static const struct of_device_id max5481_match[] = {
 	{ .compatible = "maxim,max5484", .data = &max5481_cfg[max5484] },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, max5481_match);
-#endif
+MODULE_OF_TABLE(max5481_match);
 
 static int max5481_probe(struct spi_device *spi)
 {

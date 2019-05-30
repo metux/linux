@@ -589,7 +589,6 @@ static const struct i2c_device_id pixcir_i2c_ts_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pixcir_i2c_ts_id);
 
-#ifdef CONFIG_OF
 static const struct pixcir_i2c_chip_data pixcir_ts_data = {
 	.max_fingers = 2,
 	/* no hw id support */
@@ -605,8 +604,7 @@ static const struct of_device_id pixcir_of_match[] = {
 	{ .compatible = "pixcir,pixcir_tangoc", .data = &pixcir_tangoc_data },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pixcir_of_match);
-#endif
+MODULE_OF_TABLE(pixcir_of_match);
 
 static struct i2c_driver pixcir_i2c_ts_driver = {
 	.driver = {

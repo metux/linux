@@ -212,13 +212,11 @@ static int lpc32xx_adc_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id lpc32xx_adc_match[] = {
 	{ .compatible = "nxp,lpc3220-adc" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, lpc32xx_adc_match);
-#endif
+MODULE_OF_TABLE(lpc32xx_adc_match);
 
 static struct platform_driver lpc32xx_adc_driver = {
 	.probe		= lpc32xx_adc_probe,

@@ -342,14 +342,12 @@ static int twl_pwm_remove(struct platform_device *pdev)
 	return pwmchip_remove(&twl->chip);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id twl_pwm_of_match[] = {
 	{ .compatible = "ti,twl4030-pwm" },
 	{ .compatible = "ti,twl6030-pwm" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, twl_pwm_of_match);
-#endif
+MODULE_OF_TABLE(twl_pwm_of_match);
 
 static struct platform_driver twl_pwm_driver = {
 	.driver = {

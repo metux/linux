@@ -303,13 +303,11 @@ static int __exit mv_rtc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id rtc_mv_of_match_table[] = {
 	{ .compatible = "marvell,orion-rtc", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, rtc_mv_of_match_table);
-#endif
+MODULE_OF_TABLE(rtc_mv_of_match_table);
 
 static struct platform_driver mv_rtc_driver = {
 	.remove		= __exit_p(mv_rtc_remove),

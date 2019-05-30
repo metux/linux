@@ -566,13 +566,8 @@ static const struct i2c_device_id jc42_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, jc42_id);
 
-#ifdef CONFIG_OF
-static const struct of_device_id jc42_of_ids[] = {
-	{ .compatible = "jedec,jc-42.4-temp", },
-	{ }
-};
-MODULE_DEVICE_TABLE(of, jc42_of_ids);
-#endif
+MODULE_DECLARE_OF_TABLE(jc42_of_ids,
+	{ .compatible = "jedec,jc-42.4-temp", });
 
 static struct i2c_driver jc42_driver = {
 	.class		= I2C_CLASS_SPD | I2C_CLASS_HWMON,

@@ -498,13 +498,11 @@ static int db8500_thermal_resume(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id db8500_thermal_match[] = {
 	{ .compatible = "stericsson,db8500-thermal" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, db8500_thermal_match);
-#endif
+MODULE_OF_TABLE(db8500_thermal_match);
 
 static struct platform_driver db8500_thermal_driver = {
 	.driver = {

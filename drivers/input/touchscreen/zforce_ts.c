@@ -939,13 +939,11 @@ static struct i2c_device_id zforce_idtable[] = {
 };
 MODULE_DEVICE_TABLE(i2c, zforce_idtable);
 
-#ifdef CONFIG_OF
 static const struct of_device_id zforce_dt_idtable[] = {
 	{ .compatible = "neonode,zforce" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, zforce_dt_idtable);
-#endif
+MODULE_OF_TABLE(zforce_dt_idtable);
 
 static struct i2c_driver zforce_driver = {
 	.driver = {

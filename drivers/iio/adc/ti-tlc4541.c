@@ -238,14 +238,12 @@ static int tlc4541_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id tlc4541_dt_ids[] = {
 	{ .compatible = "ti,tlc3541", },
 	{ .compatible = "ti,tlc4541", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, tlc4541_dt_ids);
-#endif
+MODULE_OF_TABLE(tlc4541_dt_ids);
 
 static const struct spi_device_id tlc4541_id[] = {
 	{"tlc3541", TLC3541},

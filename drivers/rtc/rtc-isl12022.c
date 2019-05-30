@@ -256,14 +256,12 @@ static int isl12022_probe(struct i2c_client *client,
 	return PTR_ERR_OR_ZERO(isl12022->rtc);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id isl12022_dt_match[] = {
 	{ .compatible = "isl,isl12022" }, /* for backward compat., don't use */
 	{ .compatible = "isil,isl12022" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, isl12022_dt_match);
-#endif
+MODULE_OF_TABLE(isl12022_dt_match);
 
 static const struct i2c_device_id isl12022_id[] = {
 	{ "isl12022", 0 },

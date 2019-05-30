@@ -4949,14 +4949,12 @@ static void rt5665_i2c_shutdown(struct i2c_client *client)
 	regmap_write(rt5665->regmap, RT5665_RESET, 0);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id rt5665_of_match[] = {
 	{.compatible = "realtek,rt5665"},
 	{.compatible = "realtek,rt5666"},
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt5665_of_match);
-#endif
+MODULE_OF_TABLE(rt5665_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5665_acpi_match[] = {

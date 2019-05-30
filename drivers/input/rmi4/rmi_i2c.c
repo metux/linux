@@ -174,13 +174,11 @@ static const struct rmi_transport_ops rmi_i2c_ops = {
 	.read_block	= rmi_i2c_read_block,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id rmi_i2c_of_match[] = {
 	{ .compatible = "syna,rmi4-i2c" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, rmi_i2c_of_match);
-#endif
+MODULE_OF_TABLE(rmi_i2c_of_match);
 
 static void rmi_i2c_regulator_bulk_disable(void *data)
 {

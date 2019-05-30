@@ -438,7 +438,6 @@ static const struct sx865x_data sx8654_data = {
 	.irqh			= sx8654_irq,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id sx8654_of_match[] = {
 	{
 		.compatible = "semtech,sx8650",
@@ -455,8 +454,7 @@ static const struct of_device_id sx8654_of_match[] = {
 	},
 	{ }
 };
-MODULE_DEVICE_TABLE(of, sx8654_of_match);
-#endif
+MODULE_OF_TABLE(sx8654_of_match);
 
 static const struct i2c_device_id sx8654_id_table[] = {
 	{ .name = "semtech_sx8650", .driver_data = (long)&sx8650_data },

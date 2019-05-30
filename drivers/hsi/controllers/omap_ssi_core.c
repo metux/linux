@@ -616,23 +616,13 @@ static const struct dev_pm_ops omap_ssi_pm_ops = {
 #define DEV_PM_OPS     NULL
 #endif
 
-#ifdef CONFIG_OF
-static const struct of_device_id omap_ssi_of_match[] = {
-	{ .compatible = "ti,omap3-ssi", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, omap_ssi_of_match);
-#else
-#define omap_ssi_of_match NULL
-#endif
-
 static struct platform_driver ssi_pdriver = {
 	.probe = ssi_probe,
 	.remove	= ssi_remove,
 	.driver	= {
 		.name	= "omap_ssi",
 		.pm     = DEV_PM_OPS,
-		.of_match_table = omap_ssi_of_match,
+		.of_match_table = of_match_ptr(omap_ssi_of_match),
 	},
 };
 

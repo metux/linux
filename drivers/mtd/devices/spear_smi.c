@@ -1065,13 +1065,11 @@ static int spear_smi_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(spear_smi_pm_ops, spear_smi_suspend, spear_smi_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id spear_smi_id_table[] = {
 	{ .compatible = "st,spear600-smi" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, spear_smi_id_table);
-#endif
+MODULE_OF_TABLE(spear_smi_id_table);
 
 static struct platform_driver spear_smi_driver = {
 	.driver = {

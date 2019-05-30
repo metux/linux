@@ -50,14 +50,9 @@ static const struct acpi_device_id sp_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, sp_acpi_match);
 #endif
 
-#ifdef CONFIG_OF
-static const struct of_device_id sp_of_match[] = {
+MODULE_DECLARE_OF_TABLE(sp_of_match,
 	{ .compatible = "amd,ccp-seattle-v1a",
-	  .data = (const void *)&dev_vdata[0] },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, sp_of_match);
-#endif
+	  .data = (const void *)&dev_vdata[0] });
 
 static struct sp_dev_vdata *sp_get_of_version(struct platform_device *pdev)
 {

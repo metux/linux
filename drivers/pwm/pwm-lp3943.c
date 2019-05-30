@@ -291,13 +291,11 @@ static int lp3943_pwm_remove(struct platform_device *pdev)
 	return pwmchip_remove(&lp3943_pwm->chip);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id lp3943_pwm_of_match[] = {
 	{ .compatible = "ti,lp3943-pwm", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, lp3943_pwm_of_match);
-#endif
+MODULE_OF_TABLE(lp3943_pwm_of_match);
 
 static struct platform_driver lp3943_pwm_driver = {
 	.probe = lp3943_pwm_probe,

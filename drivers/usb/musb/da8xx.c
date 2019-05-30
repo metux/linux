@@ -626,15 +626,13 @@ static int da8xx_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(da8xx_pm_ops, da8xx_suspend, da8xx_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id da8xx_id_table[] = {
 	{
 		.compatible = "ti,da830-musb",
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, da8xx_id_table);
-#endif
+MODULE_OF_TABLE(da8xx_id_table);
 
 static struct platform_driver da8xx_driver = {
 	.probe		= da8xx_probe,

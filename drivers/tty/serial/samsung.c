@@ -2456,7 +2456,6 @@ static const struct platform_device_id s3c24xx_serial_driver_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, s3c24xx_serial_driver_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id s3c24xx_uart_dt_match[] = {
 	{ .compatible = "samsung,s3c2410-uart",
 		.data = (void *)S3C2410_SERIAL_DRV_DATA },
@@ -2474,8 +2473,7 @@ static const struct of_device_id s3c24xx_uart_dt_match[] = {
 		.data = (void *)EXYNOS5433_SERIAL_DRV_DATA },
 	{},
 };
-MODULE_DEVICE_TABLE(of, s3c24xx_uart_dt_match);
-#endif
+MODULE_OF_TABLE(s3c24xx_uart_dt_match);
 
 static struct platform_driver samsung_serial_driver = {
 	.probe		= s3c24xx_serial_probe,

@@ -88,7 +88,6 @@ static const struct pca9532_chip_info pca9532_chip_info_tbl[] = {
 	},
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id of_pca9532_leds_match[] = {
 	{ .compatible = "nxp,pca9530", .data = (void *)pca9530 },
 	{ .compatible = "nxp,pca9531", .data = (void *)pca9531 },
@@ -96,9 +95,7 @@ static const struct of_device_id of_pca9532_leds_match[] = {
 	{ .compatible = "nxp,pca9533", .data = (void *)pca9533 },
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, of_pca9532_leds_match);
-#endif
+MODULE_OF_TABLE(of_pca9532_leds_match);
 
 static struct i2c_driver pca9532_driver = {
 	.driver = {

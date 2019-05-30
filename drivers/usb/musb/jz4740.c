@@ -184,13 +184,11 @@ static int jz4740_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id jz4740_musb_of_match[] = {
 	{ .compatible = "ingenic,jz4740-musb" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, jz4740_musb_of_match);
-#endif
+MODULE_OF_TABLE(jz4740_musb_of_match);
 
 static struct platform_driver jz4740_driver = {
 	.probe		= jz4740_probe,

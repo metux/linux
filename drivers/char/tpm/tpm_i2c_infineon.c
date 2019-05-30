@@ -675,15 +675,10 @@ static const struct i2c_device_id tpm_tis_i2c_table[] = {
 
 MODULE_DEVICE_TABLE(i2c, tpm_tis_i2c_table);
 
-#ifdef CONFIG_OF
-static const struct of_device_id tpm_tis_i2c_of_match[] = {
+MODULE_DECLARE_OF_TABLE(tpm_tis_i2c_of_match,
 	{.compatible = "infineon,tpm_i2c_infineon"},
 	{.compatible = "infineon,slb9635tt"},
-	{.compatible = "infineon,slb9645tt"},
-	{},
-};
-MODULE_DEVICE_TABLE(of, tpm_tis_i2c_of_match);
-#endif
+	{.compatible = "infineon,slb9645tt"});
 
 static SIMPLE_DEV_PM_OPS(tpm_tis_i2c_ops, tpm_pm_suspend, tpm_pm_resume);
 

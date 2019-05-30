@@ -1602,14 +1602,12 @@ static const struct i2c_device_id ov965x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ov965x_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id ov965x_of_match[] = {
 	{ .compatible = "ovti,ov9650", },
 	{ .compatible = "ovti,ov9652", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, ov965x_of_match);
-#endif
+MODULE_OF_TABLE(ov965x_of_match);
 
 static struct i2c_driver ov965x_i2c_driver = {
 	.driver = {

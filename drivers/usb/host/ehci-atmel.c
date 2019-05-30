@@ -206,14 +206,11 @@ static int __maybe_unused ehci_atmel_drv_resume(struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id atmel_ehci_dt_ids[] = {
 	{ .compatible = "atmel,at91sam9g45-ehci" },
 	{ /* sentinel */ }
 };
-
-MODULE_DEVICE_TABLE(of, atmel_ehci_dt_ids);
-#endif
+MODULE_OF_TABLE(atmel_ehci_dt_ids);
 
 static SIMPLE_DEV_PM_OPS(ehci_atmel_pm_ops, ehci_atmel_drv_suspend,
 					ehci_atmel_drv_resume);

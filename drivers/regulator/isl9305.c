@@ -175,7 +175,6 @@ static int isl9305_i2c_probe(struct i2c_client *i2c,
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id isl9305_dt_ids[] = {
 	{ .compatible = "isl,isl9305" }, /* for backward compat., don't use */
 	{ .compatible = "isil,isl9305" },
@@ -183,8 +182,7 @@ static const struct of_device_id isl9305_dt_ids[] = {
 	{ .compatible = "isil,isl9305h" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, isl9305_dt_ids);
-#endif
+MODULE_OF_TABLE(isl9305_dt_ids);
 
 static const struct i2c_device_id isl9305_i2c_id[] = {
 	{ "isl9305", },

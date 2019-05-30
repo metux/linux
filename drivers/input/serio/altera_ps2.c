@@ -139,14 +139,12 @@ static int altera_ps2_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id altera_ps2_match[] = {
 	{ .compatible = "ALTR,ps2-1.0", },
 	{ .compatible = "altr,ps2-1.0", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, altera_ps2_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(altera_ps2_match);
 
 /*
  * Our device driver structure

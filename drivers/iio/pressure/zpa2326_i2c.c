@@ -66,13 +66,11 @@ static const struct i2c_device_id zpa2326_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, zpa2326_i2c_ids);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id zpa2326_i2c_matches[] = {
 	{ .compatible = "murata,zpa2326" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, zpa2326_i2c_matches);
-#endif
+MODULE_OF_TABLE(zpa2326_i2c_matches);
 
 static struct i2c_driver zpa2326_i2c_driver = {
 	.driver = {

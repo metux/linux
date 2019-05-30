@@ -255,13 +255,11 @@ static int arc_ps2_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id arc_ps2_match[] = {
 	{ .compatible = "snps,arc_ps2" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, arc_ps2_match);
-#endif
+MODULE_OF_TABLE(arc_ps2_match);
 
 static struct platform_driver arc_ps2_driver = {
 	.driver	= {

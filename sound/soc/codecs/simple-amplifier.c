@@ -103,14 +103,12 @@ static int simple_amp_probe(struct platform_device *pdev)
 					       NULL, 0);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id simple_amp_ids[] = {
 	{ .compatible = "dioo,dio2125", },
 	{ .compatible = "simple-audio-amplifier", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, simple_amp_ids);
-#endif
+MODULE_OF_TABLE(simple_amp_ids);
 
 static struct platform_driver simple_amp_driver = {
 	.driver = {

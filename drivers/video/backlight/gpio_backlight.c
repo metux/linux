@@ -149,14 +149,11 @@ static int gpio_backlight_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static struct of_device_id gpio_backlight_of_match[] = {
 	{ .compatible = "gpio-backlight" },
 	{ /* sentinel */ }
 };
-
-MODULE_DEVICE_TABLE(of, gpio_backlight_of_match);
-#endif
+MODULE_OF_TABLE(gpio_backlight_of_match);
 
 static struct platform_driver gpio_backlight_driver = {
 	.driver		= {

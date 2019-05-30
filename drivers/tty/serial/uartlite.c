@@ -772,15 +772,13 @@ static const struct dev_pm_ops ulite_pm_ops = {
 			   ulite_runtime_resume, NULL)
 };
 
-#if defined(CONFIG_OF)
 /* Match table for of_platform binding */
 static const struct of_device_id ulite_of_match[] = {
 	{ .compatible = "xlnx,opb-uartlite-1.00.b", },
 	{ .compatible = "xlnx,xps-uartlite-1.00.a", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, ulite_of_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(ulite_of_match);
 
 static int ulite_probe(struct platform_device *pdev)
 {

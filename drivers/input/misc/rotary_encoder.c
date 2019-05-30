@@ -349,13 +349,11 @@ static int __maybe_unused rotary_encoder_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(rotary_encoder_pm_ops,
 			 rotary_encoder_suspend, rotary_encoder_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id rotary_encoder_of_match[] = {
 	{ .compatible = "rotary-encoder", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, rotary_encoder_of_match);
-#endif
+MODULE_OF_TABLE(rotary_encoder_of_match);
 
 static struct platform_driver rotary_encoder_driver = {
 	.probe		= rotary_encoder_probe,

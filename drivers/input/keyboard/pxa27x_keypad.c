@@ -822,13 +822,11 @@ static int pxa27x_keypad_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pxa27x_keypad_dt_match[] = {
 	{ .compatible = "marvell,pxa27x-keypad" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, pxa27x_keypad_dt_match);
-#endif
+MODULE_OF_TABLE(pxa27x_keypad_dt_match);
 
 static struct platform_driver pxa27x_keypad_driver = {
 	.probe		= pxa27x_keypad_probe,

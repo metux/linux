@@ -719,13 +719,11 @@ static int ar933x_uart_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id ar933x_uart_of_ids[] = {
 	{ .compatible = "qca,ar9330-uart" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, ar933x_uart_of_ids);
-#endif
+MODULE_OF_TABLE(ar933x_uart_of_ids);
 
 static struct platform_driver ar933x_uart_platform_driver = {
 	.probe		= ar933x_uart_probe,

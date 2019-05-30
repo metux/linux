@@ -198,8 +198,7 @@ static const struct i2c_device_id pca954x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pca954x_id);
 
-#ifdef CONFIG_OF
-static const struct of_device_id pca954x_of_match[] = {
+MODULE_DECLARE_OF_TABLE(pca954x_of_match,
 	{ .compatible = "nxp,pca9540", .data = &chips[pca_9540] },
 	{ .compatible = "nxp,pca9542", .data = &chips[pca_9542] },
 	{ .compatible = "nxp,pca9543", .data = &chips[pca_9543] },
@@ -211,11 +210,7 @@ static const struct of_device_id pca954x_of_match[] = {
 	{ .compatible = "nxp,pca9846", .data = &chips[pca_9846] },
 	{ .compatible = "nxp,pca9847", .data = &chips[pca_9847] },
 	{ .compatible = "nxp,pca9848", .data = &chips[pca_9848] },
-	{ .compatible = "nxp,pca9849", .data = &chips[pca_9849] },
-	{}
-};
-MODULE_DEVICE_TABLE(of, pca954x_of_match);
-#endif
+	{ .compatible = "nxp,pca9849", .data = &chips[pca_9849] });
 
 /* Write to mux register. Don't use i2c_transfer()/i2c_smbus_xfer()
    for this as they will try to lock adapter a second time */

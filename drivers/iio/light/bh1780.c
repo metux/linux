@@ -273,13 +273,11 @@ static const struct i2c_device_id bh1780_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, bh1780_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id of_bh1780_match[] = {
 	{ .compatible = "rohm,bh1780gli", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, of_bh1780_match);
-#endif
+MODULE_OF_TABLE(of_bh1780_match);
 
 static struct i2c_driver bh1780_driver = {
 	.probe		= bh1780_probe,

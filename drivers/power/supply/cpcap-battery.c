@@ -695,7 +695,6 @@ static const struct cpcap_battery_config cpcap_battery_default_data = {
 	.info.charge_full_design = 1740000,
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id cpcap_battery_id_table[] = {
 	{
 		.compatible = "motorola,cpcap-battery",
@@ -703,8 +702,7 @@ static const struct of_device_id cpcap_battery_id_table[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, cpcap_battery_id_table);
-#endif
+MODULE_OF_TABLE(cpcap_battery_id_table);
 
 static int cpcap_battery_probe(struct platform_device *pdev)
 {

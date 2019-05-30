@@ -628,13 +628,11 @@ static int xtfpga_i2s_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id xtfpga_i2s_of_match[] = {
 	{ .compatible = "cdns,xtfpga-i2s", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, xtfpga_i2s_of_match);
-#endif
+MODULE_OF_TABLE(xtfpga_i2s_of_match);
 
 static const struct dev_pm_ops xtfpga_i2s_pm_ops = {
 	SET_RUNTIME_PM_OPS(xtfpga_i2s_runtime_suspend,

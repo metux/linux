@@ -61,13 +61,11 @@ static u8 w1_gpio_read_bit(void *data)
 	return gpiod_get_value(pdata->gpiod) ? 1 : 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id w1_gpio_dt_ids[] = {
 	{ .compatible = "w1-gpio" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, w1_gpio_dt_ids);
-#endif
+MODULE_OF_TABLE(w1_gpio_dt_ids);
 
 static int w1_gpio_probe(struct platform_device *pdev)
 {

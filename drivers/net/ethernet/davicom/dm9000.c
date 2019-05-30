@@ -1774,13 +1774,11 @@ dm9000_drv_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id dm9000_of_matches[] = {
 	{ .compatible = "davicom,dm9000", },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, dm9000_of_matches);
-#endif
+MODULE_OF_TABLE(dm9000_of_matches);
 
 static struct platform_driver dm9000_driver = {
 	.driver	= {

@@ -432,13 +432,11 @@ static int ps2_gpio_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id ps2_gpio_match[] = {
 	{ .compatible = "ps2-gpio", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, ps2_gpio_match);
-#endif
+MODULE_OF_TABLE(ps2_gpio_match);
 
 static struct platform_driver ps2_gpio_driver = {
 	.probe		= ps2_gpio_probe,

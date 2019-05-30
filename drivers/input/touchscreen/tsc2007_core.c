@@ -434,13 +434,11 @@ static const struct i2c_device_id tsc2007_idtable[] = {
 
 MODULE_DEVICE_TABLE(i2c, tsc2007_idtable);
 
-#ifdef CONFIG_OF
 static const struct of_device_id tsc2007_of_match[] = {
 	{ .compatible = "ti,tsc2007" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, tsc2007_of_match);
-#endif
+MODULE_OF_TABLE(tsc2007_of_match);
 
 static struct i2c_driver tsc2007_driver = {
 	.driver = {

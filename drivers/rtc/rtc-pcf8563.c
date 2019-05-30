@@ -633,13 +633,11 @@ static const struct i2c_device_id pcf8563_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pcf8563_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id pcf8563_of_match[] = {
 	{ .compatible = "nxp,pcf8563" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, pcf8563_of_match);
-#endif
+MODULE_OF_TABLE(pcf8563_of_match);
 
 static struct i2c_driver pcf8563_driver = {
 	.driver		= {

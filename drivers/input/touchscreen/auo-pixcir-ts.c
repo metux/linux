@@ -667,13 +667,11 @@ static const struct i2c_device_id auo_pixcir_idtable[] = {
 };
 MODULE_DEVICE_TABLE(i2c, auo_pixcir_idtable);
 
-#ifdef CONFIG_OF
 static const struct of_device_id auo_pixcir_ts_dt_idtable[] = {
 	{ .compatible = "auo,auo_pixcir_ts" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, auo_pixcir_ts_dt_idtable);
-#endif
+MODULE_OF_TABLE(auo_pixcir_ts_dt_idtable);
 
 static struct i2c_driver auo_pixcir_driver = {
 	.driver = {

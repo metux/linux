@@ -275,15 +275,10 @@ static int nokia_modem_remove(struct device *dev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id nokia_modem_of_match[] = {
+MODULE_DECLARE_OF_TABLE(nokia_modem_of_match,
 	{ .compatible = "nokia,n900-modem", },
 	{ .compatible = "nokia,n950-modem", },
-	{ .compatible = "nokia,n9-modem", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, nokia_modem_of_match);
-#endif
+	{ .compatible = "nokia,n9-modem", });
 
 static struct hsi_client_driver nokia_modem_driver = {
 	.driver = {

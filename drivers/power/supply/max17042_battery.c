@@ -1162,15 +1162,13 @@ static const struct acpi_device_id max17042_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, max17042_acpi_match);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id max17042_dt_match[] = {
 	{ .compatible = "maxim,max17042" },
 	{ .compatible = "maxim,max17047" },
 	{ .compatible = "maxim,max17050" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, max17042_dt_match);
-#endif
+MODULE_OF_TABLE(max17042_dt_match);
 
 static const struct i2c_device_id max17042_id[] = {
 	{ "max17042", MAXIM_DEVICE_TYPE_MAX17042 },

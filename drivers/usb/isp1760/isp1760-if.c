@@ -260,14 +260,12 @@ static int isp1760_plat_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id isp1760_of_match[] = {
 	{ .compatible = "nxp,usb-isp1760", },
 	{ .compatible = "nxp,usb-isp1761", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, isp1760_of_match);
-#endif
+MODULE_OF_TABLE(isp1760_of_match);
 
 static struct platform_driver isp1760_plat_driver = {
 	.probe	= isp1760_plat_probe,

@@ -138,15 +138,13 @@ static int ds1803_probe(struct i2c_client *client,
 	return devm_iio_device_register(dev, indio_dev);
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id ds1803_dt_ids[] = {
 	{ .compatible = "maxim,ds1803-010", .data = &ds1803_cfg[DS1803_010] },
 	{ .compatible = "maxim,ds1803-050", .data = &ds1803_cfg[DS1803_050] },
 	{ .compatible = "maxim,ds1803-100", .data = &ds1803_cfg[DS1803_100] },
 	{}
 };
-MODULE_DEVICE_TABLE(of, ds1803_dt_ids);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(ds1803_dt_ids);
 
 static const struct i2c_device_id ds1803_id[] = {
 	{ "ds1803-010", DS1803_010 },

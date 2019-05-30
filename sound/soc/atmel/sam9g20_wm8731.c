@@ -247,13 +247,11 @@ static int at91sam9g20ek_audio_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id at91sam9g20ek_wm8731_dt_ids[] = {
 	{ .compatible = "atmel,at91sam9g20ek-wm8731-audio", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, at91sam9g20ek_wm8731_dt_ids);
-#endif
+MODULE_OF_TABLE(at91sam9g20ek_wm8731_dt_ids);
 
 static struct platform_driver at91sam9g20ek_audio_driver = {
 	.driver = {

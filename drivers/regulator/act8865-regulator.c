@@ -339,15 +339,13 @@ static const struct regulator_desc act8865_alt_regulators[] = {
 	ACT88xx_REG("LDO_REG4", ACT8865, LDO4, VSET, "inl67"),
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id act8865_dt_ids[] = {
 	{ .compatible = "active-semi,act8600", .data = (void *)ACT8600 },
 	{ .compatible = "active-semi,act8846", .data = (void *)ACT8846 },
 	{ .compatible = "active-semi,act8865", .data = (void *)ACT8865 },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, act8865_dt_ids);
-#endif
+MODULE_OF_TABLE(act8865_dt_ids);
 
 static struct act8865_regulator_data *act8865_get_regulator_data(
 		int id, struct act8865_platform_data *pdata)

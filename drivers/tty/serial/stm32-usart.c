@@ -866,16 +866,13 @@ static struct stm32_port *stm32_of_get_stm32_port(struct platform_device *pdev)
 	return &stm32_ports[id];
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id stm32_match[] = {
 	{ .compatible = "st,stm32-uart", .data = &stm32f4_info},
 	{ .compatible = "st,stm32f7-uart", .data = &stm32f7_info},
 	{ .compatible = "st,stm32h7-uart", .data = &stm32h7_info},
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, stm32_match);
-#endif
+MODULE_OF_TABLE(stm32_match);
 
 static int stm32_of_dma_rx_probe(struct stm32_port *stm32port,
 				 struct platform_device *pdev)

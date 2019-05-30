@@ -2683,13 +2683,11 @@ static void rt5682_i2c_shutdown(struct i2c_client *client)
 	rt5682_reset(rt5682->regmap);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id rt5682_of_match[] = {
 	{.compatible = "realtek,rt5682i"},
 	{},
 };
-MODULE_DEVICE_TABLE(of, rt5682_of_match);
-#endif
+MODULE_OF_TABLE(rt5682_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5682_acpi_match[] = {

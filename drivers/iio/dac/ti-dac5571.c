@@ -388,7 +388,6 @@ static int dac5571_remove(struct i2c_client *i2c)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id dac5571_of_id[] = {
 	{.compatible = "ti,dac5571"},
 	{.compatible = "ti,dac6571"},
@@ -401,8 +400,7 @@ static const struct of_device_id dac5571_of_id[] = {
 	{.compatible = "ti,dac7573"},
 	{}
 };
-MODULE_DEVICE_TABLE(of, dac5571_of_id);
-#endif
+MODULE_OF_TABLE(dac5571_of_id);
 
 static const struct i2c_device_id dac5571_id[] = {
 	{"dac5571", single_8bit},

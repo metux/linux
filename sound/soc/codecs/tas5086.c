@@ -806,13 +806,11 @@ static int tas5086_soc_resume(struct snd_soc_component *component)
 #define tas5086_soc_resume	NULL
 #endif /* CONFIG_PM */
 
-#ifdef CONFIG_OF
 static const struct of_device_id tas5086_dt_ids[] = {
 	{ .compatible = "ti,tas5086", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, tas5086_dt_ids);
-#endif
+MODULE_OF_TABLE(tas5086_dt_ids);
 
 static int tas5086_probe(struct snd_soc_component *component)
 {

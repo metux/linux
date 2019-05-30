@@ -299,13 +299,11 @@ static int es7241_probe(struct platform_device *pdev)
 				      &es7241_dai, 1);
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id es7241_ids[] = {
 	{ .compatible = "everest,es7241", .data = &es7241_chip },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, es7241_ids);
-#endif
+MODULE_OF_TABLE(es7241_ids);
 
 static struct platform_driver es7241_driver = {
 	.driver = {

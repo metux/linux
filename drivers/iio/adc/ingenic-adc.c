@@ -342,14 +342,9 @@ static int ingenic_adc_probe(struct platform_device *pdev)
 	return ret;
 }
 
-#ifdef CONFIG_OF
-static const struct of_device_id ingenic_adc_of_match[] = {
+MODULE_DECLARE_OF_TABLE(ingenic_adc_of_match,
 	{ .compatible = "ingenic,jz4725b-adc", .data = &jz4725b_adc_soc_data, },
-	{ .compatible = "ingenic,jz4740-adc", .data = &jz4740_adc_soc_data, },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, ingenic_adc_of_match);
-#endif
+	{ .compatible = "ingenic,jz4740-adc", .data = &jz4740_adc_soc_data, });
 
 static struct platform_driver ingenic_adc_driver = {
 	.driver = {

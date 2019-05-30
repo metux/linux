@@ -1519,8 +1519,6 @@ done:
 	return IRQ_HANDLED;
 }
 
-#ifdef CONFIG_OF
-
 #define MAX1363_COMPATIBLE(of_compatible, cfg) {		\
 			.compatible = of_compatible,		\
 			.data = &max1363_chip_info_tbl[cfg],	\
@@ -1567,8 +1565,7 @@ static const struct of_device_id max1363_of_match[] = {
 	MAX1363_COMPATIBLE("maxim,max11647", max11647),
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, max1363_of_match);
-#endif
+MODULE_OF_TABLE(max1363_of_match);
 
 static int max1363_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)

@@ -1399,23 +1399,15 @@ static const struct dev_pm_ops omap_ssi_port_pm_ops = {
 #define DEV_PM_OPS     NULL
 #endif
 
-
-#ifdef CONFIG_OF
-static const struct of_device_id omap_ssi_port_of_match[] = {
-	{ .compatible = "ti,omap3-ssi-port", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, omap_ssi_port_of_match);
-#else
-#define omap_ssi_port_of_match NULL
-#endif
+MODULE_DECLARE_OF_TABLE(omap_ssi_port_of_match,
+	{ .compatible = "ti,omap3-ssi-port", });
 
 struct platform_driver ssi_port_pdriver = {
 	.probe = ssi_port_probe,
 	.remove	= ssi_port_remove,
 	.driver	= {
 		.name	= "omap_ssi_port",
-		.of_match_table = omap_ssi_port_of_match,
+		.of_match_table = of_match_ptr(omap_ssi_port_of_match),
 		.pm	= DEV_PM_OPS,
 	},
 };

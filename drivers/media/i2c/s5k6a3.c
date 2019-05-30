@@ -368,13 +368,11 @@ static const struct i2c_device_id s5k6a3_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, s5k6a3_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id s5k6a3_of_match[] = {
 	{ .compatible = "samsung,s5k6a3" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, s5k6a3_of_match);
-#endif
+MODULE_OF_TABLE(s5k6a3_of_match);
 
 static struct i2c_driver s5k6a3_driver = {
 	.driver = {

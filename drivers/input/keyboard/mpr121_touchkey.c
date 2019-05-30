@@ -347,13 +347,11 @@ static const struct i2c_device_id mpr121_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mpr121_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id mpr121_touchkey_dt_match_table[] = {
 	{ .compatible = "fsl,mpr121-touchkey" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, mpr121_touchkey_dt_match_table);
-#endif
+MODULE_OF_TABLE(mpr121_touchkey_dt_match_table);
 
 static struct i2c_driver mpr_touchkey_driver = {
 	.driver = {

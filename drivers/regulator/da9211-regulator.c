@@ -504,7 +504,6 @@ static const struct i2c_device_id da9211_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, da9211_i2c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id da9211_dt_ids[] = {
 	{ .compatible = "dlg,da9211", .data = &da9211_i2c_id[0] },
 	{ .compatible = "dlg,da9212", .data = &da9211_i2c_id[1] },
@@ -516,8 +515,7 @@ static const struct of_device_id da9211_dt_ids[] = {
 	{ .compatible = "dlg,da9225", .data = &da9211_i2c_id[7] },
 	{},
 };
-MODULE_DEVICE_TABLE(of, da9211_dt_ids);
-#endif
+MODULE_OF_TABLE(da9211_dt_ids);
 
 static struct i2c_driver da9211_regulator_driver = {
 	.driver = {

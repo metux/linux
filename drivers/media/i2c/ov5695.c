@@ -1374,13 +1374,11 @@ static int ov5695_remove(struct i2c_client *client)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id ov5695_of_match[] = {
 	{ .compatible = "ovti,ov5695" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, ov5695_of_match);
-#endif
+MODULE_OF_TABLE(ov5695_of_match);
 
 static struct i2c_driver ov5695_i2c_driver = {
 	.driver = {

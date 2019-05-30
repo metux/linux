@@ -516,13 +516,8 @@ static const struct dev_pm_ops extcon_cros_ec_dev_pm_ops = {
 #define DEV_PM_OPS	NULL
 #endif /* CONFIG_PM_SLEEP */
 
-#ifdef CONFIG_OF
-static const struct of_device_id extcon_cros_ec_of_match[] = {
-	{ .compatible = "google,extcon-usbc-cros-ec" },
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, extcon_cros_ec_of_match);
-#endif /* CONFIG_OF */
+MODULE_DECLARE_OF_TABLE(extcon_cros_ec_of_match,
+	{ .compatible = "google,extcon-usbc-cros-ec" });
 
 static struct platform_driver extcon_cros_ec_driver = {
 	.driver = {

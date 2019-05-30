@@ -2209,13 +2209,11 @@ static const struct i2c_device_id tc358743_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, tc358743_id);
 
-#if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id tc358743_of_match[] = {
 	{ .compatible = "toshiba,tc358743" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tc358743_of_match);
-#endif
+MODULE_OF_TABLE(tc358743_of_match);
 
 static struct i2c_driver tc358743_driver = {
 	.driver = {

@@ -318,8 +318,6 @@ static int adc0832_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_OF
-
 static const struct of_device_id adc0832_dt_ids[] = {
 	{ .compatible = "ti,adc0831", },
 	{ .compatible = "ti,adc0832", },
@@ -327,9 +325,7 @@ static const struct of_device_id adc0832_dt_ids[] = {
 	{ .compatible = "ti,adc0838", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, adc0832_dt_ids);
-
-#endif
+MODULE_OF_TABLE(adc0832_dt_ids);
 
 static const struct spi_device_id adc0832_id[] = {
 	{ "adc0831", adc0831 },

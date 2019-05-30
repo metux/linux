@@ -224,14 +224,12 @@ exit:
 	return err;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id altera_spi_match[] = {
 	{ .compatible = "ALTR,spi-1.0", },
 	{ .compatible = "altr,spi-1.0", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, altera_spi_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(altera_spi_match);
 
 static struct platform_driver altera_spi_driver = {
 	.probe = altera_spi_probe,

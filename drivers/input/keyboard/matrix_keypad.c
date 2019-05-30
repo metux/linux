@@ -564,13 +564,11 @@ static int matrix_keypad_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id matrix_keypad_dt_match[] = {
 	{ .compatible = "gpio-matrix-keypad" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, matrix_keypad_dt_match);
-#endif
+MODULE_OF_TABLE(matrix_keypad_dt_match);
 
 static struct platform_driver matrix_keypad_driver = {
 	.probe		= matrix_keypad_probe,

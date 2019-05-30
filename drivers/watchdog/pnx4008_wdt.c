@@ -231,13 +231,11 @@ static int pnx4008_wdt_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id pnx4008_wdt_match[] = {
 	{ .compatible = "nxp,pnx4008-wdt" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, pnx4008_wdt_match);
-#endif
+MODULE_OF_TABLE(pnx4008_wdt_match);
 
 static struct platform_driver platform_wdt_driver = {
 	.driver = {

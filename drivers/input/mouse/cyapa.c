@@ -1490,13 +1490,11 @@ static const struct acpi_device_id cyapa_acpi_id[] = {
 MODULE_DEVICE_TABLE(acpi, cyapa_acpi_id);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id cyapa_of_match[] = {
 	{ .compatible = "cypress,cyapa" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, cyapa_of_match);
-#endif
+MODULE_OF_TABLE(cyapa_of_match);
 
 static struct i2c_driver cyapa_driver = {
 	.driver = {

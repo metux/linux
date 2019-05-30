@@ -355,13 +355,11 @@ static int max98504_i2c_probe(struct i2c_client *client,
 				max98504_dai, ARRAY_SIZE(max98504_dai));
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id max98504_of_match[] = {
 	{ .compatible = "maxim,max98504" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, max98504_of_match);
-#endif
+MODULE_OF_TABLE(max98504_of_match);
 
 static const struct i2c_device_id max98504_i2c_id[] = {
 	{ "max98504" },

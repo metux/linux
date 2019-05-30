@@ -830,24 +830,16 @@ static int hwicap_drv_remove(struct platform_device *pdev)
 	return hwicap_remove(&pdev->dev);
 }
 
-#ifdef CONFIG_OF
-/* Match table for device tree binding */
-static const struct of_device_id hwicap_of_match[] = {
+MODULE_DECLARE_OF_TABLE(hwicap_of_match,
 	{ .compatible = "xlnx,opb-hwicap-1.00.b", .data = &buffer_icap_config},
-	{ .compatible = "xlnx,xps-hwicap-1.00.a", .data = &fifo_icap_config},
-	{},
-};
-MODULE_DEVICE_TABLE(of, hwicap_of_match);
-#else
-#define hwicap_of_match NULL
-#endif
+	{ .compatible = "xlnx,xps-hwicap-1.00.a", .data = &fifo_icap_config});
 
 static struct platform_driver hwicap_platform_driver = {
 	.probe = hwicap_drv_probe,
 	.remove = hwicap_drv_remove,
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = hwicap_of_match,
+		.of_match_table = of_match_ptr(hwicap_of_match),
 	},
 };
 

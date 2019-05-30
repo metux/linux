@@ -137,13 +137,11 @@ static int platform_lcd_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(platform_lcd_pm_ops, platform_lcd_suspend,
 			platform_lcd_resume);
 
-#ifdef CONFIG_OF
 static const struct of_device_id platform_lcd_of_match[] = {
 	{ .compatible = "platform-lcd" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, platform_lcd_of_match);
-#endif
+MODULE_OF_TABLE(platform_lcd_of_match);
 
 static struct platform_driver platform_lcd_driver = {
 	.driver		= {

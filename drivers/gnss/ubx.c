@@ -128,15 +128,10 @@ static void ubx_remove(struct serdev_device *serdev)
 	gnss_serial_free(gserial);
 };
 
-#ifdef CONFIG_OF
-static const struct of_device_id ubx_of_match[] = {
+MODULE_DECLARE_OF_TABLE(ubx_of_match,
 	{ .compatible = "u-blox,neo-6m" },
 	{ .compatible = "u-blox,neo-8" },
-	{ .compatible = "u-blox,neo-m8" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, ubx_of_match);
-#endif
+	{ .compatible = "u-blox,neo-m8" });
 
 static struct serdev_device_driver ubx_driver = {
 	.driver	= {

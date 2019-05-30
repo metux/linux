@@ -1793,13 +1793,11 @@ static const struct i2c_device_id s5c73m3_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, s5c73m3_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id s5c73m3_of_match[] = {
 	{ .compatible = "samsung,s5c73m3" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, s5c73m3_of_match);
-#endif
+MODULE_OF_TABLE(s5c73m3_of_match);
 
 static struct i2c_driver s5c73m3_i2c_driver = {
 	.driver = {

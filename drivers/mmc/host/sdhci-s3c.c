@@ -768,7 +768,6 @@ static const struct platform_device_id sdhci_s3c_driver_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, sdhci_s3c_driver_ids);
 
-#ifdef CONFIG_OF
 static struct sdhci_s3c_drv_data exynos4_sdhci_drv_data = {
 	.no_divider = true,
 };
@@ -779,8 +778,7 @@ static const struct of_device_id sdhci_s3c_dt_match[] = {
 		.data = &exynos4_sdhci_drv_data },
 	{},
 };
-MODULE_DEVICE_TABLE(of, sdhci_s3c_dt_match);
-#endif
+MODULE_OF_TABLE(sdhci_s3c_dt_match);
 
 static struct platform_driver sdhci_s3c_driver = {
 	.probe		= sdhci_s3c_probe,

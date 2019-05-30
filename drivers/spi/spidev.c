@@ -656,7 +656,6 @@ static const struct file_operations spidev_fops = {
 
 static struct class *spidev_class;
 
-#ifdef CONFIG_OF
 static const struct of_device_id spidev_dt_ids[] = {
 	{ .compatible = "rohm,dh2228fv" },
 	{ .compatible = "lineartechnology,ltc2488" },
@@ -665,8 +664,7 @@ static const struct of_device_id spidev_dt_ids[] = {
 	{ .compatible = "lwn,bk4" },
 	{},
 };
-MODULE_DEVICE_TABLE(of, spidev_dt_ids);
-#endif
+MODULE_OF_TABLE(spidev_dt_ids);
 
 #ifdef CONFIG_ACPI
 

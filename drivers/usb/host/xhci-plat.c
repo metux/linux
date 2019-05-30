@@ -93,7 +93,6 @@ static int xhci_plat_start(struct usb_hcd *hcd)
 	return xhci_run(hcd);
 }
 
-#ifdef CONFIG_OF
 static const struct xhci_plat_priv xhci_plat_marvell_armada = {
 	.init_quirk = xhci_mvebu_mbus_init_quirk,
 };
@@ -154,8 +153,7 @@ static const struct of_device_id usb_xhci_of_match[] = {
 	},
 	{},
 };
-MODULE_DEVICE_TABLE(of, usb_xhci_of_match);
-#endif
+MODULE_OF_TABLE(usb_xhci_of_match);
 
 static int xhci_plat_probe(struct platform_device *pdev)
 {

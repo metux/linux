@@ -419,14 +419,12 @@ static const struct i2c_device_id sbsm_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, sbsm_ids);
 
-#ifdef CONFIG_OF
 static const struct of_device_id sbsm_dt_ids[] = {
 	{ .compatible = "sbs,sbs-manager" },
 	{ .compatible = "lltc,ltc1760" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, sbsm_dt_ids);
-#endif
+MODULE_OF_TABLE(sbsm_dt_ids);
 
 static struct i2c_driver sbsm_driver = {
 	.driver = {

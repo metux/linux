@@ -71,14 +71,12 @@ static int ads117x_probe(struct platform_device *pdev)
 			&soc_component_dev_ads117x, &ads117x_dai, 1);
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id ads117x_dt_ids[] = {
 	{ .compatible = "ti,ads1174" },
 	{ .compatible = "ti,ads1178" },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, ads117x_dt_ids);
-#endif
+MODULE_OF_TABLE(ads117x_dt_ids);
 
 static struct platform_driver ads117x_codec_driver = {
 	.driver = {

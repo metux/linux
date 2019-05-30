@@ -601,15 +601,12 @@ static const struct acpi_device_id xgbe_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, xgbe_acpi_match);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id xgbe_of_match[] = {
 	{ .compatible = "amd,xgbe-seattle-v1a",
 	  .data = &xgbe_v1 },
 	{},
 };
-
-MODULE_DEVICE_TABLE(of, xgbe_of_match);
-#endif
+MODULE_OF_TABLE(xgbe_of_match);
 
 static SIMPLE_DEV_PM_OPS(xgbe_platform_pm_ops,
 			 xgbe_platform_suspend, xgbe_platform_resume);

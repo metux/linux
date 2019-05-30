@@ -201,15 +201,8 @@ static irqreturn_t omap3_l3_app_irq(int irq, void *_l3)
 	return ret;
 }
 
-#if IS_BUILTIN(CONFIG_OF)
-static const struct of_device_id omap3_l3_match[] = {
-	{
-		.compatible = "ti,omap3-l3-smx",
-	},
-	{ },
-};
-MODULE_DEVICE_TABLE(of, omap3_l3_match);
-#endif
+MODULE_DECLARE_OF_TABLE(omap3_l3_match,
+	{ .compatible = "ti,omap3-l3-smx" });
 
 static int omap3_l3_probe(struct platform_device *pdev)
 {

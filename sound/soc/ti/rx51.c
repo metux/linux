@@ -469,13 +469,11 @@ static int rx51_soc_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
 static const struct of_device_id rx51_audio_of_match[] = {
 	{ .compatible = "nokia,n900-audio", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, rx51_audio_of_match);
-#endif
+MODULE_OF_TABLE(rx51_audio_of_match);
 
 static struct platform_driver rx51_soc_driver = {
 	.driver = {

@@ -1837,7 +1837,6 @@ static const struct dev_pm_ops dwc3_dev_pm_ops = {
 			dwc3_runtime_idle)
 };
 
-#ifdef CONFIG_OF
 static const struct of_device_id of_dwc3_match[] = {
 	{
 		.compatible = "snps,dwc3"
@@ -1847,8 +1846,7 @@ static const struct of_device_id of_dwc3_match[] = {
 	},
 	{ },
 };
-MODULE_DEVICE_TABLE(of, of_dwc3_match);
-#endif
+MODULE_OF_TABLE(of_dwc3_match);
 
 #ifdef CONFIG_ACPI
 

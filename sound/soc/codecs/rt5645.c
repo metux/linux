@@ -3576,14 +3576,12 @@ static const struct i2c_device_id rt5645_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt5645_i2c_id);
 
-#ifdef CONFIG_OF
 static const struct of_device_id rt5645_of_match[] = {
 	{ .compatible = "realtek,rt5645", },
 	{ .compatible = "realtek,rt5650", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, rt5645_of_match);
-#endif
+MODULE_OF_TABLE(rt5645_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5645_acpi_match[] = {

@@ -334,13 +334,11 @@ static int tiny_spi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id tiny_spi_match[] = {
 	{ .compatible = "opencores,tiny-spi-rtlsvn2", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, tiny_spi_match);
-#endif /* CONFIG_OF */
+MODULE_OF_TABLE(tiny_spi_match);
 
 static struct platform_driver tiny_spi_driver = {
 	.probe = tiny_spi_probe,

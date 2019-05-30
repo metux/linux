@@ -1093,13 +1093,11 @@ static const struct acpi_device_id hideep_acpi_id[] = {
 MODULE_DEVICE_TABLE(acpi, hideep_acpi_id);
 #endif
 
-#ifdef CONFIG_OF
 static const struct of_device_id hideep_match_table[] = {
 	{ .compatible = "hideep,hideep-ts" },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, hideep_match_table);
-#endif
+MODULE_OF_TABLE(hideep_match_table);
 
 static struct i2c_driver hideep_driver = {
 	.driver = {

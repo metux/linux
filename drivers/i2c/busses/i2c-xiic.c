@@ -831,13 +831,8 @@ static int xiic_i2c_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if defined(CONFIG_OF)
-static const struct of_device_id xiic_of_match[] = {
-	{ .compatible = "xlnx,xps-iic-2.00.a", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, xiic_of_match);
-#endif
+MODULE_DECLARE_OF_TABLE(xiic_of_match,
+	{ .compatible = "xlnx,xps-iic-2.00.a", });
 
 static int __maybe_unused xiic_i2c_runtime_suspend(struct device *dev)
 {

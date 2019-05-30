@@ -41,13 +41,11 @@ static const struct i2c_device_id wm8804_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, wm8804_i2c_id);
 
-#if defined(CONFIG_OF)
 static const struct of_device_id wm8804_of_match[] = {
 	{ .compatible = "wlf,wm8804", },
 	{ }
 };
-MODULE_DEVICE_TABLE(of, wm8804_of_match);
-#endif
+MODULE_OF_TABLE(wm8804_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id wm8804_acpi_match[] = {

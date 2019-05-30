@@ -259,13 +259,11 @@ static int rx51_battery_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_OF
 static const struct of_device_id n900_battery_of_match[] = {
 	{.compatible = "nokia,n900-battery", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, n900_battery_of_match);
-#endif
+MODULE_OF_TABLE(n900_battery_of_match);
 
 static struct platform_driver rx51_battery_driver = {
 	.probe = rx51_battery_probe,

@@ -781,13 +781,8 @@ static const struct dev_pm_ops nokia_bluetooth_pm_ops = {
 			   NULL)
 };
 
-#ifdef CONFIG_OF
-static const struct of_device_id nokia_bluetooth_of_match[] = {
-	{ .compatible = "nokia,h4p-bluetooth", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, nokia_bluetooth_of_match);
-#endif
+MODULE_DECLARE_OF_TABLE(nokia_bluetooth_of_match,
+	{ .compatible = "nokia,h4p-bluetooth" });
 
 static struct serdev_device_driver nokia_bluetooth_serdev_driver = {
 	.probe = nokia_bluetooth_serdev_probe,

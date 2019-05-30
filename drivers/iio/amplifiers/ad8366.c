@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0
 /*
  * AD8366 SPI Dual-Digital Variable Gain Amplifier (VGA)
  *
- * Copyright 2012 Analog Devices Inc.
+ * Copyright 2012-2019 Analog Devices Inc.
  */
 
 #include <linux/device.h>

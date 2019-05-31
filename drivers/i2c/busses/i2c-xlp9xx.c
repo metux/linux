@@ -580,14 +580,12 @@ static const struct of_device_id xlp9xx_i2c_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, xlp9xx_i2c_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xlp9xx_i2c_acpi_ids[] = {
 	{"BRCM9007", 0},
 	{"CAV9007",  0},
 	{}
 };
-MODULE_DEVICE_TABLE(acpi, xlp9xx_i2c_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(xlp9xx_i2c_acpi_ids);
 
 static struct platform_driver xlp9xx_i2c_driver = {
 	.probe = xlp9xx_i2c_probe,

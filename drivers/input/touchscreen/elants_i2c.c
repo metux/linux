@@ -1370,13 +1370,11 @@ static const struct i2c_device_id elants_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, elants_i2c_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id elants_acpi_id[] = {
 	{ "ELAN0001", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, elants_acpi_id);
-#endif
+MODULE_ACPI_TABLE(elants_acpi_id);
 
 static const struct of_device_id elants_of_match[] = {
 	{ .compatible = "elan,ekth3500" },

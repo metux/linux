@@ -169,14 +169,12 @@ static int coreboot_table_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id cros_coreboot_acpi_match[] = {
 	{ "GOOGCB00", 0 },
 	{ "BOOT0000", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, cros_coreboot_acpi_match);
-#endif
+MODULE_ACPI_TABLE(cros_coreboot_acpi_match);
 
 static const struct of_device_id coreboot_of_match[] = {
 	{ .compatible = "coreboot" },

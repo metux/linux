@@ -296,13 +296,11 @@ static int xgene_rng_init(struct hwrng *rng)
 	return 0;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xgene_rng_acpi_match[] = {
 	{ "APMC0D18", },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, xgene_rng_acpi_match);
-#endif
+MODULE_ACPI_TABLE(xgene_rng_acpi_match);
 
 static struct hwrng xgene_rng_func = {
 	.name		= "xgene-rng",

@@ -1846,16 +1846,13 @@ static const struct of_device_id of_dwc3_match[] = {
 };
 MODULE_OF_TABLE(of_dwc3_match);
 
-#ifdef CONFIG_ACPI
-
 #define ACPI_ID_INTEL_BSW	"808622B7"
 
 static const struct acpi_device_id dwc3_acpi_match[] = {
 	{ ACPI_ID_INTEL_BSW, 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, dwc3_acpi_match);
-#endif
+MODULE_ACPI_TABLE(dwc3_acpi_match);
 
 static struct platform_driver dwc3_driver = {
 	.probe		= dwc3_probe,

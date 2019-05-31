@@ -1799,13 +1799,11 @@ static int xgene_dma_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xgene_dma_acpi_match_ptr[] = {
 	{"APMC0D43", 0},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, xgene_dma_acpi_match_ptr);
-#endif
+MODULE_ACPI_TABLE(xgene_dma_acpi_match_ptr);
 
 static const struct of_device_id xgene_dma_of_match_ptr[] = {
 	{.compatible = "apm,xgene-storm-dma",},

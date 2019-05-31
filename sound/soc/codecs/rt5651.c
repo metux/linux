@@ -2188,14 +2188,12 @@ static const struct of_device_id rt5651_of_match[] = {
 };
 MODULE_OF_TABLE(rt5651_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5651_acpi_match[] = {
 	{ "10EC5651", 0 },
 	{ "10EC5640", 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, rt5651_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt5651_acpi_match);
 
 static const struct i2c_device_id rt5651_i2c_id[] = {
 	{ "rt5651", 0 },

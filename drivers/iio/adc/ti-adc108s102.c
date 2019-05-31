@@ -306,13 +306,11 @@ static const struct of_device_id adc108s102_of_match[] = {
 };
 MODULE_OF_TABLE(adc108s102_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id adc108s102_acpi_ids[] = {
 	{ "INT3495", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, adc108s102_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(adc108s102_acpi_ids);
 
 static const struct spi_device_id adc108s102_id[] = {
 	{ "adc108s102", 0 },

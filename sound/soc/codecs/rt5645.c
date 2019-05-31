@@ -3580,7 +3580,6 @@ static const struct of_device_id rt5645_of_match[] = {
 };
 MODULE_OF_TABLE(rt5645_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5645_acpi_match[] = {
 	{ "10EC5645", 0 },
 	{ "10EC5648", 0 },
@@ -3589,8 +3588,7 @@ static const struct acpi_device_id rt5645_acpi_match[] = {
 	{ "10EC3270", 0 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, rt5645_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt5645_acpi_match);
 
 static const struct rt5645_platform_data intel_braswell_platform_data = {
 	.dmic1_data_pin = RT5645_DMIC1_DISABLE,

@@ -228,13 +228,11 @@ static const struct of_device_id slimpro_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, slimpro_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id slimpro_acpi_ids[] = {
 	{"APMC0D01", 0},
 	{}
 };
-MODULE_DEVICE_TABLE(acpi, slimpro_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(slimpro_acpi_ids);
 
 static struct platform_driver slimpro_mbox_driver = {
 	.probe	= slimpro_mbox_probe,

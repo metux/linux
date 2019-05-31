@@ -1081,13 +1081,11 @@ static const struct i2c_device_id hideep_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, hideep_i2c_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id hideep_acpi_id[] = {
 	{ "HIDP0001", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, hideep_acpi_id);
-#endif
+MODULE_ACPI_TABLE(hideep_acpi_id);
 
 static const struct of_device_id hideep_match_table[] = {
 	{ .compatible = "hideep,hideep-ts" },

@@ -1024,14 +1024,12 @@ static const struct i2c_device_id goodix_ts_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, goodix_ts_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id goodix_acpi_match[] = {
 	{ "GDIX1001", 0 },
 	{ "GDIX1002", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, goodix_acpi_match);
-#endif
+MODULE_ACPI_TABLE(goodix_acpi_match);
 
 static const struct of_device_id goodix_of_match[] = {
 	{ .compatible = "goodix,gt1151" },

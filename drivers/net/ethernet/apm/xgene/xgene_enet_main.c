@@ -1986,7 +1986,6 @@ static void xgene_enet_napi_add(struct xgene_enet_pdata *pdata)
 	}
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xgene_enet_acpi_match[] = {
 	{ "APMC0D05", XGENE_ENET1},
 	{ "APMC0D30", XGENE_ENET1},
@@ -1996,8 +1995,7 @@ static const struct acpi_device_id xgene_enet_acpi_match[] = {
 	{ "APMC0D25", XGENE_ENET2},
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, xgene_enet_acpi_match);
-#endif
+MODULE_ACPI_TABLE(xgene_enet_acpi_match);
 
 static const struct of_device_id xgene_enet_of_match[] = {
 	{.compatible = "apm,xgene-enet",    .data = (void *)XGENE_ENET1},

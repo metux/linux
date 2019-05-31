@@ -169,13 +169,11 @@ static const struct i2c_device_id intel_soc_pmic_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, intel_soc_pmic_i2c_id);
 
-#if defined(CONFIG_ACPI)
 static const struct acpi_device_id intel_soc_pmic_acpi_match[] = {
 	{ "INT33FD" },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, intel_soc_pmic_acpi_match);
-#endif
+MODULE_ACPI_TABLE(intel_soc_pmic_acpi_match);
 
 static struct i2c_driver intel_soc_pmic_i2c_driver = {
 	.driver = {

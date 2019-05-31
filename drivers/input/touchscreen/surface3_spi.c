@@ -399,13 +399,11 @@ static SIMPLE_DEV_PM_OPS(surface3_spi_pm_ops,
 			 surface3_spi_suspend,
 			 surface3_spi_resume);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id surface3_spi_acpi_match[] = {
 	{ "MSHW0037", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, surface3_spi_acpi_match);
-#endif
+MODULE_ACPI_TABLE(surface3_spi_acpi_match);
 
 static struct spi_driver surface3_spi_driver = {
 	.driver = {

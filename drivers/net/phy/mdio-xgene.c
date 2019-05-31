@@ -312,16 +312,12 @@ static const struct of_device_id xgene_mdio_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, xgene_mdio_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xgene_mdio_acpi_match[] = {
 	{ "APMC0D65", XGENE_MDIO_RGMII },
 	{ "APMC0D66", XGENE_MDIO_XFI },
 	{ }
 };
-
-MODULE_DEVICE_TABLE(acpi, xgene_mdio_acpi_match);
-#endif
-
+MODULE_ACPI_TABLE(xgene_mdio_acpi_match);
 
 static int xgene_mdio_probe(struct platform_device *pdev)
 {

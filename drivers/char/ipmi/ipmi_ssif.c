@@ -2045,13 +2045,11 @@ static unsigned short *ssif_address_list(void)
 	return address_list;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id ssif_acpi_match[] = {
 	{ "IPI0001", 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, ssif_acpi_match);
-#endif
+MODULE_ACPI_TABLE(ssif_acpi_match);
 
 #ifdef CONFIG_DMI
 static int dmi_ipmi_probe(struct platform_device *pdev)

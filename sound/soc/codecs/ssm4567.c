@@ -483,15 +483,11 @@ static const struct of_device_id ssm4567_of_match[] = {
 };
 MODULE_OF_TABLE(ssm4567_of_match);
 
-#ifdef CONFIG_ACPI
-
 static const struct acpi_device_id ssm4567_acpi_match[] = {
 	{ "INT343B", 0 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, ssm4567_acpi_match);
-
-#endif
+MODULE_ACPI_TABLE(ssm4567_acpi_match);
 
 static struct i2c_driver ssm4567_driver = {
 	.driver = {

@@ -346,13 +346,11 @@ static const struct i2c_device_id cros_ec_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, cros_ec_i2c_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id cros_ec_i2c_acpi_id[] = {
 	{ "GOOG0008", 0 },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(acpi, cros_ec_i2c_acpi_id);
-#endif
+MODULE_ACPI_TABLE(cros_ec_i2c_acpi_id);
 
 static struct i2c_driver cros_ec_driver = {
 	.driver	= {

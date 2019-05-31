@@ -1180,7 +1180,6 @@ static const struct hci_uart_proto bcm_proto = {
 	.dequeue	= bcm_dequeue,
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id bcm_acpi_match[] = {
 	{ "BCM2E00" },
 	{ "BCM2E01" },
@@ -1350,8 +1349,7 @@ static const struct acpi_device_id bcm_acpi_match[] = {
 	{ "BCM2EAC" },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, bcm_acpi_match);
-#endif
+MODULE_ACPI_TABLE(bcm_acpi_match);
 
 /* suspend and resume callbacks */
 static const struct dev_pm_ops bcm_pm_ops = {

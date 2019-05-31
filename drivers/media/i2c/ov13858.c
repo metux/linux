@@ -1778,14 +1778,11 @@ static const struct dev_pm_ops ov13858_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(ov13858_suspend, ov13858_resume)
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id ov13858_acpi_ids[] = {
 	{"OVTID858"},
 	{ /* sentinel */ }
 };
-
-MODULE_DEVICE_TABLE(acpi, ov13858_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(ov13858_acpi_ids);
 
 static struct i2c_driver ov13858_i2c_driver = {
 	.driver = {

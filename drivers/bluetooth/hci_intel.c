@@ -1073,13 +1073,11 @@ static const struct hci_uart_proto intel_proto = {
 	.dequeue	= intel_dequeue,
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id intel_acpi_match[] = {
 	{ "INT33E1", 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, intel_acpi_match);
-#endif
+MODULE_ACPI_TABLE(intel_acpi_match);
 
 #ifdef CONFIG_PM
 static int intel_suspend_device(struct device *dev)

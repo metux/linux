@@ -148,14 +148,12 @@ static int rfkill_gpio_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rfkill_acpi_match[] = {
 	{ "BCM4752", RFKILL_TYPE_GPS },
 	{ "LNV4752", RFKILL_TYPE_GPS },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, rfkill_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rfkill_acpi_match);
 
 static struct platform_driver rfkill_gpio_driver = {
 	.probe = rfkill_gpio_probe,

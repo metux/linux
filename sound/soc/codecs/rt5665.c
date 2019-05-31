@@ -4953,14 +4953,12 @@ static const struct of_device_id rt5665_of_match[] = {
 };
 MODULE_OF_TABLE(rt5665_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5665_acpi_match[] = {
 	{"10EC5665", 0,},
 	{"10EC5666", 0,},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, rt5665_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt5665_acpi_match);
 
 static struct i2c_driver rt5665_i2c_driver = {
 	.driver = {

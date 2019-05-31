@@ -718,14 +718,12 @@ static struct scsi_host_template ahci_platform_sht = {
 	AHCI_SHT(DRV_NAME),
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xgene_ahci_acpi_match[] = {
 	{ "APMC0D0D", XGENE_AHCI_V1},
 	{ "APMC0D32", XGENE_AHCI_V2},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, xgene_ahci_acpi_match);
-#endif
+MODULE_ACPI_TABLE(xgene_ahci_acpi_match);
 
 static const struct of_device_id xgene_ahci_of_match[] = {
 	{.compatible = "apm,xgene-ahci", .data = (void *) XGENE_AHCI_V1},

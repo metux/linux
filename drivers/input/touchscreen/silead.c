@@ -599,7 +599,6 @@ static const struct i2c_device_id silead_ts_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, silead_ts_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id silead_ts_acpi_match[] = {
 	{ "GSL1680", 0 },
 	{ "GSL1688", 0 },
@@ -612,8 +611,7 @@ static const struct acpi_device_id silead_ts_acpi_match[] = {
 	{ "MSSL0017", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, silead_ts_acpi_match);
-#endif
+MODULE_ACPI_TABLE(silead_ts_acpi_match);
 
 static const struct of_device_id silead_ts_of_match[] = {
 	{ .compatible = "silead,gsl1680" },

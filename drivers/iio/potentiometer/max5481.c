@@ -183,7 +183,6 @@ static const struct spi_device_id max5481_id_table[] = {
 };
 MODULE_DEVICE_TABLE(spi, max5481_id_table);
 
-#if defined(CONFIG_ACPI)
 static const struct acpi_device_id max5481_acpi_match[] = {
 	{ "max5481", max5481 },
 	{ "max5482", max5482 },
@@ -191,8 +190,7 @@ static const struct acpi_device_id max5481_acpi_match[] = {
 	{ "max5484", max5484 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, max5481_acpi_match);
-#endif
+MODULE_ACPI_TABLE(max5481_acpi_match);
 
 static struct spi_driver max5481_driver = {
 	.driver = {

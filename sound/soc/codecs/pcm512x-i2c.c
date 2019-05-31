@@ -54,7 +54,6 @@ static const struct of_device_id pcm512x_of_match[] = {
 };
 MODULE_OF_TABLE(pcm512x_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id pcm512x_acpi_match[] = {
 	{ "104C5121", 0 },
 	{ "104C5122", 0 },
@@ -62,8 +61,7 @@ static const struct acpi_device_id pcm512x_acpi_match[] = {
 	{ "104C5142", 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, pcm512x_acpi_match);
-#endif
+MODULE_ACPI_TABLE(pcm512x_acpi_match);
 
 static struct i2c_driver pcm512x_i2c_driver = {
 	.probe 		= pcm512x_i2c_probe,

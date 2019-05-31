@@ -1781,15 +1781,14 @@ static const struct of_device_id xgene_pmu_of_match[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, xgene_pmu_of_match);
-#ifdef CONFIG_ACPI
+
 static const struct acpi_device_id xgene_pmu_acpi_match[] = {
 	{"APMC0D5B", PCP_PMU_V1},
 	{"APMC0D5C", PCP_PMU_V2},
 	{"APMC0D83", PCP_PMU_V3},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, xgene_pmu_acpi_match);
-#endif
+MODULE_ACPI_TABLE(xgene_pmu_acpi_match);
 
 static int xgene_pmu_online_cpu(unsigned int cpu, struct hlist_node *node)
 {

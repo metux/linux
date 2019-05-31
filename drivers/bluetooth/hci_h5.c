@@ -986,15 +986,13 @@ static struct h5_vnd rtl_vnd = {
 };
 #endif
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id h5_acpi_match[] = {
 #ifdef CONFIG_BT_HCIUART_RTL
 	{ "OBDA8723", (kernel_ulong_t)&rtl_vnd },
 #endif
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, h5_acpi_match);
-#endif
+MODULE_ACPI_TABLE(h5_acpi_match);
 
 static const struct dev_pm_ops h5_serdev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(h5_serdev_suspend, h5_serdev_resume)

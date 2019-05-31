@@ -419,14 +419,12 @@ static int xlp_gpio_probe(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id xlp_gpio_acpi_match[] = {
 	{ "BRCM9006", GPIO_VARIANT_VULCAN },
 	{ "CAV9006",  GPIO_VARIANT_VULCAN },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, xlp_gpio_acpi_match);
-#endif
+MODULE_ACPI_TABLE(xlp_gpio_acpi_match);
 
 static struct platform_driver xlp_gpio_driver = {
 	.driver		= {

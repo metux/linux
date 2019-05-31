@@ -1049,7 +1049,6 @@ static const struct of_device_id ds1307_of_match[] = {
 };
 MODULE_OF_TABLE(ds1307_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id ds1307_acpi_ids[] = {
 	{ .id = "DS1307", .driver_data = ds_1307 },
 	{ .id = "DS1308", .driver_data = ds_1308 },
@@ -1071,8 +1070,7 @@ static const struct acpi_device_id ds1307_acpi_ids[] = {
 	{ .id = "RX8130", .driver_data = rx_8130 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, ds1307_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(ds1307_acpi_ids);
 
 /*
  * The ds1337 and ds1339 both have two alarms, but we only use the first

@@ -130,13 +130,11 @@ static const struct of_device_id max98357a_device_id[] = {
 };
 MODULE_OF_TABLE(max98357a_device_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id max98357a_acpi_match[] = {
 	{ "MX98357A", 0 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, max98357a_acpi_match);
-#endif
+MODULE_ACPI_TABLE(max98357a_acpi_match);
 
 static struct platform_driver max98357a_platform_driver = {
 	.driver = {

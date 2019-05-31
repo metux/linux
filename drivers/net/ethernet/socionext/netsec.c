@@ -2168,13 +2168,11 @@ static const struct of_device_id netsec_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, netsec_dt_ids);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id netsec_acpi_ids[] = {
 	{ "SCX0001" },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, netsec_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(netsec_acpi_ids);
 
 static struct platform_driver netsec_driver = {
 	.probe	= netsec_probe,

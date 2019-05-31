@@ -240,15 +240,13 @@ static const struct of_device_id adc081c_of_match[] = {
 };
 MODULE_OF_TABLE(adc081c_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id adc081c_acpi_match[] = {
 	{ "ADC081C", ADC081C },
 	{ "ADC101C", ADC101C },
 	{ "ADC121C", ADC121C },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, adc081c_acpi_match);
-#endif
+MODULE_ACPI_TABLE(adc081c_acpi_match);
 
 static struct i2c_driver adc081c_driver = {
 	.driver = {

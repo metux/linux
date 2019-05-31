@@ -611,13 +611,11 @@ static const struct i2c_device_id max44000_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, max44000_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id max44000_acpi_match[] = {
 	{"MAX44000", 0},
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, max44000_acpi_match);
-#endif
+MODULE_ACPI_TABLE(max44000_acpi_match);
 
 static struct i2c_driver max44000_driver = {
 	.driver = {

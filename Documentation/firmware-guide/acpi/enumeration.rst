@@ -46,13 +46,11 @@ some minor changes.
 Adding ACPI support for an existing driver should be pretty
 straightforward. Here is the simplest example::
 
-	#ifdef CONFIG_ACPI
 	static const struct acpi_device_id mydrv_acpi_match[] = {
 		/* ACPI IDs here */
 		{ }
 	};
-	MODULE_DEVICE_TABLE(acpi, mydrv_acpi_match);
-	#endif
+	MODULE_ACPI_TABLE(mydrv_acpi_match);
 
 	static struct platform_driver my_driver = {
 		...
@@ -172,13 +170,11 @@ The SPI device drivers only need to add ACPI IDs in a similar way than with
 the platform device drivers. Below is an example where we add ACPI support
 to at25 SPI eeprom driver (this is meant for the above ACPI snippet)::
 
-	#ifdef CONFIG_ACPI
 	static const struct acpi_device_id at25_acpi_match[] = {
 		{ "AT25", 0 },
 		{ },
 	};
-	MODULE_DEVICE_TABLE(acpi, at25_acpi_match);
-	#endif
+	MODULE_ACPI_TABLE(at25_acpi_match);
 
 	static struct spi_driver at25_driver = {
 		.driver = {
@@ -237,13 +233,11 @@ registered.
 Below is an example of how to add ACPI support to the existing mpu3050
 input driver::
 
-	#ifdef CONFIG_ACPI
 	static const struct acpi_device_id mpu3050_acpi_match[] = {
 		{ "MPU3050", 0 },
 		{ },
 	};
-	MODULE_DEVICE_TABLE(acpi, mpu3050_acpi_match);
-	#endif
+	MODULE_ACPI_TABLE(mpu3050_acpi_match);
 
 	static struct i2c_driver mpu3050_i2c_driver = {
 		.driver	= {

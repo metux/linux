@@ -972,14 +972,12 @@ static const struct of_device_id rt1305_of_match[] = {
 };
 MODULE_OF_TABLE(rt1305_of_match);
 
-#ifdef CONFIG_ACPI
 static struct acpi_device_id rt1305_acpi_match[] = {
 	{"10EC1305", 0,},
 	{"10EC1306", 0,},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, rt1305_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt1305_acpi_match);
 
 static const struct i2c_device_id rt1305_i2c_id[] = {
 	{ "rt1305", 0 },

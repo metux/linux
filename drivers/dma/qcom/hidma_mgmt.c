@@ -318,13 +318,11 @@ out:
 	return rc;
 }
 
-#if IS_ENABLED(CONFIG_ACPI)
 static const struct acpi_device_id hidma_mgmt_acpi_ids[] = {
 	{"QCOM8060"},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, hidma_mgmt_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(hidma_mgmt_acpi_ids);
 
 static const struct of_device_id hidma_mgmt_match[] = {
 	{.compatible = "qcom,hidma-mgmt-1.0",},

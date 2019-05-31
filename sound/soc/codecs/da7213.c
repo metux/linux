@@ -1574,14 +1574,12 @@ static const struct of_device_id da7213_of_match[] = {
 };
 MODULE_OF_TABLE(da7213_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id da7213_acpi_match[] = {
 	{ "DLGS7212", 0},
 	{ "DLGS7213", 0},
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, da7213_acpi_match);
-#endif
+MODULE_ACPI_TABLE(da7213_acpi_match);
 
 static enum da7213_micbias_voltage
 	da7213_of_micbias_lvl(struct snd_soc_component *component, u32 val)

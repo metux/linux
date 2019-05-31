@@ -772,7 +772,6 @@ static const struct iio_info ak8975_info = {
 	.read_raw = &ak8975_read_raw,
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id ak_acpi_match[] = {
 	{"AK8975", AK8975},
 	{"AK8963", AK8963},
@@ -783,8 +782,7 @@ static const struct acpi_device_id ak_acpi_match[] = {
 	{"AK09912", AK09912},
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, ak_acpi_match);
-#endif
+MODULE_ACPI_TABLE(ak_acpi_match);
 
 static const char *ak8975_match_acpi_device(struct device *dev,
 					    enum asahi_compass_chipset *chipset)

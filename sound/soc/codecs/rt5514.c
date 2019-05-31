@@ -1215,13 +1215,11 @@ static const struct of_device_id rt5514_of_match[] = {
 };
 MODULE_OF_TABLE(rt5514_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5514_acpi_match[] = {
 	{ "10EC5514", 0},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, rt5514_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt5514_acpi_match);
 
 static int rt5514_parse_dp(struct rt5514_priv *rt5514, struct device *dev)
 {

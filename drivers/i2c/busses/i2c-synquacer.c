@@ -640,13 +640,11 @@ static const struct of_device_id synquacer_i2c_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, synquacer_i2c_dt_ids);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id synquacer_i2c_acpi_ids[] = {
 	{ "SCX0003" },
 	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(acpi, synquacer_i2c_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(synquacer_i2c_acpi_ids);
 
 static struct platform_driver synquacer_i2c_driver = {
 	.probe	= synquacer_i2c_probe,

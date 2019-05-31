@@ -918,13 +918,11 @@ int intel_pmc_s0ix_counter_read(u64 *data)
 }
 EXPORT_SYMBOL_GPL(intel_pmc_s0ix_counter_read);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id ipc_acpi_ids[] = {
 	{ "INT34D2", 0},
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, ipc_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(ipc_acpi_ids);
 
 static int ipc_plat_probe(struct platform_device *pdev)
 {

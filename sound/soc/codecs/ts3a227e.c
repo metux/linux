@@ -372,13 +372,11 @@ static const struct of_device_id ts3a227e_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, ts3a227e_of_match);
 
-#ifdef CONFIG_ACPI
 static struct acpi_device_id ts3a227e_acpi_match[] = {
 	{ "104C227E", 0 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, ts3a227e_acpi_match);
-#endif
+MODULE_ACPI_TABLE(ts3a227e_acpi_match);
 
 static struct i2c_driver ts3a227e_driver = {
 	.driver = {

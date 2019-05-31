@@ -51,15 +51,11 @@ static const struct of_device_id st_press_of_match[] = {
 };
 MODULE_OF_TABLE(st_press_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id st_press_acpi_match[] = {
 	{"SNO9210", LPS22HB},
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, st_press_acpi_match);
-#else
-#define st_press_acpi_match NULL
-#endif
+MODULE_ACPI_TABLE(st_press_acpi_match);
 
 static const struct i2c_device_id st_press_id_table[] = {
 	{ LPS001WP_PRESS_DEV_NAME, LPS001WP },

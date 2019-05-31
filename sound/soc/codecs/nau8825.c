@@ -2642,13 +2642,11 @@ static const struct of_device_id nau8825_of_ids[] = {
 };
 MODULE_OF_TABLE(nau8825_of_ids);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id nau8825_acpi_match[] = {
 	{ "10508825", 0 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, nau8825_acpi_match);
-#endif
+MODULE_ACPI_TABLE(nau8825_acpi_match);
 
 static struct i2c_driver nau8825_driver = {
 	.driver = {

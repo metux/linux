@@ -399,13 +399,11 @@ static const struct i2c_device_id hp206c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, hp206c_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id hp206c_acpi_match[] = {
 	{"HOP206C", 0},
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, hp206c_acpi_match);
-#endif
+MODULE_ACPI_TABLE(hp206c_acpi_match);
 
 static struct i2c_driver hp206c_driver = {
 	.probe = hp206c_probe,

@@ -441,7 +441,7 @@ ACPI::
           { "LNRO0005", },
           { }
   };
-  MODULE_DEVICE_TABLE(acpi, virtio_mmio_acpi_match);
+  MODULE_ACPI_TABLE(virtio_mmio_acpi_match);
 
 
 ASWG

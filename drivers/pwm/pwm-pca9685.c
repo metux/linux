@@ -542,13 +542,11 @@ static const struct i2c_device_id pca9685_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, pca9685_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id pca9685_acpi_ids[] = {
 	{ "INT3492", 0 },
 	{ /* sentinel */ },
 };
-MODULE_DEVICE_TABLE(acpi, pca9685_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(pca9685_acpi_ids);
 
 static const struct of_device_id pca9685_dt_ids[] = {
 	{ .compatible = "nxp,pca9685-pwm", },

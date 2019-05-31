@@ -140,7 +140,6 @@ static const struct of_device_id dw_dma_of_id_table[] = {
 };
 MODULE_OF_TABLE(dw_dma_of_id_table);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id dw_dma_acpi_id_table[] = {
 	{ "INTL9C60", (kernel_ulong_t)&dw_dma_chip_pdata },
 	{ "80862286", (kernel_ulong_t)&dw_dma_chip_pdata },
@@ -153,8 +152,7 @@ static const struct acpi_device_id dw_dma_acpi_id_table[] = {
 
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, dw_dma_acpi_id_table);
-#endif
+MODULE_ACPI_TABLE(dw_dma_acpi_id_table);
 
 #ifdef CONFIG_PM_SLEEP
 

@@ -1005,13 +1005,11 @@ static const struct of_device_id max98373_of_match[] = {
 };
 MODULE_OF_TABLE(max98373_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id max98373_acpi_match[] = {
 	{ "MX98373", 0 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, max98373_acpi_match);
-#endif
+MODULE_ACPI_TABLE(max98373_acpi_match);
 
 static struct i2c_driver max98373_i2c_driver = {
 	.driver = {

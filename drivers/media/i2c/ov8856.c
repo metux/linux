@@ -1245,14 +1245,11 @@ static const struct dev_pm_ops ov8856_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(ov8856_suspend, ov8856_resume)
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id ov8856_acpi_ids[] = {
 	{"OVTI8856"},
 	{}
 };
-
-MODULE_DEVICE_TABLE(acpi, ov8856_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(ov8856_acpi_ids);
 
 static struct i2c_driver ov8856_i2c_driver = {
 	.driver = {

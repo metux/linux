@@ -362,13 +362,11 @@ static const struct of_device_id goldfish_audio_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, goldfish_audio_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id goldfish_audio_acpi_match[] = {
 	{ "GFSH0005", 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, goldfish_audio_acpi_match);
-#endif
+MODULE_ACPI_TABLE(goldfish_audio_acpi_match);
 
 static struct platform_driver goldfish_audio_driver = {
 	.probe		= goldfish_audio_probe,

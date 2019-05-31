@@ -2731,7 +2731,6 @@ static const struct of_device_id rt5640_of_match[] = {
 };
 MODULE_OF_TABLE(rt5640_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5640_acpi_match[] = {
 	{ "INT33CA", 0 },
 	{ "10EC3276", 0 },
@@ -2740,8 +2739,7 @@ static const struct acpi_device_id rt5640_acpi_match[] = {
 	{ "INTCCFFD", 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, rt5640_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt5640_acpi_match);
 
 static int rt5640_parse_dt(struct rt5640_priv *rt5640, struct device_node *np)
 {

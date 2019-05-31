@@ -1356,9 +1356,7 @@ static const struct i2c_device_id elan_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, elan_id);
 
-#ifdef CONFIG_ACPI
-MODULE_DEVICE_TABLE(acpi, elan_acpi_id);
-#endif
+MODULE_ACPI_TABLE(elan_acpi_id);
 
 static const struct of_device_id elan_of_match[] = {
 	{ .compatible = "elan,ekth3000" },

@@ -946,15 +946,13 @@ static int hidma_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_ACPI)
 static const struct acpi_device_id hidma_acpi_ids[] = {
 	{"QCOM8061"},
 	{"QCOM8062", HIDMA_MSI_CAP},
 	{"QCOM8063", (HIDMA_MSI_CAP | HIDMA_IDENTITY_CAP)},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, hidma_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(hidma_acpi_ids);
 
 static const struct of_device_id hidma_match[] = {
 	{.compatible = "qcom,hidma-1.0",},

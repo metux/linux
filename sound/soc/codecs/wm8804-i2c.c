@@ -44,14 +44,12 @@ static const struct of_device_id wm8804_of_match[] = {
 };
 MODULE_OF_TABLE(wm8804_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id wm8804_acpi_match[] = {
 	{ "1AEC8804", 0 }, /* Wolfson PCI ID + part ID */
 	{ "10138804", 0 }, /* Cirrus Logic PCI ID + part ID */
 	{ },
 };
-MODULE_DEVICE_TABLE(acpi, wm8804_acpi_match);
-#endif
+MODULE_ACPI_TABLE(wm8804_acpi_match);
 
 static struct i2c_driver wm8804_i2c_driver = {
 	.driver = {

@@ -776,14 +776,11 @@ static SIMPLE_DEV_PM_OPS(secocec_pm_ops, secocec_suspend, secocec_resume);
 #define SECOCEC_PM_OPS NULL
 #endif
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id secocec_acpi_match[] = {
 	{"CEC00001", 0},
 	{},
 };
-
-MODULE_DEVICE_TABLE(acpi, secocec_acpi_match);
-#endif
+MODULE_ACPI_TABLE(secocec_acpi_match);
 
 static struct platform_driver secocec_driver = {
 	.driver = {

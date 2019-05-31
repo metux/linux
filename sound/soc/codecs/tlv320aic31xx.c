@@ -1389,13 +1389,11 @@ static const struct of_device_id tlv320aic31xx_of_match[] = {
 };
 MODULE_OF_TABLE(tlv320aic31xx_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id aic31xx_acpi_match[] = {
 	{ "10TI3100", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, aic31xx_acpi_match);
-#endif
+MODULE_ACPI_TABLE(aic31xx_acpi_match);
 
 static irqreturn_t aic31xx_irq(int irq, void *data)
 {

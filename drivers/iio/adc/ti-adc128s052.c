@@ -211,13 +211,11 @@ static const struct spi_device_id adc128_id[] = {
 };
 MODULE_DEVICE_TABLE(spi, adc128_id);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id adc128_acpi_match[] = {
 	{ "AANT1280", 2 }, /* ADC124S021 compatible ACPI ID */
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, adc128_acpi_match);
-#endif
+MODULE_ACPI_TABLE(adc128_acpi_match);
 
 static struct spi_driver adc128_driver = {
 	.driver = {

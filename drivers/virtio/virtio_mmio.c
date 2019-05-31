@@ -751,13 +751,11 @@ static const struct of_device_id virtio_mmio_match[] = {
 };
 MODULE_DEVICE_TABLE(of, virtio_mmio_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id virtio_mmio_acpi_match[] = {
 	{ "LNRO0005", },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, virtio_mmio_acpi_match);
-#endif
+MODULE_ACPI_TABLE(virtio_mmio_acpi_match);
 
 static struct platform_driver virtio_mmio_driver = {
 	.probe		= virtio_mmio_probe,

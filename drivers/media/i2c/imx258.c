@@ -1282,14 +1282,11 @@ static const struct dev_pm_ops imx258_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(imx258_suspend, imx258_resume)
 };
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id imx258_acpi_ids[] = {
 	{ "SONY258A" },
 	{ /* sentinel */ }
 };
-
-MODULE_DEVICE_TABLE(acpi, imx258_acpi_ids);
-#endif
+MODULE_ACPI_TABLE(imx258_acpi_ids);
 
 static struct i2c_driver imx258_i2c_driver = {
 	.driver = {

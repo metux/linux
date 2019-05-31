@@ -748,13 +748,11 @@ static const struct of_device_id fw_cfg_sysfs_mmio_match[] = {
 };
 MODULE_DEVICE_TABLE(of, fw_cfg_sysfs_mmio_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id fw_cfg_sysfs_acpi_match[] = {
 	{ FW_CFG_ACPI_DEVICE_ID, },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, fw_cfg_sysfs_acpi_match);
-#endif
+MODULE_ACPI_TABLE(fw_cfg_sysfs_acpi_match);
 
 static struct platform_driver fw_cfg_sysfs_driver = {
 	.probe = fw_cfg_sysfs_probe,

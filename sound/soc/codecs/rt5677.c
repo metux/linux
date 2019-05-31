@@ -5001,7 +5001,7 @@ static const struct acpi_device_id rt5677_acpi_match[] = {
 	{ "RT5677CE", RT5677 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, rt5677_acpi_match);
+MODULE_ACPI_TABLE(rt5677_acpi_match);
 
 static void rt5677_read_device_properties(struct rt5677_priv *rt5677,
 		struct device *dev)

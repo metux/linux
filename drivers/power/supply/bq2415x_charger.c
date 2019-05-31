@@ -1737,7 +1737,6 @@ static const struct i2c_device_id bq2415x_i2c_id_table[] = {
 };
 MODULE_DEVICE_TABLE(i2c, bq2415x_i2c_id_table);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id bq2415x_i2c_acpi_match[] = {
 	{ "BQ2415X", BQUNKNOWN },
 	{ "BQ241500", BQ24150 },
@@ -1754,8 +1753,7 @@ static const struct acpi_device_id bq2415x_i2c_acpi_match[] = {
 	{ "BQ241580", BQ24158 },
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, bq2415x_i2c_acpi_match);
-#endif
+MODULE_ACPI_TABLE(bq2415x_i2c_acpi_match);
 
 static const struct of_device_id bq2415x_of_match_table[] = {
 	{ .compatible = "ti,bq24150" },

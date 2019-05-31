@@ -1154,13 +1154,11 @@ static int max17042_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(max17042_pm_ops, max17042_suspend,
 			max17042_resume);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id max17042_acpi_match[] = {
 	{ "MAX17047", MAXIM_DEVICE_TYPE_MAX17047 },
 	{ }
 };
-MODULE_DEVICE_TABLE(acpi, max17042_acpi_match);
-#endif
+MODULE_ACPI_TABLE(max17042_acpi_match);
 
 static const struct of_device_id max17042_dt_match[] = {
 	{ .compatible = "maxim,max17042" },

@@ -3309,13 +3309,11 @@ static const struct of_device_id rt5663_of_match[] = {
 };
 MODULE_OF_TABLE(rt5663_of_match);
 
-#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt5663_acpi_match[] = {
 	{ "10EC5663", 0},
 	{},
 };
-MODULE_DEVICE_TABLE(acpi, rt5663_acpi_match);
-#endif
+MODULE_ACPI_TABLE(rt5663_acpi_match);
 
 static void rt5663_v2_calibrate(struct rt5663_priv *rt5663)
 {

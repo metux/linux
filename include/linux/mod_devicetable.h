@@ -273,6 +273,15 @@ struct of_device_id {
 #define MODULE_OF_TABLE(name)
 #endif /* CONFIG_OF */
 
+/*
+ * macro for adding the acpi module device table only if CONFIG_ACPI enabled
+ */
+#ifdef CONFIG_ACPI
+#define MODULE_ACPI_TABLE(name)	MODULE_DEVICE_TABLE(acpi,name)
+#else
+#define MODULE_ACPI_TABLE(name)
+#endif /* CONFIG_ACPI */
+
 /* VIO */
 struct vio_device_id {
 	char type[32];

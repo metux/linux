@@ -248,7 +248,6 @@ static const unsigned int cy_chip_offset[] = { 0x0000,
 
 /* PCI related definitions */
 
-#ifdef CONFIG_PCI
 static const struct pci_device_id cy_pci_dev_id[] = {
 	/* PCI < 1Mb */
 	{ PCI_DEVICE(PCI_VENDOR_ID_CYCLADES, PCI_DEVICE_ID_CYCLOM_Y_Lo) },
@@ -268,8 +267,7 @@ static const struct pci_device_id cy_pci_dev_id[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CYCLADES, PCI_DEVICE_ID_CYCLOM_Z_Hi) },
 	{ }			/* end of table */
 };
-MODULE_DEVICE_TABLE(pci, cy_pci_dev_id);
-#endif
+MODULE_PCI_TABLE(cy_pci_dev_id);
 
 static void cy_start(struct tty_struct *);
 static void cy_set_line_char(struct cyclades_port *, struct tty_struct *);

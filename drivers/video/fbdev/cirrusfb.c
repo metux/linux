@@ -251,7 +251,6 @@ static const struct cirrusfb_board_info_rec {
 	}
 };
 
-#ifdef CONFIG_PCI
 #define CHIP(id, btype) \
 	{ PCI_VENDOR_ID_CIRRUS, id, PCI_ANY_ID, PCI_ANY_ID, 0, 0, (btype) }
 
@@ -269,9 +268,7 @@ static struct pci_device_id cirrusfb_pci_table[] = {
 	CHIP(PCI_DEVICE_ID_CIRRUS_5465, BT_LAGUNAB), /* CL Laguna 3DA*/
 	{ 0, }
 };
-MODULE_DEVICE_TABLE(pci, cirrusfb_pci_table);
-#undef CHIP
-#endif /* CONFIG_PCI */
+MODULE_PCI_TABLE(cirrusfb_pci_table);
 
 #ifdef CONFIG_ZORRO
 struct zorrocl {

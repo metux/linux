@@ -795,6 +795,4 @@ MODULE_AUTHOR("Jeff Garzik <jgarzik@pobox.com>");
 MODULE_DESCRIPTION("Marvell 88SE6440 SAS/SATA controller driver");
 MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL");
-#ifdef CONFIG_PCI
-MODULE_DEVICE_TABLE(pci, mvs_pci_table);
-#endif
+MODULE_PCI_TABLE(mvs_pci_table);

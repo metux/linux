@@ -83,7 +83,6 @@ static char *moxa_brdname[] =
 	"CP-204J series",
 };
 
-#ifdef CONFIG_PCI
 static const struct pci_device_id moxa_pcibrds[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_MOXA, PCI_DEVICE_ID_MOXA_C218),
 		.driver_data = MOXA_BOARD_C218_PCI },
@@ -93,8 +92,7 @@ static const struct pci_device_id moxa_pcibrds[] = {
 		.driver_data = MOXA_BOARD_CP204J },
 	{ 0 }
 };
-MODULE_DEVICE_TABLE(pci, moxa_pcibrds);
-#endif /* CONFIG_PCI */
+MODULE_PCI_TABLE(moxa_pcibrds);
 
 struct moxa_port;
 

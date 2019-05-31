@@ -134,11 +134,8 @@ static void dw_shutdown(struct platform_device *pdev)
 	clk_disable_unprepare(chip->clk);
 }
 
-static const struct of_device_id dw_dma_of_id_table[] = {
-	{ .compatible = "snps,dma-spear1340", .data = &dw_dma_chip_pdata },
-	{}
-};
-MODULE_OF_TABLE(dw_dma_of_id_table);
+MODULE_DECLARE_OF_TABLE(dw_dma_of_id_table,
+	{ .compatible = "snps,dma-spear1340", .data = &dw_dma_chip_pdata });
 
 static const struct acpi_device_id dw_dma_acpi_id_table[] = {
 	{ "INTL9C60", (kernel_ulong_t)&dw_dma_chip_pdata },

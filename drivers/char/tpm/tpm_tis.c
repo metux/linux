@@ -308,11 +308,8 @@ static int tpm_tis_plat_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id tis_of_platform_match[] = {
-	{.compatible = "tcg,tpm-tis-mmio"},
-	{},
-};
-MODULE_OF_TABLE(tis_of_platform_match);
+MODULE_DECLARE_OF_TABLE(tis_of_platform_match,
+	{ .compatible = "tcg,tpm-tis-mmio" });
 
 static struct platform_driver tis_drv = {
 	.probe = tpm_tis_plat_probe,

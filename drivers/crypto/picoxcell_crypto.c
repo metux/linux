@@ -1604,12 +1604,9 @@ static struct spacc_alg l2_engine_algs[] = {
 	},
 };
 
-static const struct of_device_id spacc_of_id_table[] = {
+MODULE_DECLARE_OF_TABLE(spacc_of_id_table,
 	{ .compatible = "picochip,spacc-ipsec" },
-	{ .compatible = "picochip,spacc-l2" },
-	{}
-};
-MODULE_OF_TABLE(spacc_of_id_table);
+	{ .compatible = "picochip,spacc-l2" });
 
 static int spacc_probe(struct platform_device *pdev)
 {

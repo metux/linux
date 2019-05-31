@@ -45,12 +45,9 @@ static const struct acpi_device_id sp_acpi_match[] = {
 };
 MODULE_ACPI_TABLE(sp_acpi_match);
 
-static const struct of_device_id sp_of_match[] = {
+MODULE_DECLARE_OF_TABLE(sp_of_match,
 	{ .compatible = "amd,ccp-seattle-v1a",
-	  .data = (const void *)&dev_vdata[0] },
-	{ },
-};
-MODULE_OF_TABLE(sp_of_match);
+	  .data = (const void *)&dev_vdata[0] });
 
 static struct sp_dev_vdata *sp_get_of_version(struct platform_device *pdev)
 {

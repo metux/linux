@@ -83,11 +83,8 @@ static const struct i2c_device_id pca9541_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, pca9541_id);
 
-static const struct of_device_id pca9541_of_match[] = {
-	{ .compatible = "nxp,pca9541" },
-	{}
-};
-MODULE_OF_TABLE(pca9541_of_match);
+MODULE_DECLARE_OF_TABLE(pca9541_of_match,
+	{ .compatible = "nxp,pca9541" });
 
 /*
  * Write to chip register. Don't use i2c_transfer()/i2c_smbus_xfer()

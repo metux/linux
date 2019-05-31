@@ -1244,7 +1244,7 @@ static struct omap_i2c_bus_platform_data omap4_pdata = {
 	.rev = OMAP_I2C_IP_VERSION_2,
 };
 
-static const struct of_device_id omap_i2c_of_match[] = {
+MODULE_DECLARE_OF_TABLE(omap_i2c_of_match,
 	{
 		.compatible = "ti,omap4-i2c",
 		.data = &omap4_pdata,
@@ -1260,10 +1260,7 @@ static const struct of_device_id omap_i2c_of_match[] = {
 	{
 		.compatible = "ti,omap2420-i2c",
 		.data = &omap2420_pdata,
-	},
-	{ },
-};
-MODULE_OF_TABLE(omap_i2c_of_match);
+	});
 
 #define OMAP_I2C_SCHEME(rev)		((rev & 0xc000) >> 14)
 

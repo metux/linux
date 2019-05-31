@@ -437,11 +437,8 @@ static const struct i2c_device_id adp5588_gpio_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, adp5588_gpio_id);
 
-static const struct of_device_id adp5588_gpio_of_id[] = {
-	{ .compatible = "adi," DRV_NAME, },
-	{},
-};
-MODULE_OF_TABLE(adp5588_gpio_of_id);
+MODULE_DECLARE_OF_TABLE(adp5588_gpio_of_id,
+	{ .compatible = "adi," DRV_NAME, });
 
 static struct i2c_driver adp5588_gpio_driver = {
 	.driver = {

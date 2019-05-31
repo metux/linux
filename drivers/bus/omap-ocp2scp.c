@@ -92,12 +92,9 @@ static int omap_ocp2scp_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id omap_ocp2scp_id_table[] = {
+MODULE_DECLARE_OF_TABLE(omap_ocp2scp_id_table,
 	{ .compatible = "ti,omap-ocp2scp" },
-	{ .compatible = "ti,am437x-ocp2scp" },
-	{}
-};
-MODULE_OF_TABLE(omap_ocp2scp_id_table);
+	{ .compatible = "ti,am437x-ocp2scp" });
 
 static struct platform_driver omap_ocp2scp_driver = {
 	.probe		= omap_ocp2scp_probe,

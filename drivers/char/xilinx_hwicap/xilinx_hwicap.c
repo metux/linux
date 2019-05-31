@@ -830,13 +830,9 @@ static int hwicap_drv_remove(struct platform_device *pdev)
 	return hwicap_remove(&pdev->dev);
 }
 
-/* Match table for device tree binding */
-static const struct of_device_id hwicap_of_match[] = {
+MODULE_DECLARE_OF_TABLE(hwicap_of_match,
 	{ .compatible = "xlnx,opb-hwicap-1.00.b", .data = &buffer_icap_config},
-	{ .compatible = "xlnx,xps-hwicap-1.00.a", .data = &fifo_icap_config},
-	{},
-};
-MODULE_OF_TABLE(hwicap_of_match);
+	{ .compatible = "xlnx,xps-hwicap-1.00.a", .data = &fifo_icap_config});
 
 static struct platform_driver hwicap_platform_driver = {
 	.probe = hwicap_drv_probe,

@@ -1729,18 +1729,14 @@ static struct at_dma_platform_data at91sam9g45_config = {
 	.nr_channels = 8,
 };
 
-static const struct of_device_id atmel_dma_dt_ids[] = {
+MODULE_DECLARE_OF_TABLE(atmel_dma_dt_ids,
 	{
 		.compatible = "atmel,at91sam9rl-dma",
 		.data = &at91sam9rl_config,
 	}, {
 		.compatible = "atmel,at91sam9g45-dma",
 		.data = &at91sam9g45_config,
-	}, {
-		/* sentinel */
-	}
-};
-MODULE_OF_TABLE(atmel_dma_dt_ids);
+	});
 
 static const struct platform_device_id atdma_devtypes[] = {
 	{

@@ -36,11 +36,8 @@ static int kxsd9_i2c_remove(struct i2c_client *client)
 	return kxsd9_common_remove(&client->dev);
 }
 
-static const struct of_device_id kxsd9_of_match[] = {
-	{ .compatible = "kionix,kxsd9", },
-	{ },
-};
-MODULE_OF_TABLE(kxsd9_of_match);
+MODULE_DECLARE_OF_TABLE(kxsd9_of_match,
+	{ .compatible = "kionix,kxsd9", });
 
 static const struct i2c_device_id kxsd9_i2c_id[] = {
 	{"kxsd9", 0},

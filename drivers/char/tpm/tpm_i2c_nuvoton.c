@@ -637,13 +637,10 @@ static const struct i2c_device_id i2c_nuvoton_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, i2c_nuvoton_id);
 
-static const struct of_device_id i2c_nuvoton_of_match[] = {
+MODULE_DECLARE_OF_TABLE(i2c_nuvoton_of_match,
 	{.compatible = "nuvoton,npct501"},
 	{.compatible = "winbond,wpct301"},
-	{.compatible = "nuvoton,npct601", .data = OF_IS_TPM2},
-	{},
-};
-MODULE_OF_TABLE(i2c_nuvoton_of_match);
+	{.compatible = "nuvoton,npct601", .data = OF_IS_TPM2});
 
 static SIMPLE_DEV_PM_OPS(i2c_nuvoton_pm_ops, tpm_pm_suspend, tpm_pm_resume);
 

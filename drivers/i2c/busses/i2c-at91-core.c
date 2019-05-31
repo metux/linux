@@ -147,7 +147,7 @@ static struct at91_twi_pdata sama5d2_config = {
 	.has_hold_field = true,
 };
 
-static const struct of_device_id atmel_twi_dt_ids[] = {
+MODULE_DECLARE_OF_TABLE(atmel_twi_dt_ids,
 	{
 		.compatible = "atmel,at91rm9200-i2c",
 		.data = &at91rm9200_config,
@@ -172,11 +172,7 @@ static const struct of_device_id atmel_twi_dt_ids[] = {
 	}, {
 		.compatible = "atmel,sama5d2-i2c",
 		.data = &sama5d2_config,
-	}, {
-		/* sentinel */
-	}
-};
-MODULE_OF_TABLE(atmel_twi_dt_ids);
+	});
 
 static struct at91_twi_pdata *at91_twi_get_driver_data(
 					struct platform_device *pdev)

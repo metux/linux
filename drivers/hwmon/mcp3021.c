@@ -183,12 +183,9 @@ static const struct i2c_device_id mcp3021_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, mcp3021_id);
 
-static const struct of_device_id of_mcp3021_match[] = {
+MODULE_DECLARE_OF_TABLE(of_mcp3021_match,
 	{ .compatible = "microchip,mcp3021", .data = (void *)mcp3021 },
-	{ .compatible = "microchip,mcp3221", .data = (void *)mcp3221 },
-	{ }
-};
-MODULE_OF_TABLE(of_mcp3021_match);
+	{ .compatible = "microchip,mcp3221", .data = (void *)mcp3221 });
 
 static struct i2c_driver mcp3021_driver = {
 	.driver = {

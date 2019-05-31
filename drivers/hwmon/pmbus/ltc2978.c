@@ -752,7 +752,7 @@ static int ltc2978_probe(struct i2c_client *client,
 	return pmbus_do_probe(client, id, info);
 }
 
-static const struct of_device_id ltc2978_of_match[] = {
+MODULE_DECLARE_OF_TABLE(ltc2978_of_match,
 	{ .compatible = "lltc,ltc2974" },
 	{ .compatible = "lltc,ltc2975" },
 	{ .compatible = "lltc,ltc2977" },
@@ -766,10 +766,7 @@ static const struct of_device_id ltc2978_of_match[] = {
 	{ .compatible = "lltc,ltm2987" },
 	{ .compatible = "lltc,ltm4675" },
 	{ .compatible = "lltc,ltm4676" },
-	{ .compatible = "lltc,ltm4686" },
-	{ }
-};
-MODULE_OF_TABLE(ltc2978_of_match);
+	{ .compatible = "lltc,ltm4686" });
 
 static struct i2c_driver ltc2978_driver = {
 	.driver = {

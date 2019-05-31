@@ -1461,11 +1461,8 @@ static const struct i2c_device_id anx78xx_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, anx78xx_id);
 
-static const struct of_device_id anx78xx_match_table[] = {
-	{ .compatible = "analogix,anx7814", },
-	{ /* sentinel */ },
-};
-MODULE_OF_TABLE(anx78xx_match_table);
+MODULE_DECLARE_OF_TABLE(anx78xx_match_table,
+	{ .compatible = "analogix,anx7814", });
 
 static struct i2c_driver anx78xx_driver = {
 	.driver = {

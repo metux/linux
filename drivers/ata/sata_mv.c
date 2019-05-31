@@ -4273,12 +4273,9 @@ static int mv_platform_resume(struct platform_device *pdev)
 #define mv_platform_resume NULL
 #endif
 
-static const struct of_device_id mv_sata_dt_ids[] = {
+MODULE_DECLARE_OF_TABLE(mv_sata_dt_ids,
 	{ .compatible = "marvell,armada-370-sata", },
-	{ .compatible = "marvell,orion-sata", },
-	{},
-};
-MODULE_OF_TABLE(mv_sata_dt_ids);
+	{ .compatible = "marvell,orion-sata", });
 
 static struct platform_driver mv_platform_driver = {
 	.probe		= mv_platform_probe,

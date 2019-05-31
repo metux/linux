@@ -1104,13 +1104,10 @@ static const struct btmtkuart_data mt7668_data = {
 	.fwname = FIRMWARE_MT7668,
 };
 
-static const struct of_device_id mtk_of_match_table[] = {
+MODULE_DECLARE_OF_TABLE(mtk_of_match_table,
 	{ .compatible = "mediatek,mt7622-bluetooth", .data = &mt7622_data},
 	{ .compatible = "mediatek,mt7663u-bluetooth", .data = &mt7663_data},
-	{ .compatible = "mediatek,mt7668u-bluetooth", .data = &mt7668_data},
-	{ }
-};
-MODULE_OF_TABLE(mtk_of_match_table);
+	{ .compatible = "mediatek,mt7668u-bluetooth", .data = &mt7668_data});
 
 static struct serdev_device_driver btmtkuart_driver = {
 	.probe = btmtkuart_probe,

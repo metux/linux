@@ -2081,11 +2081,8 @@ static int tda998x_remove(struct i2c_client *client)
 	return 0;
 }
 
-static const struct of_device_id tda998x_dt_ids[] = {
-	{ .compatible = "nxp,tda998x", },
-	{ }
-};
-MODULE_OF_TABLE(tda998x_dt_ids);
+MODULE_DECLARE_OF_TABLE(tda998x_dt_ids,
+	{ .compatible = "nxp,tda998x" });
 
 static const struct i2c_device_id tda998x_ids[] = {
 	{ "tda998x", 0 },

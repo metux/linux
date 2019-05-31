@@ -119,9 +119,7 @@ static struct attribute *lm70_attrs[] = {
 
 ATTRIBUTE_GROUPS(lm70);
 
-/*----------------------------------------------------------------------*/
-
-static const struct of_device_id lm70_of_ids[] = {
+MODULE_DECLARE_OF_TABLE(lm70_of_ids,
 	{
 		.compatible = "ti,lm70",
 		.data = (void *) LM70_CHIP_LM70,
@@ -141,10 +139,7 @@ static const struct of_device_id lm70_of_ids[] = {
 	{
 		.compatible = "ti,lm74",
 		.data = (void *) LM70_CHIP_LM74,
-	},
-	{},
-};
-MODULE_OF_TABLE(lm70_of_ids);
+	});
 
 static int lm70_probe(struct spi_device *spi)
 {

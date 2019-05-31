@@ -1384,12 +1384,8 @@ static const struct dev_pm_ops omap_ssi_port_pm_ops = {
 #define DEV_PM_OPS     NULL
 #endif
 
-
-static const struct of_device_id omap_ssi_port_of_match[] = {
-	{ .compatible = "ti,omap3-ssi-port", },
-	{},
-};
-MODULE_OF_TABLE(omap_ssi_port_of_match);
+MODULE_DECLARE_OF_TABLE(omap_ssi_port_of_match,
+	{ .compatible = "ti,omap3-ssi-port", });
 
 struct platform_driver ssi_port_pdriver = {
 	.probe = ssi_port_probe,

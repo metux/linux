@@ -176,11 +176,8 @@ static const struct acpi_device_id cros_coreboot_acpi_match[] = {
 };
 MODULE_ACPI_TABLE(cros_coreboot_acpi_match);
 
-static const struct of_device_id coreboot_of_match[] = {
-	{ .compatible = "coreboot" },
-	{}
-};
-MODULE_OF_TABLE(coreboot_of_match);
+MODULE_DECLARE_OF_TABLE(coreboot_of_match,
+	{ .compatible = "coreboot" });
 
 static struct platform_driver coreboot_table_driver = {
 	.probe = coreboot_table_probe,

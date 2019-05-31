@@ -672,11 +672,8 @@ static int cdce706_remove(struct i2c_client *client)
 	return 0;
 }
 
-static const struct of_device_id cdce706_dt_match[] = {
-	{ .compatible = "ti,cdce706" },
-	{ },
-};
-MODULE_OF_TABLE(cdce706_dt_match);
+MODULE_DECLARE_OF_TABLE(cdce706_dt_match,
+	{ .compatible = "ti,cdce706" });
 
 static const struct i2c_device_id cdce706_id[] = {
 	{ "cdce706", 0 },

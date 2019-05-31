@@ -642,11 +642,8 @@ static int zynq_fpga_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id zynq_fpga_of_match[] = {
-	{ .compatible = "xlnx,zynq-devcfg-1.0", },
-	{},
-};
-MODULE_OF_TABLE(zynq_fpga_of_match);
+MODULE_DECLARE_OF_TABLE(zynq_fpga_of_match,
+	{ .compatible = "xlnx,zynq-devcfg-1.0", });
 
 static struct platform_driver zynq_fpga_driver = {
 	.probe = zynq_fpga_probe,

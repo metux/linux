@@ -22,7 +22,7 @@
  * For old single-chip devices keep <device_name>-accel to maintain
  * compatibility
  */
-static const struct of_device_id st_accel_of_match[] = {
+MODULE_DECLARE_OF_TABLE(st_accel_of_match,
 	{
 		/* An older compatible */
 		.compatible = "st,lis302dl-spi",
@@ -91,10 +91,7 @@ static const struct of_device_id st_accel_of_match[] = {
 	{
 		.compatible = "st,lis3de",
 		.data = LIS3DE_ACCEL_DEV_NAME,
-	},
-	{}
-};
-MODULE_OF_TABLE(st_accel_of_match);
+	});
 
 static int st_accel_spi_probe(struct spi_device *spi)
 {

@@ -291,11 +291,8 @@ static int ec_i2c_remove(struct platform_device *dev)
 	return 0;
 }
 
-static const struct of_device_id cros_ec_i2c_of_match[] = {
-	{ .compatible = "google,cros-ec-i2c-tunnel" },
-	{},
-};
-MODULE_OF_TABLE(cros_ec_i2c_of_match);
+MODULE_DECLARE_OF_TABLE(cros_ec_i2c_of_match,
+	{ .compatible = "google,cros-ec-i2c-tunnel" });
 
 static struct platform_driver ec_i2c_tunnel_driver = {
 	.probe = ec_i2c_probe,

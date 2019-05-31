@@ -269,8 +269,12 @@ struct of_device_id {
  */
 #ifdef CONFIG_OF
 #define MODULE_OF_TABLE(name)	MODULE_DEVICE_TABLE(of,name)
+#define MODULE_DECLARE_OF_TABLE(name,entries...) \
+static const struct of_device_id name[] = { entries, {} };
 #else
 #define MODULE_OF_TABLE(name)
+#define MODULE_DECLARE_OF_TABLE(name,entries...) \
+static const struct of_device_id *name = NULL;
 #endif /* CONFIG_OF */
 
 /*

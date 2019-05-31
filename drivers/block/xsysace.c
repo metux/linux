@@ -1217,14 +1217,11 @@ static int ace_remove(struct platform_device *dev)
 }
 
 /* Match table for of_platform binding */
-static const struct of_device_id ace_of_match[] = {
+MODULE_DECLARE_OF_TABLE(ace_of_match,
 	{ .compatible = "xlnx,opb-sysace-1.00.b", },
 	{ .compatible = "xlnx,opb-sysace-1.00.c", },
 	{ .compatible = "xlnx,xps-sysace-1.00.a", },
-	{ .compatible = "xlnx,sysace", },
-	{},
-};
-MODULE_OF_TABLE(ace_of_match);
+	{ .compatible = "xlnx,sysace", });
 
 static struct platform_driver ace_platform_driver = {
 	.probe = ace_probe,

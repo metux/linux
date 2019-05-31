@@ -414,16 +414,14 @@ err:
 }
 
 static int i5k_find_amb_registers(struct i5k_amb_data *data,
-					    unsigned long devid)
+				  const struct pci_device_id *devid)
 {
 	struct pci_dev *pcidev;
 	u32 val32;
 	int res = -ENODEV;
 
 	/* Find AMB register memory space */
-	pcidev = pci_get_device(PCI_VENDOR_ID_INTEL,
-				devid,
-				NULL);
+	pcidev = pci_get_device_by_id(devid);
 	if (!pcidev)
 		return -ENODEV;
 
@@ -447,14 +445,15 @@ out:
 	return res;
 }
 
-static int i5k_channel_probe(u16 *amb_present, unsigned long dev_id)
+static int i5k_channel_probe(u16 *amb_present, unsigned int vendor,
+			     unsigned int device)
 {
 	struct pci_dev *pcidev;
 	u16 val16;
 	int res = -ENODEV;
 
 	/* Copy the DIMM presence map for these two channels */
-	pcidev = pci_get_device(PCI_VENDOR_ID_INTEL, dev_id, NULL);
+	pcidev = pci_get_device(vendor, device, NULL);
 	if (!pcidev)
 		return -ENODEV;
 
@@ -473,23 +472,12 @@ out:
 	return res;
 }
 
-static struct {
-	unsigned long err;
-	unsigned long fbd0;
-} chipset_ids[]  = {
-	{ PCI_DEVICE_ID_INTEL_5000_ERR, PCI_DEVICE_ID_INTEL_5000_FBD0 },
-	{ PCI_DEVICE_ID_INTEL_5400_ERR, PCI_DEVICE_ID_INTEL_5400_FBD0 },
-	{ 0, 0 }
-};
-
-#ifdef MODULE
 static const struct pci_device_id i5k_amb_ids[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_5000_ERR) },
-	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_5400_ERR) },
+	{ PCI_DEVICE_DATA(INTEL, 5000_ERR, PCI_DEVICE_ID_INTEL_5000_FBD0) },
+	{ PCI_DEVICE_DATA(INTEL, 5400_ERR, PCI_DEVICE_ID_INTEL_5400_FBD0) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, i5k_amb_ids);
-#endif
 
 static int i5k_amb_probe(struct platform_device *pdev)
 {
@@ -504,22 +492,26 @@ static int i5k_amb_probe(struct platform_device *pdev)
 	/* Figure out where the AMB registers live */
 	i = 0;
 	do {
-		res = i5k_find_amb_registers(data, chipset_ids[i].err);
+		res = i5k_find_amb_registers(data, &i5k_amb_ids[i]);
 		if (res == 0)
 			break;
 		i++;
-	} while (chipset_ids[i].err);
+	} while (i5k_amb_ids[i].device);
 
 	if (res)
 		goto err;
 
 	/* Copy the DIMM presence map for the first two channels */
-	res = i5k_channel_probe(&data->amb_present[0], chipset_ids[i].fbd0);
+	res = i5k_channel_probe(&data->amb_present[0],
+				i5k_amb_ids[i].vendor,
+				i5k_amb_ids[i].driver_data);
 	if (res)
 		goto err;
 
 	/* Copy the DIMM presence map for the optional second two channels */
-	i5k_channel_probe(&data->amb_present[2], chipset_ids[i].fbd0 + 1);
+	i5k_channel_probe(&data->amb_present[2],
+			  i5k_amb_ids[i].vendor,
+			  i5k_amb_ids[i].driver_data+1);
 
 	/* Set up resource regions */
 	reso = request_mem_region(data->amb_base, data->amb_len, DRVNAME);

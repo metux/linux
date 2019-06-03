@@ -22,6 +22,7 @@
 
 #include <linux/firmware.h>
 #include <linux/module.h>
+#include <linux/pci.h>
 
 #include "pp_debug.h"
 #include "amdgpu.h"
@@ -335,8 +336,7 @@ static int smu_v11_0_setup_pptable(struct smu_context *smu)
 	struct amdgpu_device *adev = smu->adev;
 	const struct smc_firmware_header_v1_0 *hdr;
 	int ret, index;
-	uint32_t size = 0;
-	uint16_t atom_table_size;
+	uint32_t size;
 	uint8_t frev, crev;
 	void *table;
 	uint16_t version_major, version_minor;
@@ -364,11 +364,10 @@ static int smu_v11_0_setup_pptable(struct smu_context *smu)
 		index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
 						    powerplayinfo);
 
-		ret = smu_get_atom_data_table(smu, index, &atom_table_size, &frev, &crev,
+		ret = smu_get_atom_data_table(smu, index, (uint16_t *)&size, &frev, &crev,
 					      (uint8_t **)&table);
 		if (ret)
 			return ret;
-		size = atom_table_size;
 	}
 
 	if (!smu->smu_table.power_play_table)
@@ -1233,15 +1232,15 @@ static int smu_v11_0_start_thermal_control(struct smu_context *smu)
 			return ret;
 	}
 
-	adev->pm.dpm.thermal.min_temp = range.min * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.max_temp = range.max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.max_edge_emergency_temp = range.edge_emergency_max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.min_hotspot_temp = range.hotspot_min * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.max_hotspot_crit_temp = range.hotspot_crit_max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.max_hotspot_emergency_temp = range.hotspot_emergency_max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.min_mem_temp = range.mem_min * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.max_mem_crit_temp = range.mem_crit_max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
-	adev->pm.dpm.thermal.max_mem_emergency_temp = range.mem_emergency_max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
+	adev->pm.dpm.thermal.min_temp = range.min;
+	adev->pm.dpm.thermal.max_temp = range.max;
+	adev->pm.dpm.thermal.max_edge_emergency_temp = range.edge_emergency_max;
+	adev->pm.dpm.thermal.min_hotspot_temp = range.hotspot_min;
+	adev->pm.dpm.thermal.max_hotspot_crit_temp = range.hotspot_crit_max;
+	adev->pm.dpm.thermal.max_hotspot_emergency_temp = range.hotspot_emergency_max;
+	adev->pm.dpm.thermal.min_mem_temp = range.mem_min;
+	adev->pm.dpm.thermal.max_mem_crit_temp = range.mem_crit_max;
+	adev->pm.dpm.thermal.max_mem_emergency_temp = range.mem_emergency_max;
 	adev->pm.dpm.thermal.min_temp = range.min * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
 	adev->pm.dpm.thermal.max_temp = range.max * SMU_TEMPERATURE_UNITS_PER_CENTIGRADES;
 
@@ -1426,7 +1425,7 @@ smu_v11_0_smc_fan_control(struct smu_context *smu, bool start)
 {
 	int ret = 0;
 
-	if (!smu_feature_is_supported(smu, SMU_FEATURE_FAN_CONTROL_BIT))
+	if (smu_feature_is_supported(smu, SMU_FEATURE_FAN_CONTROL_BIT))
 		return 0;
 
 	ret = smu_feature_set_enabled(smu, SMU_FEATURE_FAN_CONTROL_BIT, start);

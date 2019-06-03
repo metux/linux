@@ -971,8 +971,14 @@ struct syscall {
 	struct syscall_arg_fmt *arg_fmt;
 };
 
+/*
+ * Must match what is in the BPF program:
+ *
+ * tools/perf/examples/bpf/augmented_raw_syscalls.c
+ */
 struct bpf_map_syscall_entry {
 	bool	enabled;
+	u16	string_args_len[6];
 };
 
 /*
@@ -2710,6 +2716,25 @@ out_enomem:
 }
 
 #ifdef HAVE_LIBBPF_SUPPORT
+static void trace__init_bpf_map_syscall_args(struct trace *trace, int id, struct bpf_map_syscall_entry *entry)
+{
+	struct syscall *sc = trace__syscall_info(trace, NULL, id);
+	int arg = 0;
+
+	if (sc == NULL)
+		goto out;
+
+	for (; arg < sc->nr_args; ++arg) {
+		entry->string_args_len[arg] = 0;
+		if (sc->arg_fmt[arg].scnprintf == SCA_FILENAME) {
+			/* Should be set like strace -s strsize */
+			entry->string_args_len[arg] = PATH_MAX;
+		}
+	}
+out:
+	for (; arg < 6; ++arg)
+		entry->string_args_len[arg] = 0;
+}
 static int trace__set_ev_qualifier_bpf_filter(struct trace *trace)
 {
 	int fd = bpf_map__fd(trace->syscalls.map);
@@ -2721,6 +2746,9 @@ static int trace__set_ev_qualifier_bpf_filter(struct trace *trace)
 
 	for (i = 0; i < trace->ev_qualifier_ids.nr; ++i) {
 		int key = trace->ev_qualifier_ids.entries[i];
+
+		if (value.enabled)
+			trace__init_bpf_map_syscall_args(trace, key, &value);
 
 		err = bpf_map_update_elem(fd, &key, &value, BPF_EXIST);
 		if (err)
@@ -2739,6 +2767,9 @@ static int __trace__init_syscalls_bpf_map(struct trace *trace, bool enabled)
 	int err = 0, key;
 
 	for (key = 0; key < trace->sctbl->syscalls.nr_entries; ++key) {
+		if (enabled)
+			trace__init_bpf_map_syscall_args(trace, key, &value);
+
 		err = bpf_map_update_elem(fd, &key, &value, BPF_ANY);
 		if (err)
 			break;

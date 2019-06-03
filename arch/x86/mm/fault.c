@@ -1018,8 +1018,6 @@ static void
 do_sigbus(struct pt_regs *regs, unsigned long error_code, unsigned long address,
 	  vm_fault_t fault)
 {
-	struct task_struct *tsk = current;
-
 	/* Kernel mode? Handle exceptions or die: */
 	if (!(error_code & X86_PF_USER)) {
 		no_context(regs, error_code, address, SIGBUS, BUS_ADRERR);
@@ -1034,6 +1032,7 @@ do_sigbus(struct pt_regs *regs, unsigned long error_code, unsigned long address,
 
 #ifdef CONFIG_MEMORY_FAILURE
 	if (fault & (VM_FAULT_HWPOISON|VM_FAULT_HWPOISON_LARGE)) {
+		struct task_struct *tsk = current;
 		unsigned lsb = 0;
 
 		pr_err(

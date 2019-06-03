@@ -301,6 +301,22 @@ struct dev_pm_ops {
 	int (*runtime_idle)(struct device *dev);
 };
 
+/*
+ * Use this macro to conditionally take a pointer to an struct dev_pm_ops,
+ * only if CONFIG_PM is enabled - otherwise NULL.
+ *
+ * Usually for assigning to the .pm field in struct device_driver, w/o
+ * having to put #ifdef CONFIG_PM around it.
+ *
+ * Note that this macro really takes pointer from the given object,
+ * so point call it w/ pointers (eg. & before field name)
+ */
+#ifdef CONFIG_PM
+#define PM_OPS_PTR(objname) (&objname)
+#else
+#define PM_OPS_PTR(objname) (NULL)
+#endif
+
 #ifdef CONFIG_PM_SLEEP
 #define SET_SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
 	.suspend = suspend_fn, \

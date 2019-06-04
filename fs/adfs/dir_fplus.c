@@ -4,7 +4,6 @@
  *
  *  Copyright (C) 1997-1999 Russell King
  */
-#include <linux/buffer_head.h>
 #include <linux/slab.h>
 #include "adfs.h"
 #include "dir_fplus.h"

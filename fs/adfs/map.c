@@ -4,7 +4,6 @@
  *
  *  Copyright (C) 1997-2002 Russell King
  */
-#include <linux/buffer_head.h>
 #include <asm/unaligned.h>
 #include "adfs.h"
 

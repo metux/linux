@@ -1185,8 +1185,7 @@ export INSTALL_HDR_PATH = $(objtree)/usr
 PHONY += archheaders archscripts
 
 PHONY += __headers
-__headers: $(version_h) scripts_basic uapi-asm-generic archheaders archscripts
-	$(Q)$(MAKE) $(build)=scripts scripts/unifdef
+__headers: $(version_h) scripts_unifdef uapi-asm-generic archheaders archscripts
 
 PHONY += headers_install
 headers_install: __headers
@@ -1207,6 +1206,10 @@ endif
 ifdef CONFIG_HEADERS_CHECK
 all: headers_check
 endif
+
+PHONY += scripts_unifdef
+scripts_unifdef: scripts_basic
+	$(Q)$(MAKE) $(build)=scripts scripts/unifdef
 
 # ---------------------------------------------------------------------------
 # Kernel selftest

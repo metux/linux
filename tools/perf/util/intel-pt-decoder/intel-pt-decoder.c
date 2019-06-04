@@ -493,7 +493,7 @@ static void intel_pt_reposition(struct intel_pt_decoder *decoder)
 	decoder->have_tma = false;
 }
 
-static int intel_pt_get_data(struct intel_pt_decoder *decoder)
+static int intel_pt_get_data(struct intel_pt_decoder *decoder, bool reposition)
 {
 	struct intel_pt_buffer buffer = { .buf = 0, };
 	int ret;
@@ -510,7 +510,7 @@ static int intel_pt_get_data(struct intel_pt_decoder *decoder)
 		intel_pt_log("No more data\n");
 		return -ENODATA;
 	}
-	if (!buffer.consecutive) {
+	if (!buffer.consecutive || reposition) {
 		intel_pt_reposition(decoder);
 		decoder->ref_timestamp = buffer.ref_timestamp;
 		decoder->state.trace_nr = buffer.trace_nr;
@@ -522,10 +522,11 @@ static int intel_pt_get_data(struct intel_pt_decoder *decoder)
 	return 0;
 }
 
-static int intel_pt_get_next_data(struct intel_pt_decoder *decoder)
+static int intel_pt_get_next_data(struct intel_pt_decoder *decoder,
+				  bool reposition)
 {
 	if (!decoder->next_buf)
-		return intel_pt_get_data(decoder);
+		return intel_pt_get_data(decoder, reposition);
 
 	decoder->buf = decoder->next_buf;
 	decoder->len = decoder->next_len;
@@ -544,7 +545,7 @@ static int intel_pt_get_split_packet(struct intel_pt_decoder *decoder)
 	len = decoder->len;
 	memcpy(buf, decoder->buf, len);
 
-	ret = intel_pt_get_data(decoder);
+	ret = intel_pt_get_data(decoder, false);
 	if (ret) {
 		decoder->pos += old_len;
 		return ret < 0 ? ret : -EINVAL;
@@ -870,7 +871,7 @@ static int intel_pt_get_next_packet(struct intel_pt_decoder *decoder)
 		decoder->len -= decoder->pkt_step;
 
 		if (!decoder->len) {
-			ret = intel_pt_get_next_data(decoder);
+			ret = intel_pt_get_next_data(decoder, false);
 			if (ret)
 				return ret;
 		}
@@ -2360,7 +2361,7 @@ static int intel_pt_get_split_psb(struct intel_pt_decoder *decoder,
 	decoder->pos += decoder->len;
 	decoder->len = 0;
 
-	ret = intel_pt_get_next_data(decoder);
+	ret = intel_pt_get_next_data(decoder, false);
 	if (ret)
 		return ret;
 
@@ -2386,7 +2387,7 @@ static int intel_pt_scan_for_psb(struct intel_pt_decoder *decoder)
 	intel_pt_log("Scanning for PSB\n");
 	while (1) {
 		if (!decoder->len) {
-			ret = intel_pt_get_next_data(decoder);
+			ret = intel_pt_get_next_data(decoder, false);
 			if (ret)
 				return ret;
 		}

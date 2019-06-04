@@ -1194,6 +1194,8 @@ headers_install: headers
 
 PHONY += archheaders archscripts
 
+hdr-inst := -f $(srctree)/scripts/Makefile.headersinst obj
+
 PHONY += headers
 headers: $(version_h) scripts_unifdef uapi-asm-generic archheaders archscripts
 	$(if $(wildcard $(srctree)/arch/$(SRCARCH)/include/uapi/asm/Kbuild),, \

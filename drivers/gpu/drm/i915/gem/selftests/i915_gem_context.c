@@ -1623,6 +1623,11 @@ __engine_name(struct drm_i915_private *i915, intel_engine_mask_t engines)
 	return "none";
 }
 
+static bool skip_unused_engines(struct intel_context *ce, void *data)
+{
+	return !ce->state;
+}
+
 static void mock_barrier_task(void *data)
 {
 	unsigned int *counter = data;
@@ -1655,7 +1660,7 @@ static int mock_context_barrier(void *arg)
 
 	counter = 0;
 	err = context_barrier_task(ctx, 0,
-				   NULL, mock_barrier_task, &counter);
+				   NULL, NULL, mock_barrier_task, &counter);
 	if (err) {
 		pr_err("Failed at line %d, err=%d\n", __LINE__, err);
 		goto out;
@@ -1668,7 +1673,10 @@ static int mock_context_barrier(void *arg)
 
 	counter = 0;
 	err = context_barrier_task(ctx, ALL_ENGINES,
-				   NULL, mock_barrier_task, &counter);
+				   skip_unused_engines,
+				   NULL,
+				   mock_barrier_task,
+				   &counter);
 	if (err) {
 		pr_err("Failed at line %d, err=%d\n", __LINE__, err);
 		goto out;
@@ -1689,7 +1697,7 @@ static int mock_context_barrier(void *arg)
 	counter = 0;
 	context_barrier_inject_fault = BIT(RCS0);
 	err = context_barrier_task(ctx, ALL_ENGINES,
-				   NULL, mock_barrier_task, &counter);
+				   NULL, NULL, mock_barrier_task, &counter);
 	context_barrier_inject_fault = 0;
 	if (err == -ENXIO)
 		err = 0;
@@ -1704,7 +1712,10 @@ static int mock_context_barrier(void *arg)
 
 	counter = 0;
 	err = context_barrier_task(ctx, ALL_ENGINES,
-				   NULL, mock_barrier_task, &counter);
+				   skip_unused_engines,
+				   NULL,
+				   mock_barrier_task,
+				   &counter);
 	if (err) {
 		pr_err("Failed at line %d, err=%d\n", __LINE__, err);
 		goto out;

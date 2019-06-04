@@ -227,3 +227,10 @@ static inline u64 adfs_disc_size(const struct adfs_discrecord *dr)
 	return (u64)le32_to_cpu(dr->disc_size_high) << 32 |
 		    le32_to_cpu(dr->disc_size);
 }
+
+/* Return the disc record from the map */
+static inline
+struct adfs_discrecord *adfs_map_discrecord(struct adfs_discmap *dm)
+{
+	return (void *)(dm[0].dm_bh->b_data + 4);
+}

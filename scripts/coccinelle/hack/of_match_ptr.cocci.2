@@ -1,0 +1,17 @@
+/// use of_match_ptr() macro for oftree match table assignments
+
+virtual patch
+virtual context
+virtual org
+virtual report
+
+@platform@
+identifier p;
+identifier matchtab;
+@@
+struct platform_driver p = {
+   .driver = {
+-        .of_match_table = matchtab,
++        .of_match_table = of_match_ptr(matchtab),
+   },
+};

@@ -1072,9 +1072,6 @@ out:
 
 static UNIVERSAL_DEV_PM_OPS(btmtksdio_pm_ops, btmtksdio_runtime_suspend,
 			    btmtksdio_runtime_resume, NULL);
-#define BTMTKSDIO_PM_OPS (&btmtksdio_pm_ops)
-#else	/* CONFIG_PM */
-#define BTMTKSDIO_PM_OPS NULL
 #endif	/* CONFIG_PM */
 
 static struct sdio_driver btmtksdio_driver = {
@@ -1084,7 +1081,7 @@ static struct sdio_driver btmtksdio_driver = {
 	.id_table	= btmtksdio_table,
 	.drv = {
 		.owner = THIS_MODULE,
-		.pm = BTMTKSDIO_PM_OPS,
+		.pm = PM_OPS_PTR(btmtksdio_pm_ops),
 	}
 };
 

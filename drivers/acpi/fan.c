@@ -39,10 +39,7 @@ static const struct dev_pm_ops acpi_fan_pm = {
 	.thaw = acpi_fan_resume,
 	.restore = acpi_fan_resume,
 };
-#define FAN_PM_OPS_PTR (&acpi_fan_pm)
-#else
-#define FAN_PM_OPS_PTR NULL
-#endif
+#endif /* CONFIG_PM_SLEEP */
 
 struct acpi_fan_fps {
 	u64 control;
@@ -73,7 +70,7 @@ static struct platform_driver acpi_fan_driver = {
 	.driver = {
 		.name = "acpi-fan",
 		.acpi_match_table = fan_device_ids,
-		.pm = FAN_PM_OPS_PTR,
+		.pm = PM_SLEEP_OPS(acpi_fan_pm),
 	},
 };
 

@@ -175,9 +175,6 @@ static int mtk_rng_runtime_resume(struct device *dev)
 
 static UNIVERSAL_DEV_PM_OPS(mtk_rng_pm_ops, mtk_rng_runtime_suspend,
 			    mtk_rng_runtime_resume, NULL);
-#define MTK_RNG_PM_OPS (&mtk_rng_pm_ops)
-#else	/* CONFIG_PM */
-#define MTK_RNG_PM_OPS NULL
 #endif	/* CONFIG_PM */
 
 static const struct of_device_id mtk_rng_match[] = {
@@ -189,7 +186,7 @@ MODULE_DEVICE_TABLE(of, mtk_rng_match);
 static struct platform_driver mtk_rng_driver = {
 	.probe          = mtk_rng_probe,
 	.driver = {
-		.name = MTK_RNG_DEV,
+		.name = PM_OPS_PTR(mtk_rng_pm_ops),
 		.pm = MTK_RNG_PM_OPS,
 		.of_match_table = mtk_rng_match,
 	},

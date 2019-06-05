@@ -676,19 +676,14 @@ static const struct dev_pm_ops jzfb_pm_ops = {
 	.poweroff	= jzfb_suspend,
 	.restore	= jzfb_resume,
 };
-
-#define JZFB_PM_OPS (&jzfb_pm_ops)
-
-#else
-#define JZFB_PM_OPS NULL
-#endif
+#endif /* CONFIG_PM */
 
 static struct platform_driver jzfb_driver = {
 	.probe = jzfb_probe,
 	.remove = jzfb_remove,
 	.driver = {
 		.name = "jz4740-fb",
-		.pm = JZFB_PM_OPS,
+		.pm = PM_OPS_PTR(jzfb_pm_ops),
 	},
 };
 module_platform_driver(jzfb_driver);

@@ -602,17 +602,13 @@ static const struct dev_pm_ops iTCO_wdt_pm = {
 	.suspend_noirq = iTCO_wdt_suspend_noirq,
 	.resume_noirq = iTCO_wdt_resume_noirq,
 };
-
-#define ITCO_WDT_PM_OPS	(&iTCO_wdt_pm)
-#else
-#define ITCO_WDT_PM_OPS	NULL
 #endif /* CONFIG_PM_SLEEP */
 
 static struct platform_driver iTCO_wdt_driver = {
 	.probe          = iTCO_wdt_probe,
 	.driver         = {
 		.name   = DRV_NAME,
-		.pm     = ITCO_WDT_PM_OPS,
+		.pm     = PM_SLEEP_OPS_PTR(iTCO_wdt_pm),
 	},
 };
 

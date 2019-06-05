@@ -278,12 +278,6 @@ static int bcma_host_pci_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(bcma_pm_ops, bcma_host_pci_suspend,
 			 bcma_host_pci_resume);
-#define BCMA_PM_OPS	(&bcma_pm_ops)
-
-#else /* CONFIG_PM_SLEEP */
-
-#define BCMA_PM_OPS     NULL
-
 #endif /* CONFIG_PM_SLEEP */
 
 static const struct pci_device_id bcma_pci_bridge_tbl[] = {
@@ -316,7 +310,7 @@ static struct pci_driver bcma_pci_bridge_driver = {
 	.id_table = bcma_pci_bridge_tbl,
 	.probe = bcma_host_pci_probe,
 	.remove = bcma_host_pci_remove,
-	.driver.pm = BCMA_PM_OPS,
+	.driver.pm = PM_SLEEP_OPS_PTR(bcma_pm_ops),
 };
 
 int __init bcma_host_pci_init(void)

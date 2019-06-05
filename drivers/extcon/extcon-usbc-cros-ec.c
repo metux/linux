@@ -510,10 +510,6 @@ static int extcon_cros_ec_resume(struct device *dev)
 static const struct dev_pm_ops extcon_cros_ec_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(extcon_cros_ec_suspend, extcon_cros_ec_resume)
 };
-
-#define DEV_PM_OPS	(&extcon_cros_ec_dev_pm_ops)
-#else
-#define DEV_PM_OPS	NULL
 #endif /* CONFIG_PM_SLEEP */
 
 #ifdef CONFIG_OF
@@ -528,7 +524,7 @@ static struct platform_driver extcon_cros_ec_driver = {
 	.driver = {
 		.name  = "extcon-usbc-cros-ec",
 		.of_match_table = of_match_ptr(extcon_cros_ec_of_match),
-		.pm = DEV_PM_OPS,
+		.pm = PM_SLEEP_OPS_PTR(extcon_cros_ec_dev_pm_ops),
 	},
 	.remove  = extcon_cros_ec_remove,
 	.probe   = extcon_cros_ec_probe,

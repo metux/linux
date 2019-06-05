@@ -471,17 +471,14 @@ static const struct dev_pm_ops neponset_pm_ops = {
 	.resume_noirq = neponset_resume,
 	.restore_noirq = neponset_resume,
 };
-#define PM_OPS &neponset_pm_ops
-#else
-#define PM_OPS NULL
-#endif
+#endif /* CONFIG_PM_SLEEP */
 
 static struct platform_driver neponset_device_driver = {
 	.probe		= neponset_probe,
 	.remove		= neponset_remove,
 	.driver		= {
 		.name	= "neponset",
-		.pm	= PM_OPS,
+		.pm	= PM_SLEEP_OPS_PTR(neponset_pm_ops),
 	},
 };
 

@@ -369,10 +369,7 @@ static int nec_8048_resume(struct device *dev)
 }
 static SIMPLE_DEV_PM_OPS(nec_8048_pm_ops, nec_8048_suspend,
 		nec_8048_resume);
-#define NEC_8048_PM_OPS (&nec_8048_pm_ops)
-#else
-#define NEC_8048_PM_OPS NULL
-#endif
+#endif /* CONFIG_PM_SLEEP */
 
 static const struct of_device_id nec_8048_of_match[] = {
 	{ .compatible = "omapdss,nec,nl8048hl11", },
@@ -384,7 +381,7 @@ MODULE_DEVICE_TABLE(of, nec_8048_of_match);
 static struct spi_driver nec_8048_driver = {
 	.driver = {
 		.name	= "panel-nec-nl8048hl11",
-		.pm	= NEC_8048_PM_OPS,
+		.pm	= PM_SLEEP_OPS_PTR(nec_8048_pm_ops),
 		.of_match_table = nec_8048_of_match,
 		.suppress_bind_attrs = true,
 	},

@@ -349,17 +349,13 @@ static int l3_resume_noirq(struct device *dev)
 static const struct dev_pm_ops l3_dev_pm_ops = {
 	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(NULL, l3_resume_noirq)
 };
-
-#define L3_DEV_PM_OPS (&l3_dev_pm_ops)
-#else
-#define L3_DEV_PM_OPS NULL
-#endif
+#endif /* CONFIG_PM_SLEEP */
 
 static struct platform_driver omap_l3_driver = {
 	.probe		= omap_l3_probe,
 	.driver		= {
 		.name		= "omap_l3_noc",
-		.pm		= L3_DEV_PM_OPS,
+		.pm		= PM_SLEEP_OPS_PTR(l3_dev_pm_ops),
 		.of_match_table = of_match_ptr(l3_noc_match),
 	},
 };

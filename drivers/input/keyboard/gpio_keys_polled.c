@@ -307,7 +307,7 @@ static int gpio_keys_polled_probe(struct platform_device *pdev)
 				fwnode_handle_put(child);
 				return error;
 			}
-		} else if (gpio_is_valid(button->gpio)) {
+		} else if ((button->gpio > 0) && gpio_is_valid(button->gpio)) {
 			/*
 			 * Legacy GPIO number so request the GPIO here and
 			 * convert it to descriptor.
@@ -333,6 +333,18 @@ static int gpio_keys_polled_probe(struct platform_device *pdev)
 					button->gpio);
 				return -EINVAL;
 			}
+		} else {
+			/* try via gpio lookup table */
+			bdata->gpiod = devm_gpiod_get_index(dev, NULL, i, GPIOF_IN);
+			if (IS_ERR(bdata->gpiod)) {
+				dev_err(dev,
+					"unable to get gpio for button %d: %ld\n",
+					i, PTR_ERR(bdata->gpiod));
+				return PTR_ERR(bdata->gpiod);
+			}
+
+			gpiod_set_consumer_name(bdata->gpiod,
+						button->desc ? : DRV_NAME);
 		}
 
 		bdata->last_state = -1;

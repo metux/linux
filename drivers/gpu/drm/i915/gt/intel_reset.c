@@ -1160,6 +1160,12 @@ static void clear_register(struct intel_uncore *uncore, i915_reg_t reg)
 	intel_uncore_rmw(uncore, reg, 0, 0);
 }
 
+static void gen8_clear_engine_error_register(struct intel_engine_cs *engine)
+{
+	GEN6_RING_FAULT_REG_RMW(engine, RING_FAULT_VALID, 0);
+	GEN6_RING_FAULT_REG_POSTING_READ(engine);
+}
+
 void i915_clear_error_registers(struct drm_i915_private *i915,
 				intel_engine_mask_t engine_mask)
 {

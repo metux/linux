@@ -476,6 +476,7 @@ struct mlx5_core_sriov {
 	struct mlx5_vf_context	*vfs_ctx;
 	int			num_vfs;
 	int			enabled_vfs;
+	u16			max_vfs;
 };
 
 struct mlx5_fc_stats {
@@ -1112,13 +1113,9 @@ static inline bool mlx5_ecpf_vport_exists(struct mlx5_core_dev *dev)
 	return mlx5_core_is_pf(dev) && MLX5_CAP_ESW(dev, ecpf_vport_exists);
 }
 
-#define MLX5_HOST_PF_MAX_VFS	(127u)
 static inline u16 mlx5_core_max_vfs(struct mlx5_core_dev *dev)
 {
-	if (mlx5_core_is_ecpf_esw_manager(dev))
-		return MLX5_HOST_PF_MAX_VFS;
-	else
-		return pci_sriov_get_totalvfs(dev->pdev);
+	return dev->priv.sriov.max_vfs;
 }
 
 static inline int mlx5_get_gid_table_len(u16 param)

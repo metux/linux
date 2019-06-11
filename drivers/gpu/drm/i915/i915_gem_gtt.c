@@ -803,7 +803,7 @@ static void gen8_initialize_pml4(struct i915_address_space *vm,
  * context switching/execlist queuing code takes extra steps
  * to ensure that tlbs are flushed.
  */
-static void mark_tlbs_dirty(struct i915_hw_ppgtt *ppgtt)
+static void mark_tlbs_dirty(struct i915_ppgtt *ppgtt)
 {
 	ppgtt->pd_dirty_engines = ALL_ENGINES;
 	ppgtt->pd_dirty_engines = INTEL_INFO(ppgtt->vm.i915)->engine_mask;
@@ -945,7 +945,7 @@ static void gen8_ppgtt_set_pml4e(struct i915_pml4 *pml4,
 static void gen8_ppgtt_clear_4lvl(struct i915_address_space *vm,
 				  u64 start, u64 length)
 {
-	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
+	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
 	struct i915_pml4 *pml4 = &ppgtt->pml4;
 	struct i915_page_directory_pointer *pdp;
 	unsigned int pml4e;
@@ -998,7 +998,7 @@ static __always_inline struct gen8_insert_pte gen8_insert_pte(u64 start)
 }
 
 static __always_inline bool
-gen8_ppgtt_insert_pte_entries(struct i915_hw_ppgtt *ppgtt,
+gen8_ppgtt_insert_pte_entries(struct i915_ppgtt *ppgtt,
 			      struct i915_page_directory_pointer *pdp,
 			      struct sgt_dma *iter,
 			      struct gen8_insert_pte *idx,
@@ -1059,7 +1059,7 @@ static void gen8_ppgtt_insert_3lvl(struct i915_address_space *vm,
 				   enum i915_cache_level cache_level,
 				   u32 flags)
 {
-	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
+	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
 	struct sgt_dma iter = sgt_dma(vma);
 	struct gen8_insert_pte idx = gen8_insert_pte(vma->node.start);
 
@@ -1193,7 +1193,7 @@ static void gen8_ppgtt_insert_4lvl(struct i915_address_space *vm,
 				   enum i915_cache_level cache_level,
 				   u32 flags)
 {
-	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
+	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
 	struct sgt_dma iter = sgt_dma(vma);
 	struct i915_page_directory_pointer **pdps = ppgtt->pml4.pdps;
 
@@ -1292,7 +1292,7 @@ free_scratch_page:
 	return ret;
 }
 
-static int gen8_ppgtt_notify_vgt(struct i915_hw_ppgtt *ppgtt, bool create)
+static int gen8_ppgtt_notify_vgt(struct i915_ppgtt *ppgtt, bool create)
 {
 	struct i915_address_space *vm = &ppgtt->vm;
 	struct drm_i915_private *dev_priv = vm->i915;
@@ -1353,7 +1353,7 @@ static void gen8_ppgtt_cleanup_3lvl(struct i915_address_space *vm,
 	free_pdp(vm, pdp);
 }
 
-static void gen8_ppgtt_cleanup_4lvl(struct i915_hw_ppgtt *ppgtt)
+static void gen8_ppgtt_cleanup_4lvl(struct i915_ppgtt *ppgtt)
 {
 	int i;
 
@@ -1370,7 +1370,7 @@ static void gen8_ppgtt_cleanup_4lvl(struct i915_hw_ppgtt *ppgtt)
 static void gen8_ppgtt_cleanup(struct i915_address_space *vm)
 {
 	struct drm_i915_private *i915 = vm->i915;
-	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
+	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
 
 	if (intel_vgpu_active(i915))
 		gen8_ppgtt_notify_vgt(ppgtt, false);
@@ -1502,7 +1502,7 @@ static int gen8_ppgtt_alloc_3lvl(struct i915_address_space *vm,
 static int gen8_ppgtt_alloc_4lvl(struct i915_address_space *vm,
 				 u64 start, u64 length)
 {
-	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
+	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
 	struct i915_pml4 *pml4 = &ppgtt->pml4;
 	struct i915_page_directory_pointer *pdp;
 	u64 from = start;
@@ -1558,7 +1558,7 @@ unwind:
 	return -ENOMEM;
 }
 
-static int gen8_preallocate_top_level_pdp(struct i915_hw_ppgtt *ppgtt)
+static int gen8_preallocate_top_level_pdp(struct i915_ppgtt *ppgtt)
 {
 	struct i915_address_space *vm = &ppgtt->vm;
 	struct i915_page_directory_pointer *pdp = &ppgtt->pdp;
@@ -1591,7 +1591,7 @@ unwind:
 }
 
 static void ppgtt_init(struct drm_i915_private *i915,
-		       struct i915_hw_ppgtt *ppgtt)
+		       struct i915_ppgtt *ppgtt)
 {
 	ppgtt->vm.i915 = i915;
 	ppgtt->vm.dma = &i915->drm.pdev->dev;
@@ -1612,9 +1612,9 @@ static void ppgtt_init(struct drm_i915_private *i915,
  * space.
  *
  */
-static struct i915_hw_ppgtt *gen8_ppgtt_create(struct drm_i915_private *i915)
+static struct i915_ppgtt *gen8_ppgtt_create(struct drm_i915_private *i915)
 {
-	struct i915_hw_ppgtt *ppgtt;
+	struct i915_ppgtt *ppgtt;
 	int err;
 
 	ppgtt = kzalloc(sizeof(*ppgtt), GFP_KERNEL);
@@ -1684,7 +1684,7 @@ err_free:
 }
 
 /* Write pde (index) from the page directory @pd to the page table @pt */
-static inline void gen6_write_pde(const struct gen6_hw_ppgtt *ppgtt,
+static inline void gen6_write_pde(const struct gen6_ppgtt *ppgtt,
 				  const unsigned int pde,
 				  const struct i915_page_table *pt)
 {
@@ -1741,7 +1741,7 @@ static void gen6_ppgtt_enable(struct drm_i915_private *dev_priv)
 static void gen6_ppgtt_clear_range(struct i915_address_space *vm,
 				   u64 start, u64 length)
 {
-	struct gen6_hw_ppgtt *ppgtt = to_gen6_ppgtt(i915_vm_to_ppgtt(vm));
+	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(i915_vm_to_ppgtt(vm));
 	unsigned int first_entry = start / I915_GTT_PAGE_SIZE;
 	unsigned int pde = first_entry / GEN6_PTES;
 	unsigned int pte = first_entry % GEN6_PTES;
@@ -1781,7 +1781,7 @@ static void gen6_ppgtt_insert_entries(struct i915_address_space *vm,
 				      enum i915_cache_level cache_level,
 				      u32 flags)
 {
-	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
+	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(vm);
 	unsigned first_entry = vma->node.start / I915_GTT_PAGE_SIZE;
 	unsigned act_pt = first_entry / GEN6_PTES;
 	unsigned act_pte = first_entry % GEN6_PTES;
@@ -1819,7 +1819,7 @@ static void gen6_ppgtt_insert_entries(struct i915_address_space *vm,
 static int gen6_alloc_va_range(struct i915_address_space *vm,
 			       u64 start, u64 length)
 {
-	struct gen6_hw_ppgtt *ppgtt = to_gen6_ppgtt(i915_vm_to_ppgtt(vm));
+	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(i915_vm_to_ppgtt(vm));
 	struct i915_page_table *pt;
 	intel_wakeref_t wakeref;
 	u64 from = start;
@@ -1879,7 +1879,7 @@ unwind_out:
 	return -ENOMEM;
 }
 
-static int gen6_ppgtt_init_scratch(struct gen6_hw_ppgtt *ppgtt)
+static int gen6_ppgtt_init_scratch(struct gen6_ppgtt *ppgtt)
 {
 	struct i915_address_space * const vm = &ppgtt->base.vm;
 	struct i915_page_table *unused;
@@ -1914,7 +1914,7 @@ static void gen6_ppgtt_free_scratch(struct i915_address_space *vm)
 	cleanup_scratch_page(vm);
 }
 
-static void gen6_ppgtt_free_pd(struct gen6_hw_ppgtt *ppgtt)
+static void gen6_ppgtt_free_pd(struct gen6_ppgtt *ppgtt)
 {
 	struct i915_page_table *pt;
 	u32 pde;
@@ -1972,7 +1972,7 @@ static const struct i915_vma_ops nop_vma_ops = {
 
 static void gen6_ppgtt_cleanup(struct i915_address_space *vm)
 {
-	struct gen6_hw_ppgtt *ppgtt = to_gen6_ppgtt(i915_vm_to_ppgtt(vm));
+	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(i915_vm_to_ppgtt(vm));
 	struct gen6_ppgtt_cleanup_work *work = ppgtt->work;
 
 	/* FIXME remove the struct_mutex to bring the locking under control */
@@ -2003,7 +2003,7 @@ static int pd_vma_bind(struct i915_vma *vma,
 		       u32 unused)
 {
 	struct i915_ggtt *ggtt = i915_vm_to_ggtt(vma->vm);
-	struct gen6_hw_ppgtt *ppgtt = vma->private;
+	struct gen6_ppgtt *ppgtt = vma->private;
 	u32 ggtt_offset = i915_ggtt_offset(vma) / I915_GTT_PAGE_SIZE;
 	struct i915_page_table *pt;
 	unsigned int pde;
@@ -2022,7 +2022,7 @@ static int pd_vma_bind(struct i915_vma *vma,
 
 static void pd_vma_unbind(struct i915_vma *vma)
 {
-	struct gen6_hw_ppgtt *ppgtt = vma->private;
+	struct gen6_ppgtt *ppgtt = vma->private;
 	struct i915_page_table * const scratch_pt = ppgtt->base.vm.scratch_pt;
 	struct i915_page_table *pt;
 	unsigned int pde;
@@ -2049,7 +2049,7 @@ static const struct i915_vma_ops pd_vma_ops = {
 	.unbind_vma = pd_vma_unbind,
 };
 
-static struct i915_vma *pd_vma_create(struct gen6_hw_ppgtt *ppgtt, int size)
+static struct i915_vma *pd_vma_create(struct gen6_ppgtt *ppgtt, int size)
 {
 	struct drm_i915_private *i915 = ppgtt->base.vm.i915;
 	struct i915_ggtt *ggtt = &i915->ggtt;
@@ -2084,9 +2084,9 @@ static struct i915_vma *pd_vma_create(struct gen6_hw_ppgtt *ppgtt, int size)
 	return vma;
 }
 
-int gen6_ppgtt_pin(struct i915_hw_ppgtt *base)
+int gen6_ppgtt_pin(struct i915_ppgtt *base)
 {
-	struct gen6_hw_ppgtt *ppgtt = to_gen6_ppgtt(base);
+	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(base);
 	int err;
 
 	GEM_BUG_ON(ppgtt->base.vm.closed);
@@ -2118,9 +2118,9 @@ unpin:
 	return err;
 }
 
-void gen6_ppgtt_unpin(struct i915_hw_ppgtt *base)
+void gen6_ppgtt_unpin(struct i915_ppgtt *base)
 {
-	struct gen6_hw_ppgtt *ppgtt = to_gen6_ppgtt(base);
+	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(base);
 
 	GEM_BUG_ON(!ppgtt->pin_count);
 	if (--ppgtt->pin_count)
@@ -2129,9 +2129,9 @@ void gen6_ppgtt_unpin(struct i915_hw_ppgtt *base)
 	i915_vma_unpin(ppgtt->vma);
 }
 
-void gen6_ppgtt_unpin_all(struct i915_hw_ppgtt *base)
+void gen6_ppgtt_unpin_all(struct i915_ppgtt *base)
 {
-	struct gen6_hw_ppgtt *ppgtt = to_gen6_ppgtt(base);
+	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(base);
 
 	if (!ppgtt->pin_count)
 		return;
@@ -2140,10 +2140,10 @@ void gen6_ppgtt_unpin_all(struct i915_hw_ppgtt *base)
 	i915_vma_unpin(ppgtt->vma);
 }
 
-static struct i915_hw_ppgtt *gen6_ppgtt_create(struct drm_i915_private *i915)
+static struct i915_ppgtt *gen6_ppgtt_create(struct drm_i915_private *i915)
 {
 	struct i915_ggtt * const ggtt = &i915->ggtt;
-	struct gen6_hw_ppgtt *ppgtt;
+	struct gen6_ppgtt *ppgtt;
 	int err;
 
 	ppgtt = kzalloc(sizeof(*ppgtt), GFP_KERNEL);
@@ -2232,8 +2232,8 @@ int i915_ppgtt_init_hw(struct drm_i915_private *dev_priv)
 	return 0;
 }
 
-static struct i915_hw_ppgtt *
-__hw_ppgtt_create(struct drm_i915_private *i915)
+static struct i915_ppgtt *
+__ppgtt_create(struct drm_i915_private *i915)
 {
 	if (INTEL_GEN(i915) < 8)
 		return gen6_ppgtt_create(i915);
@@ -2241,12 +2241,12 @@ __hw_ppgtt_create(struct drm_i915_private *i915)
 		return gen8_ppgtt_create(i915);
 }
 
-struct i915_hw_ppgtt *
+struct i915_ppgtt *
 i915_ppgtt_create(struct drm_i915_private *i915)
 {
-	struct i915_hw_ppgtt *ppgtt;
+	struct i915_ppgtt *ppgtt;
 
-	ppgtt = __hw_ppgtt_create(i915);
+	ppgtt = __ppgtt_create(i915);
 	if (IS_ERR(ppgtt))
 		return ppgtt;
 
@@ -2658,7 +2658,7 @@ static int aliasing_gtt_bind_vma(struct i915_vma *vma,
 		pte_flags |= PTE_READ_ONLY;
 
 	if (flags & I915_VMA_LOCAL_BIND) {
-		struct i915_hw_ppgtt *appgtt = i915->mm.aliasing_ppgtt;
+		struct i915_ppgtt *appgtt = i915->mm.aliasing_ppgtt;
 
 		if (!(vma->flags & I915_VMA_LOCAL_BIND)) {
 			ret = appgtt->vm.allocate_va_range(&appgtt->vm,
@@ -2757,7 +2757,7 @@ static void i915_gtt_color_adjust(const struct drm_mm_node *node,
 static int init_aliasing_ppgtt(struct drm_i915_private *i915)
 {
 	struct i915_ggtt *ggtt = &i915->ggtt;
-	struct i915_hw_ppgtt *ppgtt;
+	struct i915_ppgtt *ppgtt;
 	int err;
 
 	ppgtt = i915_ppgtt_create(i915);
@@ -2797,7 +2797,7 @@ err_ppgtt:
 static void fini_aliasing_ppgtt(struct drm_i915_private *i915)
 {
 	struct i915_ggtt *ggtt = &i915->ggtt;
-	struct i915_hw_ppgtt *ppgtt;
+	struct i915_ppgtt *ppgtt;
 
 	ppgtt = fetch_and_zero(&i915->mm.aliasing_ppgtt);
 	if (!ppgtt)

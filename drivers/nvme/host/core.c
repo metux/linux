@@ -1322,6 +1322,9 @@ static int nvme_user_cmd(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	if (cmd.flags)
 		return -EINVAL;
 
+	printk(KERN_INFO "nvme_user_cmd: opcode=%d flags=%d nsid=%d\n",
+		cmd.opcode, cmd.flags, cmd.nsid);
+
 	memset(&c, 0, sizeof(c));
 	c.common.opcode = cmd.opcode;
 	c.common.flags = cmd.flags;

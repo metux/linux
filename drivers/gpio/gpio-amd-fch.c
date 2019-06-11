@@ -36,6 +36,10 @@ struct amd_fch_gpio_priv {
 	void __iomem			*base;
 	struct amd_fch_gpio_pdata	*pdata;
 	spinlock_t			lock;
+	u32				direction_mask;
+	u32				data_mask;
+	unsigned char			direction_inverted:1;
+	unsigned char			data_inverted:1;
 };
 
 static void __iomem *amd_fch_gpio_addr(struct amd_fch_gpio_priv *priv,
@@ -130,36 +134,38 @@ static int amd_fch_gpio_get(struct gpio_chip *gc,
 	return ret;
 }
 
-static int amd_fch_gpio_request(struct gpio_chip *chip,
+static int gpio_onereg_register(struct gpio_chip *chip,
 				unsigned int gpio_pin)
 {
 	return 0;
 }
 
-static int amd_fch_gpio_probe(struct platform_device *pdev)
+// HACK: generic part of onereg (one register per line) drivers
+static int gpio_onereg_register(struct device *dev,
+				const struct resource *res)
 {
 	struct amd_fch_gpio_priv *priv;
 	struct amd_fch_gpio_pdata *pdata;
 
-	pdata = dev_get_platdata(&pdev->dev);
+	pdata = dev_get_platdata(dev);
 	if (!pdata) {
-		dev_err(&pdev->dev, "no platform_data\n");
+		dev_err(dev, "no platform_data\n");
 		return -ENOENT;
 	}
 
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	priv->pdata	= pdata;
 
 	priv->gc.owner			= THIS_MODULE;
-	priv->gc.parent			= &pdev->dev;
-	priv->gc.label			= dev_name(&pdev->dev);
+	priv->gc.parent			= dev;
+	priv->gc.label			= dev_name(dev);
 	priv->gc.ngpio			= priv->pdata->gpio_num;
 	priv->gc.names			= priv->pdata->gpio_names;
 	priv->gc.base			= -1;
-	priv->gc.request		= amd_fch_gpio_request;
+	priv->gc.request		= gpio_onereg_register;
 	priv->gc.direction_input	= amd_fch_gpio_direction_input;
 	priv->gc.direction_output	= amd_fch_gpio_direction_output;
 	priv->gc.get_direction		= amd_fch_gpio_get_direction;
@@ -168,13 +174,18 @@ static int amd_fch_gpio_probe(struct platform_device *pdev)
 
 	spin_lock_init(&priv->lock);
 
-	priv->base = devm_ioremap_resource(&pdev->dev, &amd_fch_gpio_iores);
+	priv->base = devm_ioremap_resource(dev, res);
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
 	platform_set_drvdata(pdev, priv);
 
-	return devm_gpiochip_add_data(&pdev->dev, &priv->gc, priv);
+	return devm_gpiochip_add_data(dev, &priv->gc, priv);
+}
+
+static int amd_fch_gpio_probe(struct platform_device *pdev)
+{
+	return gpio_onereg_register(&pdev->dev, &amd_fch_gpio_iores);
 }
 
 static struct platform_driver amd_fch_gpio_driver = {

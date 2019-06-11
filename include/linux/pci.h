@@ -1047,6 +1047,21 @@ struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
 struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device,
 			       struct pci_dev *from);
+
+/**
+ * pci_get_device_by_id() - get pci dev by struct pci_device_id
+ * @id: pci_device_id struct
+ *
+ * Retrieve PCI device by struct pci_device_id struct
+ *
+ * @return: pointer to struct pci_dev if sucessful, NULL otherwise
+ */
+static inline struct pci_dev *pci_get_device_by_id(
+	const struct pci_device_id *id)
+{
+	return pci_get_device(id->vendor, id->device, NULL);
+}
+
 struct pci_dev *pci_get_subsys(unsigned int vendor, unsigned int device,
 			       unsigned int ss_vendor, unsigned int ss_device,
 			       struct pci_dev *from);

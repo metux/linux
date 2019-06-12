@@ -1684,6 +1684,39 @@ config PROVIDE_OHCI1394_DMA_INIT
 
 	  See Documentation/debugging-via-ohci1394.txt for more information.
 
+menuconfig BUILD_TEST_OTHER_ARCHS
+	bool "Enable build-tests of modules from other architectures"
+	def_bool n
+	help
+	  If you wanna build-test drivers that normally are only available
+	  on specific target architectures, but w/o actually setting up build
+	  environments for these targets, you can use this menu to inject
+	  the according config symbols to inject fake symbols, so those
+	  drivers become selectable.
+
+	  WARNING: this is absolutely NOT meant for any production builds,
+	  just to allow a little bit more coverage for compile tests.
+	  The resulting kernel is likely to be broken in ridiculous ways.
+
+	  Say N here, unless you really know what you're doing.
+
+if BUILD_TEST_OTHER_ARCHS
+
+config FAKE_FOOTBRIDGE
+	bool "ARM: footbridge SOC"
+
+if FAKE_FOOTBRIDGE
+
+config FOOTBRIDGE
+	def_bool y
+
+config ARCH_FOOTBRIDGE
+	def_bool y
+
+endif # FAKE_FOOTBRIDGE
+
+endif # BUILD_TEST_OTHER_ARCHS
+
 menuconfig RUNTIME_TESTING_MENU
 	bool "Runtime Testing"
 	def_bool y

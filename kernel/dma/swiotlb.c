@@ -693,29 +693,12 @@ swiotlb_dma_supported(struct device *hwdev, u64 mask)
 
 static int __init swiotlb_create_debugfs(void)
 {
-	struct dentry *d_swiotlb_usage;
-	struct dentry *ent;
+	struct dentry *root;
 
-	d_swiotlb_usage = debugfs_create_dir("swiotlb", NULL);
-
-	if (!d_swiotlb_usage)
-		return -ENOMEM;
-
-	ent = debugfs_create_ulong("io_tlb_nslabs", 0400,
-				   d_swiotlb_usage, &io_tlb_nslabs);
-	if (!ent)
-		goto fail;
-
-	ent = debugfs_create_ulong("io_tlb_used", 0400,
-				   d_swiotlb_usage, &io_tlb_used);
-	if (!ent)
-		goto fail;
-
+	root = debugfs_create_dir("swiotlb", NULL);
+	debugfs_create_ulong("io_tlb_nslabs", 0400, root, &io_tlb_nslabs);
+	debugfs_create_ulong("io_tlb_used", 0400, root, &io_tlb_used);
 	return 0;
-
-fail:
-	debugfs_remove_recursive(d_swiotlb_usage);
-	return -ENOMEM;
 }
 
 late_initcall(swiotlb_create_debugfs);

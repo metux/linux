@@ -1,8 +1,13 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  MMU context allocation for 64-bit kernels.
  *
  *  Copyright (C) 2004 Anton Blanchard, IBM Corp. <anton@samba.org>
+ *
+ *  This program is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License
+ *  as published by the Free Software Foundation; either version
+ *  2 of the License, or (at your option) any later version.
+ *
  */
 
 #include <linux/sched.h>
@@ -50,20 +55,47 @@ EXPORT_SYMBOL_GPL(hash__alloc_context_id);
 
 void slb_setup_new_exec(void);
 
+static int realloc_context_ids(mm_context_t *ctx)
+{
+	int i, id;
+
+	/*
+	 * id 0 (aka. ctx->id) is special, we always allocate a new one, even if
+	 * there wasn't one allocated previously (which happens in the exec
+	 * case where ctx is newly allocated).
+	 *
+	 * We have to be a bit careful here. We must keep the existing ids in
+	 * the array, so that we can test if they're non-zero to decide if we
+	 * need to allocate a new one. However in case of error we must free the
+	 * ids we've allocated but *not* any of the existing ones (or risk a
+	 * UAF). That's why we decrement i at the start of the error handling
+	 * loop, to skip the id that we just tested but couldn't reallocate.
+	 */
+	for (i = 0; i < ARRAY_SIZE(ctx->extended_id); i++) {
+		if (i == 0 || ctx->extended_id[i]) {
+			id = hash__alloc_context_id();
+			if (id < 0)
+				goto error;
+
+			ctx->extended_id[i] = id;
+		}
+	}
+
+	/* The caller expects us to return id */
+	return ctx->id;
+
+error:
+	for (i--; i >= 0; i--) {
+		if (ctx->extended_id[i])
+			ida_free(&mmu_context_ida, ctx->extended_id[i]);
+	}
+
+	return id;
+}
+
 static int hash__init_new_context(struct mm_struct *mm)
 {
 	int index;
-
-	index = hash__alloc_context_id();
-	if (index < 0)
-		return index;
-
-	mm->context.hash_context = kmalloc(sizeof(struct hash_mm_context),
-					   GFP_KERNEL);
-	if (!mm->context.hash_context) {
-		ida_free(&mmu_context_ida, index);
-		return -ENOMEM;
-	}
 
 	/*
 	 * The old code would re-promote on fork, we don't do that when using
@@ -79,26 +111,14 @@ static int hash__init_new_context(struct mm_struct *mm)
 	 * We should not be calling init_new_context() on init_mm. Hence a
 	 * check against 0 is OK.
 	 */
-	if (mm->context.id == 0) {
-		memset(mm->context.hash_context, 0, sizeof(struct hash_mm_context));
+	if (mm->context.id == 0)
 		slice_init_new_context_exec(mm);
-	} else {
-		/* This is fork. Copy hash_context details from current->mm */
-		memcpy(mm->context.hash_context, current->mm->context.hash_context, sizeof(struct hash_mm_context));
-#ifdef CONFIG_PPC_SUBPAGE_PROT
-		/* inherit subpage prot detalis if we have one. */
-		if (current->mm->context.hash_context->spt) {
-			mm->context.hash_context->spt = kmalloc(sizeof(struct subpage_prot_table),
-								GFP_KERNEL);
-			if (!mm->context.hash_context->spt) {
-				ida_free(&mmu_context_ida, index);
-				kfree(mm->context.hash_context);
-				return -ENOMEM;
-			}
-		}
-#endif
 
-	}
+	index = realloc_context_ids(&mm->context);
+	if (index < 0)
+		return index;
+
+	subpage_prot_init_new_context(mm);
 
 	pkey_mm_init(mm);
 	return index;
@@ -136,7 +156,6 @@ static int radix__init_new_context(struct mm_struct *mm)
 	asm volatile("ptesync;isync" : : : "memory");
 
 	mm->context.npu_context = NULL;
-	mm->context.hash_context = NULL;
 
 	return index;
 }
@@ -181,7 +200,6 @@ static void destroy_contexts(mm_context_t *ctx)
 		if (context_id)
 			ida_free(&mmu_context_ida, context_id);
 	}
-	kfree(ctx->hash_context);
 }
 
 static void pmd_frag_destroy(void *pmd_frag)

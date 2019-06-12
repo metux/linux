@@ -1463,6 +1463,7 @@ long i915_request_wait(struct i915_request *rq,
 		return -ETIME;
 
 	trace_i915_request_wait_begin(rq, flags);
+	lock_map_acquire(&rq->i915->gt.reset_lockmap);
 
 	/*
 	 * Optimistic spin before touching IRQs.
@@ -1536,6 +1537,7 @@ long i915_request_wait(struct i915_request *rq,
 	dma_fence_remove_callback(&rq->fence, &wait.cb);
 
 out:
+	lock_map_release(&rq->i915->gt.reset_lockmap);
 	trace_i915_request_wait_end(rq);
 	return timeout;
 }

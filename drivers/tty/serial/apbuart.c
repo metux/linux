@@ -287,24 +287,12 @@ static const char *apbuart_type(struct uart_port *port)
 	return port->type == PORT_APBUART ? "GRLIB/APBUART" : NULL;
 }
 
-static void apbuart_release_port(struct uart_port *port)
-{
-	release_mem_region(port->mapbase, 0x100);
-}
-
-static int apbuart_request_port(struct uart_port *port)
-{
-	return request_mem_region(port->mapbase, 0x100, "grlib-apbuart")
-	    != NULL ? 0 : -EBUSY;
-	return 0;
-}
-
 /* Configure/autoconfigure the port */
 static void apbuart_config_port(struct uart_port *port, int flags)
 {
 	if (flags & UART_CONFIG_TYPE) {
 		port->type = PORT_APBUART;
-		apbuart_request_port(port);
+		uart_defops_request_port(port);
 	}
 }
 
@@ -334,8 +322,8 @@ static const struct uart_ops grlib_apbuart_ops = {
 	.shutdown = apbuart_shutdown,
 	.set_termios = apbuart_set_termios,
 	.type = apbuart_type,
-	.release_port = apbuart_release_port,
-	.request_port = apbuart_request_port,
+	.release_port = uart_defops_release_port,
+	.request_port = uart_defops_request_port,
 	.config_port = apbuart_config_port,
 	.verify_port = apbuart_verify_port,
 };
@@ -618,6 +606,7 @@ static int __init grlib_apbuart_configure(void)
 		port = &grlib_apbuart_ports[line];
 
 		port->mapbase = addr;
+		port->mapsize = 0x100;
 		port->membase = ioremap(addr, sizeof(struct grlib_apbuart_regs_map));
 		port->irq = 0;
 		port->iotype = UPIO_MEM;

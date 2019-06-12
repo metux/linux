@@ -524,29 +524,6 @@ static const char *sa1100_type(struct uart_port *port)
 }
 
 /*
- * Release the memory region(s) being used by 'port'.
- */
-static void sa1100_release_port(struct uart_port *port)
-{
-	struct sa1100_port *sport =
-		container_of(port, struct sa1100_port, port);
-
-	release_mem_region(sport->port.mapbase, UART_PORT_SIZE);
-}
-
-/*
- * Request the memory region(s) being used by 'port'.
- */
-static int sa1100_request_port(struct uart_port *port)
-{
-	struct sa1100_port *sport =
-		container_of(port, struct sa1100_port, port);
-
-	return request_mem_region(sport->port.mapbase, UART_PORT_SIZE,
-			"sa11x0-uart") != NULL ? 0 : -EBUSY;
-}
-
-/*
  * Configure/autoconfigure the port.
  */
 static void sa1100_config_port(struct uart_port *port, int flags)
@@ -555,7 +532,7 @@ static void sa1100_config_port(struct uart_port *port, int flags)
 		container_of(port, struct sa1100_port, port);
 
 	if (flags & UART_CONFIG_TYPE &&
-	    sa1100_request_port(&sport->port) == 0)
+	    uart_defop_request_port(&sport->port) == 0)
 		sport->port.type = PORT_SA1100;
 }
 
@@ -601,8 +578,8 @@ static struct uart_ops sa1100_pops = {
 	.shutdown	= sa1100_shutdown,
 	.set_termios	= sa1100_set_termios,
 	.type		= sa1100_type,
-	.release_port	= sa1100_release_port,
-	.request_port	= sa1100_request_port,
+	.release_port	= uart_defop_release_port,
+	.request_port	= uart_defop_request_port,
 	.config_port	= sa1100_config_port,
 	.verify_port	= sa1100_verify_port,
 };
@@ -636,6 +613,7 @@ static void __init sa1100_init_ports(void)
 		sa1100_ports[i].port.fifosize  = 8;
 		sa1100_ports[i].port.line      = i;
 		sa1100_ports[i].port.iotype    = UPIO_MEM;
+		sa1100_ports[i].port.mapsize   = UART_PORT_SIZE;
 		timer_setup(&sa1100_ports[i].timer, sa1100_timeout, 0);
 	}
 

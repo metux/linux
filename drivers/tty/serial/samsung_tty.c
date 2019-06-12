@@ -1554,24 +1554,12 @@ static const char *s3c24xx_serial_type(struct uart_port *port)
 
 #define MAP_SIZE (0x100)
 
-static void s3c24xx_serial_release_port(struct uart_port *port)
-{
-	release_mem_region(port->mapbase, MAP_SIZE);
-}
-
-static int s3c24xx_serial_request_port(struct uart_port *port)
-{
-	const char *name = s3c24xx_serial_portname(port);
-
-	return request_mem_region(port->mapbase, MAP_SIZE, name) ? 0 : -EBUSY;
-}
-
 static void s3c24xx_serial_config_port(struct uart_port *port, int flags)
 {
 	struct s3c24xx_uart_info *info = s3c24xx_port_to_info(port);
 
 	if (flags & UART_CONFIG_TYPE &&
-	    s3c24xx_serial_request_port(port) == 0)
+	    uart_defop_request_port(port) == 0)
 		port->type = info->type;
 }
 
@@ -1625,8 +1613,8 @@ static struct uart_ops s3c24xx_serial_ops = {
 	.shutdown	= s3c24xx_serial_shutdown,
 	.set_termios	= s3c24xx_serial_set_termios,
 	.type		= s3c24xx_serial_type,
-	.release_port	= s3c24xx_serial_release_port,
-	.request_port	= s3c24xx_serial_request_port,
+	.release_port	= uart_defop_release_port,
+	.request_port	= uart_defop_request_port,
 	.config_port	= s3c24xx_serial_config_port,
 	.verify_port	= s3c24xx_serial_verify_port,
 #if defined(CONFIG_SERIAL_SAMSUNG_CONSOLE) && defined(CONFIG_CONSOLE_POLL)
@@ -1902,6 +1890,7 @@ static int s3c24xx_serial_init_port(struct s3c24xx_uart_port *ourport,
 	}
 
 	port->mapbase = res->start;
+	port->mapsize = MAP_SIZE;
 	ret = platform_get_irq(platdev, 0);
 	if (ret < 0)
 		port->irq = 0;

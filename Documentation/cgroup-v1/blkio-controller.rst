@@ -1,5 +1,7 @@
-				Block IO Controller
-				===================
+===================
+Block IO Controller
+===================
+
 Overview
 ========
 cgroup subsys "blkio" implements the block io controller. There seems to be
@@ -8,33 +10,91 @@ both at leaf nodes as well as at intermediate nodes in a storage hierarchy.
 Plan is to use the same cgroup based management interface for blkio controller
 and based on user options switch IO policies in the background.
 
-One IO control policy is throttling policy which can be used to
-specify upper IO rate limits on devices. This policy is implemented in
-generic block layer and can be used on leaf nodes as well as higher
-level logical devices like device mapper.
+Currently two IO control policies are implemented. First one is proportional
+weight time based division of disk policy. It is implemented in CFQ. Hence
+this policy takes effect only on leaf nodes when CFQ is being used. The second
+one is throttling policy which can be used to specify upper IO rate limits
+on devices. This policy is implemented in generic block layer and can be
+used on leaf nodes as well as higher level logical devices like device mapper.
 
 HOWTO
 =====
-Throttling/Upper Limit policy
------------------------------
-- Enable Block IO controller
+Proportional Weight division of bandwidth
+-----------------------------------------
+You can do a very simple testing of running two dd threads in two different
+cgroups. Here is what you can do.
+
+- Enable Block IO controller::
+
 	CONFIG_BLK_CGROUP=y
 
-- Enable throttling in block layer
+- Enable group scheduling in CFQ:
+
+
+	CONFIG_CFQ_GROUP_IOSCHED=y
+
+- Compile and boot into kernel and mount IO controller (blkio); see
+  cgroups.txt, Why are cgroups needed?.
+
+  ::
+
+	mount -t tmpfs cgroup_root /sys/fs/cgroup
+	mkdir /sys/fs/cgroup/blkio
+	mount -t cgroup -o blkio none /sys/fs/cgroup/blkio
+
+- Create two cgroups::
+
+	mkdir -p /sys/fs/cgroup/blkio/test1/ /sys/fs/cgroup/blkio/test2
+
+- Set weights of group test1 and test2::
+
+	echo 1000 > /sys/fs/cgroup/blkio/test1/blkio.weight
+	echo 500 > /sys/fs/cgroup/blkio/test2/blkio.weight
+
+- Create two same size files (say 512MB each) on same disk (file1, file2) and
+  launch two dd threads in different cgroup to read those files::
+
+	sync
+	echo 3 > /proc/sys/vm/drop_caches
+
+	dd if=/mnt/sdb/zerofile1 of=/dev/null &
+	echo $! > /sys/fs/cgroup/blkio/test1/tasks
+	cat /sys/fs/cgroup/blkio/test1/tasks
+
+	dd if=/mnt/sdb/zerofile2 of=/dev/null &
+	echo $! > /sys/fs/cgroup/blkio/test2/tasks
+	cat /sys/fs/cgroup/blkio/test2/tasks
+
+- At macro level, first dd should finish first. To get more precise data, keep
+  on looking at (with the help of script), at blkio.disk_time and
+  blkio.disk_sectors files of both test1 and test2 groups. This will tell how
+  much disk time (in milliseconds), each group got and how many sectors each
+  group dispatched to the disk. We provide fairness in terms of disk time, so
+  ideally io.disk_time of cgroups should be in proportion to the weight.
+
+Throttling/Upper Limit policy
+-----------------------------
+- Enable Block IO controller::
+
+	CONFIG_BLK_CGROUP=y
+
+- Enable throttling in block layer::
+
 	CONFIG_BLK_DEV_THROTTLING=y
 
-- Mount blkio controller (see cgroups.txt, Why are cgroups needed?)
+- Mount blkio controller (see cgroups.txt, Why are cgroups needed?)::
+
         mount -t cgroup -o blkio none /sys/fs/cgroup/blkio
 
 - Specify a bandwidth rate on particular device for root group. The format
-  for policy is "<major>:<minor>  <bytes_per_second>".
+  for policy is "<major>:<minor>  <bytes_per_second>"::
 
         echo "8:16  1048576" > /sys/fs/cgroup/blkio/blkio.throttle.read_bps_device
 
   Above will put a limit of 1MB/second on reads happening for root group
   on device having major/minor number 8:16.
 
-- Run dd to read a file and see if rate is throttled to 1MB/s or not.
+- Run dd to read a file and see if rate is throttled to 1MB/s or not::
 
         # dd iflag=direct if=/mnt/common/zerofile of=/dev/null bs=4K count=1024
         1024+0 records in
@@ -46,12 +106,12 @@ Throttling/Upper Limit policy
 Hierarchical Cgroups
 ====================
 
-Throttling implements hierarchy support; however,
+Both CFQ and throttling implement hierarchy support; however,
 throttling's hierarchy support is enabled iff "sane_behavior" is
 enabled from cgroup side, which currently is a development option and
 not publicly available.
 
-If somebody created a hierarchy like as follows.
+If somebody created a hierarchy like as follows::
 
 			root
 			/  \
@@ -59,14 +119,15 @@ If somebody created a hierarchy like as follows.
 			|
 		     test3
 
-Throttling with "sane_behavior" will handle the
-hierarchy correctly. For throttling, all limits apply
+CFQ by default and throttling with "sane_behavior" will handle the
+hierarchy correctly.  For details on CFQ hierarchy support, refer to
+Documentation/block/cfq-iosched.txt.  For throttling, all limits apply
 to the whole subtree while all statistics are local to the IOs
 directly generated by tasks in that cgroup.
 
 Throttling without "sane_behavior" enabled from cgroup side will
 practically treat all groups at same level as if it looks like the
-following.
+following::
 
 				pivot
 			     /  /   \  \
@@ -80,6 +141,10 @@ CONFIG_BLK_CGROUP
 CONFIG_DEBUG_BLK_CGROUP
 	- Debug help. Right now some additional stats file show up in cgroup
 	  if this option is enabled.
+
+CONFIG_CFQ_GROUP_IOSCHED
+	- Enables group scheduling in CFQ. Currently only 1 level of group
+	  creation is allowed.
 
 CONFIG_BLK_DEV_THROTTLING
 	- Enable block device throttling support in block layer.
@@ -99,27 +164,31 @@ Proportional weight policy files
 	  These rules override the default value of group weight as specified
 	  by blkio.weight.
 
-	  Following is the format.
+	  Following is the format::
 
-	  # echo dev_maj:dev_minor weight > blkio.weight_device
-	  Configure weight=300 on /dev/sdb (8:16) in this cgroup
-	  # echo 8:16 300 > blkio.weight_device
-	  # cat blkio.weight_device
-	  dev     weight
-	  8:16    300
+	    # echo dev_maj:dev_minor weight > blkio.weight_device
 
-	  Configure weight=500 on /dev/sda (8:0) in this cgroup
-	  # echo 8:0 500 > blkio.weight_device
-	  # cat blkio.weight_device
-	  dev     weight
-	  8:0     500
-	  8:16    300
+	  Configure weight=300 on /dev/sdb (8:16) in this cgroup::
 
-	  Remove specific weight for /dev/sda in this cgroup
-	  # echo 8:0 0 > blkio.weight_device
-	  # cat blkio.weight_device
-	  dev     weight
-	  8:16    300
+	    # echo 8:16 300 > blkio.weight_device
+	    # cat blkio.weight_device
+	    dev     weight
+	    8:16    300
+
+	  Configure weight=500 on /dev/sda (8:0) in this cgroup::
+
+	    # echo 8:0 500 > blkio.weight_device
+	    # cat blkio.weight_device
+	    dev     weight
+	    8:0     500
+	    8:16    300
+
+	  Remove specific weight for /dev/sda in this cgroup::
+
+	    # echo 8:0 0 > blkio.weight_device
+	    # cat blkio.weight_device
+	    dev     weight
+	    8:16    300
 
 - blkio.leaf_weight[_device]
 	- Equivalents of blkio.weight[_device] for the purpose of
@@ -244,30 +313,30 @@ Throttling/Upper limit policy files
 - blkio.throttle.read_bps_device
 	- Specifies upper limit on READ rate from the device. IO rate is
 	  specified in bytes per second. Rules are per device. Following is
-	  the format.
+	  the format::
 
-  echo "<major>:<minor>  <rate_bytes_per_second>" > /cgrp/blkio.throttle.read_bps_device
+	    echo "<major>:<minor>  <rate_bytes_per_second>" > /cgrp/blkio.throttle.read_bps_device
 
 - blkio.throttle.write_bps_device
 	- Specifies upper limit on WRITE rate to the device. IO rate is
 	  specified in bytes per second. Rules are per device. Following is
-	  the format.
+	  the format::
 
-  echo "<major>:<minor>  <rate_bytes_per_second>" > /cgrp/blkio.throttle.write_bps_device
+	    echo "<major>:<minor>  <rate_bytes_per_second>" > /cgrp/blkio.throttle.write_bps_device
 
 - blkio.throttle.read_iops_device
 	- Specifies upper limit on READ rate from the device. IO rate is
 	  specified in IO per second. Rules are per device. Following is
-	  the format.
+	  the format::
 
-  echo "<major>:<minor>  <rate_io_per_second>" > /cgrp/blkio.throttle.read_iops_device
+	   echo "<major>:<minor>  <rate_io_per_second>" > /cgrp/blkio.throttle.read_iops_device
 
 - blkio.throttle.write_iops_device
 	- Specifies upper limit on WRITE rate to the device. IO rate is
 	  specified in io per second. Rules are per device. Following is
-	  the format.
+	  the format::
 
-  echo "<major>:<minor>  <rate_io_per_second>" > /cgrp/blkio.throttle.write_iops_device
+	    echo "<major>:<minor>  <rate_io_per_second>" > /cgrp/blkio.throttle.write_iops_device
 
 Note: If both BW and IOPS rules are specified for a device, then IO is
       subjected to both the constraints.
@@ -291,3 +360,32 @@ Common files among various policies
 - blkio.reset_stats
 	- Writing an int to this file will result in resetting all the stats
 	  for that cgroup.
+
+CFQ sysfs tunable
+=================
+/sys/block/<disk>/queue/iosched/slice_idle
+------------------------------------------
+On a faster hardware CFQ can be slow, especially with sequential workload.
+This happens because CFQ idles on a single queue and single queue might not
+drive deeper request queue depths to keep the storage busy. In such scenarios
+one can try setting slice_idle=0 and that would switch CFQ to IOPS
+(IO operations per second) mode on NCQ supporting hardware.
+
+That means CFQ will not idle between cfq queues of a cfq group and hence be
+able to driver higher queue depth and achieve better throughput. That also
+means that cfq provides fairness among groups in terms of IOPS and not in
+terms of disk time.
+
+/sys/block/<disk>/queue/iosched/group_idle
+------------------------------------------
+If one disables idling on individual cfq queues and cfq service trees by
+setting slice_idle=0, group_idle kicks in. That means CFQ will still idle
+on the group in an attempt to provide fairness among groups.
+
+By default group_idle is same as slice_idle and does not do anything if
+slice_idle is enabled.
+
+One can experience an overall throughput drop if you have created multiple
+groups and put applications in that group which are not driving enough
+IO to keep disk busy. In that case set group_idle=0, and CFQ will not idle
+on individual groups and throughput should improve.

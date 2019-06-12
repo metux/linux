@@ -338,20 +338,9 @@ static const char *serial21285_type(struct uart_port *port)
 	return port->type == PORT_21285 ? "DC21285" : NULL;
 }
 
-static void serial21285_release_port(struct uart_port *port)
-{
-	release_mem_region(port->mapbase, 32);
-}
-
-static int serial21285_request_port(struct uart_port *port)
-{
-	return request_mem_region(port->mapbase, 32, serial21285_name)
-			 != NULL ? 0 : -EBUSY;
-}
-
 static void serial21285_config_port(struct uart_port *port, int flags)
 {
-	if (flags & UART_CONFIG_TYPE && serial21285_request_port(port) == 0)
+	if (flags & UART_CONFIG_TYPE && uart_defop_request_port(port) == 0)
 		port->type = PORT_21285;
 }
 
@@ -382,14 +371,15 @@ static const struct uart_ops serial21285_ops = {
 	.shutdown	= serial21285_shutdown,
 	.set_termios	= serial21285_set_termios,
 	.type		= serial21285_type,
-	.release_port	= serial21285_release_port,
-	.request_port	= serial21285_request_port,
+	.release_port	= uart_defop_release_port,
+	.request_port	= uart_defop_request_port,
 	.config_port	= serial21285_config_port,
 	.verify_port	= serial21285_verify_port,
 };
 
 static struct uart_port serial21285_port = {
 	.mapbase	= 0x42000160,
+	.mapsize	= 32;
 	.iotype		= UPIO_MEM,
 	.irq		= 0,
 	.fifosize	= 16,

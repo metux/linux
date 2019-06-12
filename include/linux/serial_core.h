@@ -562,6 +562,12 @@ static inline int uart_handle_break(struct uart_port *port)
 }
 
 /*
+ * default driver ops
+ */
+int uart_defop_request_port(struct uart_port *);
+void uart_defop_release_port(struct uart_port *);
+
+/*
  *	UART_ENABLE_MS - determine if port should enable modem status irqs
  */
 #define UART_ENABLE_MS(port,cflag)	((port)->flags & UPF_HARDPPS_CD || \

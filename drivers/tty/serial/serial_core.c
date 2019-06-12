@@ -3270,5 +3270,27 @@ int uart_get_rs485_mode(struct uart_port *port)
 }
 EXPORT_SYMBOL_GPL(uart_get_rs485_mode);
 
+/*
+ * default operation for request_port:
+ * calls request_mem_region(), using mapstart/mapsize fields
+ */
+int uart_defop_request_port(struct uart_port *port)
+{
+	return (request_mem_region(port->mapbase, port->mapsize,
+				  dev_name(port->dev))
+		    != NULL ? 0 : -EBUSY);
+}
+EXPORT_SYMBOL_GPL(uart_defop_request_port);
+
+/*
+ * default operation for release_port:
+ * calls release_mem_region(), using mapstart/mapsize fields
+ */
+void uart_defop_release_port(struct uart_port *port)
+{
+	release_mem_region(port->mapbase, port->mapsize);
+}
+EXPORT_SYMBOL_GPL(uart_defop_release_port);
+
 MODULE_DESCRIPTION("Serial driver core");
 MODULE_LICENSE("GPL");

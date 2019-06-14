@@ -2488,7 +2488,6 @@ static void i915_gem_init__mm(struct drm_i915_private *i915)
 
 int i915_gem_init_early(struct drm_i915_private *dev_priv)
 {
-	static struct lock_class_key reset_key;
 	int err;
 	int err = -ENOMEM;
 
@@ -2509,8 +2508,6 @@ int i915_gem_init_early(struct drm_i915_private *dev_priv)
 	INIT_LIST_HEAD(&dev_priv->gt.active_rings);
 	INIT_LIST_HEAD(&dev_priv->gt.closed_vma);
 	spin_lock_init(&dev_priv->gt.closed_lock);
-	lockdep_init_map(&dev_priv->gt.reset_lockmap,
-			 "i915.reset", &reset_key, 0);
 
 	i915_gem_init__mm(dev_priv);
 	i915_gem_init__pm(dev_priv);

@@ -1148,7 +1148,9 @@ static int create_queue_cpsch(struct device_queue_manager *dqm, struct queue *q,
 
 	if (q->properties.type == KFD_QUEUE_TYPE_SDMA ||
 		q->properties.type == KFD_QUEUE_TYPE_SDMA_XGMI) {
+		dqm_lock(dqm);
 		retval = allocate_sdma_queue(dqm, q);
+		dqm_unlock(dqm);
 		if (retval)
 			goto out_unlock;
 		q->properties.sdma_queue_id =
@@ -1213,7 +1215,8 @@ out_deallocate_doorbell:
 	deallocate_doorbell(qpd, q);
 out_deallocate_sdma_queue:
 	if (q->properties.type == KFD_QUEUE_TYPE_SDMA ||
-		q->properties.type == KFD_QUEUE_TYPE_SDMA_XGMI)
+		q->properties.type == KFD_QUEUE_TYPE_SDMA_XGMI) {
+		dqm_lock(dqm);
 		deallocate_sdma_queue(dqm, q);
 	out_unlock:
 		dqm_unlock(dqm);

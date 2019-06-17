@@ -67,18 +67,7 @@ static struct i2c_driver max7300_driver = {
 	.remove = max7300_remove,
 	.id_table = max7300_id,
 };
-
-static int __init max7300_init(void)
-{
-	return i2c_add_driver(&max7300_driver);
-}
-subsys_initcall(max7300_init);
-
-static void __exit max7300_exit(void)
-{
-	i2c_del_driver(&max7300_driver);
-}
-module_exit(max7300_exit);
+subsys_i2c_driver(max7300_driver);
 
 MODULE_AUTHOR("Wolfram Sang");
 MODULE_LICENSE("GPL v2");

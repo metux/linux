@@ -275,6 +275,57 @@ static void __exit __platform_driver##_exit(void) \
 } \
 module_exit(__platform_driver##_exit);
 
+/* postcore_platform_driver() - Helper macro for drivers that don't do
+ * anything special in module init/exit.  This eliminates a lot of
+ * boilerplate.  Each module may only use this macro once, and
+ * calling it replaces postcore_initcall() and module_exit()
+ */
+#define postcore_platform_driver(__platform_driver) \
+static int __init __platform_driver##_init(void) \
+{ \
+	return platform_driver_register(&(__platform_driver)); \
+} \
+postcore_initcall(__platform_driver##_init); \
+static void __exit __platform_driver##_exit(void) \
+{ \
+	platform_driver_unregister(&(__platform_driver)); \
+} \
+module_exit(__platform_driver##_exit);
+
+/* subsys_platform_driver() - Helper macro for drivers that don't do
+ * anything special in module init/exit.  This eliminates a lot of
+ * boilerplate.  Each module may only use this macro once, and
+ * calling it replaces subsys_initcall() and module_exit()
+ */
+#define subsys_platform_driver(__platform_driver) \
+static int __init __platform_driver##_init(void) \
+{ \
+	return platform_driver_register(&(__platform_driver)); \
+} \
+subsys_initcall(__platform_driver##_init); \
+static void __exit __platform_driver##_exit(void) \
+{ \
+	platform_driver_unregister(&(__platform_driver)); \
+} \
+module_exit(__platform_driver##_exit);
+
+/* arch_platform_driver() - Helper macro for drivers that don't do
+ * anything special in module init/exit.  This eliminates a lot of
+ * boilerplate.  Each module may only use this macro once, and
+ * calling it replaces arch_initcall() and module_exit()
+ */
+#define arch_platform_driver(__platform_driver) \
+static int __init __platform_driver##_init(void) \
+{ \
+	return platform_driver_register(&(__platform_driver)); \
+} \
+arch_initcall(__platform_driver##_init); \
+static void __exit __platform_driver##_exit(void) \
+{ \
+	platform_driver_unregister(&(__platform_driver)); \
+} \
+module_exit(__platform_driver##_exit);
+
 /* builtin_platform_driver_probe() - Helper macro for drivers that don't do
  * anything special in device init.  This eliminates some boilerplate.  Each
  * driver may only use this macro once, and using it replaces device_initcall.

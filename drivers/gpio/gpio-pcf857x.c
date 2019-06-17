@@ -430,20 +430,10 @@ static struct i2c_driver pcf857x_driver = {
 	.id_table = pcf857x_id,
 };
 
-static int __init pcf857x_init(void)
-{
-	return i2c_add_driver(&pcf857x_driver);
-}
 /* register after i2c postcore initcall and before
  * subsys initcalls that may rely on these GPIOs
  */
-subsys_initcall(pcf857x_init);
-
-static void __exit pcf857x_exit(void)
-{
-	i2c_del_driver(&pcf857x_driver);
-}
-module_exit(pcf857x_exit);
+subsys_i2c_driver(pcf857x_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("David Brownell");

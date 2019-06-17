@@ -928,6 +928,23 @@ int i2c_handle_smbus_host_notify(struct i2c_adapter *adap, unsigned short addr);
 #define builtin_i2c_driver(__i2c_driver) \
 	builtin_driver(__i2c_driver, i2c_add_driver)
 
+/* subsys_i2c_driver() - Helper macro for drivers that don't do
+ * anything special in module init/exit.  This eliminates a lot of
+ * boilerplate.  Each module may only use this macro once, and
+ * calling it replaces subsys_initcall() and module_exit()
+ */
+#define subsys_i2c_driver(__i2c_driver) \
+static int __init __i2c_driver##_init(void) \
+{ \
+       return i2c_add_driver(&(__i2c_driver)); \
+} \
+subsys_initcall(__i2c_driver##_init); \
+static void __exit __i2c_driver##_exit(void) \
+{ \
+       i2c_del_driver(&(__i2c_driver)); \
+} \
+module_exit(__i2c_driver##_exit);
+
 #endif /* I2C */
 
 #if IS_ENABLED(CONFIG_OF)

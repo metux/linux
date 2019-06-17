@@ -156,21 +156,10 @@ static struct spi_driver mc33880_driver = {
 	.remove		= mc33880_remove,
 };
 
-static int __init mc33880_init(void)
-{
-	return spi_register_driver(&mc33880_driver);
-}
 /* register after spi postcore initcall and before
  * subsys initcalls that may rely on these GPIOs
  */
-subsys_initcall(mc33880_init);
-
-static void __exit mc33880_exit(void)
-{
-	spi_unregister_driver(&mc33880_driver);
-}
-module_exit(mc33880_exit);
+subsys_spi_driver(mc33880_driver);
 
 MODULE_AUTHOR("Mocean Laboratories <info@mocean-labs.com>");
 MODULE_LICENSE("GPL v2");
-

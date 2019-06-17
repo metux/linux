@@ -1272,20 +1272,10 @@ static struct i2c_driver pca953x_driver = {
 	.id_table	= pca953x_id,
 };
 
-static int __init pca953x_init(void)
-{
-	return i2c_add_driver(&pca953x_driver);
-}
 /* register after i2c postcore initcall and before
  * subsys initcalls that may rely on these GPIOs
  */
-subsys_initcall(pca953x_init);
-
-static void __exit pca953x_exit(void)
-{
-	i2c_del_driver(&pca953x_driver);
-}
-module_exit(pca953x_exit);
+subsys_i2c_driver(pca953x_driver);
 
 MODULE_AUTHOR("eric miao <eric.miao@marvell.com>");
 MODULE_DESCRIPTION("GPIO expander driver for PCA953x");

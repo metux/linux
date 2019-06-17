@@ -743,21 +743,10 @@ static struct i2c_driver max732x_driver = {
 	.remove		= max732x_remove,
 	.id_table	= max732x_id,
 };
-
-static int __init max732x_init(void)
-{
-	return i2c_add_driver(&max732x_driver);
-}
 /* register after i2c postcore initcall and before
  * subsys initcalls that may rely on these GPIOs
  */
-subsys_initcall(max732x_init);
-
-static void __exit max732x_exit(void)
-{
-	i2c_del_driver(&max732x_driver);
-}
-module_exit(max732x_exit);
+subsys_i2c_driver(max732x_driver);
 
 MODULE_AUTHOR("Eric Miao <eric.miao@marvell.com>");
 MODULE_DESCRIPTION("GPIO expander driver for MAX732X");

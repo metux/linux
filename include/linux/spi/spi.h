@@ -317,6 +317,23 @@ static inline void spi_unregister_driver(struct spi_driver *sdrv)
 	module_driver(__spi_driver, spi_register_driver, \
 			spi_unregister_driver)
 
+/* subsys_spi_driver() - Helper macro for drivers that don't do
+ * anything special in module init/exit.  This eliminates a lot of
+ * boilerplate.  Each module may only use this macro once, and
+ * calling it replaces subsys_initcall() and module_exit()
+ */
+#define subsys_spi_driver(__spi_driver) \
+static int __init __spi_driver##_init(void) \
+{ \
+	return spi_register_driver(&(__spi_driver)); \
+} \
+subsys_initcall(__spi_driver##_init); \
+static void __exit __spi_driver##_exit(void) \
+{ \
+	spi_unregister_driver(&(__spi_driver)); \
+} \
+module_exit(__spi_driver##_exit);
+
 /**
  * struct spi_controller - interface to SPI master or slave controller
  * @dev: device interface to this driver

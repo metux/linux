@@ -1524,17 +1524,7 @@ static struct platform_driver omap_gpio_driver = {
  * machine_init functions access gpio APIs.
  * Hence omap_gpio_drv_reg() is a postcore_initcall.
  */
-static int __init omap_gpio_drv_reg(void)
-{
-	return platform_driver_register(&omap_gpio_driver);
-}
-postcore_initcall(omap_gpio_drv_reg);
-
-static void __exit omap_gpio_exit(void)
-{
-	platform_driver_unregister(&omap_gpio_driver);
-}
-module_exit(omap_gpio_exit);
+postcore_platform_driver(omap_gpio_driver);
 
 MODULE_DESCRIPTION("omap gpio driver");
 MODULE_ALIAS("platform:gpio-omap");

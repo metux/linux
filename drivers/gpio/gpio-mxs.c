@@ -358,12 +358,7 @@ static struct platform_driver mxs_gpio_driver = {
 	},
 	.probe		= mxs_gpio_probe,
 };
-
-static int __init mxs_gpio_init(void)
-{
-	return platform_driver_register(&mxs_gpio_driver);
-}
-postcore_initcall(mxs_gpio_init);
+postcore_platform_driver(mxs_gpio_driver);
 
 MODULE_AUTHOR("Freescale Semiconductor, "
 	      "Daniel Mack <danielncaiaq.de>, "

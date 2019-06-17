@@ -289,10 +289,4 @@ static struct platform_driver xway_stp_driver = {
 		.of_match_table = xway_stp_match,
 	},
 };
-
-static int __init xway_stp_init(void)
-{
-	return platform_driver_register(&xway_stp_driver);
-}
-
-subsys_initcall(xway_stp_init);
+subsys_platform_driver(xway_stp_driver);

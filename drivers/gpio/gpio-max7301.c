@@ -83,21 +83,10 @@ static struct spi_driver max7301_driver = {
 	.remove = max7301_remove,
 	.id_table = max7301_id,
 };
-
-static int __init max7301_init(void)
-{
-	return spi_register_driver(&max7301_driver);
-}
 /* register after spi postcore initcall and before
  * subsys initcalls that may rely on these GPIOs
  */
-subsys_initcall(max7301_init);
-
-static void __exit max7301_exit(void)
-{
-	spi_unregister_driver(&max7301_driver);
-}
-module_exit(max7301_exit);
+subsys_spi_driver(max7301_driver);
 
 MODULE_AUTHOR("Juergen Beisert, Wolfram Sang");
 MODULE_LICENSE("GPL v2");

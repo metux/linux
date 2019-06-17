@@ -181,9 +181,4 @@ static struct platform_driver tps65910_gpio_driver = {
 	.driver.name    = "tps65910-gpio",
 	.probe		= tps65910_gpio_probe,
 };
-
-static int __init tps65910_gpio_init(void)
-{
-	return platform_driver_register(&tps65910_gpio_driver);
-}
-subsys_initcall(tps65910_gpio_init);
+subsys_platform_driver(tps65910_gpio_driver);

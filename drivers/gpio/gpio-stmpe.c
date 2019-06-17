@@ -549,9 +549,4 @@ static struct platform_driver stmpe_gpio_driver = {
 	},
 	.probe		= stmpe_gpio_probe,
 };
-
-static int __init stmpe_gpio_init(void)
-{
-	return platform_driver_register(&stmpe_gpio_driver);
-}
-subsys_initcall(stmpe_gpio_init);
+subsys_platform_driver(stmpe_gpio_driver);

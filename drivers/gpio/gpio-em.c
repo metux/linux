@@ -373,18 +373,7 @@ static struct platform_driver em_gio_device_driver = {
 		.of_match_table = em_gio_dt_ids,
 	}
 };
-
-static int __init em_gio_init(void)
-{
-	return platform_driver_register(&em_gio_device_driver);
-}
-postcore_initcall(em_gio_init);
-
-static void __exit em_gio_exit(void)
-{
-	platform_driver_unregister(&em_gio_device_driver);
-}
-module_exit(em_gio_exit);
+postcore_platform_driver(em_gio_device_driver);
 
 MODULE_AUTHOR("Magnus Damm");
 MODULE_DESCRIPTION("Renesas Emma Mobile GIO Driver");

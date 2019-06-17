@@ -189,9 +189,4 @@ static struct platform_driver spics_gpio_driver = {
 		.of_match_table = spics_gpio_of_match,
 	},
 };
-
-static int __init spics_gpio_init(void)
-{
-	return platform_driver_register(&spics_gpio_driver);
-}
-subsys_initcall(spics_gpio_init);
+subsys_platform_driver(spics_gpio_driver);

@@ -432,12 +432,7 @@ static struct platform_driver ep93xx_gpio_driver = {
 	},
 	.probe		= ep93xx_gpio_probe,
 };
-
-static int __init ep93xx_gpio_init(void)
-{
-	return platform_driver_register(&ep93xx_gpio_driver);
-}
-postcore_initcall(ep93xx_gpio_init);
+postcore_platform_driver(ep93xx_gpio_driver);
 
 MODULE_AUTHOR("Ryan Mallon <ryan@bluewatersys.com> "
 		"H Hartley Sweeten <hsweeten@visionengravers.com>");

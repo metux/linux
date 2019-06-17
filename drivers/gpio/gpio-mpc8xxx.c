@@ -454,10 +454,4 @@ static struct platform_driver mpc8xxx_plat_driver = {
 		.of_match_table	= mpc8xxx_gpio_ids,
 	},
 };
-
-static int __init mpc8xxx_init(void)
-{
-	return platform_driver_register(&mpc8xxx_plat_driver);
-}
-
-arch_initcall(mpc8xxx_init);
+arch_platform_driver(mpc8xxx_plat_driver);

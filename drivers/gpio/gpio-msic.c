@@ -306,9 +306,4 @@ static struct platform_driver platform_msic_gpio_driver = {
 	},
 	.probe		= platform_msic_gpio_probe,
 };
-
-static int __init platform_msic_gpio_init(void)
-{
-	return platform_driver_register(&platform_msic_gpio_driver);
-}
-subsys_initcall(platform_msic_gpio_init);
+subsys_platform_driver(platform_msic_gpio_driver);

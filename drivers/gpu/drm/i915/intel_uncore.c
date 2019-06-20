@@ -25,40 +25,14 @@
 #include <asm/iosf_mbi.h>
 
 #include "i915_drv.h"
-#include "i915_trace.h"
 #include "i915_vgpu.h"
+#include "intel_drv.h"
 #include "intel_pm.h"
 
 #define FORCEWAKE_ACK_TIMEOUT_MS 50
 #define GT_FIFO_TIMEOUT_MS	 10
 
 #define __raw_posting_read(...) ((void)__raw_uncore_read32(__VA_ARGS__))
-
-void
-intel_uncore_mmio_debug_init_early(struct intel_uncore_mmio_debug *mmio_debug)
-{
-	spin_lock_init(&mmio_debug->lock);
-	mmio_debug->unclaimed_mmio_check = 1;
-}
-
-static void mmio_debug_suspend(struct intel_uncore_mmio_debug *mmio_debug)
-{
-	lockdep_assert_held(&mmio_debug->lock);
-
-	/* Save and disable mmio debugging for the user bypass */
-	if (!mmio_debug->suspend_count++) {
-		mmio_debug->saved_mmio_check = mmio_debug->unclaimed_mmio_check;
-		mmio_debug->unclaimed_mmio_check = 0;
-	}
-}
-
-static void mmio_debug_resume(struct intel_uncore_mmio_debug *mmio_debug)
-{
-	lockdep_assert_held(&mmio_debug->lock);
-
-	if (!--mmio_debug->suspend_count)
-		mmio_debug->unclaimed_mmio_check = mmio_debug->saved_mmio_check;
-}
 
 static const char * const forcewake_domain_names[] = {
 	"render",
@@ -104,8 +78,6 @@ fw_domain_reset(const struct intel_uncore_forcewake_domain *d)
 static inline void
 fw_domain_arm_timer(struct intel_uncore_forcewake_domain *d)
 {
-	GEM_BUG_ON(d->uncore->fw_domains_timer & d->mask);
-	d->uncore->fw_domains_timer |= d->mask;
 	d->wake_count++;
 	hrtimer_start_range_ns(&d->timer,
 			       NSEC_PER_MSEC,
@@ -350,7 +322,7 @@ static void __gen6_gt_wait_for_fifo(struct intel_uncore *uncore)
 
 	/* On VLV, FIFO will be shared by both SW and HW.
 	 * So, we need to read the FREE_ENTRIES everytime */
-	if (IS_VALLEYVIEW(uncore->i915))
+	if (IS_VALLEYVIEW(uncore_to_i915(uncore)))
 		n = fifo_free_entries(uncore);
 	else
 		n = uncore->fifo_count;
@@ -372,7 +344,7 @@ intel_uncore_fw_release_timer(struct hrtimer *timer)
 {
 	struct intel_uncore_forcewake_domain *domain =
 	       container_of(timer, struct intel_uncore_forcewake_domain, timer);
-	struct intel_uncore *uncore = domain->uncore;
+	struct intel_uncore *uncore = forcewake_domain_to_uncore(domain);
 	unsigned long irqflags;
 
 	assert_rpm_device_not_suspended(uncore->rpm);
@@ -381,10 +353,9 @@ intel_uncore_fw_release_timer(struct hrtimer *timer)
 		return HRTIMER_RESTART;
 
 	spin_lock_irqsave(&uncore->lock, irqflags);
+	if (WARN_ON(domain->wake_count == 0))
+		domain->wake_count++;
 
-	uncore->fw_domains_timer &= ~domain->mask;
-
-	GEM_BUG_ON(!domain->wake_count);
 	if (--domain->wake_count == 0)
 		uncore->funcs.force_wake_put(uncore, domain->mask);
 
@@ -502,11 +473,6 @@ check_for_unclaimed_mmio(struct intel_uncore *uncore)
 {
 	bool ret = false;
 
-	lockdep_assert_held(&uncore->debug->lock);
-
-	if (uncore->debug->suspend_count)
-		return false;
-
 	if (intel_uncore_has_fpga_dbg_unclaimed(uncore))
 		ret |= fpga_check_for_unclaimed_mmio(uncore);
 
@@ -519,13 +485,15 @@ check_for_unclaimed_mmio(struct intel_uncore *uncore)
 	return ret;
 }
 
-static void forcewake_early_sanitize(struct intel_uncore *uncore,
-				     unsigned int restore_forcewake)
+static void __intel_uncore_early_sanitize(struct intel_uncore *uncore,
+					  unsigned int restore_forcewake)
 {
-	GEM_BUG_ON(!intel_uncore_has_forcewake(uncore));
+	/* clear out unclaimed reg detection bit */
+	if (check_for_unclaimed_mmio(uncore))
+		DRM_DEBUG("unclaimed mmio detected on uncore init, clearing\n");
 
 	/* WaDisableShadowRegForCpd:chv */
-	if (IS_CHERRYVIEW(uncore->i915)) {
+	if (IS_CHERRYVIEW(uncore_to_i915(uncore))) {
 		__raw_uncore_write32(uncore, GTFIFOCTL,
 				     __raw_uncore_read32(uncore, GTFIFOCTL) |
 				     GT_FIFO_CTL_BLOCK_ALL_POLICY_STALL |
@@ -547,9 +515,6 @@ static void forcewake_early_sanitize(struct intel_uncore *uncore,
 
 void intel_uncore_suspend(struct intel_uncore *uncore)
 {
-	if (!intel_uncore_has_forcewake(uncore))
-		return;
-
 	iosf_mbi_punit_acquire();
 	iosf_mbi_unregister_pmic_bus_access_notifier_unlocked(
 		&uncore->pmic_bus_access_nb);
@@ -561,23 +526,14 @@ void intel_uncore_resume_early(struct intel_uncore *uncore)
 {
 	unsigned int restore_forcewake;
 
-	if (intel_uncore_unclaimed_mmio(uncore))
-		DRM_DEBUG("unclaimed mmio detected on resume, clearing\n");
-
-	if (!intel_uncore_has_forcewake(uncore))
-		return;
-
 	restore_forcewake = fetch_and_zero(&uncore->fw_domains_saved);
-	forcewake_early_sanitize(uncore, restore_forcewake);
+	__intel_uncore_early_sanitize(uncore, restore_forcewake);
 
 	iosf_mbi_register_pmic_bus_access_notifier(&uncore->pmic_bus_access_nb);
 }
 
 void intel_uncore_runtime_resume(struct intel_uncore *uncore)
 {
-	if (!intel_uncore_has_forcewake(uncore))
-		return;
-
 	iosf_mbi_register_pmic_bus_access_notifier(&uncore->pmic_bus_access_nb);
 }
 
@@ -639,11 +595,17 @@ void intel_uncore_forcewake_get(struct intel_uncore *uncore,
 void intel_uncore_forcewake_user_get(struct intel_uncore *uncore)
 {
 	spin_lock_irq(&uncore->lock);
-	if (!uncore->user_forcewake_count++) {
+	if (!uncore->user_forcewake.count++) {
 		intel_uncore_forcewake_get__locked(uncore, FORCEWAKE_ALL);
-		spin_lock(&uncore->debug->lock);
-		mmio_debug_suspend(uncore->debug);
-		spin_unlock(&uncore->debug->lock);
+
+		/* Save and disable mmio debugging for the user bypass */
+		uncore->user_forcewake.saved_mmio_check =
+			uncore->unclaimed_mmio_check;
+		uncore->user_forcewake.saved_mmio_debug =
+			i915_modparams.mmio_debug;
+
+		uncore->unclaimed_mmio_check = 0;
+		i915_modparams.mmio_debug = 0;
 	}
 	spin_unlock_irq(&uncore->lock);
 }
@@ -658,14 +620,15 @@ void intel_uncore_forcewake_user_get(struct intel_uncore *uncore)
 void intel_uncore_forcewake_user_put(struct intel_uncore *uncore)
 {
 	spin_lock_irq(&uncore->lock);
-	if (!--uncore->user_forcewake_count) {
-		spin_lock(&uncore->debug->lock);
-		mmio_debug_resume(uncore->debug);
-
-		if (check_for_unclaimed_mmio(uncore))
-			dev_info(uncore->i915->drm.dev,
+	if (!--uncore->user_forcewake.count) {
+		if (intel_uncore_unclaimed_mmio(uncore))
+			dev_info(uncore_to_i915(uncore)->drm.dev,
 				 "Invalid mmio detected during user access\n");
-		spin_unlock(&uncore->debug->lock);
+
+		uncore->unclaimed_mmio_check =
+			uncore->user_forcewake.saved_mmio_check;
+		i915_modparams.mmio_debug =
+			uncore->user_forcewake.saved_mmio_debug;
 
 		intel_uncore_forcewake_put__locked(uncore, FORCEWAKE_ALL);
 	}
@@ -700,7 +663,8 @@ static void __intel_uncore_forcewake_put(struct intel_uncore *uncore,
 	fw_domains &= uncore->fw_domains;
 
 	for_each_fw_domain_masked(domain, fw_domains, uncore, tmp) {
-		GEM_BUG_ON(!domain->wake_count);
+		if (WARN_ON(domain->wake_count == 0))
+			continue;
 
 		if (--domain->wake_count) {
 			domain->active = true;
@@ -764,16 +728,8 @@ void assert_forcewakes_inactive(struct intel_uncore *uncore)
 void assert_forcewakes_active(struct intel_uncore *uncore,
 			      enum forcewake_domains fw_domains)
 {
-	struct intel_uncore_forcewake_domain *domain;
-	unsigned int tmp;
-
-	if (!IS_ENABLED(CONFIG_DRM_I915_DEBUG_RUNTIME_PM))
-		return;
-
 	if (!uncore->funcs.force_wake_get)
 		return;
-
-	spin_lock_irq(&uncore->lock);
 
 	assert_rpm_wakelock_held(uncore->rpm);
 
@@ -781,25 +737,6 @@ void assert_forcewakes_active(struct intel_uncore *uncore,
 	WARN(fw_domains & ~uncore->fw_domains_active,
 	     "Expected %08x fw_domains to be active, but %08x are off\n",
 	     fw_domains, fw_domains & ~uncore->fw_domains_active);
-
-	/*
-	 * Check that the caller has an explicit wakeref and we don't mistake
-	 * it for the auto wakeref.
-	 */
-	for_each_fw_domain_masked(domain, fw_domains, uncore, tmp) {
-		unsigned int actual = READ_ONCE(domain->wake_count);
-		unsigned int expect = 1;
-
-		if (uncore->fw_domains_timer & domain->mask)
-			expect++; /* pending automatic release */
-
-		if (WARN(actual < expect,
-			 "Expected domain %d to be held awake by caller, count=%d\n",
-			 domain->id, actual))
-			break;
-	}
-
-	spin_unlock_irq(&uncore->lock);
 }
 
 /* We give fast paths for the really cool registers */
@@ -1112,16 +1049,7 @@ unclaimed_reg_debug(struct intel_uncore *uncore,
 	if (likely(!i915_modparams.mmio_debug))
 		return;
 
-	/* interrupts are disabled and re-enabled around uncore->lock usage */
-	lockdep_assert_held(&uncore->lock);
-
-	if (before)
-		spin_lock(&uncore->debug->lock);
-
 	__unclaimed_reg_debug(uncore, reg, read, before);
-
-	if (!before)
-		spin_unlock(&uncore->debug->lock);
 }
 
 #define GEN2_READ_HEADER(x) \
@@ -1195,7 +1123,8 @@ static noinline void ___force_wake_auto(struct intel_uncore *uncore,
 static inline void __force_wake_auto(struct intel_uncore *uncore,
 				     enum forcewake_domains fw_domains)
 {
-	GEM_BUG_ON(!fw_domains);
+	if (WARN_ON(!fw_domains))
+		return;
 
 	/* Turn on all requested but inactive supported forcewake domains. */
 	fw_domains &= uncore->fw_domains;
@@ -1354,27 +1283,23 @@ do { \
 	(uncore)->funcs.read_fw_domains = x##_reg_read_fw_domains; \
 } while (0)
 
-static int __fw_domain_init(struct intel_uncore *uncore,
-			    enum forcewake_domain_id domain_id,
-			    i915_reg_t reg_set,
-			    i915_reg_t reg_ack)
+static void fw_domain_init(struct intel_uncore *uncore,
+			   enum forcewake_domain_id domain_id,
+			   i915_reg_t reg_set,
+			   i915_reg_t reg_ack)
 {
 	struct intel_uncore_forcewake_domain *d;
 
-	GEM_BUG_ON(domain_id >= FW_DOMAIN_ID_COUNT);
-	GEM_BUG_ON(uncore->fw_domain[domain_id]);
+	if (WARN_ON(domain_id >= FW_DOMAIN_ID_COUNT))
+		return;
 
-	if (i915_inject_probe_failure(uncore->i915))
-		return -ENOMEM;
+	d = &uncore->fw_domain[domain_id];
 
-	d = kzalloc(sizeof(*d), GFP_KERNEL);
-	if (!d)
-		return -ENOMEM;
+	WARN_ON(d->wake_count);
 
 	WARN_ON(!i915_mmio_reg_valid(reg_set));
 	WARN_ON(!i915_mmio_reg_valid(reg_ack));
 
-	d->uncore = uncore;
 	d->wake_count = 0;
 	d->reg_set = uncore->regs + i915_mmio_reg_offset(reg_set);
 	d->reg_ack = uncore->regs + i915_mmio_reg_offset(reg_ack);
@@ -1391,6 +1316,7 @@ static int __fw_domain_init(struct intel_uncore *uncore,
 	BUILD_BUG_ON(FORCEWAKE_MEDIA_VEBOX0 != (1 << FW_DOMAIN_ID_MEDIA_VEBOX0));
 	BUILD_BUG_ON(FORCEWAKE_MEDIA_VEBOX1 != (1 << FW_DOMAIN_ID_MEDIA_VEBOX1));
 
+
 	d->mask = BIT(domain_id);
 
 	hrtimer_init(&d->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -1399,10 +1325,6 @@ static int __fw_domain_init(struct intel_uncore *uncore,
 	uncore->fw_domains |= BIT(domain_id);
 
 	fw_domain_reset(d);
-
-	uncore->fw_domain[domain_id] = d;
-
-	return 0;
 }
 
 static void fw_domain_fini(struct intel_uncore *uncore,
@@ -1410,41 +1332,30 @@ static void fw_domain_fini(struct intel_uncore *uncore,
 {
 	struct intel_uncore_forcewake_domain *d;
 
-	GEM_BUG_ON(domain_id >= FW_DOMAIN_ID_COUNT);
-
-	d = fetch_and_zero(&uncore->fw_domain[domain_id]);
-	if (!d)
+	if (WARN_ON(domain_id >= FW_DOMAIN_ID_COUNT))
 		return;
 
-	uncore->fw_domains &= ~BIT(domain_id);
+	d = &uncore->fw_domain[domain_id];
+
 	WARN_ON(d->wake_count);
 	WARN_ON(hrtimer_cancel(&d->timer));
-	kfree(d);
+	memset(d, 0, sizeof(*d));
+
+	uncore->fw_domains &= ~BIT(domain_id);
 }
 
-static void intel_uncore_fw_domains_fini(struct intel_uncore *uncore)
+static void intel_uncore_fw_domains_init(struct intel_uncore *uncore)
 {
-	struct intel_uncore_forcewake_domain *d;
-	int tmp;
+	struct drm_i915_private *i915 = uncore_to_i915(uncore);
 
-	for_each_fw_domain(d, uncore, tmp)
-		fw_domain_fini(uncore, d->id);
-}
-
-static int intel_uncore_fw_domains_init(struct intel_uncore *uncore)
-{
-	struct drm_i915_private *i915 = uncore->i915;
-	int ret = 0;
-
-	GEM_BUG_ON(!intel_uncore_has_forcewake(uncore));
-
-#define fw_domain_init(uncore__, id__, set__, ack__) \
-	(ret ?: (ret = __fw_domain_init((uncore__), (id__), (set__), (ack__))))
+	if (!intel_uncore_has_forcewake(uncore))
+		return;
 
 	if (INTEL_GEN(i915) >= 11) {
 		int i;
 
-		uncore->funcs.force_wake_get = fw_domains_get_with_fallback;
+		uncore->funcs.force_wake_get =
+			fw_domains_get_with_fallback;
 		uncore->funcs.force_wake_put = fw_domains_put;
 		fw_domain_init(uncore, FW_DOMAIN_ID_RENDER,
 			       FORCEWAKE_RENDER_GEN9,
@@ -1452,7 +1363,6 @@ static int intel_uncore_fw_domains_init(struct intel_uncore *uncore)
 		fw_domain_init(uncore, FW_DOMAIN_ID_BLITTER,
 			       FORCEWAKE_BLITTER_GEN9,
 			       FORCEWAKE_ACK_BLITTER_GEN9);
-
 		for (i = 0; i < I915_MAX_VCS; i++) {
 			if (!HAS_ENGINE(i915, _VCS(i)))
 				continue;
@@ -1470,7 +1380,8 @@ static int intel_uncore_fw_domains_init(struct intel_uncore *uncore)
 				       FORCEWAKE_ACK_MEDIA_VEBOX_GEN11(i));
 		}
 	} else if (IS_GEN_RANGE(i915, 9, 10)) {
-		uncore->funcs.force_wake_get = fw_domains_get_with_fallback;
+		uncore->funcs.force_wake_get =
+			fw_domains_get_with_fallback;
 		uncore->funcs.force_wake_put = fw_domains_put;
 		fw_domain_init(uncore, FW_DOMAIN_ID_RENDER,
 			       FORCEWAKE_RENDER_GEN9,
@@ -1519,10 +1430,8 @@ static int intel_uncore_fw_domains_init(struct intel_uncore *uncore)
 		__raw_uncore_write32(uncore, FORCEWAKE, 0);
 		__raw_posting_read(uncore, ECOBUS);
 
-		ret = __fw_domain_init(uncore, FW_DOMAIN_ID_RENDER,
-				       FORCEWAKE_MT, FORCEWAKE_MT_ACK);
-		if (ret)
-			goto out;
+		fw_domain_init(uncore, FW_DOMAIN_ID_RENDER,
+			       FORCEWAKE_MT, FORCEWAKE_MT_ACK);
 
 		spin_lock_irq(&uncore->lock);
 		fw_domains_get_with_thread_status(uncore, FORCEWAKE_RENDER);
@@ -1533,7 +1442,6 @@ static int intel_uncore_fw_domains_init(struct intel_uncore *uncore)
 		if (!(ecobus & FORCEWAKE_MT_ENABLE)) {
 			DRM_INFO("No MT forcewake available on Ivybridge, this can result in issues\n");
 			DRM_INFO("when using vblank-synced partial screen updates.\n");
-			fw_domain_fini(uncore, FW_DOMAIN_ID_RENDER);
 			fw_domain_init(uncore, FW_DOMAIN_ID_RENDER,
 				       FORCEWAKE, FORCEWAKE_ACK);
 		}
@@ -1545,16 +1453,8 @@ static int intel_uncore_fw_domains_init(struct intel_uncore *uncore)
 			       FORCEWAKE, FORCEWAKE_ACK);
 	}
 
-#undef fw_domain_init
-
 	/* All future platforms are expected to require complex power gating */
-	WARN_ON(!ret && uncore->fw_domains == 0);
-
-out:
-	if (ret)
-		intel_uncore_fw_domains_fini(uncore);
-
-	return ret;
+	WARN_ON(uncore->fw_domains == 0);
 }
 
 #define ASSIGN_FW_DOMAINS_TABLE(uncore, d) \
@@ -1599,7 +1499,7 @@ static int i915_pmic_bus_access_notifier(struct notifier_block *nb,
 
 static int uncore_mmio_setup(struct intel_uncore *uncore)
 {
-	struct drm_i915_private *i915 = uncore->i915;
+	struct drm_i915_private *i915 = uncore_to_i915(uncore);
 	struct pci_dev *pdev = i915->drm.pdev;
 	int mmio_bar;
 	int mmio_size;
@@ -1629,46 +1529,49 @@ static int uncore_mmio_setup(struct intel_uncore *uncore)
 
 static void uncore_mmio_cleanup(struct intel_uncore *uncore)
 {
-	struct pci_dev *pdev = uncore->i915->drm.pdev;
+	struct drm_i915_private *i915 = uncore_to_i915(uncore);
+	struct pci_dev *pdev = i915->drm.pdev;
 
 	pci_iounmap(pdev, uncore->regs);
 }
 
-void intel_uncore_init_early(struct intel_uncore *uncore,
-			     struct drm_i915_private *i915)
+void intel_uncore_init_early(struct intel_uncore *uncore)
 {
 	spin_lock_init(&uncore->lock);
-	uncore->i915 = i915;
-	uncore->rpm = &i915->runtime_pm;
-	uncore->debug = &i915->mmio_debug;
 }
 
-static void uncore_raw_init(struct intel_uncore *uncore)
+int intel_uncore_init_mmio(struct intel_uncore *uncore)
 {
-	GEM_BUG_ON(intel_uncore_has_forcewake(uncore));
-
-	if (IS_GEN(uncore->i915, 5)) {
-		ASSIGN_RAW_WRITE_MMIO_VFUNCS(uncore, gen5);
-		ASSIGN_RAW_READ_MMIO_VFUNCS(uncore, gen5);
-	} else {
-		ASSIGN_RAW_WRITE_MMIO_VFUNCS(uncore, gen2);
-		ASSIGN_RAW_READ_MMIO_VFUNCS(uncore, gen2);
-	}
-}
-
-static int uncore_forcewake_init(struct intel_uncore *uncore)
-{
-	struct drm_i915_private *i915 = uncore->i915;
+	struct drm_i915_private *i915 = uncore_to_i915(uncore);
 	int ret;
 
-	GEM_BUG_ON(!intel_uncore_has_forcewake(uncore));
-
-	ret = intel_uncore_fw_domains_init(uncore);
+	ret = uncore_mmio_setup(uncore);
 	if (ret)
 		return ret;
-	forcewake_early_sanitize(uncore, 0);
 
-	if (IS_GEN_RANGE(i915, 6, 7)) {
+	i915_check_vgpu(i915);
+
+	if (INTEL_GEN(i915) > 5 && !intel_vgpu_active(i915))
+		uncore->flags |= UNCORE_HAS_FORCEWAKE;
+
+	intel_uncore_fw_domains_init(uncore);
+	__intel_uncore_early_sanitize(uncore, 0);
+
+	uncore->unclaimed_mmio_check = 1;
+	uncore->pmic_bus_access_nb.notifier_call =
+		i915_pmic_bus_access_notifier;
+
+	uncore->rpm = &i915->runtime_pm;
+
+	if (!intel_uncore_has_forcewake(uncore)) {
+		if (IS_GEN(i915, 5)) {
+			ASSIGN_RAW_WRITE_MMIO_VFUNCS(uncore, gen5);
+			ASSIGN_RAW_READ_MMIO_VFUNCS(uncore, gen5);
+		} else {
+			ASSIGN_RAW_WRITE_MMIO_VFUNCS(uncore, gen2);
+			ASSIGN_RAW_READ_MMIO_VFUNCS(uncore, gen2);
+		}
+	} else if (IS_GEN_RANGE(i915, 6, 7)) {
 		ASSIGN_WRITE_MMIO_VFUNCS(uncore, gen6);
 
 		if (IS_VALLEYVIEW(i915)) {
@@ -1682,6 +1585,7 @@ static int uncore_forcewake_init(struct intel_uncore *uncore)
 			ASSIGN_FW_DOMAINS_TABLE(uncore, __chv_fw_ranges);
 			ASSIGN_WRITE_MMIO_VFUNCS(uncore, fwtable);
 			ASSIGN_READ_MMIO_VFUNCS(uncore, fwtable);
+
 		} else {
 			ASSIGN_WRITE_MMIO_VFUNCS(uncore, gen8);
 			ASSIGN_READ_MMIO_VFUNCS(uncore, gen6);
@@ -1694,32 +1598,6 @@ static int uncore_forcewake_init(struct intel_uncore *uncore)
 		ASSIGN_FW_DOMAINS_TABLE(uncore, __gen11_fw_ranges);
 		ASSIGN_WRITE_MMIO_VFUNCS(uncore, gen11_fwtable);
 		ASSIGN_READ_MMIO_VFUNCS(uncore, gen11_fwtable);
-	}
-
-	uncore->pmic_bus_access_nb.notifier_call = i915_pmic_bus_access_notifier;
-	iosf_mbi_register_pmic_bus_access_notifier(&uncore->pmic_bus_access_nb);
-
-	return 0;
-}
-
-int intel_uncore_init_mmio(struct intel_uncore *uncore)
-{
-	struct drm_i915_private *i915 = uncore->i915;
-	int ret;
-
-	ret = uncore_mmio_setup(uncore);
-	if (ret)
-		return ret;
-
-	if (INTEL_GEN(i915) > 5 && !intel_vgpu_active(i915))
-		uncore->flags |= UNCORE_HAS_FORCEWAKE;
-
-	if (!intel_uncore_has_forcewake(uncore)) {
-		uncore_raw_init(uncore);
-	} else {
-		ret = uncore_forcewake_init(uncore);
-		if (ret)
-			goto out_mmio_cleanup;
 	}
 
 	/* make sure fw funcs are set if and only if we have fw*/
@@ -1737,16 +1615,9 @@ int intel_uncore_init_mmio(struct intel_uncore *uncore)
 	if (IS_GEN_RANGE(i915, 6, 7))
 		uncore->flags |= UNCORE_HAS_FIFO;
 
-	/* clear out unclaimed reg detection bit */
-	if (intel_uncore_unclaimed_mmio(uncore))
-		DRM_DEBUG("unclaimed mmio detected on uncore init, clearing\n");
+	iosf_mbi_register_pmic_bus_access_notifier(&uncore->pmic_bus_access_nb);
 
 	return 0;
-
-out_mmio_cleanup:
-	uncore_mmio_cleanup(uncore);
-
-	return ret;
 }
 
 /*
@@ -1756,46 +1627,42 @@ out_mmio_cleanup:
  */
 void intel_uncore_prune_mmio_domains(struct intel_uncore *uncore)
 {
-	struct drm_i915_private *i915 = uncore->i915;
-	enum forcewake_domains fw_domains = uncore->fw_domains;
-	enum forcewake_domain_id domain_id;
-	int i;
+	struct drm_i915_private *i915 = uncore_to_i915(uncore);
 
-	if (!intel_uncore_has_forcewake(uncore) || INTEL_GEN(i915) < 11)
-		return;
+	if (INTEL_GEN(i915) >= 11) {
+		enum forcewake_domains fw_domains = uncore->fw_domains;
+		enum forcewake_domain_id domain_id;
+		int i;
 
-	for (i = 0; i < I915_MAX_VCS; i++) {
-		domain_id = FW_DOMAIN_ID_MEDIA_VDBOX0 + i;
+		for (i = 0; i < I915_MAX_VCS; i++) {
+			domain_id = FW_DOMAIN_ID_MEDIA_VDBOX0 + i;
 
-		if (HAS_ENGINE(i915, _VCS(i)))
-			continue;
+			if (HAS_ENGINE(i915, _VCS(i)))
+				continue;
 
-		if (fw_domains & BIT(domain_id))
-			fw_domain_fini(uncore, domain_id);
-	}
+			if (fw_domains & BIT(domain_id))
+				fw_domain_fini(uncore, domain_id);
+		}
 
-	for (i = 0; i < I915_MAX_VECS; i++) {
-		domain_id = FW_DOMAIN_ID_MEDIA_VEBOX0 + i;
+		for (i = 0; i < I915_MAX_VECS; i++) {
+			domain_id = FW_DOMAIN_ID_MEDIA_VEBOX0 + i;
 
-		if (HAS_ENGINE(i915, _VECS(i)))
-			continue;
+			if (HAS_ENGINE(i915, _VECS(i)))
+				continue;
 
-		if (fw_domains & BIT(domain_id))
-			fw_domain_fini(uncore, domain_id);
+			if (fw_domains & BIT(domain_id))
+				fw_domain_fini(uncore, domain_id);
+		}
 	}
 }
 
 void intel_uncore_fini_mmio(struct intel_uncore *uncore)
 {
-	if (intel_uncore_has_forcewake(uncore)) {
-		iosf_mbi_punit_acquire();
-		iosf_mbi_unregister_pmic_bus_access_notifier_unlocked(
-			&uncore->pmic_bus_access_nb);
-		intel_uncore_forcewake_reset(uncore);
-		intel_uncore_fw_domains_fini(uncore);
-		iosf_mbi_punit_release();
-	}
-
+	iosf_mbi_punit_acquire();
+	iosf_mbi_unregister_pmic_bus_access_notifier_unlocked(
+		&uncore->pmic_bus_access_nb);
+	intel_uncore_forcewake_reset(uncore);
+	iosf_mbi_punit_release();
 	uncore_mmio_cleanup(uncore);
 }
 
@@ -1807,7 +1674,7 @@ static const struct reg_whitelist {
 } reg_read_whitelist[] = { {
 	.offset_ldw = RING_TIMESTAMP(RENDER_RING_BASE),
 	.offset_udw = RING_TIMESTAMP_UDW(RENDER_RING_BASE),
-	.gen_mask = INTEL_GEN_MASK(4, 12),
+	.gen_mask = INTEL_GEN_MASK(4, 11),
 	.size = 8
 } };
 
@@ -1891,7 +1758,7 @@ int i915_reg_read_ioctl(struct drm_device *dev,
  * wish to wait without holding forcewake for the duration (i.e. you expect
  * the wait to be slow).
  *
- * Return: 0 if the register matches the desired condition, or -ETIMEDOUT.
+ * Returns 0 if the register matches the desired condition, or -ETIMEOUT.
  */
 int __intel_wait_for_register_fw(struct intel_uncore *uncore,
 				 i915_reg_t reg,
@@ -1939,7 +1806,7 @@ int __intel_wait_for_register_fw(struct intel_uncore *uncore,
  *
  * Otherwise, the wait will timeout after @timeout_ms milliseconds.
  *
- * Return: 0 if the register matches the desired condition, or -ETIMEDOUT.
+ * Returns 0 if the register matches the desired condition, or -ETIMEOUT.
  */
 int __intel_wait_for_register(struct intel_uncore *uncore,
 			      i915_reg_t reg,
@@ -1983,13 +1850,7 @@ int __intel_wait_for_register(struct intel_uncore *uncore,
 
 bool intel_uncore_unclaimed_mmio(struct intel_uncore *uncore)
 {
-	bool ret;
-
-	spin_lock_irq(&uncore->debug->lock);
-	ret = check_for_unclaimed_mmio(uncore);
-	spin_unlock_irq(&uncore->debug->lock);
-
-	return ret;
+	return check_for_unclaimed_mmio(uncore);
 }
 
 bool
@@ -1997,24 +1858,24 @@ intel_uncore_arm_unclaimed_mmio_detection(struct intel_uncore *uncore)
 {
 	bool ret = false;
 
-	spin_lock_irq(&uncore->debug->lock);
+	spin_lock_irq(&uncore->lock);
 
-	if (unlikely(uncore->debug->unclaimed_mmio_check <= 0))
+	if (unlikely(uncore->unclaimed_mmio_check <= 0))
 		goto out;
 
-	if (unlikely(check_for_unclaimed_mmio(uncore))) {
+	if (unlikely(intel_uncore_unclaimed_mmio(uncore))) {
 		if (!i915_modparams.mmio_debug) {
 			DRM_DEBUG("Unclaimed register detected, "
 				  "enabling oneshot unclaimed register reporting. "
 				  "Please use i915.mmio_debug=N for more information.\n");
 			i915_modparams.mmio_debug++;
 		}
-		uncore->debug->unclaimed_mmio_check--;
+		uncore->unclaimed_mmio_check--;
 		ret = true;
 	}
 
 out:
-	spin_unlock_irq(&uncore->debug->lock);
+	spin_unlock_irq(&uncore->lock);
 
 	return ret;
 }

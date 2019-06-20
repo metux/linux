@@ -238,8 +238,7 @@ retry:
 	if (nr_inline > (PAGE_SIZE - sizeof(*req)) / sizeof(struct page *))
 		nr_inline = 0;
 
-	req = kzalloc(sizeof(*req) + sizeof(struct page *) * nr_inline,
-		      GFP_KERNEL);
+	req = kzalloc(struct_size(req, array, nr_inline), GFP_KERNEL);
 	if (!req)
 		return ERR_PTR(-ENOMEM);
 

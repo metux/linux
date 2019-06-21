@@ -9,22 +9,24 @@
 
 #include "igt_spinner.h"
 
-int igt_spinner_init(struct igt_spinner *spin, struct intel_gt *gt)
+int igt_spinner_init(struct igt_spinner *spin, struct drm_i915_private *i915)
 {
 	unsigned int mode;
 	void *vaddr;
 	int err;
 
-	memset(spin, 0, sizeof(*spin));
-	spin->gt = gt;
+	GEM_BUG_ON(INTEL_GEN(i915) < 8);
 
-	spin->hws = i915_gem_object_create_internal(gt->i915, PAGE_SIZE);
+	memset(spin, 0, sizeof(*spin));
+	spin->i915 = i915;
+
+	spin->hws = i915_gem_object_create_internal(i915, PAGE_SIZE);
 	if (IS_ERR(spin->hws)) {
 		err = PTR_ERR(spin->hws);
 		goto err;
 	}
 
-	spin->obj = i915_gem_object_create_internal(gt->i915, PAGE_SIZE);
+	spin->obj = i915_gem_object_create_internal(i915, PAGE_SIZE);
 	if (IS_ERR(spin->obj)) {
 		err = PTR_ERR(spin->obj);
 		goto err_hws;
@@ -38,7 +40,7 @@ int igt_spinner_init(struct igt_spinner *spin, struct intel_gt *gt)
 	}
 	spin->seqno = memset(vaddr, 0xff, PAGE_SIZE);
 
-	mode = i915_coherent_map_type(gt->i915);
+	mode = i915_coherent_map_type(i915);
 	vaddr = i915_gem_object_pin_map(spin->obj, mode);
 	if (IS_ERR(vaddr)) {
 		err = PTR_ERR(vaddr);
@@ -76,10 +78,7 @@ static int move_to_active(struct i915_vma *vma,
 	int err;
 
 	i915_vma_lock(vma);
-	err = i915_request_await_object(rq, vma->obj,
-					flags & EXEC_OBJECT_WRITE);
-	if (err == 0)
-		err = i915_vma_move_to_active(vma, rq, flags);
+	err = i915_vma_move_to_active(vma, rq, flags);
 	i915_vma_unlock(vma);
 
 	return err;
@@ -87,26 +86,22 @@ static int move_to_active(struct i915_vma *vma,
 
 struct i915_request *
 igt_spinner_create_request(struct igt_spinner *spin,
-			   struct intel_context *ce,
+			   struct i915_gem_context *ctx,
+			   struct intel_engine_cs *engine,
 			   u32 arbitration_command)
 {
-	struct intel_engine_cs *engine = ce->engine;
 	struct i915_request *rq = NULL;
 	struct i915_vma *hws, *vma;
-	unsigned int flags;
 	u32 *batch;
 	int err;
 
-	GEM_BUG_ON(spin->gt != ce->vm->gt);
+	spin->gt = engine->gt;
 
-	if (!intel_engine_can_store_dword(ce->engine))
-		return ERR_PTR(-ENODEV);
-
-	vma = i915_vma_instance(spin->obj, ce->vm, NULL);
+	vma = i915_vma_instance(spin->obj, ctx->vm, NULL);
 	if (IS_ERR(vma))
 		return ERR_CAST(vma);
 
-	hws = i915_vma_instance(spin->hws, ce->vm, NULL);
+	hws = i915_vma_instance(spin->hws, ctx->vm, NULL);
 	if (IS_ERR(hws))
 		return ERR_CAST(hws);
 
@@ -118,7 +113,7 @@ igt_spinner_create_request(struct igt_spinner *spin,
 	if (err)
 		goto unpin_vma;
 
-	rq = intel_context_create_request(ce);
+	rq = igt_request_alloc(ctx, engine);
 	if (IS_ERR(rq)) {
 		err = PTR_ERR(rq);
 		goto unpin_hws;
@@ -134,52 +129,28 @@ igt_spinner_create_request(struct igt_spinner *spin,
 
 	batch = spin->batch;
 
-	if (INTEL_GEN(rq->i915) >= 8) {
-		*batch++ = MI_STORE_DWORD_IMM_GEN4;
-		*batch++ = lower_32_bits(hws_address(hws, rq));
-		*batch++ = upper_32_bits(hws_address(hws, rq));
-	} else if (INTEL_GEN(rq->i915) >= 6) {
-		*batch++ = MI_STORE_DWORD_IMM_GEN4;
-		*batch++ = 0;
-		*batch++ = hws_address(hws, rq);
-	} else if (INTEL_GEN(rq->i915) >= 4) {
-		*batch++ = MI_STORE_DWORD_IMM_GEN4 | MI_USE_GGTT;
-		*batch++ = 0;
-		*batch++ = hws_address(hws, rq);
-	} else {
-		*batch++ = MI_STORE_DWORD_IMM | MI_MEM_VIRTUAL;
-		*batch++ = hws_address(hws, rq);
-	}
+	*batch++ = MI_STORE_DWORD_IMM_GEN4;
+	*batch++ = lower_32_bits(hws_address(hws, rq));
+	*batch++ = upper_32_bits(hws_address(hws, rq));
 	*batch++ = rq->fence.seqno;
 
 	*batch++ = arbitration_command;
 
-	if (INTEL_GEN(rq->i915) >= 8)
-		*batch++ = MI_BATCH_BUFFER_START | BIT(8) | 1;
-	else if (IS_HASWELL(rq->i915))
-		*batch++ = MI_BATCH_BUFFER_START | MI_BATCH_PPGTT_HSW;
-	else if (INTEL_GEN(rq->i915) >= 6)
-		*batch++ = MI_BATCH_BUFFER_START;
-	else
-		*batch++ = MI_BATCH_BUFFER_START | MI_BATCH_GTT;
+	*batch++ = MI_BATCH_BUFFER_START | 1 << 8 | 1;
 	*batch++ = lower_32_bits(vma->node.start);
 	*batch++ = upper_32_bits(vma->node.start);
-
 	*batch++ = MI_BATCH_BUFFER_END; /* not reached */
 
 	intel_gt_chipset_flush(engine->gt);
 
 	if (engine->emit_init_breadcrumb &&
-	    i915_request_timeline(rq)->has_initial_breadcrumb) {
+	    rq->timeline->has_initial_breadcrumb) {
 		err = engine->emit_init_breadcrumb(rq);
 		if (err)
 			goto cancel_rq;
 	}
 
-	flags = 0;
-	if (INTEL_GEN(rq->i915) <= 5)
-		flags |= I915_DISPATCH_SECURE;
-	err = engine->emit_bb_start(rq, vma->node.start, PAGE_SIZE, flags);
+	err = engine->emit_bb_start(rq, vma->node.start, PAGE_SIZE, 0);
 
 cancel_rq:
 	if (err) {

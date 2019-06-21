@@ -5,6 +5,7 @@
  */
 
 #include "gem/i915_gem_pm.h"
+#include "gt/intel_gt.h"
 #include "i915_selftest.h"
 #include "intel_reset.h"
 
@@ -519,7 +520,7 @@ static int check_dirty_whitelist(struct i915_gem_context *ctx,
 
 		i915_gem_object_flush_map(batch->obj);
 		i915_gem_object_unpin_map(batch->obj);
-		i915_gem_chipset_flush(ctx->i915);
+		intel_gt_chipset_flush(engine->gt);
 
 		rq = i915_request_alloc(engine, ctx);
 		if (IS_ERR(rq)) {
@@ -778,7 +779,7 @@ static int scrub_whitelisted_registers(struct i915_gem_context *ctx,
 	*cs++ = MI_BATCH_BUFFER_END;
 
 	i915_gem_object_flush_map(batch->obj);
-	i915_gem_chipset_flush(ctx->i915);
+	intel_gt_chipset_flush(engine->gt);
 
 	rq = ERR_PTR(-ENODEV);
 	with_intel_runtime_pm(engine->i915, wakeref)

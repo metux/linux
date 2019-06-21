@@ -25,6 +25,7 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 
+#include "gt/intel_gt.h"
 #include "gt/mock_engine.h"
 
 #include "mock_request.h"
@@ -182,7 +183,7 @@ struct drm_i915_private *mock_gem_device(void)
 
 	mock_uncore_init(&i915->uncore);
 	i915_gem_init__mm(i915);
-	intel_gt_pm_init(i915);
+	intel_gt_init_early(&i915->gt, i915);
 	atomic_inc(&i915->gt.wakeref.count); /* disable; no hw support */
 
 	init_waitqueue_head(&i915->gpu_error.wait_queue);
@@ -210,10 +211,6 @@ struct drm_i915_private *mock_gem_device(void)
 		goto err_objects;
 
 	i915_timelines_init(i915);
-
-	INIT_LIST_HEAD(&i915->gt.active_rings);
-	INIT_LIST_HEAD(&i915->gt.closed_vma);
-	spin_lock_init(&i915->gt.closed_lock);
 
 	mutex_lock(&i915->drm.struct_mutex);
 

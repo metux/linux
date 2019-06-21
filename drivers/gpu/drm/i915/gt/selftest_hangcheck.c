@@ -25,6 +25,7 @@
 #include <linux/kthread.h>
 
 #include "gem/i915_gem_context.h"
+#include "gt/intel_gt.h"
 #include "intel_engine_pm.h"
 
 #include "i915_selftest.h"
@@ -42,6 +43,7 @@
 
 struct hang {
 	struct drm_i915_private *i915;
+	struct intel_gt *gt;
 	struct drm_i915_gem_object *hws;
 	struct drm_i915_gem_object *obj;
 	struct i915_gem_context *ctx;
@@ -138,6 +140,8 @@ hang_create_request(struct hang *h, struct intel_engine_cs *engine)
 	unsigned int flags;
 	u32 *batch;
 	int err;
+
+	h->gt = engine->gt;
 
 	if (i915_gem_object_is_active(h->obj)) {
 		struct drm_i915_gem_object *obj;
@@ -246,7 +250,7 @@ hang_create_request(struct hang *h, struct intel_engine_cs *engine)
 		*batch++ = lower_32_bits(vma->node.start);
 	}
 	*batch++ = MI_BATCH_BUFFER_END; /* not reached */
-	i915_gem_chipset_flush(h->i915);
+	intel_gt_chipset_flush(engine->gt);
 
 	if (rq->engine->emit_init_breadcrumb) {
 		err = rq->engine->emit_init_breadcrumb(rq);
@@ -280,7 +284,9 @@ static u32 hws_seqno(const struct hang *h, const struct i915_request *rq)
 static void hang_fini(struct hang *h)
 {
 	*h->batch = MI_BATCH_BUFFER_END;
-	i915_gem_chipset_flush(h->i915);
+
+	if (h->gt)
+		intel_gt_chipset_flush(h->gt);
 
 	i915_gem_object_unpin_map(h->obj);
 	i915_gem_object_put(h->obj);
@@ -337,7 +343,7 @@ static int igt_hang_sanitycheck(void *arg)
 		i915_request_get(rq);
 
 		*h.batch = MI_BATCH_BUFFER_END;
-		i915_gem_chipset_flush(i915);
+		intel_gt_chipset_flush(engine->gt);
 
 		i915_request_add(rq);
 
@@ -1560,7 +1566,7 @@ static int igt_reset_queue(void *arg)
 		pr_info("%s: Completed %d resets\n", engine->name, count);
 
 		*h.batch = MI_BATCH_BUFFER_END;
-		i915_gem_chipset_flush(i915);
+		intel_gt_chipset_flush(engine->gt);
 
 		i915_request_put(prev);
 

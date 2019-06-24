@@ -743,41 +743,7 @@ xs_stream_start_connect(struct sock_xprt *transport)
 
 #define XS_SENDMSG_FLAGS	(MSG_DONTWAIT | MSG_NOSIGNAL)
 
-/* Common case:
- *  - stream transport
- *  - sending from byte 0 of the message
- *  - the message is wholly contained in @xdr's head iovec
- */
-static int xs_send_rm_and_kvec(struct socket *sock, struct xdr_buf *xdr,
-			       unsigned int remainder)
-{
-	struct msghdr msg = {
-		.msg_flags	= XS_SENDMSG_FLAGS | (remainder ? MSG_MORE : 0)
-	};
-	rpc_fraghdr marker = cpu_to_be32(RPC_LAST_STREAM_FRAGMENT |
-					 (u32)xdr->len);
-	struct kvec iov[2] = {
-		{
-			.iov_base	= &marker,
-			.iov_len	= sizeof(marker)
-		},
-		{
-			.iov_base	= xdr->head[0].iov_base,
-			.iov_len	= xdr->head[0].iov_len
-		},
-	};
-	int ret;
-
-	ret = kernel_sendmsg(sock, &msg, iov, 2,
-			     iov[0].iov_len + iov[1].iov_len);
-	if (ret < 0)
-		return ret;
-	if (ret < iov[0].iov_len)
-		return -EPIPE;
-	return ret - iov[0].iov_len;
-}
-
-static int xs_send_kvec(struct socket *sock, struct sockaddr *addr, int addrlen, struct kvec *vec, unsigned int base, int more)
+static int xs_sendmsg(struct socket *sock, struct msghdr *msg, size_t seek)
 {
 	if (seek)
 		iov_iter_advance(&msg->msg_iter, seek);
@@ -804,6 +770,29 @@ static int xs_send_pagedata(struct socket *sock, struct msghdr *msg, struct xdr_
 	return xs_sendmsg(sock, msg, base + xdr->page_base);
 }
 
+#define xs_record_marker_len() sizeof(rpc_fraghdr)
+
+/* Common case:
+ *  - stream transport
+ *  - sending from byte 0 of the message
+ *  - the message is wholly contained in @xdr's head iovec
+ */
+static int xs_send_rm_and_kvec(struct socket *sock, struct msghdr *msg,
+		rpc_fraghdr marker, struct kvec *vec, size_t base)
+{
+	struct kvec iov[2] = {
+		[0] = {
+			.iov_base	= &marker,
+			.iov_len	= sizeof(marker)
+		},
+		[1] = *vec,
+	};
+	size_t len = iov[0].iov_len + iov[1].iov_len;
+
+	iov_iter_kvec(&msg->msg_iter, WRITE, iov, 2, len);
+	return xs_sendmsg(sock, msg, base);
+}
+
 /**
  * xs_sendpages - write pages directly to a socket
  * @sock: socket to send on
@@ -811,36 +800,42 @@ static int xs_send_pagedata(struct socket *sock, struct msghdr *msg, struct xdr_
  * @addrlen: UDP only -- length of destination address
  * @xdr: buffer containing this request
  * @base: starting position in the buffer
+ * @rm: stream record marker field
  * @sent_p: return the total number of bytes successfully queued for sending
  *
  */
-static int xs_sendpages(struct socket *sock, struct sockaddr *addr, int addrlen, struct xdr_buf *xdr, unsigned int base, int *sent_p)
+static int xs_sendpages(struct socket *sock, struct sockaddr *addr, int addrlen, struct xdr_buf *xdr, unsigned int base, rpc_fraghdr rm, int *sent_p)
 {
 	struct msghdr msg = {
 		.msg_name = addr,
 		.msg_namelen = addrlen,
 		.msg_flags = XS_SENDMSG_FLAGS | MSG_MORE,
 	};
-	unsigned int remainder = xdr->len - base;
+	unsigned int rmsize = rm ? sizeof(rm) : 0;
+	unsigned int remainder = rmsize + xdr->len - base;
+	unsigned int want;
 	int err = 0;
 
 	if (unlikely(!sock))
 		return -ENOTSOCK;
 
-	if (base < xdr->head[0].iov_len) {
-		unsigned int len = xdr->head[0].iov_len - base;
+	want = xdr->head[0].iov_len + rmsize;
+	if (base < want) {
+		unsigned int len = want - base;
 		remainder -= len;
-if (!base && !addr)
-		err = xs_send_rm_and_kvec(sock, xdr, remainder);
-	else
-		err = xs_send_kvec(sock, addr, addrlen, &xdr->head[0],
-				   base, remainder != 0);
+		if (remainder == 0)
+			msg.msg_flags &= ~MSG_MORE;
+		if (rmsize)
+			err = xs_send_rm_and_kvec(sock, &msg, rm,
+					&xdr->head[0], base);
+		else
+			err = xs_send_kvec(sock, &msg, &xdr->head[0], base);
 		if (remainder == 0 || err != len)
 			goto out;
 		*sent_p += err;
 		base = 0;
 	} else
-		base -= xdr->head[0].iov_len;
+		base -= want;
 
 	if (base < xdr->page_len) {
 		unsigned int len = xdr->page_len - base;
@@ -927,6 +922,17 @@ xs_send_request_was_aborted(struct sock_xprt *transport, struct rpc_rqst *req)
 	return transport->xmit.offset != 0 && req->rq_bytes_sent == 0;
 }
 
+/*
+ * Return the stream record marker field for a record of length < 2^31-1
+ */
+static rpc_fraghdr
+xs_stream_record_marker(struct xdr_buf *xdr)
+{
+	if (!xdr->len)
+		return 0;
+	return cpu_to_be32(RPC_LAST_STREAM_FRAGMENT | (u32)xdr->len);
+}
+
 /**
  * xs_local_send_request - write an RPC request to an AF_LOCAL socket
  * @req: pointer to RPC request
@@ -944,6 +950,8 @@ static int xs_local_send_request(struct rpc_rqst *req)
 	struct sock_xprt *transport =
 				container_of(xprt, struct sock_xprt, xprt);
 	struct xdr_buf *xdr = &req->rq_snd_buf;
+	rpc_fraghdr rm = xs_stream_record_marker(xdr);
+	unsigned int msglen = rm ? req->rq_slen + sizeof(rm) : req->rq_slen;
 	int status;
 	int sent = 0;
 
@@ -958,8 +966,7 @@ static int xs_local_send_request(struct rpc_rqst *req)
 
 	req->rq_xtime = ktime_get();
 	status = xs_sendpages(transport->sock, NULL, 0, xdr,
-			      transport->xmit.offset,
-			      &sent);
+			      transport->xmit.offset, rm, &sent);
 	dprintk("RPC:       %s(%u) = %d\n",
 			__func__, xdr->len - transport->xmit.offset, status);
 
@@ -969,7 +976,7 @@ static int xs_local_send_request(struct rpc_rqst *req)
 	if (likely(sent > 0) || status == 0) {
 		transport->xmit.offset += sent;
 		req->rq_bytes_sent = transport->xmit.offset;
-		if (likely(req->rq_bytes_sent >= req->rq_slen)) {
+		if (likely(req->rq_bytes_sent >= msglen)) {
 			req->rq_xmit_bytes_sent += transport->xmit.offset;
 			transport->xmit.offset = 0;
 			return 0;
@@ -1026,7 +1033,7 @@ static int xs_udp_send_request(struct rpc_rqst *req)
 
 	req->rq_xtime = ktime_get();
 	status = xs_sendpages(transport->sock, xs_addr(xprt), xprt->addrlen,
-			      xdr, 0, &sent);
+			      xdr, 0, 0, &sent);
 
 	dprintk("RPC:       xs_udp_send_request(%u) = %d\n",
 			xdr->len, status);
@@ -1090,6 +1097,8 @@ static int xs_tcp_send_request(struct rpc_rqst *req)
 	struct rpc_xprt *xprt = req->rq_xprt;
 	struct sock_xprt *transport = container_of(xprt, struct sock_xprt, xprt);
 	struct xdr_buf *xdr = &req->rq_snd_buf;
+	rpc_fraghdr rm = xs_stream_record_marker(xdr);
+	unsigned int msglen = rm ? req->rq_slen + sizeof(rm) : req->rq_slen;
 	bool vm_wait = false;
 	int status;
 	int sent;
@@ -1115,8 +1124,7 @@ static int xs_tcp_send_request(struct rpc_rqst *req)
 	while (1) {
 		sent = 0;
 		status = xs_sendpages(transport->sock, NULL, 0, xdr,
-				      transport->xmit.offset,
-				      &sent);
+				      transport->xmit.offset, rm, &sent);
 
 		dprintk("RPC:       xs_tcp_send_request(%u) = %d\n",
 				xdr->len - transport->xmit.offset, status);
@@ -1125,7 +1133,7 @@ static int xs_tcp_send_request(struct rpc_rqst *req)
 		 * reset the count of bytes sent. */
 		transport->xmit.offset += sent;
 		req->rq_bytes_sent = transport->xmit.offset;
-		if (likely(req->rq_bytes_sent >= req->rq_slen)) {
+		if (likely(req->rq_bytes_sent >= msglen)) {
 			req->rq_xmit_bytes_sent += transport->xmit.offset;
 			transport->xmit.offset = 0;
 			return 0;

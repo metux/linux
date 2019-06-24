@@ -12,6 +12,8 @@
 #define AES_ENDPROC(func)	ENDPROC(neon_ ## func)
 
 	xtsmask		.req	v7
+	cbciv		.req	v7
+	vctr		.req	v4
 
 	.macro		xts_reload_mask, tmp
 	xts_load_mask	\tmp

@@ -15,6 +15,8 @@
 	.arch		armv8-a+crypto
 
 	xtsmask		.req	v16
+	cbciv		.req	v16
+	vctr		.req	v16
 
 	.macro		xts_reload_mask, tmp
 	.endm

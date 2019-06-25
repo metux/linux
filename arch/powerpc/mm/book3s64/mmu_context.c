@@ -116,7 +116,8 @@ static int hash__init_new_context(struct mm_struct *mm)
 	 * We should not be calling init_new_context() on init_mm. Hence a
 	 * check against 0 is OK.
 	 */
-	if (mm->context.id == 0)
+	if (mm->context.id == 0) {
+		memset(mm->context.hash_context, 0, sizeof(struct hash_mm_context));
 		slice_init_new_context_exec(mm);
 	} else {
 		/* This is fork. Copy hash_context details from current->mm */
@@ -178,7 +179,7 @@ static int radix__init_new_context(struct mm_struct *mm)
 	 */
 	asm volatile("ptesync;isync" : : : "memory");
 
-	mm->context.npu_context = NULL;
+	mm->context.hash_context = NULL;
 
 	return index;
 }
@@ -223,6 +224,7 @@ static void destroy_contexts(mm_context_t *ctx)
 		if (context_id)
 			ida_free(&mmu_context_ida, context_id);
 	}
+	kfree(ctx->hash_context);
 }
 
 static void pmd_frag_destroy(void *pmd_frag)

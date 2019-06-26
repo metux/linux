@@ -1401,7 +1401,6 @@ struct hmm_devmem *hmm_devmem_add(const struct hmm_devmem_ops *ops,
 	devmem->pagemap.type = MEMORY_DEVICE_PRIVATE;
 	devmem->pagemap.res = *devmem->resource;
 	devmem->pagemap.ops = &hmm_pagemap_ops;
-	devmem->pagemap.altmap_valid = false;
 	devmem->pagemap.ref = &devmem->ref;
 
 	result = devm_memremap_pages(devmem->device, &devmem->pagemap);

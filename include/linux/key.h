@@ -81,9 +81,20 @@ struct keyring_list;
 struct keyring_name;
 
 struct keyring_index_key {
+	union {
+		struct {
+#ifdef __LITTLE_ENDIAN /* Put desc_len at the LSB of x */
+			u8	desc_len;
+			char	desc[sizeof(long) - 1];	/* First few chars of description */
+#else
+			char	desc[sizeof(long) - 1];	/* First few chars of description */
+			u8	desc_len;
+#endif
+		};
+		unsigned long x;
+	};
 	struct key_type		*type;
 	const char		*description;
-	size_t			desc_len;
 };
 
 union key_payload {
@@ -197,6 +208,7 @@ struct key {
 	union {
 		struct keyring_index_key index_key;
 		struct {
+			unsigned long	len_desc;
 			struct key_type	*type;		/* type of key */
 			char		*description;
 		};

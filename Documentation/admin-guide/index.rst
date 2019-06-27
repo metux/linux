@@ -58,6 +58,7 @@ configure specific aspects of kernel behavior to your liking.
 
    initrd
    cgroup-v2
+   cgroup-v1/index
    serial-console
    braille-console
    parport

@@ -930,6 +930,8 @@
 };
 
 &i2c2b {
+
+/*
 	ov5640_mipi: ov5640_mipi@3c {
 		compatible = "ovti,ov5640_mipi";
 		reg = <0x3c>;
@@ -947,6 +949,22 @@
 		mclk = <22000000>;
 		mclk_source = <0>;
 	};
+*/
+
+
+	avt_imx6_csi2: avt_imx6_csi2@3C {
+		compatible = "avti,avt_imx6_csi2";
+		reg = <0x3C>;
+		// 400KHz CCI/I2C clock; it needs to be changed if 'clock-frequency' of 'i2c2' node is changed
+		av_cam_i2c_clk = <400000>; 
+		ipu_id = <0>;
+		csi_id = <0>;
+		lanes = <4>;	// This 'lane_count' entry has no effect if 'lanes_auto_conf' is 1
+		lanes_auto_conf = <1>;
+		clk = <300000000>;	// This 'clk' entry has no effect if 'clk_auto_conf' is 1
+		clk_auto_conf = <1>;
+	};
+
 
 	tc358743_mipi: tc358743_mipi@0f {
 		compatible = "tc358743_mipi";

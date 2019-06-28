@@ -35,10 +35,12 @@
 	ipu_id = <1>;
 };
 
+/*
 &ov5640_mipi {
 	ipu_id = <1>;
 	csi_id = <0>;
 };
+*/
 
 &pinctrl_i2c3_adv7180 {
 	fsl,pins = <

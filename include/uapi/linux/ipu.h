@@ -110,6 +110,21 @@ typedef enum {
 #define IPU_PIX_FMT_LVDS888 fourcc('L', 'V', 'D', '8')	/*!< IPU Generic Data */
 #define IPU_PIX_FMT_BT656    fourcc('B', 'T', '6', '5')	/*!< BT656, 8 bits UYVY */
 #define IPU_PIX_FMT_BT1120    fourcc('B', 'T', '1', '1')	/*!< BT1120, 16 bits UYVY */
+
+#define IPU_PIX_FMT_RAW8 fourcc('I', 'P', 'U', '3')	/*!< IPU Generic Data */
+#define IPU_PIX_FMT_RAW10 fourcc('I', 'P', 'U', '4')	/*!< IPU Generic Data */
+#define IPU_PIX_FMT_RAW12 fourcc('I', 'P', 'U', '5')	/*!< IPU Generic Data */
+
+#define IPU_PIX_FMT_SBGGR12P    fourcc('p', 'B', 'C', 'C')	/*!< 12  BGGR packed */
+#define IPU_PIX_FMT_SGBRG12P    fourcc('p', 'G', 'C', 'C')	/*!< 12  GBRG packed */
+#define IPU_PIX_FMT_SGRBG12P    fourcc('p', 'g', 'C', 'C')	/*!< 12  GRBG packed */
+#define IPU_PIX_FMT_SRGGB12P    fourcc('p', 'R', 'C', 'C')	/*!< 12  RGGB packed */
+
+#define IPU_PIX_FMT_Y12P       fourcc('Y', '1', '2', 'P')	/*!< 12  Greyscale packed */
+#define IPU_PIX_FMT_Y10P       fourcc('Y', '1', '0', 'P')	/*!< 10  Greyscale packed */
+#define IPU_PIX_FMT_GREY10P    fourcc('G', '1', '0', 'P')	/*!< 10  Greyscale packed */
+#define IPU_PIX_FMT_GREY12P    fourcc('G', '1', '2', 'P')	/*!< 12  Greyscale packed */
+
 /*! @} */
 /*! @name RGB Formats */
 /*! @{ */

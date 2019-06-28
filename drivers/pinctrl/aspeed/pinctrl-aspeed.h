@@ -524,22 +524,6 @@ struct aspeed_pin_config {
 	u8 value;
 };
 
-struct aspeed_pinctrl_data {
-	struct regmap *maps[ASPEED_NR_PINMUX_IPS];
-
-	const struct pinctrl_pin_desc *pins;
-	const unsigned int npins;
-
-	const struct aspeed_pin_group *groups;
-	const unsigned int ngroups;
-
-	const struct aspeed_pin_function *functions;
-	const unsigned int nfunctions;
-
-	const struct aspeed_pin_config *configs;
-	const unsigned int nconfigs;
-};
-
 #define ASPEED_PINCTRL_PIN(name_) \
 	[name_] = { \
 		.number = name_, \
@@ -547,30 +531,19 @@ struct aspeed_pinctrl_data {
 		.drv_data = (void *) &(PIN_SYM(name_)) \
 	}
 
-struct aspeed_pin_group {
-	const char *name;
-	const unsigned int *pins;
+struct aspeed_pinctrl_data {
+	struct regmap *scu;
+
+	const struct pinctrl_pin_desc *pins;
 	const unsigned int npins;
+
+	const struct aspeed_pin_config *configs;
+	const unsigned int nconfigs;
+
+	struct aspeed_pinmux_data pinmux;
 };
 
-#define ASPEED_PINCTRL_GROUP(name_) { \
-	.name = #name_, \
-	.pins = &(PIN_GROUP_SYM(name_))[0], \
-	.npins = ARRAY_SIZE(PIN_GROUP_SYM(name_)), \
-}
-
-struct aspeed_pin_function {
-	const char *name;
-	const char *const *groups;
-	unsigned int ngroups;
-};
-
-#define ASPEED_PINCTRL_FUNC(name_, ...) { \
-	.name = #name_, \
-	.groups = &FUNC_GROUP_SYM(name_)[0], \
-	.ngroups = ARRAY_SIZE(FUNC_GROUP_SYM(name_)), \
-}
-
+/* Aspeed pinctrl helpers */
 int aspeed_pinctrl_get_groups_count(struct pinctrl_dev *pctldev);
 const char *aspeed_pinctrl_get_group_name(struct pinctrl_dev *pctldev,
 		unsigned int group);

@@ -54,10 +54,14 @@
 #define MIPI_DT_RAW12		0x2c
 #define MIPI_DT_RAW14		0x2d
 
+#define MIPI_DT_JPEG		0x30
+#define MIPI_DT_CUSTOM		0x31
 
 struct mipi_csi2_info;
 /* mipi csi2 API */
 struct mipi_csi2_info *mipi_csi2_get_info(void);
+
+unsigned int mipi_csi2_read(struct mipi_csi2_info *info,unsigned offset);
 
 bool mipi_csi2_enable(struct mipi_csi2_info *info);
 
@@ -89,5 +93,8 @@ int mipi_csi2_pixelclk_enable(struct mipi_csi2_info *info);
 void mipi_csi2_pixelclk_disable(struct mipi_csi2_info *info);
 
 int mipi_csi2_reset(struct mipi_csi2_info *info);
+
+void mipi_csi2_reg_dump(struct mipi_csi2_info *info);
+int mipi_csi2_reset_with_dphy_freq(struct mipi_csi2_info *info, uint32_t value);
 
 #endif

@@ -82,6 +82,14 @@ ipu_csi_init_interface(struct ipu_soc *ipu, uint16_t width, uint16_t height,
 	uint32_t data = 0;
 	uint32_t csi = cfg_param.csi;
 
+pr_debug("%s:%d \"%c%c%c%c\"\n", __func__, __LINE__, (pixel_fmt >> 0) & 0xff, (pixel_fmt >> 8) & 0xff, (pixel_fmt >> 16) & 0xff, (pixel_fmt >> 24) & 0xff);
+
+	if ((pixel_fmt == IPU_PIX_FMT_GREY12P) || (pixel_fmt == IPU_PIX_FMT_SBGGR12P) ||
+		 (pixel_fmt == IPU_PIX_FMT_SGBRG12P) || pixel_fmt == (IPU_PIX_FMT_SGRBG12P) ||
+		 (pixel_fmt == IPU_PIX_FMT_SRGGB12P) || (pixel_fmt == IPU_PIX_FMT_Y12P)) {
+		width = width * 12 / 8;
+	}
+
 	/* Set SENS_DATA_FORMAT bits (8, 9 and 10)
 	   RGB or YUV444 is 0 which is current value in data so not set
 	   explicitly
@@ -98,6 +106,17 @@ ipu_csi_init_interface(struct ipu_soc *ipu, uint16_t width, uint16_t height,
 	case IPU_PIX_FMT_BGR24:
 		cfg_param.data_fmt = CSI_SENS_CONF_DATA_FMT_RGB_YUV444;
 		break;
+	case IPU_PIX_FMT_SBGGR12P:
+	case IPU_PIX_FMT_SGBRG12P:
+	case IPU_PIX_FMT_SGRBG12P:
+	case IPU_PIX_FMT_SRGGB12P:
+	case IPU_PIX_FMT_Y12P:
+	case IPU_PIX_FMT_GREY:
+	case IPU_PIX_FMT_GREY10P:
+	case IPU_PIX_FMT_GREY12P:
+	case IPU_PIX_FMT_RAW8:
+	case IPU_PIX_FMT_RAW10:
+	case IPU_PIX_FMT_RAW12:
 	case IPU_PIX_FMT_GENERIC:
 	case IPU_PIX_FMT_GENERIC_16:
 		cfg_param.data_fmt = CSI_SENS_CONF_DATA_FMT_BAYER;

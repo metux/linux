@@ -397,6 +397,25 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_ARGB32  v4l2_fourcc('B', 'A', '2', '4') /* 32  ARGB-8-8-8-8  */
 #define V4L2_PIX_FMT_XRGB32  v4l2_fourcc('B', 'X', '2', '4') /* 32  XRGB-8-8-8-8  */
 
+#define V4L2_PIX_FMT_CUSTOM    v4l2_fourcc('T', 'P', '3', '1') /* Type 31 format */
+#define V4L2_PIX_FMT_RGB666  v4l2_fourcc('R', 'G', 'B', 'H') /* 18  RGB-6-6-6	  */
+
+
+#define V4L2_PIX_FMT_GREY12P    v4l2_fourcc('G', '1', '2', 'P') /*  12  Greyscale packed    */
+#define V4L2_PIX_FMT_GREY10P    v4l2_fourcc('G', '1', '0', 'P') /*  10  Greyscale packed    */
+
+
+/* TODO, need to consider V4L2_PIX_FMT_Y10 & V4L2_PIX_FMT_Y12 */
+#define V4L2_PIX_FMT_Y10P     v4l2_fourcc('Y', '1', '0', 'P') /* 10  Greyscale packed    */
+#define V4L2_PIX_FMT_Y12P     v4l2_fourcc('Y', '1', '2', 'P') /* 12  Greyscale packed    */
+
+
+/* 12bit raw bayer packed, 6 bytes for every 4 pixels */
+#define V4L2_PIX_FMT_SBGGR12P v4l2_fourcc('p', 'B', 'C', 'C')
+#define V4L2_PIX_FMT_SGBRG12P v4l2_fourcc('p', 'G', 'C', 'C')
+#define V4L2_PIX_FMT_SGRBG12P v4l2_fourcc('p', 'g', 'C', 'C')
+#define V4L2_PIX_FMT_SRGGB12P v4l2_fourcc('p', 'R', 'C', 'C')
+
 /* Grey formats */
 #define V4L2_PIX_FMT_GREY    v4l2_fourcc('G', 'R', 'E', 'Y') /*  8  Greyscale     */
 #define V4L2_PIX_FMT_Y4      v4l2_fourcc('Y', '0', '4', ' ') /*  4  Greyscale     */
@@ -810,6 +829,14 @@ struct v4l2_buffer {
 #define V4L2_BUF_FLAG_TSTAMP_SRC_MASK		0x00070000
 #define V4L2_BUF_FLAG_TSTAMP_SRC_EOF		0x00000000
 #define V4L2_BUF_FLAG_TSTAMP_SRC_SOE		0x00010000
+
+/*  Flags for 'frame_buf_flags' field */
+#define V4L2_BUF_FLAG_INCOMPLETE	0x10000000
+#define V4L2_BUF_FLAG_UNUSED		0x20000000
+#define V4L2_BUF_FLAG_VALID		0x40000000
+#define V4L2_BUF_FLAG_INVALID		0x80000000
+#define V4L2_BUF_FLAG_INVALIDINCOMPLETE		(V4L2_BUF_FLAG_INVALID | V4L2_BUF_FLAG_INCOMPLETE)
+
 
 /**
  * struct v4l2_exportbuffer - export of video buffer as DMABUF file descriptor
@@ -1387,6 +1414,13 @@ struct v4l2_ext_controls {
 	__u32 error_idx;
 	__u32 reserved[2];
 	struct v4l2_ext_control *controls;
+};
+
+struct v4l2_send_command_control {
+	__u32		     id;
+	__u32		     value0;
+	__u32		     value1;
+	char	     	 debug[256];
 };
 
 #define V4L2_CTRL_ID_MASK      	  (0x0fffffff)
@@ -2082,6 +2116,179 @@ struct v4l2_create_buffers {
 	__u32			reserved[8];
 };
 
+struct v4l2_i2c {
+	__u32			reg;
+	__u32			timeout;
+	const char		*buffer;
+	__u32			reg_size;
+	__u32			count;
+};
+
+struct v4l2_dma_mem {
+	__u32			index;
+/* enum v4l2_buf_type */
+	__u32			type;
+/* enum v4l2_memory */
+	__u32			memory;
+};
+
+struct v4l2_flush_frames {
+	__u32			index;
+	__u32			flags;
+/* enum v4l2_buf_type */
+	__u32			type;
+/* enum v4l2_memory */
+	__u32			memory;
+};
+
+struct v4l2_streamoff {
+	__u32			index;
+	__u32			flags;
+/* enum v4l2_buf_type */
+	__u32			type;
+/* enum v4l2_memory */
+	__u32			memory;
+};
+
+struct v4l2_stream_stat {
+/* Total no of frames received. */
+	__u64			frames_count;
+/* Number of packets with CRC error. */
+	__u64			packet_crc_err;
+/* Number of frames dropped. */
+	__u64			frames_underrun;
+/* Number of frames that were not completed. */
+	__u64			frames_incomplete;
+/* Frames per sec. */
+	__u64			current_frame_rate_fps;
+};
+
+struct v4ls_stats_t {
+/* Total number of frames received */
+	__u64    frames_count;
+/* Number of packets with CRC errors */
+	__u64    packet_crc_err;
+/*  Number of frames dropped because of buffer underrun */
+	__u64    frames_underrun;
+/*  Number of frames that were not completed */
+	__u64    frames_incomplete;
+/*  Number of frames to calculate fps */
+	__u64    current_frame_count;
+/*  Time interval between frames in us */
+	__u64    current_frame_interval;
+};
+
+
+struct v4l2_restriction {
+/*  Indicates, if values are valid (1) or invalid (0) */
+	__u8 nValid;
+/*  Minimum value */
+	__u32 nMin;
+/*  Maximum value */
+	__u32 nMax;
+/*  Increment value */
+	__u32 nInc;
+};
+
+struct v4l2_ipu_restrictions {
+/*  X restrictions */
+	struct v4l2_restriction    ipu_x;
+/*  Y restrictions */
+	struct v4l2_restriction    ipu_y;
+};
+
+struct v4l2_min_announced_frames {
+	__u32 nMinAnnouncedFrames;
+};
+
+struct v4l2_range {
+/*  Indicates, if values are valid (1) or invalid (0) */
+	__u8 nValid;
+/*  Minimum allowed value */
+	__u32 nMin;
+/*  Maximum allowed value */
+	__u32 nMax;
+};
+
+struct v4l2_csi_host_clock_freq_ranges {
+	struct v4l2_range lane_range_1; /*  Min and max value for 1 lane */
+	struct v4l2_range lane_range_2; /*  Min and max value for 2 lanes */
+	struct v4l2_range lane_range_3; /*  Min and max value for 3 lanes */
+	struct v4l2_range lane_range_4; /*  Min and max value for 4 lanes */
+};
+
+struct v4l2_supported_lane_counts {
+/*  Bitfield with the supported lane counts from v4l2_lane_counts */
+	__u32 nSupportedLaneCounts;
+};
+
+struct v4l2_gencp_buffer_sizes {
+/*  Size in bytes of the GenCP In buffer */
+	__u32      nGenCPInBufferSize;
+/*  Size in bytes of the GenCP Out buffer */
+	__u32      nGenCPOutBufferSize;
+};
+
+struct v4l2_csi_data_identifiers_inq {
+/*  Inquiry for data identifiers 0-63 */
+	uint64_t nDataIdentifiersInq1;
+/*  Inquiry for data identifiers 64-127 */
+	uint64_t nDataIdentifiersInq2;
+/*  Inquiry for data identifiers 128-191 */
+	uint64_t nDataIdentifiersInq3;
+/*  Inquiry for data identifiers 192-255 */
+	uint64_t nDataIdentifiersInq4;
+};
+
+enum v4l2_statistics_capability {
+	V4L2_STATISTICS_CAPABILITY_FrameCount = 0x1,
+	V4L2_STATISTICS_CAPABILITY_PacketCRCError = 0x2,
+	V4L2_STATISTICS_CAPABILITY_FramesUnderrun = 0x4,
+	V4L2_STATISTICS_CAPABILITY_FramesIncomplete = 0x8,
+	V4L2_STATISTICS_CAPABILITY_CurrentFrameCount = 0x10,
+	V4L2_STATISTICS_CAPABILITY_CurrentFrameInterval = 0x20,
+};
+
+struct streamon_ex {
+/*  Lane count as negotiated with camera */
+	__u8       nLaneCount;
+	__u8       virtualChannel;
+	__u32       dataType;
+};
+
+struct v4l2_statistics_capabilities {
+/*  Bitmask with statistics capabilities enum (v4l2_statistics_capability9 */
+	__u64 nStatisticsCapability;
+};
+
+struct v4l2_streamon_ex {
+/*  Buffer type */
+	enum v4l2_buf_type	type;
+/*  IPU X value */
+	__u32      nIPU_X;
+/*  IPU Y value */
+	__u32      nIPU_Y;
+/*  Total data size in bytes. In case nIPU_X != 0
+ *  and nIPU_Y != 0, nTotalDataSize equals nIPU_X*nIPU_Y
+ */
+	__u32      nTotalDataSize;
+/*  Data identifier according to MIPI spec
+ *  (Bit 0..5=DataType. Bit 6..7=VirtualChannel)
+ */
+	__u8       nDataIdentifier;
+/*  Lane count as negotiated with camera */
+	__u8       nLaneCount;
+/*  CSI-2 lane clock frequency in Hz. */
+	__u32      nLaneClockFrequency;
+};
+
+struct v4l2_streamoff_ex {
+/*  Buffer type */
+	enum v4l2_buf_type type;
+/* timeout in ms */
+	__u32 timeout;
+};
+
 /*
  *	I O C T L   C O D E S   F O R   V I D E O   D E V I C E S
  *
@@ -2200,9 +2407,62 @@ struct v4l2_create_buffers {
 
 #define VIDIOC_QUERY_EXT_CTRL	_IOWR('V', 103, struct v4l2_query_ext_ctrl)
 
+#define VIDIOC_SEND_COMMAND	_IOWR('V', 120, struct v4l2_send_command_control)
+
 /* Reminder: when adding new ioctls please add support for them to
    drivers/media/video/v4l2-compat-ioctl32.c as well! */
 
 #define BASE_VIDIOC_PRIVATE	192		/* 192-255 are private */
+
+/* i2c read */
+#define VIDIOC_R_I2C                        _IOWR('V', BASE_VIDIOC_PRIVATE + 0,  struct v4l2_i2c)
+
+/* i2c write */
+#define VIDIOC_W_I2C                        _IOWR('V', BASE_VIDIOC_PRIVATE + 1,  struct v4l2_i2c)
+
+/* Memory alloc for a frame */
+#define VIDIOC_MEM_ALLOC                    _IOWR('V', BASE_VIDIOC_PRIVATE + 2,  struct v4l2_dma_mem)
+
+/* Memory free for a frame */
+#define VIDIOC_MEM_FREE                     _IOWR('V', BASE_VIDIOC_PRIVATE + 3,  struct v4l2_dma_mem)
+
+/* Flush frames */
+#define VIDIOC_FLUSH_FRAMES                 _IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct v4l2_buffer)
+
+/* Stream statistics */
+#define VIDIOC_STREAM_STAT	                _IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct v4ls_stats_t)
+
+/* Reset Stream statistics */
+#define VIDIOC_RESET_STREAMSTAT             _IO('V', BASE_VIDIOC_PRIVATE + 6)
+
+/* Custom streamon */
+#define VIDIOC_STREAMON_EX                  _IOWR('V', BASE_VIDIOC_PRIVATE + 7,  struct v4l2_streamon_ex)
+
+/* Custom streamoff */
+#define VIDIOC_STREAMOFF_EX                 _IOWR('V', BASE_VIDIOC_PRIVATE + 8,  struct v4l2_streamoff_ex)
+
+/* Get statistics capability */
+#define VIDIOC_G_STATISTICS_CAPABILITIES     _IOR('V', BASE_VIDIOC_PRIVATE + 9,  struct v4l2_statistics_capabilities)
+
+/* Get min number of announced frames*/
+#define VIDIOC_G_MIN_ANNOUNCED_FRAMES       _IOR('V', BASE_VIDIOC_PRIVATE + 10, struct v4l2_min_announced_frames)
+
+/* Get supported lane value */
+#define VIDIOC_G_SUPPORTED_LANE_COUNTS      _IOR('V', BASE_VIDIOC_PRIVATE + 11, struct v4l2_supported_lane_counts)
+
+/* Get CSI Host clock frequencies */
+#define VIDIOC_G_CSI_HOST_CLK_FREQ          _IOR('V', BASE_VIDIOC_PRIVATE + 12, struct v4l2_csi_host_clock_freq_ranges)
+
+/* Get IPU restrictions */
+#define VIDIOC_G_IPU_RESTRICTIONS           _IOR('V', BASE_VIDIOC_PRIVATE + 13, struct v4l2_ipu_restrictions)
+
+/* Get GenCPIn and GenCPOut buffer sizes */
+#define VIDIOC_G_GENCP_BUFFER_SIZES         _IOWR('V', BASE_VIDIOC_PRIVATE + 14, struct v4l2_gencp_buffer_sizes)
+
+/* Retrieving the MIPI Data Identifier */
+#define VIDIOC_G_SUPPORTED_DATA_IDENTIFIERS _IOWR('V', BASE_VIDIOC_PRIVATE + 15, struct v4l2_csi_data_identifiers_inq)
+
+/* Retrieving i2c clock frequency */
+#define VIDIOC_G_I2C_CLOCK_FREQ             _IOWR('V', BASE_VIDIOC_PRIVATE + 16, int)
 
 #endif /* _UAPI__LINUX_VIDEODEV2_H */

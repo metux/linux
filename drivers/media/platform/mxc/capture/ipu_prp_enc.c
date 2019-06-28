@@ -120,6 +120,62 @@ static int prp_enc_setup(cam_data *cam)
 	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_RGB24) {
 		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RGB24;
 		pr_info("RGB24\n");
+
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_CUSTOM) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_GENERIC;
+		pr_info("V4L2_PIX_FMT_CUSTOM, TYPE31\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_GREY) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW8;
+		pr_info("V4L2_PIX_FMT_GREY, Mono8\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SBGGR8) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW8;
+		pr_info("V4L2_PIX_FMT_SBGGR8, RAW8 BGGR\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGBRG8) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW8;
+		pr_info("V4L2_PIX_FMT_SGBRG8, RAW8 GBRG\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGRBG8) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW8;
+		pr_info("V4L2_PIX_FMT_SGRBG8, RAW8 GRBG\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB8) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW8;
+		pr_info("V4L2_PIX_FMT_SRGGB8, RAW8 RGGB\n");
+
+
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_Y10P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW10;
+		pr_info("V4L2_PIX_FMT_Y10P, RAW10 GREY\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SBGGR10P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW10;
+		pr_info("V4L2_PIX_FMT_SBGGR10P, RAW10 SBGGR10P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGBRG10P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW10;
+		pr_info("V4L2_PIX_FMT_SGBRG10P, RAW10 SGBRG10P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGRBG10P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW10;
+		pr_info("V4L2_PIX_FMT_SGRBG10P, RAW10 SGRBG10P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB10P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RAW10;
+		pr_info("V4L2_PIX_FMT_SRGGB10P, RAW10 SRGGB10P\n");
+
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_GREY12P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_GREY12P;
+		pr_info("V4L2_PIX_FMT_Y12P, RAW12 GREY GREY12P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_Y12P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_Y12P;
+		pr_info("V4L2_PIX_FMT_Y12P, RAW12 GREY Y12P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SBGGR12P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_SBGGR12P;
+		pr_info("V4L2_PIX_FMT_SBGGR12P, RAW12 SBGGR12P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGBRG12P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_SGBRG12P;
+		pr_info("V4L2_PIX_FMT_SGBRG12P, RAW12 SGBRG12P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGRBG12P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_SGRBG12P;
+		pr_info("V4L2_PIX_FMT_SGRBG12P, RAW12 SGRBG12P\n");
+	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB12P) {
+		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_SRGGB12P;
+		pr_info("V4L2_PIX_FMT_SRGGB12P, RAW12 SRGGB12P\n");
+
 	} else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_RGB565) {
 		enc.csi_prp_enc_mem.out_pixel_fmt = IPU_PIX_FMT_RGB565;
 		pr_info("RGB565\n");

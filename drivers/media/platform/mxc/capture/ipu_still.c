@@ -111,6 +111,44 @@ static int prp_still_start(void *private)
 		pixel_fmt = IPU_PIX_FMT_BGR24;
 	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_RGB24)
 		pixel_fmt = IPU_PIX_FMT_RGB24;
+
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_CUSTOM)
+		pixel_fmt = IPU_PIX_FMT_GENERIC;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_GREY)
+		pixel_fmt = IPU_PIX_FMT_RAW8;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SBGGR8)
+		pixel_fmt = IPU_PIX_FMT_RAW8;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGBRG8)
+		pixel_fmt = IPU_PIX_FMT_RAW8;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGRBG8)
+		pixel_fmt = IPU_PIX_FMT_RAW8;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB8)
+		pixel_fmt = IPU_PIX_FMT_RAW8;
+
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_Y10P)
+		pixel_fmt = IPU_PIX_FMT_RAW10;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SBGGR10P)
+		pixel_fmt = IPU_PIX_FMT_RAW10;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGBRG10P)
+		pixel_fmt = IPU_PIX_FMT_RAW10;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGRBG10P)
+		pixel_fmt = IPU_PIX_FMT_RAW10;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB10P)
+		pixel_fmt = IPU_PIX_FMT_RAW10;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_Y12P)
+		pixel_fmt = IPU_PIX_FMT_Y12P;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_GREY12P)
+		pixel_fmt = IPU_PIX_FMT_GREY12P;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SBGGR12P)
+		pixel_fmt = IPU_PIX_FMT_SBGGR12P;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGBRG12P)
+		pixel_fmt = IPU_PIX_FMT_SGBRG12P;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SGRBG12P)
+		pixel_fmt = IPU_PIX_FMT_SGRBG12P;
+	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_SRGGB12P)
+		pixel_fmt = IPU_PIX_FMT_SRGGB12P;
+
+
 	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_RGB565)
 		pixel_fmt = IPU_PIX_FMT_RGB565;
 	else if (cam->v2f.fmt.pix.pixelformat == V4L2_PIX_FMT_BGR32)

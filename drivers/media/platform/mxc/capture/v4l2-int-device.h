@@ -188,6 +188,18 @@ enum v4l2_int_ioctl_num {
 	vidioc_int_querystd_num,
 	vidioc_int_s_std_num,
 	vidioc_int_s_video_routing_num,
+	vidioc_int_send_command_num,
+
+	vidioc_int_gencam_i2cread_reg_num,
+	vidioc_int_gencam_i2cwrite_reg_num,
+	vidioc_int_try_fmt_num,
+	vidioc_int_querycap_cap_num,
+	vidioc_int_streamon_ex_num,
+	vidioc_int_g_ext_ctrl_num,
+	vidioc_int_s_ext_ctrl_num,
+	vidioc_int_try_ext_ctrl_num,
+	vidioc_int_ext_queryctrl_num,
+	vidioc_int_query_menu_num,
 
 	/*
 	 *
@@ -292,6 +304,18 @@ V4L2_INT_WRAPPER_1(s_parm, struct v4l2_streamparm, *);
 V4L2_INT_WRAPPER_1(querystd, v4l2_std_id, *);
 V4L2_INT_WRAPPER_1(s_std, v4l2_std_id, *);
 V4L2_INT_WRAPPER_1(s_video_routing, struct v4l2_routing, *);
+V4L2_INT_WRAPPER_1(send_command, struct v4l2_send_command_control, *);
+
+V4L2_INT_WRAPPER_1(g_ext_ctrl, struct v4l2_ext_controls, *);
+V4L2_INT_WRAPPER_1(s_ext_ctrl, struct v4l2_ext_controls, *);
+V4L2_INT_WRAPPER_1(try_ext_ctrl, struct v4l2_ext_controls, *);
+V4L2_INT_WRAPPER_1(gencam_i2cread_reg, struct v4l2_i2c, *);
+V4L2_INT_WRAPPER_1(gencam_i2cwrite_reg, struct v4l2_i2c, *);
+V4L2_INT_WRAPPER_1(try_fmt, struct v4l2_format, *);
+V4L2_INT_WRAPPER_1(querycap_cap, struct v4l2_capability, *);
+V4L2_INT_WRAPPER_1(streamon_ex, struct streamon_ex, *);
+V4L2_INT_WRAPPER_1(ext_queryctrl, struct v4l2_query_ext_ctrl, *);
+V4L2_INT_WRAPPER_1(query_menu, struct v4l2_querymenu, *);
 
 V4L2_INT_WRAPPER_0(dev_init);
 V4L2_INT_WRAPPER_0(dev_exit);

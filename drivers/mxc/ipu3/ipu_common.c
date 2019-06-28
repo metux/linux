@@ -1408,6 +1408,16 @@ int32_t ipu_init_channel_buffer(struct ipu_soc *ipu, ipu_channel_t channel,
 	uint32_t dma_chan;
 	uint32_t burst_size;
 
+	pr_debug("%s:%d \"%c%c%c%c\"\n", __func__, __LINE__
+	, (pixel_fmt >> 0) & 0xff, (pixel_fmt >> 8) & 0xff
+	, (pixel_fmt >> 16) & 0xff, (pixel_fmt >> 24) & 0xff);
+
+	if ((pixel_fmt == IPU_PIX_FMT_GREY12P) || (pixel_fmt == IPU_PIX_FMT_SBGGR12P) ||
+		 (pixel_fmt == IPU_PIX_FMT_SGBRG12P) || pixel_fmt == (IPU_PIX_FMT_SGRBG12P) ||
+		 (pixel_fmt == IPU_PIX_FMT_SRGGB12P) || (pixel_fmt == IPU_PIX_FMT_Y12P)) {
+		width = width * 12 / 8;
+	}
+
 	dma_chan = channel_2_dma(channel, type);
 	if (!idma_is_valid(dma_chan))
 		return -EINVAL;
@@ -1499,10 +1509,10 @@ int32_t ipu_init_channel_buffer(struct ipu_soc *ipu, ipu_channel_t channel,
 		 * in IPUforum that SMFC burst size should be NPB[6:3]
 		 * when IDMAC works in 16-bit generic data mode.
 		 */
-		if (pixel_fmt == IPU_PIX_FMT_GENERIC)
+		if (pixel_fmt == IPU_PIX_FMT_GENERIC || pixel_fmt == IPU_PIX_FMT_RAW8)
 			/* 8 bits per pixel */
 			burst_size = burst_size >> 4;
-		else if (pixel_fmt == IPU_PIX_FMT_GENERIC_16)
+		else if (pixel_fmt == IPU_PIX_FMT_GENERIC_16 || pixel_fmt == IPU_PIX_FMT_RAW10 || pixel_fmt == IPU_PIX_FMT_RAW12)
 			/* 16 bits per pixel */
 			burst_size = burst_size >> 3;
 		else
@@ -3276,6 +3286,7 @@ EXPORT_SYMBOL(ipu_swap_channel);
 uint32_t bytes_per_pixel(uint32_t fmt)
 {
 	switch (fmt) {
+	case IPU_PIX_FMT_RAW8:		/* 8bit RAW 8bpp */
 	case IPU_PIX_FMT_GENERIC:	/*generic data */
 	case IPU_PIX_FMT_RGB332:
 	case IPU_PIX_FMT_YUV420P:
@@ -3288,6 +3299,8 @@ uint32_t bytes_per_pixel(uint32_t fmt)
 	case PRE_PIX_FMT_NV61:
 		return 1;
 		break;
+	case IPU_PIX_FMT_RAW10:		/* 10bit RAW 8bpp */
+	case IPU_PIX_FMT_RAW12:		/* 12bit RAW 8bpp */
 	case IPU_PIX_FMT_GENERIC_16:	/* generic data */
 	case IPU_PIX_FMT_RGB565:
 	case IPU_PIX_FMT_BGRA4444:

@@ -57,11 +57,13 @@ static inline void mipi_csi2_write(struct mipi_csi2_info *info,
 	writel(value, info->mipi_csi2_base + offset);
 }
 
-static inline unsigned int mipi_csi2_read(struct mipi_csi2_info *info,
+unsigned int mipi_csi2_read(struct mipi_csi2_info *info,
 		unsigned offset)
 {
 	return readl(info->mipi_csi2_base + offset);
 }
+
+EXPORT_SYMBOL(mipi_csi2_read);
 
 /*!
  * This function is called to enable the mipi csi2 interface.
@@ -246,6 +248,30 @@ unsigned int mipi_csi2_get_error2(struct mipi_csi2_info *info)
 }
 EXPORT_SYMBOL(mipi_csi2_get_error2);
 
+void mipi_csi2_reg_dump(struct mipi_csi2_info *info)
+{
+	_mipi_csi2_lock(info);
+
+	pr_info("MIPI_CSI2_VERSION %x \n", mipi_csi2_read(info, MIPI_CSI2_VERSION));
+	pr_info("MIPI_CSI2_N_LANES %x \n", mipi_csi2_read(info, MIPI_CSI2_N_LANES));
+	pr_info("MIPI_CSI2_PHY_SHUTDOWNZ %x \n", mipi_csi2_read(info, MIPI_CSI2_PHY_SHUTDOWNZ));
+	pr_info("MIPI_CSI2_DPHY_RSTZ %x \n", mipi_csi2_read(info, MIPI_CSI2_DPHY_RSTZ));
+	pr_info("MIPI_CSI2_CSI2_RESETN %x \n", mipi_csi2_read(info, MIPI_CSI2_CSI2_RESETN));
+	pr_info("MIPI_CSI2_PHY_STATE %x \n", mipi_csi2_read(info, MIPI_CSI2_PHY_STATE));
+	pr_info("MIPI_CSI2_DATA_IDS_1 %x \n", mipi_csi2_read(info, MIPI_CSI2_DATA_IDS_1));
+	pr_info("MIPI_CSI2_DATA_IDS_2 %x \n", mipi_csi2_read(info, MIPI_CSI2_DATA_IDS_2));
+	pr_info("MIPI_CSI2_ERR1 %x \n", mipi_csi2_read(info, MIPI_CSI2_ERR1));
+	pr_info("MIPI_CSI2_ERR2 %x \n", mipi_csi2_read(info, MIPI_CSI2_ERR2));
+	pr_info("MIPI_CSI2_MASK1 %x \n", mipi_csi2_read(info, MIPI_CSI2_MASK1));
+	pr_info("MIPI_CSI2_MASK2 %x \n", mipi_csi2_read(info, MIPI_CSI2_MASK2));
+	pr_info("MIPI_CSI2_PHY_TST_CTRL0 %x \n", mipi_csi2_read(info, MIPI_CSI2_PHY_TST_CTRL0));
+	pr_info("MIPI_CSI2_PHY_TST_CTRL1 %x \n", mipi_csi2_read(info, MIPI_CSI2_PHY_TST_CTRL1));
+	pr_info("MIPI_CSI2_SFT_RESET %x \n", mipi_csi2_read(info, MIPI_CSI2_SFT_RESET));
+
+	_mipi_csi2_unlock(info);
+}
+EXPORT_SYMBOL(mipi_csi2_reg_dump);
+
 /*!
  * This function is called to enable mipi to ipu pixel clock.
  *
@@ -314,6 +340,47 @@ struct mipi_csi2_info *mipi_csi2_get_info(void)
 	return gmipi_csi2;
 }
 EXPORT_SYMBOL(mipi_csi2_get_info);
+
+int mipi_csi2_reset_with_dphy_freq(struct mipi_csi2_info *info, uint32_t value)
+{
+	_mipi_csi2_lock(info);
+
+	pr_debug("mipi_csi2_reset_with_dphy_freq called\n");
+
+	mipi_csi2_write(info, 0x0, MIPI_CSI2_PHY_SHUTDOWNZ);
+	mipi_csi2_write(info, 0x0, MIPI_CSI2_DPHY_RSTZ);
+	mipi_csi2_write(info, 0x0, MIPI_CSI2_CSI2_RESETN);
+
+	/* phy_testclr = 1 (0b01) test interface clear */
+	mipi_csi2_write(info, 0x00000001, MIPI_CSI2_PHY_TST_CTRL0);
+	/* phy_testdin (0) test interface input */
+	mipi_csi2_write(info, 0x00000000, MIPI_CSI2_PHY_TST_CTRL1);
+	/* 32'h00000000 this disables the testclr pin
+	 * enabling the interface to write new values to the DPHY internal registers. */
+	mipi_csi2_write(info, 0x00000000, MIPI_CSI2_PHY_TST_CTRL0);
+	/* phy_testclk = 1 (0b10) test interface strobe signal
+	 * use to clock TESTDIN bus into D-PHY */
+	mipi_csi2_write(info, 0x00000002, MIPI_CSI2_PHY_TST_CTRL0);
+	/* phy_testen (1) configure address write operation of TESTCLK
+	 * phy_testdin (0x44) register address */
+	mipi_csi2_write(info, 0x00010044, MIPI_CSI2_PHY_TST_CTRL1);
+	mipi_csi2_write(info, 0x00000000, MIPI_CSI2_PHY_TST_CTRL0);
+	/* change clock */
+	mipi_csi2_write(info, value, MIPI_CSI2_PHY_TST_CTRL1);
+	/* phy_testclk = 1 (0b10) test interface strobe signal
+	 * use to clock TESTDIN bus into D-PHY */
+	mipi_csi2_write(info, 0x00000002, MIPI_CSI2_PHY_TST_CTRL0);
+	mipi_csi2_write(info, 0x00000000, MIPI_CSI2_PHY_TST_CTRL0);
+
+	mipi_csi2_write(info, 0xffffffff, MIPI_CSI2_PHY_SHUTDOWNZ);
+	mipi_csi2_write(info, 0xffffffff, MIPI_CSI2_DPHY_RSTZ);
+	mipi_csi2_write(info, 0xffffffff, MIPI_CSI2_CSI2_RESETN);
+
+	_mipi_csi2_unlock(info);
+
+	return 0;
+}
+EXPORT_SYMBOL(mipi_csi2_reset_with_dphy_freq);
 
 /*!
  * This function is called to get mipi csi2 bind ipu num.
@@ -468,6 +535,8 @@ static int mipi_csi2_probe(struct platform_device *pdev)
 	clk_prepare_enable(gmipi_csi2->dphy_clk);
 	/* get mipi csi2 dphy version */
 	mipi_csi2_dphy_ver = mipi_csi2_read(gmipi_csi2, MIPI_CSI2_VERSION);
+
+	mipi_csi2_reset_with_dphy_freq(gmipi_csi2, 0x14);
 
 	clk_disable_unprepare(gmipi_csi2->dphy_clk);
 

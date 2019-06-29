@@ -1648,7 +1648,7 @@ void __detach_mounts(struct dentry *dentry)
 	namespace_lock();
 	lock_mount_hash();
 	mp = lookup_mountpoint(dentry);
-	if (IS_ERR_OR_NULL(mp))
+	if (!mp)
 		goto out_unlock;
 
 	event++;

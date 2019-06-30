@@ -70,6 +70,8 @@ static struct hlist_head *mount_hashtable __read_mostly;
 static struct hlist_head *mountpoint_hashtable __read_mostly;
 static struct kmem_cache *mnt_cache __read_mostly;
 static DECLARE_RWSEM(namespace_sem);
+static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
+static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
 
 /* /sys/fs */
 struct kobject *fs_kobj;
@@ -173,7 +175,6 @@ unsigned int mnt_get_count(struct mount *mnt)
 static void drop_mountpoint(struct fs_pin *p)
 {
 	struct mount *m = container_of(p, struct mount, mnt_umount);
-	dput(m->mnt_ex_mountpoint);
 	pin_remove(p);
 	mntput(&m->mnt);
 }
@@ -742,7 +743,7 @@ mountpoint:
 
 	/* Add the new mountpoint to the hash table */
 	read_seqlock_excl(&mount_lock);
-	new->m_dentry = dentry;
+	new->m_dentry = dget(dentry);
 	new->m_count = 1;
 	hlist_add_head(&new->m_hash, mp_hash(dentry));
 	INIT_HLIST_HEAD(&new->m_list);
@@ -755,7 +756,11 @@ done:
 	return mp;
 }
 
-static void put_mountpoint(struct mountpoint *mp)
+/*
+ * vfsmount lock must be held.  Additionally, the caller is responsible
+ * for serializing calls for given disposal list.
+ */
+static void __put_mountpoint(struct mountpoint *mp, struct list_head *list)
 {
 	if (!--mp->m_count) {
 		struct dentry *dentry = mp->m_dentry;
@@ -763,9 +768,16 @@ static void put_mountpoint(struct mountpoint *mp)
 		spin_lock(&dentry->d_lock);
 		dentry->d_flags &= ~DCACHE_MOUNTED;
 		spin_unlock(&dentry->d_lock);
+		dput_to_list(dentry, list);
 		hlist_del(&mp->m_hash);
 		kfree(mp);
 	}
+}
+
+/* called with namespace_lock and vfsmount lock */
+static void put_mountpoint(struct mountpoint *mp)
+{
+	__put_mountpoint(mp, &ex_mountpoints);
 }
 
 static inline int check_mnt(struct mount *mnt)
@@ -816,7 +828,7 @@ static struct mountpoint *unhash_mnt(struct mount *mnt)
  */
 static void detach_mnt(struct mount *mnt, struct path *old_path)
 {
-	old_path->dentry = mnt->mnt_mountpoint;
+	old_path->dentry = dget(mnt->mnt_mountpoint);
 	old_path->mnt = &mnt->mnt_parent->mnt;
 	put_mountpoint(unhash_mnt(mnt));
 }
@@ -826,8 +838,6 @@ static void detach_mnt(struct mount *mnt, struct path *old_path)
  */
 static void umount_mnt(struct mount *mnt)
 {
-	/* old mountpoint will be dropped when we can do that */
-	mnt->mnt_ex_mountpoint = mnt->mnt_mountpoint;
 	put_mountpoint(unhash_mnt(mnt));
 }
 
@@ -840,7 +850,7 @@ void mnt_set_mountpoint(struct mount *mnt,
 {
 	mp->m_count++;
 	mnt_add_count(mnt, 1);	/* essentially, that's mntget */
-	child_mnt->mnt_mountpoint = dget(mp->m_dentry);
+	child_mnt->mnt_mountpoint = mp->m_dentry;
 	child_mnt->mnt_parent = mnt;
 	child_mnt->mnt_mp = mp;
 	hlist_add_head(&child_mnt->mnt_mp_list, &mp->m_list);
@@ -867,7 +877,6 @@ static void attach_mnt(struct mount *mnt,
 void mnt_change_mountpoint(struct mount *parent, struct mountpoint *mp, struct mount *mnt)
 {
 	struct mountpoint *old_mp = mnt->mnt_mp;
-	struct dentry *old_mountpoint = mnt->mnt_mountpoint;
 	struct mount *old_parent = mnt->mnt_parent;
 
 	list_del_init(&mnt->mnt_child);
@@ -877,22 +886,6 @@ void mnt_change_mountpoint(struct mount *parent, struct mountpoint *mp, struct m
 	attach_mnt(mnt, parent, mp);
 
 	put_mountpoint(old_mp);
-
-	/*
-	 * Safely avoid even the suggestion this code might sleep or
-	 * lock the mount hash by taking advantage of the knowledge that
-	 * mnt_change_mountpoint will not release the final reference
-	 * to a mountpoint.
-	 *
-	 * During mounting, the mount passed in as the parent mount will
-	 * continue to use the old mountpoint and during unmounting, the
-	 * old mountpoint will continue to exist until namespace_unlock,
-	 * which happens well after mnt_change_mountpoint.
-	 */
-	spin_lock(&old_mountpoint->d_lock);
-	old_mountpoint->d_lockref.count--;
-	spin_unlock(&old_mountpoint->d_lock);
-
 	mnt_add_count(old_parent, -1);
 }
 
@@ -1165,6 +1158,8 @@ static DECLARE_DELAYED_WORK(delayed_mntput_work, delayed_mntput);
 
 static void mntput_no_expire(struct mount *mnt)
 {
+	LIST_HEAD(list);
+
 	rcu_read_lock();
 	if (likely(READ_ONCE(mnt->mnt_ns))) {
 		/*
@@ -1205,10 +1200,11 @@ static void mntput_no_expire(struct mount *mnt)
 	if (unlikely(!list_empty(&mnt->mnt_mounts))) {
 		struct mount *p, *tmp;
 		list_for_each_entry_safe(p, tmp, &mnt->mnt_mounts,  mnt_child) {
-			umount_mnt(p);
+			__put_mountpoint(unhash_mnt(p), &list);
 		}
 	}
 	unlock_mount_hash();
+	shrink_dentry_list(&list);
 
 	if (likely(!(mnt->mnt.mnt_flags & MNT_INTERNAL))) {
 		struct task_struct *task = current;
@@ -1394,15 +1390,17 @@ int may_umount(struct vfsmount *mnt)
 
 EXPORT_SYMBOL(may_umount);
 
-static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
-
 static void namespace_unlock(void)
 {
 	struct hlist_head head;
+	LIST_HEAD(list);
 
 	hlist_move_list(&unmounted, &head);
+	list_splice_init(&ex_mountpoints, &list);
 
 	up_write(&namespace_sem);
+
+	shrink_dentry_list(&list);
 
 	if (likely(hlist_empty(&head)))
 		return;

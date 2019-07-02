@@ -165,32 +165,10 @@ static void qcom_iommu_tlb_inv_range_nosync(unsigned long iova, size_t size,
 	}
 }
 
-static void qcom_iommu_tlb_flush_walk(unsigned long iova, size_t size,
-				      size_t granule, void *cookie)
-{
-	qcom_iommu_tlb_inv_range_nosync(iova, size, granule, false, cookie);
-	qcom_iommu_tlb_sync(cookie);
-}
-
-static void qcom_iommu_tlb_flush_leaf(unsigned long iova, size_t size,
-				      size_t granule, void *cookie)
-{
-	qcom_iommu_tlb_inv_range_nosync(iova, size, granule, true, cookie);
-	qcom_iommu_tlb_sync(cookie);
-}
-
-static void qcom_iommu_tlb_add_page(struct iommu_iotlb_gather *gather,
-				    unsigned long iova, size_t granule,
-				    void *cookie)
-{
-	qcom_iommu_tlb_inv_range_nosync(iova, granule, granule, true, cookie);
-}
-
 static const struct iommu_flush_ops qcom_flush_ops = {
 	.tlb_flush_all	= qcom_iommu_tlb_inv_context,
-	.tlb_flush_walk = qcom_iommu_tlb_flush_walk,
-	.tlb_flush_leaf = qcom_iommu_tlb_flush_leaf,
-	.tlb_add_page	= qcom_iommu_tlb_add_page,
+	.tlb_add_flush	= qcom_iommu_tlb_inv_range_nosync,
+	.tlb_sync	= qcom_iommu_tlb_sync,
 };
 
 static irqreturn_t qcom_iommu_fault(int irq, void *dev)
@@ -435,7 +413,7 @@ static int qcom_iommu_map(struct iommu_domain *domain, unsigned long iova,
 }
 
 static size_t qcom_iommu_unmap(struct iommu_domain *domain, unsigned long iova,
-			       size_t size, struct iommu_iotlb_gather *gather)
+			       size_t size)
 {
 	size_t ret;
 	unsigned long flags;
@@ -452,14 +430,14 @@ static size_t qcom_iommu_unmap(struct iommu_domain *domain, unsigned long iova,
 	 */
 	pm_runtime_get_sync(qcom_domain->iommu->dev);
 	spin_lock_irqsave(&qcom_domain->pgtbl_lock, flags);
-	ret = ops->unmap(ops, iova, size, gather);
+	ret = ops->unmap(ops, iova, size);
 	spin_unlock_irqrestore(&qcom_domain->pgtbl_lock, flags);
 	pm_runtime_put_sync(qcom_domain->iommu->dev);
 
 	return ret;
 }
 
-static void qcom_iommu_flush_iotlb_all(struct iommu_domain *domain)
+static void qcom_iommu_iotlb_sync(struct iommu_domain *domain)
 {
 	struct qcom_iommu_domain *qcom_domain = to_qcom_iommu_domain(domain);
 	struct io_pgtable *pgtable = container_of(qcom_domain->pgtbl_ops,
@@ -470,12 +448,6 @@ static void qcom_iommu_flush_iotlb_all(struct iommu_domain *domain)
 	pm_runtime_get_sync(qcom_domain->iommu->dev);
 	qcom_iommu_tlb_sync(pgtable->cookie);
 	pm_runtime_put_sync(qcom_domain->iommu->dev);
-}
-
-static void qcom_iommu_iotlb_sync(struct iommu_domain *domain,
-				  struct iommu_iotlb_gather *gather)
-{
-	qcom_iommu_flush_iotlb_all(domain);
 }
 
 static phys_addr_t qcom_iommu_iova_to_phys(struct iommu_domain *domain,
@@ -605,7 +577,7 @@ static const struct iommu_ops qcom_iommu_ops = {
 	.detach_dev	= qcom_iommu_detach_dev,
 	.map		= qcom_iommu_map,
 	.unmap		= qcom_iommu_unmap,
-	.flush_iotlb_all = qcom_iommu_flush_iotlb_all,
+	.flush_iotlb_all = qcom_iommu_iotlb_sync,
 	.iotlb_sync	= qcom_iommu_iotlb_sync,
 	.iova_to_phys	= qcom_iommu_iova_to_phys,
 	.add_device	= qcom_iommu_add_device,
@@ -720,8 +692,10 @@ static int qcom_iommu_ctx_probe(struct platform_device *pdev)
 		return PTR_ERR(ctx->base);
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
+	if (irq < 0) {
+		dev_err(dev, "failed to get irq\n");
 		return -ENODEV;
+	}
 
 	/* clear IRQs before registering fault handler, just in case the
 	 * boot-loader left us a surprise:
@@ -797,7 +771,7 @@ static int qcom_iommu_device_probe(struct platform_device *pdev)
 	struct qcom_iommu_dev *qcom_iommu;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
-	int ret, max_asid = 0;
+	int ret, sz, max_asid = 0;
 
 	/* find the max asid (which is 1:1 to ctx bank idx), so we know how
 	 * many child ctx devices we have:
@@ -805,8 +779,9 @@ static int qcom_iommu_device_probe(struct platform_device *pdev)
 	for_each_child_of_node(dev->of_node, child)
 		max_asid = max(max_asid, get_asid(child));
 
-	qcom_iommu = devm_kzalloc(dev, struct_size(qcom_iommu, ctxs, max_asid),
-				  GFP_KERNEL);
+	sz = sizeof(*qcom_iommu) + (max_asid * sizeof(qcom_iommu->ctxs[0]));
+
+	qcom_iommu = devm_kzalloc(dev, sz, GFP_KERNEL);
 	if (!qcom_iommu)
 		return -ENOMEM;
 	qcom_iommu->num_ctxs = max_asid;

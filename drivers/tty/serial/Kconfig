@@ -509,7 +509,7 @@ config SERIAL_PXA_CONSOLE
 
 config SERIAL_SA1100
 	bool "SA1100 serial port support"
-	depends on ARCH_SA1100
+	depends on ARCH_SA1100 || COMPILE_TEST
 	select SERIAL_CORE
 	help
 	  If you have a machine based on a SA1100/SA1110 StrongARM(R) CPU you

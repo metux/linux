@@ -1050,7 +1050,7 @@ config SERIAL_VT8500_CONSOLE
 
 config SERIAL_NETX
 	tristate "NetX serial port support"
-	depends on ARCH_NETX
+	depends on ARCH_NETX || COMPILE_TEST
 	select SERIAL_CORE
 	help
 	  If you have a machine based on a Hilscher NetX SoC you

@@ -199,7 +199,7 @@ config SERIAL_KGDB_NMI
 
 config SERIAL_KS8695
 	bool "Micrel KS8695 (Centaur) serial port support"
-	depends on ARCH_KS8695
+	depends on ARCH_KS8695 || COMPILE_TEST
 	select SERIAL_CORE
 	help
 	  This selects the Micrel Centaur KS8695 UART.  Say Y here.

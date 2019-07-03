@@ -25,8 +25,8 @@
 #include <linux/io.h>
 
 #include <asm/irq.h>
-#include <mach/hardware.h>
-#include <mach/irqs.h>
+//#include <mach/hardware.h>
+//#include <mach/irqs.h>
 
 /* We've been assigned a range on the "Low-density serial ports" major */
 #define SERIAL_SA1100_MAJOR	204

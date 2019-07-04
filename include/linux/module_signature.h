@@ -9,8 +9,6 @@
 #ifndef _LINUX_MODULE_SIGNATURE_H
 #define _LINUX_MODULE_SIGNATURE_H
 
-#include <linux/types.h>
-
 /* In stripped ARM and x86-64 modules, ~ is surprisingly rare. */
 #define MODULE_SIG_STRING "~Module signature appended~\n"
 

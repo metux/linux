@@ -537,6 +537,9 @@ int dev_pm_qos_add_notifier(struct device *dev, struct notifier_block *notifier,
 {
 	int ret = 0;
 
+	if (WARN_ON(type != DEV_PM_QOS_RESUME_LATENCY))
+		return -EINVAL;
+
 	mutex_lock(&dev_pm_qos_mtx);
 
 	if (IS_ERR(dev->power.qos))
@@ -587,6 +590,9 @@ int dev_pm_qos_remove_notifier(struct device *dev,
 			       enum dev_pm_qos_req_type type)
 {
 	int ret = 0;
+
+	if (WARN_ON(type != DEV_PM_QOS_RESUME_LATENCY))
+		return -EINVAL;
 
 	mutex_lock(&dev_pm_qos_mtx);
 

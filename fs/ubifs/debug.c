@@ -2809,7 +2809,7 @@ static const struct file_operations dfs_fops = {
  */
 void dbg_debugfs_init_fs(struct ubifs_info *c)
 {
-	int err, n;
+	int n;
 	const char *fname;
 	struct ubifs_debug_info *d = c->dbg;
 

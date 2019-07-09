@@ -324,19 +324,21 @@ static int create_queue_nocpsch(struct device_queue_manager *dqm,
 		retval = -ENOMEM;
 		goto out_deallocate_doorbell;
 	}
-	mqd_mgr->init_mqd(mqd_mgr, &q->mqd, q->mqd_mem_obj,
-				&q->gart_mqd_addr, &q->properties);
-	if (q->properties.is_active) {
 
-		if (WARN(q->process->mm != current->mm,
-					"should only run in user thread"))
-			retval = -EFAULT;
-		else
-			retval = mqd_mgr->load_mqd(mqd_mgr, q->mqd, q->pipe,
-					q->queue, &q->properties, current->mm);
-		if (retval)
-			goto out_free_mqd;
-	}
+	dqm_lock(dqm);
+
+	/*
+	 * Eviction state logic: mark all queues as evicted, even ones
+	 * not currently active. Restoring inactive queues later only
+	 * updates the is_evicted flag but is a no-op otherwise.
+	 */
+	if (qpd->evicted)
+		q->properties.is_evicted = (q->properties.queue_size > 0 &&
+			     q->properties.queue_percent > 0 &&
+			     q->properties.queue_address != 0);
+
+	mqd_mgr->init_mqd(mqd_mgr, &q->mqd, q->mqd_mem_obj,
+			&q->gart_mqd_addr, &q->properties);
 
 	list_add(&q->list, &qpd->queues_list);
 	qpd->queue_count++;
@@ -1182,6 +1184,22 @@ static int create_queue_cpsch(struct device_queue_manager *dqm, struct queue *q,
 	if (!q->mqd_mem_obj) {
 		retval = -ENOMEM;
 		goto out_deallocate_doorbell;
+	}
+
+	dqm_lock(dqm);
+
+	/*
+	 * Eviction state logic: mark all queues as evicted, even ones
+	 * not currently active. Restoring inactive queues later only
+	 * updates the is_evicted flag but is a no-op otherwise.
+	 */
+	if (qpd->evicted)
+		q->properties.is_evicted = (q->properties.queue_size > 0 &&
+			     q->properties.queue_percent > 0 &&
+			     q->properties.queue_address != 0);
+
+	mqd_mgr->init_mqd(mqd_mgr, &q->mqd, q->mqd_mem_obj,
+			&q->gart_mqd_addr, &q->properties);
 
 	list_add(&q->list, &qpd->queues_list);
 	qpd->queue_count++;

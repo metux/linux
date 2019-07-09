@@ -671,6 +671,9 @@ static void ttm_bo_release(struct kref *kref)
 	struct ttm_bo_device *bdev = bo->bdev;
 	struct ttm_mem_type_manager *man = &bdev->man[bo->mem.mem_type];
 
+	if (bo->bdev->driver->release_notify)
+		bo->bdev->driver->release_notify(bo);
+
 	drm_vma_offset_remove(&bdev->vma_manager, &bo->vma_node);
 	ttm_mem_io_lock(man, false);
 	ttm_mem_io_free_vm(bo);
@@ -850,8 +853,8 @@ static int ttm_mem_evict_first(struct ttm_bo_device *bdev,
 
 			if (!ttm_bo_evict_swapout_allowable(bo, ctx, &locked,
 							    &busy)) {
-				if (busy && !busy_bo && ticket !=
-				    reservation_object_locking_ctx(bo->resv))
+				if (busy && !busy_bo &&
+				    bo->resv->lock.ctx != ticket)
 					busy_bo = bo;
 				continue;
 			}
@@ -957,10 +960,8 @@ static int ttm_bo_mem_force_space(struct ttm_buffer_object *bo,
 {
 	struct ttm_bo_device *bdev = bo->bdev;
 	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
-	struct ww_acquire_ctx *ticket;
 	int ret;
 
-	ticket = reservation_object_locking_ctx(bo->resv);
 	do {
 		ret = (*man->func->get_node)(man, bo, place, mem);
 		if (unlikely(ret != 0))
@@ -968,7 +969,7 @@ static int ttm_bo_mem_force_space(struct ttm_buffer_object *bo,
 		if (mem->mm_node)
 			break;
 		ret = ttm_mem_evict_first(bdev, mem->mem_type, place, ctx,
-					  ticket);
+					  bo->resv->lock.ctx);
 		if (unlikely(ret != 0))
 			return ret;
 	} while (1);
@@ -1741,6 +1742,7 @@ int ttm_bo_device_init(struct ttm_bo_device *bdev,
 	mutex_lock(&ttm_global_mutex);
 	list_add_tail(&bdev->device_list, &glob->device_list);
 	mutex_unlock(&ttm_global_mutex);
+	bdev->vm_ops = &ttm_bo_vm_ops;
 
 	return 0;
 out_no_sys:
@@ -1965,7 +1967,7 @@ int ttm_bo_wait_unreserved(struct ttm_buffer_object *bo)
 	ret = mutex_lock_interruptible(&bo->wu_mutex);
 	if (unlikely(ret != 0))
 		return -ERESTARTSYS;
-	if (!reservation_object_is_locked(bo->resv))
+	if (!ww_mutex_is_locked(&bo->resv->lock))
 		goto out_unlock;
 	ret = reservation_object_lock_interruptible(bo->resv, NULL);
 	if (ret == -EINTR)

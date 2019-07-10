@@ -260,7 +260,6 @@ struct intel_engine_cs {
 	struct llist_head barrier_tasks;
 
 	struct intel_context *kernel_context; /* pinned */
-	struct intel_context *preempt_context; /* pinned; optional */
 
 	unsigned long serial;
 

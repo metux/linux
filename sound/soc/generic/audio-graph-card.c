@@ -124,9 +124,12 @@ static const struct snd_soc_ops graph_ops = {
 
 static int graph_get_dai_id(struct device_node *ep)
 {
-	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
-	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
-	int ret = 0;
+	struct device_node *node;
+	struct device_node *endpoint;
+	struct of_endpoint info;
+	int i, id;
+	u32 *reg;
+	int ret;
 
 	/* use driver specified DAI ID if exist */
 	ret = snd_soc_get_dai_id(ep);
@@ -146,8 +149,9 @@ static int graph_get_dai_id(struct device_node *ep)
 			return info.id;
 
 		node = of_get_parent(ep);
+		reg = of_get_property(node, "reg", NULL);
 		of_node_put(node);
-		if (of_get_property(node, "reg", NULL))
+		if (reg)
 			return info.port;
 	}
 	node = of_graph_get_port_parent(ep);

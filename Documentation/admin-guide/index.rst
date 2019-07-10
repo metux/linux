@@ -71,6 +71,7 @@ configure specific aspects of kernel behavior to your liking.
    bcache
    ext4
    xfs
+   jfs
    pm/index
    thunderbolt
    LSM/index

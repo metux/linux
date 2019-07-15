@@ -21,6 +21,7 @@
 #define AMD_FCH_GPIO_BANK0_BASE		0x1500
 #define AMD_FCH_GPIO_SIZE		0x0300
 
+#define AMD_FCH_GPIO_FLAG_INTSRC	BIT(28)
 #define AMD_FCH_GPIO_FLAG_DIRECTION	BIT(23)
 #define AMD_FCH_GPIO_FLAG_WRITE		BIT(22)
 #define AMD_FCH_GPIO_FLAG_READ		BIT(16)
@@ -53,6 +54,8 @@ static int amd_fch_gpio_direction_input(struct gpio_chip *gc,
 
 	spin_lock_irqsave(&priv->lock, flags);
 	writel_relaxed(readl_relaxed(ptr) & ~AMD_FCH_GPIO_FLAG_DIRECTION, ptr);
+	// HACK: enable interrupt source
+	writel_relaxed(readl_relaxed(ptr) & AMD_FCH_GPIO_FLAG_INTSRC, ptr);
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	return 0;

@@ -110,6 +110,7 @@ needed).
    netlabel/index
    networking/index
    pcmcia/index
+   power/index
    target/index
    timers/index
    watchdog/index

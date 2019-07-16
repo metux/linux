@@ -589,11 +589,9 @@ cifs_reconnect(struct TCP_Server_Info *server)
 	spin_lock(&GlobalMid_Lock);
 	list_for_each_safe(tmp, tmp2, &server->pending_mid_q) {
 		mid_entry = list_entry(tmp, struct mid_q_entry, qhead);
-		kref_get(&mid_entry->refcount);
 		if (mid_entry->mid_state == MID_REQUEST_SUBMITTED)
 			mid_entry->mid_state = MID_RETRY_NEEDED;
 		list_move(&mid_entry->qhead, &retry_list);
-		mid_entry->mid_flags |= MID_DELETED;
 	}
 	spin_unlock(&GlobalMid_Lock);
 	mutex_unlock(&server->srv_mutex);
@@ -603,7 +601,6 @@ cifs_reconnect(struct TCP_Server_Info *server)
 		mid_entry = list_entry(tmp, struct mid_q_entry, qhead);
 		list_del_init(&mid_entry->qhead);
 		mid_entry->callback(mid_entry);
-		cifs_mid_q_entry_release(mid_entry);
 	}
 
 	if (cifs_rdma_enabled(server)) {
@@ -926,10 +923,8 @@ dequeue_mid(struct mid_q_entry *mid, bool malformed)
 	if (mid->mid_flags & MID_DELETED)
 		printk_once(KERN_WARNING
 			    "trying to dequeue a deleted mid\n");
-	else {
+	else
 		list_del_init(&mid->qhead);
-		mid->mid_flags |= MID_DELETED;
-	}
 	spin_unlock(&GlobalMid_Lock);
 }
 
@@ -1014,10 +1009,8 @@ static void clean_demultiplex_info(struct TCP_Server_Info *server)
 		list_for_each_safe(tmp, tmp2, &server->pending_mid_q) {
 			mid_entry = list_entry(tmp, struct mid_q_entry, qhead);
 			cifs_dbg(FYI, "Clearing mid 0x%llx\n", mid_entry->mid);
-			kref_get(&mid_entry->refcount);
 			mid_entry->mid_state = MID_SHUTDOWN;
 			list_move(&mid_entry->qhead, &dispose_list);
-			mid_entry->mid_flags |= MID_DELETED;
 		}
 		spin_unlock(&GlobalMid_Lock);
 
@@ -1027,7 +1020,6 @@ static void clean_demultiplex_info(struct TCP_Server_Info *server)
 			cifs_dbg(FYI, "Callback mid 0x%llx\n", mid_entry->mid);
 			list_del_init(&mid_entry->qhead);
 			mid_entry->callback(mid_entry);
-			cifs_mid_q_entry_release(mid_entry);
 		}
 		/* 1/8th of sec is more than enough time for them to exit */
 		msleep(125);
@@ -3982,12 +3974,8 @@ generic_ip_connect(struct TCP_Server_Info *server)
 
 	rc = socket->ops->connect(socket, saddr, slen,
 				  server->noblockcnt ? O_NONBLOCK : 0);
-	/*
-	 * When mounting SMB root file systems, we do not want to block in
-	 * connect. Otherwise bail out and then let cifs_reconnect() perform
-	 * reconnect failover - if possible.
-	 */
-	if (server->noblockcnt && rc == -EINPROGRESS)
+
+	if (rc == -EINPROGRESS)
 		rc = 0;
 	if (rc < 0) {
 		cifs_dbg(FYI, "Error %d connecting to server\n", rc);
@@ -4368,7 +4356,7 @@ static int mount_get_conns(struct smb_vol *vol, struct cifs_sb_info *cifs_sb,
 		server->ops->qfs_tcon(*xid, tcon, cifs_sb);
 		if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_RO_CACHE) {
 			if (tcon->fsDevInfo.DeviceCharacteristics &
-			    cpu_to_le32(FILE_READ_ONLY_DEVICE))
+			    FILE_READ_ONLY_DEVICE)
 				cifs_dbg(VFS, "mounted to read only share\n");
 			else if ((cifs_sb->mnt_cifs_flags &
 				  CIFS_MOUNT_RW_CACHE) == 0)
@@ -4549,7 +4537,7 @@ static int setup_dfs_tgt_conn(const char *path,
 	int rc;
 	struct dfs_info3_param ref = {0};
 	char *mdata = NULL, *fake_devname = NULL;
-	struct smb_vol fake_vol = {NULL};
+	struct smb_vol fake_vol = {0};
 
 	cifs_dbg(FYI, "%s: dfs path: %s\n", __func__, path);
 

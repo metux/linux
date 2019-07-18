@@ -271,7 +271,6 @@ config DM_CRYPT
 	depends on BLK_DEV_DM
 	select CRYPTO
 	select CRYPTO_CBC
-	select CRYPTO_ESSIV
 	---help---
 	  This device-mapper target allows you to create a device that
 	  transparently encrypts the data on it. You'll need to activate
@@ -346,20 +345,6 @@ config DM_ERA
          dm-era tracks which parts of a block device are written to
          over time.  Useful for maintaining cache coherency when using
          vendor snapshots.
-
-config DM_CLONE
-       tristate "Clone target (EXPERIMENTAL)"
-       depends on BLK_DEV_DM
-       default n
-       select DM_PERSISTENT_DATA
-       ---help---
-         dm-clone produces a one-to-one copy of an existing, read-only source
-         device into a writable destination device. The cloned device is
-         visible/mountable immediately and the copy of the source device to the
-         destination device happens in the background, in parallel with user
-         I/O.
-
-         If unsure, say N.
 
 config DM_MIRROR
        tristate "Mirror target"
@@ -517,15 +502,6 @@ config DM_VERITY_VERIFY_ROOTHASH_SIG
 
 	  If unsure, say N.
 
-config DM_VERITY_AVB
-	tristate "Support AVB specific verity error behavior"
-	depends on DM_VERITY
-	---help---
-	  Enables Android Verified Boot platform-specific error
-	  behavior. In particular, it will modify the vbmeta partition
-	  specified on the kernel command-line when non-transient error
-	  occurs (followed by a panic).
-
 config DM_VERITY_FEC
 	bool "Verity forward error correction support"
 	depends on DM_VERITY
@@ -603,18 +579,6 @@ config DM_ZONED
 
 	  To compile this code as a module, choose M here: the module will
 	  be called dm-zoned.
-
-	  If unsure, say N.
-
-config DM_BOW
-	tristate "Backup block device"
-	depends on BLK_DEV_DM
-	select DM_BUFIO
-	---help---
-	  This device-mapper target takes a device and keeps a log of all
-	  changes using free blocks identified by issuing a trim command.
-	  This can then be restored by running a command line utility,
-	  or committed by simply replacing the target.
 
 	  If unsure, say N.
 

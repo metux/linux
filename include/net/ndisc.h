@@ -41,7 +41,6 @@ enum {
 	ND_OPT_DNSSL = 31,		/* RFC6106 */
 	ND_OPT_6CO = 34,		/* RFC6775 */
 	ND_OPT_CAPTIVE_PORTAL = 37,	/* RFC7710 */
-	ND_OPT_PREF64 = 38,		/* RFC8781 */
 	__ND_OPT_MAX
 };
 
@@ -81,12 +80,12 @@ extern struct neigh_table nd_tbl;
 struct nd_msg {
         struct icmp6hdr	icmph;
         struct in6_addr	target;
-	__u8		opt[];
+	__u8		opt[0];
 };
 
 struct rs_msg {
 	struct icmp6hdr	icmph;
-	__u8		opt[];
+	__u8		opt[0];
 };
 
 struct ra_msg {
@@ -99,7 +98,7 @@ struct rd_msg {
 	struct icmp6hdr icmph;
 	struct in6_addr	target;
 	struct in6_addr	dest;
-	__u8		opt[];
+	__u8		opt[0];
 };
 
 struct nd_opt_hdr {
@@ -415,8 +414,8 @@ static inline void __ipv6_confirm_neigh(struct net_device *dev,
 		unsigned long now = jiffies;
 
 		/* avoid dirtying neighbour */
-		if (READ_ONCE(n->confirmed) != now)
-			WRITE_ONCE(n->confirmed, now);
+		if (n->confirmed != now)
+			n->confirmed = now;
 	}
 	rcu_read_unlock_bh();
 }
@@ -432,8 +431,8 @@ static inline void __ipv6_confirm_neigh_stub(struct net_device *dev,
 		unsigned long now = jiffies;
 
 		/* avoid dirtying neighbour */
-		if (READ_ONCE(n->confirmed) != now)
-			WRITE_ONCE(n->confirmed, now);
+		if (n->confirmed != now)
+			n->confirmed = now;
 	}
 	rcu_read_unlock_bh();
 }

@@ -1559,7 +1559,6 @@ static void setup_local_APIC(void)
 	int logical_apicid, ldr_apicid;
 #endif
 
-
 	if (disable_apic) {
 		disable_ioapic_support();
 		return;
@@ -1574,8 +1573,6 @@ static void setup_local_APIC(void)
 		apic_write(APIC_ESR, 0);
 	}
 #endif
-	perf_events_lapic_init();
-
 	/*
 	 * Double-check whether this APIC is really registered.
 	 * This is meaningless in clustered apic mode, so we skip it.
@@ -1658,6 +1655,8 @@ static void setup_local_APIC(void)
 	 */
 	value |= SPURIOUS_APIC_VECTOR;
 	apic_write(APIC_SPIV, value);
+
+	perf_events_lapic_init();
 
 	/*
 	 * Set up LVT0, LVT1:

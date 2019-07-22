@@ -5908,24 +5908,6 @@ static inline void rtl8169_rx_csum(struct sk_buff *skb, u32 opts1)
 		skb_checksum_none_assert(skb);
 }
 
-static struct sk_buff *rtl8169_try_rx_copy(void *data,
-					   struct rtl8169_private *tp,
-					   int pkt_size,
-					   dma_addr_t addr)
-{
-	struct sk_buff *skb;
-	struct device *d = tp_to_dev(tp);
-
-	dma_sync_single_for_cpu(d, addr, pkt_size, DMA_FROM_DEVICE);
-	prefetch(data);
-	skb = napi_alloc_skb(&tp->napi, pkt_size);
-	if (skb)
-		skb_copy_to_linear_data(skb, data, pkt_size);
-	dma_sync_single_for_device(d, addr, pkt_size, DMA_FROM_DEVICE);
-
-	return skb;
-}
-
 static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, u32 budget)
 {
 	unsigned int cur_rx, rx_left;
@@ -5961,17 +5943,13 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, u32 budget
 				goto process_pkt;
 			}
 		} else {
+			unsigned int pkt_size;
 			struct sk_buff *skb;
-			dma_addr_t addr;
-			int pkt_size;
 
 process_pkt:
-			addr = le64_to_cpu(desc->addr);
+			pkt_size = status & GENMASK(13, 0);
 			if (likely(!(dev->features & NETIF_F_RXFCS)))
-				pkt_size = (status & 0x00003fff) - 4;
-			else
-				pkt_size = status & 0x00003fff;
-
+				pkt_size -= ETH_FCS_LEN;
 			/*
 			 * The driver does not support incoming fragmented
 			 * frames. They are seen as a symptom of over-mtu
@@ -5983,15 +5961,23 @@ process_pkt:
 				goto release_descriptor;
 			}
 
-			skb = rtl8169_try_rx_copy(tp->Rx_databuff[entry],
-						  tp, pkt_size, addr);
-			if (!skb) {
+			dma_sync_single_for_cpu(tp_to_dev(tp),
+						le64_to_cpu(desc->addr),
+						pkt_size, DMA_FROM_DEVICE);
+
+			skb = napi_alloc_skb(&tp->napi, pkt_size);
+			if (unlikely(!skb)) {
 				dev->stats.rx_dropped++;
 				goto release_descriptor;
 			}
 
+			prefetch(tp->Rx_databuff[entry]);
+			skb_copy_to_linear_data(skb, tp->Rx_databuff[entry],
+						pkt_size);
+			skb->tail += pkt_size;
+			skb->len = pkt_size;
+
 			rtl8169_rx_csum(skb, status);
-			skb_put(skb, pkt_size);
 			skb->protocol = eth_type_trans(skb, dev);
 
 			rtl8169_rx_vlan_tag(desc, skb);
@@ -6137,7 +6123,10 @@ static int r8169_phy_connect(struct rtl8169_private *tp)
 	if (ret)
 		return ret;
 
-	if (!tp->supports_gmii)
+	if (tp->supports_gmii)
+		phy_remove_link_mode(phydev,
+				     ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
+	else
 		phy_set_max_speed(phydev, SPEED_100);
 
 	phy_support_asym_pause(phydev);
@@ -6587,18 +6576,13 @@ static int rtl_alloc_irq(struct rtl8169_private *tp)
 {
 	unsigned int flags;
 
-	switch (tp->mac_version) {
-	case RTL_GIGA_MAC_VER_02 ... RTL_GIGA_MAC_VER_06:
+	if (tp->mac_version <= RTL_GIGA_MAC_VER_06) {
 		rtl_unlock_config_regs(tp);
 		RTL_W8(tp, Config2, RTL_R8(tp, Config2) & ~MSIEnable);
 		rtl_lock_config_regs(tp);
-		/* fall through */
-	case RTL_GIGA_MAC_VER_07 ... RTL_GIGA_MAC_VER_24:
 		flags = PCI_IRQ_LEGACY;
-		break;
-	default:
+	} else {
 		flags = PCI_IRQ_ALL_TYPES;
-		break;
 	}
 
 	return pci_alloc_irq_vectors(tp->pci_dev, 1, 1, flags);

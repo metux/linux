@@ -48,11 +48,9 @@ void f2fs_set_inode_flags(struct inode *inode)
 		new_fl |= S_ENCRYPTED;
 	if (file_is_verity(inode))
 		new_fl |= S_VERITY;
-	if (flags & F2FS_CASEFOLD_FL)
-		new_fl |= S_CASEFOLD;
 	inode_set_flags(inode, new_fl,
 			S_SYNC|S_APPEND|S_IMMUTABLE|S_NOATIME|S_DIRSYNC|
-			S_ENCRYPTED|S_VERITY|S_CASEFOLD);
+			S_ENCRYPTED|S_VERITY);
 }
 
 static void __get_inode_rdev(struct inode *inode, struct f2fs_inode *ri)
@@ -661,7 +659,7 @@ int f2fs_write_inode(struct inode *inode, struct writeback_control *wbc)
 		!is_inode_flag_set(inode, FI_DIRTY_INODE))
 		return 0;
 
-	if (!f2fs_is_checkpoint_ready(sbi))
+	if (f2fs_is_checkpoint_ready(sbi))
 		return -ENOSPC;
 
 	/*
@@ -740,8 +738,7 @@ retry:
 
 	if (err) {
 		f2fs_update_inode_page(inode);
-		if (dquot_initialize_needed(inode))
-			set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
+		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
 	}
 	sb_end_intwrite(inode->i_sb);
 no_delete:
@@ -753,7 +750,7 @@ no_delete:
 	stat_dec_compr_inode(inode);
 	stat_sub_compr_blocks(inode, F2FS_I(inode)->i_compr_blocks);
 
-	if (likely(!f2fs_cp_error(sbi) &&
+	if (likely(!is_set_ckpt_flags(sbi, CP_ERROR_FLAG) &&
 				!is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
 		f2fs_bug_on(sbi, is_inode_flag_set(inode, FI_DIRTY_INODE));
 	else

@@ -403,7 +403,7 @@ That is, the recovery API only requires that:
 .. note::
 
    Implementation details for the powerpc platform are discussed in
-   the file Documentation/powerpc/eeh-pci-error-recovery.rst
+   the file Documentation/powerpc/eeh-pci-error-recovery.txt
 
    As of this writing, there is a growing list of device drivers with
    patches implementing error recovery. Not all of these patches are in
@@ -421,6 +421,3 @@ That is, the recovery API only requires that:
    - drivers/net/ixgbe
    - drivers/net/cxgb3
    - drivers/net/s2io.c
-
-The End
--------

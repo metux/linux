@@ -47,6 +47,24 @@ void skl_dsp_set_astate_cfg(struct skl_dev *skl, u32 cnt, void *data)
 	skl_ipc_set_large_config(&skl->ipc, &msg, data);
 }
 
+#define NOTIFICATION_PARAM_ID 3
+#define NOTIFICATION_MASK 0xf
+
+/* disable notfication for underruns/overruns from firmware module */
+void skl_dsp_enable_notification(struct skl_dev *skl, bool enable)
+{
+	struct notification_mask mask;
+	struct skl_ipc_large_config_msg	msg = {0};
+
+	mask.notify = NOTIFICATION_MASK;
+	mask.enable = enable;
+
+	msg.large_param_id = NOTIFICATION_PARAM_ID;
+	msg.param_data_size = sizeof(mask);
+
+	skl_ipc_set_large_config(&skl->ipc, &msg, (u32 *)&mask);
+}
+
 static int skl_dsp_setup_spib(struct device *dev, unsigned int size,
 				int stream_tag, int enable)
 {
@@ -407,6 +425,8 @@ int skl_resume_dsp(struct skl_dev *skl)
 	if (ret < 0)
 		return ret;
 
+	skl_dsp_enable_notification(skl, false);
+
 	if (skl->cfg.astate_cfg != NULL) {
 		skl_dsp_set_astate_cfg(skl, skl->cfg.astate_cfg->count,
 					skl->cfg.astate_cfg);
@@ -466,7 +486,7 @@ static void skl_set_base_module_format(struct skl_dev *skl,
 
 	base_cfg->audio_fmt.interleaving = format->interleaving_style;
 
-	base_cfg->cpc = res->cpc;
+	base_cfg->cps = res->cps;
 	base_cfg->ibs = res->ibs;
 	base_cfg->obs = res->obs;
 	base_cfg->is_pages = res->is_pages;
@@ -867,9 +887,8 @@ static int skl_set_module_format(struct skl_dev *skl,
 
 	}
 
-	dev_dbg(skl->dev, "Module type=%d id=%d config size: %d bytes\n",
-			module_config->m_type, module_config->id.module_id,
-			param_size);
+	dev_dbg(skl->dev, "Module type=%d config size: %d bytes\n",
+			module_config->id.module_id, param_size);
 	print_hex_dump_debug("Module params:", DUMP_PREFIX_OFFSET, 8, 4,
 			*param_data, param_size, false);
 	return 0;
@@ -1369,12 +1388,11 @@ int skl_get_module_params(struct skl_dev *skl, u32 *params, int size,
 			  u32 param_id, struct skl_module_cfg *mcfg)
 {
 	struct skl_ipc_large_config_msg msg;
-	size_t bytes = size;
 
 	msg.module_id = mcfg->id.module_id;
 	msg.instance_id = mcfg->id.pvt_id;
 	msg.param_data_size = size;
 	msg.large_param_id = param_id;
 
-	return skl_ipc_get_large_config(&skl->ipc, &msg, &params, &bytes);
+	return skl_ipc_get_large_config(&skl->ipc, &msg, params);
 }

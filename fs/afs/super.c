@@ -294,7 +294,7 @@ static int afs_parse_source(struct fs_context *fc, struct fs_parameter *param)
 			       cellnamesz, cellnamesz, cellname ?: "");
 			return PTR_ERR(cell);
 		}
-		afs_put_cell(ctx->net, ctx->cell);
+		afs_unuse_cell(ctx->net, ctx->cell);
 		ctx->cell = cell;
 	}
 
@@ -352,7 +352,9 @@ static int afs_validate_fc(struct fs_context *fc)
 {
 	struct afs_fs_context *ctx = fc->fs_private;
 	struct afs_volume *volume;
+	struct afs_cell *cell;
 	struct key *key;
+	int ret;
 
 	if (!ctx->dyn_root) {
 		if (ctx->no_cell) {
@@ -365,6 +367,7 @@ static int afs_validate_fc(struct fs_context *fc)
 			return -EDESTADDRREQ;
 		}
 
+	reget_key:
 		/* We try to do the mount securely. */
 		key = afs_request_key(ctx->cell);
 		if (IS_ERR(key))
@@ -373,8 +376,24 @@ static int afs_validate_fc(struct fs_context *fc)
 		ctx->key = key;
 
 		if (ctx->volume) {
-			afs_put_volume(ctx->net, ctx->volume);
+			afs_put_volume(ctx->net, ctx->volume,
+				       afs_volume_trace_put_validate_fc);
 			ctx->volume = NULL;
+		}
+
+		if (test_bit(AFS_CELL_FL_CHECK_ALIAS, &ctx->cell->flags)) {
+			ret = afs_cell_detect_alias(ctx->cell, key);
+			if (ret < 0)
+				return ret;
+			if (ret == 1) {
+				_debug("switch to alias");
+				key_put(ctx->key);
+				ctx->key = NULL;
+				cell = afs_use_cell(ctx->cell->alias_of);
+				afs_unuse_cell(ctx->net, ctx->cell);
+				ctx->cell = cell;
+				goto reget_key;
+			}
 		}
 
 		volume = afs_create_volume(ctx);
@@ -465,6 +484,7 @@ static int afs_fill_super(struct super_block *sb, struct afs_fs_context *ctx)
 			goto error;
 	} else {
 		sb->s_d_op = &afs_fs_dentry_operations;
+		rcu_assign_pointer(as->volume->sb, sb);
 	}
 
 	_leave(" = 0");
@@ -487,8 +507,9 @@ static struct afs_super_info *afs_alloc_sbi(struct fs_context *fc)
 		if (ctx->dyn_root) {
 			as->dyn_root = true;
 		} else {
-			as->cell = afs_get_cell(ctx->cell);
-			as->volume = afs_get_volume(ctx->volume);
+			as->cell = afs_use_cell(ctx->cell);
+			as->volume = afs_get_volume(ctx->volume,
+						    afs_volume_trace_get_alloc_sbi);
 		}
 	}
 	return as;
@@ -498,8 +519,8 @@ static void afs_destroy_sbi(struct afs_super_info *as)
 {
 	if (as) {
 		struct afs_net *net = afs_net(as->net_ns);
-		afs_put_volume(net, as->volume);
-		afs_put_cell(net, as->cell);
+		afs_put_volume(net, as->volume, afs_volume_trace_put_destroy_sbi);
+		afs_unuse_cell(net, as->cell);
 		put_net(as->net_ns);
 		kfree(as);
 	}
@@ -508,7 +529,6 @@ static void afs_destroy_sbi(struct afs_super_info *as)
 static void afs_kill_super(struct super_block *sb)
 {
 	struct afs_super_info *as = AFS_FS_S(sb);
-	struct afs_net *net = afs_net(as->net_ns);
 
 	if (as->dyn_root)
 		afs_dynroot_depopulate(sb);
@@ -517,7 +537,7 @@ static void afs_kill_super(struct super_block *sb)
 	 * deactivating the superblock.
 	 */
 	if (as->volume)
-		afs_clear_callback_interests(net, as->volume->servers);
+		rcu_assign_pointer(as->volume->sb, NULL);
 	kill_anon_super(sb);
 	if (as->volume)
 		afs_deactivate_volume(as->volume);
@@ -585,8 +605,8 @@ static void afs_free_fc(struct fs_context *fc)
 	struct afs_fs_context *ctx = fc->fs_private;
 
 	afs_destroy_sbi(fc->s_fs_info);
-	afs_put_volume(ctx->net, ctx->volume);
-	afs_put_cell(ctx->net, ctx->cell);
+	afs_put_volume(ctx->net, ctx->volume, afs_volume_trace_put_free_fc);
+	afs_unuse_cell(ctx->net, ctx->cell);
 	key_put(ctx->key);
 	kfree(ctx);
 }
@@ -665,7 +685,6 @@ static struct inode *afs_alloc_inode(struct super_block *sb)
 	vnode->volume		= NULL;
 	vnode->lock_key		= NULL;
 	vnode->permit_cache	= NULL;
-	RCU_INIT_POINTER(vnode->cb_interest, NULL);
 #ifdef CONFIG_AFS_FSCACHE
 	vnode->cache		= NULL;
 #endif
@@ -695,8 +714,6 @@ static void afs_destroy_inode(struct inode *inode)
 
 	_debug("DESTROY INODE %p", inode);
 
-	ASSERTCMP(rcu_access_pointer(vnode->cb_interest), ==, NULL);
-
 	atomic_dec(&afs_count_active_inodes);
 }
 
@@ -709,7 +726,10 @@ static void afs_get_volume_status_success(struct afs_operation *op)
 		buf->f_blocks = vs->part_max_blocks;
 	else
 		buf->f_blocks = vs->max_quota;
-	buf->f_bavail = buf->f_bfree = buf->f_blocks - vs->blocks_in_use;
+
+	if (buf->f_blocks > vs->blocks_in_use)
+		buf->f_bavail = buf->f_bfree =
+			buf->f_blocks - vs->blocks_in_use;
 }
 
 static const struct afs_operation_ops afs_get_volume_status_operation = {

@@ -17,7 +17,6 @@
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
 #include <linux/kernel.h>
-#include <linux/lockdep.h>
 #include <linux/mm.h>
 #include <linux/stddef.h>
 #include <linux/sysctl.h>
@@ -45,7 +44,6 @@
 #include <asm/alternative.h>
 #include <asm/arch_gicv3.h>
 #include <asm/compat.h>
-#include <asm/cpufeature.h>
 #include <asm/cacheflush.h>
 #include <asm/exec.h>
 #include <asm/fpsimd.h>
@@ -334,38 +332,40 @@ void arch_release_task_struct(struct task_struct *tsk)
 	fpsimd_release_task(tsk);
 }
 
+/*
+ * src and dst may temporarily have aliased sve_state after task_struct
+ * is copied.  We cannot fix this properly here, because src may have
+ * live SVE state and dst's thread_info may not exist yet, so tweaking
+ * either src's or dst's TIF_SVE is not safe.
+ *
+ * The unaliasing is done in copy_thread() instead.  This works because
+ * dst is not schedulable or traceable until both of these functions
+ * have been called.
+ */
 int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 {
 	if (current->mm)
 		fpsimd_preserve_current_state();
 	*dst = *src;
 
-	/* We rely on the above assignment to initialize dst's thread_flags: */
-	BUILD_BUG_ON(!IS_ENABLED(CONFIG_THREAD_INFO_IN_TASK));
-
-	/*
-	 * Detach src's sve_state (if any) from dst so that it does not
-	 * get erroneously used or freed prematurely.  dst's sve_state
-	 * will be allocated on demand later on if dst uses SVE.
-	 * For consistency, also clear TIF_SVE here: this could be done
-	 * later in copy_process(), but to avoid tripping up future
-	 * maintainers it is best not to leave TIF_SVE and sve_state in
-	 * an inconsistent state, even temporarily.
-	 */
-	dst->thread.sve_state = NULL;
-	clear_tsk_thread_flag(dst, TIF_SVE);
-
 	return 0;
 }
 
 asmlinkage void ret_from_fork(void) asm("ret_from_fork");
 
-int copy_thread_tls(unsigned long clone_flags, unsigned long stack_start,
-		unsigned long stk_sz, struct task_struct *p, unsigned long tls)
+int copy_thread(unsigned long clone_flags, unsigned long stack_start,
+		unsigned long stk_sz, struct task_struct *p)
 {
 	struct pt_regs *childregs = task_pt_regs(p);
 
 	memset(&p->thread.cpu_context, 0, sizeof(struct cpu_context));
+
+	/*
+	 * Unalias p->thread.sve_state (if any) from the parent task
+	 * and disable discard SVE state for p:
+	 */
+	clear_tsk_thread_flag(p, TIF_SVE);
+	p->thread.sve_state = NULL;
 
 	/*
 	 * In case p was allocated the same task_struct pointer as some
@@ -394,11 +394,11 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long stack_start,
 		}
 
 		/*
-		 * If a TLS pointer was passed to clone, use it for the new
-		 * thread.
+		 * If a TLS pointer was passed to clone (4th argument), use it
+		 * for the new thread.
 		 */
 		if (clone_flags & CLONE_SETTLS)
-			p->thread.uw.tp_value = tls;
+			p->thread.uw.tp_value = childregs->regs[3];
 	} else {
 		memset(childregs, 0, sizeof(struct pt_regs));
 		childregs->pstate = PSR_MODE_EL1h;
@@ -464,13 +464,6 @@ static void ssbs_thread_switch(struct task_struct *next)
 	 * (e.g. idle task) so check the flags and bail early.
 	 */
 	if (unlikely(next->flags & PF_KTHREAD))
-		return;
-
-	/*
-	 * If all CPUs implement the SSBS extension, then we just need to
-	 * context-switch the PSTATE field.
-	 */
-	if (cpu_have_feature(cpu_feature(SSBS)))
 		return;
 
 	/* If the mitigation is enabled, then we leave SSBS clear. */
@@ -564,6 +557,14 @@ unsigned long arch_align_stack(unsigned long sp)
 	return sp & ~0xf;
 }
 
+unsigned long arch_randomize_brk(struct mm_struct *mm)
+{
+	if (is_compat_task())
+		return randomize_page(mm->brk, SZ_32M);
+	else
+		return randomize_page(mm->brk, SZ_1G);
+}
+
 /*
  * Called from setup_new_exec() after (COMPAT_)SET_PERSONALITY.
  */
@@ -578,20 +579,15 @@ void arch_setup_new_exec(void)
 /*
  * Control the relaxed ABI allowing tagged user addresses into the kernel.
  */
-static unsigned int tagged_addr_disabled;
+static unsigned int tagged_addr_prctl_allowed = 1;
 
 long set_tagged_addr_ctrl(unsigned long arg)
 {
+	if (!tagged_addr_prctl_allowed)
+		return -EINVAL;
 	if (is_compat_task())
 		return -EINVAL;
 	if (arg & ~PR_TAGGED_ADDR_ENABLE)
-		return -EINVAL;
-
-	/*
-	 * Do not allow the enabling of the tagged address ABI if globally
-	 * disabled via sysctl abi.tagged_addr_disabled.
-	 */
-	if (arg & PR_TAGGED_ADDR_ENABLE && tagged_addr_disabled)
 		return -EINVAL;
 
 	update_thread_flag(TIF_TAGGED_ADDR, arg & PR_TAGGED_ADDR_ENABLE);
@@ -601,6 +597,8 @@ long set_tagged_addr_ctrl(unsigned long arg)
 
 long get_tagged_addr_ctrl(void)
 {
+	if (!tagged_addr_prctl_allowed)
+		return -EINVAL;
 	if (is_compat_task())
 		return -EINVAL;
 
@@ -615,16 +613,18 @@ long get_tagged_addr_ctrl(void)
  * only prevents the tagged address ABI enabling via prctl() and does not
  * disable it for tasks that already opted in to the relaxed ABI.
  */
+static int zero;
+static int one = 1;
 
 static struct ctl_table tagged_addr_sysctl_table[] = {
 	{
-		.procname	= "tagged_addr_disabled",
+		.procname	= "tagged_addr",
 		.mode		= 0644,
-		.data		= &tagged_addr_disabled,
+		.data		= &tagged_addr_prctl_allowed,
 		.maxlen		= sizeof(int),
 		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE,
+		.extra1		= &zero,
+		.extra2		= &one,
 	},
 	{ }
 };
@@ -638,19 +638,3 @@ static int __init tagged_addr_init(void)
 
 core_initcall(tagged_addr_init);
 #endif	/* CONFIG_ARM64_TAGGED_ADDR_ABI */
-
-asmlinkage void __sched arm64_preempt_schedule_irq(void)
-{
-	lockdep_assert_irqs_disabled();
-
-	/*
-	 * Preempting a task from an IRQ means we leave copies of PSTATE
-	 * on the stack. cpufeature's enable calls may modify PSTATE, but
-	 * resuming one of these preempted tasks would undo those changes.
-	 *
-	 * Only allow a task to be preempted once cpufeatures have been
-	 * enabled.
-	 */
-	if (system_capabilities_finalized())
-		preempt_schedule_irq();
-}

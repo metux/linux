@@ -112,17 +112,13 @@ static struct f2fs_dir_entry *find_in_block(struct inode *dir,
  * doesn't match or less than zero on error.
  */
 int f2fs_ci_compare(const struct inode *parent, const struct qstr *name,
-				const struct qstr *entry, bool quick)
+		    const struct qstr *entry)
 {
 	const struct f2fs_sb_info *sbi = F2FS_SB(parent->i_sb);
 	const struct unicode_map *um = sbi->s_encoding;
 	int ret;
 
-	if (quick)
-		ret = utf8_strncasecmp_folded(um, name, entry);
-	else
-		ret = utf8_strncasecmp(um, name, entry);
-
+	ret = utf8_strncasecmp(um, name, entry);
 	if (ret < 0) {
 		/* Handle invalid character sequence as either an error
 		 * or as an opaque byte sequence.
@@ -138,79 +134,17 @@ int f2fs_ci_compare(const struct inode *parent, const struct qstr *name,
 
 	return ret;
 }
-
-static void f2fs_fname_setup_ci_filename(struct inode *dir,
-					const struct qstr *iname,
-					struct fscrypt_str *cf_name)
-{
-	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
-
-	if (!IS_CASEFOLDED(dir)) {
-		cf_name->name = NULL;
-		return;
-	}
-
-	cf_name->name = f2fs_kmalloc(sbi, F2FS_NAME_LEN, GFP_NOFS);
-	if (!cf_name->name)
-		return;
-
-	cf_name->len = utf8_casefold(sbi->s_encoding,
-					iname, cf_name->name,
-					F2FS_NAME_LEN);
-	if ((int)cf_name->len <= 0) {
-		kvfree(cf_name->name);
-		cf_name->name = NULL;
-	}
-}
 #endif
-
-static inline bool f2fs_match_name(struct f2fs_dentry_ptr *d,
-					struct f2fs_dir_entry *de,
-					struct fscrypt_name *fname,
-					struct fscrypt_str *cf_str,
-					unsigned long bit_pos,
-					f2fs_hash_t namehash)
-{
-#ifdef CONFIG_UNICODE
-	struct inode *parent = d->inode;
-	struct f2fs_sb_info *sbi = F2FS_I_SB(parent);
-	struct qstr entry;
-#endif
-
-	if (de->hash_code != namehash)
-		return false;
-
-#ifdef CONFIG_UNICODE
-	entry.name = d->filename[bit_pos];
-	entry.len = de->name_len;
-
-	if (sbi->s_encoding && IS_CASEFOLDED(parent)) {
-		if (cf_str->name) {
-			struct qstr cf = {.name = cf_str->name,
-					  .len = cf_str->len};
-			return !f2fs_ci_compare(parent, &cf, &entry, true);
-		}
-		return !f2fs_ci_compare(parent, fname->usr_fname, &entry,
-					false);
-	}
-#endif
-	if (fscrypt_match_name(fname, d->filename[bit_pos],
-				le16_to_cpu(de->name_len)))
-		return true;
-	return false;
-}
 
 struct f2fs_dir_entry *f2fs_find_target_dentry(struct fscrypt_name *fname,
 			f2fs_hash_t namehash, int *max_slots,
 			struct f2fs_dentry_ptr *d)
 {
 	struct f2fs_dir_entry *de;
-	struct fscrypt_str cf_str = { .name = NULL, .len = 0 };
 	unsigned long bit_pos = 0;
 	int max_len = 0;
-
 #ifdef CONFIG_UNICODE
-	f2fs_fname_setup_ci_filename(d->inode, fname->usr_fname, &cf_str);
+	struct qstr entry;
 #endif
 
 	if (max_slots)
@@ -223,14 +157,28 @@ struct f2fs_dir_entry *f2fs_find_target_dentry(struct fscrypt_name *fname,
 		}
 
 		de = &d->dentry[bit_pos];
+#ifdef CONFIG_UNICODE
+		entry.name = d->filename[bit_pos];
+		entry.len = de->name_len;
+#endif
 
 		if (unlikely(!de->name_len)) {
 			bit_pos++;
 			continue;
 		}
+		if (de->hash_code == namehash) {
+#ifdef CONFIG_UNICODE
+			if (F2FS_SB(d->inode->i_sb)->s_encoding &&
+					IS_CASEFOLDED(d->inode) &&
+					!f2fs_ci_compare(d->inode,
+						fname->usr_fname, &entry))
+				goto found;
 
-		if (f2fs_match_name(d, de, fname, &cf_str, bit_pos, namehash))
-			goto found;
+#endif
+			if (fscrypt_match_name(fname, d->filename[bit_pos],
+						le16_to_cpu(de->name_len)))
+				goto found;
+		}
 
 		if (max_slots && max_len > *max_slots)
 			*max_slots = max_len;
@@ -243,10 +191,6 @@ struct f2fs_dir_entry *f2fs_find_target_dentry(struct fscrypt_name *fname,
 found:
 	if (max_slots && max_len > *max_slots)
 		*max_slots = max_len;
-
-#ifdef CONFIG_UNICODE
-	kvfree(cf_str.name);
-#endif
 	return de;
 }
 
@@ -578,20 +522,6 @@ next:
 	goto next;
 }
 
-bool f2fs_has_enough_room(struct inode *dir, struct page *ipage,
-					struct fscrypt_name *fname)
-{
-	struct f2fs_dentry_ptr d;
-	unsigned int bit_pos;
-	int slots = GET_DENTRY_SLOTS(fname_len(fname));
-
-	make_dentry_ptr_inline(dir, &d, inline_data_addr(dir, ipage));
-
-	bit_pos = f2fs_room_for_filename(d.bitmap, slots, d.max);
-
-	return bit_pos < d.max;
-}
-
 void f2fs_update_dentry(nid_t ino, umode_t mode, struct f2fs_dentry_ptr *d,
 				const struct qstr *name, f2fs_hash_t name_hash,
 				unsigned int bit_pos)
@@ -642,7 +572,7 @@ int f2fs_add_regular_entry(struct inode *dir, const struct qstr *new_name,
 
 start:
 	if (time_to_inject(F2FS_I_SB(dir), FAULT_DIR_DEPTH)) {
-		f2fs_show_injection_info(F2FS_I_SB(dir), FAULT_DIR_DEPTH);
+		f2fs_show_injection_info(FAULT_DIR_DEPTH);
 		return -ENOSPC;
 	}
 
@@ -696,11 +626,6 @@ add_dentry:
 
 	if (inode) {
 		f2fs_i_pino_write(inode, dir->i_ino);
-
-		/* synchronize inode page's data from inode cache */
-		if (is_inode_flag_set(inode, FI_NEW_INODE))
-			f2fs_update_inode(inode, page);
-
 		f2fs_put_page(page, 1);
 	}
 
@@ -933,9 +858,8 @@ int f2fs_fill_dentries(struct dir_context *ctx, struct f2fs_dentry_ptr *d,
 			bit_pos++;
 			ctx->pos = start_pos + bit_pos;
 			printk_ratelimited(
-				"%sF2FS-fs (%s): invalid namelen(0), ino:%u, run fsck to fix.",
-				KERN_WARNING, sbi->sb->s_id,
-				le32_to_cpu(de->ino));
+				"%s, invalid namelen(0), ino:%u, run fsck to fix.",
+				KERN_WARNING, le32_to_cpu(de->ino));
 			set_sbi_flag(sbi, SBI_NEED_FSCK);
 			continue;
 		}
@@ -1001,7 +925,7 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 
 	if (IS_ENCRYPTED(inode)) {
 		err = fscrypt_get_encryption_info(inode);
-		if (err)
+		if (err && err != -ENOKEY)
 			goto out;
 
 		err = fscrypt_fname_alloc_buffer(inode, F2FS_NAME_LEN, &fstr);
@@ -1083,27 +1007,24 @@ static int f2fs_d_compare(const struct dentry *dentry, unsigned int len,
 			  const char *str, const struct qstr *name)
 {
 	struct qstr qstr = {.name = str, .len = len };
-	const struct dentry *parent = READ_ONCE(dentry->d_parent);
-	const struct inode *inode = READ_ONCE(parent->d_inode);
 
-	if (!inode || !IS_CASEFOLDED(inode)) {
+	if (!IS_CASEFOLDED(dentry->d_parent->d_inode)) {
 		if (len != name->len)
 			return -1;
-		return memcmp(str, name->name, len);
+		return memcmp(str, name, len);
 	}
 
-	return f2fs_ci_compare(inode, name, &qstr, false);
+	return f2fs_ci_compare(dentry->d_parent->d_inode, name, &qstr);
 }
 
 static int f2fs_d_hash(const struct dentry *dentry, struct qstr *str)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(dentry->d_sb);
 	const struct unicode_map *um = sbi->s_encoding;
-	const struct inode *inode = READ_ONCE(dentry->d_inode);
 	unsigned char *norm;
 	int len, ret = 0;
 
-	if (!inode || !IS_CASEFOLDED(inode))
+	if (!IS_CASEFOLDED(dentry->d_inode))
 		return 0;
 
 	norm = f2fs_kmalloc(sbi, PATH_MAX, GFP_ATOMIC);

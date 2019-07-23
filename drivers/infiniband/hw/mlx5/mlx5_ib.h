@@ -481,7 +481,6 @@ struct mlx5_umr_wr {
 	u64				length;
 	int				access_flags;
 	u32				mkey;
-	u8				ignore_free_state:1;
 };
 
 static inline const struct mlx5_umr_wr *umr_wr(const struct ib_send_wr *wr)
@@ -868,10 +867,7 @@ struct mlx5_ib_flow_action {
 		struct {
 			struct mlx5_ib_dev *dev;
 			u32 sub_type;
-			union {
-				struct mlx5_modify_hdr *modify_hdr;
-				struct mlx5_pkt_reformat *pkt_reformat;
-			};
+			u32 action_id;
 		} flow_action_raw;
 	};
 };
@@ -884,6 +880,8 @@ struct mlx5_dm {
 	 */
 	spinlock_t lock;
 	DECLARE_BITMAP(memic_alloc_pages, MLX5_MAX_MEMIC_PAGES);
+	unsigned long *steering_sw_icm_alloc_blocks;
+	unsigned long *header_modify_sw_icm_alloc_blocks;
 };
 
 struct mlx5_read_counters_attr {
@@ -1476,18 +1474,5 @@ int bfregn_to_uar_index(struct mlx5_ib_dev *dev,
 			bool dyn_bfreg);
 
 int mlx5_ib_qp_set_counter(struct ib_qp *qp, struct rdma_counter *counter);
-
-static inline bool mlx5_ib_can_use_umr(struct mlx5_ib_dev *dev,
-				       bool do_modify_atomic)
-{
-	if (MLX5_CAP_GEN(dev->mdev, umr_modify_entity_size_disabled))
-		return false;
-
-	if (do_modify_atomic &&
-	    MLX5_CAP_GEN(dev->mdev, atomic) &&
-	    MLX5_CAP_GEN(dev->mdev, umr_modify_atomic_disabled))
-		return false;
-
-	return true;
-}
+u16 mlx5_ib_get_counters_id(struct mlx5_ib_dev *dev, u8 port_num);
 #endif /* MLX5_IB_H */

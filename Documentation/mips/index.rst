@@ -1,17 +1,11 @@
 .. SPDX-License-Identifier: GPL-2.0
 
-=================
-MIPS architecture
-=================
+===========================
+MIPS-specific Documentation
+===========================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
+   :numbered:
 
-   au1xxx_ide
-
-.. only::  subproject and html
-
-   Indices
-   =======
-
-   * :ref:`genindex`
+   ingenic-tcu

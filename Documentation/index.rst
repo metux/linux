@@ -106,6 +106,8 @@ needed).
    hid/index
    i2c/index
    iio/index
+   isdn/index
+   infiniband/index
    leds/index
    media/index
    netlabel/index
@@ -125,6 +127,7 @@ needed).
    filesystems/index
    vm/index
    bpf/index
+   usb/index
    PCI/index
    misc-devices/index
    mic/index
@@ -147,7 +150,6 @@ implementation.
 .. toctree::
    :maxdepth: 2
 
-   x86/index
    sh/index
    arm/index
    arm64/index

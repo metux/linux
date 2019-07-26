@@ -44,7 +44,6 @@ struct mlx5_eswitch_rep_data {
 struct mlx5_eswitch_rep {
 	struct mlx5_eswitch_rep_data rep_data[NUM_REP_TYPES];
 	u16		       vport;
-	u8		       hw_id[ETH_ALEN];
 	u16		       vlan;
 	u32		       vlan_refcount;
 };

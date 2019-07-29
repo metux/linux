@@ -5932,7 +5932,20 @@ resource_size_t __weak pcibios_default_alignment(void)
 	return 0;
 }
 
-static char *resource_alignment_param;
+/*
+ * Arches that don't want to expose struct resource to userland as-is in
+ * sysfs and /proc can implement their own pci_resource_to_user().
+ */
+void __weak pci_resource_to_user(const struct pci_dev *dev, int bar,
+				 const struct resource *rsrc,
+				 resource_size_t *start, resource_size_t *end)
+{
+	*start = rsrc->start;
+	*end = rsrc->end;
+}
+
+#define RESOURCE_ALIGNMENT_PARAM_SIZE COMMAND_LINE_SIZE
+static char resource_alignment_param[RESOURCE_ALIGNMENT_PARAM_SIZE] = {0};
 static DEFINE_SPINLOCK(resource_alignment_lock);
 
 /**
@@ -5953,7 +5966,7 @@ static resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
 
 	spin_lock(&resource_alignment_lock);
 	p = resource_alignment_param;
-	if (!p || !*p)
+	if (!*p && !align)
 		goto out;
 	if (pci_has_flag(PCI_PROBE_ONLY)) {
 		align = 0;
@@ -6119,25 +6132,21 @@ void pci_reassigndev_resource_alignment(struct pci_dev *dev)
 
 static ssize_t pci_set_resource_alignment_param(const char *buf, size_t count)
 {
+	if (count > RESOURCE_ALIGNMENT_PARAM_SIZE - 1)
+		count = RESOURCE_ALIGNMENT_PARAM_SIZE - 1;
 	spin_lock(&resource_alignment_lock);
-
-	kfree(resource_alignment_param);
-	resource_alignment_param = kstrndup(buf, count, GFP_KERNEL);
-
+	strncpy(resource_alignment_param, buf, count);
+	resource_alignment_param[count] = '\0';
 	spin_unlock(&resource_alignment_lock);
-
-	return resource_alignment_param ? count : -ENOMEM;
+	return count;
 }
 
 static ssize_t pci_get_resource_alignment_param(char *buf, size_t size)
 {
-	size_t count = 0;
-
+	size_t count;
 	spin_lock(&resource_alignment_lock);
-	if (resource_alignment_param)
-		count = snprintf(buf, size, "%s", resource_alignment_param);
+	count = snprintf(buf, size, "%s", resource_alignment_param);
 	spin_unlock(&resource_alignment_lock);
-
 	return count;
 }
 
@@ -6278,7 +6287,8 @@ static int __init pci_setup(char *str)
 			} else if (!strncmp(str, "cbmemsize=", 10)) {
 				pci_cardbus_mem_size = memparse(str + 10, &str);
 			} else if (!strncmp(str, "resource_alignment=", 19)) {
-				resource_alignment_param = str + 19;
+				pci_set_resource_alignment_param(str + 19,
+							strlen(str + 19));
 			} else if (!strncmp(str, "ecrc=", 5)) {
 				pcie_ecrc_get_policy(str + 5);
 			} else if (!strncmp(str, "hpiosize=", 9)) {
@@ -6313,18 +6323,15 @@ static int __init pci_setup(char *str)
 early_param("pci", pci_setup);
 
 /*
- * 'resource_alignment_param' and 'disable_acs_redir_param' are initialized
- * in pci_setup(), above, to point to data in the __initdata section which
- * will be freed after the init sequence is complete. We can't allocate memory
- * in pci_setup() because some architectures do not have any memory allocation
- * service available during an early_param() call. So we allocate memory and
- * copy the variable here before the init section is freed.
- *
+ * 'disable_acs_redir_param' is initialized in pci_setup(), above, to point
+ * to data in the __initdata section which will be freed after the init
+ * sequence is complete. We can't allocate memory in pci_setup() because some
+ * architectures do not have any memory allocation service available during
+ * an early_param() call. So we allocate memory and copy the variable here
+ * before the init section is freed.
  */
 static int __init pci_realloc_setup_params(void)
 {
-	resource_alignment_param = kstrdup(resource_alignment_param,
-					   GFP_KERNEL);
 	disable_acs_redir_param = kstrdup(disable_acs_redir_param, GFP_KERNEL);
 
 	return 0;

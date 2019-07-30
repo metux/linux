@@ -1194,7 +1194,7 @@ static int igt_ctx_readonly(void *arg)
 		goto out_unlock;
 	}
 
-	vm = ctx->vm ?: &i915->mm.aliasing_ppgtt->vm;
+	vm = ctx->vm ?: &i915->ggtt.alias->vm;
 	if (!vm || !vm->has_read_only) {
 		err = 0;
 		goto out_unlock;

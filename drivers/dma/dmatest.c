@@ -72,6 +72,10 @@ static bool norandom;
 module_param(norandom, bool, 0644);
 MODULE_PARM_DESC(norandom, "Disable random offset setup (default: random)");
 
+static bool polled;
+module_param(polled, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(polled, "Use polling for completion instead of interrupts");
+
 static bool verbose;
 module_param(verbose, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(verbose, "Enable \"success\" result messages (default: off)");
@@ -110,6 +114,7 @@ struct dmatest_params {
 	bool		norandom;
 	int		alignment;
 	unsigned int	transfer_size;
+	bool		polled;
 };
 
 /**
@@ -651,7 +656,10 @@ static int dmatest_func(void *data)
 	/*
 	 * src and dst buffers are freed by ourselves below
 	 */
-	flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
+	if (params->polled)
+		flags = DMA_CTRL_ACK;
+	else
+		flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
 
 	ktime = ktime_get();
 	while (!kthread_should_stop()
@@ -727,9 +735,8 @@ static int dmatest_func(void *data)
 			ret = dma_mapping_error(dev->dev, um->addr[i]);
 			if (ret) {
 				result("src mapping error", total_tests,
-			       src->off, dst->off, len, ret);
-			failed_tests++;
-			continue;
+				       src->off, dst->off, len, ret);
+				goto error_unmap_continue;
 			}
 			um->to_cnt++;
 		}
@@ -745,9 +752,8 @@ static int dmatest_func(void *data)
 			ret = dma_mapping_error(dev->dev, dsts[i]);
 			if (ret) {
 				result("dst mapping error", total_tests,
-			       src->off, dst->off, len, ret);
-			failed_tests++;
-			continue;
+				       src->off, dst->off, len, ret);
+				goto error_unmap_continue;
 			}
 			um->bidi_cnt++;
 		}
@@ -774,32 +780,42 @@ static int dmatest_func(void *data)
 						     len, flags);
 		}
 
-if (!tx) {
-	dmaengine_unmap_put(um);
-	result("prep error", total_tests, src->off,
-	       dst->off, len, ret);
-	msleep(100);
-	goto error_unmap_continue;
-}
+		if (!tx) {
+			result("prep error", total_tests, src->off,
+			       dst->off, len, ret);
+			msleep(100);
+			goto error_unmap_continue;
+		}
 
 		done->done = false;
-		tx->callback = dmatest_callback;
-		tx->callback_param = done;
+		if (!params->polled) {
+			tx->callback = dmatest_callback;
+			tx->callback_param = done;
+		}
 		cookie = tx->tx_submit(tx);
 
-if (dma_submit_error(cookie)) {
-	dmaengine_unmap_put(um);
-	result("submit error", total_tests, src->off,
-	       dst->off, len, ret);
-	msleep(100);
-	goto error_unmap_continue;
-}
-		dma_async_issue_pending(chan);
+		if (dma_submit_error(cookie)) {
+			result("submit error", total_tests, src->off,
+			       dst->off, len, ret);
+			msleep(100);
+			goto error_unmap_continue;
+		}
 
-		wait_event_freezable_timeout(thread->done_wait, done->done,
-					     msecs_to_jiffies(params->timeout));
+		if (params->polled) {
+			status = dma_sync_wait(chan, cookie);
+			dmaengine_terminate_sync(chan);
+			if (status == DMA_COMPLETE)
+				done->done = true;
+		} else {
+			dma_async_issue_pending(chan);
 
-		status = dma_async_is_tx_complete(chan, cookie, NULL, NULL);
+			wait_event_freezable_timeout(thread->done_wait,
+					done->done,
+					msecs_to_jiffies(params->timeout));
+
+			status = dma_async_is_tx_complete(chan, cookie, NULL,
+							  NULL);
+		}
 
 		if (!done->done) {
 			result("test timed out", total_tests, src->off, dst->off,
@@ -808,10 +824,9 @@ if (dma_submit_error(cookie)) {
 		} else if (status != DMA_COMPLETE) {
 			result(status == DMA_ERROR ?
 			       "completion error status" :
-"completion busy status", total_tests, src->off,
-		       dst->off, len, ret);
-		failed_tests++;
-		continue;
+			       "completion busy status", total_tests, src->off,
+			       dst->off, len, ret);
+			goto error_unmap_continue;
 		}
 
 		dmaengine_unmap_put(um);
@@ -1070,6 +1085,7 @@ static void add_threaded_test(struct dmatest_info *info)
 	params->norandom = norandom;
 	params->alignment = alignment;
 	params->transfer_size = transfer_size;
+	params->polled = polled;
 
 	request_channels(info, DMA_MEMCPY);
 	request_channels(info, DMA_MEMSET);

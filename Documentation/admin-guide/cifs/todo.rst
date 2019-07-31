@@ -18,8 +18,7 @@ a) SMB3 (and SMB3.1.1) missing optional features:
    - T10 copy offload ie "ODX" (copy chunk, and "Duplicate Extents" ioctl
      currently the only two server side copy mechanisms supported)
 
-b) improved sparse file support (fiemap and SEEK_HOLE are implemented
-   but additional features would be supportable by the protocol).
+b) improved sparse file support
 
 c) Directory entry caching relies on a 1 second timer, rather than
    using Directory Leases, currently only the root file handle is cached longer
@@ -27,14 +26,10 @@ c) Directory entry caching relies on a 1 second timer, rather than
 d) quota support (needs minor kernel change since quota calls
    to make it to network filesystems or deviceless filesystems)
 
-e) Additional use cases can be optimized to use "compounding" (e.g.
-   open/query/close and open/setinfo/close) to reduce the number of
-   roundtrips to the server and improve performance. Various cases
-   (stat, statfs, create, unlink, mkdir) already have been improved by
-   using compounding but more can be done. In addition we could
-   significantly reduce redundant opens by using deferred close (with
-   handle caching leases) and better using reference counters on file
-   handles.
+e) Additional use cases where we use "compoounding" (e.g. open/query/close
+   and open/setinfo/close) to reduce the number of roundtrips, and also
+   open to reduce redundant opens (using deferred close and reference counts
+   more).
 
 f) Finish inotify support so kde and gnome file list windows
    will autorefresh (partially complete by Asser). Needs minor kernel
@@ -54,18 +49,18 @@ j) Create UID mapping facility so server UIDs can be mapped on a per
    exists. Also better integration with winbind for resolving SID owners
 
 k) Add tools to take advantage of more smb3 specific ioctls and features
-   (passthrough ioctl/fsctl is now implemented in cifs.ko to allow
-   sending various SMB3 fsctls and query info and set info calls
-   directly from user space) Add tools to make setting various non-POSIX
-   metadata attributes easier from tools (e.g. extending what was done
-   in smb-info tool).
+   (passthrough ioctl/fsctl for sending various SMB3 fsctls to the server
+   is in progress, and a passthrough query_info call is already implemented
+   in cifs.ko to allow smb3 info levels queries to be sent from userspace)
 
 l) encrypted file support
 
 m) improved stats gathering tools (perhaps integration with nfsometer?)
    to extend and make easier to use what is currently in /proc/fs/cifs/Stats
 
-n) Add support for claims based ACLs ("DAC")
+n) allow setting more NTFS/SMB3 file attributes remotely (currently limited to
+   compressed file attribute via chflags) and improve user space tools for
+   managing and viewing them.
 
 o) mount helper GUI (to simplify the various configuration options on mount)
 
@@ -92,8 +87,6 @@ v) POSIX Extensions for SMB3.1.1 (started, create and mkdir support added
 
 w) Add support for additional strong encryption types, and additional spnego
    authentication mechanisms (see MS-SMB2)
-
-x) Finish support for SMB3.1.1 compression
 
 Known Bugs
 ==========

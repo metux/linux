@@ -77,6 +77,7 @@ configure specific aspects of kernel behavior to your liking.
    blockdev/index
    ext4
    binderfs
+   cifs/index
    xfs
    jfs
    ufs
@@ -108,6 +109,7 @@ configure specific aspects of kernel behavior to your liking.
    pnp
    rtc
    svga
+   wimax/index
    video-output
 
 .. only::  subproject and html

@@ -825,8 +825,7 @@ err_vma:
 #define TEST_RESET	BIT(2)
 
 static int
-__sseu_prepare(struct drm_i915_private *i915,
-	       const char *name,
+__sseu_prepare(const char *name,
 	       unsigned int flags,
 	       struct intel_context *ce,
 	       struct igt_spinner **spin)
@@ -842,14 +841,11 @@ __sseu_prepare(struct drm_i915_private *i915,
 	if (!*spin)
 		return -ENOMEM;
 
-	ret = igt_spinner_init(*spin, i915);
+	ret = igt_spinner_init(*spin, ce->engine->gt);
 	if (ret)
 		goto err_free;
 
-	rq = igt_spinner_create_request(*spin,
-					ce->gem_context,
-					ce->engine,
-					MI_NOOP);
+	rq = igt_spinner_create_request(*spin, ce, MI_NOOP);
 	if (IS_ERR(rq)) {
 		ret = PTR_ERR(rq);
 		goto err_fini;
@@ -875,8 +871,7 @@ err_free:
 }
 
 static int
-__read_slice_count(struct drm_i915_private *i915,
-		   struct intel_context *ce,
+__read_slice_count(struct intel_context *ce,
 		   struct drm_i915_gem_object *obj,
 		   struct igt_spinner *spin,
 		   u32 *rpcs)
@@ -905,7 +900,7 @@ __read_slice_count(struct drm_i915_private *i915,
 		return ret;
 	}
 
-	if (INTEL_GEN(i915) >= 11) {
+	if (INTEL_GEN(ce->engine->i915) >= 11) {
 		s_mask = GEN11_RPCS_S_CNT_MASK;
 		s_shift = GEN11_RPCS_S_CNT_SHIFT;
 	} else {
@@ -948,8 +943,7 @@ __check_rpcs(const char *name, u32 rpcs, int slices, unsigned int expected,
 }
 
 static int
-__sseu_finish(struct drm_i915_private *i915,
-	      const char *name,
+__sseu_finish(const char *name,
 	      unsigned int flags,
 	      struct intel_context *ce,
 	      struct drm_i915_gem_object *obj,
@@ -966,14 +960,13 @@ __sseu_finish(struct drm_i915_private *i915,
 			goto out;
 	}
 
-	ret = __read_slice_count(i915, ce, obj,
+	ret = __read_slice_count(ce, obj,
 				 flags & TEST_RESET ? NULL : spin, &rpcs);
 	ret = __check_rpcs(name, rpcs, ret, expected, "Context", "!");
 	if (ret)
 		goto out;
 
-	ret = __read_slice_count(i915, ce->engine->kernel_context, obj,
-				 NULL, &rpcs);
+	ret = __read_slice_count(ce->engine->kernel_context, obj, NULL, &rpcs);
 	ret = __check_rpcs(name, rpcs, ret, slices, "Kernel context", "!");
 
 out:
@@ -981,11 +974,12 @@ out:
 		igt_spinner_end(spin);
 
 	if ((flags & TEST_IDLE) && ret == 0) {
-		ret = i915_gem_wait_for_idle(i915, 0, MAX_SCHEDULE_TIMEOUT);
+		ret = i915_gem_wait_for_idle(ce->engine->i915,
+					     0, MAX_SCHEDULE_TIMEOUT);
 		if (ret)
 			return ret;
 
-		ret = __read_slice_count(i915, ce, obj, NULL, &rpcs);
+		ret = __read_slice_count(ce, obj, NULL, &rpcs);
 		ret = __check_rpcs(name, rpcs, ret, expected,
 				   "Context", " after idle!");
 	}
@@ -994,8 +988,7 @@ out:
 }
 
 static int
-__sseu_test(struct drm_i915_private *i915,
-	    const char *name,
+__sseu_test(const char *name,
 	    unsigned int flags,
 	    struct intel_context *ce,
 	    struct drm_i915_gem_object *obj,
@@ -1004,7 +997,7 @@ __sseu_test(struct drm_i915_private *i915,
 	struct igt_spinner *spin = NULL;
 	int ret;
 
-	ret = __sseu_prepare(i915, name, flags, ce, &spin);
+	ret = __sseu_prepare(name, flags, ce, &spin);
 	if (ret)
 		return ret;
 
@@ -1012,7 +1005,7 @@ __sseu_test(struct drm_i915_private *i915,
 	if (ret)
 		goto out_spin;
 
-	ret = __sseu_finish(i915, name, flags, ce, obj,
+	ret = __sseu_finish(name, flags, ce, obj,
 			    hweight32(sseu.slice_mask), spin);
 
 out_spin:
@@ -1092,22 +1085,22 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 		goto out_context;
 
 	/* First set the default mask. */
-	ret = __sseu_test(i915, name, flags, ce, obj, engine->sseu);
+	ret = __sseu_test(name, flags, ce, obj, engine->sseu);
 	if (ret)
 		goto out_fail;
 
 	/* Then set a power-gated configuration. */
-	ret = __sseu_test(i915, name, flags, ce, obj, pg_sseu);
+	ret = __sseu_test(name, flags, ce, obj, pg_sseu);
 	if (ret)
 		goto out_fail;
 
 	/* Back to defaults. */
-	ret = __sseu_test(i915, name, flags, ce, obj, engine->sseu);
+	ret = __sseu_test(name, flags, ce, obj, engine->sseu);
 	if (ret)
 		goto out_fail;
 
 	/* One last power-gated configuration for the road. */
-	ret = __sseu_test(i915, name, flags, ce, obj, pg_sseu);
+	ret = __sseu_test(name, flags, ce, obj, pg_sseu);
 	if (ret)
 		goto out_fail;
 

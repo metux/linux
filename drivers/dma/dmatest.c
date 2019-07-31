@@ -772,9 +772,8 @@ static int dmatest_func(void *data)
 			ret = dma_mapping_error(dev->dev, um->addr[i]);
 			if (ret) {
 				result("src mapping error", total_tests,
-			       src->off, dst->off, len, ret);
-			failed_tests++;
-			continue;
+				       src->off, dst->off, len, ret);
+				goto error_unmap_continue;
 			}
 			um->to_cnt++;
 		}
@@ -790,9 +789,8 @@ static int dmatest_func(void *data)
 			ret = dma_mapping_error(dev->dev, dsts[i]);
 			if (ret) {
 				result("dst mapping error", total_tests,
-			       src->off, dst->off, len, ret);
-			failed_tests++;
-			continue;
+				       src->off, dst->off, len, ret);
+				goto error_unmap_continue;
 			}
 			um->bidi_cnt++;
 		}

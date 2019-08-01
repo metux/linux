@@ -964,11 +964,6 @@ static int acpi_s2idle_begin(void)
 
 static int acpi_s2idle_prepare(void)
 {
-	if (lps0_device_handle && !sleep_no_lps0) {
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SCREEN_OFF);
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_ENTRY);
-	}
-
 	if (acpi_sci_irq_valid())
 		enable_irq_wake(acpi_sci_irq);
 
@@ -982,11 +977,22 @@ static int acpi_s2idle_prepare(void)
 	return 0;
 }
 
-static void acpi_s2idle_wake(void)
+static int acpi_s2idle_prepare_late(void)
 {
-	if (lps0_device_handle && !sleep_no_lps0 && pm_debug_messages_on)
+	if (!lps0_device_handle || sleep_no_lps0)
+		return 0;
+
+	if (pm_debug_messages_on)
 		lpi_check_constraints();
 
+	acpi_sleep_run_lps0_dsm(ACPI_LPS0_SCREEN_OFF);
+	acpi_sleep_run_lps0_dsm(ACPI_LPS0_ENTRY);
+
+	return 0;
+}
+
+static void acpi_s2idle_wake(void)
+{
 	/*
 	 * If IRQD_WAKEUP_ARMED is set for the SCI at this point, the SCI has
 	 * not triggered while suspended, so bail out.
@@ -1021,6 +1027,15 @@ static void acpi_s2idle_wake(void)
 	rearm_wake_irq(acpi_sci_irq);
 }
 
+static void acpi_s2idle_restore_early(void)
+{
+	if (!lps0_device_handle || sleep_no_lps0)
+		return;
+
+	acpi_sleep_run_lps0_dsm(ACPI_LPS0_EXIT);
+	acpi_sleep_run_lps0_dsm(ACPI_LPS0_SCREEN_ON);
+}
+
 static void acpi_s2idle_restore(void)
 {
 	s2idle_wakeup = false;
@@ -1031,11 +1046,6 @@ static void acpi_s2idle_restore(void)
 
 	if (acpi_sci_irq_valid())
 		disable_irq_wake(acpi_sci_irq);
-
-	if (lps0_device_handle && !sleep_no_lps0) {
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_EXIT);
-		acpi_sleep_run_lps0_dsm(ACPI_LPS0_SCREEN_ON);
-	}
 }
 
 static void acpi_s2idle_end(void)
@@ -1046,7 +1056,9 @@ static void acpi_s2idle_end(void)
 static const struct platform_s2idle_ops acpi_s2idle_ops = {
 	.begin = acpi_s2idle_begin,
 	.prepare = acpi_s2idle_prepare,
+	.prepare_late = acpi_s2idle_prepare_late,
 	.wake = acpi_s2idle_wake,
+	.restore_early = acpi_s2idle_restore_early,
 	.restore = acpi_s2idle_restore,
 	.end = acpi_s2idle_end,
 };

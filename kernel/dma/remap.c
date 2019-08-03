@@ -11,21 +11,13 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
-struct page **dma_common_find_pages(void *cpu_addr)
-{
-	struct vm_struct *area = find_vm_area(cpu_addr);
-
-	if (!area || area->flags != VM_DMA_COHERENT)
-		return NULL;
-	return area->pages;
-}
-
 static struct vm_struct *__dma_common_pages_remap(struct page **pages,
-			size_t size, pgprot_t prot, const void *caller)
+			size_t size, unsigned long vm_flags, pgprot_t prot,
+			const void *caller)
 {
 	struct vm_struct *area;
 
-	area = get_vm_area_caller(size, VM_DMA_COHERENT, caller);
+	area = get_vm_area_caller(size, vm_flags, caller);
 	if (!area)
 		return NULL;
 
@@ -42,11 +34,12 @@ static struct vm_struct *__dma_common_pages_remap(struct page **pages,
  * Cannot be used in non-sleeping contexts
  */
 void *dma_common_pages_remap(struct page **pages, size_t size,
-			 pgprot_t prot, const void *caller)
+			unsigned long vm_flags, pgprot_t prot,
+			const void *caller)
 {
 	struct vm_struct *area;
 
-	area = __dma_common_pages_remap(pages, size, prot, caller);
+	area = __dma_common_pages_remap(pages, size, vm_flags, prot, caller);
 	if (!area)
 		return NULL;
 
@@ -60,6 +53,7 @@ void *dma_common_pages_remap(struct page **pages, size_t size,
  * Cannot be used in non-sleeping contexts
  */
 void *dma_common_contiguous_remap(struct page *page, size_t size,
+			unsigned long vm_flags,
 			pgprot_t prot, const void *caller)
 {
 	int i;
@@ -73,7 +67,7 @@ void *dma_common_contiguous_remap(struct page *page, size_t size,
 	for (i = 0; i < (size >> PAGE_SHIFT); i++)
 		pages[i] = nth_page(page, i);
 
-	area = __dma_common_pages_remap(pages, size, prot, caller);
+	area = __dma_common_pages_remap(pages, size, vm_flags, prot, caller);
 
 	kfree(pages);
 
@@ -85,11 +79,11 @@ void *dma_common_contiguous_remap(struct page *page, size_t size,
 /*
  * Unmaps a range previously mapped by dma_common_*_remap
  */
-void dma_common_free_remap(void *cpu_addr, size_t size)
+void dma_common_free_remap(void *cpu_addr, size_t size, unsigned long vm_flags)
 {
 	struct vm_struct *area = find_vm_area(cpu_addr);
 
-	if (!area || area->flags != VM_DMA_COHERENT) {
+	if (!area || (area->flags & vm_flags) != vm_flags) {
 		WARN(1, "trying to free invalid coherent area: %p\n", cpu_addr);
 		return;
 	}
@@ -142,7 +136,7 @@ static int __init dma_atomic_pool_init(void)
 	if (!atomic_pool)
 		goto free_page;
 
-	addr = dma_common_contiguous_remap(page, atomic_pool_size,
+	addr = dma_common_contiguous_remap(page, atomic_pool_size, VM_USERMAP,
 					   pgprot_dmacoherent(PAGE_KERNEL),
 					   __builtin_return_address(0));
 	if (!addr)
@@ -159,7 +153,7 @@ static int __init dma_atomic_pool_init(void)
 	return 0;
 
 remove_mapping:
-	dma_common_free_remap(addr, atomic_pool_size);
+	dma_common_free_remap(addr, atomic_pool_size, VM_USERMAP);
 destroy_genpool:
 	gen_pool_destroy(atomic_pool);
 	atomic_pool = NULL;
@@ -234,7 +228,7 @@ void *arch_dma_alloc(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	arch_dma_prep_coherent(page, size);
 
 	/* create a coherent mapping */
-	ret = dma_common_contiguous_remap(page, size,
+	ret = dma_common_contiguous_remap(page, size, VM_USERMAP,
 			dma_pgprot(dev, PAGE_KERNEL, attrs),
 			__builtin_return_address(0));
 	if (!ret) {

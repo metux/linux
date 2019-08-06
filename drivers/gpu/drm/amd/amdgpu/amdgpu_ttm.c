@@ -29,21 +29,26 @@
  *    Thomas Hellstrom <thomas-at-tungstengraphics-dot-com>
  *    Dave Airlie
  */
+
+#include <linux/dma-mapping.h>
+#include <linux/iommu.h>
+#include <linux/hmm.h>
+#include <linux/pagemap.h>
+#include <linux/sched/task.h>
+#include <linux/seq_file.h>
+#include <linux/slab.h>
+#include <linux/swap.h>
+#include <linux/swiotlb.h>
+
 #include <drm/ttm/ttm_bo_api.h>
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_module.h>
 #include <drm/ttm/ttm_page_alloc.h>
-#include <drm/drmP.h>
+
+#include <drm/drm_debugfs.h>
 #include <drm/amdgpu_drm.h>
-#include <linux/seq_file.h>
-#include <linux/slab.h>
-#include <linux/swiotlb.h>
-#include <linux/swap.h>
-#include <linux/pagemap.h>
-#include <linux/debugfs.h>
-#include <linux/iommu.h>
-#include <linux/hmm.h>
+
 #include "amdgpu.h"
 #include "amdgpu_object.h"
 #include "amdgpu_trace.h"
@@ -298,7 +303,7 @@ int amdgpu_ttm_copy_mem_to_mem(struct amdgpu_device *adev,
 			       struct amdgpu_copy_mem *src,
 			       struct amdgpu_copy_mem *dst,
 			       uint64_t size,
-			       struct dma_resv *resv,
+			       struct reservation_object *resv,
 			       struct dma_fence **f)
 {
 	struct amdgpu_ring *ring = adev->mman.buffer_funcs_ring;
@@ -435,25 +440,9 @@ static int amdgpu_move_blit(struct ttm_buffer_object *bo,
 
 	r = amdgpu_ttm_copy_mem_to_mem(adev, &src, &dst,
 				       new_mem->num_pages << PAGE_SHIFT,
-				       bo->base.resv, &fence);
+				       bo->resv, &fence);
 	if (r)
 		goto error;
-
-	/* clear the space being freed */
-	if (old_mem->mem_type == TTM_PL_VRAM &&
-	    (ttm_to_amdgpu_bo(bo)->flags &
-	     AMDGPU_GEM_CREATE_VRAM_WIPE_ON_RELEASE)) {
-		struct dma_fence *wipe_fence = NULL;
-
-		r = amdgpu_fill_buffer(ttm_to_amdgpu_bo(bo), AMDGPU_POISON,
-				       NULL, &wipe_fence);
-		if (r) {
-			goto error;
-		} else if (wipe_fence) {
-			dma_fence_put(fence);
-			fence = wipe_fence;
-		}
-	}
 
 	/* Always block for VM page tables before committing the new location */
 	if (bo->type == ttm_bo_type_kernel)
@@ -829,8 +818,11 @@ int amdgpu_ttm_tt_get_user_pages(struct amdgpu_bo *bo, struct page **pages)
 				0 : range->flags[HMM_PFN_WRITE];
 	range->pfn_flags_mask = 0;
 	range->pfns = pfns;
-	hmm_range_register(range, mm, start,
-			   start + ttm->num_pages * PAGE_SIZE, PAGE_SHIFT);
+	range->page_shift = PAGE_SHIFT;
+	range->start = start;
+	range->end = start + ttm->num_pages * PAGE_SIZE;
+
+	hmm_range_register(range, mirror);
 
 	/*
 	 * Just wait for range to be valid, safe to ignore return value as we
@@ -1471,7 +1463,7 @@ static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 {
 	unsigned long num_pages = bo->mem.num_pages;
 	struct drm_mm_node *node = bo->mem.mm_node;
-	struct dma_resv_list *flist;
+	struct reservation_object_list *flist;
 	struct dma_fence *f;
 	int i;
 
@@ -1479,18 +1471,18 @@ static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 	 * cleanly handle page faults.
 	 */
 	if (bo->type == ttm_bo_type_kernel &&
-	    !dma_resv_test_signaled_rcu(bo->base.resv, true))
+	    !reservation_object_test_signaled_rcu(bo->resv, true))
 		return false;
 
 	/* If bo is a KFD BO, check if the bo belongs to the current process.
 	 * If true, then return false as any KFD process needs all its BOs to
 	 * be resident to run successfully
 	 */
-	flist = dma_resv_get_list(bo->base.resv);
+	flist = reservation_object_get_list(bo->resv);
 	if (flist) {
 		for (i = 0; i < flist->shared_count; ++i) {
 			f = rcu_dereference_protected(flist->shared[i],
-				dma_resv_held(bo->base.resv));
+				reservation_object_held(bo->resv));
 			if (amdkfd_fence_check_mm(f, current->mm))
 				return false;
 		}
@@ -1600,7 +1592,6 @@ static struct ttm_bo_driver amdgpu_bo_driver = {
 	.move = &amdgpu_bo_move,
 	.verify_access = &amdgpu_verify_access,
 	.move_notify = &amdgpu_bo_move_notify,
-	.release_notify = &amdgpu_bo_release_notify,
 	.fault_reserve_notify = &amdgpu_bo_fault_reserve_notify,
 	.io_mem_reserve = &amdgpu_ttm_io_mem_reserve,
 	.io_mem_free = &amdgpu_ttm_io_mem_free,
@@ -1994,7 +1985,7 @@ error_free:
 
 int amdgpu_copy_buffer(struct amdgpu_ring *ring, uint64_t src_offset,
 		       uint64_t dst_offset, uint32_t byte_count,
-		       struct dma_resv *resv,
+		       struct reservation_object *resv,
 		       struct dma_fence **fence, bool direct_submit,
 		       bool vm_needs_flush)
 {
@@ -2068,7 +2059,7 @@ error_free:
 
 int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 		       uint32_t src_data,
-		       struct dma_resv *resv,
+		       struct reservation_object *resv,
 		       struct dma_fence **fence)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);

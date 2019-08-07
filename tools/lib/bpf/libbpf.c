@@ -20,7 +20,6 @@
 #include <inttypes.h>
 #include <string.h>
 #include <unistd.h>
-#include <endian.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <asm/unistd.h>
@@ -185,6 +184,7 @@ struct bpf_program {
 	bpf_program_clear_priv_t clear_priv;
 
 	enum bpf_attach_type expected_attach_type;
+	int btf_fd;
 	void *func_info;
 	__u32 func_info_rec_size;
 	__u32 func_info_cnt;
@@ -315,6 +315,7 @@ void bpf_program__unload(struct bpf_program *prog)
 	prog->instances.nr = -1;
 	zfree(&prog->instances.fds);
 
+	zclose(prog->btf_fd);
 	zfree(&prog->func_info);
 	zfree(&prog->line_info);
 }
@@ -393,6 +394,7 @@ bpf_program__init(void *data, size_t size, char *section_name, int idx,
 	prog->instances.fds = NULL;
 	prog->instances.nr = -1;
 	prog->type = BPF_PROG_TYPE_UNSPEC;
+	prog->btf_fd = -1;
 
 	return 0;
 errout:
@@ -613,10 +615,10 @@ errout:
 
 static int bpf_object__check_endianness(struct bpf_object *obj)
 {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	if (obj->efile.ehdr.e_ident[EI_DATA] == ELFDATA2LSB)
 		return 0;
-#elif __BYTE_ORDER == __BIG_ENDIAN
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	if (obj->efile.ehdr.e_ident[EI_DATA] == ELFDATA2MSB)
 		return 0;
 #else
@@ -1047,9 +1049,9 @@ static bool get_map_field_int(const char *map_name, const struct btf *btf,
 	const struct btf_array *arr_info;
 	const struct btf_type *arr_t;
 
-	if (BTF_INFO_KIND(t->info) != BTF_KIND_PTR) {
+	if (!btf_is_ptr(t)) {
 		pr_warning("map '%s': attr '%s': expected PTR, got %u.\n",
-			   map_name, name, BTF_INFO_KIND(t->info));
+			   map_name, name, btf_kind(t));
 		return false;
 	}
 
@@ -1059,12 +1061,12 @@ static bool get_map_field_int(const char *map_name, const struct btf *btf,
 			   map_name, name, t->type);
 		return false;
 	}
-	if (BTF_INFO_KIND(arr_t->info) != BTF_KIND_ARRAY) {
+	if (!btf_is_array(arr_t)) {
 		pr_warning("map '%s': attr '%s': expected ARRAY, got %u.\n",
-			   map_name, name, BTF_INFO_KIND(arr_t->info));
+			   map_name, name, btf_kind(arr_t));
 		return false;
 	}
-	arr_info = (const void *)(arr_t + 1);
+	arr_info = btf_array(arr_t);
 	*res = arr_info->nelems;
 	return true;
 }
@@ -1082,11 +1084,11 @@ static int bpf_object__init_user_btf_map(struct bpf_object *obj,
 	struct bpf_map *map;
 	int vlen, i;
 
-	vi = (const struct btf_var_secinfo *)(const void *)(sec + 1) + var_idx;
+	vi = btf_var_secinfos(sec) + var_idx;
 	var = btf__type_by_id(obj->btf, vi->type);
-	var_extra = (const void *)(var + 1);
+	var_extra = btf_var(var);
 	map_name = btf__name_by_offset(obj->btf, var->name_off);
-	vlen = BTF_INFO_VLEN(var->info);
+	vlen = btf_vlen(var);
 
 	if (map_name == NULL || map_name[0] == '\0') {
 		pr_warning("map #%d: empty name.\n", var_idx);
@@ -1096,9 +1098,9 @@ static int bpf_object__init_user_btf_map(struct bpf_object *obj,
 		pr_warning("map '%s' BTF data is corrupted.\n", map_name);
 		return -EINVAL;
 	}
-	if (BTF_INFO_KIND(var->info) != BTF_KIND_VAR) {
+	if (!btf_is_var(var)) {
 		pr_warning("map '%s': unexpected var kind %u.\n",
-			   map_name, BTF_INFO_KIND(var->info));
+			   map_name, btf_kind(var));
 		return -EINVAL;
 	}
 	if (var_extra->linkage != BTF_VAR_GLOBAL_ALLOCATED &&
@@ -1109,9 +1111,9 @@ static int bpf_object__init_user_btf_map(struct bpf_object *obj,
 	}
 
 	def = skip_mods_and_typedefs(obj->btf, var->type);
-	if (BTF_INFO_KIND(def->info) != BTF_KIND_STRUCT) {
+	if (!btf_is_struct(def)) {
 		pr_warning("map '%s': unexpected def kind %u.\n",
-			   map_name, BTF_INFO_KIND(var->info));
+			   map_name, btf_kind(var));
 		return -EINVAL;
 	}
 	if (def->size > vi->size) {
@@ -1134,8 +1136,8 @@ static int bpf_object__init_user_btf_map(struct bpf_object *obj,
 	pr_debug("map '%s': at sec_idx %d, offset %zu.\n",
 		 map_name, map->sec_idx, map->sec_offset);
 
-	vlen = BTF_INFO_VLEN(def->info);
-	m = (const void *)(def + 1);
+	vlen = btf_vlen(def);
+	m = btf_members(def);
 	for (i = 0; i < vlen; i++, m++) {
 		const char *name = btf__name_by_offset(obj->btf, m->name_off);
 
@@ -1185,9 +1187,9 @@ static int bpf_object__init_user_btf_map(struct bpf_object *obj,
 					   map_name, m->type);
 				return -EINVAL;
 			}
-			if (BTF_INFO_KIND(t->info) != BTF_KIND_PTR) {
+			if (!btf_is_ptr(t)) {
 				pr_warning("map '%s': key spec is not PTR: %u.\n",
-					   map_name, BTF_INFO_KIND(t->info));
+					   map_name, btf_kind(t));
 				return -EINVAL;
 			}
 			sz = btf__resolve_size(obj->btf, t->type);
@@ -1228,9 +1230,9 @@ static int bpf_object__init_user_btf_map(struct bpf_object *obj,
 					   map_name, m->type);
 				return -EINVAL;
 			}
-			if (BTF_INFO_KIND(t->info) != BTF_KIND_PTR) {
+			if (!btf_is_ptr(t)) {
 				pr_warning("map '%s': value spec is not PTR: %u.\n",
-					   map_name, BTF_INFO_KIND(t->info));
+					   map_name, btf_kind(t));
 				return -EINVAL;
 			}
 			sz = btf__resolve_size(obj->btf, t->type);
@@ -1291,7 +1293,7 @@ static int bpf_object__init_user_btf_maps(struct bpf_object *obj, bool strict)
 	nr_types = btf__get_nr_types(obj->btf);
 	for (i = 1; i <= nr_types; i++) {
 		t = btf__type_by_id(obj->btf, i);
-		if (BTF_INFO_KIND(t->info) != BTF_KIND_DATASEC)
+		if (!btf_is_datasec(t))
 			continue;
 		name = btf__name_by_offset(obj->btf, t->name_off);
 		if (strcmp(name, MAPS_ELF_SEC) == 0) {
@@ -1305,7 +1307,7 @@ static int bpf_object__init_user_btf_maps(struct bpf_object *obj, bool strict)
 		return -ENOENT;
 	}
 
-	vlen = BTF_INFO_VLEN(sec->info);
+	vlen = btf_vlen(sec);
 	for (i = 0; i < vlen; i++) {
 		err = bpf_object__init_user_btf_map(obj, sec, i,
 						    obj->efile.btf_maps_shndx,
@@ -1366,29 +1368,22 @@ static void bpf_object__sanitize_btf(struct bpf_object *obj)
 	struct btf *btf = obj->btf;
 	struct btf_type *t;
 	int i, j, vlen;
-	__u16 kind;
 
 	if (!obj->btf || (has_func && has_datasec))
 		return;
 
 	for (i = 1; i <= btf__get_nr_types(btf); i++) {
 		t = (struct btf_type *)btf__type_by_id(btf, i);
-		kind = BTF_INFO_KIND(t->info);
 
-		if (!has_datasec && kind == BTF_KIND_VAR) {
+		if (!has_datasec && btf_is_var(t)) {
 			/* replace VAR with INT */
 			t->info = BTF_INFO_ENC(BTF_KIND_INT, 0, 0);
-			/*
-			 * using size = 1 is the safest choice, 4 will be too
-			 * big and cause kernel BTF validation failure if
-			 * original variable took less than 4 bytes
-			 */
-			t->size = 1;
-			*(int *)(t+1) = BTF_INT_ENC(0, 0, 8);
-		} else if (!has_datasec && kind == BTF_KIND_DATASEC) {
+			t->size = sizeof(int);
+			*(int *)(t + 1) = BTF_INT_ENC(0, 0, 32);
+		} else if (!has_datasec && btf_is_datasec(t)) {
 			/* replace DATASEC with STRUCT */
-			struct btf_var_secinfo *v = (void *)(t + 1);
-			struct btf_member *m = (void *)(t + 1);
+			const struct btf_var_secinfo *v = btf_var_secinfos(t);
+			struct btf_member *m = btf_members(t);
 			struct btf_type *vt;
 			char *name;
 
@@ -1399,7 +1394,7 @@ static void bpf_object__sanitize_btf(struct bpf_object *obj)
 				name++;
 			}
 
-			vlen = BTF_INFO_VLEN(t->info);
+			vlen = btf_vlen(t);
 			t->info = BTF_INFO_ENC(BTF_KIND_STRUCT, 0, vlen);
 			for (j = 0; j < vlen; j++, v++, m++) {
 				/* order of field assignments is important */
@@ -1409,12 +1404,12 @@ static void bpf_object__sanitize_btf(struct bpf_object *obj)
 				vt = (void *)btf__type_by_id(btf, v->type);
 				m->name_off = vt->name_off;
 			}
-		} else if (!has_func && kind == BTF_KIND_FUNC_PROTO) {
+		} else if (!has_func && btf_is_func_proto(t)) {
 			/* replace FUNC_PROTO with ENUM */
-			vlen = BTF_INFO_VLEN(t->info);
+			vlen = btf_vlen(t);
 			t->info = BTF_INFO_ENC(BTF_KIND_ENUM, 0, vlen);
 			t->size = sizeof(__u32); /* kernel enforced */
-		} else if (!has_func && kind == BTF_KIND_FUNC) {
+		} else if (!has_func && btf_is_func(t)) {
 			/* replace FUNC with TYPEDEF */
 			t->info = BTF_INFO_ENC(BTF_KIND_TYPEDEF, 0, 0);
 		}
@@ -1506,12 +1501,6 @@ static int bpf_object__sanitize_and_load_btf(struct bpf_object *obj)
 			   BTF_ELF_SEC, err);
 		btf__free(obj->btf);
 		obj->btf = NULL;
-		/* btf_ext can't exist without btf, so free it as well */
-		if (obj->btf_ext) {
-			btf_ext__free(obj->btf_ext);
-			obj->btf_ext = NULL;
-		}
-
 		if (bpf_object__is_btf_mandatory(obj))
 			return err;
 	}
@@ -2295,6 +2284,9 @@ bpf_program_reloc_btf_ext(struct bpf_program *prog, struct bpf_object *obj,
 		prog->line_info_rec_size = btf_ext__line_info_rec_size(obj->btf_ext);
 	}
 
+	if (!insn_offset)
+		prog->btf_fd = btf__fd(obj->btf);
+
 	return 0;
 }
 
@@ -2467,7 +2459,7 @@ load_program(struct bpf_program *prog, struct bpf_insn *insns, int insns_cnt,
 	char *cp, errmsg[STRERR_BUFSIZE];
 	int log_buf_size = BPF_LOG_BUF_SIZE;
 	char *log_buf;
-	int btf_fd, ret;
+	int ret;
 
 	if (!insns || !insns_cnt)
 		return -EINVAL;
@@ -2482,12 +2474,7 @@ load_program(struct bpf_program *prog, struct bpf_insn *insns, int insns_cnt,
 	load_attr.license = license;
 	load_attr.kern_version = kern_version;
 	load_attr.prog_ifindex = prog->prog_ifindex;
-	/* if .BTF.ext was loaded, kernel supports associated BTF for prog */
-	if (prog->obj->btf_ext)
-		btf_fd = bpf_object__btf_fd(prog->obj);
-	else
-		btf_fd = -1;
-	load_attr.prog_btf_fd = btf_fd >= 0 ? btf_fd : 0;
+	load_attr.prog_btf_fd = prog->btf_fd >= 0 ? prog->btf_fd : 0;
 	load_attr.func_info = prog->func_info;
 	load_attr.func_info_rec_size = prog->func_info_rec_size;
 	load_attr.func_info_cnt = prog->func_info_cnt;
@@ -4528,13 +4515,13 @@ struct perf_buffer *perf_buffer__new(int map_fd, size_t page_cnt,
 				     const struct perf_buffer_opts *opts)
 {
 	struct perf_buffer_params p = {};
-	struct perf_event_attr attr = { 0, };
-
-	attr.config = PERF_COUNT_SW_BPF_OUTPUT,
-	attr.type = PERF_TYPE_SOFTWARE;
-	attr.sample_type = PERF_SAMPLE_RAW;
-	attr.sample_period = 1;
-	attr.wakeup_events = 1;
+	struct perf_event_attr attr = {
+		.config = PERF_COUNT_SW_BPF_OUTPUT,
+		.type = PERF_TYPE_SOFTWARE,
+		.sample_type = PERF_SAMPLE_RAW,
+		.sample_period = 1,
+		.wakeup_events = 1,
+	};
 
 	p.attr = &attr;
 	p.sample_cb = opts ? opts->sample_cb : NULL;
@@ -5009,15 +4996,13 @@ int libbpf_num_possible_cpus(void)
 	static const char *fcpu = "/sys/devices/system/cpu/possible";
 	int len = 0, n = 0, il = 0, ir = 0;
 	unsigned int start = 0, end = 0;
-	int tmp_cpus = 0;
 	static int cpus;
 	char buf[128];
 	int error = 0;
 	int fd = -1;
 
-	tmp_cpus = READ_ONCE(cpus);
-	if (tmp_cpus > 0)
-		return tmp_cpus;
+	if (cpus > 0)
+		return cpus;
 
 	fd = open(fcpu, O_RDONLY);
 	if (fd < 0) {
@@ -5040,7 +5025,7 @@ int libbpf_num_possible_cpus(void)
 	}
 	buf[len] = '\0';
 
-	for (ir = 0, tmp_cpus = 0; ir <= len; ir++) {
+	for (ir = 0, cpus = 0; ir <= len; ir++) {
 		/* Each sub string separated by ',' has format \d+-\d+ or \d+ */
 		if (buf[ir] == ',' || buf[ir] == '\0') {
 			buf[ir] = '\0';
@@ -5052,15 +5037,13 @@ int libbpf_num_possible_cpus(void)
 			} else if (n == 1) {
 				end = start;
 			}
-			tmp_cpus += end - start + 1;
+			cpus += end - start + 1;
 			il = ir + 1;
 		}
 	}
-	if (tmp_cpus <= 0) {
-		pr_warning("Invalid #CPUs %d from %s\n", tmp_cpus, fcpu);
+	if (cpus <= 0) {
+		pr_warning("Invalid #CPUs %d from %s\n", cpus, fcpu);
 		return -EINVAL;
 	}
-
-	WRITE_ONCE(cpus, tmp_cpus);
-	return tmp_cpus;
+	return cpus;
 }

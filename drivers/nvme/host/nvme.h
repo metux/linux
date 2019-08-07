@@ -96,9 +96,14 @@ enum nvme_quirks {
 	NVME_QUIRK_DISABLE_WRITE_ZEROES		= (1 << 9),
 
 	/*
-	 * Force simple suspend/resume path.
+	 * Use only one interrupt vector for all queues
 	 */
-	NVME_QUIRK_SIMPLE_SUSPEND		= (1 << 10),
+	NVME_QUIRK_SINGLE_VECTOR		= (1 << 10),
+
+	/*
+	 * Use non-standard 128 bytes SQEs.
+	 */
+	NVME_QUIRK_128_BYTES_SQES		= (1 << 11),
 };
 
 /*
@@ -497,9 +502,6 @@ static inline bool nvme_ctrl_use_ana(struct nvme_ctrl *ctrl)
 	return ctrl->ana_log_buf != NULL;
 }
 
-void nvme_mpath_unfreeze(struct nvme_subsystem *subsys);
-void nvme_mpath_wait_freeze(struct nvme_subsystem *subsys);
-void nvme_mpath_start_freeze(struct nvme_subsystem *subsys);
 void nvme_set_disk_name(char *disk_name, struct nvme_ns *ns,
 			struct nvme_ctrl *ctrl, int *flags);
 void nvme_failover_req(struct request *req);
@@ -510,8 +512,7 @@ void nvme_mpath_remove_disk(struct nvme_ns_head *head);
 int nvme_mpath_init(struct nvme_ctrl *ctrl, struct nvme_id_ctrl *id);
 void nvme_mpath_uninit(struct nvme_ctrl *ctrl);
 void nvme_mpath_stop(struct nvme_ctrl *ctrl);
-bool nvme_mpath_clear_current_path(struct nvme_ns *ns);
-void nvme_mpath_clear_ctrl_paths(struct nvme_ctrl *ctrl);
+void nvme_mpath_clear_current_path(struct nvme_ns *ns);
 struct nvme_ns *nvme_find_path(struct nvme_ns_head *head);
 
 static inline void nvme_mpath_check_last_path(struct nvme_ns *ns)
@@ -569,11 +570,7 @@ static inline void nvme_mpath_add_disk(struct nvme_ns *ns,
 static inline void nvme_mpath_remove_disk(struct nvme_ns_head *head)
 {
 }
-static inline bool nvme_mpath_clear_current_path(struct nvme_ns *ns)
-{
-	return false;
-}
-static inline void nvme_mpath_clear_ctrl_paths(struct nvme_ctrl *ctrl)
+static inline void nvme_mpath_clear_current_path(struct nvme_ns *ns)
 {
 }
 static inline void nvme_mpath_check_last_path(struct nvme_ns *ns)
@@ -595,15 +592,6 @@ static inline void nvme_mpath_uninit(struct nvme_ctrl *ctrl)
 {
 }
 static inline void nvme_mpath_stop(struct nvme_ctrl *ctrl)
-{
-}
-static inline void nvme_mpath_unfreeze(struct nvme_subsystem *subsys)
-{
-}
-static inline void nvme_mpath_wait_freeze(struct nvme_subsystem *subsys)
-{
-}
-static inline void nvme_mpath_start_freeze(struct nvme_subsystem *subsys)
 {
 }
 #endif /* CONFIG_NVME_MULTIPATH */

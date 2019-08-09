@@ -49,6 +49,7 @@ struct intel_context {
 
 	struct i915_vma *state;
 	struct intel_ring *ring;
+	struct intel_timeline *timeline;
 
 	u32 *lrc_reg_state;
 	u64 lrc_desc;

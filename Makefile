@@ -1654,6 +1654,10 @@ $(clean-dirs):
 
 clean: rm-files := $(KBUILD_EXTMOD)/Module.symvers
 
+PHONY += /
+/:
+	@echo >&2 '"$(MAKE) /" is no longer supported. Please use "$(MAKE) ./" instead.'
+
 PHONY += help
 help:
 	@echo  '  Building external modules.'
@@ -1789,11 +1793,6 @@ endif
 	$(Q)$(MAKE) $(build)=$(build-dir) $(build-target:.ko=.mod)
 	$(Q)echo $(build-target) > $(MODORDER)
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost
-
-# Modules
-PHONY += /
-/: ./
-
 %/: prepare FORCE
 	$(Q)$(MAKE) KBUILD_MODULES=1 $(build)=$(build-dir) need-modorder=1
 

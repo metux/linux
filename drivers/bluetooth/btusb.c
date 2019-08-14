@@ -384,9 +384,6 @@ static const struct usb_device_id blacklist_table[] = {
 	{ USB_DEVICE(0x13d3, 0x3526), .driver_info = BTUSB_REALTEK },
 	{ USB_DEVICE(0x0b05, 0x185c), .driver_info = BTUSB_REALTEK },
 
-	/* Additional Realtek 8822CE Bluetooth devices */
-	{ USB_DEVICE(0x04ca, 0x4005), .driver_info = BTUSB_REALTEK },
-
 	/* Silicon Wave based devices */
 	{ USB_DEVICE(0x0c10, 0x0000), .driver_info = BTUSB_SWAVE },
 
@@ -525,36 +522,6 @@ static void btusb_intel_cmd_timeout(struct hci_dev *hdev)
 	gpiod_set_value_cansleep(reset_gpio, 1);
 	msleep(100);
 	gpiod_set_value_cansleep(reset_gpio, 0);
-}
-
-static void btusb_rtl_cmd_timeout(struct hci_dev *hdev)
-{
-	struct btusb_data *data = hci_get_drvdata(hdev);
-	struct gpio_desc *reset_gpio = data->reset_gpio;
-
-	if (++data->cmd_timeout_cnt < 5)
-		return;
-
-	if (!reset_gpio) {
-		bt_dev_err(hdev, "No gpio to reset Realtek device, ignoring");
-		return;
-	}
-
-	/* Toggle the hard reset line. The Realtek device is going to
-	 * yank itself off the USB and then replug. The cleanup is handled
-	 * correctly on the way out (standard USB disconnect), and the new
-	 * device is detected cleanly and bound to the driver again like
-	 * it should be.
-	 */
-	if (test_and_set_bit(BTUSB_HW_RESET_ACTIVE, &data->flags)) {
-		bt_dev_err(hdev, "last reset failed? Not resetting again");
-		return;
-	}
-
-	bt_dev_err(hdev, "Reset Realtek device via gpio");
-	gpiod_set_value_cansleep(reset_gpio, 0);
-	msleep(200);
-	gpiod_set_value_cansleep(reset_gpio, 1);
 }
 
 static inline void btusb_free_frags(struct btusb_data *data)
@@ -1204,6 +1171,10 @@ static int btusb_open(struct hci_dev *hdev)
 	}
 
 	data->intf->needs_remote_wakeup = 1;
+	/* device specific wakeup source enabled and required for USB
+	 * remote wakeup while host is suspended
+	 */
+	device_wakeup_enable(&data->udev->dev);
 
 	/* Disable device remote wakeup when host is suspended
 	 * For Realtek chips, global suspend without
@@ -1280,6 +1251,7 @@ static int btusb_close(struct hci_dev *hdev)
 	if (test_bit(BTUSB_WAKEUP_DISABLE, &data->flags))
 		data->intf->needs_remote_wakeup = 1;
 
+	device_wakeup_disable(&data->udev->dev);
 	usb_autopm_put_interface(data->intf);
 
 failed:
@@ -3811,7 +3783,6 @@ static int btusb_probe(struct usb_interface *intf,
 	if (id->driver_info & BTUSB_REALTEK) {
 		hdev->setup = btrtl_setup_realtek;
 		hdev->shutdown = btrtl_shutdown_realtek;
-		hdev->cmd_timeout = btusb_rtl_cmd_timeout;
 
 		/* Realtek devices lose their updated firmware over global
 		 * suspend that means host doesn't send SET_FEATURE

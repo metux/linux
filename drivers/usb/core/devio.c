@@ -1658,7 +1658,8 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 	if (as->usbm)
 		num_sgs = 0;
 
-	u += sizeof(struct async) + sizeof(struct urb) + uurb->buffer_length +
+	u += sizeof(struct async) + sizeof(struct urb) +
+	     (as->usbm ? 0 : uurb->buffer_length) +
 	     num_sgs * sizeof(struct scatterlist);
 	ret = usbfs_increase_memory_usage(u);
 	if (ret)

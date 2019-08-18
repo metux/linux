@@ -129,7 +129,6 @@ enum dspi_trans_mode {
 struct fsl_dspi_devtype_data {
 	enum dspi_trans_mode	trans_mode;
 	u8			max_clock_factor;
-	bool			ptp_sts_supported;
 	bool			xspi_mode;
 };
 
@@ -141,14 +140,12 @@ static const struct fsl_dspi_devtype_data vf610_data = {
 static const struct fsl_dspi_devtype_data ls1021a_v1_data = {
 	.trans_mode		= DSPI_TCFQ_MODE,
 	.max_clock_factor	= 8,
-	.ptp_sts_supported	= true,
 	.xspi_mode		= true,
 };
 
 static const struct fsl_dspi_devtype_data ls2085a_data = {
 	.trans_mode		= DSPI_TCFQ_MODE,
 	.max_clock_factor	= 8,
-	.ptp_sts_supported	= true,
 };
 
 static const struct fsl_dspi_devtype_data coldfire_data = {
@@ -185,7 +182,6 @@ struct fsl_dspi {
 	struct spi_transfer			*cur_transfer;
 	struct spi_message			*cur_msg;
 	struct chip_data			*cur_chip;
-	size_t					progress;
 	size_t					len;
 	const void				*tx;
 	void					*rx;
@@ -396,17 +392,17 @@ static int dspi_request_dma(struct fsl_dspi *dspi, phys_addr_t phy_addr)
 	if (!dma)
 		return -ENOMEM;
 
-	dma->chan_rx = dma_request_chan(dev, "rx");
-	if (IS_ERR(dma->chan_rx)) {
+	dma->chan_rx = dma_request_slave_channel(dev, "rx");
+	if (!dma->chan_rx) {
 		dev_err(dev, "rx dma channel not available\n");
-		ret = PTR_ERR(dma->chan_rx);
+		ret = -ENODEV;
 		return ret;
 	}
 
-	dma->chan_tx = dma_request_chan(dev, "tx");
-	if (IS_ERR(dma->chan_tx)) {
+	dma->chan_tx = dma_request_slave_channel(dev, "tx");
+	if (!dma->chan_tx) {
 		dev_err(dev, "tx dma channel not available\n");
-		ret = PTR_ERR(dma->chan_tx);
+		ret = -ENODEV;
 		goto err_tx_channel;
 	}
 
@@ -587,14 +583,21 @@ static void dspi_tcfq_write(struct fsl_dspi *dspi)
 	dspi->tx_cmd |= SPI_PUSHR_CMD_CTCNT;
 
 	if (dspi->devtype_data->xspi_mode && dspi->bits_per_word > 16) {
-		/* Write the CMD FIFO entry first, and then the two
-		 * corresponding TX FIFO entries.
+		/* Write two TX FIFO entries first, and then the corresponding
+		 * CMD FIFO entry.
 		 */
 		u32 data = dspi_pop_tx(dspi);
 
+		if (dspi->cur_chip->ctar_val & SPI_CTAR_LSBFE) {
+			/* LSB */
+			tx_fifo_write(dspi, data & 0xFFFF);
+			tx_fifo_write(dspi, data >> 16);
+		} else {
+			/* MSB */
+			tx_fifo_write(dspi, data >> 16);
+			tx_fifo_write(dspi, data & 0xFFFF);
+		}
 		cmd_fifo_write(dspi);
-		tx_fifo_write(dspi, data & 0xFFFF);
-		tx_fifo_write(dspi, data >> 16);
 	} else {
 		/* Write one entry to both TX FIFO and CMD FIFO
 		 * simultaneously.
@@ -644,79 +647,58 @@ static void dspi_eoq_read(struct fsl_dspi *dspi)
 		dspi_push_rx(dspi, fifo_read(dspi));
 }
 
-static int dspi_rxtx(struct fsl_dspi *dspi)
-{
-	struct spi_message *msg = dspi->cur_msg;
-	enum dspi_trans_mode trans_mode;
-	u16 spi_tcnt;
-	u32 spi_tcr;
-
-	spi_take_timestamp_post(dspi->ctlr, dspi->cur_transfer,
-				dspi->progress, !dspi->irq);
-
-	/* Get transfer counter (in number of SPI transfers). It was
-	 * reset to 0 when transfer(s) were started.
-	 */
-	regmap_read(dspi->regmap, SPI_TCR, &spi_tcr);
-	spi_tcnt = SPI_TCR_GET_TCNT(spi_tcr);
-	/* Update total number of bytes that were transferred */
-	msg->actual_length += spi_tcnt * dspi->bytes_per_word;
-	dspi->progress += spi_tcnt;
-
-	trans_mode = dspi->devtype_data->trans_mode;
-	if (trans_mode == DSPI_EOQ_MODE)
-		dspi_eoq_read(dspi);
-	else if (trans_mode == DSPI_TCFQ_MODE)
-		dspi_tcfq_read(dspi);
-
-	if (!dspi->len)
-		/* Success! */
-		return 0;
-
-	spi_take_timestamp_pre(dspi->ctlr, dspi->cur_transfer,
-			       dspi->progress, !dspi->irq);
-
-	if (trans_mode == DSPI_EOQ_MODE)
-		dspi_eoq_write(dspi);
-	else if (trans_mode == DSPI_TCFQ_MODE)
-		dspi_tcfq_write(dspi);
-
-	return -EINPROGRESS;
-}
-
-static int dspi_poll(struct fsl_dspi *dspi)
-{
-	int tries = 1000;
-	u32 spi_sr;
-
-	do {
-		regmap_read(dspi->regmap, SPI_SR, &spi_sr);
-		regmap_write(dspi->regmap, SPI_SR, spi_sr);
-
-		if (spi_sr & (SPI_SR_EOQF | SPI_SR_TCFQF))
-			break;
-	} while (--tries);
-
-	if (!tries)
-		return -ETIMEDOUT;
-
-	return dspi_rxtx(dspi);
-}
-
 static irqreturn_t dspi_interrupt(int irq, void *dev_id)
 {
 	struct fsl_dspi *dspi = (struct fsl_dspi *)dev_id;
-	u32 spi_sr;
+	struct spi_message *msg = dspi->cur_msg;
+	enum dspi_trans_mode trans_mode;
+	u32 spi_sr, spi_tcr;
+	u16 spi_tcnt;
 
 	regmap_read(dspi->regmap, SPI_SR, &spi_sr);
 	regmap_write(dspi->regmap, SPI_SR, spi_sr);
 
-	if (!(spi_sr & SPI_SR_EOQF))
-		return IRQ_NONE;
 
-	if (dspi_rxtx(dspi) == 0) {
-		dspi->waitflags = 1;
-		wake_up_interruptible(&dspi->waitq);
+	if (spi_sr & (SPI_SR_EOQF | SPI_SR_TCFQF)) {
+		/* Get transfer counter (in number of SPI transfers). It was
+		 * reset to 0 when transfer(s) were started.
+		 */
+		regmap_read(dspi->regmap, SPI_TCR, &spi_tcr);
+		spi_tcnt = SPI_TCR_GET_TCNT(spi_tcr);
+		/* Update total number of bytes that were transferred */
+		msg->actual_length += spi_tcnt * dspi->bytes_per_word;
+
+		trans_mode = dspi->devtype_data->trans_mode;
+		switch (trans_mode) {
+		case DSPI_EOQ_MODE:
+			dspi_eoq_read(dspi);
+			break;
+		case DSPI_TCFQ_MODE:
+			dspi_tcfq_read(dspi);
+			break;
+		default:
+			dev_err(&dspi->pdev->dev, "unsupported trans_mode %u\n",
+				trans_mode);
+				return IRQ_HANDLED;
+		}
+
+		if (!dspi->len) {
+			dspi->waitflags = 1;
+			wake_up_interruptible(&dspi->waitq);
+		} else {
+			switch (trans_mode) {
+			case DSPI_EOQ_MODE:
+				dspi_eoq_write(dspi);
+				break;
+			case DSPI_TCFQ_MODE:
+				dspi_tcfq_write(dspi);
+				break;
+			default:
+				dev_err(&dspi->pdev->dev,
+					"unsupported trans_mode %u\n",
+					trans_mode);
+			}
+		}
 	}
 
 	return IRQ_HANDLED;
@@ -763,7 +745,6 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 		dspi->rx = transfer->rx_buf;
 		dspi->rx_end = dspi->rx + transfer->len;
 		dspi->len = transfer->len;
-		dspi->progress = 0;
 		/* Validated transfer specific frame size (defaults applied) */
 		dspi->bits_per_word = transfer->bits_per_word;
 		if (transfer->bits_per_word <= 8)
@@ -783,9 +764,6 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 			regmap_write(dspi->regmap, SPI_CTARE(0),
 				     SPI_FRAME_EBITS(transfer->bits_per_word) |
 				     SPI_CTARE_DTCP(1));
-
-		spi_take_timestamp_pre(dspi->ctlr, dspi->cur_transfer,
-				       dspi->progress, !dspi->irq);
 
 		trans_mode = dspi->devtype_data->trans_mode;
 		switch (trans_mode) {
@@ -810,20 +788,16 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 			goto out;
 		}
 
-		if (!dspi->irq) {
-			do {
-				status = dspi_poll(dspi);
-			} while (status == -EINPROGRESS);
-		} else if (trans_mode != DSPI_DMA_MODE) {
-			status = wait_event_interruptible(dspi->waitq,
-							  dspi->waitflags);
+		if (trans_mode != DSPI_DMA_MODE) {
+			if (wait_event_interruptible(dspi->waitq,
+						     dspi->waitflags))
+				dev_err(&dspi->pdev->dev,
+					"wait transfer complete fail!\n");
 			dspi->waitflags = 0;
 		}
-		if (status)
-			dev_err(&dspi->pdev->dev,
-				"Waiting for transfer to complete failed!\n");
 
-		spi_transfer_delay_exec(transfer);
+		if (transfer->delay_usecs)
+			udelay(transfer->delay_usecs);
 	}
 
 out:
@@ -1013,25 +987,6 @@ static void dspi_init(struct fsl_dspi *dspi)
 			     SPI_CTARE_FMSZE(0) | SPI_CTARE_DTCP(1));
 }
 
-static int dspi_slave_abort(struct spi_master *master)
-{
-	struct fsl_dspi *dspi = spi_master_get_devdata(master);
-
-	/*
-	 * Terminate all pending DMA transactions for the SPI working
-	 * in SLAVE mode.
-	 */
-	dmaengine_terminate_sync(dspi->dma->chan_rx);
-	dmaengine_terminate_sync(dspi->dma->chan_tx);
-
-	/* Clear the internal DSPI RX and TX FIFO buffers */
-	regmap_update_bits(dspi->regmap, SPI_MCR,
-			   SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF,
-			   SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF);
-
-	return 0;
-}
-
 static int dspi_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1056,7 +1011,6 @@ static int dspi_probe(struct platform_device *pdev)
 	ctlr->dev.of_node = pdev->dev.of_node;
 
 	ctlr->cleanup = dspi_cleanup;
-	ctlr->slave_abort = dspi_slave_abort;
 	ctlr->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
 
 	pdata = dev_get_platdata(&pdev->dev);
@@ -1140,16 +1094,10 @@ static int dspi_probe(struct platform_device *pdev)
 		goto out_ctlr_put;
 
 	dspi_init(dspi);
-
-	if (dspi->devtype_data->trans_mode == DSPI_TCFQ_MODE)
-		goto poll_mode;
-
 	dspi->irq = platform_get_irq(pdev, 0);
-	if (dspi->irq <= 0) {
-		dev_info(&pdev->dev,
-			 "can't get platform irq, using poll mode\n");
-		dspi->irq = 0;
-		goto poll_mode;
+	if (dspi->irq < 0) {
+		ret = dspi->irq;
+		goto out_clk_put;
 	}
 
 	ret = devm_request_irq(&pdev->dev, dspi->irq, dspi_interrupt,
@@ -1158,10 +1106,6 @@ static int dspi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Unable to attach DSPI interrupt\n");
 		goto out_clk_put;
 	}
-
-	init_waitqueue_head(&dspi->waitq);
-
-poll_mode:
 
 	if (dspi->devtype_data->trans_mode == DSPI_DMA_MODE) {
 		ret = dspi_request_dma(dspi, res->start);
@@ -1174,8 +1118,7 @@ poll_mode:
 	ctlr->max_speed_hz =
 		clk_get_rate(dspi->clk) / dspi->devtype_data->max_clock_factor;
 
-	ctlr->ptp_sts_supported = dspi->devtype_data->ptp_sts_supported;
-
+	init_waitqueue_head(&dspi->waitq);
 	platform_set_drvdata(pdev, ctlr);
 
 	ret = spi_register_controller(ctlr);

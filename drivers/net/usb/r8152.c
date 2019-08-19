@@ -445,18 +445,18 @@
 #define UPS_FLAGS_250M_CKDIV		BIT(2)
 #define UPS_FLAGS_EN_ALDPS		BIT(3)
 #define UPS_FLAGS_CTAP_SHORT_DIS	BIT(4)
+#define UPS_FLAGS_SPEED_MASK		(0xf << 16)
 #define ups_flags_speed(x)		((x) << 16)
 #define UPS_FLAGS_EN_EEE		BIT(20)
 #define UPS_FLAGS_EN_500M_EEE		BIT(21)
 #define UPS_FLAGS_EN_EEE_CKDIV		BIT(22)
-#define UPS_FLAGS_EEE_PLLOFF_100	BIT(23)
 #define UPS_FLAGS_EEE_PLLOFF_GIGA	BIT(24)
 #define UPS_FLAGS_EEE_CMOD_LV_EN	BIT(25)
 #define UPS_FLAGS_EN_GREEN		BIT(26)
 #define UPS_FLAGS_EN_FLOW_CTR		BIT(27)
 
 enum spd_duplex {
-	NWAY_10M_HALF,
+	NWAY_10M_HALF = 1,
 	NWAY_10M_FULL,
 	NWAY_100M_HALF,
 	NWAY_100M_FULL,
@@ -749,39 +749,19 @@ struct r8152 {
 		void (*autosuspend_en)(struct r8152 *tp, bool enable);
 	} rtl_ops;
 
-	struct ups_info {
-		u32 _10m_ckdiv:1;
-		u32 _250m_ckdiv:1;
-		u32 aldps:1;
-		u32 lite_mode:2;
-		u32 speed_duplex:4;
-		u32 eee:1;
-		u32 eee_lite:1;
-		u32 eee_ckdiv:1;
-		u32 eee_plloff_100:1;
-		u32 eee_plloff_giga:1;
-		u32 eee_cmod_lv:1;
-		u32 green:1;
-		u32 flow_control:1;
-		u32 ctap_short_off:1;
-	} ups_info;
-
 	atomic_t rx_count;
 
-	bool eee_en;
 	int intr_interval;
 	u32 saved_wolopts;
 	u32 msg_enable;
 	u32 tx_qlen;
 	u32 coalesce;
-	u32 advertising;
 	u32 rx_buf_sz;
 	u32 rx_copybreak;
 	u32 rx_pending;
 
 	u16 ocp_base;
 	u16 speed;
-	u16 eee_adv;
 	u8 *intr_buff;
 	u8 version;
 	u8 duplex;
@@ -808,13 +788,6 @@ enum tx_csum_stat {
 	TX_CSUM_NONE
 };
 
-#define RTL_ADVERTISED_10_HALF			BIT(0)
-#define RTL_ADVERTISED_10_FULL			BIT(1)
-#define RTL_ADVERTISED_100_HALF			BIT(2)
-#define RTL_ADVERTISED_100_FULL			BIT(3)
-#define RTL_ADVERTISED_1000_HALF		BIT(4)
-#define RTL_ADVERTISED_1000_FULL		BIT(5)
-
 /* Maximum number of multicast addresses to filter (vs. Rx-all-multicast).
  * The RTL chips use a 64 element hash table based on the Ethernet CRC.
  */
@@ -837,11 +810,8 @@ int get_registers(struct r8152 *tp, u16 value, u16 index, u16 size, void *data)
 	ret = usb_control_msg(tp->udev, usb_rcvctrlpipe(tp->udev, 0),
 			      RTL8152_REQ_GET_REGS, RTL8152_REQT_READ,
 			      value, index, tmp, size, 500);
-	if (ret < 0)
-		memset(data, 0xff, size);
-	else
-		memcpy(data, tmp, size);
 
+	memcpy(data, tmp, size);
 	kfree(tmp);
 
 	return ret;
@@ -2882,76 +2852,14 @@ static void r8153_u2p3en(struct r8152 *tp, bool enable)
 	ocp_write_word(tp, MCU_TYPE_USB, USB_U2P3_CTRL, ocp_data);
 }
 
-static void r8153b_ups_flags(struct r8152 *tp)
+static void r8153b_ups_flags_w1w0(struct r8152 *tp, u32 set, u32 clear)
 {
-	u32 ups_flags = 0;
+	u32 ocp_data;
 
-	if (tp->ups_info.green)
-		ups_flags |= UPS_FLAGS_EN_GREEN;
-
-	if (tp->ups_info.aldps)
-		ups_flags |= UPS_FLAGS_EN_ALDPS;
-
-	if (tp->ups_info.eee)
-		ups_flags |= UPS_FLAGS_EN_EEE;
-
-	if (tp->ups_info.flow_control)
-		ups_flags |= UPS_FLAGS_EN_FLOW_CTR;
-
-	if (tp->ups_info.eee_ckdiv)
-		ups_flags |= UPS_FLAGS_EN_EEE_CKDIV;
-
-	if (tp->ups_info.eee_cmod_lv)
-		ups_flags |= UPS_FLAGS_EEE_CMOD_LV_EN;
-
-	if (tp->ups_info._10m_ckdiv)
-		ups_flags |= UPS_FLAGS_EN_10M_CKDIV;
-
-	if (tp->ups_info.eee_plloff_100)
-		ups_flags |= UPS_FLAGS_EEE_PLLOFF_100;
-
-	if (tp->ups_info.eee_plloff_giga)
-		ups_flags |= UPS_FLAGS_EEE_PLLOFF_GIGA;
-
-	if (tp->ups_info._250m_ckdiv)
-		ups_flags |= UPS_FLAGS_250M_CKDIV;
-
-	if (tp->ups_info.ctap_short_off)
-		ups_flags |= UPS_FLAGS_CTAP_SHORT_DIS;
-
-	switch (tp->ups_info.speed_duplex) {
-	case NWAY_10M_HALF:
-		ups_flags |= ups_flags_speed(1);
-		break;
-	case NWAY_10M_FULL:
-		ups_flags |= ups_flags_speed(2);
-		break;
-	case NWAY_100M_HALF:
-		ups_flags |= ups_flags_speed(3);
-		break;
-	case NWAY_100M_FULL:
-		ups_flags |= ups_flags_speed(4);
-		break;
-	case NWAY_1000M_FULL:
-		ups_flags |= ups_flags_speed(5);
-		break;
-	case FORCE_10M_HALF:
-		ups_flags |= ups_flags_speed(6);
-		break;
-	case FORCE_10M_FULL:
-		ups_flags |= ups_flags_speed(7);
-		break;
-	case FORCE_100M_HALF:
-		ups_flags |= ups_flags_speed(8);
-		break;
-	case FORCE_100M_FULL:
-		ups_flags |= ups_flags_speed(9);
-		break;
-	default:
-		break;
-	}
-
-	ocp_write_dword(tp, MCU_TYPE_USB, USB_UPS_FLAGS, ups_flags);
+	ocp_data = ocp_read_dword(tp, MCU_TYPE_USB, USB_UPS_FLAGS);
+	ocp_data &= ~clear;
+	ocp_data |= set;
+	ocp_write_dword(tp, MCU_TYPE_USB, USB_UPS_FLAGS, ocp_data);
 }
 
 static void r8153b_green_en(struct r8152 *tp, bool enable)
@@ -2972,7 +2880,7 @@ static void r8153b_green_en(struct r8152 *tp, bool enable)
 	data |= GREEN_ETH_EN;
 	sram_write(tp, SRAM_GREEN_CFG, data);
 
-	tp->ups_info.green = enable;
+	r8153b_ups_flags_w1w0(tp, UPS_FLAGS_EN_GREEN, 0);
 }
 
 static u16 r8153_phy_status(struct r8152 *tp, u16 desired)
@@ -3002,8 +2910,6 @@ static void r8153b_ups_en(struct r8152 *tp, bool enable)
 	u32 ocp_data = ocp_read_byte(tp, MCU_TYPE_USB, USB_POWER_CUT);
 
 	if (enable) {
-		r8153b_ups_flags(tp);
-
 		ocp_data |= UPS_EN | USP_PREWAKE | PHASE2_EN;
 		ocp_write_byte(tp, MCU_TYPE_USB, USB_POWER_CUT, ocp_data);
 
@@ -3294,60 +3200,10 @@ static void r8152_eee_en(struct r8152 *tp, bool enable)
 	ocp_reg_write(tp, OCP_EEE_CONFIG3, config3);
 }
 
-static void r8153_eee_en(struct r8152 *tp, bool enable)
+static void r8152b_enable_eee(struct r8152 *tp)
 {
-	u32 ocp_data;
-	u16 config;
-
-	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_EEE_CR);
-	config = ocp_reg_read(tp, OCP_EEE_CFG);
-
-	if (enable) {
-		ocp_data |= EEE_RX_EN | EEE_TX_EN;
-		config |= EEE10_EN;
-	} else {
-		ocp_data &= ~(EEE_RX_EN | EEE_TX_EN);
-		config &= ~EEE10_EN;
-	}
-
-	ocp_write_word(tp, MCU_TYPE_PLA, PLA_EEE_CR, ocp_data);
-	ocp_reg_write(tp, OCP_EEE_CFG, config);
-
-	tp->ups_info.eee = enable;
-}
-
-static void rtl_eee_enable(struct r8152 *tp, bool enable)
-{
-	switch (tp->version) {
-	case RTL_VER_01:
-	case RTL_VER_02:
-	case RTL_VER_07:
-		if (enable) {
-			r8152_eee_en(tp, true);
-			r8152_mmd_write(tp, MDIO_MMD_AN, MDIO_AN_EEE_ADV,
-					tp->eee_adv);
-		} else {
-			r8152_eee_en(tp, false);
-			r8152_mmd_write(tp, MDIO_MMD_AN, MDIO_AN_EEE_ADV, 0);
-		}
-		break;
-	case RTL_VER_03:
-	case RTL_VER_04:
-	case RTL_VER_05:
-	case RTL_VER_06:
-	case RTL_VER_08:
-	case RTL_VER_09:
-		if (enable) {
-			r8153_eee_en(tp, true);
-			ocp_reg_write(tp, OCP_EEE_ADV, tp->eee_adv);
-		} else {
-			r8153_eee_en(tp, false);
-			ocp_reg_write(tp, OCP_EEE_ADV, 0);
-		}
-		break;
-	default:
-		break;
-	}
+	r8152_eee_en(tp, true);
+	r8152_mmd_write(tp, MDIO_MMD_AN, MDIO_AN_EEE_ADV, MDIO_EEE_100TX);
 }
 
 static void r8152b_enable_fc(struct r8152 *tp)
@@ -3357,8 +3213,6 @@ static void r8152b_enable_fc(struct r8152 *tp)
 	anar = r8152_mdio_read(tp, MII_ADVERTISE);
 	anar |= ADVERTISE_PAUSE_CAP | ADVERTISE_PAUSE_ASYM;
 	r8152_mdio_write(tp, MII_ADVERTISE, anar);
-
-	tp->ups_info.flow_control = true;
 }
 
 static void rtl8152_disable(struct r8152 *tp)
@@ -3370,7 +3224,7 @@ static void rtl8152_disable(struct r8152 *tp)
 
 static void r8152b_hw_phy_cfg(struct r8152 *tp)
 {
-	rtl_eee_enable(tp, tp->eee_en);
+	r8152b_enable_eee(tp);
 	r8152_aldps_en(tp, true);
 	r8152b_enable_fc(tp);
 
@@ -3552,8 +3406,52 @@ static void r8153_aldps_en(struct r8152 *tp, bool enable)
 				break;
 		}
 	}
+}
 
-	tp->ups_info.aldps = enable;
+static void r8153b_aldps_en(struct r8152 *tp, bool enable)
+{
+	r8153_aldps_en(tp, enable);
+
+	if (enable)
+		r8153b_ups_flags_w1w0(tp, UPS_FLAGS_EN_ALDPS, 0);
+	else
+		r8153b_ups_flags_w1w0(tp, 0, UPS_FLAGS_EN_ALDPS);
+}
+
+static void r8153_eee_en(struct r8152 *tp, bool enable)
+{
+	u32 ocp_data;
+	u16 config;
+
+	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_EEE_CR);
+	config = ocp_reg_read(tp, OCP_EEE_CFG);
+
+	if (enable) {
+		ocp_data |= EEE_RX_EN | EEE_TX_EN;
+		config |= EEE10_EN;
+	} else {
+		ocp_data &= ~(EEE_RX_EN | EEE_TX_EN);
+		config &= ~EEE10_EN;
+	}
+
+	ocp_write_word(tp, MCU_TYPE_PLA, PLA_EEE_CR, ocp_data);
+	ocp_reg_write(tp, OCP_EEE_CFG, config);
+}
+
+static void r8153b_eee_en(struct r8152 *tp, bool enable)
+{
+	r8153_eee_en(tp, enable);
+
+	if (enable)
+		r8153b_ups_flags_w1w0(tp, UPS_FLAGS_EN_EEE, 0);
+	else
+		r8153b_ups_flags_w1w0(tp, 0, UPS_FLAGS_EN_EEE);
+}
+
+static void r8153b_enable_fc(struct r8152 *tp)
+{
+	r8152b_enable_fc(tp);
+	r8153b_ups_flags_w1w0(tp, UPS_FLAGS_EN_FLOW_CTR, 0);
 }
 
 static void r8153_hw_phy_cfg(struct r8152 *tp)
@@ -3565,7 +3463,8 @@ static void r8153_hw_phy_cfg(struct r8152 *tp)
 	r8153_aldps_en(tp, false);
 
 	/* disable EEE before updating the PHY parameters */
-	rtl_eee_enable(tp, false);
+	r8153_eee_en(tp, false);
+	ocp_reg_write(tp, OCP_EEE_ADV, 0);
 
 	if (tp->version == RTL_VER_03) {
 		data = ocp_reg_read(tp, OCP_EEE_CFG);
@@ -3596,8 +3495,8 @@ static void r8153_hw_phy_cfg(struct r8152 *tp)
 	sram_write(tp, SRAM_10M_AMP1, 0x00af);
 	sram_write(tp, SRAM_10M_AMP2, 0x0208);
 
-	if (tp->eee_en)
-		rtl_eee_enable(tp, true);
+	r8153_eee_en(tp, true);
+	ocp_reg_write(tp, OCP_EEE_ADV, MDIO_EEE_1000T | MDIO_EEE_100TX);
 
 	r8153_aldps_en(tp, true);
 	r8152b_enable_fc(tp);
@@ -3630,14 +3529,15 @@ static u32 r8152_efuse_read(struct r8152 *tp, u8 addr)
 
 static void r8153b_hw_phy_cfg(struct r8152 *tp)
 {
-	u32 ocp_data;
+	u32 ocp_data, ups_flags = 0;
 	u16 data;
 
 	/* disable ALDPS before updating the PHY parameters */
-	r8153_aldps_en(tp, false);
+	r8153b_aldps_en(tp, false);
 
 	/* disable EEE before updating the PHY parameters */
-	rtl_eee_enable(tp, false);
+	r8153b_eee_en(tp, false);
+	ocp_reg_write(tp, OCP_EEE_ADV, 0);
 
 	r8153b_green_en(tp, test_bit(GREEN_ETHERNET, &tp->flags));
 
@@ -3682,27 +3582,28 @@ static void r8153b_hw_phy_cfg(struct r8152 *tp)
 		data = ocp_reg_read(tp, OCP_POWER_CFG);
 		data |= EEE_CLKDIV_EN;
 		ocp_reg_write(tp, OCP_POWER_CFG, data);
-		tp->ups_info.eee_ckdiv = true;
 
 		data = ocp_reg_read(tp, OCP_DOWN_SPEED);
 		data |= EN_EEE_CMODE | EN_EEE_1000 | EN_10M_CLKDIV;
 		ocp_reg_write(tp, OCP_DOWN_SPEED, data);
-		tp->ups_info.eee_cmod_lv = true;
-		tp->ups_info._10m_ckdiv = true;
-		tp->ups_info.eee_plloff_giga = true;
 
 		ocp_reg_write(tp, OCP_SYSCLK_CFG, 0);
 		ocp_reg_write(tp, OCP_SYSCLK_CFG, clk_div_expo(5));
-		tp->ups_info._250m_ckdiv = true;
+
+		ups_flags |= UPS_FLAGS_EN_10M_CKDIV | UPS_FLAGS_250M_CKDIV |
+			     UPS_FLAGS_EN_EEE_CKDIV | UPS_FLAGS_EEE_CMOD_LV_EN |
+			     UPS_FLAGS_EEE_PLLOFF_GIGA;
 
 		r8153_patch_request(tp, false);
 	}
 
-	if (tp->eee_en)
-		rtl_eee_enable(tp, true);
+	r8153b_ups_flags_w1w0(tp, ups_flags, 0);
 
-	r8153_aldps_en(tp, true);
-	r8152b_enable_fc(tp);
+	r8153b_eee_en(tp, true);
+	ocp_reg_write(tp, OCP_EEE_ADV, MDIO_EEE_1000T | MDIO_EEE_100TX);
+
+	r8153b_aldps_en(tp, true);
+	r8153b_enable_fc(tp);
 	r8153_u2p3en(tp, true);
 
 	set_bit(PHY_RESET, &tp->flags);
@@ -3853,117 +3754,110 @@ static void rtl8153_disable(struct r8152 *tp)
 	r8153_aldps_en(tp, true);
 }
 
-static int rtl8152_set_speed(struct r8152 *tp, u8 autoneg, u32 speed, u8 duplex,
-			     u32 advertising)
+static void rtl8153b_disable(struct r8152 *tp)
 {
-	u16 bmcr;
+	r8153b_aldps_en(tp, false);
+	rtl_disable(tp);
+	rtl_reset_bmu(tp);
+	r8153b_aldps_en(tp, true);
+}
+
+static int rtl8152_set_speed(struct r8152 *tp, u8 autoneg, u16 speed, u8 duplex)
+{
+	u16 bmcr, anar, gbcr;
+	enum spd_duplex speed_duplex;
 	int ret = 0;
 
-	if (autoneg == AUTONEG_DISABLE) {
-		if (duplex != DUPLEX_HALF && duplex != DUPLEX_FULL)
-			return -EINVAL;
+	anar = r8152_mdio_read(tp, MII_ADVERTISE);
+	anar &= ~(ADVERTISE_10HALF | ADVERTISE_10FULL |
+		  ADVERTISE_100HALF | ADVERTISE_100FULL);
+	if (tp->mii.supports_gmii) {
+		gbcr = r8152_mdio_read(tp, MII_CTRL1000);
+		gbcr &= ~(ADVERTISE_1000FULL | ADVERTISE_1000HALF);
+	} else {
+		gbcr = 0;
+	}
 
-		switch (speed) {
-		case SPEED_10:
-			bmcr = BMCR_SPEED10;
-			if (duplex == DUPLEX_FULL) {
-				bmcr |= BMCR_FULLDPLX;
-				tp->ups_info.speed_duplex = FORCE_10M_FULL;
-			} else {
-				tp->ups_info.speed_duplex = FORCE_10M_HALF;
-			}
-			break;
-		case SPEED_100:
+	if (autoneg == AUTONEG_DISABLE) {
+		if (speed == SPEED_10) {
+			bmcr = 0;
+			anar |= ADVERTISE_10HALF | ADVERTISE_10FULL;
+			speed_duplex = FORCE_10M_HALF;
+		} else if (speed == SPEED_100) {
 			bmcr = BMCR_SPEED100;
-			if (duplex == DUPLEX_FULL) {
-				bmcr |= BMCR_FULLDPLX;
-				tp->ups_info.speed_duplex = FORCE_100M_FULL;
-			} else {
-				tp->ups_info.speed_duplex = FORCE_100M_HALF;
-			}
-			break;
-		case SPEED_1000:
-			if (tp->mii.supports_gmii) {
-				bmcr = BMCR_SPEED1000 | BMCR_FULLDPLX;
-				tp->ups_info.speed_duplex = NWAY_1000M_FULL;
-				break;
-			}
-			/* fall through */
-		default:
+			anar |= ADVERTISE_100HALF | ADVERTISE_100FULL;
+			speed_duplex = FORCE_100M_HALF;
+		} else if (speed == SPEED_1000 && tp->mii.supports_gmii) {
+			bmcr = BMCR_SPEED1000;
+			gbcr |= ADVERTISE_1000FULL | ADVERTISE_1000HALF;
+			speed_duplex = NWAY_1000M_FULL;
+		} else {
 			ret = -EINVAL;
 			goto out;
 		}
 
-		if (duplex == DUPLEX_FULL)
-			tp->mii.full_duplex = 1;
-		else
-			tp->mii.full_duplex = 0;
-
-		tp->mii.force_media = 1;
+		if (duplex == DUPLEX_FULL) {
+			bmcr |= BMCR_FULLDPLX;
+			if (speed != SPEED_1000)
+				speed_duplex++;
+		}
 	} else {
-		u16 anar, tmp1;
-		u32 support;
-
-		support = RTL_ADVERTISED_10_HALF | RTL_ADVERTISED_10_FULL |
-			  RTL_ADVERTISED_100_HALF | RTL_ADVERTISED_100_FULL;
-
-		if (tp->mii.supports_gmii)
-			support |= RTL_ADVERTISED_1000_FULL;
-
-		if (!(advertising & support))
-			return -EINVAL;
-
-		anar = r8152_mdio_read(tp, MII_ADVERTISE);
-		tmp1 = anar & ~(ADVERTISE_10HALF | ADVERTISE_10FULL |
-				ADVERTISE_100HALF | ADVERTISE_100FULL);
-		if (advertising & RTL_ADVERTISED_10_HALF) {
-			tmp1 |= ADVERTISE_10HALF;
-			tp->ups_info.speed_duplex = NWAY_10M_HALF;
-		}
-		if (advertising & RTL_ADVERTISED_10_FULL) {
-			tmp1 |= ADVERTISE_10FULL;
-			tp->ups_info.speed_duplex = NWAY_10M_FULL;
-		}
-
-		if (advertising & RTL_ADVERTISED_100_HALF) {
-			tmp1 |= ADVERTISE_100HALF;
-			tp->ups_info.speed_duplex = NWAY_100M_HALF;
-		}
-		if (advertising & RTL_ADVERTISED_100_FULL) {
-			tmp1 |= ADVERTISE_100FULL;
-			tp->ups_info.speed_duplex = NWAY_100M_FULL;
-		}
-
-		if (anar != tmp1) {
-			r8152_mdio_write(tp, MII_ADVERTISE, tmp1);
-			tp->mii.advertising = tmp1;
-		}
-
-		if (tp->mii.supports_gmii) {
-			u16 gbcr;
-
-			gbcr = r8152_mdio_read(tp, MII_CTRL1000);
-			tmp1 = gbcr & ~(ADVERTISE_1000FULL |
-					ADVERTISE_1000HALF);
-
-			if (advertising & RTL_ADVERTISED_1000_FULL) {
-				tmp1 |= ADVERTISE_1000FULL;
-				tp->ups_info.speed_duplex = NWAY_1000M_FULL;
+		if (speed == SPEED_10) {
+			if (duplex == DUPLEX_FULL) {
+				anar |= ADVERTISE_10HALF | ADVERTISE_10FULL;
+				speed_duplex = NWAY_10M_FULL;
+			} else {
+				anar |= ADVERTISE_10HALF;
+				speed_duplex = NWAY_10M_HALF;
 			}
-
-			if (gbcr != tmp1)
-				r8152_mdio_write(tp, MII_CTRL1000, tmp1);
+		} else if (speed == SPEED_100) {
+			if (duplex == DUPLEX_FULL) {
+				anar |= ADVERTISE_10HALF | ADVERTISE_10FULL;
+				anar |= ADVERTISE_100HALF | ADVERTISE_100FULL;
+				speed_duplex = NWAY_100M_FULL;
+			} else {
+				anar |= ADVERTISE_10HALF;
+				anar |= ADVERTISE_100HALF;
+				speed_duplex = NWAY_100M_HALF;
+			}
+		} else if (speed == SPEED_1000 && tp->mii.supports_gmii) {
+			if (duplex == DUPLEX_FULL) {
+				anar |= ADVERTISE_10HALF | ADVERTISE_10FULL;
+				anar |= ADVERTISE_100HALF | ADVERTISE_100FULL;
+				gbcr |= ADVERTISE_1000FULL | ADVERTISE_1000HALF;
+			} else {
+				anar |= ADVERTISE_10HALF;
+				anar |= ADVERTISE_100HALF;
+				gbcr |= ADVERTISE_1000HALF;
+			}
+			speed_duplex = NWAY_1000M_FULL;
+		} else {
+			ret = -EINVAL;
+			goto out;
 		}
 
 		bmcr = BMCR_ANENABLE | BMCR_ANRESTART;
-
-		tp->mii.force_media = 0;
 	}
 
 	if (test_and_clear_bit(PHY_RESET, &tp->flags))
 		bmcr |= BMCR_RESET;
 
+	if (tp->mii.supports_gmii)
+		r8152_mdio_write(tp, MII_CTRL1000, gbcr);
+
+	r8152_mdio_write(tp, MII_ADVERTISE, anar);
 	r8152_mdio_write(tp, MII_BMCR, bmcr);
+
+	switch (tp->version) {
+	case RTL_VER_08:
+	case RTL_VER_09:
+		r8153b_ups_flags_w1w0(tp, ups_flags_speed(speed_duplex),
+				      UPS_FLAGS_SPEED_MASK);
+		break;
+
+	default:
+		break;
+	}
 
 	if (bmcr & BMCR_RESET) {
 		int i;
@@ -4049,12 +3943,12 @@ static void rtl8153b_up(struct r8152 *tp)
 
 	r8153b_u1u2en(tp, false);
 	r8153_u2p3en(tp, false);
-	r8153_aldps_en(tp, false);
+	r8153b_aldps_en(tp, false);
 
 	r8153_first_init(tp);
 	ocp_write_dword(tp, MCU_TYPE_USB, USB_RX_BUF_TH, RX_THR_B);
 
-	r8153_aldps_en(tp, true);
+	r8153b_aldps_en(tp, true);
 	r8153_u2p3en(tp, true);
 	r8153b_u1u2en(tp, true);
 }
@@ -4069,9 +3963,9 @@ static void rtl8153b_down(struct r8152 *tp)
 	r8153b_u1u2en(tp, false);
 	r8153_u2p3en(tp, false);
 	r8153b_power_cut_en(tp, false);
-	r8153_aldps_en(tp, false);
+	r8153b_aldps_en(tp, false);
 	r8153_enter_oob(tp);
-	r8153_aldps_en(tp, true);
+	r8153b_aldps_en(tp, true);
 }
 
 static bool rtl8152_in_nway(struct r8152 *tp)
@@ -4189,8 +4083,7 @@ static void rtl_hw_phy_work_func_t(struct work_struct *work)
 
 	tp->rtl_ops.hw_phy_cfg(tp);
 
-	rtl8152_set_speed(tp, tp->autoneg, tp->speed, tp->duplex,
-			  tp->advertising);
+	rtl8152_set_speed(tp, tp->autoneg, tp->speed, tp->duplex);
 
 	mutex_unlock(&tp->control);
 
@@ -4283,10 +4176,11 @@ static int rtl8152_close(struct net_device *netdev)
 	unregister_pm_notifier(&tp->pm_notifier);
 #endif
 	tasklet_disable(&tp->tx_tl);
+	if (!test_bit(RTL8152_UNPLUG, &tp->flags))
+		napi_disable(&tp->napi);
 	clear_bit(WORK_ENABLE, &tp->flags);
 	usb_kill_urb(tp->intr_urb);
 	cancel_delayed_work_sync(&tp->schedule);
-	napi_disable(&tp->napi);
 	netif_stop_queue(netdev);
 
 	res = usb_autopm_get_interface(tp->intf);
@@ -4552,10 +4446,10 @@ static int rtl8152_pre_reset(struct usb_interface *intf)
 
 	netif_stop_queue(netdev);
 	tasklet_disable(&tp->tx_tl);
+	napi_disable(&tp->napi);
 	clear_bit(WORK_ENABLE, &tp->flags);
 	usb_kill_urb(tp->intr_urb);
 	cancel_delayed_work_sync(&tp->schedule);
-	napi_disable(&tp->napi);
 	if (netif_carrier_ok(netdev)) {
 		mutex_lock(&tp->control);
 		tp->rtl_ops.disable(tp);
@@ -4673,7 +4567,7 @@ static int rtl8152_system_resume(struct r8152 *tp)
 
 	netif_device_attach(netdev);
 
-	if (netif_running(netdev) && (netdev->flags & IFF_UP)) {
+	if (netif_running(netdev) && netdev->flags & IFF_UP) {
 		tp->rtl_ops.up(tp);
 		netif_carrier_off(netdev);
 		set_bit(WORK_ENABLE, &tp->flags);
@@ -4799,9 +4693,10 @@ static int rtl8152_reset_resume(struct usb_interface *intf)
 	struct r8152 *tp = usb_get_intfdata(intf);
 
 	clear_bit(SELECTIVE_SUSPEND, &tp->flags);
+	mutex_lock(&tp->control);
 	tp->rtl_ops.init(tp);
 	queue_delayed_work(system_long_wq, &tp->hw_phy_work, 0);
-	set_ethernet_addr(tp);
+	mutex_unlock(&tp->control);
 	return rtl8152_resume(intf);
 }
 
@@ -4907,46 +4802,20 @@ static int rtl8152_set_link_ksettings(struct net_device *dev,
 				      const struct ethtool_link_ksettings *cmd)
 {
 	struct r8152 *tp = netdev_priv(dev);
-	u32 advertising = 0;
 	int ret;
 
 	ret = usb_autopm_get_interface(tp->intf);
 	if (ret < 0)
 		goto out;
 
-	if (test_bit(ETHTOOL_LINK_MODE_10baseT_Half_BIT,
-		     cmd->link_modes.advertising))
-		advertising |= RTL_ADVERTISED_10_HALF;
-
-	if (test_bit(ETHTOOL_LINK_MODE_10baseT_Full_BIT,
-		     cmd->link_modes.advertising))
-		advertising |= RTL_ADVERTISED_10_FULL;
-
-	if (test_bit(ETHTOOL_LINK_MODE_100baseT_Half_BIT,
-		     cmd->link_modes.advertising))
-		advertising |= RTL_ADVERTISED_100_HALF;
-
-	if (test_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT,
-		     cmd->link_modes.advertising))
-		advertising |= RTL_ADVERTISED_100_FULL;
-
-	if (test_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
-		     cmd->link_modes.advertising))
-		advertising |= RTL_ADVERTISED_1000_HALF;
-
-	if (test_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
-		     cmd->link_modes.advertising))
-		advertising |= RTL_ADVERTISED_1000_FULL;
-
 	mutex_lock(&tp->control);
 
 	ret = rtl8152_set_speed(tp, cmd->base.autoneg, cmd->base.speed,
-				cmd->base.duplex, advertising);
+				cmd->base.duplex);
 	if (!ret) {
 		tp->autoneg = cmd->base.autoneg;
 		tp->speed = cmd->base.speed;
 		tp->duplex = cmd->base.duplex;
-		tp->advertising = advertising;
 	}
 
 	mutex_unlock(&tp->control);
@@ -5022,7 +4891,7 @@ static void rtl8152_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 
 static int r8152_get_eee(struct r8152 *tp, struct ethtool_eee *eee)
 {
-	u32 lp, adv, supported = 0;
+	u32 ocp_data, lp, adv, supported = 0;
 	u16 val;
 
 	val = r8152_mmd_read(tp, MDIO_MMD_PCS, MDIO_PCS_EEE_ABLE);
@@ -5034,10 +4903,13 @@ static int r8152_get_eee(struct r8152 *tp, struct ethtool_eee *eee)
 	val = r8152_mmd_read(tp, MDIO_MMD_AN, MDIO_AN_EEE_LPABLE);
 	lp = mmd_eee_adv_to_ethtool_adv_t(val);
 
-	eee->eee_enabled = tp->eee_en;
+	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_EEE_CR);
+	ocp_data &= EEE_RX_EN | EEE_TX_EN;
+
+	eee->eee_enabled = !!ocp_data;
 	eee->eee_active = !!(supported & adv & lp);
 	eee->supported = supported;
-	eee->advertised = tp->eee_adv;
+	eee->advertised = adv;
 	eee->lp_advertised = lp;
 
 	return 0;
@@ -5047,17 +4919,19 @@ static int r8152_set_eee(struct r8152 *tp, struct ethtool_eee *eee)
 {
 	u16 val = ethtool_adv_to_mmd_eee_adv_t(eee->advertised);
 
-	tp->eee_en = eee->eee_enabled;
-	tp->eee_adv = val;
+	r8152_eee_en(tp, eee->eee_enabled);
 
-	rtl_eee_enable(tp, tp->eee_en);
+	if (!eee->eee_enabled)
+		val = 0;
+
+	r8152_mmd_write(tp, MDIO_MMD_AN, MDIO_AN_EEE_ADV, val);
 
 	return 0;
 }
 
 static int r8153_get_eee(struct r8152 *tp, struct ethtool_eee *eee)
 {
-	u32 lp, adv, supported = 0;
+	u32 ocp_data, lp, adv, supported = 0;
 	u16 val;
 
 	val = ocp_reg_read(tp, OCP_EEE_ABLE);
@@ -5069,11 +4943,42 @@ static int r8153_get_eee(struct r8152 *tp, struct ethtool_eee *eee)
 	val = ocp_reg_read(tp, OCP_EEE_LPABLE);
 	lp = mmd_eee_adv_to_ethtool_adv_t(val);
 
-	eee->eee_enabled = tp->eee_en;
+	ocp_data = ocp_read_word(tp, MCU_TYPE_PLA, PLA_EEE_CR);
+	ocp_data &= EEE_RX_EN | EEE_TX_EN;
+
+	eee->eee_enabled = !!ocp_data;
 	eee->eee_active = !!(supported & adv & lp);
 	eee->supported = supported;
-	eee->advertised = tp->eee_adv;
+	eee->advertised = adv;
 	eee->lp_advertised = lp;
+
+	return 0;
+}
+
+static int r8153_set_eee(struct r8152 *tp, struct ethtool_eee *eee)
+{
+	u16 val = ethtool_adv_to_mmd_eee_adv_t(eee->advertised);
+
+	r8153_eee_en(tp, eee->eee_enabled);
+
+	if (!eee->eee_enabled)
+		val = 0;
+
+	ocp_reg_write(tp, OCP_EEE_ADV, val);
+
+	return 0;
+}
+
+static int r8153b_set_eee(struct r8152 *tp, struct ethtool_eee *eee)
+{
+	u16 val = ethtool_adv_to_mmd_eee_adv_t(eee->advertised);
+
+	r8153b_eee_en(tp, eee->eee_enabled);
+
+	if (!eee->eee_enabled)
+		val = 0;
+
+	ocp_reg_write(tp, OCP_EEE_ADV, val);
 
 	return 0;
 }
@@ -5244,15 +5149,9 @@ static int rtl8152_set_tunable(struct net_device *netdev,
 		}
 
 		if (tp->rx_copybreak != val) {
-			if (netdev->flags & IFF_UP) {
-				mutex_lock(&tp->control);
-				napi_disable(&tp->napi);
-				tp->rx_copybreak = val;
-				napi_enable(&tp->napi);
-				mutex_unlock(&tp->control);
-			} else {
-				tp->rx_copybreak = val;
-			}
+			napi_disable(&tp->napi);
+			tp->rx_copybreak = val;
+			napi_enable(&tp->napi);
 		}
 		break;
 	default:
@@ -5280,15 +5179,9 @@ static int rtl8152_set_ringparam(struct net_device *netdev,
 		return -EINVAL;
 
 	if (tp->rx_pending != ring->rx_pending) {
-		if (netdev->flags & IFF_UP) {
-			mutex_lock(&tp->control);
-			napi_disable(&tp->napi);
-			tp->rx_pending = ring->rx_pending;
-			napi_enable(&tp->napi);
-			mutex_unlock(&tp->control);
-		} else {
-			tp->rx_pending = ring->rx_pending;
-		}
+		napi_disable(&tp->napi);
+		tp->rx_pending = ring->rx_pending;
+		napi_enable(&tp->napi);
 	}
 
 	return 0;
@@ -5460,8 +5353,6 @@ static int rtl_ops_init(struct r8152 *tp)
 		ops->hw_phy_cfg		= r8152b_hw_phy_cfg;
 		ops->autosuspend_en	= rtl_runtime_suspend_enable;
 		tp->rx_buf_sz		= 16 * 1024;
-		tp->eee_en		= true;
-		tp->eee_adv		= MDIO_EEE_100TX;
 		break;
 
 	case RTL_VER_03:
@@ -5475,31 +5366,27 @@ static int rtl_ops_init(struct r8152 *tp)
 		ops->down		= rtl8153_down;
 		ops->unload		= rtl8153_unload;
 		ops->eee_get		= r8153_get_eee;
-		ops->eee_set		= r8152_set_eee;
+		ops->eee_set		= r8153_set_eee;
 		ops->in_nway		= rtl8153_in_nway;
 		ops->hw_phy_cfg		= r8153_hw_phy_cfg;
 		ops->autosuspend_en	= rtl8153_runtime_enable;
 		tp->rx_buf_sz		= 32 * 1024;
-		tp->eee_en		= true;
-		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
 		break;
 
 	case RTL_VER_08:
 	case RTL_VER_09:
 		ops->init		= r8153b_init;
 		ops->enable		= rtl8153_enable;
-		ops->disable		= rtl8153_disable;
+		ops->disable		= rtl8153b_disable;
 		ops->up			= rtl8153b_up;
 		ops->down		= rtl8153b_down;
 		ops->unload		= rtl8153b_unload;
 		ops->eee_get		= r8153_get_eee;
-		ops->eee_set		= r8152_set_eee;
+		ops->eee_set		= r8153b_set_eee;
 		ops->in_nway		= rtl8153_in_nway;
 		ops->hw_phy_cfg		= r8153b_hw_phy_cfg;
 		ops->autosuspend_en	= rtl8153b_runtime_enable;
 		tp->rx_buf_sz		= 32 * 1024;
-		tp->eee_en		= true;
-		tp->eee_adv		= MDIO_EEE_1000T | MDIO_EEE_100TX;
 		break;
 
 	default:
@@ -5673,13 +5560,7 @@ static int rtl8152_probe(struct usb_interface *intf,
 	tp->mii.phy_id = R8152_PHY_ID;
 
 	tp->autoneg = AUTONEG_ENABLE;
-	tp->speed = SPEED_100;
-	tp->advertising = RTL_ADVERTISED_10_HALF | RTL_ADVERTISED_10_FULL |
-			  RTL_ADVERTISED_100_HALF | RTL_ADVERTISED_100_FULL;
-	if (tp->mii.supports_gmii) {
-		tp->speed = SPEED_1000;
-		tp->advertising |= RTL_ADVERTISED_1000_FULL;
-	}
+	tp->speed = tp->mii.supports_gmii ? SPEED_1000 : SPEED_100;
 	tp->duplex = DUPLEX_FULL;
 
 	tp->rx_copybreak = RTL8152_RXFG_HEADSZ;
@@ -5714,6 +5595,7 @@ static int rtl8152_probe(struct usb_interface *intf,
 	return 0;
 
 out1:
+	netif_napi_del(&tp->napi);
 	tasklet_kill(&tp->tx_tl);
 	usb_set_intfdata(intf, NULL);
 out:
@@ -5729,6 +5611,7 @@ static void rtl8152_disconnect(struct usb_interface *intf)
 	if (tp) {
 		rtl_set_unplug(tp);
 
+		netif_napi_del(&tp->napi);
 		unregister_netdev(tp->netdev);
 		tasklet_kill(&tp->tx_tl);
 		cancel_delayed_work_sync(&tp->hw_phy_work);
@@ -5767,7 +5650,6 @@ static const struct usb_device_id rtl8152_table[] = {
 	{REALTEK_USB_DEVICE(VENDOR_ID_LENOVO,  0x7205)},
 	{REALTEK_USB_DEVICE(VENDOR_ID_LENOVO,  0x720c)},
 	{REALTEK_USB_DEVICE(VENDOR_ID_LENOVO,  0x7214)},
-	{REALTEK_USB_DEVICE(VENDOR_ID_LENOVO,  0xa387)},
 	{REALTEK_USB_DEVICE(VENDOR_ID_LINKSYS, 0x0041)},
 	{REALTEK_USB_DEVICE(VENDOR_ID_NVIDIA,  0x09ff)},
 	{REALTEK_USB_DEVICE(VENDOR_ID_TPLINK,  0x0601)},

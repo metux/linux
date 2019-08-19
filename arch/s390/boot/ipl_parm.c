@@ -221,12 +221,12 @@ void parse_boot_command_line(void)
 	while (*args) {
 		args = next_arg(args, &param, &val);
 
-		if (!strcmp(param, "mem")) {
+		if (!strcmp(param, "mem") && val) {
 			memory_end = round_down(memparse(val, NULL), PAGE_SIZE);
 			memory_end_set = 1;
 		}
 
-		if (!strcmp(param, "vmalloc"))
+		if (!strcmp(param, "vmalloc") && val)
 			vmalloc_size = round_up(memparse(val, NULL), PAGE_SIZE);
 
 		if (!strcmp(param, "noexec")) {
@@ -235,7 +235,7 @@ void parse_boot_command_line(void)
 				noexec_disabled = 1;
 		}
 
-		if (!strcmp(param, "facilities"))
+		if (!strcmp(param, "facilities") && val)
 			modify_fac_list(val);
 
 		if (!strcmp(param, "nokaslr"))

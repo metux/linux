@@ -5,7 +5,7 @@
  */
 
 #include <linux/intel-iommu.h>
-#include <linux/dma-resv.h>
+#include <linux/reservation.h>
 #include <linux/sync_file.h>
 #include <linux/uaccess.h>
 
@@ -1249,8 +1249,9 @@ static int __reloc_gpu_alloc(struct i915_execbuffer *eb,
 		goto skip_request;
 
 	i915_vma_lock(batch);
-	GEM_BUG_ON(!dma_resv_test_signaled_rcu(batch->resv, true));
-	err = i915_vma_move_to_active(batch, rq, 0);
+	err = i915_request_await_object(rq, batch->obj, false);
+	if (err == 0)
+		err = i915_vma_move_to_active(batch, rq, 0);
 	i915_vma_unlock(batch);
 	if (err)
 		goto skip_request;
@@ -1322,7 +1323,7 @@ relocate_entry(struct i915_vma *vma,
 
 	if (!eb->reloc_cache.vaddr &&
 	    (DBG_FORCE_RELOC == FORCE_GPU_RELOC ||
-	     !dma_resv_test_signaled_rcu(vma->resv, true))) {
+	     !reservation_object_test_signaled_rcu(vma->resv, true))) {
 		const unsigned int gen = eb->reloc_cache.gen;
 		unsigned int len;
 		u32 *batch;
@@ -1633,7 +1634,6 @@ static int check_relocations(const struct drm_i915_gem_exec_object2 *entry)
 
 static int eb_copy_relocations(const struct i915_execbuffer *eb)
 {
-	struct drm_i915_gem_relocation_entry *relocs;
 	const unsigned int count = eb->buffer_count;
 	unsigned int i;
 	int err;
@@ -1641,6 +1641,7 @@ static int eb_copy_relocations(const struct i915_execbuffer *eb)
 	for (i = 0; i < count; i++) {
 		const unsigned int nreloc = eb->exec[i].relocation_count;
 		struct drm_i915_gem_relocation_entry __user *urelocs;
+		struct drm_i915_gem_relocation_entry *relocs;
 		unsigned long size;
 		unsigned long copied;
 
@@ -1668,8 +1669,14 @@ static int eb_copy_relocations(const struct i915_execbuffer *eb)
 
 			if (__copy_from_user((char *)relocs + copied,
 					     (char __user *)urelocs + copied,
-					     len))
-				goto end;
+					     len)) {
+end_user:
+				user_access_end();
+end:
+				kvfree(relocs);
+				err = -EFAULT;
+				goto err;
+			}
 
 			copied += len;
 		} while (copied < size);
@@ -1698,14 +1705,10 @@ static int eb_copy_relocations(const struct i915_execbuffer *eb)
 
 	return 0;
 
-end_user:
-	user_access_end();
-end:
-	kvfree(relocs);
-	err = -EFAULT;
 err:
 	while (i--) {
-		relocs = u64_to_ptr(typeof(*relocs), eb->exec[i].relocs_ptr);
+		struct drm_i915_gem_relocation_entry *relocs =
+			u64_to_ptr(typeof(*relocs), eb->exec[i].relocs_ptr);
 		if (eb->exec[i].relocation_count)
 			kvfree(relocs);
 	}

@@ -26,6 +26,8 @@
 #ifndef DC_HW_TYPES_H
 #define DC_HW_TYPES_H
 
+#ifndef AMD_EDID_UTILITY
+
 #include "os_types.h"
 #include "fixed31_32.h"
 #include "signal_types.h"
@@ -165,10 +167,12 @@ enum surface_pixel_format {
 	/*swaped & float*/
 	SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F,
 	/*grow graphics here if necessary */
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	SURFACE_PIXEL_FORMAT_GRPH_RGB111110_FIX,
 	SURFACE_PIXEL_FORMAT_GRPH_BGR101111_FIX,
 	SURFACE_PIXEL_FORMAT_GRPH_RGB111110_FLOAT,
 	SURFACE_PIXEL_FORMAT_GRPH_BGR101111_FLOAT,
+#endif
 	SURFACE_PIXEL_FORMAT_VIDEO_BEGIN,
 	SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr =
 		SURFACE_PIXEL_FORMAT_VIDEO_BEGIN,
@@ -176,8 +180,10 @@ enum surface_pixel_format {
 	SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr,
 	SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb,
 		SURFACE_PIXEL_FORMAT_SUBSAMPLE_END,
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb2101010,
 	SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA1010102,
+#endif
 	SURFACE_PIXEL_FORMAT_VIDEO_AYCrCb8888,
 	SURFACE_PIXEL_FORMAT_INVALID
 
@@ -216,10 +222,12 @@ enum tile_split_values {
 	DC_ROTATED_MICRO_TILING = 0x3,
 };
 
+#ifdef CONFIG_DRM_AMD_DC_DCN2_0
 enum tripleBuffer_enable {
 	DC_TRIPLEBUFFER_DISABLE = 0x0,
 	DC_TRIPLEBUFFER_ENABLE = 0x1,
 };
+#endif
 
 /* TODO: These values come from hardware spec. We need to readdress this
  * if they ever change.
@@ -419,11 +427,13 @@ struct dc_csc_transform {
 	bool enable_adjustment;
 };
 
+#ifdef CONFIG_DRM_AMD_DC_DCN2_0
 struct dc_rgb_fixed {
 	struct fixed31_32 red;
 	struct fixed31_32 green;
 	struct fixed31_32 blue;
 };
+#endif
 
 struct dc_gamma {
 	struct kref refcount;
@@ -458,8 +468,10 @@ enum dc_cursor_color_format {
 	CURSOR_MODE_COLOR_1BIT_AND,
 	CURSOR_MODE_COLOR_PRE_MULTIPLIED_ALPHA,
 	CURSOR_MODE_COLOR_UN_PRE_MULTIPLIED_ALPHA,
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	CURSOR_MODE_COLOR_64BIT_FP_PRE_MULTIPLIED,
 	CURSOR_MODE_COLOR_64BIT_FP_UN_PRE_MULTIPLIED
+#endif
 };
 
 /*
@@ -566,11 +578,6 @@ enum dc_quantization_range {
 	QUANTIZATION_RANGE_LIMITED
 };
 
-enum dc_dynamic_expansion {
-	DYN_EXPANSION_AUTO,
-	DYN_EXPANSION_DISABLE
-};
-
 /* XFM */
 
 /* used in  struct dc_plane_state */
@@ -581,6 +588,8 @@ struct scaling_taps {
 	uint32_t h_taps_c;
 	bool integer_scaling;
 };
+
+#endif /* AMD_EDID_UTILITY */
 
 enum dc_timing_standard {
 	DC_TIMING_STANDARD_UNDEFINED,
@@ -612,8 +621,10 @@ enum dc_color_depth {
 	COLOR_DEPTH_121212,
 	COLOR_DEPTH_141414,
 	COLOR_DEPTH_161616,
+#ifdef CONFIG_DRM_AMD_DC_DCN2_0
 	COLOR_DEPTH_999,
 	COLOR_DEPTH_111111,
+#endif
 	COLOR_DEPTH_COUNT
 };
 
@@ -674,7 +685,9 @@ struct dc_crtc_timing_flags {
 	 * rates less than or equal to 340Mcsc */
 	uint32_t LTE_340MCSC_SCRAMBLE:1;
 
+#ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
 	uint32_t DSC : 1; /* Use DSC with this timing */
+#endif
 };
 
 enum dc_timing_3d_format {
@@ -699,6 +712,7 @@ enum dc_timing_3d_format {
 	TIMING_3D_FORMAT_MAX,
 };
 
+#ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
 struct dc_dsc_config {
 	uint32_t num_slices_h; /* Number of DSC slices - horizontal */
 	uint32_t num_slices_v; /* Number of DSC slices - vertical */
@@ -709,6 +723,7 @@ struct dc_dsc_config {
 	bool ycbcr422_simple; /* Tell DSC engine to convert YCbCr 4:2:2 to 'YCbCr 4:2:2 simple'. */
 	int32_t rc_buffer_size; /* DSC RC buffer block size in bytes */
 };
+#endif
 struct dc_crtc_timing {
 	uint32_t h_total;
 	uint32_t h_border_left;
@@ -735,8 +750,12 @@ struct dc_crtc_timing {
 	enum scanning_type scan_type;
 
 	struct dc_crtc_timing_flags flags;
+#ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
 	struct dc_dsc_config dsc_cfg;
+#endif
 };
+
+#ifndef AMD_EDID_UTILITY
 
 enum trigger_delay {
 	TRIGGER_DELAY_NEXT_PIXEL = 0,
@@ -772,6 +791,7 @@ enum vram_type {
 	VIDEO_MEMORY_TYPE_GDDR6  = 6,
 };
 
+#ifdef CONFIG_DRM_AMD_DC_DCN2_0
 enum dwb_cnv_out_bpc {
 	DWB_CNV_OUT_BPC_8BPC  = 0,
 	DWB_CNV_OUT_BPC_10BPC = 1,
@@ -822,6 +842,7 @@ struct mcif_buf_params {
 	unsigned int		swlock;
 };
 
+#endif
 
 #define MAX_TG_COLOR_VALUE 0x3FF
 struct tg_color {
@@ -830,6 +851,8 @@ struct tg_color {
 	uint16_t color_g_y;
 	uint16_t color_b_cb;
 };
+
+#endif /* AMD_EDID_UTILITY */
 
 #endif /* DC_HW_TYPES_H */
 

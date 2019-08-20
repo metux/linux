@@ -97,32 +97,10 @@ enum lsm_event {
  * potentially a moving target. It is easy to misuse this information
  * in a way that could break userspace. Please be careful not to do
  * so.
- *
- * If you add to this, remember to extend lockdown_reasons in
- * security/lockdown/lockdown.c.
  */
 enum lockdown_reason {
 	LOCKDOWN_NONE,
-	LOCKDOWN_MODULE_SIGNATURE,
-	LOCKDOWN_DEV_MEM,
-	LOCKDOWN_EFI_TEST,
-	LOCKDOWN_KEXEC,
-	LOCKDOWN_HIBERNATION,
-	LOCKDOWN_PCI_ACCESS,
-	LOCKDOWN_IOPORT,
-	LOCKDOWN_MSR,
-	LOCKDOWN_ACPI_TABLES,
-	LOCKDOWN_PCMCIA_CIS,
-	LOCKDOWN_TIOCSSERIAL,
-	LOCKDOWN_MODULE_PARAMETERS,
-	LOCKDOWN_MMIOTRACE,
-	LOCKDOWN_DEBUGFS,
 	LOCKDOWN_INTEGRITY_MAX,
-	LOCKDOWN_KCORE,
-	LOCKDOWN_KPROBES,
-	LOCKDOWN_BPF_READ,
-	LOCKDOWN_PERF,
-	LOCKDOWN_TRACEFS,
 	LOCKDOWN_CONFIDENTIALITY_MAX,
 };
 

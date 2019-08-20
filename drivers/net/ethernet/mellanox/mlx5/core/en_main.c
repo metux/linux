@@ -616,11 +616,11 @@ static int mlx5e_alloc_rq(struct mlx5e_channel *c,
 
 	switch (params->rx_cq_moderation.cq_period_mode) {
 	case MLX5_CQ_PERIOD_MODE_START_FROM_CQE:
-		rq->dim.mode = NET_DIM_CQ_PERIOD_MODE_START_FROM_CQE;
+		rq->dim.mode = DIM_CQ_PERIOD_MODE_START_FROM_CQE;
 		break;
 	case MLX5_CQ_PERIOD_MODE_START_FROM_EQE:
 	default:
-		rq->dim.mode = NET_DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+		rq->dim.mode = DIM_CQ_PERIOD_MODE_START_FROM_EQE;
 	}
 
 	rq->page_cache.head = 0;
@@ -1618,7 +1618,7 @@ static void mlx5e_destroy_cq(struct mlx5e_cq *cq)
 	mlx5_core_destroy_cq(cq->mdev, &cq->mcq);
 }
 
-int mlx5e_open_cq(struct mlx5e_channel *c, struct net_dim_cq_moder moder,
+int mlx5e_open_cq(struct mlx5e_channel *c, struct dim_cq_moder moder,
 		  struct mlx5e_cq_param *param, struct mlx5e_cq *cq)
 {
 	struct mlx5_core_dev *mdev = c->mdev;
@@ -1820,7 +1820,7 @@ static int mlx5e_open_queues(struct mlx5e_channel *c,
 			     struct mlx5e_params *params,
 			     struct mlx5e_channel_param *cparam)
 {
-	struct net_dim_cq_moder icocq_moder = {0, 0};
+	struct dim_cq_moder icocq_moder = {0, 0};
 	int err;
 
 	err = mlx5e_open_cq(c, icocq_moder, &cparam->icosq_cq, &c->icosq.cq);
@@ -2248,7 +2248,7 @@ void mlx5e_build_ico_cq_param(struct mlx5e_priv *priv,
 
 	mlx5e_build_common_cq_param(priv, param);
 
-	param->cq_period_mode = NET_DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+	param->cq_period_mode = DIM_CQ_PERIOD_MODE_START_FROM_EQE;
 }
 
 void mlx5e_build_icosq_param(struct mlx5e_priv *priv,
@@ -2954,7 +2954,7 @@ static void mlx5e_switch_priv_channels(struct mlx5e_priv *priv,
 	if (hw_modify)
 		hw_modify(priv);
 
-	mlx5e_refresh_tirs(priv, false);
+	priv->profile->update_rx(priv);
 	mlx5e_activate_priv_channels(priv);
 
 	/* return carrier back if needed */
@@ -3004,7 +3004,7 @@ int mlx5e_open_locked(struct net_device *netdev)
 	if (err)
 		goto err_clear_state_opened_flag;
 
-	mlx5e_refresh_tirs(priv, false);
+	priv->profile->update_rx(priv);
 	mlx5e_activate_priv_channels(priv);
 	if (priv->profile->update_carrier)
 		priv->profile->update_carrier(priv);
@@ -4616,9 +4616,9 @@ static bool slow_pci_heuristic(struct mlx5_core_dev *mdev)
 		link_speed > MLX5E_SLOW_PCI_RATIO * pci_bw;
 }
 
-static struct net_dim_cq_moder mlx5e_get_def_tx_moderation(u8 cq_period_mode)
+static struct dim_cq_moder mlx5e_get_def_tx_moderation(u8 cq_period_mode)
 {
-	struct net_dim_cq_moder moder;
+	struct dim_cq_moder moder;
 
 	moder.cq_period_mode = cq_period_mode;
 	moder.pkts = MLX5E_PARAMS_DEFAULT_TX_CQ_MODERATION_PKTS;
@@ -4629,9 +4629,9 @@ static struct net_dim_cq_moder mlx5e_get_def_tx_moderation(u8 cq_period_mode)
 	return moder;
 }
 
-static struct net_dim_cq_moder mlx5e_get_def_rx_moderation(u8 cq_period_mode)
+static struct dim_cq_moder mlx5e_get_def_rx_moderation(u8 cq_period_mode)
 {
-	struct net_dim_cq_moder moder;
+	struct dim_cq_moder moder;
 
 	moder.cq_period_mode = cq_period_mode;
 	moder.pkts = MLX5E_PARAMS_DEFAULT_RX_CQ_MODERATION_PKTS;
@@ -4645,8 +4645,8 @@ static struct net_dim_cq_moder mlx5e_get_def_rx_moderation(u8 cq_period_mode)
 static u8 mlx5_to_net_dim_cq_period_mode(u8 cq_period_mode)
 {
 	return cq_period_mode == MLX5_CQ_PERIOD_MODE_START_FROM_CQE ?
-		NET_DIM_CQ_PERIOD_MODE_START_FROM_CQE :
-		NET_DIM_CQ_PERIOD_MODE_START_FROM_EQE;
+		DIM_CQ_PERIOD_MODE_START_FROM_CQE :
+		DIM_CQ_PERIOD_MODE_START_FROM_EQE;
 }
 
 void mlx5e_set_tx_cq_mode_params(struct mlx5e_params *params, u8 cq_period_mode)
@@ -4823,13 +4823,17 @@ static void mlx5e_build_nic_netdev(struct net_device *netdev)
 	netdev->ethtool_ops	  = &mlx5e_ethtool_ops;
 
 	netdev->vlan_features    |= NETIF_F_SG;
-	netdev->vlan_features    |= NETIF_F_IP_CSUM;
-	netdev->vlan_features    |= NETIF_F_IPV6_CSUM;
+	netdev->vlan_features    |= NETIF_F_HW_CSUM;
 	netdev->vlan_features    |= NETIF_F_GRO;
 	netdev->vlan_features    |= NETIF_F_TSO;
 	netdev->vlan_features    |= NETIF_F_TSO6;
 	netdev->vlan_features    |= NETIF_F_RXCSUM;
 	netdev->vlan_features    |= NETIF_F_RXHASH;
+
+	netdev->mpls_features    |= NETIF_F_SG;
+	netdev->mpls_features    |= NETIF_F_HW_CSUM;
+	netdev->mpls_features    |= NETIF_F_TSO;
+	netdev->mpls_features    |= NETIF_F_TSO6;
 
 	netdev->hw_enc_features  |= NETIF_F_HW_VLAN_CTAG_TX;
 	netdev->hw_enc_features  |= NETIF_F_HW_VLAN_CTAG_RX;
@@ -4845,9 +4849,8 @@ static void mlx5e_build_nic_netdev(struct net_device *netdev)
 	netdev->hw_features      |= NETIF_F_HW_VLAN_STAG_TX;
 
 	if (mlx5_vxlan_allowed(mdev->vxlan) || mlx5_geneve_tx_allowed(mdev) ||
-	    MLX5_CAP_ETH(mdev, tunnel_stateless_gre)) {
-		netdev->hw_enc_features |= NETIF_F_IP_CSUM;
-		netdev->hw_enc_features |= NETIF_F_IPV6_CSUM;
+	    mlx5e_any_tunnel_proto_supported(mdev)) {
+		netdev->hw_enc_features |= NETIF_F_HW_CSUM;
 		netdev->hw_enc_features |= NETIF_F_TSO;
 		netdev->hw_enc_features |= NETIF_F_TSO6;
 		netdev->hw_enc_features |= NETIF_F_GSO_PARTIAL;
@@ -4861,7 +4864,7 @@ static void mlx5e_build_nic_netdev(struct net_device *netdev)
 		netdev->gso_partial_features = NETIF_F_GSO_UDP_TUNNEL_CSUM;
 	}
 
-	if (MLX5_CAP_ETH(mdev, tunnel_stateless_gre)) {
+	if (mlx5e_tunnel_proto_supported(mdev, IPPROTO_GRE)) {
 		netdev->hw_features     |= NETIF_F_GSO_GRE |
 					   NETIF_F_GSO_GRE_CSUM;
 		netdev->hw_enc_features |= NETIF_F_GSO_GRE |
@@ -5144,6 +5147,11 @@ static void mlx5e_nic_disable(struct mlx5e_priv *priv)
 	mlx5_lag_remove(mdev);
 }
 
+int mlx5e_update_nic_rx(struct mlx5e_priv *priv)
+{
+	return mlx5e_refresh_tirs(priv, false);
+}
+
 static const struct mlx5e_profile mlx5e_nic_profile = {
 	.init		   = mlx5e_nic_init,
 	.cleanup	   = mlx5e_nic_cleanup,
@@ -5153,6 +5161,7 @@ static const struct mlx5e_profile mlx5e_nic_profile = {
 	.cleanup_tx	   = mlx5e_cleanup_nic_tx,
 	.enable		   = mlx5e_nic_enable,
 	.disable	   = mlx5e_nic_disable,
+	.update_rx	   = mlx5e_update_nic_rx,
 	.update_stats	   = mlx5e_update_ndo_stats,
 	.update_carrier	   = mlx5e_update_carrier,
 	.rx_handlers.handle_rx_cqe       = mlx5e_handle_rx_cqe,

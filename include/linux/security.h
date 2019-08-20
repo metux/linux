@@ -97,38 +97,12 @@ enum lsm_event {
  * potentially a moving target. It is easy to misuse this information
  * in a way that could break userspace. Please be careful not to do
  * so.
- *
- * If you add to this, remember to extend lockdown_reasons in
- * security/lockdown/lockdown.c.
  */
 enum lockdown_reason {
 	LOCKDOWN_NONE,
-	LOCKDOWN_MODULE_SIGNATURE,
-	LOCKDOWN_DEV_MEM,
-	LOCKDOWN_EFI_TEST,
-	LOCKDOWN_KEXEC,
-	LOCKDOWN_HIBERNATION,
-	LOCKDOWN_PCI_ACCESS,
-	LOCKDOWN_IOPORT,
-	LOCKDOWN_MSR,
-	LOCKDOWN_ACPI_TABLES,
-	LOCKDOWN_PCMCIA_CIS,
-	LOCKDOWN_TIOCSSERIAL,
-	LOCKDOWN_MODULE_PARAMETERS,
-	LOCKDOWN_MMIOTRACE,
-	LOCKDOWN_DEBUGFS,
-	LOCKDOWN_XMON_WR,
 	LOCKDOWN_INTEGRITY_MAX,
-	LOCKDOWN_KCORE,
-	LOCKDOWN_KPROBES,
-	LOCKDOWN_BPF_READ,
-	LOCKDOWN_PERF,
-	LOCKDOWN_TRACEFS,
-	LOCKDOWN_XMON_RW,
 	LOCKDOWN_CONFIDENTIALITY_MAX,
 };
-
-extern const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX+1];
 
 /* These functions are in security/commoncap.c */
 extern int cap_capable(const struct cred *cred, struct user_namespace *ns,
@@ -1899,42 +1873,5 @@ static inline void security_bpf_prog_free(struct bpf_prog_aux *aux)
 #endif /* CONFIG_SECURITY */
 #endif /* CONFIG_BPF_SYSCALL */
 
-#ifdef CONFIG_PERF_EVENTS
-struct perf_event_attr;
-struct perf_event;
-
-#ifdef CONFIG_SECURITY
-extern int security_perf_event_open(struct perf_event_attr *attr, int type);
-extern int security_perf_event_alloc(struct perf_event *event);
-extern void security_perf_event_free(struct perf_event *event);
-extern int security_perf_event_read(struct perf_event *event);
-extern int security_perf_event_write(struct perf_event *event);
-#else
-static inline int security_perf_event_open(struct perf_event_attr *attr,
-					   int type)
-{
-	return 0;
-}
-
-static inline int security_perf_event_alloc(struct perf_event *event)
-{
-	return 0;
-}
-
-static inline void security_perf_event_free(struct perf_event *event)
-{
-}
-
-static inline int security_perf_event_read(struct perf_event *event)
-{
-	return 0;
-}
-
-static inline int security_perf_event_write(struct perf_event *event)
-{
-	return 0;
-}
-#endif /* CONFIG_SECURITY */
-#endif /* CONFIG_PERF_EVENTS */
-
 #endif /* ! __LINUX_SECURITY_H */
+

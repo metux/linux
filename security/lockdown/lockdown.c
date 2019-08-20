@@ -16,11 +16,10 @@
 
 static enum lockdown_reason kernel_locked_down;
 
-static const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX+1] = {
+static char *lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX+1] = {
 	[LOCKDOWN_NONE] = "none",
 	[LOCKDOWN_MODULE_SIGNATURE] = "unsigned module loading",
 	[LOCKDOWN_DEV_MEM] = "/dev/mem,kmem,port",
-	[LOCKDOWN_EFI_TEST] = "/dev/efi_test access",
 	[LOCKDOWN_KEXEC] = "kexec of unsigned images",
 	[LOCKDOWN_HIBERNATION] = "hibernation",
 	[LOCKDOWN_PCI_ACCESS] = "direct PCI access",
@@ -31,17 +30,13 @@ static const char *const lockdown_reasons[LOCKDOWN_CONFIDENTIALITY_MAX+1] = {
 	[LOCKDOWN_TIOCSSERIAL] = "reconfiguration of serial port IO",
 	[LOCKDOWN_MODULE_PARAMETERS] = "unsafe module parameters",
 	[LOCKDOWN_MMIOTRACE] = "unsafe mmio",
-	[LOCKDOWN_DEBUGFS] = "debugfs access",
 	[LOCKDOWN_INTEGRITY_MAX] = "integrity",
 	[LOCKDOWN_KCORE] = "/proc/kcore access",
 	[LOCKDOWN_KPROBES] = "use of kprobes",
-	[LOCKDOWN_BPF_READ] = "use of bpf to read kernel RAM",
-	[LOCKDOWN_PERF] = "unsafe use of perf",
-	[LOCKDOWN_TRACEFS] = "use of tracefs",
 	[LOCKDOWN_CONFIDENTIALITY_MAX] = "confidentiality",
 };
 
-static const enum lockdown_reason lockdown_levels[] = {LOCKDOWN_NONE,
+static enum lockdown_reason lockdown_levels[] = {LOCKDOWN_NONE,
 						 LOCKDOWN_INTEGRITY_MAX,
 						 LOCKDOWN_CONFIDENTIALITY_MAX};
 
@@ -82,14 +77,10 @@ early_param("lockdown", lockdown_param);
  */
 static int lockdown_is_locked_down(enum lockdown_reason what)
 {
-	if (WARN(what >= LOCKDOWN_CONFIDENTIALITY_MAX,
-		 "Invalid lockdown reason"))
-		return -EPERM;
-
 	if (kernel_locked_down >= what) {
 		if (lockdown_reasons[what])
-			pr_notice("Lockdown: %s: %s is restricted; see man kernel_lockdown.7\n",
-				  current->comm, lockdown_reasons[what]);
+			pr_notice("Lockdown: %s is restricted; see man kernel_lockdown.7\n",
+				  lockdown_reasons[what]);
 		return -EPERM;
 	}
 

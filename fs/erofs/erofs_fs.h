@@ -1,7 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only OR Apache-2.0 */
 /*
+<<<<<<< HEAD
  * EROFS (Enhanced ROM File System) on-disk format definition
  *
+=======
+>>>>>>> 79ce47831b101 (erofs: move erofs out of staging)
  * Copyright (C) 2017-2018 HUAWEI, Inc.
  *             http://www.huawei.com/
  * Created by Gao Xiang <gaoxiang25@huawei.com>
@@ -9,6 +12,10 @@
 #ifndef __EROFS_FS_H
 #define __EROFS_FS_H
 
+<<<<<<< HEAD
+=======
+/* Enhanced(Extended) ROM File System */
+>>>>>>> 79ce47831b101 (erofs: move erofs out of staging)
 #define EROFS_SUPER_OFFSET      1024
 
 #define EROFS_FEATURE_COMPAT_SB_CHKSUM          0x00000001

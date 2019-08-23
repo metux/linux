@@ -1048,47 +1048,25 @@ int __init early_init_dt_scan_memory(unsigned long node, const char *uname,
 	return 0;
 }
 
-/*
- * Convert configs to something easy to use in C code
- */
-#if defined(CONFIG_CMDLINE_FORCE)
-static const int overwrite_incoming_cmdline = 1;
-static const int read_dt_cmdline;
-static const int concat_cmdline;
-#elif defined(CONFIG_CMDLINE_EXTEND)
-static const int overwrite_incoming_cmdline;
-static const int read_dt_cmdline = 1;
-static const int concat_cmdline = 1;
-#else /* CMDLINE_FROM_BOOTLOADER */
-static const int overwrite_incoming_cmdline;
-static const int read_dt_cmdline = 1;
-static const int concat_cmdline;
-#endif
-
-#ifdef CONFIG_CMDLINE
-static const char *config_cmdline = CONFIG_CMDLINE;
-#else
-static const char *config_cmdline = "";
-#endif
-
 int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 				     int depth, void *data)
 {
-	int l = 0;
-	const char *p = NULL;
-	char *cmdline = data;
+	int l;
+	const char *p;
+	const void *rng_seed;
 
 	pr_debug("search \"chosen\", depth: %d, uname: %s\n", depth, uname);
 
-	if (depth != 1 || !cmdline ||
+	if (depth != 1 || !data ||
 	    (strcmp(uname, "chosen") != 0 && strcmp(uname, "chosen@0") != 0))
 		return 0;
 
 	early_init_dt_check_for_initrd(node);
 
-	/* Put CONFIG_CMDLINE in if forced or if data had nothing in it to start */
-	if (overwrite_incoming_cmdline || !cmdline[0])
-		strlcpy(cmdline, config_cmdline, COMMAND_LINE_SIZE);
+	/* Retrieve command line */
+	p = of_get_flat_dt_prop(node, "bootargs", &l);
+	if (p != NULL && l > 0)
+		strlcpy(data, p, min(l, COMMAND_LINE_SIZE));
 
 	/* Retrieve command line */
 	p = of_get_flat_dt_prop(node, "bootargs", &l);
@@ -1113,6 +1091,17 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 			strlcpy(cmdline, p, min((int)l, COMMAND_LINE_SIZE));
 		}
 	}
+	 * CONFIG_CMDLINE is meant to be a default in case nothing else
+	 * managed to set the command line, unless CONFIG_CMDLINE_FORCE
+#ifdef CONFIG_CMDLINE
+#if defined(CONFIG_CMDLINE_EXTEND)
+	strlcat(data, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#elif defined(CONFIG_CMDLINE_FORCE)
+	strlcpy(data, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#else
+		strlcpy(data, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#endif
+#endif /* CONFIG_CMDLINE */
 
 	pr_debug("Command line is: %s\n", (char*)data);
 
@@ -1122,10 +1111,6 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 
 		/* try to clear seed so it won't be found. */
 		fdt_nop_property(initial_boot_params, node, "rng-seed");
-
-		/* update CRC check value */
-		of_fdt_crc32 = crc32_be(~0, initial_boot_params,
-				fdt_totalsize(initial_boot_params));
 	}
 
 	/* break now */
@@ -1216,8 +1201,6 @@ bool __init early_init_dt_verify(void *params)
 
 	/* Setup flat device-tree pointer */
 	initial_boot_params = params;
-	of_fdt_crc32 = crc32_be(~0, initial_boot_params,
-				fdt_totalsize(initial_boot_params));
 	return true;
 }
 
@@ -1247,6 +1230,8 @@ bool __init early_init_dt_scan(void *params)
 		return false;
 
 	early_init_dt_scan_nodes();
+	of_fdt_crc32 = crc32_be(~0, initial_boot_params,
+				fdt_totalsize(initial_boot_params));
 	return true;
 }
 

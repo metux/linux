@@ -1644,12 +1644,13 @@ static int wait_for_engines(struct intel_gt *gt)
 
 static long
 wait_for_timelines(struct drm_i915_private *i915,
-		   unsigned int flags, long timeout)
+		   unsigned int wait, long timeout)
 {
 	struct intel_gt_timelines *timelines = &i915->gt.timelines;
 	struct intel_timeline *tl;
+	unsigned long flags;
 
-	spin_lock(&timelines->lock);
+	spin_lock_irqsave(&timelines->lock, flags);
 	list_for_each_entry(tl, &timelines->active_list, link) {
 		struct i915_request *rq;
 
@@ -1657,7 +1658,7 @@ wait_for_timelines(struct drm_i915_private *i915,
 		if (!rq)
 			continue;
 
-		spin_unlock(&timelines->lock);
+		spin_unlock_irqrestore(&timelines->lock, flags);
 
 		/*
 		 * "Race-to-idle".
@@ -1668,19 +1669,19 @@ wait_for_timelines(struct drm_i915_private *i915,
 		 * want to complete as quickly as possible to avoid prolonged
 		 * stalls, so allow the gpu to boost to maximum clocks.
 		 */
-		if (flags & I915_WAIT_FOR_IDLE_BOOST)
+		if (wait & I915_WAIT_FOR_IDLE_BOOST)
 			gen6_rps_boost(rq);
 
-		timeout = i915_request_wait(rq, flags, timeout);
+		timeout = i915_request_wait(rq, wait, timeout);
 		i915_request_put(rq);
 		if (timeout < 0)
 			return timeout;
 
 		/* restart after reacquiring the lock */
-		spin_lock(&timelines->lock);
+		spin_lock_irqsave(&timelines->lock, flags);
 		tl = list_entry(&timelines->active_list, typeof(*tl), link);
 	}
-	spin_unlock(&timelines->lock);
+	spin_unlock_irqrestore(&timelines->lock, flags);
 
 	return timeout;
 }

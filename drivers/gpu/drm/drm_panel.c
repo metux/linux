@@ -44,14 +44,18 @@ static LIST_HEAD(panel_list);
 /**
  * drm_panel_init - initialize a panel
  * @panel: DRM panel
+ * @dev: parent device of the panel
+ * @funcs: panel operations
  *
- * Sets up internal fields of the panel so that it can subsequently be added
- * to the registry.
+ * Initialize the panel structure for subsequent registration with
+ * drm_panel_add().
  */
-void drm_panel_init(struct drm_panel *panel)
+void drm_panel_init(struct drm_panel *panel, struct device *dev,
+		    const struct drm_panel_funcs *funcs)
 {
 	INIT_LIST_HEAD(&panel->list);
-	BLOCKING_INIT_NOTIFIER_HEAD(&panel->nh);
+	panel->dev = dev;
+	panel->funcs = funcs;
 }
 EXPORT_SYMBOL(drm_panel_init);
 
@@ -266,27 +270,6 @@ struct drm_panel *of_drm_find_panel(const struct device_node *np)
 }
 EXPORT_SYMBOL(of_drm_find_panel);
 #endif
-
-int drm_panel_notifier_register(struct drm_panel *panel,
-	struct notifier_block *nb)
-{
-	return blocking_notifier_chain_register(&panel->nh, nb);
-}
-EXPORT_SYMBOL(drm_panel_notifier_register);
-
-int drm_panel_notifier_unregister(struct drm_panel *panel,
-	struct notifier_block *nb)
-{
-	return blocking_notifier_chain_unregister(&panel->nh, nb);
-}
-EXPORT_SYMBOL(drm_panel_notifier_unregister);
-
-int drm_panel_notifier_call_chain(struct drm_panel *panel,
-	unsigned long val, void *v)
-{
-	return blocking_notifier_call_chain(&panel->nh, val, v);
-}
-EXPORT_SYMBOL(drm_panel_notifier_call_chain);
 
 MODULE_AUTHOR("Thierry Reding <treding@nvidia.com>");
 MODULE_DESCRIPTION("DRM panel infrastructure");

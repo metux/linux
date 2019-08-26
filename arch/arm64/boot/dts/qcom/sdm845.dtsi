@@ -3109,6 +3109,8 @@
 			rpmhcc: clock-controller {
 				compatible = "qcom,sdm845-rpmh-clk";
 				#clock-cells = <1>;
+				clock-names = "xo";
+				clocks = <&xo_board>;
 			};
 
 			rpmhpd: power-controller {

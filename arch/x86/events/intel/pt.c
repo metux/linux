@@ -205,8 +205,8 @@ static int __init pt_pmu_hw_init(void)
 	/* model-specific quirks */
 	switch (boot_cpu_data.x86_model) {
 	case INTEL_FAM6_BROADWELL:
-	case INTEL_FAM6_BROADWELL_D:
-	case INTEL_FAM6_BROADWELL_G:
+	case INTEL_FAM6_BROADWELL_XEON_D:
+	case INTEL_FAM6_BROADWELL_GT3E:
 	case INTEL_FAM6_BROADWELL_X:
 		/* not setting BRANCH_EN will #GP, erratum BDM106 */
 		pt_pmu.branch_en_always_on = true;
@@ -656,7 +656,7 @@ static struct topa *topa_alloc(int cpu, gfp_t gfp)
 	 * link as the 2nd entry in the table
 	 */
 	if (!intel_pt_validate_hw_cap(PT_CAP_topa_multiple_entries)) {
-		TOPA_ENTRY(&tp->topa, 1)->base = page_to_phys(p) >> TOPA_SHIFT;
+		TOPA_ENTRY(&tp->topa, 1)->base = page_to_phys(p);
 		TOPA_ENTRY(&tp->topa, 1)->end = 1;
 	}
 

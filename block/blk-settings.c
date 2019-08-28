@@ -806,7 +806,7 @@ EXPORT_SYMBOL(blk_queue_update_dma_alignment);
 void blk_set_queue_depth(struct request_queue *q, unsigned int depth)
 {
 	q->queue_depth = depth;
-	rq_qos_queue_depth_changed(q);
+	wbt_set_queue_depth(q, depth);
 }
 EXPORT_SYMBOL(blk_set_queue_depth);
 
@@ -834,20 +834,26 @@ void blk_queue_write_cache(struct request_queue *q, bool wc, bool fua)
 EXPORT_SYMBOL_GPL(blk_queue_write_cache);
 
 /**
- * blk_queue_required_elevator_features - Set a queue required elevator features
- * @q:		the request queue for the target device
- * @features:	Required elevator features OR'ed together
+ * blk_queue_can_use_dma_map_merging - configure queue for merging segments.
+ * @q:		the request queue for the device
+ * @dev:	the device pointer for dma
  *
- * Tell the block layer that for the device controlled through @q, only the
- * only elevators that can be used are those that implement at least the set of
- * features specified by @features.
+ * Tell the block layer about merging the segments by dma map of @q.
  */
-void blk_queue_required_elevator_features(struct request_queue *q,
-					  unsigned int features)
+bool blk_queue_can_use_dma_map_merging(struct request_queue *q,
+				       struct device *dev)
 {
-	q->required_elevator_features = features;
+	unsigned long boundary = dma_get_merge_boundary(dev);
+
+	if (!boundary)
+		return false;
+
+	/* No need to update max_segment_size. see blk_queue_virt_boundary() */
+	blk_queue_virt_boundary(q, boundary);
+
+	return true;
 }
-EXPORT_SYMBOL_GPL(blk_queue_required_elevator_features);
+EXPORT_SYMBOL_GPL(blk_queue_can_use_dma_map_merging);
 
 /**
  * blk_queue_can_use_dma_map_merging - configure queue for merging segments.

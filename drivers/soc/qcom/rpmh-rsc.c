@@ -13,6 +13,7 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
@@ -175,21 +176,13 @@ static void write_tcs_reg(const struct rsc_drv *drv, int reg, int tcs_id,
 static void write_tcs_reg_sync(const struct rsc_drv *drv, int reg, int tcs_id,
 			       u32 data)
 {
-	int i;
+	u32 new_data;
 
 	writel(data, tcs_reg_addr(drv, reg, tcs_id));
-
-	/*
-	 * Wait until we read back the same value.  Use a counter rather than
-	 * ktime for timeout since this may be called after timekeeping stops.
-	 */
-	for (i = 0; i < USEC_PER_SEC; i++) {
-		if (readl(tcs_reg_addr(drv, reg, tcs_id)) == data)
-			return;
-		udelay(1);
-	}
-	pr_err("%s: error writing %#x to %d:%#x\n", drv->name,
-	       data, tcs_id, reg);
+	if (readl_poll_timeout_atomic(tcs_reg_addr(drv, reg, tcs_id), new_data,
+				      new_data == data, 1, USEC_PER_SEC))
+		pr_err("%s: error writing %#x to %d:%#x\n", drv->name,
+		       data, tcs_id, reg);
 }
 
 /**
@@ -1031,12 +1024,9 @@ static struct platform_driver rpmh_driver = {
 	.driver = {
 		  .name = "rpmh",
 		  .of_match_table = rpmh_drv_match,
-		  .suppress_bind_attrs = true,
 	},
 };
+builtin_platform_driver(rpmh_driver);
 
-static int __init rpmh_driver_init(void)
-{
-	return platform_driver_register(&rpmh_driver);
-}
-arch_initcall(rpmh_driver_init);
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. RPMH communication driver");

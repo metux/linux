@@ -137,7 +137,7 @@ static void virtio_gpu_remove(struct virtio_device *vdev)
 
 	drm_dev_unregister(dev);
 	virtio_gpu_deinit(dev);
-	drm_dev_put(dev);
+	drm_put_dev(dev);
 }
 
 static void virtio_gpu_config_changed(struct virtio_device *vdev)
@@ -184,7 +184,7 @@ MODULE_AUTHOR("Dave Airlie <airlied@redhat.com>");
 MODULE_AUTHOR("Gerd Hoffmann <kraxel@redhat.com>");
 MODULE_AUTHOR("Alon Levy");
 
-DEFINE_DRM_GEM_FOPS(virtio_gpu_driver_fops);
+DEFINE_DRM_GEM_SHMEM_FOPS(virtio_gpu_driver_fops);
 
 static struct drm_driver driver = {
 	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_RENDER | DRIVER_ATOMIC,
@@ -199,7 +199,6 @@ static struct drm_driver driver = {
 #endif
 	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
 	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
-	.gem_prime_mmap = drm_gem_prime_mmap,
 	.gem_prime_import_sg_table = virtgpu_gem_prime_import_sg_table,
 
 	.gem_create_object = virtio_gpu_create_object,

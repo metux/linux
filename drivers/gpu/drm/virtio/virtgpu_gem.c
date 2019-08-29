@@ -28,20 +28,35 @@
 
 #include "virtgpu_drv.h"
 
+struct virtio_gpu_object*
+virtio_gpu_alloc_object(struct drm_device *dev,
+			struct virtio_gpu_object_params *params,
+			struct virtio_gpu_fence *fence)
+{
+	struct virtio_gpu_device *vgdev = dev->dev_private;
+	struct virtio_gpu_object *obj;
+	int ret;
+
+	ret = virtio_gpu_object_create(vgdev, params, &obj, fence);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return obj;
+}
+
 int virtio_gpu_gem_create(struct drm_file *file,
 			  struct drm_device *dev,
 			  struct virtio_gpu_object_params *params,
 			  struct drm_gem_object **obj_p,
 			  uint32_t *handle_p)
 {
-	struct virtio_gpu_device *vgdev = dev->dev_private;
 	struct virtio_gpu_object *obj;
 	int ret;
 	u32 handle;
 
-	ret = virtio_gpu_object_create(vgdev, params, &obj, NULL);
-	if (ret < 0)
-		return ret;
+	obj = virtio_gpu_alloc_object(dev, params, NULL);
+	if (IS_ERR(obj))
+		return PTR_ERR(obj);
 
 	ret = drm_gem_handle_create(file, &obj->base.base, &handle);
 	if (ret) {
@@ -96,12 +111,14 @@ int virtio_gpu_mode_dumb_mmap(struct drm_file *file_priv,
 			      uint32_t handle, uint64_t *offset_p)
 {
 	struct drm_gem_object *gobj;
+	struct virtio_gpu_object *obj;
 
 	BUG_ON(!offset_p);
 	gobj = drm_gem_object_lookup(file_priv, handle);
 	if (gobj == NULL)
 		return -ENOENT;
-	*offset_p = drm_vma_node_offset_addr(&gobj->vma_node);
+	obj = gem_to_virtio_gpu_obj(gobj);
+	*offset_p = virtio_gpu_object_mmap_offset(obj);
 	drm_gem_object_put_unlocked(gobj);
 	return 0;
 }
@@ -236,31 +253,4 @@ void virtio_gpu_array_put_free(struct virtio_gpu_object_array *objs)
 	for (i = 0; i < objs->nents; i++)
 		drm_gem_object_put_unlocked(objs->objs[i]);
 	virtio_gpu_array_free(objs);
-}
-
-void virtio_gpu_array_put_free_delayed(struct virtio_gpu_device *vgdev,
-				       struct virtio_gpu_object_array *objs)
-{
-	spin_lock(&vgdev->obj_free_lock);
-	list_add_tail(&objs->next, &vgdev->obj_free_list);
-	spin_unlock(&vgdev->obj_free_lock);
-	schedule_work(&vgdev->obj_free_work);
-}
-
-void virtio_gpu_array_put_free_work(struct work_struct *work)
-{
-	struct virtio_gpu_device *vgdev =
-		container_of(work, struct virtio_gpu_device, obj_free_work);
-	struct virtio_gpu_object_array *objs;
-
-	spin_lock(&vgdev->obj_free_lock);
-	while (!list_empty(&vgdev->obj_free_list)) {
-		objs = list_first_entry(&vgdev->obj_free_list,
-					struct virtio_gpu_object_array, next);
-		list_del(&objs->next);
-		spin_unlock(&vgdev->obj_free_lock);
-		virtio_gpu_array_put_free(objs);
-		spin_lock(&vgdev->obj_free_lock);
-	}
-	spin_unlock(&vgdev->obj_free_lock);
 }

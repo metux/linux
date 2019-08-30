@@ -27,7 +27,7 @@ subdir-ccflags-$(CONFIG_DRM_I915_WERROR) += -Werror
 
 # Fine grained warnings disable
 CFLAGS_i915_pci.o = $(call cc-disable-warning, override-init)
-CFLAGS_intel_fbdev.o = $(call cc-disable-warning, override-init)
+CFLAGS_display/intel_fbdev.o = $(call cc-disable-warning, override-init)
 
 subdir-ccflags-y += \
 	$(call as-instr,movntdqa (%eax)$(comma)%xmm0,-DCONFIG_AS_MOVNTDQA)
@@ -42,13 +42,16 @@ subdir-ccflags-y += -I$(srctree)/$(src)
 # core driver code
 i915-y += i915_drv.o \
 	  i915_irq.o \
+	  i915_getparam.o \
 	  i915_params.o \
 	  i915_pci.o \
 	  i915_scatterlist.o \
 	  i915_suspend.o \
 	  i915_sysfs.o \
+	  i915_utils.o \
 	  intel_csr.o \
 	  intel_device_info.o \
+	  intel_pch.o \
 	  intel_pm.o \
 	  intel_runtime_pm.o \
 	  intel_sideband.o \
@@ -60,6 +63,7 @@ i915-y += \
 	i915_memcpy.o \
 	i915_mm.o \
 	i915_sw_fence.o \
+	i915_sw_fence_work.o \
 	i915_syncmap.o \
 	i915_user_extensions.o
 
@@ -77,7 +81,9 @@ gt-y += \
 	gt/intel_engine_pm.o \
 	gt/intel_engine_user.o \
 	gt/intel_gt.o \
+	gt/intel_gt_irq.o \
 	gt/intel_gt_pm.o \
+	gt/intel_gt_pm_irq.o \
 	gt/intel_hangcheck.o \
 	gt/intel_lrc.o \
 	gt/intel_renderstate.o \
@@ -93,8 +99,6 @@ gt-y += \
 	gt/gen7_renderstate.o \
 	gt/gen8_renderstate.o \
 	gt/gen9_renderstate.o
-gt-$(CONFIG_DRM_I915_SELFTEST) += \
-	gt/mock_engine.o
 i915-y += $(gt-y)
 
 # GEM (Graphics Execution Management) code
@@ -126,6 +130,7 @@ gem-y += \
 i915-y += \
 	  $(gem-y) \
 	  i915_active.o \
+	  i915_buddy.o \
 	  i915_cmd_parser.o \
 	  i915_gem_evict.o \
 	  i915_gem_fence_reg.o \

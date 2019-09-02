@@ -48,16 +48,16 @@
 #include <sound/uda1380.h>
 
 #include <linux/platform_data/fb-s3c2410.h>
-#include "map.h"
-#include "hardware-s3c24xx.h"
-#include "regs-clock.h"
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/hardware-s3c24xx.h>
+#include <mach/regs-clock.h>
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "gpio-cfg.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/gpio-cfg.h>
+#include <plat/pm.h>
 
 #include "s3c24xx.h"
 #include "h1940.h"
@@ -686,7 +686,7 @@ static void __init h1940_map_io(void)
 {
 	s3c24xx_init_io(h1940_iodesc, ARRAY_SIZE(h1940_iodesc));
 	s3c24xx_init_uarts(h1940_uartcfgs, ARRAY_SIZE(h1940_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 
 	/* setup PM */
 
@@ -703,7 +703,7 @@ static void __init h1940_map_io(void)
 static void __init h1940_init_time(void)
 {
 	s3c2410_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 /* H1940 and RX3715 need to reserve this for suspend */

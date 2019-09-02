@@ -26,12 +26,12 @@
 #include <asm/mach/irq.h>
 
 #include <mach/irqs.h>
-#include "regs-irq.h"
-#include "regs-gpio.h"
+#include <mach/regs-irq.h>
+#include <mach/regs-gpio.h>
 
-#include "cpu.h"
-#include "regs-irqtype.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/regs-irqtype.h>
+#include <plat/pm.h>
 
 #define S3C_IRQTYPE_NONE	0
 #define S3C_IRQTYPE_EINT	1

@@ -25,19 +25,19 @@
 #include <asm/mach/irq.h>
 
 #include <video/samsung_fimd.h>
-#include "map.h"
+#include <mach/map.h>
 #include <mach/irqs.h>
 
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 
 #include <linux/platform_data/i2c-s3c2410.h>
-#include "gpio-samsung.h"
-#include "fb.h"
+#include <mach/gpio-samsung.h>
+#include <plat/fb.h>
 #include <linux/platform_data/mtd-nand-s3c2410.h>
 
-#include "devs.h"
-#include "cpu.h"
+#include <plat/devs.h>
+#include <plat/cpu.h>
 
 #include "s3c64xx.h"
 
@@ -249,7 +249,7 @@ static void __init hmt_map_io(void)
 	s3c64xx_init_io(hmt_iodesc, ARRAY_SIZE(hmt_iodesc));
 	s3c64xx_set_xtal_freq(12000000);
 	s3c24xx_init_uarts(hmt_uartcfgs, ARRAY_SIZE(hmt_uartcfgs));
-	s3c64xx_set_timer_source(S3C64XX_PWM3, S3C64XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init hmt_machine_init(void)
@@ -278,5 +278,5 @@ MACHINE_START(HMT, "Airgoo-HMT")
 	.init_irq	= s3c6410_init_irq,
 	.map_io		= hmt_map_io,
 	.init_machine	= hmt_machine_init,
-	.init_time	= s3c64xx_timer_init,
+	.init_time	= samsung_timer_init,
 MACHINE_END

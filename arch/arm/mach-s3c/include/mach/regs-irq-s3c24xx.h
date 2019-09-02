@@ -8,7 +8,7 @@
 #ifndef ___ASM_ARCH_REGS_IRQ_H
 #define ___ASM_ARCH_REGS_IRQ_H
 
-#include "map-s3c.h"
+#include <plat/map-s3c.h>
 
 /* interrupt controller */
 

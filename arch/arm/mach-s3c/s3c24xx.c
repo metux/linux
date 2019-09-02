@@ -22,9 +22,9 @@
 #include <linux/dmaengine.h>
 #include <linux/clk/samsung.h>
 
-#include "hardware-s3c24xx.h"
-#include "map.h"
-#include "regs-clock.h"
+#include <mach/hardware-s3c24xx.h>
+#include <mach/map.h>
+#include <mach/regs-clock.h>
 #include <asm/irq.h>
 #include <asm/cacheflush.h>
 #include <asm/system_info.h>
@@ -33,12 +33,12 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
-#include "regs-gpio.h"
-#include "dma-s3c24xx.h"
+#include <mach/regs-gpio.h>
+#include <mach/dma.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "pwm-core.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/pwm-core.h>
 
 #include "s3c24xx.h"
 
@@ -139,7 +139,7 @@ static struct cpu_table cpu_ids[] __initdata = {
 
 /* minimal IO mapping */
 
-static struct map_desc s3c_iodesc[] __initdata __maybe_unused = {
+static struct map_desc s3c_iodesc[] __initdata = {
 	IODESC_ENT(GPIO),
 	IODESC_ENT(IRQ),
 	IODESC_ENT(MEMCTRL),
@@ -222,13 +222,13 @@ void __init s3c24xx_init_io(struct map_desc *mach_desc, int size)
 	samsung_pwm_set_platdata(&s3c24xx_pwm_variant);
 }
 
-void __init s3c24xx_set_timer_source(unsigned int event, unsigned int source)
+void __init samsung_set_timer_source(unsigned int event, unsigned int source)
 {
 	s3c24xx_pwm_variant.output_mask = BIT(SAMSUNG_PWM_NUM) - 1;
 	s3c24xx_pwm_variant.output_mask &= ~(BIT(event) | BIT(source));
 }
 
-void __init s3c24xx_timer_init(void)
+void __init samsung_timer_init(void)
 {
 	unsigned int timer_irqs[SAMSUNG_PWM_NUM] = {
 		IRQ_TIMER0, IRQ_TIMER1, IRQ_TIMER2, IRQ_TIMER3, IRQ_TIMER4,

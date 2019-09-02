@@ -44,22 +44,22 @@
 #include <asm/mach-types.h>
 
 #include <video/samsung_fimd.h>
-#include "map.h"
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 #include <mach/irqs.h>
 
-#include "fb.h"
-#include "sdhci.h"
-#include "gpio-cfg.h"
+#include <plat/fb.h>
+#include <plat/sdhci.h>
+#include <plat/gpio-cfg.h>
 #include <linux/platform_data/spi-s3c64xx.h>
 
-#include "keypad.h"
-#include "devs.h"
-#include "cpu.h"
+#include <plat/keypad.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
 #include <linux/soc/samsung/s3c-adc.h>
 #include <linux/platform_data/i2c-s3c2410.h>
-#include "pm.h"
+#include <plat/pm.h>
 
 #include "s3c64xx.h"
 #include "crag6410.h"
@@ -748,7 +748,7 @@ static void __init crag6410_map_io(void)
 	s3c64xx_init_io(NULL, 0);
 	s3c64xx_set_xtal_freq(12000000);
 	s3c24xx_init_uarts(crag6410_uartcfgs, ARRAY_SIZE(crag6410_uartcfgs));
-	s3c64xx_set_timer_source(S3C64XX_PWM3, S3C64XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 
 	/* LCD type and Bypass set by bootloader */
 }
@@ -875,5 +875,5 @@ MACHINE_START(WLF_CRAGG_6410, "Wolfson Cragganmore 6410")
 	.init_irq	= s3c6410_init_irq,
 	.map_io		= crag6410_map_io,
 	.init_machine	= crag6410_machine_init,
-	.init_time	= s3c64xx_timer_init,
+	.init_time	= samsung_timer_init,
 MACHINE_END

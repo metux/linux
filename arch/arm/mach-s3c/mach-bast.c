@@ -41,13 +41,13 @@
 #include <asm/mach-types.h>
 
 #include <linux/platform_data/fb-s3c2410.h>
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
+#include <plat/cpu.h>
 #include <linux/soc/samsung/s3c-cpu-freq.h>
-#include "devs.h"
-#include "gpio-cfg.h"
+#include <plat/devs.h>
+#include <plat/gpio-cfg.h>
 
 #include "bast.h"
 #include "s3c24xx.h"
@@ -547,13 +547,13 @@ static void __init bast_map_io(void)
 
 	s3c24xx_init_io(bast_iodesc, ARRAY_SIZE(bast_iodesc));
 	s3c24xx_init_uarts(bast_uartcfgs, ARRAY_SIZE(bast_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init bast_init_time(void)
 {
 	s3c2410_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 static void __init bast_init(void)

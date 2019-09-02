@@ -15,10 +15,10 @@
 
 #include <asm/mach/arch.h>
 #include <asm/mach/irq.h>
-#include "map.h"
+#include <mach/map.h>
 #include <mach/irqs.h>
 
-#include "devs.h"
+#include <plat/devs.h>
 
 /* Serial port registrations */
 

@@ -21,7 +21,7 @@
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 
-#include "map.h"
+#include <mach/map.h>
 
 #include "bast.h"
 #include "simtec.h"

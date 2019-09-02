@@ -59,14 +59,14 @@
 #include <linux/platform_data/usb-s3c2410_udc.h>
 #include <linux/platform_data/fb-s3c2410.h>
 
-#include "regs-gpio.h"
-#include "regs-irq.h"
-#include "gpio-samsung.h"
+#include <mach/regs-gpio.h>
+#include <mach/regs-irq.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "gpio-cfg.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/gpio-cfg.h>
+#include <plat/pm.h>
 
 #include "s3c24xx.h"
 #include "gta02.h"
@@ -505,7 +505,7 @@ static void __init gta02_map_io(void)
 {
 	s3c24xx_init_io(gta02_iodesc, ARRAY_SIZE(gta02_iodesc));
 	s3c24xx_init_uarts(gta02_uartcfgs, ARRAY_SIZE(gta02_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 
@@ -567,7 +567,7 @@ static void __init gta02_machine_init(void)
 static void __init gta02_init_time(void)
 {
 	s3c2442_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 MACHINE_START(NEO1973_GTA02, "GTA02")

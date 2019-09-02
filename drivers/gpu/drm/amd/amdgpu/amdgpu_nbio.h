@@ -67,8 +67,6 @@ struct amdgpu_nbio_funcs {
 						  bool enable);
 	void (*ih_doorbell_range)(struct amdgpu_device *adev,
 				  bool use_doorbell, int doorbell_index);
-	void (*enable_doorbell_interrupt)(struct amdgpu_device *adev,
-					  bool enable);
 	void (*update_medium_grain_clock_gating)(struct amdgpu_device *adev,
 						 bool enable);
 	void (*update_medium_grain_light_sleep)(struct amdgpu_device *adev,
@@ -83,8 +81,6 @@ struct amdgpu_nbio_funcs {
 	void (*handle_ras_err_event_athub_intr_no_bifring)(struct amdgpu_device *adev);
 	int (*init_ras_controller_interrupt)(struct amdgpu_device *adev);
 	int (*init_ras_err_event_athub_interrupt)(struct amdgpu_device *adev);
-	void (*query_ras_error_count)(struct amdgpu_device *adev,
-					void *ras_error_status);
 	int (*ras_late_init)(struct amdgpu_device *adev);
 };
 
@@ -97,5 +93,5 @@ struct amdgpu_nbio {
 };
 
 int amdgpu_nbio_ras_late_init(struct amdgpu_device *adev);
-void amdgpu_nbio_ras_fini(struct amdgpu_device *adev);
+
 #endif

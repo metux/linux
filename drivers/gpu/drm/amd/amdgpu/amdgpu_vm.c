@@ -603,14 +603,12 @@ void amdgpu_vm_move_to_lru_tail(struct amdgpu_device *adev,
 	struct ttm_bo_global *glob = adev->mman.bdev.glob;
 	struct amdgpu_vm_bo_base *bo_base;
 
-#if 0
 	if (vm->bulk_moveable) {
 		spin_lock(&glob->lru_lock);
 		ttm_bo_bulk_move_lru_tail(&vm->lru_bulk_move);
 		spin_unlock(&glob->lru_lock);
 		return;
 	}
-#endif
 
 	memset(&vm->lru_bulk_move, 0, sizeof(vm->lru_bulk_move));
 
@@ -1571,33 +1569,8 @@ static int amdgpu_vm_bo_split_mapping(struct amdgpu_device *adev,
 	if (!(mapping->flags & AMDGPU_PTE_WRITEABLE))
 		flags &= ~AMDGPU_PTE_WRITEABLE;
 
-	if (adev->asic_type >= CHIP_TONGA) {
-		flags &= ~AMDGPU_PTE_EXECUTABLE;
-		flags |= mapping->flags & AMDGPU_PTE_EXECUTABLE;
-	}
-
-	if (adev->asic_type == CHIP_NAVI10) {
-		flags &= ~AMDGPU_PTE_MTYPE_NV10_MASK;
-		flags |= (mapping->flags & AMDGPU_PTE_MTYPE_NV10_MASK);
-	} else {
-		flags &= ~AMDGPU_PTE_MTYPE_VG10_MASK;
-		flags |= (mapping->flags & AMDGPU_PTE_MTYPE_VG10_MASK);
-	}
-
-	if ((mapping->flags & AMDGPU_PTE_PRT) &&
-	    (adev->asic_type >= CHIP_VEGA10)) {
-		flags |= AMDGPU_PTE_PRT;
-		if (adev->asic_type >= CHIP_NAVI10) {
-			flags |= AMDGPU_PTE_SNOOPED;
-			flags |= AMDGPU_PTE_LOG;
-			flags |= AMDGPU_PTE_SYSTEM;
-		}
-		flags &= ~AMDGPU_PTE_VALID;
-	}
-	if (adev->asic_type == CHIP_ARCTURUS &&
-	    !(flags & AMDGPU_PTE_SYSTEM) &&
-	    mapping->bo_va->is_xgmi)
-		flags |= AMDGPU_PTE_SNOOPED;
+	/* Apply ASIC specific mapping flags */
+	amdgpu_gmc_get_vm_pte(adev, mapping, &flags);
 
 	trace_amdgpu_vm_bo_update(mapping);
 
@@ -2869,6 +2842,13 @@ int amdgpu_vm_make_compute(struct amdgpu_device *adev, struct amdgpu_vm *vm, uns
 	WARN_ONCE((vm->use_cpu_for_update && !amdgpu_gmc_vram_full_visible(&adev->gmc)),
 		  "CPU update of VM recommended only for large BAR system\n");
 
+	if (vm->use_cpu_for_update)
+		vm->update_funcs = &amdgpu_vm_cpu_funcs;
+	else
+		vm->update_funcs = &amdgpu_vm_sdma_funcs;
+	dma_fence_put(vm->last_update);
+	vm->last_update = NULL;
+
 	if (vm->pasid) {
 		unsigned long flags;
 
@@ -3067,12 +3047,12 @@ int amdgpu_vm_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	switch (args->in.op) {
 	case AMDGPU_VM_OP_RESERVE_VMID:
 		/* current, we only have requirement to reserve vmid from gfxhub */
-		r = amdgpu_vmid_alloc_reserved(adev, &fpriv->vm, AMDGPU_GFXHUB);
+		r = amdgpu_vmid_alloc_reserved(adev, &fpriv->vm, AMDGPU_GFXHUB_0);
 		if (r)
 			return r;
 		break;
 	case AMDGPU_VM_OP_UNRESERVE_VMID:
-		amdgpu_vmid_free_reserved(adev, &fpriv->vm, AMDGPU_GFXHUB);
+		amdgpu_vmid_free_reserved(adev, &fpriv->vm, AMDGPU_GFXHUB_0);
 		break;
 	default:
 		return -EINVAL;

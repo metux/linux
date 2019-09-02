@@ -7,7 +7,6 @@
 #include <linux/mman.h>
 #include <linux/sizes.h>
 
-#include "display/intel_display_types.h"
 #include "gt/intel_gt.h"
 
 #include "i915_drv.h"
@@ -102,9 +101,6 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 		up_write(&mm->mmap_sem);
 		if (IS_ERR_VALUE(addr))
 			goto err;
-
-		/* This may race, but that's ok, it only gets set */
-		WRITE_ONCE(obj->frontbuffer_ggtt_origin, ORIGIN_CPU);
 	}
 	i915_gem_object_put(obj);
 
@@ -268,15 +264,15 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 	/* Now pin it into the GTT as needed */
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0,
 				       PIN_MAPPABLE |
-				       PIN_NONBLOCK |
-				       PIN_NONFAULT);
+				       PIN_NONBLOCK /* NOWARN */ |
+				       PIN_NOEVICT);
 	if (IS_ERR(vma)) {
 		/* Use a partial view if it is bigger than available space */
 		struct i915_ggtt_view view =
 			compute_partial_view(obj, page_offset, MIN_CHUNK_PAGES);
 		unsigned int flags;
 
-		flags = PIN_MAPPABLE;
+		flags = PIN_MAPPABLE | PIN_NOSEARCH;
 		if (view.type == I915_GGTT_VIEW_NORMAL)
 			flags |= PIN_NONBLOCK; /* avoid warnings for pinned */
 
@@ -284,14 +280,16 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 		 * Userspace is now writing through an untracked VMA, abandon
 		 * all hope that the hardware is able to track future writes.
 		 */
-		obj->frontbuffer_ggtt_origin = ORIGIN_CPU;
 
 		vma = i915_gem_object_ggtt_pin(obj, &view, 0, 0, flags);
-		if (IS_ERR(vma) && !view.type) {
+		if (IS_ERR(vma)) {
 			flags = PIN_MAPPABLE;
 			view.type = I915_GGTT_VIEW_PARTIAL;
 			vma = i915_gem_object_ggtt_pin(obj, &view, 0, 0, flags);
 		}
+
+		/* The entire mappable GGTT is pinned? Unexpected! */
+		GEM_BUG_ON(vma == ERR_PTR(-ENOSPC));
 	}
 	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
@@ -311,14 +309,17 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 	if (ret)
 		goto err_fence;
 
-	/* Mark as being mmapped into userspace for later revocation */
 	assert_rpm_wakelock_held(rpm);
+
+	/* Mark as being mmapped into userspace for later revocation */
+	mutex_lock(&i915->ggtt.vm.mutex);
 	if (!i915_vma_set_userfault(vma) && !obj->userfault_count++)
 		list_add(&obj->userfault_link, &i915->ggtt.userfault_list);
+	mutex_unlock(&i915->ggtt.vm.mutex);
+
 	if (CONFIG_DRM_I915_USERFAULT_AUTOSUSPEND)
 		intel_wakeref_auto(&i915->ggtt.userfault_wakeref,
 				   msecs_to_jiffies_timeout(CONFIG_DRM_I915_USERFAULT_AUTOSUSPEND));
-	GEM_BUG_ON(!obj->userfault_count);
 
 	i915_vma_set_ggtt_write(vma);
 
@@ -335,23 +336,19 @@ err_rpm:
 	i915_gem_object_unpin_pages(obj);
 err:
 	switch (ret) {
-	case -EIO:
-		/*
-		 * We eat errors when the gpu is terminally wedged to avoid
-		 * userspace unduly crashing (gl has no provisions for mmaps to
-		 * fail). But any other -EIO isn't ours (e.g. swap in failure)
-		 * and so needs to be reported.
-		 */
-		if (!intel_gt_is_wedged(ggtt->vm.gt))
-			return VM_FAULT_SIGBUS;
-		/* else, fall through */
-	case -EAGAIN:
-		/*
-		 * EAGAIN means the gpu is hung and we'll wait for the error
-		 * handler to reset everything when re-faulting in
-		 * i915_mutex_lock_interruptible.
-		 */
+	default:
+		WARN_ONCE(ret, "unhandled error in %s: %i\n", __func__, ret);
+		/* fallthrough */
+	case -EIO: /* shmemfs failure from swap device */
+	case -EFAULT: /* purged object */
+		return VM_FAULT_SIGBUS;
+
+	case -ENOSPC: /* shmemfs allocation failure */
+	case -ENOMEM: /* our allocation failure */
+		return VM_FAULT_OOM;
+
 	case 0:
+	case -EAGAIN:
 	case -ERESTARTSYS:
 	case -EINTR:
 	case -EBUSY:
@@ -360,14 +357,6 @@ err:
 		 * already did the job.
 		 */
 		return VM_FAULT_NOPAGE;
-	case -ENOMEM:
-		return VM_FAULT_OOM;
-	case -ENOSPC:
-	case -EFAULT:
-		return VM_FAULT_SIGBUS;
-	default:
-		WARN_ONCE(ret, "unhandled error in %s: %i\n", __func__, ret);
-		return VM_FAULT_SIGBUS;
 	}
 }
 
@@ -413,8 +402,8 @@ void i915_gem_object_release_mmap(struct drm_i915_gem_object *obj)
 	 * requirement that operations to the GGTT be made holding the RPM
 	 * wakeref.
 	 */
-	lockdep_assert_held(&i915->drm.struct_mutex);
 	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
+	mutex_lock(&i915->ggtt.vm.mutex);
 
 	if (!obj->userfault_count)
 		goto out;
@@ -431,6 +420,7 @@ void i915_gem_object_release_mmap(struct drm_i915_gem_object *obj)
 	wmb();
 
 out:
+	mutex_unlock(&i915->ggtt.vm.mutex);
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 

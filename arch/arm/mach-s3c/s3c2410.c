@@ -25,27 +25,27 @@
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 
-#include "map.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/gpio-samsung.h>
 #include <asm/irq.h>
 #include <asm/system_misc.h>
 
 
-#include "regs-clock.h"
+#include <mach/regs-clock.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/pm.h>
 
-#include "gpio-core.h"
-#include "gpio-cfg.h"
-#include "gpio-cfg-helpers.h"
+#include <plat/gpio-core.h>
+#include <plat/gpio-cfg.h>
+#include <plat/gpio-cfg-helpers.h>
 
 #include "s3c24xx.h"
 
 /* Initial IO mappings */
 
-static struct map_desc s3c2410_iodesc[] __initdata __maybe_unused = {
+static struct map_desc s3c2410_iodesc[] __initdata = {
 	IODESC_ENT(CLKPWR),
 	IODESC_ENT(TIMER),
 	IODESC_ENT(WATCHDOG),

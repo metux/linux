@@ -46,14 +46,14 @@
 
 #include <sound/uda1380.h>
 
-#include "hardware-s3c24xx.h"
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/hardware-s3c24xx.h>
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "pm.h"
-#include "gpio-cfg.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/pm.h>
+#include <plat/gpio-cfg.h>
 
 #include "s3c24xx.h"
 #include "h1940.h"
@@ -778,7 +778,7 @@ static void __init rx1950_map_io(void)
 {
 	s3c24xx_init_io(rx1950_iodesc, ARRAY_SIZE(rx1950_iodesc));
 	s3c24xx_init_uarts(rx1950_uartcfgs, ARRAY_SIZE(rx1950_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 
 	/* setup PM */
 
@@ -792,7 +792,7 @@ static void __init rx1950_map_io(void)
 static void __init rx1950_init_time(void)
 {
 	s3c2442_init_clocks(16934000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 static void __init rx1950_init_machine(void)

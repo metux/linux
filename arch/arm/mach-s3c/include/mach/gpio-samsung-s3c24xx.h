@@ -14,7 +14,7 @@
 #ifndef GPIO_SAMSUNG_S3C24XX_H
 #define GPIO_SAMSUNG_S3C24XX_H
 
-#include "map.h"
+#include <mach/map.h>
 
 /*
  * GPIO sizes for various SoCs:

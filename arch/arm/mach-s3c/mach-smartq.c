@@ -18,17 +18,17 @@
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
 
-#include "map.h"
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
-#include "devs.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
 #include <linux/platform_data/i2c-s3c2410.h>
-#include "gpio-cfg.h"
+#include <plat/gpio-cfg.h>
 #include <linux/platform_data/hwmon-s3c.h>
 #include <linux/platform_data/usb-ohci-s3c2410.h>
-#include "sdhci.h"
+#include <plat/sdhci.h>
 #include <linux/platform_data/touchscreen-s3c2410.h>
 
 #include <video/platform_lcd.h>
@@ -383,7 +383,7 @@ void __init smartq_map_io(void)
 	s3c64xx_set_xtal_freq(12000000);
 	s3c64xx_set_xusbxti_freq(12000000);
 	s3c24xx_init_uarts(smartq_uartcfgs, ARRAY_SIZE(smartq_uartcfgs));
-	s3c64xx_set_timer_source(S3C64XX_PWM3, S3C64XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 
 	smartq_lcd_mode_set();
 }

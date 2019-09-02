@@ -7,9 +7,9 @@
 
 #include <linux/linkage.h>
 #include <asm/assembler.h>
-#include "map.h"
+#include <mach/map.h>
 
-#include "regs-gpio.h"
+#include <mach/regs-gpio.h>
 
 	.text
 	.global	h1940_pm_return

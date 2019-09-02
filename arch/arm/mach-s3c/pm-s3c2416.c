@@ -11,10 +11,10 @@
 
 #include <asm/cacheflush.h>
 
-#include "regs-s3c2443-clock.h"
+#include <mach/regs-s3c2443-clock.h>
 
-#include "cpu.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/pm.h>
 
 #include "s3c2412-power.h"
 

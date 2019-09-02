@@ -24,15 +24,15 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
-#include "map.h"
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 #include <mach/irqs.h>
 
 #include <linux/soc/samsung/s3c-adc.h>
-#include "cpu.h"
-#include "devs.h"
-#include "fb.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/fb.h>
 #include <linux/platform_data/mtd-nand-s3c2410.h>
 #include <linux/platform_data/touchscreen-s3c2410.h>
 
@@ -207,7 +207,7 @@ static void __init real6410_map_io(void)
 	s3c64xx_init_io(NULL, 0);
 	s3c24xx_init_clocks(12000000);
 	s3c24xx_init_uarts(real6410_uartcfgs, ARRAY_SIZE(real6410_uartcfgs));
-	s3c64xx_set_timer_source(S3C64XX_PWM3, S3C64XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 
 	/* set the LCD type */
 	tmp = __raw_readl(S3C64XX_SPCON);
@@ -329,5 +329,5 @@ MACHINE_START(REAL6410, "REAL6410")
 	.init_irq	= s3c6410_init_irq,
 	.map_io		= real6410_map_io,
 	.init_machine	= real6410_machine_init,
-	.init_time	= s3c64xx_timer_init,
+	.init_time	= samsung_timer_init,
 MACHINE_END

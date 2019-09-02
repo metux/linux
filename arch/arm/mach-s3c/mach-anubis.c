@@ -27,8 +27,8 @@
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 #include <linux/platform_data/mtd-nand-s3c2410.h>
 #include <linux/platform_data/i2c-s3c2410.h>
 
@@ -39,8 +39,8 @@
 
 #include <net/ax88796.h>
 
-#include "devs.h"
-#include "cpu.h"
+#include <plat/devs.h>
+#include <plat/cpu.h>
 #include <linux/platform_data/asoc-s3c24xx_simtec.h>
 
 #include "anubis.h"
@@ -381,7 +381,7 @@ static void __init anubis_map_io(void)
 {
 	s3c24xx_init_io(anubis_iodesc, ARRAY_SIZE(anubis_iodesc));
 	s3c24xx_init_uarts(anubis_uartcfgs, ARRAY_SIZE(anubis_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 
 	/* check for the newer revision boards with large page nand */
 
@@ -400,7 +400,7 @@ static void __init anubis_map_io(void)
 static void __init anubis_init_time(void)
 {
 	s3c2440_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 static void __init anubis_init(void)

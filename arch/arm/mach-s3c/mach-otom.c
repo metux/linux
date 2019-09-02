@@ -22,11 +22,12 @@
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 
-#include "gpio-samsung.h"
-#include "gpio-cfg.h"
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
+#include <plat/gpio-cfg.h>
 
-#include "cpu.h"
-#include "devs.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
 
 #include "s3c24xx.h"
 #include "otom.h"
@@ -94,13 +95,13 @@ static void __init otom11_map_io(void)
 {
 	s3c24xx_init_io(otom11_iodesc, ARRAY_SIZE(otom11_iodesc));
 	s3c24xx_init_uarts(otom11_uartcfgs, ARRAY_SIZE(otom11_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init otom11_init_time(void)
 {
 	s3c2410_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 static void __init otom11_init(void)

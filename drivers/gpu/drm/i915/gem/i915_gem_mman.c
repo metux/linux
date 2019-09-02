@@ -245,9 +245,11 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 
 	wakeref = intel_runtime_pm_get(rpm);
 
-	ret = intel_gt_reset_trylock(ggtt->vm.gt, &srcu);
-	if (ret)
+	srcu = intel_gt_reset_trylock(ggtt->vm.gt);
+	if (srcu < 0) {
+		ret = srcu;
 		goto err_rpm;
+	}
 
 	ret = i915_mutex_lock_interruptible(dev);
 	if (ret)
@@ -285,6 +287,9 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 			view.type = I915_GGTT_VIEW_PARTIAL;
 			vma = i915_gem_object_ggtt_pin(obj, &view, 0, 0, flags);
 		}
+
+		/* The entire mappable GGTT is pinned? Unexpected! */
+		GEM_BUG_ON(vma == ERR_PTR(-ENOSPC));
 	}
 	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
@@ -316,11 +321,7 @@ vm_fault_t i915_gem_fault(struct vm_fault *vmf)
 		intel_wakeref_auto(&i915->ggtt.userfault_wakeref,
 				   msecs_to_jiffies_timeout(CONFIG_DRM_I915_USERFAULT_AUTOSUSPEND));
 
-	if (write) {
-		GEM_BUG_ON(!i915_gem_object_has_pinned_pages(obj));
-		i915_vma_set_ggtt_write(vma);
-		obj->mm.dirty = true;
-	}
+	i915_vma_set_ggtt_write(vma);
 
 err_fence:
 	i915_vma_unpin_fence(vma);
@@ -335,23 +336,19 @@ err_rpm:
 	i915_gem_object_unpin_pages(obj);
 err:
 	switch (ret) {
-	case -EIO:
-		/*
-		 * We eat errors when the gpu is terminally wedged to avoid
-		 * userspace unduly crashing (gl has no provisions for mmaps to
-		 * fail). But any other -EIO isn't ours (e.g. swap in failure)
-		 * and so needs to be reported.
-		 */
-		if (!intel_gt_is_wedged(ggtt->vm.gt))
-			return VM_FAULT_SIGBUS;
-		/* else, fall through */
-	case -EAGAIN:
-		/*
-		 * EAGAIN means the gpu is hung and we'll wait for the error
-		 * handler to reset everything when re-faulting in
-		 * i915_mutex_lock_interruptible.
-		 */
+	default:
+		WARN_ONCE(ret, "unhandled error in %s: %i\n", __func__, ret);
+		/* fallthrough */
+	case -EIO: /* shmemfs failure from swap device */
+	case -EFAULT: /* purged object */
+		return VM_FAULT_SIGBUS;
+
+	case -ENOSPC: /* shmemfs allocation failure */
+	case -ENOMEM: /* our allocation failure */
+		return VM_FAULT_OOM;
+
 	case 0:
+	case -EAGAIN:
 	case -ERESTARTSYS:
 	case -EINTR:
 	case -EBUSY:
@@ -360,15 +357,6 @@ err:
 		 * already did the job.
 		 */
 		return VM_FAULT_NOPAGE;
-	case -ENOMEM:
-		return VM_FAULT_OOM;
-	case -ENOSPC:
-	case -EFAULT:
-	case -ENODEV: /* bad object, how did you get here! */
-		return VM_FAULT_SIGBUS;
-	default:
-		WARN_ONCE(ret, "unhandled error in %s: %i\n", __func__, ret);
-		return VM_FAULT_SIGBUS;
 	}
 }
 
@@ -476,16 +464,10 @@ i915_gem_mmap_gtt(struct drm_file *file,
 	if (!obj)
 		return -ENOENT;
 
-	if (i915_gem_object_never_bind_ggtt(obj)) {
-		ret = -ENODEV;
-		goto out;
-	}
-
 	ret = create_mmap_offset(obj);
 	if (ret == 0)
 		*offset = drm_vma_node_offset_addr(&obj->base.vma_node);
 
-out:
 	i915_gem_object_put(obj);
 	return ret;
 }

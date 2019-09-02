@@ -16,10 +16,10 @@
 #include <linux/serial_s3c.h>
 
 #include <asm/mach/arch.h>
-#include "map.h"
+#include <mach/map.h>
 
-#include "cpu.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/pm.h>
 
 #include "s3c24xx.h"
 

@@ -28,12 +28,12 @@
 
 #include <asm/irq.h>
 
-#include "regs-clock.h"
+#include <mach/regs-clock.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "sdhci.h"
-#include "iic-core.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/sdhci.h>
+#include <plat/iic-core.h>
 
 #include "s3c64xx.h"
 #include "onenand-core-s3c64xx.h"

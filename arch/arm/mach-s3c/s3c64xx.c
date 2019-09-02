@@ -35,17 +35,18 @@
 #include <asm/mach/map.h>
 #include <asm/system_misc.h>
 
-#include "map.h"
+#include <mach/map.h>
 #include <mach/irqs.h>
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "pm.h"
-#include "gpio-cfg.h"
-#include "pwm-core.h"
-#include "regs-irqtype.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/pm.h>
+#include <plat/gpio-cfg.h>
+#include <plat/pwm-core.h>
+#include <plat/regs-irqtype.h>
+
 #include "s3c64xx.h"
 #include "irq-uart-s3c64xx.h"
 
@@ -95,12 +96,7 @@ static struct cpu_table cpu_ids[] __initdata = {
 
 /* minimal IO mapping */
 
-/*
- * note, for the boot process to work we have to keep the UART
- * virtual address aligned to an 1MiB boundary for the L1
- * mapping the head code makes. We keep the UART virtual address
- * aligned and add in the offset when we load the value here.
- */
+/* see notes on uart map in arch/arm/mach-s3c64xx/include/mach/debug-macro.S */
 #define UART_OFFS (S3C_PA_UART & 0xfffff)
 
 static struct map_desc s3c_iodesc[] __initdata = {
@@ -173,13 +169,13 @@ static struct samsung_pwm_variant s3c64xx_pwm_variant = {
 	.tclk_mask	= (1 << 7) | (1 << 6) | (1 << 5),
 };
 
-void __init s3c64xx_set_timer_source(unsigned int event, unsigned int source)
+void __init samsung_set_timer_source(unsigned int event, unsigned int source)
 {
 	s3c64xx_pwm_variant.output_mask = BIT(SAMSUNG_PWM_NUM) - 1;
 	s3c64xx_pwm_variant.output_mask &= ~(BIT(event) | BIT(source));
 }
 
-void __init s3c64xx_timer_init(void)
+void __init samsung_timer_init(void)
 {
 	unsigned int timer_irqs[SAMSUNG_PWM_NUM] = {
 		IRQ_TIMER0_VIC, IRQ_TIMER1_VIC, IRQ_TIMER2_VIC,

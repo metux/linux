@@ -11,7 +11,7 @@
  * management
 */
 
-#include "pm-common.h"
+#include <plat/pm-common.h>
 
 struct device;
 

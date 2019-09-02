@@ -25,26 +25,26 @@
 #include <asm/mach/irq.h>
 
 #include <video/samsung_fimd.h>
+#include <mach/hardware-s3c24xx.h>
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 
-#include "hardware-s3c24xx.h"
-#include "regs-gpio.h"
-#include "regs-s3c2443-clock.h"
-#include "gpio-samsung.h"
+#include <mach/regs-gpio.h>
+#include <mach/regs-s3c2443-clock.h>
+#include <mach/gpio-samsung.h>
 
 #include <linux/platform_data/leds-s3c24xx.h>
 #include <linux/platform_data/i2c-s3c2410.h>
 
-#include "gpio-cfg.h"
-#include "devs.h"
-#include "cpu.h"
+#include <plat/gpio-cfg.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
 #include <linux/platform_data/mtd-nand-s3c2410.h>
-#include "sdhci.h"
+#include <plat/sdhci.h>
 #include <linux/platform_data/usb-s3c2410_udc.h>
 #include <linux/platform_data/s3c-hsudc.h>
 
-#include "fb.h"
+#include <plat/fb.h>
 
 #include "s3c24xx.h"
 #include "common-smdk-s3c24xx.h"
@@ -213,14 +213,14 @@ static struct platform_device *smdk2416_devices[] __initdata = {
 static void __init smdk2416_init_time(void)
 {
 	s3c2416_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 static void __init smdk2416_map_io(void)
 {
 	s3c24xx_init_io(smdk2416_iodesc, ARRAY_SIZE(smdk2416_iodesc));
 	s3c24xx_init_uarts(smdk2416_uartcfgs, ARRAY_SIZE(smdk2416_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init smdk2416_machine_init(void)

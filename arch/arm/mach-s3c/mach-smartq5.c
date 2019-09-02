@@ -15,14 +15,14 @@
 
 #include <video/samsung_fimd.h>
 #include <mach/irqs.h>
-#include "map.h"
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "fb.h"
-#include "gpio-cfg.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/fb.h>
+#include <plat/gpio-cfg.h>
 
 #include "s3c64xx.h"
 #include "mach-smartq.h"
@@ -150,5 +150,5 @@ MACHINE_START(SMARTQ5, "SmartQ 5")
 	.init_irq	= s3c6410_init_irq,
 	.map_io		= smartq_map_io,
 	.init_machine	= smartq5_machine_init,
-	.init_time	= s3c64xx_timer_init,
+	.init_time	= samsung_timer_init,
 MACHINE_END

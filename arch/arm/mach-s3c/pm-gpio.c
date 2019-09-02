@@ -13,10 +13,10 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 
-#include "gpio-samsung.h"
+#include <mach/gpio-samsung.h>
 
-#include "gpio-core.h"
-#include "pm.h"
+#include <plat/gpio-core.h>
+#include <plat/pm.h>
 
 /* PM GPIO helpers */
 

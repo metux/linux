@@ -26,32 +26,32 @@
 #include <asm/mach/map.h>
 #include <asm/mach/irq.h>
 
-#include "map.h"
-#include "gpio-samsung.h"
+#include <mach/map.h>
+#include <mach/gpio-samsung.h>
 #include <asm/proc-fns.h>
 #include <asm/irq.h>
 #include <asm/system_misc.h>
 
-#include "regs-s3c2443-clock.h"
-#include "rtc-core-s3c24xx.h"
+#include <mach/regs-s3c2443-clock.h>
+#include <mach/rtc-core-s3c24xx.h>
 
-#include "gpio-core.h"
-#include "gpio-cfg.h"
-#include "gpio-cfg-helpers.h"
-#include "devs.h"
-#include "cpu.h"
-#include "sdhci.h"
-#include "pm.h"
+#include <plat/gpio-core.h>
+#include <plat/gpio-cfg.h>
+#include <plat/gpio-cfg-helpers.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
+#include <plat/sdhci.h>
+#include <plat/pm.h>
 
-#include "iic-core.h"
-#include "adc-core.h"
+#include <plat/iic-core.h>
+#include <plat/adc-core.h>
 
 #include "s3c24xx.h"
 #include "fb-core-s3c24xx.h"
 #include "nand-core-s3c24xx.h"
 #include "spi-core-s3c24xx.h"
 
-static struct map_desc s3c2416_iodesc[] __initdata __maybe_unused = {
+static struct map_desc s3c2416_iodesc[] __initdata = {
 	IODESC_ENT(WATCHDOG),
 	IODESC_ENT(CLKPWR),
 	IODESC_ENT(TIMER),

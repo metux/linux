@@ -31,13 +31,13 @@
 #include <asm/mach-types.h>
 #include <linux/platform_data/fb-s3c2410.h>
 
-#include "regs-gpio.h"
-#include "gpio-samsung.h"
+#include <mach/regs-gpio.h>
+#include <mach/gpio-samsung.h>
 
 #include <linux/platform_data/i2c-s3c2410.h>
-#include "devs.h"
-#include "cpu.h"
-#include "gpio-cfg.h"
+#include <plat/devs.h>
+#include <plat/cpu.h>
+#include <plat/gpio-cfg.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
@@ -153,13 +153,13 @@ static void __init amlm5900_map_io(void)
 {
 	s3c24xx_init_io(amlm5900_iodesc, ARRAY_SIZE(amlm5900_iodesc));
 	s3c24xx_init_uarts(amlm5900_uartcfgs, ARRAY_SIZE(amlm5900_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init amlm5900_init_time(void)
 {
 	s3c2410_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 #ifdef CONFIG_FB_S3C2410

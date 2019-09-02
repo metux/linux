@@ -31,10 +31,10 @@
 #include <linux/platform_data/mtd-nand-s3c2410.h>
 #include <linux/platform_data/i2c-s3c2410.h>
 
-#include "hardware-s3c24xx.h"
-#include "regs-gpio.h"
+#include <mach/hardware-s3c24xx.h>
+#include <mach/regs-gpio.h>
 #include <linux/platform_data/fb-s3c2410.h>
-#include "gpio-samsung.h"
+#include <mach/gpio-samsung.h>
 
 #include <asm/mach-types.h>
 
@@ -43,10 +43,10 @@
 #include <linux/mtd/nand_ecc.h>
 #include <linux/mtd/partitions.h>
 
-#include "gpio-cfg.h"
-#include "devs.h"
-#include "cpu.h"
-#include "pm.h"
+#include <plat/gpio-cfg.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
+#include <plat/pm.h>
 #include <linux/platform_data/usb-s3c2410_udc.h>
 
 #include "s3c24xx.h"
@@ -529,13 +529,13 @@ static void __init jive_map_io(void)
 {
 	s3c24xx_init_io(jive_iodesc, ARRAY_SIZE(jive_iodesc));
 	s3c24xx_init_uarts(jive_uartcfgs, ARRAY_SIZE(jive_uartcfgs));
-	s3c24xx_set_timer_source(S3C24XX_PWM3, S3C24XX_PWM4);
+	samsung_set_timer_source(SAMSUNG_PWM3, SAMSUNG_PWM4);
 }
 
 static void __init jive_init_time(void)
 {
 	s3c2412_init_clocks(12000000);
-	s3c24xx_timer_init();
+	samsung_timer_init();
 }
 
 static void jive_power_off(void)

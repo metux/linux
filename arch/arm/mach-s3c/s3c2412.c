@@ -29,13 +29,13 @@
 #include <asm/irq.h>
 #include <asm/system_misc.h>
 
-#include "map.h"
-#include "regs-clock.h"
-#include "regs-gpio.h"
+#include <mach/map.h>
+#include <mach/regs-clock.h>
+#include <mach/regs-gpio.h>
 
-#include "cpu.h"
-#include "devs.h"
-#include "pm.h"
+#include <plat/cpu.h>
+#include <plat/devs.h>
+#include <plat/pm.h>
 
 #include "s3c24xx.h"
 #include "nand-core-s3c24xx.h"
@@ -55,7 +55,7 @@ static inline void s3c2412_init_gpio2(void)
 
 /* Initial IO mappings */
 
-static struct map_desc s3c2412_iodesc[] __initdata __maybe_unused = {
+static struct map_desc s3c2412_iodesc[] __initdata = {
 	IODESC_ENT(CLKPWR),
 	IODESC_ENT(TIMER),
 	IODESC_ENT(WATCHDOG),

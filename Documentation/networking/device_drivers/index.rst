@@ -24,7 +24,6 @@ Contents:
    google/gve
    marvell/octeontx2
    mellanox/mlx5
-   netronome/nfp
    pensando/ionic
    stmicro/stmmac
 

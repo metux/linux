@@ -268,16 +268,6 @@ struct tls_context {
 
 	/* cache cold stuff */
 	void (*sk_destruct)(struct sock *sk);
-	void (*sk_proto_close)(struct sock *sk, long timeout);
-
-	int  (*setsockopt)(struct sock *sk, int level,
-			   int optname, char __user *optval,
-			   unsigned int optlen);
-	int  (*getsockopt)(struct sock *sk, int level,
-			   int optname, char __user *optval,
-			   int __user *optlen);
-	int  (*hash)(struct sock *sk);
-	void (*unhash)(struct sock *sk);
 
 	union tls_crypto_context crypto_send;
 	union tls_crypto_context crypto_recv;

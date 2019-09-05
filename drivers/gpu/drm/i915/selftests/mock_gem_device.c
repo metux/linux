@@ -195,7 +195,7 @@ struct drm_i915_private *mock_gem_device(void)
 	INIT_DELAYED_WORK(&i915->gem.retire_work, mock_retire_work_handler);
 	INIT_WORK(&i915->gem.idle_work, mock_idle_work_handler);
 
-	i915->gt.awake = true;
+	i915->gt.awake = -1;
 
 	i915->objects = KMEM_CACHE(mock_object, SLAB_HWCACHE_ALIGN);
 	if (!i915->objects)

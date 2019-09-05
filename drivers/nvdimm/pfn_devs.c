@@ -92,42 +92,39 @@ static ssize_t align_show(struct device *dev,
 	return sprintf(buf, "%ld\n", nd_pfn->align);
 }
 
-static unsigned long *nd_pfn_supported_alignments(unsigned long *alignments)
+static const unsigned long *nd_pfn_supported_alignments(void)
 {
+	/*
+	 * This needs to be a non-static variable because the *_SIZE
+	 * macros aren't always constants.
+	 */
+	const unsigned long supported_alignments[] = {
+		PAGE_SIZE,
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+		HPAGE_PMD_SIZE,
+#ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
+		HPAGE_PUD_SIZE,
+#endif
+#endif
+		0,
+	};
+	static unsigned long data[ARRAY_SIZE(supported_alignments)];
 
-	alignments[0] = PAGE_SIZE;
+	memcpy(data, supported_alignments, sizeof(data));
 
-	if (has_transparent_hugepage()) {
-		alignments[1] = HPAGE_PMD_SIZE;
-		if (IS_ENABLED(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD))
-			alignments[2] = HPAGE_PUD_SIZE;
-	}
-
-	return alignments;
-}
-
-/*
- * Use pmd mapping if supported as default alignment
- */
-static unsigned long nd_pfn_default_alignment(void)
-{
-
-	if (has_transparent_hugepage())
-		return HPAGE_PMD_SIZE;
-	return PAGE_SIZE;
+	return data;
 }
 
 static ssize_t align_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct nd_pfn *nd_pfn = to_nd_pfn_safe(dev);
-	unsigned long aligns[MAX_NVDIMM_ALIGN] = { [0] = 0, };
 	ssize_t rc;
 
 	nd_device_lock(dev);
 	nvdimm_bus_lock(dev);
 	rc = nd_size_select_store(dev, buf, &nd_pfn->align,
-			nd_pfn_supported_alignments(aligns));
+			nd_pfn_supported_alignments());
 	dev_dbg(dev, "result: %zd wrote: %s%s", rc, buf,
 			buf[len - 1] == '\n' ? "" : "\n");
 	nvdimm_bus_unlock(dev);
@@ -251,10 +248,7 @@ static DEVICE_ATTR_RO(size);
 static ssize_t supported_alignments_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	unsigned long aligns[MAX_NVDIMM_ALIGN] = { [0] = 0, };
-
-	return nd_size_select_show(0,
-			nd_pfn_supported_alignments(aligns), buf);
+	return nd_size_select_show(0, nd_pfn_supported_alignments(), buf);
 }
 static DEVICE_ATTR_RO(supported_alignments);
 
@@ -301,7 +295,7 @@ struct device *nd_pfn_devinit(struct nd_pfn *nd_pfn,
 		return NULL;
 
 	nd_pfn->mode = PFN_MODE_NONE;
-	nd_pfn->align = nd_pfn_default_alignment();
+	nd_pfn->align = PFN_DEFAULT_ALIGNMENT;
 	dev = &nd_pfn->dev;
 	device_initialize(&nd_pfn->dev);
 	if (ndns && !__nd_attach_ndns(&nd_pfn->dev, ndns, &nd_pfn->ndns)) {
@@ -419,21 +413,6 @@ static int nd_pfn_clear_memmap_errors(struct nd_pfn *nd_pfn)
 	return 0;
 }
 
-static bool nd_supported_alignment(unsigned long align)
-{
-	int i;
-	unsigned long supported[MAX_NVDIMM_ALIGN] = { [0] = 0, };
-
-	if (align == 0)
-		return false;
-
-	nd_pfn_supported_alignments(supported);
-	for (i = 0; supported[i]; i++)
-		if (align == supported[i])
-			return true;
-	return false;
-}
-
 /**
  * nd_pfn_validate - read and validate info-block
  * @nd_pfn: fsdax namespace runtime state / properties
@@ -515,18 +494,6 @@ int nd_pfn_validate(struct nd_pfn *nd_pfn, const char *sig)
 		dev_err(&nd_pfn->dev,
 				"init failed, struct page size mismatch %d\n",
 				le16_to_cpu(pfn_sb->page_struct_size));
-		return -EOPNOTSUPP;
-	}
-
-	/*
-	 * Check whether the we support the alignment. For Dax if the
-	 * superblock alignment is not matching, we won't initialize
-	 * the device.
-	 */
-	if (!nd_supported_alignment(align) &&
-			!memcmp(pfn_sb->signature, DAX_SIG, PFN_SIG_LEN)) {
-		dev_err(&nd_pfn->dev, "init failed, alignment mismatch: "
-				"%ld:%ld\n", nd_pfn->align, align);
 		return -EOPNOTSUPP;
 	}
 
@@ -668,11 +635,9 @@ static int __nvdimm_setup_pfn(struct nd_pfn *nd_pfn, struct dev_pagemap *pgmap)
 	struct nd_namespace_common *ndns = nd_pfn->ndns;
 	struct nd_namespace_io *nsio = to_nd_namespace_io(&ndns->dev);
 	resource_size_t base = nsio->res.start + start_pad;
-	resource_size_t end = nsio->res.end - end_trunc;
 	struct vmem_altmap __altmap = {
 		.base_pfn = init_altmap_base(base),
 		.reserve = init_altmap_reserve(base),
-		.end_pfn = PHYS_PFN(end),
 	};
 
 	memcpy(res, &nsio->res, sizeof(*res));
@@ -707,7 +672,6 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	resource_size_t start, size;
 	struct nd_region *nd_region;
 	unsigned long npfns, align;
-	u32 end_trunc;
 	struct nd_pfn_sb *pfn_sb;
 	phys_addr_t offset;
 	const char *sig;
@@ -751,7 +715,6 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	size = resource_size(&nsio->res);
 	npfns = PHYS_PFN(size - SZ_8K);
 	align = max(nd_pfn->align, (1UL << SUBSECTION_SHIFT));
-	end_trunc = start + size - ALIGN_DOWN(start + size, align);
 	if (nd_pfn->mode == PFN_MODE_PMEM) {
 		/*
 		 * The altmap should be padded out to the block size used
@@ -778,7 +741,7 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 		return -ENXIO;
 	}
 
-	npfns = PHYS_PFN(size - offset - end_trunc);
+	npfns = PHYS_PFN(size - offset);
 	pfn_sb->mode = cpu_to_le32(nd_pfn->mode);
 	pfn_sb->dataoff = cpu_to_le64(offset);
 	pfn_sb->npfns = cpu_to_le64(npfns);
@@ -787,7 +750,6 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	memcpy(pfn_sb->parent_uuid, nd_dev_to_uuid(&ndns->dev), 16);
 	pfn_sb->version_major = cpu_to_le16(1);
 	pfn_sb->version_minor = cpu_to_le16(4);
-	pfn_sb->end_trunc = cpu_to_le32(end_trunc);
 	pfn_sb->align = cpu_to_le32(nd_pfn->align);
 	pfn_sb->page_struct_size = cpu_to_le16(MAX_STRUCT_PAGE_SIZE);
 	pfn_sb->page_size = cpu_to_le32(PAGE_SIZE);

@@ -685,7 +685,7 @@ static bool is_same_edid(struct dc_edid *old_edid, struct dc_edid *new_edid)
 	return (memcmp(old_edid->raw_edid, new_edid->raw_edid, new_edid->length) == 0);
 }
 
-bool wait_for_alt_mode(struct dc_link *link)
+static bool wait_for_alt_mode(struct dc_link *link)
 {
 
 	/**
@@ -743,7 +743,7 @@ bool wait_for_alt_mode(struct dc_link *link)
  * This does not create remote sinks but will trigger DM
  * to start MST detection if a branch is detected.
  */
-bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
+bool dc_link_detect_helper(struct dc_link *link, enum dc_detect_reason reason)
 {
 	struct dc_sink_init_data sink_init_data = { 0 };
 	struct display_sink_capability sink_caps = { 0 };
@@ -759,6 +759,7 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 	bool same_dpcd = true;
 	enum dc_connection_type new_connection_type = dc_connection_none;
 	bool perform_dp_seamless_boot = false;
+
 	DC_LOGGER_INIT(link->ctx->logger);
 
 	if (dc_is_virtual_signal(link->connector_signal))
@@ -871,7 +872,8 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 				 * empty which leads to allocate_mst_payload() has "0"
 				 * pbn_per_slot value leading to exception on dc_fixpt_div()
 				 */
-				link->verified_link_cap = link->reported_link_cap;
+				dp_verify_mst_link_cap(link);
+
 				if (prev_sink != NULL)
 					dc_sink_release(prev_sink);
 				return false;
@@ -1065,6 +1067,23 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 		dc_sink_release(prev_sink);
 
 	return true;
+
+}
+
+bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
+{
+	const struct dc *dc = link->dc;
+	bool ret;
+
+	/* get out of low power state */
+	clk_mgr_exit_optimized_pwr_state(dc, dc->clk_mgr);
+
+	ret = dc_link_detect_helper(link, reason);
+
+	/* Go back to power optimized state */
+	clk_mgr_optimize_pwr_state(dc, dc->clk_mgr);
+
+	return ret;
 }
 
 bool dc_link_get_hpd_state(struct dc_link *dc_link)
@@ -2401,13 +2420,17 @@ bool dc_link_set_abm_disable(const struct dc_link *link)
 	return true;
 }
 
-bool dc_link_set_psr_enable(const struct dc_link *link, bool enable, bool wait)
+bool dc_link_set_psr_allow_active(struct dc_link *link, bool allow_active, bool wait)
 {
 	struct dc  *core_dc = link->ctx->dc;
 	struct dmcu *dmcu = core_dc->res_pool->dmcu;
 
-	if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_enabled)
-		dmcu->funcs->set_psr_enable(dmcu, enable, wait);
+
+
+	if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_feature_enabled)
+		dmcu->funcs->set_psr_enable(dmcu, allow_active, wait);
+
+	link->psr_allow_active = allow_active;
 
 	return true;
 }
@@ -2690,6 +2713,24 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 
 	return DC_OK;
 }
+#if defined(CONFIG_DRM_AMD_DC_HDCP)
+static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
+{
+	struct cp_psp *cp_psp = &pipe_ctx->stream->ctx->cp_psp;
+	if (cp_psp && cp_psp->funcs.update_stream_config) {
+		struct cp_psp_stream_config config;
+
+		memset(&config, 0, sizeof(config));
+
+		config.otg_inst = (uint8_t) pipe_ctx->stream_res.tg->inst;
+		config.stream_enc_inst = (uint8_t) pipe_ctx->stream_res.stream_enc->id;
+		config.link_enc_inst = pipe_ctx->stream->link->link_enc_hw_inst;
+		config.dpms_off = dpms_off;
+		config.dm_stream_ctx = pipe_ctx->stream->dm_stream_context;
+		cp_psp->funcs.update_stream_config(cp_psp->handle, &config);
+	}
+}
+#endif
 
 void core_link_enable_stream(
 		struct dc_state *state,
@@ -2699,6 +2740,10 @@ void core_link_enable_stream(
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	enum dc_status status;
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
+
+	if (!IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment) &&
+			dc_is_virtual_signal(pipe_ctx->stream->signal))
+		return;
 
 	if (!dc_is_virtual_signal(pipe_ctx->stream->signal)) {
 		stream->link->link_enc->funcs->setup(
@@ -2750,6 +2795,9 @@ void core_link_enable_stream(
 		/* Do not touch link on seamless boot optimization. */
 		if (pipe_ctx->stream->apply_seamless_boot_optimization) {
 			pipe_ctx->stream->dpms_off = false;
+#if defined(CONFIG_DRM_AMD_DC_HDCP)
+			update_psp_stream_config(pipe_ctx, false);
+#endif
 			return;
 		}
 
@@ -2757,6 +2805,9 @@ void core_link_enable_stream(
 		if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP &&
 					apply_edp_fast_boot_optimization) {
 			pipe_ctx->stream->dpms_off = false;
+#if defined(CONFIG_DRM_AMD_DC_HDCP)
+			update_psp_stream_config(pipe_ctx, false);
+#endif
 			return;
 		}
 
@@ -2816,6 +2867,9 @@ void core_link_enable_stream(
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
 			enable_stream_features(pipe_ctx);
+#if defined(CONFIG_DRM_AMD_DC_HDCP)
+		update_psp_stream_config(pipe_ctx, false);
+#endif
 	}
 #ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
 	else { // if (IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment))
@@ -2832,6 +2886,14 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 	struct dc  *core_dc = pipe_ctx->stream->ctx->dc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->sink->link;
+
+	if (!IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment) &&
+			dc_is_virtual_signal(pipe_ctx->stream->signal))
+		return;
+
+#if defined(CONFIG_DRM_AMD_DC_HDCP)
+	update_psp_stream_config(pipe_ctx, true);
+#endif
 
 	core_dc->hwss.blank_stream(pipe_ctx);
 

@@ -495,11 +495,10 @@ build.
 	tree. During the MODPOST step, a new Module.symvers file will be
 	written containing all exported symbols from that external module.
 
-6.3 Symbols From Another External Module
-----------------------------------------
+--- 6.3 Symbols From Another External Module
 
 	Sometimes, an external module uses exported symbols from
-	another external module. Kbuild needs to have full knowledge of
+	another external module. kbuild needs to have full knowledge of
 	all symbols to avoid spitting out warnings about undefined
 	symbols. Two solutions exist for this situation.
 
@@ -519,7 +518,7 @@ build.
 		The top-level kbuild file would then look like::
 
 			#./Kbuild (or ./Makefile):
-				obj-m := foo/ bar/
+				obj-y := foo/ bar/
 
 		And executing::
 

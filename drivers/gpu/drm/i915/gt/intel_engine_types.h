@@ -26,6 +26,26 @@
 #include "intel_wakeref.h"
 #include "intel_workarounds_types.h"
 
+/* Legacy HW Engine ID */
+
+#define RCS0_HW		0
+#define VCS0_HW		1
+#define BCS0_HW		2
+#define VECS0_HW	3
+#define VCS1_HW		4
+#define VCS2_HW		6
+#define VCS3_HW		7
+#define VECS1_HW	12
+
+/* Gen11+ HW Engine class + instance */
+#define RENDER_CLASS		0
+#define VIDEO_DECODE_CLASS	1
+#define VIDEO_ENHANCEMENT_CLASS	2
+#define COPY_ENGINE_CLASS	3
+#define OTHER_CLASS		4
+#define MAX_ENGINE_CLASS	4
+#define MAX_ENGINE_INSTANCE	3
+
 #define I915_MAX_SLICES	3
 #define I915_MAX_SUBSLICES 8
 
@@ -68,9 +88,6 @@ struct intel_ring {
 	struct kref ref;
 	struct i915_vma *vma;
 	void *vaddr;
-
-	struct list_head request_list;
-	struct list_head active_link;
 
 	/*
 	 * As we have two types of rings, one global to the engine used
@@ -208,6 +225,16 @@ struct intel_engine_execlists {
 	unsigned int port_mask;
 
 	/**
+	 * @switch_priority_hint: Second context priority.
+	 *
+	 * We submit multiple contexts to the HW simultaneously and would
+	 * like to occasionally switch between them to emulate timeslicing.
+	 * To know when timeslicing is suitable, we track the priority of
+	 * the context submitted second.
+	 */
+	int switch_priority_hint;
+
+	/**
 	 * @queue_priority_hint: Highest pending priority.
 	 *
 	 * When we add requests into the queue, or adjust the priority of
@@ -263,8 +290,11 @@ struct intel_engine_cs {
 	char name[INTEL_ENGINE_CS_MAX_NAME];
 
 	enum intel_engine_id id;
+	enum intel_engine_id legacy_idx;
+
 	unsigned int hw_id;
 	unsigned int guc_id;
+
 	intel_engine_mask_t mask;
 
 	u8 class;
@@ -451,6 +481,7 @@ struct intel_engine_cs {
 #define I915_ENGINE_HAS_SEMAPHORES   BIT(3)
 #define I915_ENGINE_NEEDS_BREADCRUMB_TASKLET BIT(4)
 #define I915_ENGINE_IS_VIRTUAL       BIT(5)
+#define I915_ENGINE_HAS_RELATIVE_MMIO BIT(6)
 	unsigned int flags;
 
 	/*
@@ -544,6 +575,12 @@ static inline bool
 intel_engine_is_virtual(const struct intel_engine_cs *engine)
 {
 	return engine->flags & I915_ENGINE_IS_VIRTUAL;
+}
+
+static inline bool
+intel_engine_has_relative_mmio(const struct intel_engine_cs * const engine)
+{
+	return engine->flags & I915_ENGINE_HAS_RELATIVE_MMIO;
 }
 
 #define instdone_has_slice(dev_priv___, sseu___, slice___) \

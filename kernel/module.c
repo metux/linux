@@ -7,7 +7,6 @@
 #include <linux/export.h>
 #include <linux/extable.h>
 #include <linux/moduleloader.h>
-#include <linux/module_signature.h>
 #include <linux/trace_events.h>
 #include <linux/init.h>
 #include <linux/kallsyms.h>
@@ -548,17 +547,18 @@ static const char *kernel_symbol_name(const struct kernel_symbol *sym)
 static const char *kernel_symbol_namespace(const struct kernel_symbol *sym)
 {
 #ifdef CONFIG_HAVE_ARCH_PREL32_RELOCATIONS
-	if (!sym->namespace_offset)
-		return NULL;
 	return offset_to_ptr(&sym->namespace_offset);
 #else
 	return sym->namespace;
 #endif
 }
 
-static int cmp_name(const void *name, const void *sym)
+static int cmp_name(const void *va, const void *vb)
 {
-	return strcmp(name, kernel_symbol_name(sym));
+	const char *a;
+	const struct kernel_symbol *b;
+	a = va; b = vb;
+	return strcmp(a, kernel_symbol_name(b));
 }
 
 static bool find_exported_symbol_in_section(const struct symsearch *syms,
@@ -1408,16 +1408,9 @@ static int verify_namespace_is_imported(const struct load_info *info,
 			imported_namespace = get_next_modinfo(
 				info, "import_ns", imported_namespace);
 		}
-#ifdef CONFIG_MODULE_ALLOW_MISSING_NAMESPACE_IMPORTS
-		pr_warn(
-#else
-		pr_err(
-#endif
-			"%s: module uses symbol (%s) from namespace %s, but does not import it.\n",
-			mod->name, kernel_symbol_name(sym), namespace);
-#ifndef CONFIG_MODULE_ALLOW_MISSING_NAMESPACE_IMPORTS
+		pr_err("%s: module uses symbol (%s) from namespace %s, but does not import it.\n",
+		       mod->name, kernel_symbol_name(sym), namespace);
 		return -EINVAL;
-#endif
 	}
 	return 0;
 }
@@ -2839,9 +2832,8 @@ static inline void kmemleak_load_module(const struct module *mod,
 #ifdef CONFIG_MODULE_SIG
 static int module_sig_check(struct load_info *info, int flags)
 {
-	int err = -ENODATA;
+	int err = -ENOKEY;
 	const unsigned long markerlen = sizeof(MODULE_SIG_STRING) - 1;
-	const char *reason;
 	const void *mod = info->hdr;
 
 	/*
@@ -2856,38 +2848,16 @@ static int module_sig_check(struct load_info *info, int flags)
 		err = mod_verify_sig(mod, info);
 	}
 
-	switch (err) {
-	case 0:
+	if (!err) {
 		info->sig_ok = true;
 		return 0;
-
-		/* We don't permit modules to be loaded into trusted kernels
-		 * without a valid signature on them, but if we're not
-		 * enforcing, certain errors are non-fatal.
-		 */
-	case -ENODATA:
-		reason = "Loading of unsigned module";
-		goto decide;
-	case -ENOPKG:
-		reason = "Loading of module with unsupported crypto";
-		goto decide;
-	case -ENOKEY:
-		reason = "Loading of module with unavailable key";
-	decide:
-		if (is_module_sig_enforced()) {
-			pr_notice("%s is rejected\n", reason);
-			return -EKEYREJECTED;
-		}
-
-		return security_locked_down(LOCKDOWN_MODULE_SIGNATURE);
-
-		/* All other errors are fatal, including nomem, unparseable
-		 * signatures and signature check failures - even if signatures
-		 * aren't required.
-		 */
-	default:
-		return err;
 	}
+
+	/* Not having a signature is only an error if we're strict. */
+	if (err == -ENOKEY && !is_module_sig_enforced())
+		err = 0;
+
+	return err;
 }
 #else /* !CONFIG_MODULE_SIG */
 static int module_sig_check(struct load_info *info, int flags)

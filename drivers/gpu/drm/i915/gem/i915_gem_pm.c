@@ -37,7 +37,6 @@ static void i915_gem_park(struct drm_i915_private *i915)
 	for_each_engine(engine, i915, id)
 		call_idle_barriers(engine); /* cleanup after wedging */
 
-	intel_timelines_park(i915);
 	i915_vma_parked(i915);
 
 	i915_globals_park();
@@ -233,7 +232,6 @@ void i915_gem_suspend_late(struct drm_i915_private *i915)
 	}
 	spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
 
-	intel_uc_sanitize(&i915->gt.uc);
 	i915_gem_sanitize(i915);
 }
 
@@ -244,10 +242,7 @@ void i915_gem_resume(struct drm_i915_private *i915)
 	mutex_lock(&i915->drm.struct_mutex);
 	intel_uncore_forcewake_get(&i915->uncore, FORCEWAKE_ALL);
 
-	i915_gem_restore_gtt_mappings(i915);
-	i915_gem_restore_fences(i915);
-
-	if (i915_gem_init_hw(i915))
+	if (intel_gt_init_hw(&i915->gt))
 		goto err_wedged;
 
 	/*

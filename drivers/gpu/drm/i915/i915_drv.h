@@ -2375,7 +2375,9 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define GT_FREQUENCY_MULTIPLIER 50
 #define GEN9_FREQ_SCALER 3
 
-#define HAS_DISPLAY(dev_priv) (INTEL_INFO(dev_priv)->num_pipes > 0)
+#define INTEL_NUM_PIPES(dev_priv) (INTEL_INFO(dev_priv)->num_pipes)
+
+#define HAS_DISPLAY(dev_priv) (INTEL_NUM_PIPES(dev_priv) > 0)
 
 #include "i915_trace.h"
 

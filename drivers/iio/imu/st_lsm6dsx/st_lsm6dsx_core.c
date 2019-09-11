@@ -611,6 +611,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 			.addr = 0x56,
 			.mask = BIT(0),
 		},
+		.clear_on_read = {
+			.addr = 0x56,
+			.mask = BIT(6),
+		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
 			.read_fifo = st_lsm6dsx_read_tagged_fifo,
@@ -747,6 +751,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 			.addr = 0x56,
 			.mask = BIT(0),
 		},
+		.clear_on_read = {
+			.addr = 0x56,
+			.mask = BIT(6),
+		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
 			.read_fifo = st_lsm6dsx_read_tagged_fifo,
@@ -859,6 +867,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 		.lir = {
 			.addr = 0x56,
 			.mask = BIT(0),
+		},
+		.clear_on_read = {
+			.addr = 0x56,
+			.mask = BIT(6),
 		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
@@ -1459,6 +1471,18 @@ static int st_lsm6dsx_init_device(struct st_lsm6dsx_hw *hw)
 					 hw->settings->lir.mask, data);
 		if (err < 0)
 			return err;
+
+		/* enable clear on read for latched interrupts */
+		if (hw->settings->clear_on_read.addr) {
+			data = ST_LSM6DSX_SHIFT_VAL(1,
+					hw->settings->clear_on_read.mask);
+			err = regmap_update_bits(hw->regmap,
+					hw->settings->clear_on_read.addr,
+					hw->settings->clear_on_read.mask,
+					data);
+			if (err < 0)
+				return err;
+		}
 	}
 
 	err = st_lsm6dsx_init_shub(hw);

@@ -241,6 +241,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.mask = GENMASK(5, 3),
 			},
 		},
+		.lir = {
+			.addr = 0x58,
+			.mask = BIT(0),
+		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
 			.read_fifo = st_lsm6dsx_read_fifo,
@@ -354,6 +358,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.addr = 0x08,
 				.mask = GENMASK(5, 3),
 			},
+		},
+		.lir = {
+			.addr = 0x58,
+			.mask = BIT(0),
 		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
@@ -478,6 +486,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.mask = GENMASK(5, 3),
 			},
 		},
+		.lir = {
+			.addr = 0x58,
+			.mask = BIT(0),
+		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
 			.read_fifo = st_lsm6dsx_read_fifo,
@@ -594,6 +606,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.addr = 0x09,
 				.mask = GENMASK(7, 4),
 			},
+		},
+		.lir = {
+			.addr = 0x56,
+			.mask = BIT(0),
 		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
@@ -727,6 +743,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.mask = GENMASK(7, 4),
 			},
 		},
+		.lir = {
+			.addr = 0x56,
+			.mask = BIT(0),
+		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
 			.read_fifo = st_lsm6dsx_read_tagged_fifo,
@@ -835,6 +855,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.addr = 0x09,
 				.mask = GENMASK(7, 4),
 			},
+		},
+		.lir = {
+			.addr = 0x56,
+			.mask = BIT(0),
 		},
 		.fifo_ops = {
 			.update_fifo = st_lsm6dsx_update_fifo,
@@ -1425,6 +1449,17 @@ static int st_lsm6dsx_init_device(struct st_lsm6dsx_hw *hw)
 					    1));
 	if (err < 0)
 		return err;
+
+	/* enable Latched interrupts for device events */
+	if (hw->settings->lir.addr) {
+		unsigned int data;
+
+		data = ST_LSM6DSX_SHIFT_VAL(1, hw->settings->lir.mask);
+		err = regmap_update_bits(hw->regmap, hw->settings->lir.addr,
+					 hw->settings->lir.mask, data);
+		if (err < 0)
+			return err;
+	}
 
 	err = st_lsm6dsx_init_shub(hw);
 	if (err < 0)

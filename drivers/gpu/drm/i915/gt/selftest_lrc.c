@@ -869,6 +869,10 @@ static int live_suppress_self_preempt(void *arg)
 		if (!intel_engine_has_preemption(engine))
 			continue;
 
+		if (igt_flush_test(i915, I915_WAIT_LOCKED))
+			goto err_wedged;
+
+		intel_engine_pm_get(engine);
 		engine->execlists.preempt_hang.count = 0;
 
 		rq_a = igt_spinner_create_request(&a.spin,
@@ -876,12 +880,14 @@ static int live_suppress_self_preempt(void *arg)
 						  MI_NOOP);
 		if (IS_ERR(rq_a)) {
 			err = PTR_ERR(rq_a);
+			intel_engine_pm_put(engine);
 			goto err_client_b;
 		}
 
 		i915_request_add(rq_a);
 		if (!igt_wait_for_spinner(&a.spin, rq_a)) {
 			pr_err("First client failed to start\n");
+			intel_engine_pm_put(engine);
 			goto err_wedged;
 		}
 
@@ -891,6 +897,7 @@ static int live_suppress_self_preempt(void *arg)
 							  MI_NOOP);
 			if (IS_ERR(rq_b)) {
 				err = PTR_ERR(rq_b);
+				intel_engine_pm_put(engine);
 				goto err_client_b;
 			}
 			i915_request_add(rq_b);
@@ -901,6 +908,7 @@ static int live_suppress_self_preempt(void *arg)
 
 			if (!igt_wait_for_spinner(&b.spin, rq_b)) {
 				pr_err("Second client failed to start\n");
+				intel_engine_pm_put(engine);
 				goto err_wedged;
 			}
 
@@ -913,10 +921,12 @@ static int live_suppress_self_preempt(void *arg)
 			pr_err("Preemption recorded x%d, depth %d; should have been suppressed!\n",
 			       engine->execlists.preempt_hang.count,
 			       depth);
+			intel_engine_pm_put(engine);
 			err = -EINVAL;
 			goto err_client_b;
 		}
 
+		intel_engine_pm_put(engine);
 		if (igt_flush_test(i915, I915_WAIT_LOCKED))
 			goto err_wedged;
 	}

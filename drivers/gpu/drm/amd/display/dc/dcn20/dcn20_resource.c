@@ -1883,7 +1883,7 @@ int dcn20_populate_dml_pipes_from_context(
 			break;
 		case PIXEL_ENCODING_YCBCR420:
 			pipes[pipe_cnt].dout.output_format = dm_420;
-			pipes[pipe_cnt].dout.output_bpp = (output_bpc * 3) / 2;
+			pipes[pipe_cnt].dout.output_bpp = (output_bpc * 3.0) / 2;
 			break;
 		case PIXEL_ENCODING_YCBCR422:
 			if (true) /* todo */
@@ -1900,6 +1900,9 @@ int dcn20_populate_dml_pipes_from_context(
 		if (res_ctx->pipe_ctx[i].top_pipe && res_ctx->pipe_ctx[i].top_pipe->plane_state
 				== res_ctx->pipe_ctx[i].plane_state)
 			pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].top_pipe->pipe_idx;
+
+		if (res_ctx->pipe_ctx[i].stream->timing.flags.DSC)
+			pipes[pipe_cnt].dout.output_bpp = res_ctx->pipe_ctx[i].stream->timing.dsc_cfg.bits_per_pixel / 16.0;
 
 		/* todo: default max for now, until there is logic reflecting this in dc*/
 		pipes[pipe_cnt].dout.output_bpc = 12;

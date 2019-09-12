@@ -18,7 +18,7 @@ enum {
 	__I915_SAMPLE_FREQ_ACT = 0,
 	__I915_SAMPLE_FREQ_REQ,
 	__I915_SAMPLE_RC6,
-	__I915_SAMPLE_RC6_LAST_REPORTED,
+	__I915_SAMPLE_RC6_ESTIMATED,
 	__I915_NUM_PMU_SAMPLERS
 };
 
@@ -39,20 +39,13 @@ struct i915_pmu_sample {
 
 struct i915_pmu {
 	/**
-	 * @cpuhp: Struct used for CPU hotplug handling.
+	 * @node: List node for CPU hotplug handling.
 	 */
-	struct {
-		struct hlist_node node;
-		enum cpuhp_state slot;
-	} cpuhp;
+	struct hlist_node node;
 	/**
 	 * @base: PMU base.
 	 */
 	struct pmu base;
-	/**
-	 * @name: Name as registered with perf core.
-	 */
-	const char *name;
 	/**
 	 * @lock: Lock protecting enable mask and ref count handling.
 	 */
@@ -107,10 +100,6 @@ struct i915_pmu {
 	 * @sleep_last: Last time GT parked for RC6 estimation.
 	 */
 	ktime_t sleep_last;
-	/**
-	 * @events_attr_group: Device events attribute group.
-	 */
-	struct attribute_group events_attr_group;
 	/**
 	 * @i915_attr: Memory block holding device attributes.
 	 */

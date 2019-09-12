@@ -51,6 +51,7 @@ struct intel_gt {
 	struct list_head active_rings;
 
 	struct intel_wakeref wakeref;
+	atomic_t user_wakeref;
 
 	struct list_head closed_vma;
 	spinlock_t closed_lock; /* guards the list of closed_vma */

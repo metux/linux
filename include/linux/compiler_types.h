@@ -146,8 +146,17 @@ struct ftrace_likely_data {
 	__inline_maybe_unused notrace
 #endif
 
+/*
+ * gcc provides both __inline__ and __inline as alternate spellings of
+ * the inline keyword, though the latter is undocumented. New kernel
+ * code should only use the inline spelling, but some existing code
+ * uses __inline__. Since we #define inline above, to ensure
+ * __inline__ has the same semantics, we need this #define.
+ *
+ * However, the spelling __inline is strictly reserved for referring
+ * to the bare keyword.
+ */
 #define __inline__ inline
-#define __inline   inline
 
 /*
  * GCC does not warn about unused static inline functions for -Wunused-function.

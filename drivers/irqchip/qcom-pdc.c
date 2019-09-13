@@ -5,7 +5,6 @@
 
 #include <linux/err.h>
 #include <linux/init.h>
-#include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
 #include <linux/irqdomain.h>
@@ -49,26 +48,6 @@ static void pdc_reg_write(int reg, u32 i, u32 val)
 static u32 pdc_reg_read(int reg, u32 i)
 {
 	return readl_relaxed(pdc_base + reg + i * sizeof(u32));
-}
-
-static int qcom_pdc_gic_get_irqchip_state(struct irq_data *d,
-					  enum irqchip_irq_state which,
-					  bool *state)
-{
-	if (d->hwirq == GPIO_NO_WAKE_IRQ)
-		return 0;
-
-	return irq_chip_get_parent_state(d, which, state);
-}
-
-static int qcom_pdc_gic_set_irqchip_state(struct irq_data *d,
-					  enum irqchip_irq_state which,
-					  bool value)
-{
-	if (d->hwirq == GPIO_NO_WAKE_IRQ)
-		return 0;
-
-	return irq_chip_set_parent_state(d, which, value);
 }
 
 static void pdc_enable_intr(struct irq_data *d, bool on)
@@ -199,8 +178,6 @@ static struct irq_chip qcom_pdc_gic_chip = {
 	.irq_unmask		= qcom_pdc_gic_unmask,
 	.irq_disable		= qcom_pdc_gic_disable,
 	.irq_enable		= qcom_pdc_gic_enable,
-	.irq_get_irqchip_state	= qcom_pdc_gic_get_irqchip_state,
-	.irq_set_irqchip_state	= qcom_pdc_gic_set_irqchip_state,
 	.irq_retrigger		= irq_chip_retrigger_hierarchy,
 	.irq_set_type		= qcom_pdc_gic_set_type,
 	.flags			= IRQCHIP_MASK_ON_SUSPEND |
@@ -408,10 +385,10 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	}
 
 	pdc_gpio_domain = irq_domain_create_hierarchy(parent_domain,
-					IRQ_DOMAIN_FLAG_QCOM_PDC_WAKEUP,
-					PDC_MAX_GPIO_IRQS,
-					of_fwnode_handle(node),
-					&qcom_pdc_gpio_ops, NULL);
+						      IRQ_DOMAIN_FLAG_QCOM_PDC_WAKEUP,
+						      PDC_MAX_GPIO_IRQS,
+						      of_fwnode_handle(node),
+						      &qcom_pdc_gpio_ops, NULL);
 	if (!pdc_gpio_domain) {
 		pr_err("%pOF: PDC domain add failed for GPIO domain\n", node);
 		ret = -ENOMEM;
@@ -430,4 +407,4 @@ fail:
 	return ret;
 }
 
-IRQCHIP_DECLARE(qcom_pdc, "qcom,pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_sdm845, "qcom,sdm845-pdc", qcom_pdc_init);

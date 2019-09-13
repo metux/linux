@@ -59,16 +59,14 @@ int rn_get_active_display_cnt_wa(
 		struct dc_state *context)
 {
 	int i, display_count;
-	bool tmds_present = false;
+	bool hdmi_present = false;
 
 	display_count = 0;
 	for (i = 0; i < context->stream_count; i++) {
 		const struct dc_stream_state *stream = context->streams[i];
 
-		if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A ||
-				stream->signal == SIGNAL_TYPE_DVI_SINGLE_LINK ||
-				stream->signal == SIGNAL_TYPE_DVI_DUAL_LINK)
-			tmds_present = true;
+		if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
+			hdmi_present = true;
 	}
 
 	for (i = 0; i < dc->link_count; i++) {
@@ -87,7 +85,7 @@ int rn_get_active_display_cnt_wa(
 	}
 
 	/* WA for hang on HDMI after display off back back on*/
-	if (display_count == 0 && tmds_present)
+	if (display_count == 0 && hdmi_present)
 		display_count = 1;
 
 	return display_count;
@@ -116,22 +114,22 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 	 */
 	if (safe_to_lower) {
 		/* check that we're not already in lower */
-		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_LOW_POWER) {
+		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_OPTIMIZED) {
 
 			display_count = rn_get_active_display_cnt_wa(dc, context);
 			/* if we can go lower, go lower */
 			if (display_count == 0) {
-				rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_LOW_POWER);
+				rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_OPTIMIZED);
 				/* update power state */
-				clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_LOW_POWER;
+				clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_OPTIMIZED;
 			}
 		}
 	} else {
-		/* check that we're not already in D0 */
-		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_MISSION_MODE) {
-			rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_MISSION_MODE);
+		/* check that we're not already in the normal state */
+		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_NORMAL) {
+			rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_NORMAL);
 			/* update power state */
-			clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_MISSION_MODE;
+			clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_NORMAL;
 		}
 	}
 
@@ -151,12 +149,6 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 		rn_vbios_smu_set_min_deep_sleep_dcfclk(clk_mgr, clk_mgr_base->clks.dcfclk_deep_sleep_khz);
 	}
 
-	// workaround: Limit dppclk to 100Mhz to avoid lower eDP panel switch to plus 4K monitor underflow.
-	if (!IS_DIAG_DC(dc->ctx->dce_environment)) {
-		if (new_clocks->dppclk_khz < 100000)
-			new_clocks->dppclk_khz = 100000;
-	}
-
 	if (should_set_clock(safe_to_lower, new_clocks->dppclk_khz, clk_mgr->base.clks.dppclk_khz)) {
 		if (clk_mgr->base.clks.dppclk_khz > new_clocks->dppclk_khz)
 			dpp_clock_lowered = true;
@@ -172,16 +164,15 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 	}
 
 	if (dpp_clock_lowered) {
-		// increase per DPP DTO before lowering global dppclk
-		dcn20_update_clocks_update_dpp_dto(clk_mgr, context, safe_to_lower);
+		// if clock is being lowered, increase DTO before lowering refclk
+		dcn20_update_clocks_update_dpp_dto(clk_mgr, context);
 		rn_vbios_smu_set_dppclk(clk_mgr, clk_mgr_base->clks.dppclk_khz);
 	} else {
-		// increase global DPPCLK before lowering per DPP DTO
+		// if clock is being raised, increase refclk before lowering DTO
 		if (update_dppclk || update_dispclk)
 			rn_vbios_smu_set_dppclk(clk_mgr, clk_mgr_base->clks.dppclk_khz);
-		// always update dtos unless clock is lowered and not safe to lower
-		if (new_clocks->dppclk_khz >= dc->current_state->bw_ctx.bw.dcn.clk.dppclk_khz)
-			dcn20_update_clocks_update_dpp_dto(clk_mgr, context, safe_to_lower);
+		if (update_dppclk)
+			dcn20_update_clocks_update_dpp_dto(clk_mgr, context);
 	}
 
 	if (update_dispclk &&
@@ -386,7 +377,7 @@ void rn_get_clk_states(struct clk_mgr *clk_mgr_base, struct clk_states *s)
 
 	rn_dump_clk_registers(&sb, clk_mgr_base, &log_info);
 
-	s->dprefclk_khz = sb.dprefclk * 1000;
+	s->dprefclk_khz = sb.dprefclk;
 }
 
 void rn_enable_pme_wa(struct clk_mgr *clk_mgr_base)
@@ -402,106 +393,15 @@ void rn_init_clocks(struct clk_mgr *clk_mgr)
 	// Assumption is that boot state always supports pstate
 	clk_mgr->clks.p_state_change_support = true;
 	clk_mgr->clks.prev_p_state_change_support = true;
-	clk_mgr->clks.pwr_state = DCN_PWR_STATE_UNKNOWN;
+	clk_mgr->clks.pwr_state = DCN_PWR_STATE_NORMAL;
 }
-
-void build_watermark_ranges(struct clk_bw_params *bw_params, struct pp_smu_wm_range_sets *ranges)
-{
-	int i, num_valid_sets;
-
-	num_valid_sets = 0;
-
-	for (i = 0; i < WM_SET_COUNT; i++) {
-		/* skip empty entries, the smu array has no holes*/
-		if (!bw_params->wm_table.entries[i].valid)
-			continue;
-
-		ranges->reader_wm_sets[num_valid_sets].wm_inst = bw_params->wm_table.entries[i].wm_inst;
-		ranges->reader_wm_sets[num_valid_sets].wm_type = bw_params->wm_table.entries[i].wm_type;
-		/* We will not select WM based on fclk, so leave it as unconstrained */
-		ranges->reader_wm_sets[num_valid_sets].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
-		ranges->reader_wm_sets[num_valid_sets].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-		/* dcfclk wil be used to select WM*/
-
-		if (ranges->reader_wm_sets[num_valid_sets].wm_type == WM_TYPE_PSTATE_CHG) {
-			if (i == 0)
-				ranges->reader_wm_sets[num_valid_sets].min_drain_clk_mhz = 0;
-			else {
-				/* add 1 to make it non-overlapping with next lvl */
-				ranges->reader_wm_sets[num_valid_sets].min_drain_clk_mhz = bw_params->clk_table.entries[i - 1].dcfclk_mhz + 1;
-			}
-			ranges->reader_wm_sets[num_valid_sets].max_drain_clk_mhz = bw_params->clk_table.entries[i].dcfclk_mhz;
-
-		} else {
-			/* unconstrained for memory retraining */
-			ranges->reader_wm_sets[num_valid_sets].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
-			ranges->reader_wm_sets[num_valid_sets].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-
-			/* Modify previous watermark range to cover up to max */
-			ranges->reader_wm_sets[num_valid_sets - 1].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-		}
-		num_valid_sets++;
-	}
-
-	ASSERT(num_valid_sets != 0); /* Must have at least one set of valid watermarks */
-	ranges->num_reader_wm_sets = num_valid_sets;
-
-	/* modify the min and max to make sure we cover the whole range*/
-	ranges->reader_wm_sets[0].min_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
-	ranges->reader_wm_sets[0].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
-	ranges->reader_wm_sets[ranges->num_reader_wm_sets - 1].max_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-	ranges->reader_wm_sets[ranges->num_reader_wm_sets - 1].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-
-	/* This is for writeback only, does not matter currently as no writeback support*/
-	ranges->num_writer_wm_sets = 1;
-	ranges->writer_wm_sets[0].wm_inst = WM_A;
-	ranges->writer_wm_sets[0].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
-	ranges->writer_wm_sets[0].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-	ranges->writer_wm_sets[0].min_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
-	ranges->writer_wm_sets[0].max_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
-
-}
-
-static void rn_notify_wm_ranges(struct clk_mgr *clk_mgr_base)
-{
-	struct dc_debug_options *debug = &clk_mgr_base->ctx->dc->debug;
-	struct pp_smu_wm_range_sets ranges = {0};
-	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
-	struct pp_smu_funcs *pp_smu = clk_mgr->pp_smu;
-
-	if (!debug->disable_pplib_wm_range) {
-		build_watermark_ranges(clk_mgr_base->bw_params, &ranges);
-
-		/* Notify PP Lib/SMU which Watermarks to use for which clock ranges */
-		if (pp_smu && pp_smu->rn_funcs.set_wm_ranges)
-			pp_smu->rn_funcs.set_wm_ranges(&pp_smu->rn_funcs.pp_smu, &ranges);
-	}
-
-}
-
-static bool rn_are_clock_states_equal(struct dc_clocks *a,
-		struct dc_clocks *b)
-{
-	if (a->dispclk_khz != b->dispclk_khz)
-		return false;
-	else if (a->dppclk_khz != b->dppclk_khz)
-		return false;
-	else if (a->dcfclk_khz != b->dcfclk_khz)
-		return false;
-	else if (a->dcfclk_deep_sleep_khz != b->dcfclk_deep_sleep_khz)
-		return false;
-
-	return true;
-}
-
 
 static struct clk_mgr_funcs dcn21_funcs = {
 	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
 	.update_clocks = rn_update_clocks,
 	.init_clocks = rn_init_clocks,
 	.enable_pme_wa = rn_enable_pme_wa,
-	.are_clock_states_equal = rn_are_clock_states_equal,
-	.notify_wm_ranges = rn_notify_wm_ranges
+	/* .dump_clk_registers = rn_dump_clk_registers */
 };
 
 struct clk_bw_params rn_bw_params = {
@@ -542,82 +442,92 @@ struct clk_bw_params rn_bw_params = {
 		.num_entries = 4,
 	},
 
-};
-
-struct wm_table ddr4_wm_table = {
-	.entries = {
-		{
-			.wm_inst = WM_A,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.72,
-			.sr_exit_time_us = 6.09,
-			.sr_enter_plus_exit_time_us = 7.14,
-			.valid = true,
-		},
-		{
-			.wm_inst = WM_B,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.72,
-			.sr_exit_time_us = 10.12,
-			.sr_enter_plus_exit_time_us = 11.48,
-			.valid = true,
-		},
-		{
-			.wm_inst = WM_C,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.72,
-			.sr_exit_time_us = 10.12,
-			.sr_enter_plus_exit_time_us = 11.48,
-			.valid = true,
-		},
-		{
-			.wm_inst = WM_D,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.72,
-			.sr_exit_time_us = 10.12,
-			.sr_enter_plus_exit_time_us = 11.48,
-			.valid = true,
+	.wm_table = {
+		.entries = {
+			{
+				.wm_inst = WM_A,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 23.84,
+				.valid = true,
+			},
+			{
+				.wm_inst = WM_B,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 23.84,
+				.valid = true,
+			},
+			{
+				.wm_inst = WM_C,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 23.84,
+				.valid = true,
+			},
+			{
+				.wm_inst = WM_D,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 23.84,
+				.valid = true,
+			},
 		},
 	}
 };
 
-struct wm_table lpddr4_wm_table = {
-	.entries = {
-		{
-			.wm_inst = WM_A,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.65333,
-			.sr_exit_time_us = 5.32,
-			.sr_enter_plus_exit_time_us = 6.38,
-			.valid = true,
-		},
-		{
-			.wm_inst = WM_B,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.65333,
-			.sr_exit_time_us = 9.82,
-			.sr_enter_plus_exit_time_us = 11.196,
-			.valid = true,
-		},
-		{
-			.wm_inst = WM_C,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.65333,
-			.sr_exit_time_us = 9.89,
-			.sr_enter_plus_exit_time_us = 11.24,
-			.valid = true,
-		},
-		{
-			.wm_inst = WM_D,
-			.wm_type = WM_TYPE_PSTATE_CHG,
-			.pstate_latency_us = 11.65333,
-			.sr_exit_time_us = 9.748,
-			.sr_enter_plus_exit_time_us = 11.102,
-			.valid = true,
-		},
-	}
-};
+void rn_build_watermark_ranges(struct clk_bw_params *bw_params, struct pp_smu_wm_range_sets *ranges)
+{
+	int i, num_valid_sets;
 
+	num_valid_sets = 0;
+
+	for (i = 0; i < WM_SET_COUNT; i++) {
+		/* skip empty entries, the smu array has no holes*/
+		if (!bw_params->wm_table.entries[i].valid)
+			continue;
+
+		ranges->reader_wm_sets[num_valid_sets].wm_inst = bw_params->wm_table.entries[i].wm_inst;
+		ranges->reader_wm_sets[num_valid_sets].wm_type = bw_params->wm_table.entries[i].wm_type;;
+		/* We will not select WM based on dcfclk, so leave it as unconstrained */
+		ranges->reader_wm_sets[num_valid_sets].min_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
+		ranges->reader_wm_sets[num_valid_sets].max_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+		/* fclk wil be used to select WM*/
+
+		if (ranges->reader_wm_sets[num_valid_sets].wm_type == WM_TYPE_PSTATE_CHG) {
+			if (i == 0)
+				ranges->reader_wm_sets[num_valid_sets].min_fill_clk_mhz = 0;
+			else {
+				/* add 1 to make it non-overlapping with next lvl */
+				ranges->reader_wm_sets[num_valid_sets].min_fill_clk_mhz = bw_params->clk_table.entries[i - 1].fclk_mhz + 1;
+			}
+			ranges->reader_wm_sets[num_valid_sets].max_fill_clk_mhz = bw_params->clk_table.entries[i].fclk_mhz;
+
+		} else {
+			/* unconstrained for memory retraining */
+			ranges->reader_wm_sets[num_valid_sets].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
+			ranges->reader_wm_sets[num_valid_sets].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+
+			/* Modify previous watermark range to cover up to max */
+			ranges->reader_wm_sets[num_valid_sets - 1].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+		}
+		num_valid_sets++;
+	}
+
+	ASSERT(num_valid_sets != 0); /* Must have at least one set of valid watermarks */
+	ranges->num_reader_wm_sets = num_valid_sets;
+
+	/* modify the min and max to make sure we cover the whole range*/
+	ranges->reader_wm_sets[0].min_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
+	ranges->reader_wm_sets[0].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
+	ranges->reader_wm_sets[ranges->num_reader_wm_sets - 1].max_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+	ranges->reader_wm_sets[ranges->num_reader_wm_sets - 1].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+
+	/* This is for writeback only, does not matter currently as no writeback support*/
+	ranges->num_writer_wm_sets = 1;
+	ranges->writer_wm_sets[0].wm_inst = WM_A;
+	ranges->writer_wm_sets[0].min_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
+	ranges->writer_wm_sets[0].max_fill_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+	ranges->writer_wm_sets[0].min_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MIN;
+	ranges->writer_wm_sets[0].max_drain_clk_mhz = PP_SMU_WM_SET_RANGE_CLK_UNCONSTRAINED_MAX;
+
+}
 
 static unsigned int find_dcfclk_for_voltage(struct dpm_clocks *clock_table, unsigned int voltage)
 {
@@ -632,11 +542,9 @@ static unsigned int find_dcfclk_for_voltage(struct dpm_clocks *clock_table, unsi
 	return 0;
 }
 
-static void rn_clk_mgr_helper_populate_bw_params(struct clk_bw_params *bw_params, struct dpm_clocks *clock_table, struct integrated_info *bios_info)
+void rn_clk_mgr_helper_populate_bw_params(struct clk_bw_params *bw_params, struct dpm_clocks *clock_table, struct hw_asic_id *asic_id)
 {
 	int i, j = 0;
-
-	j = -1;
 
 	ASSERT(PP_SMU_NUM_FCLK_DPM_LEVELS <= MAX_NUM_DPM_LVL);
 
@@ -649,12 +557,6 @@ static void rn_clk_mgr_helper_populate_bw_params(struct clk_bw_params *bw_params
 		}
 	}
 
-	if (j == -1) {
-		/* clock table is all 0s, just use our own hardcode */
-		ASSERT(0);
-		return;
-	}
-
 	bw_params->clk_table.num_entries = j + 1;
 
 	for (i = 0; i < bw_params->clk_table.num_entries; i++, j--) {
@@ -664,8 +566,8 @@ static void rn_clk_mgr_helper_populate_bw_params(struct clk_bw_params *bw_params
 		bw_params->clk_table.entries[i].dcfclk_mhz = find_dcfclk_for_voltage(clock_table, clock_table->FClocks[j].Vol);
 	}
 
-	bw_params->vram_type = bios_info->memory_type;
-	bw_params->num_channels = bios_info->ma_channel_number;
+	bw_params->vram_type = asic_id->vram_type;
+	bw_params->num_channels = asic_id->vram_width / DDR4_DRAM_WIDTH;
 
 	for (i = 0; i < WM_SET_COUNT; i++) {
 		bw_params->wm_table.entries[i].wm_inst = i;
@@ -699,6 +601,7 @@ void rn_clk_mgr_construct(
 {
 	struct dc_debug_options *debug = &ctx->dc->debug;
 	struct dpm_clocks clock_table = { 0 };
+	struct clk_state_registers_and_bypass s = { 0 };
 
 	clk_mgr->base.ctx = ctx;
 	clk_mgr->base.funcs = &dcn21_funcs;
@@ -717,37 +620,53 @@ void rn_clk_mgr_construct(
 
 	if (IS_FPGA_MAXIMUS_DC(ctx->dce_environment)) {
 		dcn21_funcs.update_clocks = dcn2_update_clocks_fpga;
-		clk_mgr->base.dentist_vco_freq_khz = 3600000;
+		clk_mgr->dentist_vco_freq_khz = 3600000;
+		clk_mgr->base.dprefclk_khz = 600000;
 	} else {
 		struct clk_log_info log_info = {0};
 
 		/* TODO: Check we get what we expect during bringup */
-		clk_mgr->base.dentist_vco_freq_khz = get_vco_frequency_from_reg(clk_mgr);
+		clk_mgr->dentist_vco_freq_khz = get_vco_frequency_from_reg(clk_mgr);
 
 		/* in case we don't get a value from the register, use default */
-		if (clk_mgr->base.dentist_vco_freq_khz == 0)
-			clk_mgr->base.dentist_vco_freq_khz = 3600000;
+		if (clk_mgr->dentist_vco_freq_khz == 0)
+			clk_mgr->dentist_vco_freq_khz = 3600000;
 
-		if (ctx->dc_bios->integrated_info->memory_type == LpDdr4MemType) {
-			rn_bw_params.wm_table = lpddr4_wm_table;
-		} else {
-			rn_bw_params.wm_table = ddr4_wm_table;
+		rn_dump_clk_registers(&s, &clk_mgr->base, &log_info);
+		clk_mgr->base.dprefclk_khz = s.dprefclk;
+
+		if (clk_mgr->base.dprefclk_khz != 600000) {
+			clk_mgr->base.dprefclk_khz = 600000;
+			ASSERT(1); //TODO: Renoir follow up.
 		}
-		/* Saved clocks configured at boot for debug purposes */
-		rn_dump_clk_registers(&clk_mgr->base.boot_snapshot, &clk_mgr->base, &log_info);
+
+		/* in case we don't get a value from the register, use default */
+		if (clk_mgr->base.dprefclk_khz == 0)
+			clk_mgr->base.dprefclk_khz = 600000;
 	}
 
-	clk_mgr->base.dprefclk_khz = 600000;
 	dce_clock_read_ss_info(clk_mgr);
-
 
 	clk_mgr->base.bw_params = &rn_bw_params;
 
-	if (pp_smu && pp_smu->rn_funcs.get_dpm_clock_table) {
+	if (pp_smu) {
 		pp_smu->rn_funcs.get_dpm_clock_table(&pp_smu->rn_funcs.pp_smu, &clock_table);
-		if (ctx->dc_bios && ctx->dc_bios->integrated_info) {
-			rn_clk_mgr_helper_populate_bw_params (clk_mgr->base.bw_params, &clock_table, ctx->dc_bios->integrated_info);
-		}
+		rn_clk_mgr_helper_populate_bw_params(clk_mgr->base.bw_params, &clock_table, &ctx->asic_id);
+	}
+
+	/*
+	 * Notify SMU which set of WM should be selected for different ranges of fclk
+	 * On Renoir there is a maximumum of 4 DF pstates supported, could be less
+	 * depending on DDR speed and fused maximum fclk.
+	 */
+	if (!debug->disable_pplib_wm_range) {
+		struct pp_smu_wm_range_sets ranges = {0};
+
+		rn_build_watermark_ranges(clk_mgr->base.bw_params, &ranges);
+
+		/* Notify PP Lib/SMU which Watermarks to use for which clock ranges */
+		if (pp_smu && pp_smu->rn_funcs.set_wm_ranges)
+			pp_smu->rn_funcs.set_wm_ranges(&pp_smu->rn_funcs.pp_smu, &ranges);
 	}
 
 	if (!IS_FPGA_MAXIMUS_DC(ctx->dce_environment) && clk_mgr->smu_ver >= 0x00371500) {

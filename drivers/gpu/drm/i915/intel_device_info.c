@@ -1004,8 +1004,10 @@ void intel_device_info_init_mmio(struct drm_i915_private *dev_priv)
 		      GEN11_GT_VEBOX_DISABLE_SHIFT;
 
 	for (i = 0; i < I915_MAX_VCS; i++) {
-		if (!HAS_ENGINE(dev_priv, _VCS(i)))
+		if (!HAS_ENGINE(dev_priv, _VCS(i))) {
+			vdbox_mask &= ~BIT(i);
 			continue;
+		}
 
 		if (!(BIT(i) & vdbox_mask)) {
 		if (!(BIT(i) & RUNTIME_INFO(dev_priv)->vdbox_enable)) {
@@ -1027,8 +1029,10 @@ void intel_device_info_init_mmio(struct drm_i915_private *dev_priv)
 	GEM_BUG_ON(vdbox_mask != VDBOX_MASK(dev_priv));
 
 	for (i = 0; i < I915_MAX_VECS; i++) {
-		if (!HAS_ENGINE(dev_priv, _VECS(i)))
+		if (!HAS_ENGINE(dev_priv, _VECS(i))) {
+			vebox_mask &= ~BIT(i);
 			continue;
+		}
 
 		if (!(BIT(i) & vebox_mask)) {
 		if (!(BIT(i) & RUNTIME_INFO(dev_priv)->vebox_enable)) {

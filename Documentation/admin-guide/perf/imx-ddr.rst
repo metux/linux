@@ -35,19 +35,17 @@ value 1 for supported.
   Filter is defined with two configuration parts:
   --AXI_ID defines AxID matching value.
   --AXI_MASKING defines which bits of AxID are meaningful for the matching.
-        0：corresponding bit is masked.
-        1: corresponding bit is not masked, i.e. used to do the matching.
+
+      - 0: corresponding bit is masked.
+      - 1: corresponding bit is not masked, i.e. used to do the matching.
 
   AXI_ID and AXI_MASKING are mapped on DPCR1 register in performance counter.
   When non-masked bits are matching corresponding AXI_ID bits then counter is
   incremented. Perf counter is incremented if
-          AxID && AXI_MASKING == AXI_ID && AXI_MASKING
+        AxID && AXI_MASKING == AXI_ID && AXI_MASKING
 
   This filter doesn't support filter different AXI ID for axid-read and axid-write
   event at the same time as this filter is shared between counters.
-  e.g.::
-        perf stat -a -e imx8_ddr0/axid-read,axi_mask=0xMMMM,axi_id=0xDDDD/ cmd
-        perf stat -a -e imx8_ddr0/axid-write,axi_mask=0xMMMM,axi_id=0xDDDD/ cmd
 
   NOTE: axi_mask is inverted in userspace(i.e. set bits are bits to mask), and
   it will be reverted in driver automatically. so that the user can just specify

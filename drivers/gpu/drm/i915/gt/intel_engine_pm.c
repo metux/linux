@@ -37,9 +37,44 @@ static int __engine_unpark(struct intel_wakeref *wf)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_LOCKDEP)
+
+static inline unsigned long __timeline_mark_lock(struct intel_context *ce)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	mutex_acquire(&ce->timeline->mutex.dep_map, 2, 0, _THIS_IP_);
+
+	return flags;
+}
+
+static inline void __timeline_mark_unlock(struct intel_context *ce,
+					  unsigned long flags)
+{
+	mutex_release(&ce->timeline->mutex.dep_map, _THIS_IP_);
+	local_irq_restore(flags);
+}
+
+#else
+
+static inline unsigned long __timeline_mark_lock(struct intel_context *ce)
+{
+	return 0;
+}
+
+static inline void __timeline_mark_unlock(struct intel_context *ce,
+					  unsigned long flags)
+{
+}
+
+#endif /* !IS_ENABLED(CONFIG_LOCKDEP) */
+
 static bool switch_to_kernel_context(struct intel_engine_cs *engine)
 {
 	struct i915_request *rq;
+	unsigned long flags;
+	bool result = true;
 
 	/* Already inside the kernel context, safe to power down. */
 	if (engine->wakeref_serial == engine->serial)
@@ -61,18 +96,31 @@ static bool switch_to_kernel_context(struct intel_engine_cs *engine)
 	 * retiring the last request, thus all rings should be empty and
 	 * all timelines idle.
 	 */
+	flags = __timeline_mark_lock(engine->kernel_context);
+
 	rq = __i915_request_create(engine->kernel_context, GFP_NOWAIT);
 	if (IS_ERR(rq))
 		/* Context switch failed, hope for the best! Maybe reset? */
-		return true;
+		goto out_unlock;
+
+	intel_timeline_enter(rq->timeline);
 
 	/* Check again on the next retirement. */
 	engine->wakeref_serial = engine->serial + 1;
+	i915_request_add_active_barriers(rq);
 
-	i915_request_add_barriers(rq);
+	/* Install ourselves as a preemption barrier */
+	rq->sched.attr.priority = I915_PRIORITY_UNPREEMPTABLE;
 	__i915_request_commit(rq);
 
-	return false;
+	/* Release our exclusive hold on the engine */
+	__intel_wakeref_defer_park(&engine->wakeref);
+	__i915_request_queue(rq, NULL);
+
+	result = false;
+out_unlock:
+	__timeline_mark_unlock(engine->kernel_context, flags);
+	return result;
 }
 
 static int __engine_park(struct intel_wakeref *wf)

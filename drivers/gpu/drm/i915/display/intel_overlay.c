@@ -230,7 +230,7 @@ alloc_request(struct intel_overlay *overlay, void (*fn)(struct intel_overlay *))
 	if (IS_ERR(rq))
 		return rq;
 
-	err = i915_active_ref(&overlay->last_flip, rq->fence.context, rq);
+	err = i915_active_add_request(&overlay->last_flip, rq);
 	if (err) {
 		i915_request_add(rq);
 		return ERR_PTR(err);
@@ -281,9 +281,9 @@ static void intel_overlay_flip_prepare(struct intel_overlay *overlay,
 
 	WARN_ON(overlay->old_vma);
 
-	i915_gem_track_fb(overlay->vma ? overlay->vma->obj : NULL,
-			  vma ? vma->obj : NULL,
-			  INTEL_FRONTBUFFER_OVERLAY(pipe));
+	intel_frontbuffer_track(overlay->vma ? overlay->vma->obj->frontbuffer : NULL,
+				vma ? vma->obj->frontbuffer : NULL,
+				INTEL_FRONTBUFFER_OVERLAY(pipe));
 
 	intel_frontbuffer_flip_prepare(overlay->i915,
 				       INTEL_FRONTBUFFER_OVERLAY(pipe));
@@ -766,11 +766,7 @@ static int intel_overlay_do_put_image(struct intel_overlay *overlay,
 		ret = PTR_ERR(vma);
 		goto out_pin_section;
 	}
-	intel_fb_obj_flush(new_bo, ORIGIN_DIRTYFB);
-
-	ret = i915_vma_put_fence(vma);
-	if (ret)
-		goto out_unpin;
+	intel_frontbuffer_flush(new_bo->frontbuffer, ORIGIN_DIRTYFB);
 
 	if (!overlay->active) {
 		u32 oconfig;

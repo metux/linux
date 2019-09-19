@@ -280,10 +280,12 @@ int __init i915_global_context_init(void)
 void intel_context_enter_engine(struct intel_context *ce)
 {
 	intel_engine_pm_get(ce->engine);
+	intel_timeline_enter(ce->timeline);
 }
 
 void intel_context_exit_engine(struct intel_context *ce)
 {
+	intel_timeline_exit(ce->timeline);
 	intel_engine_pm_put(ce->engine);
 }
 
@@ -296,7 +298,7 @@ int intel_context_prepare_remote_request(struct intel_context *ce,
 	/* Only suitable for use in remotely modifying this context */
 	GEM_BUG_ON(rq->hw_context == ce);
 
-	if (rq->timeline != tl) { /* beware timeline sharing */
+	if (rcu_access_pointer(rq->timeline) != tl) { /* timeline sharing! */
 		err = mutex_lock_interruptible_nested(&tl->mutex,
 						      SINGLE_DEPTH_NESTING);
 		if (err)
@@ -304,10 +306,10 @@ int intel_context_prepare_remote_request(struct intel_context *ce,
 
 		/* Queue this switch after current activity by this context. */
 		err = i915_active_request_set(&tl->last_request, rq);
+		mutex_unlock(&tl->mutex);
 		if (err)
-			goto unlock;
+			return err;
 	}
-	lockdep_assert_held(&tl->mutex);
 
 	/*
 	 * Guarantee context image and the timeline remains pinned until the
@@ -317,12 +319,7 @@ int intel_context_prepare_remote_request(struct intel_context *ce,
 	 * words transfer the pinned ce object to tracked active request.
 	 */
 	GEM_BUG_ON(i915_active_is_idle(&ce->active));
-	err = i915_active_ref(&ce->active, rq->fence.context, rq);
-
-unlock:
-	if (rq->timeline != tl)
-		mutex_unlock(&tl->mutex);
-	return err;
+	return i915_active_add_request(&ce->active, rq);
 }
 
 struct i915_request *intel_context_create_request(struct intel_context *ce)

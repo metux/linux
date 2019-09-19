@@ -164,6 +164,7 @@ u32 intel_engine_context_size(struct drm_i915_private *dev_priv, u8 class)
 		default:
 			MISSING_CASE(INTEL_GEN(dev_priv));
 			return DEFAULT_LR_CONTEXT_RENDER_SIZE;
+		case 12:
 		case 11:
 			return GEN11_LR_CONTEXT_RENDER_SIZE;
 		case 10:
@@ -679,7 +680,8 @@ static int measure_breadcrumb_dw(struct intel_engine_cs *engine)
 				engine->status_page.vma))
 		goto out_frame;
 
-	INIT_LIST_HEAD(&frame->ring.request_list);
+	mutex_lock(&frame->timeline.mutex);
+
 	frame->ring.vaddr = frame->cs;
 	frame->ring.size = sizeof(frame->cs);
 	frame->ring.effective_size = frame->ring.size;
@@ -688,18 +690,22 @@ static int measure_breadcrumb_dw(struct intel_engine_cs *engine)
 	frame->rq.i915 = engine->i915;
 	frame->rq.engine = engine;
 	frame->rq.ring = &frame->ring;
-	frame->rq.timeline = &frame->timeline;
+	rcu_assign_pointer(frame->rq.timeline, &frame->timeline);
 
 	dw = intel_timeline_pin(&frame->timeline);
 	if (dw < 0)
 		goto out_timeline;
 
+	spin_lock_irq(&engine->active.lock);
 	dw = engine->emit_fini_breadcrumb(&frame->rq, frame->cs) - frame->cs;
+	spin_unlock_irq(&engine->active.lock);
+
 	GEM_BUG_ON(dw & 1); /* RING_TAIL must be qword aligned */
 
 	intel_timeline_unpin(&frame->timeline);
 
 out_timeline:
+	mutex_unlock(&frame->timeline.mutex);
 	intel_timeline_fini(&frame->timeline);
 out_frame:
 	kfree(frame);
@@ -736,6 +742,8 @@ create_kernel_context(struct intel_engine_cs *engine)
 	ce = intel_context_create(engine->i915->kernel_context, engine);
 	if (IS_ERR(ce))
 		return ce;
+
+	ce->ring = __intel_context_ring_size(SZ_4K);
 
 	err = intel_context_pin(ce);
 	if (err) {
@@ -1009,16 +1017,12 @@ void intel_engine_get_instdone(struct intel_engine_cs *engine,
 
 static bool ring_is_idle(struct intel_engine_cs *engine)
 {
-	struct drm_i915_private *dev_priv = engine->i915;
-	intel_wakeref_t wakeref;
 	bool idle = true;
 
 	if (I915_SELFTEST_ONLY(!engine->mmio_base))
 		return true;
 
-	/* If the whole device is asleep, the engine must be idle */
-	wakeref = intel_runtime_pm_get_if_in_use(&dev_priv->runtime_pm);
-	if (!wakeref)
+	if (!intel_engine_pm_get_if_awake(engine))
 		return true;
 
 	/* First check that no commands are left in the ring */
@@ -1027,11 +1031,11 @@ static bool ring_is_idle(struct intel_engine_cs *engine)
 		idle = false;
 
 	/* No bit for gen2, so assume the CS parser is idle */
-	if (INTEL_GEN(dev_priv) > 2 &&
+	if (INTEL_GEN(engine->i915) > 2 &&
 	    !(ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE))
 		idle = false;
 
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
+	intel_engine_pm_put(engine);
 
 	return idle;
 }
@@ -1200,13 +1204,32 @@ static void hexdump(struct drm_printer *m, const void *buf, size_t len)
 	}
 }
 
+static struct intel_timeline *get_timeline(struct i915_request *rq)
+{
+	struct intel_timeline *tl;
+
+	/*
+	 * Even though we are holding the engine->active.lock here, there
+	 * is no control over the submission queue per-se and we are
+	 * inspecting the active state at a random point in time, with an
+	 * unknown queue. Play safe and make sure the timeline remains valid.
+	 * (Only being used for pretty printing, one extra kref shouldn't
+	 * cause a camel stampede!)
+	 */
+	rcu_read_lock();
+	tl = rcu_dereference(rq->timeline);
+	if (!kref_get_unless_zero(&tl->kref))
+		tl = NULL;
+	rcu_read_unlock();
+
+	return tl;
+}
+
 static void intel_engine_print_registers(struct intel_engine_cs *engine,
 					 struct drm_printer *m)
 {
 	struct drm_i915_private *dev_priv = engine->i915;
-	const struct intel_engine_execlists * const execlists =
-		&engine->execlists;
-	unsigned long flags;
+	struct intel_engine_execlists * const execlists = &engine->execlists;
 	u64 addr;
 
 	if (engine->id == RENDER_CLASS && IS_GEN_RANGE(dev_priv, 4, 7))
@@ -1289,35 +1312,45 @@ static void intel_engine_print_registers(struct intel_engine_cs *engine,
 				   idx, hws[idx * 2], hws[idx * 2 + 1]);
 		}
 
-		spin_lock_irqsave(&engine->active.lock, flags);
+		execlists_active_lock_bh(execlists);
 		for (port = execlists->active; (rq = *port); port++) {
 			char hdr[80];
 			int len;
 
 			len = snprintf(hdr, sizeof(hdr),
-				       "\t\tActive[%d: ",
+				       "\t\tActive[%d]: ",
 				       (int)(port - execlists->active));
-			if (!i915_request_signaled(rq))
+			if (!i915_request_signaled(rq)) {
+				struct intel_timeline *tl = get_timeline(rq);
+
 				len += snprintf(hdr + len, sizeof(hdr) - len,
 						"ring:{start:%08x, hwsp:%08x, seqno:%08x}, ",
 						i915_ggtt_offset(rq->ring->vma),
-						rq->timeline->hwsp_offset,
+						tl ? tl->hwsp_offset : 0,
 						hwsp_seqno(rq));
+
+				if (tl)
+					intel_timeline_put(tl);
+			}
 			snprintf(hdr + len, sizeof(hdr) - len, "rq: ");
 			print_request(m, rq, hdr);
 		}
 		for (port = execlists->pending; (rq = *port); port++) {
+			struct intel_timeline *tl = get_timeline(rq);
 			char hdr[80];
 
 			snprintf(hdr, sizeof(hdr),
 				 "\t\tPending[%d] ring:{start:%08x, hwsp:%08x, seqno:%08x}, rq: ",
 				 (int)(port - execlists->pending),
 				 i915_ggtt_offset(rq->ring->vma),
-				 rq->timeline->hwsp_offset,
+				 tl ? tl->hwsp_offset : 0,
 				 hwsp_seqno(rq));
 			print_request(m, rq, hdr);
+
+			if (tl)
+				intel_timeline_put(tl);
 		}
-		spin_unlock_irqrestore(&engine->active.lock, flags);
+		execlists_active_unlock_bh(execlists);
 	} else if (INTEL_GEN(dev_priv) > 6) {
 		drm_printf(m, "\tPP_DIR_BASE: 0x%08x\n",
 			   ENGINE_READ(engine, RING_PP_DIR_BASE));
@@ -1393,6 +1426,8 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 	spin_lock_irqsave(&engine->active.lock, flags);
 	rq = intel_engine_find_active_request(engine);
 	if (rq) {
+		struct intel_timeline *tl = get_timeline(rq);
+
 		print_request(m, rq, "\t\tactive ");
 
 		drm_printf(m, "\t\tring->start:  0x%08x\n",
@@ -1405,8 +1440,12 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 			   rq->ring->emit);
 		drm_printf(m, "\t\tring->space:  0x%08x\n",
 			   rq->ring->space);
-		drm_printf(m, "\t\tring->hwsp:   0x%08x\n",
-			   rq->timeline->hwsp_offset);
+
+		if (tl) {
+			drm_printf(m, "\t\tring->hwsp:   0x%08x\n",
+				   tl->hwsp_offset);
+			intel_timeline_put(tl);
+		}
 
 		print_request_ring(m, rq);
 
@@ -1417,6 +1456,7 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 	}
 	spin_unlock_irqrestore(&engine->active.lock, flags);
 
+	drm_printf(m, "\tMMIO base:  0x%08x\n", engine->mmio_base);
 	wakeref = intel_runtime_pm_get_if_in_use(&engine->i915->runtime_pm);
 	if (wakeref) {
 		intel_engine_print_registers(engine, m);
@@ -1452,8 +1492,8 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 	if (!intel_engine_supports_stats(engine))
 		return -ENODEV;
 
-	spin_lock_irqsave(&engine->active.lock, flags);
-	write_seqlock(&engine->stats.lock);
+	execlists_active_lock_bh(execlists);
+	write_seqlock_irqsave(&engine->stats.lock, flags);
 
 	if (unlikely(engine->stats.enabled == ~0)) {
 		err = -EBUSY;
@@ -1472,7 +1512,7 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 
 		for (port = execlists->pending; (rq = *port); port++) {
 			/* Exclude any contexts already counted in active */
-			if (intel_context_inflight_count(rq->hw_context) == 1)
+			if (!intel_context_inflight_count(rq->hw_context))
 				engine->stats.active++;
 		}
 
@@ -1481,8 +1521,8 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 	}
 
 unlock:
-	write_sequnlock(&engine->stats.lock);
-	spin_unlock_irqrestore(&engine->active.lock, flags);
+	write_sequnlock_irqrestore(&engine->stats.lock, flags);
+	execlists_active_unlock_bh(execlists);
 
 	return err;
 }

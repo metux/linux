@@ -37,6 +37,8 @@
 #include "i915_trace.h"
 #include "intel_context.h"
 #include "intel_gt.h"
+#include "intel_gt_irq.h"
+#include "intel_gt_pm_irq.h"
 #include "intel_reset.h"
 #include "intel_workarounds.h"
 
@@ -320,7 +322,8 @@ static u32 *gen6_rcs_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 		 PIPE_CONTROL_DC_FLUSH_ENABLE |
 		 PIPE_CONTROL_QW_WRITE |
 		 PIPE_CONTROL_CS_STALL);
-	*cs++ = rq->timeline->hwsp_offset | PIPE_CONTROL_GLOBAL_GTT;
+	*cs++ = i915_request_active_timeline(rq)->hwsp_offset |
+		PIPE_CONTROL_GLOBAL_GTT;
 	*cs++ = rq->fence.seqno;
 
 	*cs++ = MI_USER_INTERRUPT;
@@ -423,7 +426,7 @@ static u32 *gen7_rcs_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 		 PIPE_CONTROL_QW_WRITE |
 		 PIPE_CONTROL_GLOBAL_GTT_IVB |
 		 PIPE_CONTROL_CS_STALL);
-	*cs++ = rq->timeline->hwsp_offset;
+	*cs++ = i915_request_active_timeline(rq)->hwsp_offset;
 	*cs++ = rq->fence.seqno;
 
 	*cs++ = MI_USER_INTERRUPT;
@@ -437,8 +440,8 @@ static u32 *gen7_rcs_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 
 static u32 *gen6_xcs_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 {
-	GEM_BUG_ON(rq->timeline->hwsp_ggtt != rq->engine->status_page.vma);
-	GEM_BUG_ON(offset_in_page(rq->timeline->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
+	GEM_BUG_ON(i915_request_active_timeline(rq)->hwsp_ggtt != rq->engine->status_page.vma);
+	GEM_BUG_ON(offset_in_page(i915_request_active_timeline(rq)->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
 
 	*cs++ = MI_FLUSH_DW | MI_FLUSH_DW_OP_STOREDW | MI_FLUSH_DW_STORE_INDEX;
 	*cs++ = I915_GEM_HWS_SEQNO_ADDR | MI_FLUSH_DW_USE_GTT;
@@ -457,8 +460,8 @@ static u32 *gen7_xcs_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 {
 	int i;
 
-	GEM_BUG_ON(rq->timeline->hwsp_ggtt != rq->engine->status_page.vma);
-	GEM_BUG_ON(offset_in_page(rq->timeline->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
+	GEM_BUG_ON(i915_request_active_timeline(rq)->hwsp_ggtt != rq->engine->status_page.vma);
+	GEM_BUG_ON(offset_in_page(i915_request_active_timeline(rq)->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
 
 	*cs++ = MI_FLUSH_DW | MI_FLUSH_DW_OP_STOREDW | MI_FLUSH_DW_STORE_INDEX;
 	*cs++ = I915_GEM_HWS_SEQNO_ADDR | MI_FLUSH_DW_USE_GTT;
@@ -936,8 +939,8 @@ static void i9xx_submit_request(struct i915_request *request)
 
 static u32 *i9xx_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 {
-	GEM_BUG_ON(rq->timeline->hwsp_ggtt != rq->engine->status_page.vma);
-	GEM_BUG_ON(offset_in_page(rq->timeline->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
+	GEM_BUG_ON(i915_request_active_timeline(rq)->hwsp_ggtt != rq->engine->status_page.vma);
+	GEM_BUG_ON(offset_in_page(i915_request_active_timeline(rq)->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
 
 	*cs++ = MI_FLUSH;
 
@@ -959,8 +962,8 @@ static u32 *gen5_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 {
 	int i;
 
-	GEM_BUG_ON(rq->timeline->hwsp_ggtt != rq->engine->status_page.vma);
-	GEM_BUG_ON(offset_in_page(rq->timeline->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
+	GEM_BUG_ON(i915_request_active_timeline(rq)->hwsp_ggtt != rq->engine->status_page.vma);
+	GEM_BUG_ON(offset_in_page(i915_request_active_timeline(rq)->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
 
 	*cs++ = MI_FLUSH;
 
@@ -983,13 +986,13 @@ static u32 *gen5_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 static void
 gen5_irq_enable(struct intel_engine_cs *engine)
 {
-	gen5_enable_gt_irq(engine->i915, engine->irq_enable_mask);
+	gen5_gt_enable_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static void
 gen5_irq_disable(struct intel_engine_cs *engine)
 {
-	gen5_disable_gt_irq(engine->i915, engine->irq_enable_mask);
+	gen5_gt_disable_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static void
@@ -1050,14 +1053,14 @@ gen6_irq_enable(struct intel_engine_cs *engine)
 	/* Flush/delay to ensure the RING_IMR is active before the GT IMR */
 	ENGINE_POSTING_READ(engine, RING_IMR);
 
-	gen5_enable_gt_irq(engine->i915, engine->irq_enable_mask);
+	gen5_gt_enable_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static void
 gen6_irq_disable(struct intel_engine_cs *engine)
 {
 	ENGINE_WRITE(engine, RING_IMR, ~engine->irq_keep_mask);
-	gen5_disable_gt_irq(engine->i915, engine->irq_enable_mask);
+	gen5_gt_disable_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static void
@@ -1068,14 +1071,14 @@ hsw_vebox_irq_enable(struct intel_engine_cs *engine)
 	/* Flush/delay to ensure the RING_IMR is active before the GT IMR */
 	ENGINE_POSTING_READ(engine, RING_IMR);
 
-	gen6_unmask_pm_irq(engine->gt, engine->irq_enable_mask);
+	gen6_gt_pm_unmask_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static void
 hsw_vebox_irq_disable(struct intel_engine_cs *engine)
 {
 	ENGINE_WRITE(engine, RING_IMR, ~0);
-	gen6_mask_pm_irq(engine->gt, engine->irq_enable_mask);
+	gen6_gt_pm_mask_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static int
@@ -1137,7 +1140,7 @@ i830_emit_bb_start(struct i915_request *rq,
 		 * stable batch scratch bo area (so that the CS never
 		 * stumbles over its tlb invalidation bug) ...
 		 */
-		*cs++ = SRC_COPY_BLT_CMD | BLT_WRITE_RGBA;
+		*cs++ = SRC_COPY_BLT_CMD | BLT_WRITE_RGBA | (6 - 2);
 		*cs++ = BLT_DEPTH_32 | BLT_ROP_SRC_COPY | 4096;
 		*cs++ = DIV_ROUND_UP(len, 4096) << 16 | 4096;
 		*cs++ = cs_offset;
@@ -1233,8 +1236,7 @@ err_unpin:
 
 void intel_ring_reset(struct intel_ring *ring, u32 tail)
 {
-	GEM_BUG_ON(!intel_ring_offset_valid(ring, tail));
-
+	tail = intel_ring_wrap(ring, tail);
 	ring->tail = tail;
 	ring->head = tail;
 	ring->emit = tail;
@@ -1249,7 +1251,7 @@ void intel_ring_unpin(struct intel_ring *ring)
 		return;
 
 	/* Discard any unused bytes beyond that submitted to hw. */
-	intel_ring_reset(ring, ring->tail);
+	intel_ring_reset(ring, ring->emit);
 
 	i915_vma_unset_ggtt_write(vma);
 	if (i915_vma_is_map_and_fenceable(vma))
@@ -1310,7 +1312,6 @@ intel_engine_create_ring(struct intel_engine_cs *engine, int size)
 		return ERR_PTR(-ENOMEM);
 
 	kref_init(&ring->ref);
-	INIT_LIST_HEAD(&ring->request_list);
 
 	ring->size = size;
 	/* Workaround an erratum on the i830 which causes a hang if
@@ -1574,7 +1575,7 @@ static inline int mi_set_context(struct i915_request *rq, u32 flags)
 	struct intel_engine_cs *engine = rq->engine;
 	enum intel_engine_id id;
 	const int num_engines =
-		IS_HSW_GT1(i915) ? RUNTIME_INFO(i915)->num_engines - 1 : 0;
+		IS_HASWELL(i915) ? RUNTIME_INFO(i915)->num_engines - 1 : 0;
 	bool force_restore = false;
 	int len;
 	u32 *cs;
@@ -1815,7 +1816,7 @@ static int ring_request_alloc(struct i915_request *request)
 	int ret;
 
 	GEM_BUG_ON(!intel_context_is_pinned(request->hw_context));
-	GEM_BUG_ON(request->timeline->has_initial_breadcrumb);
+	GEM_BUG_ON(i915_request_timeline(request)->has_initial_breadcrumb);
 
 	/*
 	 * Flush enough space to reduce the likelihood of waiting after
@@ -1837,7 +1838,10 @@ static int ring_request_alloc(struct i915_request *request)
 	return 0;
 }
 
-static noinline int wait_for_space(struct intel_ring *ring, unsigned int bytes)
+static noinline int
+wait_for_space(struct intel_ring *ring,
+	       struct intel_timeline *tl,
+	       unsigned int bytes)
 {
 	struct i915_request *target;
 	long timeout;
@@ -1845,15 +1849,18 @@ static noinline int wait_for_space(struct intel_ring *ring, unsigned int bytes)
 	if (intel_ring_update_space(ring) >= bytes)
 		return 0;
 
-	GEM_BUG_ON(list_empty(&ring->request_list));
-	list_for_each_entry(target, &ring->request_list, ring_link) {
+	GEM_BUG_ON(list_empty(&tl->requests));
+	list_for_each_entry(target, &tl->requests, link) {
+		if (target->ring != ring)
+			continue;
+
 		/* Would completion of this request free enough space? */
 		if (bytes <= __intel_ring_space(target->postfix,
 						ring->emit, ring->size))
 			break;
 	}
 
-	if (WARN_ON(&target->ring_link == &ring->request_list))
+	if (GEM_WARN_ON(&target->link == &tl->requests))
 		return -ENOSPC;
 
 	timeout = i915_request_wait(target,
@@ -1920,7 +1927,9 @@ u32 *intel_ring_begin(struct i915_request *rq, unsigned int num_dwords)
 		 */
 		GEM_BUG_ON(!rq->reserved_space);
 
-		ret = wait_for_space(ring, total_bytes);
+		ret = wait_for_space(ring,
+				     i915_request_timeline(rq),
+				     total_bytes);
 		if (unlikely(ret))
 			return ERR_PTR(ret);
 	}

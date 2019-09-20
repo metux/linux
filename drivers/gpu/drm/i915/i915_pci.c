@@ -523,8 +523,6 @@ static const struct intel_device_info intel_haswell_gt3_info = {
 #define GEN8_FEATURES \
 	G75_FEATURES, \
 	GEN(8), \
-	.page_sizes = I915_GTT_PAGE_SIZE_4K | \
-		      I915_GTT_PAGE_SIZE_2M, \
 	.has_logical_ring_contexts = 1, \
 	.ppgtt_type = INTEL_PPGTT_FULL, \
 	.ppgtt_size = 48, \
@@ -587,8 +585,7 @@ static const struct intel_device_info intel_cherryview_info = {
 
 #define GEN9_DEFAULT_PAGE_SIZES \
 	.page_sizes = I915_GTT_PAGE_SIZE_4K | \
-		      I915_GTT_PAGE_SIZE_64K | \
-		      I915_GTT_PAGE_SIZE_2M
+		      I915_GTT_PAGE_SIZE_64K
 
 #define GEN9_FEATURES \
 	GEN8_FEATURES, \
@@ -728,8 +725,14 @@ static const struct intel_device_info intel_cannonlake_info = {
 	.gt = 2,
 };
 
+#define GEN11_DEFAULT_PAGE_SIZES \
+	.page_sizes = I915_GTT_PAGE_SIZE_4K | \
+		      I915_GTT_PAGE_SIZE_64K | \
+		      I915_GTT_PAGE_SIZE_2M
+
 #define GEN11_FEATURES \
 	GEN10_FEATURES, \
+	GEN11_DEFAULT_PAGE_SIZES, \
 	.pipe_offsets = { \
 		[TRANSCODER_A] = PIPE_A_OFFSET, \
 		[TRANSCODER_B] = PIPE_B_OFFSET, \
@@ -786,13 +789,16 @@ static const struct intel_device_info intel_elkhartlake_info = {
 		[TRANSCODER_D] = TRANSCODER_D_OFFSET, \
 		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET, \
 		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET, \
-	}
+	}, \
+	.has_global_mocs = 1, \
+	.display.has_dsb = 1
 
 static const struct intel_device_info intel_tigerlake_12_info = {
 	GEN12_FEATURES,
 	PLATFORM(INTEL_TIGERLAKE),
 	.pipe_mask = BIT(PIPE_A) | BIT(PIPE_B) | BIT(PIPE_C) | BIT(PIPE_D),
 	.require_force_probe = 1,
+	.display.has_modular_fia = 1,
 	.engine_mask =
 		BIT(RCS0) | BIT(BCS0) | BIT(VECS0) | BIT(VCS0) | BIT(VCS2),
 	.engine_mask = BIT(RCS0), /* XXX reduced for debugging */
@@ -869,22 +875,23 @@ static const struct pci_device_id pciidlist[] = {
 	INTEL_CNL_IDS(&intel_cannonlake_info),
 	INTEL_ICL_11_IDS(&intel_icelake_11_info),
 	INTEL_EHL_IDS(&intel_elkhartlake_info),
+	INTEL_TGL_12_IDS(&intel_tigerlake_12_info),
 	{0, 0, 0}
 };
 MODULE_DEVICE_TABLE(pci, pciidlist);
 
 static void i915_pci_remove(struct pci_dev *pdev)
 {
-	struct drm_device *dev;
+	struct drm_i915_private *i915;
 
-	dev = pci_get_drvdata(pdev);
-	if (!dev) /* driver load aborted, nothing to cleanup */
+	i915 = pci_get_drvdata(pdev);
+	if (!i915) /* driver load aborted, nothing to cleanup */
 		return;
 
-	i915_driver_unload(dev);
-	drm_dev_put(dev);
-
+	i915_driver_remove(i915);
 	pci_set_drvdata(pdev, NULL);
+
+	drm_dev_put(&i915->drm);
 }
 
 /* is device_id present in comma separated list of ids */
@@ -956,11 +963,11 @@ static int i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (vga_switcheroo_client_probe_defer(pdev))
 		return -EPROBE_DEFER;
 
-	err = i915_driver_load(pdev, ent);
+	err = i915_driver_probe(pdev, ent);
 	if (err)
 		return err;
 
-	if (i915_inject_load_failure()) {
+	if (i915_inject_probe_failure(pci_get_drvdata(pdev))) {
 		i915_pci_remove(pdev);
 		return -ENODEV;
 	}

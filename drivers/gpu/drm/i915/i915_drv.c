@@ -62,18 +62,17 @@
 
 #include "gem/i915_gem_context.h"
 #include "gem/i915_gem_ioctls.h"
-#include "gt/intel_engine_user.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
-#include "gt/intel_reset.h"
-#include "gt/intel_workarounds.h"
-#include "gt/uc/intel_uc.h"
 
 #include "i915_debugfs.h"
 #include "i915_drv.h"
 #include "i915_irq.h"
-#include "i915_pmu.h"
+#include "i915_memcpy.h"
+#include "i915_perf.h"
 #include "i915_query.h"
+#include "i915_suspend.h"
+#include "i915_sysfs.h"
 #include "i915_trace.h"
 #include "i915_vgpu.h"
 #include "intel_csr.h"
@@ -81,426 +80,67 @@
 
 static struct drm_driver driver;
 
-#if IS_ENABLED(CONFIG_DRM_I915_DEBUG)
-static unsigned int i915_probe_fail_count;
+struct vlv_s0ix_state {
+	/* GAM */
+	u32 wr_watermark;
+	u32 gfx_prio_ctrl;
+	u32 arb_mode;
+	u32 gfx_pend_tlb0;
+	u32 gfx_pend_tlb1;
+	u32 lra_limits[GEN7_LRA_LIMITS_REG_NUM];
+	u32 media_max_req_count;
+	u32 gfx_max_req_count;
+	u32 render_hwsp;
+	u32 ecochk;
+	u32 bsd_hwsp;
+	u32 blt_hwsp;
+	u32 tlb_rd_addr;
 
-int __i915_inject_load_error(struct drm_i915_private *i915, int err,
-			     const char *func, int line)
-{
-	if (i915_probe_fail_count >= i915_modparams.inject_load_failure)
-		return 0;
+	/* MBC */
+	u32 g3dctl;
+	u32 gsckgctl;
+	u32 mbctl;
 
-	if (++i915_probe_fail_count < i915_modparams.inject_load_failure)
-		return 0;
+	/* GCP */
+	u32 ucgctl1;
+	u32 ucgctl3;
+	u32 rcgctl1;
+	u32 rcgctl2;
+	u32 rstctl;
+	u32 misccpctl;
 
-	__i915_printk(i915, KERN_INFO,
-		      "Injecting failure %d at checkpoint %u [%s:%d]\n",
-		      err, i915_modparams.inject_load_failure, func, line);
-	i915_modparams.inject_load_failure = 0;
-	return err;
-}
+	/* GPM */
+	u32 gfxpause;
+	u32 rpdeuhwtc;
+	u32 rpdeuc;
+	u32 ecobus;
+	u32 pwrdwnupctl;
+	u32 rp_down_timeout;
+	u32 rp_deucsw;
+	u32 rcubmabdtmr;
+	u32 rcedata;
+	u32 spare2gh;
 
-bool i915_error_injected(void)
-{
-	return i915_probe_fail_count && !i915_modparams.inject_load_failure;
-}
+	/* Display 1 CZ domain */
+	u32 gt_imr;
+	u32 gt_ier;
+	u32 pm_imr;
+	u32 pm_ier;
+	u32 gt_scratch[GEN7_GT_SCRATCH_REG_NUM];
 
-#endif
+	/* GT SA CZ domain */
+	u32 tilectl;
+	u32 gt_fifoctl;
+	u32 gtlc_wake_ctrl;
+	u32 gtlc_survive;
+	u32 pmwgicz;
 
-#define FDO_BUG_URL "https://bugs.freedesktop.org/enter_bug.cgi?product=DRI"
-#define FDO_BUG_MSG "Please file a bug at " FDO_BUG_URL " against DRM/Intel " \
-		    "providing the dmesg log by booting with drm.debug=0xf"
-
-void
-__i915_printk(struct drm_i915_private *dev_priv, const char *level,
-	      const char *fmt, ...)
-{
-	static bool shown_bug_once;
-	struct device *kdev = dev_priv->drm.dev;
-	bool is_error = level[1] <= KERN_ERR[1];
-	bool is_debug = level[1] == KERN_DEBUG[1];
-	struct va_format vaf;
-	va_list args;
-
-	if (is_debug && !(drm_debug & DRM_UT_DRIVER))
-		return;
-
-	va_start(args, fmt);
-
-	vaf.fmt = fmt;
-	vaf.va = &args;
-
-	if (is_error)
-		dev_printk(level, kdev, "%pV", &vaf);
-	else
-		dev_printk(level, kdev, "[" DRM_NAME ":%ps] %pV",
-			   __builtin_return_address(0), &vaf);
-
-	va_end(args);
-
-	if (is_error && !shown_bug_once) {
-		/*
-		 * Ask the user to file a bug report for the error, except
-		 * if they may have caused the bug by fiddling with unsafe
-		 * module parameters.
-		 */
-		if (!test_taint(TAINT_USER))
-			dev_notice(kdev, "%s", FDO_BUG_MSG);
-		shown_bug_once = true;
-	}
-}
-
-/* Map PCH device id to PCH type, or PCH_NONE if unknown. */
-static enum intel_pch
-intel_pch_type(const struct drm_i915_private *dev_priv, unsigned short id)
-{
-	switch (id) {
-	case INTEL_PCH_IBX_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Ibex Peak PCH\n");
-		WARN_ON(!IS_GEN(dev_priv, 5));
-		return PCH_IBX;
-	case INTEL_PCH_CPT_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found CougarPoint PCH\n");
-		WARN_ON(!IS_GEN(dev_priv, 6) && !IS_IVYBRIDGE(dev_priv));
-		return PCH_CPT;
-	case INTEL_PCH_PPT_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found PantherPoint PCH\n");
-		WARN_ON(!IS_GEN(dev_priv, 6) && !IS_IVYBRIDGE(dev_priv));
-		/* PantherPoint is CPT compatible */
-		return PCH_CPT;
-	case INTEL_PCH_LPT_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found LynxPoint PCH\n");
-		WARN_ON(!IS_HASWELL(dev_priv) && !IS_BROADWELL(dev_priv));
-		WARN_ON(IS_HSW_ULT(dev_priv) || IS_BDW_ULT(dev_priv));
-		return PCH_LPT;
-	case INTEL_PCH_LPT_LP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found LynxPoint LP PCH\n");
-		WARN_ON(!IS_HASWELL(dev_priv) && !IS_BROADWELL(dev_priv));
-		WARN_ON(!IS_HSW_ULT(dev_priv) && !IS_BDW_ULT(dev_priv));
-		return PCH_LPT;
-	case INTEL_PCH_WPT_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found WildcatPoint PCH\n");
-		WARN_ON(!IS_HASWELL(dev_priv) && !IS_BROADWELL(dev_priv));
-		WARN_ON(IS_HSW_ULT(dev_priv) || IS_BDW_ULT(dev_priv));
-		/* WildcatPoint is LPT compatible */
-		return PCH_LPT;
-	case INTEL_PCH_WPT_LP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found WildcatPoint LP PCH\n");
-		WARN_ON(!IS_HASWELL(dev_priv) && !IS_BROADWELL(dev_priv));
-		WARN_ON(!IS_HSW_ULT(dev_priv) && !IS_BDW_ULT(dev_priv));
-		/* WildcatPoint is LPT compatible */
-		return PCH_LPT;
-	case INTEL_PCH_SPT_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found SunrisePoint PCH\n");
-		WARN_ON(!IS_SKYLAKE(dev_priv) && !IS_KABYLAKE(dev_priv));
-		return PCH_SPT;
-	case INTEL_PCH_SPT_LP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found SunrisePoint LP PCH\n");
-		WARN_ON(!IS_SKYLAKE(dev_priv) && !IS_KABYLAKE(dev_priv));
-		return PCH_SPT;
-	case INTEL_PCH_KBP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Kaby Lake PCH (KBP)\n");
-		WARN_ON(!IS_SKYLAKE(dev_priv) && !IS_KABYLAKE(dev_priv) &&
-			!IS_COFFEELAKE(dev_priv));
-		/* KBP is SPT compatible */
-		return PCH_SPT;
-	case INTEL_PCH_CNP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Cannon Lake PCH (CNP)\n");
-		WARN_ON(!IS_CANNONLAKE(dev_priv) && !IS_COFFEELAKE(dev_priv));
-		return PCH_CNP;
-	case INTEL_PCH_CNP_LP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Cannon Lake LP PCH (CNP-LP)\n");
-		WARN_ON(!IS_CANNONLAKE(dev_priv) && !IS_COFFEELAKE(dev_priv));
-		return PCH_CNP;
-	case INTEL_PCH_CMP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Comet Lake PCH (CMP)\n");
-		WARN_ON(!IS_COFFEELAKE(dev_priv));
-		/* CometPoint is CNP Compatible */
-		return PCH_CNP;
-	case INTEL_PCH_ICP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Ice Lake PCH\n");
-		WARN_ON(!IS_ICELAKE(dev_priv));
-		return PCH_ICP;
-	case INTEL_PCH_MCC_DEVICE_ID_TYPE:
-	case INTEL_PCH_MCC2_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Mule Creek Canyon PCH\n");
-		WARN_ON(!IS_ELKHARTLAKE(dev_priv));
-		return PCH_MCC;
-	case INTEL_PCH_TGP_DEVICE_ID_TYPE:
-		DRM_DEBUG_KMS("Found Tiger Lake LP PCH\n");
-		WARN_ON(!IS_TIGERLAKE(dev_priv));
-		return PCH_TGP;
-	default:
-		return PCH_NONE;
-	}
-}
-
-static bool intel_is_virt_pch(unsigned short id,
-			      unsigned short svendor, unsigned short sdevice)
-{
-	return (id == INTEL_PCH_P2X_DEVICE_ID_TYPE ||
-		id == INTEL_PCH_P3X_DEVICE_ID_TYPE ||
-		(id == INTEL_PCH_QEMU_DEVICE_ID_TYPE &&
-		 svendor == PCI_SUBVENDOR_ID_REDHAT_QUMRANET &&
-		 sdevice == PCI_SUBDEVICE_ID_QEMU));
-}
-
-static unsigned short
-intel_virt_detect_pch(const struct drm_i915_private *dev_priv)
-{
-	unsigned short id = 0;
-
-	/*
-	 * In a virtualized passthrough environment we can be in a
-	 * setup where the ISA bridge is not able to be passed through.
-	 * In this case, a south bridge can be emulated and we have to
-	 * make an educated guess as to which PCH is really there.
-	 */
-
-	if (IS_TIGERLAKE(dev_priv))
-		id = INTEL_PCH_TGP_DEVICE_ID_TYPE;
-	else if (IS_ELKHARTLAKE(dev_priv))
-		id = INTEL_PCH_MCC_DEVICE_ID_TYPE;
-	else if (IS_ICELAKE(dev_priv))
-		id = INTEL_PCH_ICP_DEVICE_ID_TYPE;
-	else if (IS_CANNONLAKE(dev_priv) || IS_COFFEELAKE(dev_priv))
-		id = INTEL_PCH_CNP_DEVICE_ID_TYPE;
-	else if (IS_KABYLAKE(dev_priv) || IS_SKYLAKE(dev_priv))
-		id = INTEL_PCH_SPT_DEVICE_ID_TYPE;
-	else if (IS_HSW_ULT(dev_priv) || IS_BDW_ULT(dev_priv))
-		id = INTEL_PCH_LPT_LP_DEVICE_ID_TYPE;
-	else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv))
-		id = INTEL_PCH_LPT_DEVICE_ID_TYPE;
-	else if (IS_GEN(dev_priv, 6) || IS_IVYBRIDGE(dev_priv))
-		id = INTEL_PCH_CPT_DEVICE_ID_TYPE;
-	else if (IS_GEN(dev_priv, 5))
-		id = INTEL_PCH_IBX_DEVICE_ID_TYPE;
-
-	if (id)
-		DRM_DEBUG_KMS("Assuming PCH ID %04x\n", id);
-	else
-		DRM_DEBUG_KMS("Assuming no PCH\n");
-
-	return id;
-}
-
-static void intel_detect_pch(struct drm_i915_private *dev_priv)
-{
-	struct pci_dev *pch = NULL;
-
-	/*
-	 * The reason to probe ISA bridge instead of Dev31:Fun0 is to
-	 * make graphics device passthrough work easy for VMM, that only
-	 * need to expose ISA bridge to let driver know the real hardware
-	 * underneath. This is a requirement from virtualization team.
-	 *
-	 * In some virtualized environments (e.g. XEN), there is irrelevant
-	 * ISA bridge in the system. To work reliably, we should scan trhough
-	 * all the ISA bridge devices and check for the first match, instead
-	 * of only checking the first one.
-	 */
-	while ((pch = pci_get_class(PCI_CLASS_BRIDGE_ISA << 8, pch))) {
-		unsigned short id;
-		enum intel_pch pch_type;
-
-		if (pch->vendor != PCI_VENDOR_ID_INTEL)
-			continue;
-
-		id = pch->device & INTEL_PCH_DEVICE_ID_MASK;
-
-		pch_type = intel_pch_type(dev_priv, id);
-		if (pch_type != PCH_NONE) {
-			dev_priv->pch_type = pch_type;
-			dev_priv->pch_id = id;
-			break;
-		} else if (intel_is_virt_pch(id, pch->subsystem_vendor,
-					 pch->subsystem_device)) {
-			id = intel_virt_detect_pch(dev_priv);
-			pch_type = intel_pch_type(dev_priv, id);
-
-			/* Sanity check virtual PCH id */
-			if (WARN_ON(id && pch_type == PCH_NONE))
-				id = 0;
-
-			dev_priv->pch_type = pch_type;
-			dev_priv->pch_id = id;
-			break;
-		}
-	}
-
-	/*
-	 * Use PCH_NOP (PCH but no South Display) for PCH platforms without
-	 * display.
-	 */
-	if (pch && !HAS_DISPLAY(dev_priv)) {
-		DRM_DEBUG_KMS("Display disabled, reverting to NOP PCH\n");
-		dev_priv->pch_type = PCH_NOP;
-		dev_priv->pch_id = 0;
-	}
-
-	if (!pch)
-		DRM_DEBUG_KMS("No PCH found.\n");
-
-	pci_dev_put(pch);
-}
-
-static int i915_getparam_ioctl(struct drm_device *dev, void *data,
-			       struct drm_file *file_priv)
-{
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct pci_dev *pdev = dev_priv->drm.pdev;
-	const struct sseu_dev_info *sseu = &RUNTIME_INFO(dev_priv)->sseu;
-	drm_i915_getparam_t *param = data;
-	int value;
-
-	switch (param->param) {
-	case I915_PARAM_IRQ_ACTIVE:
-	case I915_PARAM_ALLOW_BATCHBUFFER:
-	case I915_PARAM_LAST_DISPATCH:
-	case I915_PARAM_HAS_EXEC_CONSTANTS:
-		/* Reject all old ums/dri params. */
-		return -ENODEV;
-	case I915_PARAM_CHIPSET_ID:
-		value = pdev->device;
-		break;
-	case I915_PARAM_REVISION:
-		value = pdev->revision;
-		break;
-	case I915_PARAM_NUM_FENCES_AVAIL:
-		value = dev_priv->ggtt.num_fences;
-		break;
-	case I915_PARAM_HAS_OVERLAY:
-		value = dev_priv->overlay ? 1 : 0;
-		break;
-	case I915_PARAM_HAS_BSD:
-		value = !!dev_priv->engine[VCS0];
-		break;
-	case I915_PARAM_HAS_BLT:
-		value = !!dev_priv->engine[BCS0];
-		break;
-	case I915_PARAM_HAS_VEBOX:
-		value = !!dev_priv->engine[VECS0];
-		break;
-	case I915_PARAM_HAS_BSD2:
-		value = !!dev_priv->engine[VCS1];
-		break;
-	case I915_PARAM_HAS_LLC:
-		value = HAS_LLC(dev_priv);
-		break;
-	case I915_PARAM_HAS_WT:
-		value = HAS_WT(dev_priv);
-		break;
-	case I915_PARAM_HAS_ALIASING_PPGTT:
-		value = INTEL_PPGTT(dev_priv);
-		break;
-	case I915_PARAM_HAS_SEMAPHORES:
-		value = !!(dev_priv->caps.scheduler & I915_SCHEDULER_CAP_SEMAPHORES);
-		break;
-	case I915_PARAM_HAS_SECURE_BATCHES:
-		value = capable(CAP_SYS_ADMIN);
-		break;
-	case I915_PARAM_CMD_PARSER_VERSION:
-		value = i915_cmd_parser_get_version(dev_priv);
-		break;
-	case I915_PARAM_SUBSLICE_TOTAL:
-		value = intel_sseu_subslice_total(sseu);
-		if (!value)
-			return -ENODEV;
-		break;
-	case I915_PARAM_EU_TOTAL:
-		value = sseu->eu_total;
-		if (!value)
-			return -ENODEV;
-		break;
-	case I915_PARAM_HAS_GPU_RESET:
-		value = i915_modparams.enable_hangcheck &&
-			intel_has_gpu_reset(dev_priv);
-		if (value && intel_has_reset_engine(dev_priv))
-			value = 2;
-		break;
-	case I915_PARAM_HAS_RESOURCE_STREAMER:
-		value = 0;
-		break;
-	case I915_PARAM_HAS_POOLED_EU:
-		value = HAS_POOLED_EU(dev_priv);
-		break;
-	case I915_PARAM_MIN_EU_IN_POOL:
-		value = sseu->min_eu_in_pool;
-		break;
-	case I915_PARAM_HUC_STATUS:
-		value = intel_huc_check_status(&dev_priv->gt.uc.huc);
-		if (value < 0)
-			return value;
-		break;
-	case I915_PARAM_MMAP_GTT_VERSION:
-		/* Though we've started our numbering from 1, and so class all
-		 * earlier versions as 0, in effect their value is undefined as
-		 * the ioctl will report EINVAL for the unknown param!
-		 */
-		value = i915_gem_mmap_gtt_version();
-		break;
-	case I915_PARAM_HAS_SCHEDULER:
-		value = dev_priv->caps.scheduler;
-		break;
-
-	case I915_PARAM_MMAP_VERSION:
-		/* Remember to bump this if the version changes! */
-	case I915_PARAM_HAS_GEM:
-	case I915_PARAM_HAS_PAGEFLIPPING:
-	case I915_PARAM_HAS_EXECBUF2: /* depends on GEM */
-	case I915_PARAM_HAS_RELAXED_FENCING:
-	case I915_PARAM_HAS_COHERENT_RINGS:
-	case I915_PARAM_HAS_RELAXED_DELTA:
-	case I915_PARAM_HAS_GEN7_SOL_RESET:
-	case I915_PARAM_HAS_WAIT_TIMEOUT:
-	case I915_PARAM_HAS_PRIME_VMAP_FLUSH:
-	case I915_PARAM_HAS_PINNED_BATCHES:
-	case I915_PARAM_HAS_EXEC_NO_RELOC:
-	case I915_PARAM_HAS_EXEC_HANDLE_LUT:
-	case I915_PARAM_HAS_COHERENT_PHYS_GTT:
-	case I915_PARAM_HAS_EXEC_SOFTPIN:
-	case I915_PARAM_HAS_EXEC_ASYNC:
-	case I915_PARAM_HAS_EXEC_FENCE:
-	case I915_PARAM_HAS_EXEC_CAPTURE:
-	case I915_PARAM_HAS_EXEC_BATCH_FIRST:
-	case I915_PARAM_HAS_EXEC_FENCE_ARRAY:
-	case I915_PARAM_HAS_EXEC_SUBMIT_FENCE:
-		/* For the time being all of these are always true;
-		 * if some supported hardware does not have one of these
-		 * features this value needs to be provided from
-		 * INTEL_INFO(), a feature macro, or similar.
-		 */
-		value = 1;
-		break;
-	case I915_PARAM_HAS_CONTEXT_ISOLATION:
-		value = intel_engines_has_context_isolation(dev_priv);
-		break;
-	case I915_PARAM_SLICE_MASK:
-		value = sseu->slice_mask;
-		if (!value)
-			return -ENODEV;
-		break;
-	case I915_PARAM_SUBSLICE_MASK:
-		value = sseu->subslice_mask[0];
-		if (!value)
-			return -ENODEV;
-		break;
-	case I915_PARAM_CS_TIMESTAMP_FREQUENCY:
-		value = 1000 * RUNTIME_INFO(dev_priv)->cs_timestamp_frequency_khz;
-		break;
-	case I915_PARAM_MMAP_GTT_COHERENT:
-		value = INTEL_INFO(dev_priv)->has_coherent_ggtt;
-		break;
-	default:
-		DRM_DEBUG("Unknown parameter %d\n", param->param);
-		return -EINVAL;
-	}
-
-	if (put_user(value, param->value))
-		return -EFAULT;
-
-	return 0;
-}
+	/* Display 2 CZ domain */
+	u32 gu_ctl0;
+	u32 gu_ctl1;
+	u32 pcbr;
+	u32 clock_gate_dis2;
+};
 
 static int i915_get_bridge_dev(struct drm_i915_private *dev_priv)
 {
@@ -689,23 +329,22 @@ static const struct vga_switcheroo_client_ops i915_switcheroo_ops = {
 	.can_switch = i915_switcheroo_can_switch,
 };
 
-static int i915_driver_modeset_probe(struct drm_device *dev)
+static int i915_driver_modeset_probe(struct drm_i915_private *i915)
 {
-	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct pci_dev *pdev = dev_priv->drm.pdev;
+	struct pci_dev *pdev = i915->drm.pdev;
 	int ret;
 
-	if (i915_inject_probe_failure(dev_priv))
+	if (i915_inject_probe_failure(i915))
 		return -ENODEV;
 
-	if (HAS_DISPLAY(dev_priv) && INTEL_DISPLAY_ENABLED(dev_priv)) {
-		ret = drm_vblank_init(&dev_priv->drm,
-				      INTEL_NUM_PIPES(dev_priv));
+	if (HAS_DISPLAY(i915) && INTEL_DISPLAY_ENABLED(i915)) {
+		ret = drm_vblank_init(&i915->drm,
+				      INTEL_NUM_PIPES(i915));
 		if (ret)
 			goto out;
 	}
 
-	intel_bios_init(dev_priv);
+	intel_bios_init(i915);
 
 	/* If we have > 1 VGA cards, then we need to arbitrate access
 	 * to the common VGA resources.
@@ -714,7 +353,7 @@ static int i915_driver_modeset_probe(struct drm_device *dev)
 	 * then we do not take part in VGA arbitration and the
 	 * vga_client_register() fails with -ENODEV.
 	 */
-	ret = vga_client_register(pdev, dev_priv, NULL, i915_vga_set_decode);
+	ret = vga_client_register(pdev, i915, NULL, i915_vga_set_decode);
 	if (ret && ret != -ENODEV)
 		goto out;
 
@@ -725,56 +364,56 @@ static int i915_driver_modeset_probe(struct drm_device *dev)
 		goto cleanup_vga_client;
 
 	/* must happen before intel_power_domains_init_hw() on VLV/CHV */
-	intel_update_rawclk(dev_priv);
+	intel_update_rawclk(i915);
 
-	intel_power_domains_init_hw(dev_priv, false);
+	intel_power_domains_init_hw(i915, false);
 
-	intel_csr_ucode_init(dev_priv);
+	intel_csr_ucode_init(i915);
 
-	ret = intel_irq_install(dev_priv);
+	ret = intel_irq_install(i915);
 	if (ret)
 		goto cleanup_csr;
 
-	intel_gmbus_setup(dev_priv);
+	intel_gmbus_setup(i915);
 
 	/* Important: The output setup functions called by modeset_init need
 	 * working irqs for e.g. gmbus and dp aux transfers. */
-	ret = intel_modeset_init(dev);
+	ret = intel_modeset_init(&i915->drm);
 	if (ret)
 		goto cleanup_irq;
 
-	ret = i915_gem_init(dev_priv);
+	ret = i915_gem_init(i915);
 	if (ret)
 		goto cleanup_modeset;
 
-	intel_overlay_setup(dev_priv);
+	intel_overlay_setup(i915);
 
-	if (!HAS_DISPLAY(dev_priv) || !INTEL_DISPLAY_ENABLED(dev_priv))
+	if (!HAS_DISPLAY(i915) || !INTEL_DISPLAY_ENABLED(i915))
 		return 0;
 
-	ret = intel_fbdev_init(dev);
+	ret = intel_fbdev_init(&i915->drm);
 	if (ret)
 		goto cleanup_gem;
 
 	/* Only enable hotplug handling once the fbdev is fully set up. */
-	intel_hpd_init(dev_priv);
+	intel_hpd_init(i915);
 
-	intel_init_ipc(dev_priv);
+	intel_init_ipc(i915);
 
 	return 0;
 
 cleanup_gem:
-	i915_gem_suspend(dev_priv);
-	i915_gem_driver_remove(dev_priv);
-	i915_gem_driver_release(dev_priv);
+	i915_gem_suspend(i915);
+	i915_gem_driver_remove(i915);
+	i915_gem_driver_release(i915);
 cleanup_modeset:
-	intel_modeset_driver_remove(dev);
+	intel_modeset_driver_remove(&i915->drm);
 cleanup_irq:
-	intel_irq_uninstall(dev_priv);
-	intel_gmbus_teardown(dev_priv);
+	intel_irq_uninstall(i915);
+	intel_gmbus_teardown(i915);
 cleanup_csr:
-	intel_csr_ucode_fini(dev_priv);
-	intel_power_domains_driver_remove(dev_priv);
+	intel_csr_ucode_fini(i915);
+	intel_power_domains_driver_remove(i915);
 	vga_switcheroo_unregister_client(pdev);
 cleanup_vga_client:
 	vga_client_register(pdev, NULL, NULL, NULL);
@@ -902,6 +541,29 @@ static void intel_detect_preproduction_hw(struct drm_i915_private *dev_priv)
 	}
 }
 
+static int vlv_alloc_s0ix_state(struct drm_i915_private *i915)
+{
+	if (!IS_VALLEYVIEW(i915))
+		return 0;
+
+	/* we write all the values in the struct, so no need to zero it out */
+	i915->vlv_s0ix_state = kmalloc(sizeof(*i915->vlv_s0ix_state),
+				       GFP_KERNEL);
+	if (!i915->vlv_s0ix_state)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void vlv_free_s0ix_state(struct drm_i915_private *i915)
+{
+	if (!i915->vlv_s0ix_state)
+		return;
+
+	kfree(i915->vlv_s0ix_state);
+	i915->vlv_s0ix_state = NULL;
+}
+
 /**
  * i915_driver_early_probe - setup state not requiring device access
  * @dev_priv: device private
@@ -921,6 +583,7 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 
 	intel_device_info_subplatform_init(dev_priv);
 
+	intel_uncore_mmio_debug_init_early(&dev_priv->mmio_debug);
 	intel_uncore_init_early(&dev_priv->uncore, dev_priv);
 
 	spin_lock_init(&dev_priv->irq_lock);
@@ -943,13 +606,17 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 	if (ret < 0)
 		return ret;
 
+	ret = vlv_alloc_s0ix_state(dev_priv);
+	if (ret < 0)
+		goto err_workqueues;
+
 	intel_wopcm_init_early(&dev_priv->wopcm);
 
 	intel_gt_init_early(&dev_priv->gt, dev_priv);
 
 	ret = i915_gem_init_early(dev_priv);
 	if (ret < 0)
-		goto err_workqueues;
+		goto err_gt;
 
 	/* This must be called before any calls to HAS_PCH_* */
 	intel_detect_pch(dev_priv);
@@ -971,8 +638,10 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 
 err_gem:
 	i915_gem_cleanup_early(dev_priv);
-err_workqueues:
+err_gt:
 	intel_gt_driver_late_release(&dev_priv->gt);
+	vlv_free_s0ix_state(dev_priv);
+err_workqueues:
 	i915_workqueues_cleanup(dev_priv);
 	return ret;
 }
@@ -988,6 +657,7 @@ static void i915_driver_late_release(struct drm_i915_private *dev_priv)
 	intel_power_domains_cleanup(dev_priv);
 	i915_gem_cleanup_early(dev_priv);
 	intel_gt_driver_late_release(&dev_priv->gt);
+	vlv_free_s0ix_state(dev_priv);
 	i915_workqueues_cleanup(dev_priv);
 
 	pm_qos_remove_request(&dev_priv->sb_qos);
@@ -1537,7 +1207,8 @@ static void edram_detect(struct drm_i915_private *dev_priv)
 		dev_priv->edram_size_mb =
 			gen9_edram_size_mb(dev_priv, edram_cap);
 
-	DRM_INFO("Found %uMB of eDRAM\n", dev_priv->edram_size_mb);
+	dev_info(dev_priv->drm.dev,
+		 "Found %uMB of eDRAM\n", dev_priv->edram_size_mb);
 }
 
 /**
@@ -1935,7 +1606,7 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret < 0)
 		goto out_cleanup_mmio;
 
-	ret = i915_driver_modeset_probe(&dev_priv->drm);
+	ret = i915_driver_modeset_probe(dev_priv);
 	if (ret < 0)
 		goto out_cleanup_hw;
 
@@ -2167,7 +1838,7 @@ static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct pci_dev *pdev = dev_priv->drm.pdev;
 	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
-	int ret;
+	int ret = 0;
 
 	disable_rpm_wakeref_asserts(rpm);
 
@@ -2178,12 +1849,9 @@ static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 	intel_power_domains_suspend(dev_priv,
 				    get_suspend_mode(dev_priv, hibernation));
 
-	ret = 0;
-	if (INTEL_GEN(dev_priv) >= 11 || IS_GEN9_LP(dev_priv))
-		bxt_enable_dc9(dev_priv);
-	else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv))
-		hsw_enable_pc8(dev_priv);
-	else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
+	intel_display_power_suspend_late(dev_priv);
+
+	if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
 		ret = vlv_suspend_complete(dev_priv);
 
 	if (ret) {
@@ -2211,7 +1879,7 @@ static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 
 out:
 	enable_rpm_wakeref_asserts(rpm);
-	if (!dev_priv->uncore.user_forcewake.count)
+	if (!dev_priv->uncore.user_forcewake_count)
 		intel_runtime_pm_driver_release(rpm);
 
 	return ret;
@@ -2249,6 +1917,11 @@ static int i915_drm_resume(struct drm_device *dev)
 	ret = i915_ggtt_enable_hw(dev_priv);
 	if (ret)
 		DRM_ERROR("failed to re-enable GGTT\n");
+
+	mutex_lock(&dev_priv->drm.struct_mutex);
+	i915_gem_restore_gtt_mappings(dev_priv);
+	i915_gem_restore_fences(dev_priv);
+	mutex_unlock(&dev_priv->drm.struct_mutex);
 
 	intel_csr_ucode_resume(dev_priv);
 
@@ -2368,12 +2041,7 @@ static int i915_drm_resume_early(struct drm_device *dev)
 
 	intel_gt_check_and_clear_faults(&dev_priv->gt);
 
-	if (INTEL_GEN(dev_priv) >= 11 || IS_GEN9_LP(dev_priv)) {
-		gen9_sanitize_dc_state(dev_priv);
-		bxt_disable_dc9(dev_priv);
-	} else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv)) {
-		hsw_disable_pc8(dev_priv);
-	}
+	intel_display_power_resume_early(dev_priv);
 
 	intel_gt_pm_disable(&dev_priv->gt);
 
@@ -2566,8 +2234,11 @@ static int i915_pm_restore(struct device *kdev)
  */
 static void vlv_save_gunit_s0ix_state(struct drm_i915_private *dev_priv)
 {
-	struct vlv_s0ix_state *s = &dev_priv->vlv_s0ix_state;
+	struct vlv_s0ix_state *s = dev_priv->vlv_s0ix_state;
 	int i;
+
+	if (!s)
+		return;
 
 	/* GAM 0x4000-0x4770 */
 	s->wr_watermark		= I915_READ(GEN7_WR_WATERMARK);
@@ -2647,9 +2318,12 @@ static void vlv_save_gunit_s0ix_state(struct drm_i915_private *dev_priv)
 
 static void vlv_restore_gunit_s0ix_state(struct drm_i915_private *dev_priv)
 {
-	struct vlv_s0ix_state *s = &dev_priv->vlv_s0ix_state;
+	struct vlv_s0ix_state *s = dev_priv->vlv_s0ix_state;
 	u32 val;
 	int i;
+
+	if (!s)
+		return;
 
 	/* GAM 0x4000-0x4770 */
 	I915_WRITE(GEN7_WR_WATERMARK,	s->wr_watermark);
@@ -2859,8 +2533,7 @@ static int vlv_suspend_complete(struct drm_i915_private *dev_priv)
 	if (err)
 		goto err2;
 
-	if (!IS_CHERRYVIEW(dev_priv))
-		vlv_save_gunit_s0ix_state(dev_priv);
+	vlv_save_gunit_s0ix_state(dev_priv);
 
 	err = vlv_force_gfx_clock(dev_priv, false);
 	if (err)
@@ -2890,8 +2563,7 @@ static int vlv_resume_prepare(struct drm_i915_private *dev_priv,
 	 */
 	ret = vlv_force_gfx_clock(dev_priv, true);
 
-	if (!IS_CHERRYVIEW(dev_priv))
-		vlv_restore_gunit_s0ix_state(dev_priv);
+	vlv_restore_gunit_s0ix_state(dev_priv);
 
 	err = vlv_allow_gt_wake(dev_priv, true);
 	if (!ret)
@@ -2913,7 +2585,7 @@ static int intel_runtime_suspend(struct device *kdev)
 {
 	struct drm_i915_private *dev_priv = kdev_to_i915(kdev);
 	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
-	int ret;
+	int ret = 0;
 
 	if (WARN_ON_ONCE(!HAS_RUNTIME_PM(dev_priv)))
 		return -ENODEV;
@@ -2934,18 +2606,10 @@ static int intel_runtime_suspend(struct device *kdev)
 
 	intel_uncore_suspend(&dev_priv->uncore);
 
-	ret = 0;
-	if (INTEL_GEN(dev_priv) >= 11) {
-		icl_display_core_uninit(dev_priv);
-		bxt_enable_dc9(dev_priv);
-	} else if (IS_GEN9_LP(dev_priv)) {
-		bxt_display_core_uninit(dev_priv);
-		bxt_enable_dc9(dev_priv);
-	} else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv)) {
-		hsw_enable_pc8(dev_priv);
-	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
+	intel_display_power_suspend(dev_priv);
+
+	if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
 		ret = vlv_suspend_complete(dev_priv);
-	}
 
 	if (ret) {
 		DRM_ERROR("Runtime suspend failed, disabling it (%d)\n", ret);
@@ -3021,28 +2685,10 @@ static int intel_runtime_resume(struct device *kdev)
 	if (intel_uncore_unclaimed_mmio(&dev_priv->uncore))
 		DRM_DEBUG_DRIVER("Unclaimed access during suspend, bios?\n");
 
-	if (INTEL_GEN(dev_priv) >= 11) {
-		bxt_disable_dc9(dev_priv);
-		icl_display_core_init(dev_priv, true);
-		if (dev_priv->csr.dmc_payload) {
-			if (dev_priv->csr.allowed_dc_mask &
-			    DC_STATE_EN_UPTO_DC6)
-				skl_enable_dc6(dev_priv);
-			else if (dev_priv->csr.allowed_dc_mask &
-				 DC_STATE_EN_UPTO_DC5)
-				gen9_enable_dc5(dev_priv);
-		}
-	} else if (IS_GEN9_LP(dev_priv)) {
-		bxt_disable_dc9(dev_priv);
-		bxt_display_core_init(dev_priv, true);
-		if (dev_priv->csr.dmc_payload &&
-		    (dev_priv->csr.allowed_dc_mask & DC_STATE_EN_UPTO_DC5))
-			gen9_enable_dc5(dev_priv);
-	} else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv)) {
-		hsw_disable_pc8(dev_priv);
-	} else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) {
+	intel_display_power_resume(dev_priv);
+
+	if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
 		ret = vlv_resume_prepare(dev_priv, true);
-	}
 
 	intel_uncore_runtime_resume(&dev_priv->uncore);
 

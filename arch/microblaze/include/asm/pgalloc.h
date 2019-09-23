@@ -21,9 +21,6 @@
 #include <asm/cache.h>
 #include <asm/pgtable.h>
 
-#define __HAVE_ARCH_PTE_ALLOC_ONE_KERNEL
-#include <asm-generic/pgalloc.h>
-
 extern void __bad_pte(pmd_t *pmd);
 
 static inline pgd_t *get_pgd(void)
@@ -42,6 +39,42 @@ static inline void free_pgd(pgd_t *pgd)
 #define pmd_pgtable(pmd)	pmd_page(pmd)
 
 extern pte_t *pte_alloc_one_kernel(struct mm_struct *mm);
+
+static inline struct page *pte_alloc_one(struct mm_struct *mm)
+{
+	struct page *ptepage;
+
+#ifdef CONFIG_HIGHPTE
+	int flags = GFP_KERNEL | __GFP_ZERO | __GFP_HIGHMEM;
+#else
+	int flags = GFP_KERNEL | __GFP_ZERO;
+#endif
+
+	ptepage = alloc_pages(flags, 0);
+	if (!ptepage)
+		return NULL;
+	if (!pgtable_page_ctor(ptepage)) {
+		__free_page(ptepage);
+		return NULL;
+	}
+	return ptepage;
+}
+
+static inline void pte_free_kernel(struct mm_struct *mm, pte_t *pte)
+{
+	free_page((unsigned long)pte);
+}
+
+static inline void pte_free_slow(struct page *ptepage)
+{
+	__free_page(ptepage);
+}
+
+static inline void pte_free(struct mm_struct *mm, struct page *ptepage)
+{
+	pgtable_page_dtor(ptepage);
+	__free_page(ptepage);
+}
 
 #define __pte_free_tlb(tlb, pte, addr)	pte_free((tlb)->mm, (pte))
 

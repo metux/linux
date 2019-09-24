@@ -198,6 +198,8 @@ struct clk_duty {
  *		such as rate or parents.
  *		Returns 0 on success, -EERROR otherwise.
  *
+ * @terminate:  Free any resource allocated by init.
+ *
  * @debug_init:	Set up type-specific debugfs entries for this clock.  This
  *		is called once, after the debugfs directory entry for this
  *		clock has been created.  The dentry pointer representing that
@@ -256,6 +258,7 @@ struct clk_ops {
 	int		(*set_duty_cycle)(struct clk_hw *hw,
 					  struct clk_duty *duty);
 	int		(*init)(struct clk_hw *hw);
+	void		(*terminate)(struct clk_hw *hw);
 	void		(*debug_init)(struct clk_hw *hw, struct dentry *dentry);
 	int		(*pre_rate_change)(struct clk_hw *hw,
 					   unsigned long rate,

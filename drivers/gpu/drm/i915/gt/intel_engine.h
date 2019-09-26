@@ -625,8 +625,19 @@ execlists_active(const struct intel_engine_execlists *execlists)
 	return READ_ONCE(*execlists->active);
 }
 
-void
-execlists_cancel_port_requests(struct intel_engine_execlists * const execlists);
+static inline void
+execlists_active_lock_bh(struct intel_engine_execlists *execlists)
+{
+	local_bh_disable(); /* prevent local softirq and lock recursion */
+	tasklet_lock(&execlists->tasklet);
+}
+
+static inline void
+execlists_active_unlock_bh(struct intel_engine_execlists *execlists)
+{
+	tasklet_unlock(&execlists->tasklet);
+	local_bh_enable(); /* restore softirq, and kick ksoftirqd! */
+}
 
 struct i915_request *
 execlists_unwind_incomplete_requests(struct intel_engine_execlists *execlists);
@@ -827,10 +838,6 @@ void intel_engine_init_execlists(struct intel_engine_cs *engine);
 void intel_engine_init_breadcrumbs(struct intel_engine_cs *engine);
 void intel_engine_fini_breadcrumbs(struct intel_engine_cs *engine);
 
-void intel_engine_pin_breadcrumbs_irq(struct intel_engine_cs *engine);
-void intel_engine_unpin_breadcrumbs_irq(struct intel_engine_cs *engine);
-
-void intel_engine_signal_breadcrumbs(struct intel_engine_cs *engine);
 void intel_engine_disarm_breadcrumbs(struct intel_engine_cs *engine);
 
 static inline void

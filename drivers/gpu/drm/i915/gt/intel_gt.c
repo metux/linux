@@ -8,6 +8,7 @@
 #include "intel_gt.h"
 #include "intel_gt_pm.h"
 #include "intel_mocs.h"
+#include "intel_rc6.h"
 #include "intel_uncore.h"
 #include "intel_pm.h"
 
@@ -353,6 +354,8 @@ int intel_gt_init(struct intel_gt *gt)
 	if (err)
 		return err;
 
+	intel_gt_pm_init(gt);
+
 	return 0;
 }
 
@@ -371,8 +374,8 @@ void intel_gt_driver_release(struct intel_gt *gt)
 {
 	/* Paranoia: make sure we have disabled everything before we exit. */
 	intel_gt_pm_disable(gt);
+	intel_gt_pm_fini(gt);
 
-	intel_cleanup_gt_powersave(gt->i915);
 	intel_gt_fini_scratch(gt);
 }
 

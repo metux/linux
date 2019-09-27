@@ -5,9 +5,6 @@
  * Copyright © 2019 Intel Corporation
  */
 
-#include "selftest_llc.h"
-#include "selftest_rc6.h"
-
 static int live_gt_resume(void *arg)
 {
 	struct intel_gt *gt = arg;
@@ -16,8 +13,7 @@ static int live_gt_resume(void *arg)
 
 	/* Do several suspend/resume cycles to check we don't explode! */
 	do {
-		intel_gt_suspend_prepare(gt);
-		intel_gt_suspend_late(gt);
+		intel_gt_suspend(gt);
 
 		if (gt->rc6.enabled) {
 			pr_err("rc6 still enabled after suspend!\n");
@@ -36,13 +32,6 @@ static int live_gt_resume(void *arg)
 			err = -EINVAL;
 			break;
 		}
-
-		err = st_llc_verify(&gt->llc);
-		if (err) {
-			pr_err("llc state not restored upon resume!\n");
-			intel_gt_set_wedged_on_init(gt);
-			break;
-		}
 	} while (!__igt_timeout(end_time, NULL));
 
 	return err;
@@ -51,25 +40,7 @@ static int live_gt_resume(void *arg)
 int intel_gt_pm_live_selftests(struct drm_i915_private *i915)
 {
 	static const struct i915_subtest tests[] = {
-		SUBTEST(live_rc6_manual),
 		SUBTEST(live_gt_resume),
-	};
-
-	if (intel_gt_is_wedged(&i915->gt))
-		return 0;
-
-	return intel_gt_live_subtests(tests, &i915->gt);
-}
-
-int intel_gt_pm_late_selftests(struct drm_i915_private *i915)
-{
-	static const struct i915_subtest tests[] = {
-		/*
-		 * These tests may leave the system in an undesirable state.
-		 * They are intended to be run last in CI and the system
-		 * rebooted afterwards.
-		 */
-		SUBTEST(live_rc6_ctx_wa),
 	};
 
 	if (intel_gt_is_wedged(&i915->gt))

@@ -17,6 +17,7 @@
 
 #include "i915_vma.h"
 #include "intel_reset_types.h"
+#include "intel_rc6_types.h"
 #include "intel_wakeref.h"
 
 struct drm_i915_private;
@@ -67,6 +68,8 @@ struct intel_gt {
 	 * is a slight delay before we do so.
 	 */
 	intel_wakeref_t awake;
+
+	struct intel_rc6 rc6;
 
 	struct blocking_notifier_head pm_notifications;
 

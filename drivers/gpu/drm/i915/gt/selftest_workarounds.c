@@ -742,7 +742,7 @@ static int live_reset_whitelist(void *arg)
 
 	igt_global_reset_lock(&i915->gt);
 
-	if (intel_has_reset_engine(i915)) {
+	if (intel_has_reset_engine(&i915->gt)) {
 		err = check_whitelist_across_reset(engine,
 						   do_engine_reset,
 						   "engine");
@@ -750,7 +750,7 @@ static int live_reset_whitelist(void *arg)
 			goto out;
 	}
 
-	if (intel_has_gpu_reset(i915)) {
+	if (intel_has_gpu_reset(&i915->gt)) {
 		err = check_whitelist_across_reset(engine,
 						   do_device_reset,
 						   "device");
@@ -1127,7 +1127,7 @@ live_gpu_reset_workarounds(void *arg)
 	struct wa_lists lists;
 	bool ok;
 
-	if (!intel_has_gpu_reset(i915))
+	if (!intel_has_gpu_reset(&i915->gt))
 		return 0;
 
 	ctx = kernel_context(i915);
@@ -1171,7 +1171,7 @@ live_engine_reset_workarounds(void *arg)
 	struct wa_lists lists;
 	int ret = 0;
 
-	if (!intel_has_reset_engine(i915))
+	if (!intel_has_reset_engine(&i915->gt))
 		return 0;
 
 	ctx = kernel_context(i915);

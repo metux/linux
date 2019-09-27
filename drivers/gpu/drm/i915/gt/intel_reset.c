@@ -42,11 +42,10 @@ static void engine_skip_context(struct i915_request *rq)
 	struct intel_engine_cs *engine = rq->engine;
 	struct i915_gem_context *hung_ctx = rq->gem_context;
 
-	lockdep_assert_held(&engine->active.lock);
-
 	if (!i915_request_is_active(rq))
 		return;
 
+	lockdep_assert_held(&engine->active.lock);
 	list_for_each_entry_continue(rq, &engine->active.requests, sched.link)
 		if (rq->gem_context == hung_ctx)
 			i915_request_skip(rq, -EIO);
@@ -123,7 +122,6 @@ void __i915_request_reset(struct i915_request *rq, bool guilty)
 		  rq->fence.seqno,
 		  yesno(guilty));
 
-	lockdep_assert_held(&rq->engine->active.lock);
 	GEM_BUG_ON(i915_request_completed(rq));
 
 	if (guilty) {
@@ -822,6 +820,8 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 {
 	struct intel_gt_timelines *timelines = &gt->timelines;
 	struct intel_timeline *tl;
+	unsigned long flags;
+	bool ok;
 
 	if (!test_bit(I915_WEDGED, &gt->reset.flags))
 		return true;
@@ -842,13 +842,15 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 	 *
 	 * No more can be submitted until we reset the wedged bit.
 	 */
-	mutex_lock(&timelines->mutex);
+	spin_lock_irqsave(&timelines->lock, flags);
 	list_for_each_entry(tl, &timelines->active_list, link) {
 		struct i915_request *rq;
 
 		rq = i915_active_request_get_unlocked(&tl->last_request);
 		if (!rq)
 			continue;
+
+		spin_unlock_irqrestore(&timelines->lock, flags);
 
 		/*
 		 * All internal dependencies (i915_requests) will have
@@ -859,10 +861,19 @@ static bool __intel_gt_unset_wedged(struct intel_gt *gt)
 		 */
 		dma_fence_default_wait(&rq->fence, false, MAX_SCHEDULE_TIMEOUT);
 		i915_request_put(rq);
-	}
-	mutex_unlock(&timelines->mutex);
 
-	intel_gt_sanitize(gt, false);
+		/* Restart iteration after droping lock */
+		spin_lock_irqsave(&timelines->lock, flags);
+		tl = list_entry(&timelines->active_list, typeof(*tl), link);
+	}
+	spin_unlock_irqrestore(&timelines->lock, flags);
+
+	/* We must reset pending GPU events before restoring our submission */
+	ok = !HAS_EXECLISTS(gt->i915); /* XXX better agnosticism desired */
+	if (!INTEL_INFO(gt->i915)->gpu_reset_clobbers_display)
+		ok = __intel_gt_reset(gt, ALL_ENGINES) == 0;
+	if (!ok)
+		return false;
 
 	/*
 	 * Undo nop_submit_request. We prevent all new i915 requests from
@@ -1354,10 +1365,8 @@ out:
 	intel_runtime_pm_put(&gt->i915->runtime_pm, wakeref);
 }
 
-int intel_gt_reset_trylock(struct intel_gt *gt)
+int intel_gt_reset_trylock(struct intel_gt *gt, int *srcu)
 {
-	int srcu;
-
 	might_lock(&gt->reset.backoff_srcu);
 	might_sleep();
 
@@ -1372,10 +1381,10 @@ int intel_gt_reset_trylock(struct intel_gt *gt)
 
 		rcu_read_lock();
 	}
-	srcu = srcu_read_lock(&gt->reset.backoff_srcu);
+	*srcu = srcu_read_lock(&gt->reset.backoff_srcu);
 	rcu_read_unlock();
 
-	return srcu;
+	return 0;
 }
 
 void intel_gt_reset_unlock(struct intel_gt *gt, int tag)

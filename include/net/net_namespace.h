@@ -53,9 +53,6 @@ struct bpf_prog;
 #define NETDEV_HASHENTRIES (1 << NETDEV_HASHBITS)
 
 struct net {
-	/* First cache line can be often dirtied.
-	 * Do not place here read-mostly fields.
-	 */
 	refcount_t		passive;	/* To decide when the network
 						 * namespace should be freed.
 						 */
@@ -64,13 +61,7 @@ struct net {
 						 */
 	spinlock_t		rules_mod_lock;
 
-	unsigned int		dev_unreg_count;
-
-	unsigned int		dev_base_seq;	/* protected by rtnl_mutex */
-	int			ifindex;
-
-	spinlock_t		nsid_lock;
-	atomic_t		fnhe_genid;
+	u32			hash_mix;
 
 	struct list_head	list;		/* list of network namespaces */
 	struct list_head	exit_list;	/* To linked to call pernet exit
@@ -86,11 +77,11 @@ struct net {
 #endif
 	struct user_namespace   *user_ns;	/* Owning user namespace */
 	struct ucounts		*ucounts;
+	spinlock_t		nsid_lock;
 	struct idr		netns_ids;
 
 	struct ns_common	ns;
 
-	struct list_head 	dev_base_head;
 	struct proc_dir_entry 	*proc_net;
 	struct proc_dir_entry 	*proc_net_stat;
 
@@ -103,20 +94,19 @@ struct net {
 
 	struct uevent_sock	*uevent_sock;		/* uevent socket */
 
+	struct list_head 	dev_base_head;
 	struct hlist_head 	*dev_name_head;
 	struct hlist_head	*dev_index_head;
 	struct raw_notifier_head	netdev_chain;
 
-	/* Note that @hash_mix can be read millions times per second,
-	 * it is critical that it is on a read_mostly cache line.
-	 */
-	u32			hash_mix;
-
-	struct net_device       *loopback_dev;          /* The loopback */
+	unsigned int		dev_base_seq;	/* protected by rtnl_mutex */
+	int			ifindex;
+	unsigned int		dev_unreg_count;
 
 	/* core fib_rules */
 	struct list_head	rules_ops;
 
+	struct net_device       *loopback_dev;          /* The loopback */
 	struct netns_core	core;
 	struct netns_mib	mib;
 	struct netns_packet	packet;
@@ -184,6 +174,7 @@ struct net {
 	struct sock		*crypto_nlsk;
 #endif
 	struct sock		*diag_nlsk;
+	atomic_t		fnhe_genid;
 } __randomize_layout;
 
 #include <linux/seq_file_net.h>
@@ -346,10 +337,10 @@ static inline struct net *read_pnet(const possible_net_t *pnet)
 #define __net_initconst	__initconst
 #endif
 
-int peernet2id_alloc(struct net *net, struct net *peer, gfp_t gfp);
-int peernet2id(const struct net *net, struct net *peer);
-bool peernet_has_id(const struct net *net, struct net *peer);
-struct net *get_net_ns_by_id(const struct net *net, int id);
+int peernet2id_alloc(struct net *net, struct net *peer);
+int peernet2id(struct net *net, struct net *peer);
+bool peernet_has_id(struct net *net, struct net *peer);
+struct net *get_net_ns_by_id(struct net *net, int id);
 
 struct pernet_operations {
 	struct list_head list;
@@ -427,7 +418,7 @@ static inline void unregister_net_sysctl_table(struct ctl_table_header *header)
 }
 #endif
 
-static inline int rt_genid_ipv4(const struct net *net)
+static inline int rt_genid_ipv4(struct net *net)
 {
 	return atomic_read(&net->ipv4.rt_genid);
 }
@@ -459,7 +450,7 @@ static inline void rt_genid_bump_all(struct net *net)
 	rt_genid_bump_ipv6(net);
 }
 
-static inline int fnhe_genid(const struct net *net)
+static inline int fnhe_genid(struct net *net)
 {
 	return atomic_read(&net->fnhe_genid);
 }

@@ -10,7 +10,7 @@
 #include "math.h"
 #include "block-group.h"
 
-u64 btrfs_space_info_used(struct btrfs_space_info *s_info,
+u64 __pure btrfs_space_info_used(struct btrfs_space_info *s_info,
 			  bool may_use_included)
 {
 	ASSERT(s_info);

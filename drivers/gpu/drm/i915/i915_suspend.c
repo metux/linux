@@ -29,6 +29,7 @@
 #include "display/intel_display_types.h"
 #include "display/intel_fbc.h"
 #include "display/intel_gmbus.h"
+#include "display/intel_vga.h"
 
 #include "i915_reg.h"
 
@@ -56,7 +57,7 @@ static void i915_restore_display(struct drm_i915_private *dev_priv)
 	if (HAS_FBC(dev_priv) && INTEL_GEN(dev_priv) <= 4 && !IS_G4X(dev_priv))
 		I915_WRITE(FBC_CONTROL, dev_priv->regfile.saveFBC_CONTROL);
 
-	i915_redisable_vga(dev_priv);
+	intel_vga_redisable(dev_priv);
 }
 
 int i915_save_state(struct drm_i915_private *dev_priv)

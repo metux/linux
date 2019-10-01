@@ -36,7 +36,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/pnp.h>
 #include <linux/slab.h>
-#include <linux/vgaarb.h>
 #include <linux/vga_switcheroo.h>
 #include <linux/vt.h>
 #include <acpi/video.h>
@@ -59,6 +58,7 @@
 #include "display/intel_overlay.h"
 #include "display/intel_pipe_crc.h"
 #include "display/intel_sprite.h"
+#include "display/intel_vga.h"
 
 #include "gem/i915_gem_context.h"
 #include "gem/i915_gem_ioctls.h"
@@ -269,19 +269,6 @@ intel_teardown_mchbar(struct drm_i915_private *dev_priv)
 		release_resource(&dev_priv->mch_res);
 }
 
-/* true = enable decode, false = disable decoder */
-static unsigned int i915_vga_set_decode(void *cookie, bool state)
-{
-	struct drm_i915_private *dev_priv = cookie;
-
-	intel_modeset_vga_set_state(dev_priv, state);
-	if (state)
-		return VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM |
-		       VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
-	else
-		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
-}
-
 static int i915_resume_switcheroo(struct drm_i915_private *i915);
 static int i915_suspend_switcheroo(struct drm_i915_private *i915,
 				   pm_message_t state);
@@ -346,15 +333,8 @@ static int i915_driver_modeset_probe(struct drm_i915_private *i915)
 
 	intel_bios_init(i915);
 
-	/* If we have > 1 VGA cards, then we need to arbitrate access
-	 * to the common VGA resources.
-	 *
-	 * If we are a secondary display controller (!PCI_DISPLAY_CLASS_VGA),
-	 * then we do not take part in VGA arbitration and the
-	 * vga_client_register() fails with -ENODEV.
-	 */
-	ret = vga_client_register(pdev, i915, NULL, i915_vga_set_decode);
-	if (ret && ret != -ENODEV)
+	ret = intel_vga_register(i915);
+	if (ret)
 		goto out;
 
 	intel_register_dsm_handler();
@@ -378,7 +358,7 @@ static int i915_driver_modeset_probe(struct drm_i915_private *i915)
 
 	/* Important: The output setup functions called by modeset_init need
 	 * working irqs for e.g. gmbus and dp aux transfers. */
-	ret = intel_modeset_init(&i915->drm);
+	ret = intel_modeset_init(i915);
 	if (ret)
 		goto cleanup_irq;
 
@@ -407,7 +387,7 @@ cleanup_gem:
 	i915_gem_driver_remove(i915);
 	i915_gem_driver_release(i915);
 cleanup_modeset:
-	intel_modeset_driver_remove(&i915->drm);
+	intel_modeset_driver_remove(i915);
 cleanup_irq:
 	intel_irq_uninstall(i915);
 	intel_gmbus_teardown(i915);
@@ -416,7 +396,7 @@ cleanup_csr:
 	intel_power_domains_driver_remove(i915);
 	vga_switcheroo_unregister_client(pdev);
 cleanup_vga_client:
-	vga_client_register(pdev, NULL, NULL, NULL);
+	intel_vga_unregister(i915);
 out:
 	return ret;
 }
@@ -444,6 +424,20 @@ static int i915_kick_out_firmware_fb(struct drm_i915_private *dev_priv)
 	kfree(ap);
 
 	return ret;
+}
+
+static void i915_driver_modeset_remove(struct drm_i915_private *i915)
+{
+	struct pci_dev *pdev = i915->drm.pdev;
+
+	intel_modeset_driver_remove(i915);
+
+	intel_bios_driver_remove(i915);
+
+	vga_switcheroo_unregister_client(pdev);
+	intel_vga_unregister(i915);
+
+	intel_csr_ucode_fini(i915);
 }
 
 static void intel_init_dpio(struct drm_i915_private *dev_priv)
@@ -1619,8 +1613,6 @@ out_fini:
 
 void i915_driver_remove(struct drm_i915_private *i915)
 {
-	struct pci_dev *pdev = i915->drm.pdev;
-
 	disable_rpm_wakeref_asserts(&i915->runtime_pm);
 
 	i915_driver_unregister(i915);
@@ -1641,14 +1633,7 @@ void i915_driver_remove(struct drm_i915_private *i915)
 
 	intel_gvt_driver_remove(i915);
 
-	intel_modeset_driver_remove(&i915->drm);
-
-	intel_bios_driver_remove(i915);
-
-	vga_switcheroo_unregister_client(pdev);
-	vga_client_register(pdev, NULL, NULL, NULL);
-
-	intel_csr_ucode_fini(i915);
+	i915_driver_modeset_remove(i915);
 
 	/* Free error state after interrupts are fully disabled. */
 	cancel_delayed_work_sync(&i915->gt.hangcheck.work);
@@ -1938,7 +1923,7 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	i915_gem_resume(dev_priv);
 
-	intel_modeset_init_hw(dev);
+	intel_modeset_init_hw(dev_priv);
 	intel_init_clock_gating(dev_priv);
 
 	spin_lock_irq(&dev_priv->irq_lock);

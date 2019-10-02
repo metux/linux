@@ -235,6 +235,23 @@ static void execlists_init_reg_state(u32 *reg_state,
 				     const struct intel_ring *ring,
 				     bool close);
 
+static void __context_pin_acquire(struct intel_context *ce)
+{
+	mutex_acquire(&ce->pin_mutex.dep_map, 2, 0, _RET_IP_);
+}
+
+static void __context_pin_release(struct intel_context *ce)
+{
+	mutex_release(&ce->pin_mutex.dep_map, 0, _RET_IP_);
+}
+
+static void mark_eio(struct i915_request *rq)
+{
+	if (!i915_request_signaled(rq))
+		dma_fence_set_error(&rq->fence, -EIO);
+	i915_request_mark_complete(rq);
+}
+
 static inline u32 intel_hws_preempt_address(struct intel_engine_cs *engine)
 {
 	return (i915_ggtt_offset(engine->status_page.vma) +
@@ -1608,6 +1625,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 				submit = true;
 				last = rq;
 			}
+			i915_request_put(rq);
 
 			/*
 			 * Hmm, we have a bunch of virtual engine requests,
@@ -2843,7 +2861,7 @@ static void __execlists_reset(struct intel_engine_cs *engine, bool stalled)
 	GEM_BUG_ON(!i915_vma_is_pinned(ce->state));
 
 	/* Proclaim we have exclusive access to the context image! */
-	mutex_acquire(&ce->pin_mutex.dep_map, 2, 0, _THIS_IP_);
+	__context_pin_acquire(ce);
 
 	rq = active_request(rq);
 	if (!rq) {
@@ -2907,7 +2925,7 @@ out_replay:
 	__execlists_reset_reg_state(ce, engine);
 	__execlists_update_reg_state(ce, engine);
 	ce->lrc_desc |= CTX_DESC_FORCE_RESTORE; /* paranoid: GPU was reset! */
-	mutex_release(&ce->pin_mutex.dep_map, 0, _THIS_IP_);
+	__context_pin_release(ce);
 
 unwind:
 	/* Push back any incomplete requests for replay after the reset. */
@@ -2961,12 +2979,8 @@ static void execlists_cancel_requests(struct intel_engine_cs *engine)
 	__execlists_reset(engine, true);
 
 	/* Mark all executing requests as skipped. */
-	list_for_each_entry(rq, &engine->active.requests, sched.link) {
-		if (!i915_request_signaled(rq))
-			dma_fence_set_error(&rq->fence, -EIO);
-
-		i915_request_mark_complete(rq);
-	}
+	list_for_each_entry(rq, &engine->active.requests, sched.link)
+		mark_eio(rq);
 
 	/* Flush the queued requests to the timeline list (for retiring). */
 	while ((rb = rb_first_cached(&execlists->queue))) {
@@ -2974,10 +2988,8 @@ static void execlists_cancel_requests(struct intel_engine_cs *engine)
 		int i;
 
 		priolist_for_each_request_consume(rq, rn, p, i) {
-			list_del_init(&rq->sched.link);
+			mark_eio(rq);
 			__i915_request_submit(rq);
-			dma_fence_set_error(&rq->fence, -EIO);
-			i915_request_mark_complete(rq);
 		}
 
 		rb_erase_cached(&p->node, &execlists->queue);
@@ -2993,13 +3005,15 @@ static void execlists_cancel_requests(struct intel_engine_cs *engine)
 		RB_CLEAR_NODE(rb);
 
 		spin_lock(&ve->base.active.lock);
-		if (ve->request) {
-			ve->request->engine = engine;
-			__i915_request_submit(ve->request);
-			dma_fence_set_error(&ve->request->fence, -EIO);
-			i915_request_mark_complete(ve->request);
+		rq = fetch_and_zero(&ve->request);
+		if (rq) {
+			mark_eio(rq);
+
+			rq->engine = engine;
+			__i915_request_submit(rq);
+			i915_request_put(rq);
+
 			ve->base.execlists.queue_priority_hint = INT_MIN;
-			ve->request = NULL;
 		}
 		spin_unlock(&ve->base.active.lock);
 	}
@@ -4144,6 +4158,8 @@ submit_engine:
 static void virtual_submit_request(struct i915_request *rq)
 {
 	struct virtual_engine *ve = to_virtual_engine(rq->engine);
+	struct i915_request *old;
+	unsigned long flags;
 
 	GEM_TRACE("%s: rq=%llx:%lld\n",
 		  ve->base.name,
@@ -4152,15 +4168,31 @@ static void virtual_submit_request(struct i915_request *rq)
 
 	GEM_BUG_ON(ve->base.submit_request != virtual_submit_request);
 
-	GEM_BUG_ON(ve->request);
-	GEM_BUG_ON(!list_empty(virtual_queue(ve)));
+	spin_lock_irqsave(&ve->base.active.lock, flags);
 
-	ve->base.execlists.queue_priority_hint = rq_prio(rq);
-	WRITE_ONCE(ve->request, rq);
+	old = ve->request;
+	if (old) { /* background completion event from preempt-to-busy */
+		GEM_BUG_ON(!i915_request_completed(old));
+		__i915_request_submit(old);
+		i915_request_put(old);
+	}
 
-	list_move_tail(&rq->sched.link, virtual_queue(ve));
+	if (i915_request_completed(rq)) {
+		__i915_request_submit(rq);
 
-	tasklet_schedule(&ve->base.execlists.tasklet);
+		ve->base.execlists.queue_priority_hint = INT_MIN;
+		ve->request = NULL;
+	} else {
+		ve->base.execlists.queue_priority_hint = rq_prio(rq);
+		ve->request = i915_request_get(rq);
+
+		GEM_BUG_ON(!list_empty(virtual_queue(ve)));
+		list_move_tail(&rq->sched.link, virtual_queue(ve));
+
+		tasklet_schedule(&ve->base.execlists.tasklet);
+	}
+
+	spin_unlock_irqrestore(&ve->base.active.lock, flags);
 }
 
 static struct ve_bond *
@@ -4181,18 +4213,22 @@ static void
 virtual_bond_execute(struct i915_request *rq, struct dma_fence *signal)
 {
 	struct virtual_engine *ve = to_virtual_engine(rq->engine);
+	intel_engine_mask_t allowed, exec;
 	struct ve_bond *bond;
 
-	bond = virtual_find_bond(ve, to_request(signal)->engine);
-	if (bond) {
-		intel_engine_mask_t old, new, cmp;
+	allowed = ~to_request(signal)->engine->mask;
 
-		cmp = READ_ONCE(rq->execution_mask);
-		do {
-			old = cmp;
-			new = cmp & bond->sibling_mask;
-		} while ((cmp = cmpxchg(&rq->execution_mask, old, new)) != old);
-	}
+	bond = virtual_find_bond(ve, to_request(signal)->engine);
+	if (bond)
+		allowed &= bond->sibling_mask;
+
+	/* Restrict the bonded request to run on only the available engines */
+	exec = READ_ONCE(rq->execution_mask);
+	while (!try_cmpxchg(&rq->execution_mask, &exec, exec & allowed))
+		;
+
+	/* Prevent the master from being re-run on the bonded engines */
+	to_request(signal)->execution_mask &= ~allowed;
 }
 
 struct intel_context *
@@ -4503,7 +4539,7 @@ void intel_lr_context_reset(struct intel_engine_cs *engine,
 			    bool scrub)
 {
 	GEM_BUG_ON(!intel_context_is_pinned(ce));
-	mutex_acquire(&ce->pin_mutex.dep_map, 2, 0, _THIS_IP_);
+	__context_pin_acquire(ce);
 
 	/*
 	 * We want a simple context + ring to execute the breadcrumb update.
@@ -4529,7 +4565,7 @@ void intel_lr_context_reset(struct intel_engine_cs *engine,
 	intel_ring_update_space(ce->ring);
 
 	__execlists_update_reg_state(ce, engine);
-	mutex_release(&ce->pin_mutex.dep_map, 0, _THIS_IP_);
+	__context_pin_release(ce);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

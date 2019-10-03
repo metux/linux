@@ -41,7 +41,6 @@
 #include <linux/inetdevice.h>
 #include <linux/inet_diag.h>
 
-#include <net/snmp.h>
 #include <net/tls.h>
 #include <net/tls_toe.h>
 
@@ -209,15 +208,24 @@ int tls_push_partial_record(struct sock *sk, struct tls_context *ctx,
 	return tls_push_sg(sk, ctx, sg, offset, flags);
 }
 
-void tls_free_partial_record(struct sock *sk, struct tls_context *ctx)
+bool tls_free_partial_record(struct sock *sk, struct tls_context *ctx)
 {
 	struct scatterlist *sg;
 
-	for (sg = ctx->partially_sent_record; sg; sg = sg_next(sg)) {
+	sg = ctx->partially_sent_record;
+	if (!sg)
+		return false;
+
+	while (1) {
 		put_page(sg_page(sg));
 		sk_mem_uncharge(sk, sg->length);
+
+		if (sg_is_last(sg))
+			break;
+		sg++;
 	}
 	ctx->partially_sent_record = NULL;
+	return true;
 }
 
 static void tls_write_space(struct sock *sk)
@@ -278,19 +286,14 @@ static void tls_sk_proto_cleanup(struct sock *sk,
 		kfree(ctx->tx.rec_seq);
 		kfree(ctx->tx.iv);
 		tls_sw_release_resources_tx(sk);
-		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXSW);
 	} else if (ctx->tx_conf == TLS_HW) {
 		tls_device_free_resources_tx(sk);
-		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXDEVICE);
 	}
 
-	if (ctx->rx_conf == TLS_SW) {
+	if (ctx->rx_conf == TLS_SW)
 		tls_sw_release_resources_rx(sk);
-		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRRXSW);
-	} else if (ctx->rx_conf == TLS_HW) {
+	else if (ctx->rx_conf == TLS_HW)
 		tls_device_offload_cleanup_rx(sk);
-		TLS_DEC_STATS(sock_net(sk), LINUX_MIB_TLSCURRRXDEVICE);
-	}
 }
 
 static void tls_sk_proto_close(struct sock *sk, long timeout)
@@ -487,7 +490,7 @@ static int do_tls_setsockopt_conf(struct sock *sk, char __user *optval,
 	/* check version */
 	if (crypto_info->version != TLS_1_2_VERSION &&
 	    crypto_info->version != TLS_1_3_VERSION) {
-		rc = -EINVAL;
+		rc = -ENOTSUPP;
 		goto err_crypto_info;
 	}
 
@@ -531,29 +534,19 @@ static int do_tls_setsockopt_conf(struct sock *sk, char __user *optval,
 	if (tx) {
 		rc = tls_set_device_offload(sk, ctx);
 		conf = TLS_HW;
-		if (!rc) {
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXDEVICE);
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXDEVICE);
-		} else {
+		if (rc) {
 			rc = tls_set_sw_offload(sk, ctx, 1);
 			if (rc)
 				goto err_crypto_info;
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSTXSW);
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRTXSW);
 			conf = TLS_SW;
 		}
 	} else {
 		rc = tls_set_device_offload_rx(sk, ctx);
 		conf = TLS_HW;
-		if (!rc) {
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXDEVICE);
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRRXDEVICE);
-		} else {
+		if (rc) {
 			rc = tls_set_sw_offload(sk, ctx, 0);
 			if (rc)
 				goto err_crypto_info;
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSRXSW);
-			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSCURRRXSW);
 			conf = TLS_SW;
 		}
 		tls_sw_strparser_arm(sk, ctx);
@@ -688,11 +681,10 @@ static void build_protos(struct proto prot[TLS_NUM_CONFIG][TLS_NUM_CONFIG],
 
 	prot[TLS_HW][TLS_HW] = prot[TLS_HW][TLS_SW];
 #endif
-#ifdef CONFIG_TLS_TOE
+
 	prot[TLS_HW_RECORD][TLS_HW_RECORD] = *base;
-	prot[TLS_HW_RECORD][TLS_HW_RECORD].hash		= tls_toe_hash;
-	prot[TLS_HW_RECORD][TLS_HW_RECORD].unhash	= tls_toe_unhash;
-#endif
+	prot[TLS_HW_RECORD][TLS_HW_RECORD].hash		= tls_hw_hash;
+	prot[TLS_HW_RECORD][TLS_HW_RECORD].unhash	= tls_hw_unhash;
 }
 
 static int tls_init(struct sock *sk)
@@ -702,10 +694,8 @@ static int tls_init(struct sock *sk)
 
 	tls_build_proto(sk);
 
-#ifdef CONFIG_TLS_TOE
-	if (tls_toe_bypass(sk))
+	if (tls_hw_prot(sk))
 		return 0;
-#endif
 
 	/* The TLS ulp is currently supported only for TCP sockets
 	 * in ESTABLISHED state.
@@ -714,7 +704,7 @@ static int tls_init(struct sock *sk)
 	 * share the ulp context.
 	 */
 	if (sk->sk_state != TCP_ESTABLISHED)
-		return -ENOTCONN;
+		return -ENOTSUPP;
 
 	/* allocate tls context */
 	write_lock_bh(&sk->sk_callback_lock);
@@ -732,19 +722,15 @@ out:
 	return rc;
 }
 
-static void tls_update(struct sock *sk, struct proto *p,
-		       void (*write_space)(struct sock *sk))
+static void tls_update(struct sock *sk, struct proto *p)
 {
 	struct tls_context *ctx;
 
 	ctx = tls_get_ctx(sk);
-	if (likely(ctx)) {
-		ctx->sk_write_space = write_space;
+	if (likely(ctx))
 		ctx->sk_proto = p;
-	} else {
+	else
 		sk->sk_prot = p;
-		sk->sk_write_space = write_space;
-	}
 }
 
 static int tls_get_info(const struct sock *sk, struct sk_buff *skb)
@@ -808,35 +794,6 @@ static size_t tls_get_info_size(const struct sock *sk)
 	return size;
 }
 
-static int __net_init tls_init_net(struct net *net)
-{
-	int err;
-
-	net->mib.tls_statistics = alloc_percpu(struct linux_tls_mib);
-	if (!net->mib.tls_statistics)
-		return -ENOMEM;
-
-	err = tls_proc_init(net);
-	if (err)
-		goto err_free_stats;
-
-	return 0;
-err_free_stats:
-	free_percpu(net->mib.tls_statistics);
-	return err;
-}
-
-static void __net_exit tls_exit_net(struct net *net)
-{
-	tls_proc_fini(net);
-	free_percpu(net->mib.tls_statistics);
-}
-
-static struct pernet_operations tls_proc_ops = {
-	.init = tls_init_net,
-	.exit = tls_exit_net,
-};
-
 static struct tcp_ulp_ops tcp_tls_ulp_ops __read_mostly = {
 	.name			= "tls",
 	.owner			= THIS_MODULE,
@@ -848,12 +805,6 @@ static struct tcp_ulp_ops tcp_tls_ulp_ops __read_mostly = {
 
 static int __init tls_register(void)
 {
-	int err;
-
-	err = register_pernet_subsys(&tls_proc_ops);
-	if (err)
-		return err;
-
 	tls_sw_proto_ops = inet_stream_ops;
 	tls_sw_proto_ops.splice_read = tls_sw_splice_read;
 	tls_sw_proto_ops.sendpage_locked   = tls_sw_sendpage_locked,
@@ -868,7 +819,6 @@ static void __exit tls_unregister(void)
 {
 	tcp_unregister_ulp(&tcp_tls_ulp_ops);
 	tls_device_cleanup();
-	unregister_pernet_subsys(&tls_proc_ops);
 }
 
 module_init(tls_register);

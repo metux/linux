@@ -247,8 +247,7 @@ struct rds_ib_device {
 	struct ib_device	*dev;
 	struct ib_pd		*pd;
 	struct dma_pool		*rid_hdrs_pool; /* RDS headers DMA pool */
-	u8			use_fastreg:1;
-	u8			odp_capable:1;
+	bool                    use_fastreg;
 
 	unsigned int		max_mrs;
 	struct rds_ib_mr_pool	*mr_1m_pool;

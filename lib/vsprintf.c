@@ -39,7 +39,6 @@
 #include <net/addrconf.h>
 #include <linux/siphash.h>
 #include <linux/compiler.h>
-#include <linux/property.h>
 #ifdef CONFIG_BLOCK
 #include <linux/blkdev.h>
 #endif
@@ -761,12 +760,23 @@ static int __init initialize_ptr_random(void)
 early_initcall(initialize_ptr_random);
 
 /* Maps a pointer to a 32 bit unique identifier. */
-static inline int __ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
+static char *ptr_to_id(char *buf, char *end, const void *ptr,
+		       struct printf_spec spec)
 {
+	const char *str = sizeof(ptr) == 8 ? "(____ptrval____)" : "(ptrval)";
 	unsigned long hashval;
 
-	if (static_branch_unlikely(&not_filled_random_ptr_key))
-		return -EAGAIN;
+	/* When debugging early boot use non-cryptographically secure hash. */
+	if (unlikely(debug_boot_weak_hash)) {
+		hashval = hash_long((unsigned long)ptr, 32);
+		return pointer_string(buf, end, (const void *)hashval, spec);
+	}
+
+	if (static_branch_unlikely(&not_filled_random_ptr_key)) {
+		spec.field_width = 2 * sizeof(ptr);
+		/* string length must be less than default_width */
+		return error_string(buf, end, str, spec);
+	}
 
 #ifdef CONFIG_64BIT
 	hashval = (unsigned long)siphash_1u64((u64)ptr, &ptr_key);
@@ -778,35 +788,6 @@ static inline int __ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
 #else
 	hashval = (unsigned long)siphash_1u32((u32)ptr, &ptr_key);
 #endif
-	*hashval_out = hashval;
-	return 0;
-}
-
-int ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
-{
-	return __ptr_to_hashval(ptr, hashval_out);
-}
-
-static char *ptr_to_id(char *buf, char *end, const void *ptr,
-		       struct printf_spec spec)
-{
-	const char *str = sizeof(ptr) == 8 ? "(____ptrval____)" : "(ptrval)";
-	unsigned long hashval;
-	int ret;
-
-	/* When debugging early boot use non-cryptographically secure hash. */
-	if (unlikely(debug_boot_weak_hash)) {
-		hashval = hash_long((unsigned long)ptr, 32);
-		return pointer_string(buf, end, (const void *)hashval, spec);
-	}
-
-	ret = __ptr_to_hashval(ptr, &hashval);
-	if (ret) {
-		spec.field_width = 2 * sizeof(ptr);
-		/* string length must be less than default_width */
-		return error_string(buf, end, str, spec);
-	}
-
 	return pointer_string(buf, end, (const void *)hashval, spec);
 }
 
@@ -1911,25 +1892,32 @@ char *flags_string(char *buf, char *end, void *flags_ptr,
 	return format_flags(buf, end, flags, names);
 }
 
+static const char *device_node_name_for_depth(const struct device_node *np, int depth)
+{
+	for ( ; np && depth; depth--)
+		np = np->parent;
+
+	return kbasename(np->full_name);
+}
+
 static noinline_for_stack
-char *fwnode_full_name_string(struct fwnode_handle *fwnode, char *buf,
-			      char *end)
+char *device_node_gen_full_name(const struct device_node *np, char *buf, char *end)
 {
 	int depth;
+	const struct device_node *parent = np->parent;
 
-	/* Loop starting from the root node to the current node. */
-	for (depth = fwnode_count_parents(fwnode); depth >= 0; depth--) {
-		struct fwnode_handle *__fwnode =
-			fwnode_get_nth_parent(fwnode, depth);
+	/* special case for root node */
+	if (!parent)
+		return string_nocheck(buf, end, "/", default_str_spec);
 
-		buf = string(buf, end, fwnode_get_name_prefix(__fwnode),
+	for (depth = 0; parent->parent; depth++)
+		parent = parent->parent;
+
+	for ( ; depth >= 0; depth--) {
+		buf = string_nocheck(buf, end, "/", default_str_spec);
+		buf = string(buf, end, device_node_name_for_depth(np, depth),
 			     default_str_spec);
-		buf = string(buf, end, fwnode_get_name(__fwnode),
-			     default_str_spec);
-
-		fwnode_handle_put(__fwnode);
 	}
-
 	return buf;
 }
 
@@ -1953,9 +1941,6 @@ char *device_node_string(char *buf, char *end, struct device_node *dn,
 	struct printf_spec str_spec = spec;
 	str_spec.field_width = -1;
 
-	if (fmt[0] != 'F')
-		return error_string(buf, end, "(%pO?)", spec);
-
 	if (!IS_ENABLED(CONFIG_OF))
 		return error_string(buf, end, "(%pOF?)", spec);
 
@@ -1977,11 +1962,10 @@ char *device_node_string(char *buf, char *end, struct device_node *dn,
 
 		switch (*fmt) {
 		case 'f':	/* full_name */
-			buf = fwnode_full_name_string(of_fwnode_handle(dn), buf,
-						      end);
+			buf = device_node_gen_full_name(dn, buf, end);
 			break;
 		case 'n':	/* name */
-			p = fwnode_get_name(of_fwnode_handle(dn));
+			p = kbasename(of_node_full_name(dn));
 			precision = str_spec.precision;
 			str_spec.precision = strchrnul(p, '@') - p;
 			buf = string(buf, end, p, str_spec);
@@ -1991,7 +1975,7 @@ char *device_node_string(char *buf, char *end, struct device_node *dn,
 			buf = number(buf, end, (unsigned int)dn->phandle, num_spec);
 			break;
 		case 'P':	/* path-spec */
-			p = fwnode_get_name(of_fwnode_handle(dn));
+			p = kbasename(of_node_full_name(dn));
 			if (!p[1])
 				p = "/";
 			buf = string(buf, end, p, str_spec);
@@ -2029,34 +2013,15 @@ char *device_node_string(char *buf, char *end, struct device_node *dn,
 	return widen_string(buf, buf - buf_start, end, spec);
 }
 
-static noinline_for_stack
-char *fwnode_string(char *buf, char *end, struct fwnode_handle *fwnode,
-		    struct printf_spec spec, const char *fmt)
+static char *kobject_string(char *buf, char *end, void *ptr,
+			    struct printf_spec spec, const char *fmt)
 {
-	struct printf_spec str_spec = spec;
-	char *buf_start = buf;
-
-	str_spec.field_width = -1;
-
-	if (*fmt != 'w')
-		return error_string(buf, end, "(%pf?)", spec);
-
-	if (check_pointer(&buf, end, fwnode, spec))
-		return buf;
-
-	fmt++;
-
-	switch (*fmt) {
-	case 'P':	/* name */
-		buf = string(buf, end, fwnode_get_name(fwnode), str_spec);
-		break;
-	case 'f':	/* full_name */
-	default:
-		buf = fwnode_full_name_string(fwnode, buf, end);
-		break;
+	switch (fmt[1]) {
+	case 'F':
+		return device_node_string(buf, end, ptr, spec, fmt + 1);
 	}
 
-	return widen_string(buf, buf - buf_start, end, spec);
+	return error_string(buf, end, "(%pO?)", spec);
 }
 
 /*
@@ -2072,8 +2037,6 @@ char *fwnode_string(char *buf, char *end, struct fwnode_handle *fwnode,
  * - 'S' For symbolic direct pointers (or function descriptors) with offset
  * - 's' For symbolic direct pointers (or function descriptors) without offset
  * - '[Ss]R' as above with __builtin_extract_return_addr() translation
- * - '[Ff]' %pf and %pF were obsoleted and later removed in favor of
- *	    %ps and %pS. Be careful when re-using these specifiers.
  * - 'B' For backtraced symbolic direct pointers with offset
  * - 'R' For decoded struct resource, e.g., [mem 0x0-0x1f 64bit pref]
  * - 'r' For raw struct resource, e.g., [mem 0x0-0x1f flags 0x201]
@@ -2163,10 +2126,6 @@ char *fwnode_string(char *buf, char *end, struct fwnode_handle *fwnode,
  *                  F device node flags
  *                  c major compatible string
  *                  C full compatible string
- * - 'fw[fP]'	For a firmware node (struct fwnode_handle) pointer
- *		Without an option prints the full name of the node
- *		f full name
- *		P node name, including a possible unit address
  * - 'x' For printing the address. Equivalent to "%lx".
  *
  * ** When making changes please also update:
@@ -2241,9 +2200,7 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	case 'G':
 		return flags_string(buf, end, ptr, spec, fmt);
 	case 'O':
-		return device_node_string(buf, end, ptr, spec, fmt + 1);
-	case 'f':
-		return fwnode_string(buf, end, ptr, spec, fmt + 1);
+		return kobject_string(buf, end, ptr, spec, fmt);
 	case 'x':
 		return pointer_string(buf, end, ptr, spec);
 	case 'e':

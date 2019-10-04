@@ -1357,8 +1357,7 @@ void intel_overlay_setup(struct drm_i915_private *dev_priv)
 	overlay->contrast = 75;
 	overlay->saturation = 146;
 
-	i915_active_init(dev_priv,
-			 &overlay->last_flip,
+	i915_active_init(&overlay->last_flip,
 			 NULL, intel_overlay_last_flip_retire);
 
 	mutex_lock(&dev_priv->drm.struct_mutex);

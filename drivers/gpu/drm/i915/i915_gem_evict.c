@@ -30,7 +30,6 @@
 
 #include "display/intel_display_types.h"
 #include "gem/i915_gem_context.h"
-#include "gt/intel_gt_requests.h"
 
 #include "i915_drv.h"
 #include "i915_trace.h"
@@ -39,7 +38,7 @@ I915_SELFTEST_DECLARE(static struct igt_evict_ctl {
 	bool fail_if_busy:1;
 } igt_evict_ctl;)
 
-static int ggtt_flush(struct intel_gt *gt)
+static int ggtt_flush(struct drm_i915_private *i915)
 {
 	/*
 	 * Not everything in the GGTT is tracked via vma (otherwise we
@@ -48,7 +47,9 @@ static int ggtt_flush(struct intel_gt *gt)
 	 * the hopes that we can then remove contexts and the like only
 	 * bound by their active reference.
 	 */
-	return intel_gt_wait_for_idle(gt, MAX_SCHEDULE_TIMEOUT);
+	return i915_gem_wait_for_idle(i915,
+				      I915_WAIT_INTERRUPTIBLE,
+				      MAX_SCHEDULE_TIMEOUT);
 }
 
 static bool
@@ -97,6 +98,7 @@ i915_gem_evict_something(struct i915_address_space *vm,
 			 u64 start, u64 end,
 			 unsigned flags)
 {
+	struct drm_i915_private *dev_priv = vm->i915;
 	struct drm_mm_scan scan;
 	struct list_head eviction_list;
 	struct i915_vma *vma, *next;
@@ -127,8 +129,6 @@ i915_gem_evict_something(struct i915_address_space *vm,
 	drm_mm_scan_init_with_range(&scan, &vm->mm,
 				    min_size, alignment, color,
 				    start, end, mode);
-
-	intel_gt_retire_requests(vm->gt);
 
 search_again:
 	active = NULL;
@@ -201,7 +201,7 @@ search_again:
 	if (I915_SELFTEST_ONLY(igt_evict_ctl.fail_if_busy))
 		return -EBUSY;
 
-	ret = ggtt_flush(vm->gt);
+	ret = ggtt_flush(dev_priv);
 	if (ret)
 		return ret;
 
@@ -268,13 +268,13 @@ int i915_gem_evict_for_node(struct i915_address_space *vm,
 
 	trace_i915_gem_evict_node(vm, target, flags);
 
-	/*
-	 * Retire before we search the active list. Although we have
+	/* Retire before we search the active list. Although we have
 	 * reasonable accuracy in our retirement lists, we may have
 	 * a stray pin (preventing eviction) that can only be resolved by
 	 * retiring.
 	 */
-	intel_gt_retire_requests(vm->gt);
+	if (!(flags & PIN_NONBLOCK))
+		i915_retire_requests(vm->i915);
 
 	if (i915_vm_has_cache_coloring(vm)) {
 		/* Expand search to cover neighbouring guard pages (or lack!) */
@@ -368,7 +368,9 @@ int i915_gem_evict_for_node(struct i915_address_space *vm,
  */
 int i915_gem_evict_vm(struct i915_address_space *vm)
 {
-	int ret = 0;
+	struct list_head eviction_list;
+	struct i915_vma *vma, *next;
+	int ret;
 
 	lockdep_assert_held(&vm->mutex);
 	trace_i915_gem_evict_vm(vm);
@@ -379,35 +381,26 @@ int i915_gem_evict_vm(struct i915_address_space *vm)
 	 * switch otherwise is ineffective.
 	 */
 	if (i915_is_ggtt(vm)) {
-		ret = ggtt_flush(vm->gt);
+		ret = ggtt_flush(vm->i915);
 		if (ret)
 			return ret;
 	}
 
-	do {
-		struct i915_vma *vma, *vn;
-		LIST_HEAD(eviction_list);
+	INIT_LIST_HEAD(&eviction_list);
+	list_for_each_entry(vma, &vm->bound_list, vm_link) {
+		if (i915_vma_is_pinned(vma))
+			continue;
 
-		list_for_each_entry(vma, &vm->bound_list, vm_link) {
-			if (i915_vma_is_pinned(vma))
-				continue;
+		__i915_vma_pin(vma);
+		list_add(&vma->evict_link, &eviction_list);
+	}
 
-			__i915_vma_pin(vma);
-			list_add(&vma->evict_link, &eviction_list);
-		}
-		if (list_empty(&eviction_list))
-			break;
-
-		ret = 0;
-		list_for_each_entry_safe(vma, vn, &eviction_list, evict_link) {
-			__i915_vma_unpin(vma);
-			if (ret == 0)
-				ret = __i915_vma_unbind(vma);
-			if (ret != -EINTR) /* "Get me out of here!" */
-				ret = 0;
-		}
-	} while (ret == 0);
-
+	ret = 0;
+	list_for_each_entry_safe(vma, next, &eviction_list, evict_link) {
+		__i915_vma_unpin(vma);
+		if (ret == 0)
+			ret = __i915_vma_unbind(vma);
+	}
 	return ret;
 }
 

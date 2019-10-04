@@ -13,6 +13,9 @@
 #include <linux/mutex.h>
 #include <linux/rbtree.h>
 #include <linux/rcupdate.h>
+#include <linux/workqueue.h>
+
+#include "i915_utils.h"
 
 struct drm_i915_private;
 struct i915_active_request;
@@ -25,9 +28,29 @@ struct i915_active_request {
 	struct i915_request __rcu *request;
 	struct list_head link;
 	i915_active_retire_fn retire;
+#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM)
+	/*
+	 * Incorporeal!
+	 *
+	 * Updates to the i915_active_request must be serialised under a lock
+	 * to ensure that the timeline is ordered. Normally, this is the
+	 * timeline->mutex, but another mutex may be used so long as it is
+	 * done so consistently.
+	 *
+	 * For lockdep tracking of the above, we store the lock we intend
+	 * to always use for updates of this i915_active_request during
+	 * construction and assert that is held on every update.
+	 */
+	struct mutex *lock;
+#endif
 };
 
 struct active_node;
+
+#define I915_ACTIVE_MAY_SLEEP BIT(0)
+
+#define __i915_active_call __aligned(4)
+#define i915_active_may_sleep(fn) ptr_pack_bits(&(fn), I915_ACTIVE_MAY_SLEEP, 2)
 
 struct i915_active {
 	struct drm_i915_private *i915;
@@ -42,12 +65,15 @@ struct i915_active {
 	struct dma_fence_cb excl_cb;
 
 	unsigned long flags;
-#define I915_ACTIVE_GRAB_BIT 0
+#define I915_ACTIVE_RETIRE_SLEEPS BIT(0)
+#define I915_ACTIVE_GRAB_BIT 1
 
 	int (*active)(struct i915_active *ref);
 	void (*retire)(struct i915_active *ref);
 
-	struct llist_head barriers;
+	struct work_struct work;
+
+	struct llist_head preallocated_barriers;
 };
 
 #endif /* _I915_ACTIVE_TYPES_H_ */

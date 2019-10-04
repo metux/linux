@@ -1530,13 +1530,6 @@ struct drm_i915_private {
 	struct mutex av_mutex;
 	int audio_power_refcount;
 
-	struct {
-		struct mutex mutex;
-		struct list_head list;
-		struct llist_head free_list;
-		struct work_struct free_work;
-	} contexts;
-
 	u32 fdi_rx_config;
 
 	/* Shadow for DISPLAY_PHY_CONTROL which can't be safely read */
@@ -1692,6 +1685,14 @@ struct drm_i915_private {
 
 	struct {
 		struct notifier_block pm_notifier;
+
+		struct i915_gem_contexts {
+			spinlock_t lock; /* locks list */
+			struct list_head list;
+
+			struct llist_head free_list;
+			struct work_struct free_work;
+		} contexts;
 	} gem;
 
 	/* For i945gm vblank irq vs. C3 workaround */

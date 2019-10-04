@@ -5,7 +5,6 @@
  */
 
 #include "mock_context.h"
-#include "selftests/mock_drm.h"
 #include "selftests/mock_gtt.h"
 
 struct i915_gem_context *
@@ -23,8 +22,6 @@ mock_context(struct drm_i915_private *i915,
 	INIT_LIST_HEAD(&ctx->link);
 	ctx->i915 = i915;
 
-	i915_gem_context_set_persistence(ctx);
-
 	mutex_init(&ctx->engines_mutex);
 	e = default_engines(ctx);
 	if (IS_ERR(e))
@@ -37,7 +34,9 @@ mock_context(struct drm_i915_private *i915,
 	if (name) {
 		struct i915_ppgtt *ppgtt;
 
-		strncpy(ctx->name, name, sizeof(ctx->name));
+		ctx->name = kstrdup(name, GFP_KERNEL);
+		if (!ctx->name)
+			goto err_put;
 
 		ppgtt = mock_ppgtt(i915, name);
 		if (!ppgtt)
@@ -73,17 +72,16 @@ void mock_init_contexts(struct drm_i915_private *i915)
 }
 
 struct i915_gem_context *
-live_context(struct drm_i915_private *i915, struct file *file)
+live_context(struct drm_i915_private *i915, struct drm_file *file)
 {
 	struct i915_gem_context *ctx;
 	int err;
-	u32 id;
 
 	ctx = i915_gem_create_context(i915, 0);
 	if (IS_ERR(ctx))
 		return ctx;
 
-	err = gem_context_register(ctx, to_drm_file(file)->driver_priv, &id);
+	err = gem_context_register(ctx, file->driver_priv);
 	if (err < 0)
 		goto err_ctx;
 
@@ -97,16 +95,7 @@ err_ctx:
 struct i915_gem_context *
 kernel_context(struct drm_i915_private *i915)
 {
-	struct i915_gem_context *ctx;
-
-	ctx = i915_gem_create_context(i915, 0);
-	if (IS_ERR(ctx))
-		return ctx;
-
-	i915_gem_context_clear_bannable(ctx);
-	i915_gem_context_set_persistence(ctx);
-
-	return ctx;
+	return i915_gem_context_create_kernel(i915, I915_PRIORITY_NORMAL);
 }
 
 void kernel_context_close(struct i915_gem_context *ctx)

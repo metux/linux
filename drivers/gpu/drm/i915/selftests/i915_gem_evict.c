@@ -468,7 +468,6 @@ static int igt_evict_contexts(void *arg)
 		}
 
 		count = 0;
-		mutex_lock(&i915->drm.struct_mutex);
 		onstack_fence_init(&fence);
 		do {
 			struct i915_request *rq;
@@ -505,8 +504,6 @@ static int igt_evict_contexts(void *arg)
 			count++;
 			err = 0;
 		} while(1);
-		mutex_unlock(&i915->drm.struct_mutex);
-
 		onstack_fence_fini(&fence);
 		pr_info("Submitted %lu contexts/requests on %s\n",
 			count, engine->name);

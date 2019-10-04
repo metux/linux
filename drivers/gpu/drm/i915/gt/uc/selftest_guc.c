@@ -135,7 +135,6 @@ static int igt_guc_clients(void *args)
 	int err = 0;
 
 	GEM_BUG_ON(!HAS_GT_UC(dev_priv));
-	mutex_lock(&dev_priv->drm.struct_mutex);
 	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
 
 	guc = &dev_priv->gt.uc.guc;
@@ -209,7 +208,6 @@ out:
 	guc_clients_enable(guc);
 unlock:
 	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
-	mutex_unlock(&dev_priv->drm.struct_mutex);
 	return err;
 }
 
@@ -227,7 +225,6 @@ static int igt_guc_doorbells(void *arg)
 	u16 db_id;
 
 	GEM_BUG_ON(!HAS_GT_UC(dev_priv));
-	mutex_lock(&dev_priv->drm.struct_mutex);
 	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
 
 	guc = &dev_priv->gt.uc.guc;
@@ -318,7 +315,6 @@ out:
 		}
 unlock:
 	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
-	mutex_unlock(&dev_priv->drm.struct_mutex);
 	return err;
 }
 

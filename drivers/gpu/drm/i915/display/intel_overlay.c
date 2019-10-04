@@ -1288,7 +1288,7 @@ static int get_registers(struct intel_overlay *overlay, bool use_phys)
 	int err;
 
 	obj = i915_gem_object_create_stolen(overlay->i915, PAGE_SIZE);
-	if (obj == NULL)
+	if (IS_ERR(obj))
 		obj = i915_gem_object_create_internal(overlay->i915, PAGE_SIZE);
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);

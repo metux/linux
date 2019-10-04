@@ -341,7 +341,7 @@ TRACE_EVENT(intel_disable_plane,
 
 /* pipe updates */
 
-TRACE_EVENT(intel_pipe_update_start,
+TRACE_EVENT(i915_pipe_update_start,
 	    TP_PROTO(struct intel_crtc *crtc),
 	    TP_ARGS(crtc),
 
@@ -366,7 +366,7 @@ TRACE_EVENT(intel_pipe_update_start,
 		       __entry->scanline, __entry->min, __entry->max)
 );
 
-TRACE_EVENT(intel_pipe_update_vblank_evaded,
+TRACE_EVENT(i915_pipe_update_vblank_evaded,
 	    TP_PROTO(struct intel_crtc *crtc),
 	    TP_ARGS(crtc),
 
@@ -391,7 +391,7 @@ TRACE_EVENT(intel_pipe_update_vblank_evaded,
 		       __entry->scanline, __entry->min, __entry->max)
 );
 
-TRACE_EVENT(intel_pipe_update_end,
+TRACE_EVENT(i915_pipe_update_end,
 	    TP_PROTO(struct intel_crtc *crtc, u32 frame, int scanline_end),
 	    TP_ARGS(crtc, frame, scanline_end),
 
@@ -952,7 +952,7 @@ DECLARE_EVENT_CLASS(i915_context,
 	TP_fast_assign(
 			__entry->dev = ctx->i915->drm.primary->index;
 			__entry->ctx = ctx;
-			__entry->vm = rcu_access_pointer(ctx->vm);
+			__entry->vm = ctx->vm;
 	),
 
 	TP_printk("dev=%u, ctx=%p, ctx_vm=%p",

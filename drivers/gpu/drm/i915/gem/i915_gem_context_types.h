@@ -88,7 +88,7 @@ struct i915_gem_context {
 	 * In other modes, this is a NULL pointer with the expectation that
 	 * the caller uses the shared global GTT.
 	 */
-	struct i915_address_space __rcu *vm;
+	struct i915_address_space *vm;
 
 	/**
 	 * @pid: process id of creator
@@ -99,6 +99,15 @@ struct i915_gem_context {
 	 * explicitly by the client are expected to be isolated.
 	 */
 	struct pid *pid;
+
+	/**
+	 * @name: arbitrary name
+	 *
+	 * A name is constructed for the context from the creator's process
+	 * name, pid and user handle in order to uniquely identify the
+	 * context in messages.
+	 */
+	const char *name;
 
 	/** link: place with &drm_i915_private.context_list */
 	struct list_head link;
@@ -128,14 +137,15 @@ struct i915_gem_context {
 #define UCONTEXT_NO_ERROR_CAPTURE	1
 #define UCONTEXT_BANNABLE		2
 #define UCONTEXT_RECOVERABLE		3
-#define UCONTEXT_PERSISTENCE		4
 
 	/**
 	 * @flags: small set of booleans
 	 */
 	unsigned long flags;
-#define CONTEXT_CLOSED			0
-#define CONTEXT_USER_ENGINES		1
+#define CONTEXT_BANNED			0
+#define CONTEXT_CLOSED			1
+#define CONTEXT_FORCE_SINGLE_SUBMISSION	2
+#define CONTEXT_USER_ENGINES		3
 
 	struct mutex mutex;
 
@@ -165,14 +175,12 @@ struct i915_gem_context {
 	 */
 	struct radix_tree_root handles_vma;
 
-	/**
-	 * @name: arbitrary name, used for user debug
-	 *
-	 * A name is constructed for the context from the creator's process
-	 * name, pid and user handle in order to uniquely identify the
-	 * context in messages.
+	/** jump_whitelist: Bit array for tracking cmds during cmdparsing
+	 *  Guarded by struct_mutex
 	 */
-	char name[TASK_COMM_LEN + 8];
+	unsigned long *jump_whitelist;
+	/** jump_whitelist_cmds: No of cmd slots available */
+	u32 jump_whitelist_cmds;
 };
 
 #endif /* __I915_GEM_CONTEXT_TYPES_H__ */

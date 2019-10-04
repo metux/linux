@@ -61,7 +61,7 @@ static int live_sanitycheck(void *arg)
 		}
 
 		igt_spinner_end(&spin);
-		if (igt_flush_test(i915, I915_WAIT_LOCKED)) {
+		if (igt_flush_test(i915)) {
 			err = -EIO;
 			goto err_ctx;
 		}
@@ -383,8 +383,7 @@ slice_semaphore_queue(struct intel_engine_cs *outer,
 	if (err)
 		goto out;
 
-	if (i915_request_wait(head,
-			      I915_WAIT_LOCKED,
+	if (i915_request_wait(head, 0,
 			      2 * RUNTIME_INFO(outer->i915)->num_engines * (count + 2) * (count + 3)) < 0) {
 		pr_err("Failed to slice along semaphore chain of length (%d, %d)!\n",
 		       count, n);
@@ -453,7 +452,7 @@ static int live_timeslice_preempt(void *arg)
 			if (err)
 				goto err_pin;
 
-			if (igt_flush_test(i915, I915_WAIT_LOCKED)) {
+			if (igt_flush_test(i915)) {
 				err = -EIO;
 				goto err_pin;
 			}
@@ -985,7 +984,7 @@ static int live_nopreempt(void *arg)
 			goto err_wedged;
 		}
 
-		if (igt_flush_test(i915, I915_WAIT_LOCKED))
+		if (igt_flush_test(i915))
 			goto err_wedged;
 	}
 
@@ -1047,7 +1046,7 @@ static int live_suppress_self_preempt(void *arg)
 		if (!intel_engine_has_preemption(engine))
 			continue;
 
-		if (igt_flush_test(i915, I915_WAIT_LOCKED))
+		if (igt_flush_test(i915))
 			goto err_wedged;
 
 		intel_engine_pm_get(engine);
@@ -1105,7 +1104,7 @@ static int live_suppress_self_preempt(void *arg)
 		}
 
 		intel_engine_pm_put(engine);
-		if (igt_flush_test(i915, I915_WAIT_LOCKED))
+		if (igt_flush_test(i915))
 			goto err_wedged;
 	}
 
@@ -1266,7 +1265,7 @@ static int live_suppress_wait_preempt(void *arg)
 			for (i = 0; i < ARRAY_SIZE(client); i++)
 				igt_spinner_end(&client[i].spin);
 
-			if (igt_flush_test(i915, I915_WAIT_LOCKED))
+			if (igt_flush_test(i915))
 				goto err_wedged;
 
 			if (engine->execlists.preempt_hang.count) {
@@ -1545,7 +1544,7 @@ static int live_preempt_hang(void *arg)
 
 		igt_spinner_end(&spin_hi);
 		igt_spinner_end(&spin_lo);
-		if (igt_flush_test(i915, I915_WAIT_LOCKED)) {
+		if (igt_flush_test(i915)) {
 			err = -EIO;
 			goto err_ctx_lo;
 		}
@@ -1942,7 +1941,7 @@ static int nop_virtual_engine(struct drm_i915_private *i915,
 		prime, div64_u64(ktime_to_ns(times[1]), prime));
 
 out:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
+	if (igt_flush_test(i915))
 		err = -EIO;
 
 	for (nc = 0; nc < nctx; nc++) {
@@ -2087,7 +2086,7 @@ static int mask_virtual_engine(struct drm_i915_private *i915,
 		goto out;
 
 out:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
+	if (igt_flush_test(i915))
 		err = -EIO;
 
 	for (n = 0; n < nsibling; n++)
@@ -2265,7 +2264,7 @@ static int bond_virtual_engine(struct drm_i915_private *i915,
 out:
 	for (n = 0; !IS_ERR(rq[n]); n++)
 		i915_request_put(rq[n]);
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
+	if (igt_flush_test(i915))
 		err = -EIO;
 
 	kernel_context_close(ctx);

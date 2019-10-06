@@ -145,6 +145,7 @@ struct nsim_dev_port {
 struct nsim_dev {
 	struct nsim_bus_dev *nsim_bus_dev;
 	struct nsim_fib_data *fib_data;
+	struct nsim_trap_data *trap_data;
 	struct dentry *ddir;
 	struct dentry *ports_ddir;
 	struct bpf_offload_dev *bpf_dev;
@@ -160,6 +161,9 @@ struct nsim_dev {
 	bool fw_update_status;
 	u32 max_macs;
 	bool test1;
+	bool dont_allow_reload;
+	bool fail_reload;
+	struct devlink_region *dummy_region;
 };
 
 static inline struct net *nsim_dev_net(struct nsim_dev *nsim_dev)

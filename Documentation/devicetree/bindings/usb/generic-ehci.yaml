@@ -69,6 +69,11 @@ properties:
   phy-names:
     const: usb
 
+  companion:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+     Phandle of a companion.
+
 required:
   - compatible
   - reg

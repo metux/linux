@@ -32,13 +32,10 @@ static void del_ptr(struct btrfs_root *root, struct btrfs_path *path,
 static const struct btrfs_csums {
 	u16		size;
 	const char	*name;
-	const char	*driver;
 } btrfs_csums[] = {
 	[BTRFS_CSUM_TYPE_CRC32] = { .size = 4, .name = "crc32c" },
 	[BTRFS_CSUM_TYPE_XXHASH] = { .size = 8, .name = "xxhash64" },
 	[BTRFS_CSUM_TYPE_SHA256] = { .size = 32, .name = "sha256" },
-	[BTRFS_CSUM_TYPE_BLAKE2] = { .size = 32, .name = "blake2b",
-				     .driver = "blake2b-256" },
 };
 
 int btrfs_super_csum_size(const struct btrfs_super_block *s)
@@ -54,17 +51,6 @@ const char *btrfs_super_csum_name(u16 csum_type)
 {
 	/* csum type is validated at mount time */
 	return btrfs_csums[csum_type].name;
-}
-
-/*
- * Return driver name if defined, otherwise the name that's also a valid driver
- * name
- */
-const char *btrfs_super_csum_driver(u16 csum_type)
-{
-	/* csum type is validated at mount time */
-	return btrfs_csums[csum_type].driver ?:
-		btrfs_csums[csum_type].name;
 }
 
 size_t __const btrfs_get_num_csums(void)
@@ -326,10 +312,12 @@ u64 btrfs_get_tree_mod_seq(struct btrfs_fs_info *fs_info,
 			   struct seq_list *elem)
 {
 	write_lock(&fs_info->tree_mod_log_lock);
+	spin_lock(&fs_info->tree_mod_seq_lock);
 	if (!elem->seq) {
 		elem->seq = btrfs_inc_tree_mod_seq(fs_info);
 		list_add_tail(&elem->list, &fs_info->tree_mod_seq_list);
 	}
+	spin_unlock(&fs_info->tree_mod_seq_lock);
 	write_unlock(&fs_info->tree_mod_log_lock);
 
 	return elem->seq;
@@ -349,7 +337,7 @@ void btrfs_put_tree_mod_seq(struct btrfs_fs_info *fs_info,
 	if (!seq_putting)
 		return;
 
-	write_lock(&fs_info->tree_mod_log_lock);
+	spin_lock(&fs_info->tree_mod_seq_lock);
 	list_del(&elem->list);
 	elem->seq = 0;
 
@@ -360,22 +348,24 @@ void btrfs_put_tree_mod_seq(struct btrfs_fs_info *fs_info,
 				 * blocker with lower sequence number exists, we
 				 * cannot remove anything from the log
 				 */
-				write_unlock(&fs_info->tree_mod_log_lock);
+				spin_unlock(&fs_info->tree_mod_seq_lock);
 				return;
 			}
 			min_seq = cur_elem->seq;
 		}
 	}
+	spin_unlock(&fs_info->tree_mod_seq_lock);
 
 	/*
 	 * anything that's lower than the lowest existing (read: blocked)
 	 * sequence number can be removed from the tree.
 	 */
+	write_lock(&fs_info->tree_mod_log_lock);
 	tm_root = &fs_info->tree_mod_log;
 	for (node = rb_first(tm_root); node; node = next) {
 		next = rb_next(node);
 		tm = rb_entry(node, struct tree_mod_elem, node);
-		if (tm->seq >= min_seq)
+		if (tm->seq > min_seq)
 			continue;
 		rb_erase(node, tm_root);
 		kfree(tm);
@@ -2367,6 +2357,32 @@ static noinline void unlock_up(struct btrfs_path *path, int level,
 				*write_lock_level = i - 1;
 			}
 		}
+	}
+}
+
+/*
+ * This releases any locks held in the path starting at level and
+ * going all the way up to the root.
+ *
+ * btrfs_search_slot will keep the lock held on higher nodes in a few
+ * corner cases, such as COW of the block at slot zero in the node.  This
+ * ignores those rules, and it should only be called when there are no
+ * more updates to be done higher up in the tree.
+ */
+noinline void btrfs_unlock_up_safe(struct btrfs_path *path, int level)
+{
+	int i;
+
+	if (path->keep_locks)
+		return;
+
+	for (i = level; i < BTRFS_MAX_LEVEL; i++) {
+		if (!path->nodes[i])
+			continue;
+		if (!path->locks[i])
+			continue;
+		btrfs_tree_unlock_rw(path->nodes[i], path->locks[i]);
+		path->locks[i] = 0;
 	}
 }
 

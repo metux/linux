@@ -6,30 +6,6 @@
 #include "intel_memory_region.h"
 #include "i915_drv.h"
 
-/* XXX: Hysterical raisins. BIT(inst) needs to just be (inst) at some point. */
-#define REGION_MAP(type, inst) \
-	BIT((type) + INTEL_MEMORY_TYPE_SHIFT) | BIT(inst)
-
-const u32 intel_region_map[] = {
-	[INTEL_REGION_SMEM] = REGION_MAP(INTEL_MEMORY_SYSTEM, 0),
-	[INTEL_REGION_LMEM] = REGION_MAP(INTEL_MEMORY_LOCAL, 0),
-	[INTEL_REGION_STOLEN] = REGION_MAP(INTEL_MEMORY_STOLEN, 0),
-};
-
-struct intel_memory_region *
-intel_memory_region_by_type(struct drm_i915_private *i915,
-			    enum intel_memory_type mem_type)
-{
-	struct intel_memory_region *mr;
-	int id;
-
-	for_each_memory_region(mr, i915, id)
-		if (mr->type == mem_type)
-			return mr;
-
-	return NULL;
-}
-
 static u64
 intel_memory_region_free_pages(struct intel_memory_region *mem,
 			       struct list_head *blocks)
@@ -51,7 +27,7 @@ __intel_memory_region_put_pages_buddy(struct intel_memory_region *mem,
 				      struct list_head *blocks)
 {
 	mutex_lock(&mem->mm_lock);
-	mem->avail += intel_memory_region_free_pages(mem, blocks);
+	intel_memory_region_free_pages(mem, blocks);
 	mutex_unlock(&mem->mm_lock);
 }
 
@@ -71,8 +47,8 @@ __intel_memory_region_get_pages_buddy(struct intel_memory_region *mem,
 				      unsigned int flags,
 				      struct list_head *blocks)
 {
+	unsigned long n_pages = size >> ilog2(mem->mm.chunk_size);
 	unsigned int min_order = 0;
-	unsigned long n_pages;
 
 	GEM_BUG_ON(!IS_ALIGNED(size, mem->mm.chunk_size));
 	GEM_BUG_ON(!list_empty(blocks));
@@ -81,16 +57,6 @@ __intel_memory_region_get_pages_buddy(struct intel_memory_region *mem,
 		min_order = ilog2(mem->min_page_size) -
 			    ilog2(mem->mm.chunk_size);
 	}
-
-	if (flags & I915_ALLOC_CONTIGUOUS) {
-		size = roundup_pow_of_two(size);
-		min_order = ilog2(size) - ilog2(mem->mm.chunk_size);
-	}
-
-	if (size > BIT(mem->mm.max_order) * mem->mm.chunk_size)
-		return -E2BIG;
-
-	n_pages = size >> ilog2(mem->mm.chunk_size);
 
 	mutex_lock(&mem->mm_lock);
 
@@ -120,7 +86,6 @@ __intel_memory_region_get_pages_buddy(struct intel_memory_region *mem,
 			break;
 	} while (1);
 
-	mem->avail -= size;
 	mutex_unlock(&mem->mm_lock);
 	return 0;
 
@@ -179,12 +144,6 @@ intel_memory_region_create(struct drm_i915_private *i915,
 	mem->io_start = io_start;
 	mem->min_page_size = min_page_size;
 	mem->ops = ops;
-	mem->total = size;
-	mem->avail = mem->total;
-
-	mutex_init(&mem->objects.lock);
-	INIT_LIST_HEAD(&mem->objects.list);
-	INIT_LIST_HEAD(&mem->objects.purgeable);
 
 	mutex_init(&mem->mm_lock);
 
@@ -202,16 +161,6 @@ err_free:
 	return ERR_PTR(err);
 }
 
-void intel_memory_region_set_name(struct intel_memory_region *mem,
-				  const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	vsnprintf(mem->name, sizeof(mem->name), fmt, ap);
-	va_end(ap);
-}
-
 static void __intel_memory_region_destroy(struct kref *kref)
 {
 	struct intel_memory_region *mem =
@@ -221,7 +170,6 @@ static void __intel_memory_region_destroy(struct kref *kref)
 		mem->ops->release(mem);
 
 	mutex_destroy(&mem->mm_lock);
-	mutex_destroy(&mem->objects.lock);
 	kfree(mem);
 }
 
@@ -235,65 +183,6 @@ intel_memory_region_get(struct intel_memory_region *mem)
 void intel_memory_region_put(struct intel_memory_region *mem)
 {
 	kref_put(&mem->kref, __intel_memory_region_destroy);
-}
-
-/* Global memory region registration -- only slight layer inversions! */
-
-int intel_memory_regions_hw_probe(struct drm_i915_private *i915)
-{
-	int err, i;
-
-	for (i = 0; i < ARRAY_SIZE(i915->mm.regions); i++) {
-		struct intel_memory_region *mem = ERR_PTR(-ENODEV);
-		u32 type;
-
-		if (!HAS_REGION(i915, BIT(i)))
-			continue;
-
-		type = MEMORY_TYPE_FROM_REGION(intel_region_map[i]);
-		switch (type) {
-		case INTEL_MEMORY_SYSTEM:
-			mem = i915_gem_shmem_setup(i915);
-			break;
-		case INTEL_MEMORY_STOLEN:
-			mem = i915_gem_stolen_setup(i915);
-			break;
-		case INTEL_MEMORY_LOCAL:
-			mem = intel_setup_fake_lmem(i915);
-			break;
-		}
-
-		if (IS_ERR(mem)) {
-			err = PTR_ERR(mem);
-			DRM_ERROR("Failed to setup region(%d) type=%d\n", err, type);
-			goto out_cleanup;
-		}
-
-		mem->id = intel_region_map[i];
-		mem->type = type;
-		mem->instance = MEMORY_INSTANCE_FROM_REGION(intel_region_map[i]);
-
-		i915->mm.regions[i] = mem;
-	}
-
-	return 0;
-
-out_cleanup:
-	intel_memory_regions_driver_release(i915);
-	return err;
-}
-
-void intel_memory_regions_driver_release(struct drm_i915_private *i915)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(i915->mm.regions); i++) {
-		struct intel_memory_region *region =
-			fetch_and_zero(&i915->mm.regions[i]);
-
-		if (region)
-			intel_memory_region_put(region);
-	}
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

@@ -247,7 +247,12 @@ struct mlx5_ib_flow_db {
  * These flags are intended for internal use by the mlx5_ib driver, and they
  * rely on the range reserved for that use in the ib_qp_create_flags enum.
  */
-#define MLX5_IB_QP_CREATE_SQPN_QP1	IB_QP_CREATE_RESERVED_START
+
+/* Create a UD QP whose source QP number is 1 */
+static inline enum ib_qp_create_flags mlx5_ib_create_qp_sqpn_qp1(void)
+{
+	return IB_QP_CREATE_RESERVED_START;
+}
 
 struct wr_list {
 	u16	opcode;
@@ -477,6 +482,7 @@ struct mlx5_umr_wr {
 	u64				length;
 	int				access_flags;
 	u32				mkey;
+	u8				ignore_free_state:1;
 };
 
 static inline const struct mlx5_umr_wr *umr_wr(const struct ib_send_wr *wr)
@@ -579,9 +585,6 @@ struct mlx5_ib_dm {
 					  IB_ACCESS_REMOTE_READ   |\
 					  IB_ZERO_BASED)
 
-#define mlx5_update_odp_stats(mr, counter_name, value)		\
-	atomic64_add(value, &((mr)->odp_stats.counter_name))
-
 struct mlx5_ib_mr {
 	struct ib_mr		ibmr;
 	void			*descs;
@@ -614,12 +617,13 @@ struct mlx5_ib_mr {
 	u64			data_iova;
 	u64			pi_iova;
 
+	/* For ODP and implicit */
 	atomic_t		num_leaf_free;
 	wait_queue_head_t       q_leaf_free;
-	struct mlx5_async_work  cb_work;
 	atomic_t		num_pending_prefetch;
-	struct ib_odp_counters	odp_stats;
-	bool			is_odp_implicit;
+	struct xarray		implicit_children;
+
+	struct mlx5_async_work  cb_work;
 };
 
 static inline bool is_odp_mr(struct mlx5_ib_mr *mr)
@@ -866,7 +870,10 @@ struct mlx5_ib_flow_action {
 		struct {
 			struct mlx5_ib_dev *dev;
 			u32 sub_type;
-			u32 action_id;
+			union {
+				struct mlx5_modify_hdr *modify_hdr;
+				struct mlx5_pkt_reformat *pkt_reformat;
+			};
 		} flow_action_raw;
 	};
 };
@@ -879,8 +886,6 @@ struct mlx5_dm {
 	 */
 	spinlock_t lock;
 	DECLARE_BITMAP(memic_alloc_pages, MLX5_MAX_MEMIC_PAGES);
-	unsigned long *steering_sw_icm_alloc_blocks;
-	unsigned long *header_modify_sw_icm_alloc_blocks;
 };
 
 struct mlx5_read_counters_attr {
@@ -954,10 +959,7 @@ struct mlx5_ib_dev {
 	/* serialize update of capability mask
 	 */
 	struct mutex			cap_mask_mutex;
-	u8				ib_active:1;
-	u8				fill_delay:1;
-	u8				is_rep:1;
-	u8				lag_active:1;
+	bool				ib_active;
 	struct umr_common		umrc;
 	/* sync used page count stats
 	 */
@@ -966,6 +968,7 @@ struct mlx5_ib_dev {
 	struct timer_list		delay_timer;
 	/* Prevents soft lock on massive reg MRs */
 	struct mutex			slow_path_mutex;
+	int				fill_delay;
 	struct ib_odp_caps	odp_caps;
 	u64			odp_max_size;
 	struct mlx5_ib_pf_eq	odp_pf_eq;
@@ -988,6 +991,8 @@ struct mlx5_ib_dev {
 	struct mlx5_sq_bfreg	fp_bfreg;
 	struct mlx5_ib_delay_drop	delay_drop;
 	const struct mlx5_ib_profile	*profile;
+	bool			is_rep;
+	int				lag_active;
 
 	struct mlx5_ib_lb_state		lb;
 	u8			umr_fence;
@@ -1236,6 +1241,7 @@ struct ib_rwq_ind_table *mlx5_ib_create_rwq_ind_table(struct ib_device *device,
 						      struct ib_rwq_ind_table_init_attr *init_attr,
 						      struct ib_udata *udata);
 int mlx5_ib_destroy_rwq_ind_table(struct ib_rwq_ind_table *wq_ind_table);
+bool mlx5_ib_dc_atomic_is_supported(struct mlx5_ib_dev *dev);
 struct ib_dm *mlx5_ib_alloc_dm(struct ib_device *ibdev,
 			       struct ib_ucontext *context,
 			       struct ib_dm_alloc_attr *attr,
@@ -1334,10 +1340,6 @@ struct mlx5_core_dev *mlx5_ib_get_native_port_mdev(struct mlx5_ib_dev *dev,
 						   u8 *native_port_num);
 void mlx5_ib_put_native_port_mdev(struct mlx5_ib_dev *dev,
 				  u8 port_num);
-int mlx5_ib_fill_res_entry(struct sk_buff *msg,
-			   struct rdma_restrack_entry *res);
-int mlx5_ib_fill_stat_entry(struct sk_buff *msg,
-			    struct rdma_restrack_entry *res);
 
 #if IS_ENABLED(CONFIG_INFINIBAND_USER_ACCESS)
 int mlx5_ib_devx_create(struct mlx5_ib_dev *dev, bool is_user);
@@ -1481,4 +1483,18 @@ int bfregn_to_uar_index(struct mlx5_ib_dev *dev,
 
 int mlx5_ib_qp_set_counter(struct ib_qp *qp, struct rdma_counter *counter);
 u16 mlx5_ib_get_counters_id(struct mlx5_ib_dev *dev, u8 port_num);
+
+static inline bool mlx5_ib_can_use_umr(struct mlx5_ib_dev *dev,
+				       bool do_modify_atomic)
+{
+	if (MLX5_CAP_GEN(dev->mdev, umr_modify_entity_size_disabled))
+		return false;
+
+	if (do_modify_atomic &&
+	    MLX5_CAP_GEN(dev->mdev, atomic) &&
+	    MLX5_CAP_GEN(dev->mdev, umr_modify_atomic_disabled))
+		return false;
+
+	return true;
+}
 #endif /* MLX5_IB_H */

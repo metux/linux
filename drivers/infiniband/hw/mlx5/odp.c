@@ -93,130 +93,54 @@ struct mlx5_pagefault {
 
 static u64 mlx5_imr_ksm_entries;
 
-static int check_parent(struct ib_umem_odp *odp,
-			       struct mlx5_ib_mr *parent)
+void mlx5_odp_populate_klm(struct mlx5_klm *pklm, size_t idx, size_t nentries,
+			   struct mlx5_ib_mr *imr, int flags)
 {
-	struct mlx5_ib_mr *mr = odp->private;
-
-	return mr && mr->parent == parent && !odp->dying;
-}
-
-static struct ib_ucontext_per_mm *mr_to_per_mm(struct mlx5_ib_mr *mr)
-{
-	if (WARN_ON(!mr || !is_odp_mr(mr)))
-		return NULL;
-
-	return to_ib_umem_odp(mr->umem)->per_mm;
-}
-
-static struct ib_umem_odp *odp_next(struct ib_umem_odp *odp)
-{
-	struct mlx5_ib_mr *mr = odp->private, *parent = mr->parent;
-	struct ib_ucontext_per_mm *per_mm = odp->per_mm;
-	struct rb_node *rb;
-
-	down_read(&per_mm->umem_rwsem);
-	while (1) {
-		rb = rb_next(&odp->interval_tree.rb);
-		if (!rb)
-			goto not_found;
-		odp = rb_entry(rb, struct ib_umem_odp, interval_tree.rb);
-		if (check_parent(odp, parent))
-			goto end;
-	}
-not_found:
-	odp = NULL;
-end:
-	up_read(&per_mm->umem_rwsem);
-	return odp;
-}
-
-static struct ib_umem_odp *odp_lookup(u64 start, u64 length,
-				      struct mlx5_ib_mr *parent)
-{
-	struct ib_ucontext_per_mm *per_mm = mr_to_per_mm(parent);
-	struct ib_umem_odp *odp;
-	struct rb_node *rb;
-
-	down_read(&per_mm->umem_rwsem);
-	odp = rbt_ib_umem_lookup(&per_mm->umem_tree, start, length);
-	if (!odp)
-		goto end;
-
-	while (1) {
-		if (check_parent(odp, parent))
-			goto end;
-		rb = rb_next(&odp->interval_tree.rb);
-		if (!rb)
-			goto not_found;
-		odp = rb_entry(rb, struct ib_umem_odp, interval_tree.rb);
-		if (ib_umem_start(odp) > start + length)
-			goto not_found;
-	}
-not_found:
-	odp = NULL;
-end:
-	up_read(&per_mm->umem_rwsem);
-	return odp;
-}
-
-void mlx5_odp_populate_klm(struct mlx5_klm *pklm, size_t offset,
-			   size_t nentries, struct mlx5_ib_mr *mr, int flags)
-{
-	struct ib_pd *pd = mr->ibmr.pd;
-	struct mlx5_ib_dev *dev = to_mdev(pd->device);
-	struct ib_umem_odp *odp;
-	unsigned long va;
-	int i;
+	struct mlx5_klm *end = pklm + nentries;
 
 	if (flags & MLX5_IB_UPD_XLT_ZAP) {
-		for (i = 0; i < nentries; i++, pklm++) {
+		for (; pklm != end; pklm++, idx++) {
 			pklm->bcount = cpu_to_be32(MLX5_IMR_MTT_SIZE);
-			pklm->key = cpu_to_be32(dev->null_mkey);
+			pklm->key = cpu_to_be32(imr->dev->null_mkey);
 			pklm->va = 0;
 		}
 		return;
 	}
 
 	/*
-	 * The locking here is pretty subtle. Ideally the implicit children
-	 * list would be protected by the umem_mutex, however that is not
+	 * The locking here is pretty subtle. Ideally the implicit_children
+	 * xarray would be protected by the umem_mutex, however that is not
 	 * possible. Instead this uses a weaker update-then-lock pattern:
 	 *
 	 *  srcu_read_lock()
-	 *    <change children list>
+	 *    xa_store()
 	 *    mutex_lock(umem_mutex)
 	 *     mlx5_ib_update_xlt()
 	 *    mutex_unlock(umem_mutex)
 	 *    destroy lkey
 	 *
-	 * ie any change the children list must be followed by the locked
-	 * update_xlt before destroying.
+	 * ie any change the xarray must be followed by the locked update_xlt
+	 * before destroying.
 	 *
 	 * The umem_mutex provides the acquire/release semantic needed to make
-	 * the children list visible to a racing thread. While SRCU is not
+	 * the xa_store() visible to a racing thread. While SRCU is not
 	 * technically required, using it gives consistent use of the SRCU
-	 * locking around the children list.
+	 * locking around the xarray.
 	 */
-	lockdep_assert_held(&to_ib_umem_odp(mr->umem)->umem_mutex);
-	lockdep_assert_held(&mr->dev->odp_srcu);
+	lockdep_assert_held(&to_ib_umem_odp(imr->umem)->umem_mutex);
+	lockdep_assert_held(&imr->dev->odp_srcu);
 
-	odp = odp_lookup(offset * MLX5_IMR_MTT_SIZE,
-			 nentries * MLX5_IMR_MTT_SIZE, mr);
+	for (; pklm != end; pklm++, idx++) {
+		struct mlx5_ib_mr *mtt = xa_load(&imr->implicit_children, idx);
 
-	for (i = 0; i < nentries; i++, pklm++) {
 		pklm->bcount = cpu_to_be32(MLX5_IMR_MTT_SIZE);
-		va = (offset + i) * MLX5_IMR_MTT_SIZE;
-		if (odp && ib_umem_start(odp) == va) {
-			struct mlx5_ib_mr *mtt = odp->private;
-
+		if (mtt) {
 			pklm->key = cpu_to_be32(mtt->ibmr.lkey);
-			odp = odp_next(odp);
+			pklm->va = cpu_to_be64(idx * MLX5_IMR_MTT_SIZE);
 		} else {
-			pklm->key = cpu_to_be32(dev->null_mkey);
+			pklm->key = cpu_to_be32(imr->dev->null_mkey);
+			pklm->va = 0;
 		}
-		mlx5_ib_dbg(dev, "[%d] va %lx key %x\n",
-			    i, va, be32_to_cpu(pklm->key));
 	}
 }
 
@@ -318,6 +242,8 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 
 	if (unlikely(!umem_odp->npages && mr->parent &&
 		     !umem_odp->dying)) {
+		xa_erase(&mr->parent->implicit_children,
+			 ib_umem_start(umem_odp) >> MLX5_IMR_MTT_SHIFT);
 		xa_erase(&mr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
 		umem_odp->dying = 1;
 		atomic_inc(&mr->parent->num_leaf_free);
@@ -416,141 +342,128 @@ static void mlx5_ib_page_fault_resume(struct mlx5_ib_dev *dev,
 			    wq_num, err);
 }
 
-static struct mlx5_ib_mr *implicit_mr_alloc(struct ib_pd *pd,
-					    struct ib_umem_odp *umem_odp,
-					    bool ksm, int access_flags)
+static struct mlx5_ib_mr *implicit_get_child_mr(struct mlx5_ib_mr *imr,
+						unsigned long idx)
 {
-	struct mlx5_ib_dev *dev = to_mdev(pd->device);
+	struct ib_umem_odp *odp;
 	struct mlx5_ib_mr *mr;
+	struct mlx5_ib_mr *ret;
 	int err;
 
-	mr = mlx5_mr_cache_alloc(dev, ksm ? MLX5_IMR_KSM_CACHE_ENTRY :
-					    MLX5_IMR_MTT_CACHE_ENTRY);
+	odp = ib_umem_odp_alloc_child(to_ib_umem_odp(imr->umem),
+				      idx * MLX5_IMR_MTT_SIZE,
+				      MLX5_IMR_MTT_SIZE);
+	if (IS_ERR(odp))
+		return ERR_CAST(odp);
 
+	ret = mr = mlx5_mr_cache_alloc(imr->dev, MLX5_IMR_MTT_CACHE_ENTRY);
 	if (IS_ERR(mr))
-		return mr;
+		goto out_umem;
 
-	err = xa_reserve(&dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key),
+	err = xa_reserve(&imr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key),
 			 GFP_KERNEL);
-	if (err)
+	if (err) {
+		ret = ERR_PTR(err);
 		goto out_mr;
-
-	mr->ibmr.pd = pd;
-
-	mr->dev = dev;
-	mr->access_flags = access_flags;
-	mr->mmkey.iova = 0;
-	mr->umem = &umem_odp->umem;
-
-	if (ksm) {
-		err = mlx5_ib_update_xlt(mr, 0,
-					 mlx5_imr_ksm_entries,
-					 MLX5_KSM_PAGE_SHIFT,
-					 MLX5_IB_UPD_XLT_INDIRECT |
-					 MLX5_IB_UPD_XLT_ZAP |
-					 MLX5_IB_UPD_XLT_ENABLE);
-
-	} else {
-		err = mlx5_ib_update_xlt(mr, 0,
-					 MLX5_IMR_MTT_ENTRIES,
-					 PAGE_SHIFT,
-					 MLX5_IB_UPD_XLT_ZAP |
-					 MLX5_IB_UPD_XLT_ENABLE |
-					 MLX5_IB_UPD_XLT_ATOMIC);
 	}
 
-	if (err)
-		goto out_release;
-
+	mr->ibmr.pd = imr->ibmr.pd;
+	mr->access_flags = imr->access_flags;
+	mr->umem = &odp->umem;
 	mr->ibmr.lkey = mr->mmkey.key;
 	mr->ibmr.rkey = mr->mmkey.key;
+	mr->mmkey.iova = idx * MLX5_IMR_MTT_SIZE;
+	mr->parent = imr;
+	odp->private = mr;
+	INIT_WORK(&odp->work, mr_leaf_free_action);
 
-	mlx5_ib_dbg(dev, "key %x dev %p mr %p\n",
-		    mr->mmkey.key, dev->mdev, mr);
+	err = mlx5_ib_update_xlt(mr, 0,
+				 MLX5_IMR_MTT_ENTRIES,
+				 PAGE_SHIFT,
+				 MLX5_IB_UPD_XLT_ZAP |
+				 MLX5_IB_UPD_XLT_ENABLE |
+				 MLX5_IB_UPD_XLT_ATOMIC);
+	if (err) {
+		ret = ERR_PTR(err);
+		goto out_release;
+	}
 
+	/*
+	 * Once the store to either xarray completes any error unwind has to
+	 * use synchronize_srcu(). Avoid this with xa_reserve()
+	 */
+	err = xa_err(xa_store(&imr->implicit_children, idx, mr, GFP_KERNEL));
+	if (err) {
+		ret = ERR_PTR(err);
+		goto out_release;
+	}
+
+	xa_store(&imr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key),
+		 &mr->mmkey, GFP_ATOMIC);
+
+	mlx5_ib_dbg(imr->dev, "key %x mr %p\n", mr->mmkey.key, mr);
 	return mr;
 
 out_release:
-	xa_release(&dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
+	xa_release(&imr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
 out_mr:
-	mlx5_ib_err(dev, "Failed to register MKEY %d\n", err);
-	mlx5_mr_cache_free(dev, mr);
-
-	return ERR_PTR(err);
+	mlx5_mr_cache_free(imr->dev, mr);
+out_umem:
+	ib_umem_odp_release(odp);
+	return ret;
 }
 
-static struct ib_umem_odp *implicit_mr_get_data(struct mlx5_ib_mr *mr,
+static struct mlx5_ib_mr *implicit_mr_get_data(struct mlx5_ib_mr *imr,
 						u64 io_virt, size_t bcnt)
 {
-	struct mlx5_ib_dev *dev = to_mdev(mr->ibmr.pd->device);
-	struct ib_umem_odp *odp, *result = NULL;
-	struct ib_umem_odp *odp_mr = to_ib_umem_odp(mr->umem);
-	u64 addr = io_virt & MLX5_IMR_MTT_MASK;
-	int nentries = 0, start_idx = 0, ret;
-	struct mlx5_ib_mr *mtt;
+	struct ib_umem_odp *odp_imr = to_ib_umem_odp(imr->umem);
+	unsigned long end_idx = (io_virt + bcnt - 1) >> MLX5_IMR_MTT_SHIFT;
+	unsigned long idx = io_virt >> MLX5_IMR_MTT_SHIFT;
+	unsigned long inv_start_idx = end_idx + 1;
+	unsigned long inv_len = 0;
+	struct mlx5_ib_mr *result = NULL;
+	int ret;
 
-	mutex_lock(&odp_mr->umem_mutex);
-	odp = odp_lookup(addr, 1, mr);
+	mutex_lock(&odp_imr->umem_mutex);
+	for (idx = idx; idx <= end_idx; idx++) {
+		struct mlx5_ib_mr *mtt = xa_load(&imr->implicit_children, idx);
 
-	mlx5_ib_dbg(dev, "io_virt:%llx bcnt:%zx addr:%llx odp:%p\n",
-		    io_virt, bcnt, addr, odp);
-
-next_mr:
-	if (likely(odp)) {
-		if (nentries)
-			nentries++;
-	} else {
-		odp = ib_umem_odp_alloc_child(odp_mr, addr, MLX5_IMR_MTT_SIZE);
-		if (IS_ERR(odp)) {
-			mutex_unlock(&odp_mr->umem_mutex);
-			return ERR_CAST(odp);
+		if (unlikely(!mtt)) {
+			mtt = implicit_get_child_mr(imr, idx);
+			if (IS_ERR(mtt)) {
+				result = mtt;
+				goto out;
+			}
+			inv_start_idx = min(inv_start_idx, idx);
+			inv_len = idx - inv_start_idx + 1;
 		}
 
-		mtt = implicit_mr_alloc(mr->ibmr.pd, odp, 0,
-					mr->access_flags);
-		if (IS_ERR(mtt)) {
-			mutex_unlock(&odp_mr->umem_mutex);
-			ib_umem_odp_release(odp);
-			return ERR_CAST(mtt);
-		}
-
-		odp->private = mtt;
-		mtt->umem = &odp->umem;
-		mtt->mmkey.iova = addr;
-		mtt->parent = mr;
-		INIT_WORK(&odp->work, mr_leaf_free_action);
-
-		xa_store(&dev->odp_mkeys, mlx5_base_mkey(mtt->mmkey.key),
-			 &mtt->mmkey, GFP_ATOMIC);
-
-		if (!nentries)
-			start_idx = addr >> MLX5_IMR_MTT_SHIFT;
-		nentries++;
+		/* Return first odp if region not covered by single one */
+		if (likely(!result))
+			result = mtt;
 	}
 
-	/* Return first odp if region not covered by single one */
-	if (likely(!result))
-		result = odp;
+	/*
+	 * Any time the implicit_children are changed we must perform an
+	 * update of the xlt before exiting to ensure the HW and the
+	 * implicit_children remains synchronized.
+	 */
+out:
+	if (likely(!inv_len))
+		goto out_unlock;
 
-	addr += MLX5_IMR_MTT_SIZE;
-	if (unlikely(addr < io_virt + bcnt)) {
-		odp = odp_next(odp);
-		if (odp && ib_umem_start(odp) != addr)
-			odp = NULL;
-		goto next_mr;
-	}
-
-	if (unlikely(nentries)) {
-		ret = mlx5_ib_update_xlt(mr, start_idx, nentries, 0,
-					 MLX5_IB_UPD_XLT_INDIRECT |
+	ret = mlx5_ib_update_xlt(imr, inv_start_idx, inv_len, 0,
+				 MLX5_IB_UPD_XLT_INDIRECT |
 					 MLX5_IB_UPD_XLT_ATOMIC);
-		if (ret) {
-			mlx5_ib_err(dev, "Failed to update PAS\n");
-			result = ERR_PTR(ret);
-		}
+	if (ret) {
+		mlx5_ib_err(to_mdev(imr->ibmr.pd->device),
+			    "Failed to update PAS\n");
+		result = ERR_PTR(ret);
+		goto out_unlock;
 	}
 
-	mutex_unlock(&odp_mr->umem_mutex);
+out_unlock:
+	mutex_unlock(&odp_imr->umem_mutex);
 	return result;
 }
 
@@ -558,43 +471,68 @@ struct mlx5_ib_mr *mlx5_ib_alloc_implicit_mr(struct mlx5_ib_pd *pd,
 					     struct ib_udata *udata,
 					     int access_flags)
 {
-	struct mlx5_ib_mr *imr;
+	struct mlx5_ib_dev *dev = to_mdev(pd->ibpd.device);
 	struct ib_umem_odp *umem_odp;
+	struct mlx5_ib_mr *imr;
+	int err;
 
 	umem_odp = ib_umem_odp_alloc_implicit(udata, access_flags);
 	if (IS_ERR(umem_odp))
 		return ERR_CAST(umem_odp);
 
-	imr = implicit_mr_alloc(&pd->ibpd, umem_odp, 1, access_flags);
+	imr = mlx5_mr_cache_alloc(dev, MLX5_IMR_KSM_CACHE_ENTRY);
 	if (IS_ERR(imr)) {
-		ib_umem_odp_release(umem_odp);
-		return ERR_CAST(imr);
+		err = PTR_ERR(imr);
+		goto out_umem;
 	}
 
+	imr->ibmr.pd = &pd->ibpd;
+	imr->access_flags = access_flags;
+	imr->mmkey.iova = 0;
+	imr->umem = &umem_odp->umem;
+	imr->ibmr.lkey = imr->mmkey.key;
+	imr->ibmr.rkey = imr->mmkey.key;
 	imr->umem = &umem_odp->umem;
 	init_waitqueue_head(&imr->q_leaf_free);
 	atomic_set(&imr->num_leaf_free, 0);
 	atomic_set(&imr->num_pending_prefetch, 0);
-	xa_store(&imr->dev->odp_mkeys, mlx5_base_mkey(imr->mmkey.key),
-		 &imr->mmkey, GFP_ATOMIC);
+	xa_init(&imr->implicit_children);
 
+	err = mlx5_ib_update_xlt(imr, 0,
+				 mlx5_imr_ksm_entries,
+				 MLX5_KSM_PAGE_SHIFT,
+				 MLX5_IB_UPD_XLT_INDIRECT |
+				 MLX5_IB_UPD_XLT_ZAP |
+				 MLX5_IB_UPD_XLT_ENABLE);
+	if (err)
+		goto out_mr;
+
+	err = xa_err(xa_store(&dev->odp_mkeys, mlx5_base_mkey(imr->mmkey.key),
+			      &imr->mmkey, GFP_KERNEL));
+	if (err)
+		goto out_mr;
+
+	mlx5_ib_dbg(dev, "key %x mr %p\n", imr->mmkey.key, imr);
 	return imr;
+out_mr:
+	mlx5_ib_err(dev, "Failed to register MKEY %d\n", err);
+	mlx5_mr_cache_free(dev, imr);
+out_umem:
+	ib_umem_odp_release(umem_odp);
+	return ERR_PTR(err);
 }
 
 void mlx5_ib_free_implicit_mr(struct mlx5_ib_mr *imr)
 {
-	struct ib_ucontext_per_mm *per_mm = mr_to_per_mm(imr);
-	struct rb_node *node;
+	struct ib_umem_odp *odp_imr = to_ib_umem_odp(imr->umem);
+	struct mlx5_ib_mr *mtt;
+	unsigned long idx;
 
-	down_read(&per_mm->umem_rwsem);
-	for (node = rb_first_cached(&per_mm->umem_tree); node;
-	     node = rb_next(node)) {
-		struct ib_umem_odp *umem_odp =
-			rb_entry(node, struct ib_umem_odp, interval_tree.rb);
-		struct mlx5_ib_mr *mr = umem_odp->private;
+	mutex_lock(&odp_imr->umem_mutex);
+	xa_for_each (&imr->implicit_children, idx, mtt) {
+		struct ib_umem_odp *umem_odp = to_ib_umem_odp(mtt->umem);
 
-		if (mr->parent != imr)
-			continue;
+		xa_erase(&imr->implicit_children, idx);
 
 		mutex_lock(&umem_odp->umem_mutex);
 		ib_umem_odp_unmap_dma_pages(umem_odp, ib_umem_start(umem_odp),
@@ -610,39 +548,27 @@ void mlx5_ib_free_implicit_mr(struct mlx5_ib_mr *imr)
 		schedule_work(&umem_odp->work);
 		mutex_unlock(&umem_odp->umem_mutex);
 	}
-	up_read(&per_mm->umem_rwsem);
+	mutex_unlock(&odp_imr->umem_mutex);
 
 	wait_event(imr->q_leaf_free, !atomic_read(&imr->num_leaf_free));
+	WARN_ON(!xa_empty(&imr->implicit_children));
+	/* Remove any left over reserved elements */
+	xa_destroy(&imr->implicit_children);
 }
 
 #define MLX5_PF_FLAGS_DOWNGRADE BIT(1)
-static int pagefault_mr(struct mlx5_ib_mr *mr, u64 io_virt, size_t bcnt,
-			u32 *bytes_mapped, u32 flags)
+static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
+			     u64 user_va, size_t bcnt, u32 *bytes_mapped,
+			     u32 flags)
 {
-	int npages = 0, current_seq, page_shift, ret, np;
-	struct ib_umem_odp *odp_mr = to_ib_umem_odp(mr->umem);
+	int current_seq, page_shift, ret, np;
 	bool downgrade = flags & MLX5_PF_FLAGS_DOWNGRADE;
 	u64 access_mask;
 	u64 start_idx, page_mask;
-	struct ib_umem_odp *odp;
-	size_t size;
-
-	if (odp_mr->is_implicit_odp) {
-		odp = implicit_mr_get_data(mr, io_virt, bcnt);
-
-		if (IS_ERR(odp))
-			return PTR_ERR(odp);
-		mr = odp->private;
-	} else {
-		odp = odp_mr;
-	}
-
-next_mr:
-	size = min_t(size_t, bcnt, ib_umem_end(odp) - io_virt);
 
 	page_shift = odp->page_shift;
 	page_mask = ~(BIT(page_shift) - 1);
-	start_idx = (io_virt - (mr->mmkey.iova & page_mask)) >> page_shift;
+	start_idx = (user_va - (mr->mmkey.iova & page_mask)) >> page_shift;
 	access_mask = ODP_READ_ALLOWED_BIT;
 
 	if (odp->umem.writable && !downgrade)
@@ -655,13 +581,10 @@ next_mr:
 	 */
 	smp_rmb();
 
-	ret = ib_umem_odp_map_dma_pages(odp, io_virt, size, access_mask,
-					current_seq);
-
-	if (ret < 0)
-		goto out;
-
-	np = ret;
+	np = ib_umem_odp_map_dma_pages(odp, user_va, bcnt, access_mask,
+				       current_seq);
+	if (np < 0)
+		return np;
 
 	mutex_lock(&odp->umem_mutex);
 	if (!ib_umem_mmu_notifier_retry(odp, current_seq)) {
@@ -686,31 +609,12 @@ next_mr:
 
 	if (bytes_mapped) {
 		u32 new_mappings = (np << page_shift) -
-			(io_virt - round_down(io_virt, 1 << page_shift));
-		*bytes_mapped += min_t(u32, new_mappings, size);
+			(user_va - round_down(user_va, 1 << page_shift));
+
+		*bytes_mapped += min_t(u32, new_mappings, bcnt);
 	}
 
-	npages += np << (page_shift - PAGE_SHIFT);
-	bcnt -= size;
-
-	if (unlikely(bcnt)) {
-		struct ib_umem_odp *next;
-
-		io_virt += size;
-		next = odp_next(odp);
-		if (unlikely(!next || ib_umem_start(next) != io_virt)) {
-			mlx5_ib_dbg(
-				mr->dev,
-				"next implicit leaf removed at 0x%llx. got %p\n",
-				io_virt, next);
-			return -EAGAIN;
-		}
-		odp = next;
-		mr = odp->private;
-		goto next_mr;
-	}
-
-	return npages;
+	return np << (page_shift - PAGE_SHIFT);
 
 out:
 	if (ret == -EAGAIN) {
@@ -727,6 +631,73 @@ out:
 	}
 
 	return ret;
+}
+
+/*
+ * Returns:
+ *  -EFAULT: The io_virt->bcnt is not within the MR, it covers pages that are
+ *           not accessible, or the MR is no longer valid.
+ *  -EAGAIN/-ENOMEM: The operation should be retried
+ *
+ *  -EINVAL/others: General internal malfunction
+ *  >0: Number of pages mapped
+ */
+static int pagefault_mr(struct mlx5_ib_mr *mr, u64 io_virt, size_t bcnt,
+			u32 *bytes_mapped, u32 flags)
+{
+	struct ib_umem_odp *odp = to_ib_umem_odp(mr->umem);
+	struct mlx5_ib_mr *mtt;
+	int npages = 0;
+
+	if (!odp->is_implicit_odp) {
+		if (unlikely(io_virt < ib_umem_start(odp) ||
+			     ib_umem_end(odp) - io_virt < bcnt))
+			return -EFAULT;
+		return pagefault_real_mr(mr, odp, io_virt, bcnt, bytes_mapped,
+					 flags);
+	}
+
+	if (unlikely(io_virt >= mlx5_imr_ksm_entries * MLX5_IMR_MTT_SIZE ||
+		     mlx5_imr_ksm_entries * MLX5_IMR_MTT_SIZE - io_virt < bcnt))
+		return -EFAULT;
+
+	mtt = implicit_mr_get_data(mr, io_virt, bcnt);
+	if (IS_ERR(mtt))
+		return PTR_ERR(mtt);
+
+	/* Fault each child mr that intersects with our interval. */
+	while (bcnt) {
+		struct ib_umem_odp *umem_odp = to_ib_umem_odp(mtt->umem);
+		u64 end = min_t(u64, io_virt + bcnt, ib_umem_end(umem_odp));
+		u64 len = end - io_virt;
+		int ret;
+
+		ret = pagefault_real_mr(mtt, umem_odp, io_virt, len,
+					bytes_mapped, flags);
+		if (ret < 0)
+			return ret;
+		io_virt += len;
+		bcnt -= len;
+		npages += ret;
+
+		if (unlikely(bcnt)) {
+			mtt = xa_load(&mr->implicit_children,
+				      io_virt >> MLX5_IMR_MTT_SHIFT);
+
+			/*
+			 * implicit_mr_get_data sets up all the leaves, this
+			 * means they got invalidated before we got to them.
+			 */
+			if (!mtt) {
+				mlx5_ib_dbg(
+					mr->dev,
+					"next implicit leaf removed at 0x%llx.\n",
+					io_virt);
+				return -EAGAIN;
+			}
+		}
+	}
+	return npages;
 }
 
 struct pf_frame {

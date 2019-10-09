@@ -482,6 +482,7 @@ struct mlx5_umr_wr {
 	u64				length;
 	int				access_flags;
 	u32				mkey;
+	u8				ignore_free_state:1;
 };
 
 static inline const struct mlx5_umr_wr *umr_wr(const struct ib_send_wr *wr)
@@ -584,9 +585,6 @@ struct mlx5_ib_dm {
 					  IB_ACCESS_REMOTE_READ   |\
 					  IB_ZERO_BASED)
 
-#define mlx5_update_odp_stats(mr, counter_name, value)		\
-	atomic64_add(value, &((mr)->odp_stats.counter_name))
-
 struct mlx5_ib_mr {
 	struct ib_mr		ibmr;
 	void			*descs;
@@ -619,11 +617,13 @@ struct mlx5_ib_mr {
 	u64			data_iova;
 	u64			pi_iova;
 
+	/* For ODP and implicit */
 	atomic_t		num_leaf_free;
 	wait_queue_head_t       q_leaf_free;
-	struct mlx5_async_work  cb_work;
 	atomic_t		num_pending_prefetch;
-	struct ib_odp_counters	odp_stats;
+	struct xarray		implicit_children;
+
+	struct mlx5_async_work  cb_work;
 };
 
 static inline bool is_odp_mr(struct mlx5_ib_mr *mr)
@@ -870,7 +870,10 @@ struct mlx5_ib_flow_action {
 		struct {
 			struct mlx5_ib_dev *dev;
 			u32 sub_type;
-			u32 action_id;
+			union {
+				struct mlx5_modify_hdr *modify_hdr;
+				struct mlx5_pkt_reformat *pkt_reformat;
+			};
 		} flow_action_raw;
 	};
 };
@@ -883,8 +886,6 @@ struct mlx5_dm {
 	 */
 	spinlock_t lock;
 	DECLARE_BITMAP(memic_alloc_pages, MLX5_MAX_MEMIC_PAGES);
-	unsigned long *steering_sw_icm_alloc_blocks;
-	unsigned long *header_modify_sw_icm_alloc_blocks;
 };
 
 struct mlx5_read_counters_attr {
@@ -1482,4 +1483,18 @@ int bfregn_to_uar_index(struct mlx5_ib_dev *dev,
 
 int mlx5_ib_qp_set_counter(struct ib_qp *qp, struct rdma_counter *counter);
 u16 mlx5_ib_get_counters_id(struct mlx5_ib_dev *dev, u8 port_num);
+
+static inline bool mlx5_ib_can_use_umr(struct mlx5_ib_dev *dev,
+				       bool do_modify_atomic)
+{
+	if (MLX5_CAP_GEN(dev->mdev, umr_modify_entity_size_disabled))
+		return false;
+
+	if (do_modify_atomic &&
+	    MLX5_CAP_GEN(dev->mdev, atomic) &&
+	    MLX5_CAP_GEN(dev->mdev, umr_modify_atomic_disabled))
+		return false;
+
+	return true;
+}
 #endif /* MLX5_IB_H */

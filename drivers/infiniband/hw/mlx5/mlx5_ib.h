@@ -200,6 +200,7 @@ struct mlx5_ib_flow_db {
 	struct mlx5_ib_flow_prio	sniffer[MLX5_IB_NUM_SNIFFER_FTS];
 	struct mlx5_ib_flow_prio	egress[MLX5_IB_NUM_EGRESS_FTS];
 	struct mlx5_ib_flow_prio	fdb;
+	struct mlx5_ib_flow_prio	rdma_rx[MLX5_IB_NUM_FLOW_FT];
 	struct mlx5_flow_table		*lag_demux_ft;
 	/* Protect flow steering bypass flow tables
 	 * when add/del flow rules.
@@ -602,7 +603,6 @@ struct mlx5_ib_mr {
 	struct mlx5_ib_dev     *dev;
 	u32 out[MLX5_ST_SZ_DW(create_mkey_out)];
 	struct mlx5_core_sig_ctx    *sig;
-	int			live;
 	void			*descs_alloc;
 	int			access_flags; /* Needed for rereg MR */
 
@@ -637,7 +637,6 @@ struct mlx5_ib_mw {
 struct mlx5_ib_devx_mr {
 	struct mlx5_core_mkey	mmkey;
 	int			ndescs;
-	struct rcu_head		rcu;
 };
 
 struct mlx5_ib_umr_context {
@@ -975,7 +974,9 @@ struct mlx5_ib_dev {
 	 * Sleepable RCU that prevents destruction of MRs while they are still
 	 * being used by a page fault handler.
 	 */
-	struct srcu_struct      mr_srcu;
+	struct srcu_struct      odp_srcu;
+	struct xarray		odp_mkeys;
+
 	u32			null_mkey;
 	struct mlx5_ib_flow_db	*flow_db;
 	/* protect resources needed as part of reset flow */

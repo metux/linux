@@ -59,13 +59,9 @@ static bool umr_can_use_indirect_mkey(struct mlx5_ib_dev *dev)
 
 static int destroy_mkey(struct mlx5_ib_dev *dev, struct mlx5_ib_mr *mr)
 {
-	int err = mlx5_core_destroy_mkey(dev->mdev, &mr->mmkey);
+	WARN_ON(xa_load(&dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key)));
 
-	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING))
-		/* Wait until all page fault handlers using the mr complete. */
-		synchronize_srcu(&dev->mr_srcu);
-
-	return err;
+	return mlx5_core_destroy_mkey(dev->mdev, &mr->mmkey);
 }
 
 static int order2idx(struct mlx5_ib_dev *dev, int order)
@@ -217,9 +213,6 @@ static void remove_keys(struct mlx5_ib_dev *dev, int c, int num)
 		spin_unlock_irq(&ent->lock);
 		mlx5_core_destroy_mkey(dev->mdev, &mr->mmkey);
 	}
-
-	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING))
-		synchronize_srcu(&dev->mr_srcu);
 
 	list_for_each_entry_safe(mr, tmp_mr, &del_list, list) {
 		list_del(&mr->list);
@@ -555,10 +548,6 @@ static void clean_keys(struct mlx5_ib_dev *dev, int c)
 		mlx5_core_destroy_mkey(dev->mdev, &mr->mmkey);
 	}
 
-#ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
-	synchronize_srcu(&dev->mr_srcu);
-#endif
-
 	list_for_each_entry_safe(mr, tmp_mr, &del_list, list) {
 		list_del(&mr->list);
 		kfree(mr);
@@ -679,20 +668,6 @@ int mlx5_mr_cache_cleanup(struct mlx5_ib_dev *dev)
 	return 0;
 }
 
-static void set_mkc_access_pd_addr_fields(void *mkc, int acc, u64 start_addr,
-					  struct ib_pd *pd)
-{
-	MLX5_SET(mkc, mkc, a, !!(acc & IB_ACCESS_REMOTE_ATOMIC));
-	MLX5_SET(mkc, mkc, rw, !!(acc & IB_ACCESS_REMOTE_WRITE));
-	MLX5_SET(mkc, mkc, rr, !!(acc & IB_ACCESS_REMOTE_READ));
-	MLX5_SET(mkc, mkc, lw, !!(acc & IB_ACCESS_LOCAL_WRITE));
-	MLX5_SET(mkc, mkc, lr, 1);
-
-	MLX5_SET(mkc, mkc, pd, to_mpd(pd)->pdn);
-	MLX5_SET(mkc, mkc, qpn, 0xffffff);
-	MLX5_SET64(mkc, mkc, start_addr, start_addr);
-}
-
 struct ib_mr *mlx5_ib_get_dma_mr(struct ib_pd *pd, int acc)
 {
 	struct mlx5_ib_dev *dev = to_mdev(pd->device);
@@ -716,8 +691,16 @@ struct ib_mr *mlx5_ib_get_dma_mr(struct ib_pd *pd, int acc)
 	mkc = MLX5_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
 
 	MLX5_SET(mkc, mkc, access_mode_1_0, MLX5_MKC_ACCESS_MODE_PA);
+	MLX5_SET(mkc, mkc, a, !!(acc & IB_ACCESS_REMOTE_ATOMIC));
+	MLX5_SET(mkc, mkc, rw, !!(acc & IB_ACCESS_REMOTE_WRITE));
+	MLX5_SET(mkc, mkc, rr, !!(acc & IB_ACCESS_REMOTE_READ));
+	MLX5_SET(mkc, mkc, lw, !!(acc & IB_ACCESS_LOCAL_WRITE));
+	MLX5_SET(mkc, mkc, lr, 1);
+
 	MLX5_SET(mkc, mkc, length64, 1);
-	set_mkc_access_pd_addr_fields(mkc, acc, 0, pd);
+	MLX5_SET(mkc, mkc, pd, to_mpd(pd)->pdn);
+	MLX5_SET(mkc, mkc, qpn, 0xffffff);
+	MLX5_SET64(mkc, mkc, start_addr, 0);
 
 	err = mlx5_core_create_mkey(mdev, &mr->mmkey, in, inlen);
 	if (err)
@@ -1175,8 +1158,16 @@ static struct ib_mr *mlx5_ib_get_dm_mr(struct ib_pd *pd, u64 start_addr,
 
 	MLX5_SET(mkc, mkc, access_mode_1_0, mode & 0x3);
 	MLX5_SET(mkc, mkc, access_mode_4_2, (mode >> 2) & 0x7);
+	MLX5_SET(mkc, mkc, a, !!(acc & IB_ACCESS_REMOTE_ATOMIC));
+	MLX5_SET(mkc, mkc, rw, !!(acc & IB_ACCESS_REMOTE_WRITE));
+	MLX5_SET(mkc, mkc, rr, !!(acc & IB_ACCESS_REMOTE_READ));
+	MLX5_SET(mkc, mkc, lw, !!(acc & IB_ACCESS_LOCAL_WRITE));
+	MLX5_SET(mkc, mkc, lr, 1);
+
 	MLX5_SET64(mkc, mkc, len, length);
-	set_mkc_access_pd_addr_fields(mkc, acc, start_addr, pd);
+	MLX5_SET(mkc, mkc, pd, to_mpd(pd)->pdn);
+	MLX5_SET(mkc, mkc, qpn, 0xffffff);
+	MLX5_SET64(mkc, mkc, start_addr, start_addr);
 
 	err = mlx5_core_create_mkey(mdev, &mr->mmkey, in, inlen);
 	if (err)
@@ -1336,9 +1327,14 @@ struct ib_mr *mlx5_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	if (is_odp_mr(mr)) {
 		to_ib_umem_odp(mr->umem)->private = mr;
 		atomic_set(&mr->num_pending_prefetch, 0);
+		err = xa_err(xa_store(&dev->odp_mkeys,
+				      mlx5_base_mkey(mr->mmkey.key), &mr->mmkey,
+				      GFP_KERNEL));
+		if (err) {
+			dereg_mr(dev, mr);
+			return ERR_PTR(err);
+		}
 	}
-	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING))
-		smp_store_release(&mr->live, 1);
 
 	return &mr->ibmr;
 error:
@@ -1580,10 +1576,10 @@ static void dereg_mr(struct mlx5_ib_dev *dev, struct mlx5_ib_mr *mr)
 		/* Prevent new page faults and
 		 * prefetch requests from succeeding
 		 */
-		WRITE_ONCE(mr->live, 0);
+		xa_erase(&dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
 
 		/* Wait for all running page-fault handlers to finish. */
-		synchronize_srcu(&dev->mr_srcu);
+		synchronize_srcu(&dev->odp_srcu);
 
 		/* dequeue pending prefetch requests for the mr */
 		if (atomic_read(&mr->num_pending_prefetch))
@@ -1957,9 +1953,19 @@ struct ib_mw *mlx5_ib_alloc_mw(struct ib_pd *pd, enum ib_mw_type type,
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING)) {
+		err = xa_err(xa_store(&dev->odp_mkeys,
+				      mlx5_base_mkey(mw->mmkey.key), &mw->mmkey,
+				      GFP_KERNEL));
+		if (err)
+			goto free_mkey;
+	}
+
 	kfree(in);
 	return &mw->ibmw;
 
+free_mkey:
+	mlx5_core_destroy_mkey(dev->mdev, &mw->mmkey);
 free:
 	kfree(mw);
 	kfree(in);
@@ -1973,13 +1979,12 @@ int mlx5_ib_dealloc_mw(struct ib_mw *mw)
 	int err;
 
 	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING)) {
-		xa_erase_irq(&dev->mdev->priv.mkey_table,
-			     mlx5_base_mkey(mmw->mmkey.key));
+		xa_erase(&dev->odp_mkeys, mlx5_base_mkey(mmw->mmkey.key));
 		/*
 		 * pagefault_single_data_segment() may be accessing mmw under
 		 * SRCU if the user bound an ODP MR to this MW.
 		 */
-		synchronize_srcu(&dev->mr_srcu);
+		synchronize_srcu(&dev->odp_srcu);
 	}
 
 	err = mlx5_core_destroy_mkey(dev->mdev, &mmw->mmkey);

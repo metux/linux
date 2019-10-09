@@ -82,7 +82,13 @@ done | cpio --quiet -pd $cpio_dir >/dev/null 2>&1
 find $cpio_dir -type f -print0 |
 	xargs -0 -P8 -n1 perl -pi -e 'BEGIN {undef $/;}; s/\/\*((?!SPDX).)*?\*\///smg;'
 
-tar -Jcf $tarfile -C $cpio_dir/ . > /dev/null
+# Create archive and try to normalize metadata for reproducibility.
+# For compatibility with older versions of tar, files are fed to tar
+# pre-sorted, as --sort=name might not be available.
+find $cpio_dir -printf "./%P\n" | LC_ALL=C sort | \
+    tar "${KBUILD_BUILD_TIMESTAMP:+--mtime=$KBUILD_BUILD_TIMESTAMP}" \
+    --owner=0 --group=0 --numeric-owner --no-recursion \
+    -Jcf $tarfile -C $cpio_dir/ -T - > /dev/null
 
 echo $headers_md5 > kernel/kheaders.md5
 echo "$this_file_md5" >> kernel/kheaders.md5

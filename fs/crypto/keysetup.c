@@ -13,13 +13,12 @@
 
 #include "fscrypt_private.h"
 
-struct fscrypt_mode fscrypt_modes[] = {
+static struct fscrypt_mode available_modes[] = {
 	[FSCRYPT_MODE_AES_256_XTS] = {
 		.friendly_name = "AES-256-XTS",
 		.cipher_str = "xts(aes)",
 		.keysize = 64,
 		.ivsize = 16,
-		.blk_crypto_mode = BLK_ENCRYPTION_MODE_AES_256_XTS,
 	},
 	[FSCRYPT_MODE_AES_256_CTS] = {
 		.friendly_name = "AES-256-CTS-CBC",
@@ -52,10 +51,10 @@ select_encryption_mode(const union fscrypt_policy *policy,
 		       const struct inode *inode)
 {
 	if (S_ISREG(inode->i_mode))
-		return &fscrypt_modes[fscrypt_policy_contents_mode(policy)];
+		return &available_modes[fscrypt_policy_contents_mode(policy)];
 
 	if (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode))
-		return &fscrypt_modes[fscrypt_policy_fnames_mode(policy)];
+		return &available_modes[fscrypt_policy_fnames_mode(policy)];
 
 	WARN_ONCE(1, "fscrypt: filesystem tried to load encryption info for inode %lu, which is not encryptable (file type %d)\n",
 		  inode->i_ino, (inode->i_mode & S_IFMT));
@@ -112,62 +111,45 @@ int fscrypt_set_derived_key(struct fscrypt_info *ci, const u8 *derived_key)
 {
 	struct crypto_skcipher *tfm;
 
-	if (fscrypt_should_use_inline_encryption(ci))
-		return fscrypt_set_inline_crypt_key(ci, derived_key);
-
 	tfm = fscrypt_allocate_skcipher(ci->ci_mode, derived_key, ci->ci_inode);
 	if (IS_ERR(tfm))
 		return PTR_ERR(tfm);
 
 	ci->ci_ctfm = tfm;
-	ci->ci_owns_key = true;
 	return 0;
 }
 
 static int setup_per_mode_key(struct fscrypt_info *ci,
-			      struct fscrypt_master_key *mk,
-			      struct crypto_skcipher **tfms,
-			      u8 hkdf_context, bool include_fs_uuid)
+			      struct fscrypt_master_key *mk)
 {
-	const struct inode *inode = ci->ci_inode;
-	const struct super_block *sb = inode->i_sb;
 	struct fscrypt_mode *mode = ci->ci_mode;
-	const u8 mode_num = mode - fscrypt_modes;
+	u8 mode_num = mode - available_modes;
 	struct crypto_skcipher *tfm, *prev_tfm;
 	u8 mode_key[FSCRYPT_MAX_KEY_SIZE];
-	u8 hkdf_info[sizeof(mode_num) + sizeof(sb->s_uuid)];
-	unsigned int hkdf_infolen = 0;
 	int err;
 
-	if (WARN_ON(mode_num > __FSCRYPT_MODE_MAX))
+	if (WARN_ON(mode_num >= ARRAY_SIZE(mk->mk_mode_keys)))
 		return -EINVAL;
 
 	/* pairs with cmpxchg() below */
-	tfm = READ_ONCE(tfms[mode_num]);
+	tfm = READ_ONCE(mk->mk_mode_keys[mode_num]);
 	if (likely(tfm != NULL))
 		goto done;
 
 	BUILD_BUG_ON(sizeof(mode_num) != 1);
-	BUILD_BUG_ON(sizeof(sb->s_uuid) != 16);
-	BUILD_BUG_ON(sizeof(hkdf_info) != 17);
-	hkdf_info[hkdf_infolen++] = mode_num;
-	if (include_fs_uuid) {
-		memcpy(&hkdf_info[hkdf_infolen], &sb->s_uuid,
-		       sizeof(sb->s_uuid));
-		hkdf_infolen += sizeof(sb->s_uuid);
-	}
 	err = fscrypt_hkdf_expand(&mk->mk_secret.hkdf,
-				  hkdf_context, hkdf_info, hkdf_infolen,
+				  HKDF_CONTEXT_PER_MODE_KEY,
+				  &mode_num, sizeof(mode_num),
 				  mode_key, mode->keysize);
 	if (err)
 		return err;
-	tfm = fscrypt_allocate_skcipher(mode, mode_key, inode);
+	tfm = fscrypt_allocate_skcipher(mode, mode_key, ci->ci_inode);
 	memzero_explicit(mode_key, mode->keysize);
 	if (IS_ERR(tfm))
 		return PTR_ERR(tfm);
 
 	/* pairs with READ_ONCE() above */
-	prev_tfm = cmpxchg(&tfms[mode_num], NULL, tfm);
+	prev_tfm = cmpxchg(&mk->mk_mode_keys[mode_num], NULL, tfm);
 	if (prev_tfm != NULL) {
 		crypto_free_skcipher(tfm);
 		tfm = prev_tfm;
@@ -198,21 +180,7 @@ static int fscrypt_setup_v2_file_key(struct fscrypt_info *ci,
 				     ci->ci_mode->friendly_name);
 			return -EINVAL;
 		}
-		return setup_per_mode_key(ci, mk, mk->mk_direct_tfms,
-					  HKDF_CONTEXT_DIRECT_KEY, false);
-	} else if (ci->ci_policy.v2.flags &
-		   FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) {
-		/*
-		 * IV_INO_LBLK_64: encryption keys are derived from (master_key,
-		 * mode_num, filesystem_uuid), and inode number is included in
-		 * the IVs.  This format is optimized for use with inline
-		 * encryption hardware compliant with the UFS or eMMC standards.
-		 */
-		if (fscrypt_should_use_inline_encryption(ci))
-			return fscrypt_setup_per_mode_inline_crypt_key(ci, mk);
-		return setup_per_mode_key(ci, mk, mk->mk_iv_ino_lblk_64_tfms,
-					  HKDF_CONTEXT_IV_INO_LBLK_64_KEY,
-					  true);
+		return setup_per_mode_key(ci, mk);
 	}
 
 	err = fscrypt_hkdf_expand(&mk->mk_secret.hkdf,
@@ -336,10 +304,9 @@ static void put_crypt_info(struct fscrypt_info *ci)
 
 	if (ci->ci_direct_key)
 		fscrypt_put_direct_key(ci->ci_direct_key);
-	else if (ci->ci_owns_key) {
+	else if (ci->ci_ctfm != NULL &&
+		 !fscrypt_is_direct_key_policy(&ci->ci_policy))
 		crypto_free_skcipher(ci->ci_ctfm);
-		fscrypt_free_inline_crypt_key(ci);
-	}
 
 	key = ci->ci_master_key;
 	if (key) {
@@ -360,7 +327,6 @@ static void put_crypt_info(struct fscrypt_info *ci)
 			key_invalidate(key);
 		key_put(key);
 	}
-	memzero_explicit(ci, sizeof(*ci));
 	kmem_cache_free(fscrypt_info_cachep, ci);
 }
 

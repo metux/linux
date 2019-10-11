@@ -64,7 +64,7 @@ RESERVE_BRK(pagetables, INIT_MAP_SIZE)
  * can.
  */
 __HEAD
-SYM_CODE_START(startup_32)
+ENTRY(startup_32)
 	movl pa(initial_stack),%ecx
 	
 	/* test KEEP_SEGMENTS flag to see if the bootloader is asking
@@ -156,7 +156,7 @@ SYM_CODE_START(startup_32)
 	jmp *%eax
 
 .Lbad_subarch:
-SYM_INNER_LABEL_ALIGN(xen_entry, SYM_L_WEAK)
+WEAK(xen_entry)
 	/* Unknown implementation; there's really
 	   nothing we can do at this point. */
 	ud2a
@@ -172,7 +172,6 @@ num_subarch_entries = (. - subarch_entries) / 4
 #else
 	jmp .Ldefault_entry
 #endif /* CONFIG_PARAVIRT */
-SYM_CODE_END(startup_32)
 
 #ifdef CONFIG_HOTPLUG_CPU
 /*
@@ -180,12 +179,12 @@ SYM_CODE_END(startup_32)
  * up already except stack. We just set up stack here. Then call
  * start_secondary().
  */
-SYM_FUNC_START(start_cpu0)
+ENTRY(start_cpu0)
 	movl initial_stack, %ecx
 	movl %ecx, %esp
 	call *(initial_code)
 1:	jmp 1b
-SYM_FUNC_END(start_cpu0)
+ENDPROC(start_cpu0)
 #endif
 
 /*
@@ -196,7 +195,7 @@ SYM_FUNC_END(start_cpu0)
  * If cpu hotplug is not supported then this code can go in init section
  * which will be freed later
  */
-SYM_FUNC_START(startup_32_smp)
+ENTRY(startup_32_smp)
 	cld
 	movl $(__BOOT_DS),%eax
 	movl %eax,%ds
@@ -363,7 +362,7 @@ SYM_FUNC_START(startup_32_smp)
 
 	call *(initial_code)
 1:	jmp 1b
-SYM_FUNC_END(startup_32_smp)
+ENDPROC(startup_32_smp)
 
 #include "verify_cpu.S"
 
@@ -393,7 +392,7 @@ setup_once:
 	andl $0,setup_once_ref	/* Once is enough, thanks */
 	ret
 
-SYM_FUNC_START(early_idt_handler_array)
+ENTRY(early_idt_handler_array)
 	# 36(%esp) %eflags
 	# 32(%esp) %cs
 	# 28(%esp) %eip
@@ -408,7 +407,7 @@ SYM_FUNC_START(early_idt_handler_array)
 	i = i + 1
 	.fill early_idt_handler_array + i*EARLY_IDT_HANDLER_SIZE - ., 1, 0xcc
 	.endr
-SYM_FUNC_END(early_idt_handler_array)
+ENDPROC(early_idt_handler_array)
 	
 SYM_CODE_START_LOCAL(early_idt_handler_common)
 	/*
@@ -464,7 +463,7 @@ SYM_CODE_START_LOCAL(early_idt_handler_common)
 SYM_CODE_END(early_idt_handler_common)
 
 /* This is the default interrupt "handler" :-) */
-SYM_FUNC_START(early_ignore_irq)
+ENTRY(early_ignore_irq)
 	cld
 #ifdef CONFIG_PRINTK
 	pushl %eax
@@ -499,7 +498,7 @@ SYM_FUNC_START(early_ignore_irq)
 hlt_loop:
 	hlt
 	jmp hlt_loop
-SYM_FUNC_END(early_ignore_irq)
+ENDPROC(early_ignore_irq)
 
 __INITDATA
 	.align 4
@@ -569,16 +568,6 @@ SYM_DATA_START(initial_page_table)
 #  error "Kernel PMDs should be 1, 2 or 3"
 # endif
 	.align PAGE_SIZE		/* needs to be page-sized too */
-
-#ifdef CONFIG_PAGE_TABLE_ISOLATION
-	/*
-	 * PTI needs another page so sync_initial_pagetable() works correctly
-	 * and does not scribble over the data which is placed behind the
-	 * actual initial_page_table. See clone_pgd_range().
-	 */
-	.fill 1024, 4, 0
-#endif
-
 SYM_DATA_END(initial_page_table)
 #endif
 

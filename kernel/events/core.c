@@ -398,13 +398,8 @@ static cpumask_var_t perf_online_mask;
  *   0 - disallow raw tracepoint access for unpriv
  *   1 - disallow cpu events for unpriv
  *   2 - disallow kernel profiling for unpriv
- *   3 - disallow all unpriv perf event use
  */
-#ifdef CONFIG_SECURITY_PERF_EVENTS_RESTRICT
-int sysctl_perf_event_paranoid __read_mostly = 3;
-#else
 int sysctl_perf_event_paranoid __read_mostly = 2;
-#endif
 
 /* Minimum for 512 kiB + 1 user control page */
 int sysctl_perf_event_mlock __read_mostly = 512 + (PAGE_SIZE / 1024); /* 'free' kiB per user */
@@ -1036,7 +1031,7 @@ perf_cgroup_set_timestamp(struct task_struct *task,
 {
 }
 
-static inline void
+void
 perf_cgroup_switch(struct task_struct *task, struct task_struct *next)
 {
 }
@@ -4234,8 +4229,9 @@ find_get_context(struct pmu *pmu, struct task_struct *task,
 
 	if (!task) {
 		/* Must be root to operate on a CPU event: */
-		if (perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN))
-			return ERR_PTR(-EACCES);
+		err = perf_allow_cpu(&event->attr);
+		if (err)
+			return ERR_PTR(err);
 
 		cpuctx = per_cpu_ptr(pmu->pmu_cpu_context, cpu);
 		ctx = &cpuctx->ctx;
@@ -4543,6 +4539,8 @@ static void _free_event(struct perf_event *event)
 	irq_work_sync(&event->pending);
 
 	unaccount_event(event);
+
+	security_perf_event_free(event);
 
 	if (event->rb) {
 		/*
@@ -4997,6 +4995,10 @@ perf_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 	struct perf_event_context *ctx;
 	int ret;
 
+	ret = security_perf_event_read(event);
+	if (ret)
+		return ret;
+
 	ctx = perf_event_ctx_lock(event);
 	ret = __perf_read(event, buf, count);
 	perf_event_ctx_unlock(event, ctx);
@@ -5033,24 +5035,6 @@ static void _perf_event_reset(struct perf_event *event)
 	local64_set(&event->count, 0);
 	perf_event_update_userpage(event);
 }
-
-/* Assume it's not an event with inherit set. */
-u64 perf_event_pause(struct perf_event *event, bool reset)
-{
-	struct perf_event_context *ctx;
-	u64 count;
-
-	ctx = perf_event_ctx_lock(event);
-	WARN_ON_ONCE(event->attr.inherit);
-	_perf_event_disable(event);
-	count = local64_read(&event->count);
-	if (reset)
-		local64_set(&event->count, 0);
-	perf_event_ctx_unlock(event, ctx);
-
-	return count;
-}
-EXPORT_SYMBOL_GPL(perf_event_pause);
 
 /*
  * Holding the top-level event's child_mutex means that any
@@ -5129,10 +5113,15 @@ static int perf_event_check_period(struct perf_event *event, u64 value)
 	return event->pmu->check_period(event, value);
 }
 
-static int _perf_event_period(struct perf_event *event, u64 value)
+static int perf_event_period(struct perf_event *event, u64 __user *arg)
 {
+	u64 value;
+
 	if (!is_sampling_event(event))
 		return -EINVAL;
+
+	if (copy_from_user(&value, arg, sizeof(value)))
+		return -EFAULT;
 
 	if (!value)
 		return -EINVAL;
@@ -5150,19 +5139,6 @@ static int _perf_event_period(struct perf_event *event, u64 value)
 
 	return 0;
 }
-
-int perf_event_period(struct perf_event *event, u64 value)
-{
-	struct perf_event_context *ctx;
-	int ret;
-
-	ctx = perf_event_ctx_lock(event);
-	ret = _perf_event_period(event, value);
-	perf_event_ctx_unlock(event, ctx);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(perf_event_period);
 
 static const struct file_operations perf_fops;
 
@@ -5207,14 +5183,8 @@ static long _perf_ioctl(struct perf_event *event, unsigned int cmd, unsigned lon
 		return _perf_event_refresh(event, arg);
 
 	case PERF_EVENT_IOC_PERIOD:
-	{
-		u64 value;
+		return perf_event_period(event, (u64 __user *)arg);
 
-		if (copy_from_user(&value, (u64 __user *)arg, sizeof(value)))
-			return -EFAULT;
-
-		return _perf_event_period(event, value);
-	}
 	case PERF_EVENT_IOC_ID:
 	{
 		u64 id = primary_event_id(event);
@@ -5292,6 +5262,11 @@ static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct perf_event *event = file->private_data;
 	struct perf_event_context *ctx;
 	long ret;
+
+	/* Treat ioctl like writes as it is likely a mutating operation. */
+	ret = security_perf_event_write(event);
+	if (ret)
+		return ret;
 
 	ctx = perf_event_ctx_lock(event);
 	ret = _perf_ioctl(event, cmd, arg);
@@ -5644,10 +5619,8 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 		perf_pmu_output_stop(event);
 
 		/* now it's safe to free the pages */
-		if (!rb->aux_mmap_locked)
-			atomic_long_sub(rb->aux_nr_pages, &mmap_user->locked_vm);
-		else
-			atomic64_sub(rb->aux_mmap_locked, &vma->vm_mm->pinned_vm);
+		atomic_long_sub(rb->aux_nr_pages, &mmap_user->locked_vm);
+		atomic64_sub(rb->aux_mmap_locked, &vma->vm_mm->pinned_vm);
 
 		/* this has to be the last one */
 		rb_free_aux(rb);
@@ -5757,6 +5730,10 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
+
+	ret = security_perf_event_read(event);
+	if (ret)
+		return ret;
 
 	vma_size = vma->vm_end - vma->vm_start;
 
@@ -5883,7 +5860,7 @@ accounting:
 	lock_limit >>= PAGE_SHIFT;
 	locked = atomic64_read(&vma->vm_mm->pinned_vm) + extra;
 
-	if ((locked > lock_limit) && perf_paranoid_tracepoint_raw() &&
+	if ((locked > lock_limit) && perf_is_paranoid() &&
 		!capable(CAP_IPC_LOCK)) {
 		ret = -EPERM;
 		goto unlock;
@@ -6986,7 +6963,7 @@ static void __perf_event_output_stop(struct perf_event *event, void *data)
 static int __perf_pmu_output_stop(void *info)
 {
 	struct perf_event *event = info;
-	struct pmu *pmu = event->ctx->pmu;
+	struct pmu *pmu = event->pmu;
 	struct perf_cpu_context *cpuctx = this_cpu_ptr(pmu->pmu_cpu_context);
 	struct remote_output ro = {
 		.rb	= event->rb,
@@ -10514,9 +10491,12 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		context = parent_event->overflow_handler_context;
 #if defined(CONFIG_BPF_SYSCALL) && defined(CONFIG_EVENT_TRACING)
 		if (overflow_handler == bpf_overflow_handler) {
-			struct bpf_prog *prog = parent_event->prog;
+			struct bpf_prog *prog = bpf_prog_inc(parent_event->prog);
 
-			bpf_prog_inc(prog);
+			if (IS_ERR(prog)) {
+				err = PTR_ERR(prog);
+				goto err_ns;
+			}
 			event->prog = prog;
 			event->orig_overflow_handler =
 				parent_event->orig_overflow_handler;
@@ -10569,15 +10549,6 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		goto err_ns;
 	}
 
-	/*
-	 * Disallow uncore-cgroup events, they don't make sense as the cgroup will
-	 * be different on other CPUs in the uncore mask.
-	 */
-	if (pmu->task_ctx_nr == perf_invalid_context && cgroup_fd != -1) {
-		err = -EINVAL;
-		goto err_pmu;
-	}
-
 	if (event->attr.aux_output &&
 	    !(pmu->capabilities & PERF_PMU_CAP_AUX_OUTPUT)) {
 		err = -EOPNOTSUPP;
@@ -10623,11 +10594,20 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		}
 	}
 
+	err = security_perf_event_alloc(event);
+	if (err)
+		goto err_callchain_buffer;
+
 	/* symmetric to unaccount_event() in _free_event() */
 	account_event(event);
 
 	return event;
 
+err_callchain_buffer:
+	if (!event->parent) {
+		if (event->attr.sample_type & PERF_SAMPLE_CALLCHAIN)
+			put_callchain_buffers();
+	}
 err_addr_filters:
 	kfree(event->addr_filter_ranges);
 
@@ -10678,7 +10658,7 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 
 	attr->size = size;
 
-	if (attr->__reserved_1 || attr->__reserved_2)
+	if (attr->__reserved_1)
 		return -EINVAL;
 
 	if (attr->sample_type & ~(PERF_SAMPLE_MAX-1))
@@ -10716,9 +10696,11 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 			attr->branch_sample_type = mask;
 		}
 		/* privileged levels capture (kernel, hv): check permissions */
-		if ((mask & PERF_SAMPLE_BRANCH_PERM_PLM)
-		    && perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))
-			return -EACCES;
+		if (mask & PERF_SAMPLE_BRANCH_PERM_PLM) {
+			ret = perf_allow_kernel(attr);
+			if (ret)
+				return ret;
+		}
 	}
 
 	if (attr->sample_type & PERF_SAMPLE_REGS_USER) {
@@ -10931,16 +10913,19 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & ~PERF_FLAG_ALL)
 		return -EINVAL;
 
-	if (perf_paranoid_any() && !capable(CAP_SYS_ADMIN))
-		return -EACCES;
+	/* Do we allow access to perf_event_open(2) ? */
+	err = security_perf_event_open(&attr, PERF_SECURITY_OPEN);
+	if (err)
+		return err;
 
 	err = perf_copy_attr(attr_uptr, &attr);
 	if (err)
 		return err;
 
 	if (!attr.exclude_kernel) {
-		if (perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))
-			return -EACCES;
+		err = perf_allow_kernel(&attr);
+		if (err)
+			return err;
 	}
 
 	if (attr.namespaces) {
@@ -10957,9 +10942,11 @@ SYSCALL_DEFINE5(perf_event_open,
 	}
 
 	/* Only privileged users can get physical addresses */
-	if ((attr.sample_type & PERF_SAMPLE_PHYS_ADDR) &&
-	    perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))
-		return -EACCES;
+	if ((attr.sample_type & PERF_SAMPLE_PHYS_ADDR)) {
+		err = perf_allow_kernel(&attr);
+		if (err)
+			return err;
+	}
 
 	err = security_locked_down(LOCKDOWN_PERF);
 	if (err && (attr.sample_type & PERF_SAMPLE_REGS_INTR))
@@ -11369,11 +11356,8 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	int err;
 
 	/*
-	 * Grouping is not supported for kernel events, neither is 'AUX',
-	 * make sure the caller's intentions are adjusted.
+	 * Get the target context (task or percpu):
 	 */
-	if (attr->aux_output)
-		return ERR_PTR(-EINVAL);
 
 	event = perf_event_alloc(attr, cpu, task, NULL, NULL,
 				 overflow_handler, context, -1);
@@ -11385,9 +11369,6 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
 	/* Mark owner so we could distinguish it from user events. */
 	event->owner = TASK_TOMBSTONE;
 
-	/*
-	 * Get the target context (task or percpu):
-	 */
 	ctx = find_get_context(event->pmu, task, event);
 	if (IS_ERR(ctx)) {
 		err = PTR_ERR(ctx);
@@ -11839,7 +11820,7 @@ inherit_event(struct perf_event *parent_event,
 						   GFP_KERNEL);
 		if (!child_ctx->task_ctx_data) {
 			free_event(child_event);
-			return ERR_PTR(-ENOMEM);
+			return NULL;
 		}
 	}
 
@@ -11942,7 +11923,7 @@ static int inherit_group(struct perf_event *parent_event,
 		if (IS_ERR(child_ctr))
 			return PTR_ERR(child_ctr);
 
-		if (sub->aux_event == parent_event && child_ctr &&
+		if (sub->aux_event == parent_event &&
 		    !perf_get_aux_event(child_ctr, leader))
 			return -EINVAL;
 	}

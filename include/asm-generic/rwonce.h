@@ -26,6 +26,8 @@
 #include <linux/kasan-checks.h>
 #include <linux/kcsan-checks.h>
 
+#include <asm/barrier.h>
+
 /*
  * Yes, this permits 64-bit accesses on 32-bit architectures. These will
  * actually be atomic in some cases (namely Armv7 + LPAE), but for others we
@@ -38,16 +40,22 @@
 
 /*
  * Use __READ_ONCE() instead of READ_ONCE() if you do not require any
- * atomicity. Note that this may result in tears!
+ * atomicity or dependency ordering guarantees. Note that this may result
+ * in tears!
  */
-#ifndef __READ_ONCE
 #define __READ_ONCE(x)	(*(const volatile __unqual_scalar_typeof(x) *)&(x))
-#endif
+
+#define __READ_ONCE_SCALAR(x)						\
+({									\
+	__unqual_scalar_typeof(x) __x = __READ_ONCE(x);			\
+	smp_read_barrier_depends();					\
+	(typeof(x))__x;							\
+})
 
 #define READ_ONCE(x)							\
 ({									\
 	compiletime_assert_rwonce_type(x);				\
-	__READ_ONCE(x);							\
+	__READ_ONCE_SCALAR(x);						\
 })
 
 #define __WRITE_ONCE(x, val)						\
@@ -74,9 +82,12 @@ unsigned long __read_once_word_nocheck(const void *addr)
  */
 #define READ_ONCE_NOCHECK(x)						\
 ({									\
-	compiletime_assert(sizeof(x) == sizeof(unsigned long),		\
+	unsigned long __x;						\
+	compiletime_assert(sizeof(x) == sizeof(__x),			\
 		"Unsupported access size for READ_ONCE_NOCHECK().");	\
-	(typeof(x))__read_once_word_nocheck(&(x));			\
+	__x = __read_once_word_nocheck(&(x));				\
+	smp_read_barrier_depends();					\
+	(typeof(x))__x;							\
 })
 
 static __no_kasan_or_inline

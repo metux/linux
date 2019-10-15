@@ -59,7 +59,7 @@ do {				\
 	libbpf_print(level, "libbpf: " fmt, ##__VA_ARGS__);	\
 } while (0)
 
-#define pr_warn(fmt, ...)	__pr(LIBBPF_WARN, fmt, ##__VA_ARGS__)
+#define pr_warning(fmt, ...)	__pr(LIBBPF_WARN, fmt, ##__VA_ARGS__)
 #define pr_info(fmt, ...)	__pr(LIBBPF_INFO, fmt, ##__VA_ARGS__)
 #define pr_debug(fmt, ...)	__pr(LIBBPF_DEBUG, fmt, ##__VA_ARGS__)
 
@@ -68,7 +68,7 @@ static inline bool libbpf_validate_opts(const char *opts,
 					const char *type_name)
 {
 	if (user_sz < sizeof(size_t)) {
-		pr_warn("%s size (%zu) is too small\n", type_name, user_sz);
+		pr_warning("%s size (%zu) is too small\n", type_name, user_sz);
 		return false;
 	}
 	if (user_sz > opts_sz) {
@@ -76,8 +76,8 @@ static inline bool libbpf_validate_opts(const char *opts,
 
 		for (i = opts_sz; i < user_sz; i++) {
 			if (opts[i]) {
-				pr_warn("%s has non-zero extra bytes\n",
-					type_name);
+				pr_warning("%s has non-zero extra bytes",
+					   type_name);
 				return false;
 			}
 		}
@@ -95,27 +95,8 @@ static inline bool libbpf_validate_opts(const char *opts,
 #define OPTS_GET(opts, field, fallback_value) \
 	(OPTS_HAS(opts, field) ? (opts)->field : fallback_value)
 
-int parse_cpu_mask_str(const char *s, bool **mask, int *mask_sz);
-int parse_cpu_mask_file(const char *fcpu, bool **mask, int *mask_sz);
 int libbpf__load_raw_btf(const char *raw_types, size_t types_len,
 			 const char *str_sec, size_t str_len);
-
-int bpf_object__section_size(const struct bpf_object *obj, const char *name,
-			     __u32 *size);
-int bpf_object__variable_offset(const struct bpf_object *obj, const char *name,
-				__u32 *off);
-
-struct nlattr;
-typedef int (*libbpf_dump_nlmsg_t)(void *cookie, void *msg, struct nlattr **tb);
-int libbpf_netlink_open(unsigned int *nl_pid);
-int libbpf_nl_get_link(int sock, unsigned int nl_pid,
-		       libbpf_dump_nlmsg_t dump_link_nlmsg, void *cookie);
-int libbpf_nl_get_class(int sock, unsigned int nl_pid, int ifindex,
-			libbpf_dump_nlmsg_t dump_class_nlmsg, void *cookie);
-int libbpf_nl_get_qdisc(int sock, unsigned int nl_pid, int ifindex,
-			libbpf_dump_nlmsg_t dump_qdisc_nlmsg, void *cookie);
-int libbpf_nl_get_filter(int sock, unsigned int nl_pid, int ifindex, int handle,
-			 libbpf_dump_nlmsg_t dump_filter_nlmsg, void *cookie);
 
 struct btf_ext_info {
 	/*
@@ -177,11 +158,7 @@ struct bpf_line_info_min {
  */
 enum bpf_field_info_kind {
 	BPF_FIELD_BYTE_OFFSET = 0,	/* field byte offset */
-	BPF_FIELD_BYTE_SIZE = 1,
 	BPF_FIELD_EXISTS = 2,		/* field existence in target kernel */
-	BPF_FIELD_SIGNED = 3,
-	BPF_FIELD_LSHIFT_U64 = 4,
-	BPF_FIELD_RSHIFT_U64 = 5,
 };
 
 /* The minimum bpf_field_reloc checked by the loader

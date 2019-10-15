@@ -2723,6 +2723,8 @@ static int __init ib_core_init(void)
 		goto err_comp_unbound;
 	}
 
+	rdma_nl_init();
+
 	ret = addr_init();
 	if (ret) {
 		pr_warn("Could't init IB address resolution\n");

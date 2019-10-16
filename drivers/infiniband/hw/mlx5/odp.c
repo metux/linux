@@ -224,6 +224,7 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 	const u64 umr_block_mask = (MLX5_UMR_MTT_ALIGNMENT /
 				    sizeof(struct mlx5_mtt)) - 1;
 	u64 idx = 0, blk_start_idx = 0;
+	u64 invalidations = 0;
 	int in_block = 0;
 	u64 addr;
 
@@ -261,6 +262,9 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 				blk_start_idx = idx;
 				in_block = 1;
 			}
+
+			/* Count page invalidations */
+			invalidations += idx - blk_start_idx + 1;
 		} else {
 			u64 umr_offset = idx & umr_block_mask;
 
@@ -279,6 +283,9 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 				   MLX5_IB_UPD_XLT_ZAP |
 				   MLX5_IB_UPD_XLT_ATOMIC);
 	mutex_unlock(&umem_odp->umem_mutex);
+
+	mlx5_update_odp_stats(mr, invalidations, invalidations);
+
 	/*
 	 * We are now sure that the device will not access the
 	 * memory. We can safely unmap it, and mark it as dirty if
@@ -286,6 +293,7 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 	 */
 
 	ib_umem_odp_unmap_dma_pages(umem_odp, start, end);
+
 
 	if (unlikely(!umem_odp->npages && mr->parent &&
 		     !umem_odp->dying)) {
@@ -801,6 +809,13 @@ next_mr:
 		if (ret < 0)
 			goto srcu_unlock;
 
+		/*
+		 * When prefetching a page, page fault is generated
+		 * in order to bring the page to the main memory.
+		 * In the current flow, page faults are being counted.
+		 */
+		mlx5_update_odp_stats(mr, faults, ret);
+
 		npages += ret;
 		ret = 0;
 		break;
@@ -1016,7 +1031,8 @@ static int mlx5_ib_mr_initiator_pfault_handler(
 	if (qp->ibqp.qp_type == IB_QPT_XRC_INI)
 		*wqe += sizeof(struct mlx5_wqe_xrc_seg);
 
-	if (qp->ibqp.qp_type == IB_QPT_UD) {
+	if (qp->ibqp.qp_type == IB_QPT_UD ||
+	    qp->qp_sub_type == MLX5_IB_QPT_DCI) {
 		av = *wqe;
 		if (av->dqp_dct & cpu_to_be32(MLX5_EXTENDED_UD_AV))
 			*wqe += sizeof(struct mlx5_av);
@@ -1128,7 +1144,7 @@ static void mlx5_ib_mr_wqe_pfault_handler(struct mlx5_ib_dev *dev,
 {
 	bool sq = pfault->type & MLX5_PFAULT_REQUESTOR;
 	u16 wqe_index = pfault->wqe.wqe_index;
-	void *wqe = NULL, *wqe_end = NULL;
+	void *wqe, *wqe_start = NULL, *wqe_end = NULL;
 	u32 bytes_mapped, total_wqe_bytes;
 	struct mlx5_core_rsc_common *res;
 	int resume_with_error = 1;
@@ -1149,12 +1165,13 @@ static void mlx5_ib_mr_wqe_pfault_handler(struct mlx5_ib_dev *dev,
 		goto resolve_page_fault;
 	}
 
-	wqe = (void *)__get_free_page(GFP_KERNEL);
-	if (!wqe) {
+	wqe_start = (void *)__get_free_page(GFP_KERNEL);
+	if (!wqe_start) {
 		mlx5_ib_err(dev, "Error allocating memory for IO page fault handling.\n");
 		goto resolve_page_fault;
 	}
 
+	wqe = wqe_start;
 	qp = (res->res == MLX5_RES_QP) ? res_to_qp(res) : NULL;
 	if (qp && sq) {
 		ret = mlx5_ib_read_user_wqe_sq(qp, wqe_index, wqe, PAGE_SIZE,
@@ -1209,7 +1226,7 @@ resolve_page_fault:
 		    pfault->wqe.wq_num, resume_with_error,
 		    pfault->type);
 	mlx5_core_res_put(res);
-	free_page((unsigned long)wqe);
+	free_page((unsigned long)wqe_start);
 }
 
 static int pages_in_range(u64 address, u32 length)

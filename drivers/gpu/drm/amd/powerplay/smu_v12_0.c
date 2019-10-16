@@ -324,8 +324,6 @@ static int smu_v12_0_get_dpm_ultimate_freq(struct smu_context *smu, enum smu_clk
 {
 	int ret = 0;
 
-	mutex_lock(&smu->mutex);
-
 	if (max) {
 		switch (clk_type) {
 		case SMU_GFXCLK:
@@ -376,7 +374,6 @@ static int smu_v12_0_get_dpm_ultimate_freq(struct smu_context *smu, enum smu_clk
 
 	}
 failed:
-	mutex_unlock(&smu->mutex);
 	return ret;
 }
 

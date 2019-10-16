@@ -7,9 +7,6 @@
 MAX_RETRIES=600
 RETRY_INTERVAL=".1"	# seconds
 
-# Kselftest framework requirement - SKIP code is 4
-ksft_skip=4
-
 # log(msg) - write message to kernel log
 #	msg - insightful words
 function log() {
@@ -21,16 +18,7 @@ function log() {
 function skip() {
 	log "SKIP: $1"
 	echo "SKIP: $1" >&2
-	exit $ksft_skip
-}
-
-# root test
-function is_root() {
-	uid=$(id -u)
-	if [ $uid -ne 0 ]; then
-		echo "skip all tests: must be run as root" >&2
-		exit $ksft_skip
-	fi
+	exit 4
 }
 
 # die(msg) - game over, man
@@ -64,6 +52,7 @@ function set_dynamic_debug() {
 }
 
 function set_ftrace_enabled() {
+	local sysctl="$1"
 	result=$(sysctl kernel.ftrace_enabled="$1" 2>&1 | paste --serial --delimiters=' ')
 	echo "livepatch: $result" > /dev/kmsg
 }
@@ -73,7 +62,6 @@ function set_ftrace_enabled() {
 #		 for verbose livepatching output and turn on
 #		 the ftrace_enabled sysctl.
 function setup_config() {
-	is_root
 	push_config
 	set_dynamic_debug
 	set_ftrace_enabled 1

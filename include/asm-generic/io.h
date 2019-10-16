@@ -923,10 +923,9 @@ static inline void *phys_to_virt(unsigned long address)
  * DOC: ioremap() and ioremap_*() variants
  *
  * Architectures with an MMU are expected to provide ioremap() and iounmap()
- * themselves or rely on GENERIC_IOREMAP.  For NOMMU architectures we provide
- * a default nop-op implementation that expect that the physical address used
- * for MMIO are already marked as uncached, and can be used as kernel virtual
- * addresses.
+ * themselves.  For NOMMU architectures we provide a default nop-op
+ * implementation that expect that the physical address used for MMIO are
+ * already marked as uncached, and can be used as kernel virtual addresses.
  *
  * ioremap_wc() and ioremap_wt() can provide more relaxed caching attributes
  * for specific drivers if the architecture choses to implement them.  If they
@@ -947,18 +946,11 @@ static inline void iounmap(void __iomem *addr)
 {
 }
 #endif
-#elif defined(CONFIG_GENERIC_IOREMAP)
-#include <asm/pgtable.h>
+#endif /* CONFIG_MMU */
 
-void __iomem *ioremap_prot(phys_addr_t addr, size_t size, unsigned long prot);
-void iounmap(volatile void __iomem *addr);
-
-static inline void __iomem *ioremap(phys_addr_t addr, size_t size)
-{
-	/* _PAGE_IOREMAP needs to be supplied by the architecture */
-	return ioremap_prot(addr, size, _PAGE_IOREMAP);
-}
-#endif /* !CONFIG_MMU || CONFIG_GENERIC_IOREMAP */
+#ifndef ioremap_nocache
+#define ioremap_nocache ioremap
+#endif
 
 #ifndef ioremap_wc
 #define ioremap_wc ioremap

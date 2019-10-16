@@ -5,6 +5,8 @@ dsc_ccflags := -mhard-float -msse
 
 ifdef CONFIG_CC_IS_GCC
 dsc_ccflags += -mpreferred-stack-boundary=4
+else
+dsc_ccflags += -msse2
 endif
 
 CFLAGS_$(AMDDALPATH)/dc/dsc/rc_calc.o := $(dsc_ccflags)

@@ -1670,45 +1670,6 @@ static void node_guid_gen_from_mac(u64 *node_guid, u8 mac[ETH_ALEN])
 	((u8 *)node_guid)[0] = mac[5];
 }
 
-static void esw_vport_setup(struct mlx5_eswitch *esw, struct mlx5_vport *vport)
-{
-	int vport_num = vport->vport;
-	int flags;
-
-	if (mlx5_esw_is_manager_vport(esw, vport_num))
-		return;
-
-	mlx5_modify_vport_admin_state(esw->dev,
-				      MLX5_VPORT_STATE_OP_MOD_ESW_VPORT,
-				      vport_num, 1,
-				      vport->info.link_state);
-
-	/* Host PF has its own mac/guid. */
-	if (vport_num) {
-		mlx5_modify_nic_vport_mac_address(esw->dev, vport_num,
-						  vport->info.mac);
-		mlx5_modify_nic_vport_node_guid(esw->dev, vport_num,
-						vport->info.node_guid);
-	}
-
-	flags = (vport->info.vlan || vport->info.qos) ?
-		SET_VLAN_STRIP | SET_VLAN_INSERT : 0;
-	modify_esw_vport_cvlan(esw->dev, vport_num, vport->info.vlan, vport->info.qos,
-			       flags);
-}
-
-/* Don't cleanup vport->info, it's needed to restore vport configuration */
-static void esw_vport_cleanup(struct mlx5_eswitch *esw, struct mlx5_vport *vport)
-{
-	u16 vport_num = vport->vport;
-
-	if (!mlx5_esw_is_manager_vport(esw, vport_num))
-		mlx5_modify_vport_admin_state(esw->dev,
-					      MLX5_VPORT_STATE_OP_MOD_ESW_VPORT,
-					      vport_num, 1,
-					      MLX5_VPORT_ADMIN_STATE_DOWN);
-}
-
 static int esw_vport_create_legacy_acl_tables(struct mlx5_eswitch *esw,
 					      struct mlx5_vport *vport)
 {
@@ -1793,6 +1754,58 @@ static void esw_vport_cleanup_acl(struct mlx5_eswitch *esw,
 		esw_vport_destroy_offloads_acl_tables(esw, vport);
 }
 
+static int esw_vport_setup(struct mlx5_eswitch *esw, struct mlx5_vport *vport)
+{
+	u16 vport_num = vport->vport;
+	int flags;
+	int err;
+
+	err = esw_vport_setup_acl(esw, vport);
+	if (err)
+		return err;
+
+	/* Attach vport to the eswitch rate limiter */
+	esw_vport_enable_qos(esw, vport, vport->info.max_rate, vport->qos.bw_share);
+
+	if (mlx5_esw_is_manager_vport(esw, vport_num))
+		return 0;
+
+	mlx5_modify_vport_admin_state(esw->dev,
+				      MLX5_VPORT_STATE_OP_MOD_ESW_VPORT,
+				      vport_num, 1,
+				      vport->info.link_state);
+
+	/* Host PF has its own mac/guid. */
+	if (vport_num) {
+		mlx5_modify_nic_vport_mac_address(esw->dev, vport_num,
+						  vport->info.mac);
+		mlx5_modify_nic_vport_node_guid(esw->dev, vport_num,
+						vport->info.node_guid);
+	}
+
+	flags = (vport->info.vlan || vport->info.qos) ?
+		SET_VLAN_STRIP | SET_VLAN_INSERT : 0;
+	modify_esw_vport_cvlan(esw->dev, vport_num, vport->info.vlan,
+			       vport->info.qos, flags);
+
+	return 0;
+}
+
+/* Don't cleanup vport->info, it's needed to restore vport configuration */
+static void esw_vport_cleanup(struct mlx5_eswitch *esw, struct mlx5_vport *vport)
+{
+	u16 vport_num = vport->vport;
+
+	if (!mlx5_esw_is_manager_vport(esw, vport_num))
+		mlx5_modify_vport_admin_state(esw->dev,
+					      MLX5_VPORT_STATE_OP_MOD_ESW_VPORT,
+					      vport_num, 1,
+					      MLX5_VPORT_ADMIN_STATE_DOWN);
+
+	esw_vport_disable_qos(esw, vport);
+	esw_vport_cleanup_acl(esw, vport);
+}
+
 static int esw_enable_vport(struct mlx5_eswitch *esw, struct mlx5_vport *vport,
 			    enum mlx5_eswitch_vport_event enabled_events)
 {
@@ -1804,15 +1817,9 @@ static int esw_enable_vport(struct mlx5_eswitch *esw, struct mlx5_vport *vport,
 
 	esw_debug(esw->dev, "Enabling VPORT(%d)\n", vport_num);
 
-	/* Restore old vport configuration */
-	esw_vport_setup(esw, vport);
-
-	ret = esw_vport_setup_acl(esw, vport);
+	ret = esw_vport_setup(esw, vport);
 	if (ret)
 		goto done;
-
-	/* Attach vport to the eswitch rate limiter */
-	esw_vport_enable_qos(esw, vport, vport->info.max_rate, vport->qos.bw_share);
 
 	/* Sync with current vport context */
 	vport->enabled_events = enabled_events;
@@ -1855,9 +1862,7 @@ static void esw_disable_vport(struct mlx5_eswitch *esw,
 	 */
 	esw_vport_change_handle_locked(vport);
 	vport->enabled_events = 0;
-	esw_vport_disable_qos(esw, vport);
 	esw_vport_cleanup(esw, vport);
-	esw_vport_cleanup_acl(esw, vport);
 	esw->enabled_vports--;
 
 done:
@@ -2206,7 +2211,7 @@ void mlx5_eswitch_cleanup(struct mlx5_eswitch *esw)
 
 /* Vport Administration */
 int mlx5_eswitch_set_vport_mac(struct mlx5_eswitch *esw,
-			       int vport, u8 mac[ETH_ALEN])
+			       u16 vport, u8 mac[ETH_ALEN])
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
 	u64 node_guid;
@@ -2250,7 +2255,7 @@ unlock:
 }
 
 int mlx5_eswitch_set_vport_state(struct mlx5_eswitch *esw,
-				 int vport, int link_state)
+				 u16 vport, int link_state)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
 	int err = 0;
@@ -2280,7 +2285,7 @@ unlock:
 }
 
 int mlx5_eswitch_get_vport_config(struct mlx5_eswitch *esw,
-				  int vport, struct ifla_vf_info *ivi)
+				  u16 vport, struct ifla_vf_info *ivi)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
 
@@ -2305,7 +2310,7 @@ int mlx5_eswitch_get_vport_config(struct mlx5_eswitch *esw,
 }
 
 int __mlx5_eswitch_set_vport_vlan(struct mlx5_eswitch *esw,
-				  int vport, u16 vlan, u8 qos, u8 set_flags)
+				  u16 vport, u16 vlan, u8 qos, u8 set_flags)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
 	int err = 0;
@@ -2334,7 +2339,7 @@ int __mlx5_eswitch_set_vport_vlan(struct mlx5_eswitch *esw,
 }
 
 int mlx5_eswitch_set_vport_vlan(struct mlx5_eswitch *esw,
-				int vport, u16 vlan, u8 qos)
+				u16 vport, u16 vlan, u8 qos)
 {
 	u8 set_flags = 0;
 	int err;
@@ -2350,7 +2355,7 @@ int mlx5_eswitch_set_vport_vlan(struct mlx5_eswitch *esw,
 }
 
 int mlx5_eswitch_set_vport_spoofchk(struct mlx5_eswitch *esw,
-				    int vport, bool spoofchk)
+				    u16 vport, bool spoofchk)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
 	bool pschk;
@@ -2492,7 +2497,7 @@ int mlx5_eswitch_get_vepa(struct mlx5_eswitch *esw, u8 *setting)
 }
 
 int mlx5_eswitch_set_vport_trust(struct mlx5_eswitch *esw,
-				 int vport, bool setting)
+				 u16 vport, bool setting)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
 
@@ -2562,7 +2567,7 @@ static int normalize_vports_min_rate(struct mlx5_eswitch *esw, u32 divider)
 	return 0;
 }
 
-int mlx5_eswitch_set_vport_rate(struct mlx5_eswitch *esw, int vport,
+int mlx5_eswitch_set_vport_rate(struct mlx5_eswitch *esw, u16 vport,
 				u32 max_rate, u32 min_rate)
 {
 	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
@@ -2658,7 +2663,7 @@ unlock:
 }
 
 int mlx5_eswitch_get_vport_stats(struct mlx5_eswitch *esw,
-				 int vport_num,
+				 u16 vport_num,
 				 struct ifla_vf_stats *vf_stats)
 {
 	struct mlx5_vport *vport = mlx5_eswitch_get_vport(esw, vport_num);

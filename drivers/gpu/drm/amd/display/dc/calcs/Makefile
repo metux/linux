@@ -28,6 +28,8 @@ calcs_ccflags := -mhard-float -msse
 
 ifdef CONFIG_CC_IS_GCC
 calcs_ccflags += -mpreferred-stack-boundary=4
+else
+calcs_ccflags += -msse2
 endif
 
 CFLAGS_$(AMDDALPATH)/dc/calcs/dcn_calcs.o := $(calcs_ccflags)

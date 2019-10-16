@@ -35,7 +35,7 @@ struct imx_key_drv_data {
 
 struct imx_sc_msg_key {
 	struct imx_sc_rpc_msg hdr;
-	u32 state;
+	u8 state;
 };
 
 static int imx_sc_key_notify(struct notifier_block *nb,
@@ -78,13 +78,7 @@ static void imx_sc_check_for_events(struct work_struct *work)
 		return;
 	}
 
-	/*
-	 * The response data from SCU firmware is 4 bytes,
-	 * but ONLY the first byte is the key state, other
-	 * 3 bytes could be some dirty data, so we should
-	 * ONLY take the first byte as key state.
-	 */
-	state = (bool)(msg.state & 0xff);
+	state = (bool)msg.state;
 
 	if (state ^ priv->keystate) {
 		priv->keystate = state;

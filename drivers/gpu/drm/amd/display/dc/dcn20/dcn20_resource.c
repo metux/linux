@@ -1915,8 +1915,10 @@ int dcn20_populate_dml_pipes_from_context(
 				== res_ctx->pipe_ctx[i].plane_state)
 			pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].top_pipe->pipe_idx;
 
+#ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
 		if (res_ctx->pipe_ctx[i].stream->timing.flags.DSC)
 			pipes[pipe_cnt].dout.output_bpp = res_ctx->pipe_ctx[i].stream->timing.dsc_cfg.bits_per_pixel / 16.0;
+#endif
 
 		/* todo: default max for now, until there is logic reflecting this in dc*/
 		pipes[pipe_cnt].dout.output_bpc = 12;

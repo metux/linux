@@ -63,6 +63,7 @@
 #include "gem/i915_gem_ioctls.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
+#include "gt/intel_rc6.h"
 
 #include "i915_debugfs.h"
 #include "i915_drv.h"
@@ -355,6 +356,8 @@ static void i915_driver_modeset_remove(struct drm_i915_private *i915)
 {
 	intel_modeset_driver_remove(i915);
 
+	intel_irq_uninstall(i915);
+
 	intel_bios_driver_remove(i915);
 
 	i915_switcheroo_unregister(i915);
@@ -597,11 +600,9 @@ static int i915_driver_mmio_probe(struct drm_i915_private *dev_priv)
 
 	intel_uc_init_mmio(&dev_priv->gt.uc);
 
-	ret = intel_engines_init_mmio(dev_priv);
+	ret = intel_engines_init_mmio(&dev_priv->gt);
 	if (ret)
 		goto err_uncore;
-
-	i915_gem_init_mmio(dev_priv);
 
 	return 0;
 
@@ -620,7 +621,7 @@ err_bridge:
  */
 static void i915_driver_mmio_release(struct drm_i915_private *dev_priv)
 {
-	intel_engines_cleanup(dev_priv);
+	intel_engines_cleanup(&dev_priv->gt);
 	intel_teardown_mchbar(dev_priv);
 	intel_uncore_fini_mmio(&dev_priv->uncore);
 	pci_dev_put(dev_priv->bridge_dev);
@@ -1074,8 +1075,8 @@ intel_get_dram_info(struct drm_i915_private *dev_priv)
 
 static u32 gen9_edram_size_mb(struct drm_i915_private *dev_priv, u32 cap)
 {
-	const unsigned int ways[8] = { 4, 8, 12, 16, 16, 16, 16, 16 };
-	const unsigned int sets[4] = { 1, 1, 2, 2 };
+	static const u8 ways[8] = { 4, 8, 12, 16, 16, 16, 16, 16 };
+	static const u8 sets[4] = { 1, 1, 2, 2 };
 
 	return EDRAM_NUM_BANKS(cap) *
 		ways[EDRAM_WAYS_IDX(cap)] *
@@ -1175,7 +1176,7 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 	if (ret)
 		goto err_ggtt;
 
-	intel_gt_init_hw_early(dev_priv);
+	intel_gt_init_hw_early(&dev_priv->gt, &dev_priv->ggtt);
 
 	ret = i915_ggtt_enable_hw(dev_priv);
 	if (ret) {
@@ -1480,6 +1481,23 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Disable nuclear pageflip by default on pre-ILK */
 	if (!i915_modparams.nuclear_pageflip && match_info->gen < 5)
 		dev_priv->drm.driver_features &= ~DRIVER_ATOMIC;
+
+	/*
+	 * Check if we support fake LMEM -- for now we only unleash this for
+	 * the live selftests(test-and-exit).
+	 */
+#if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
+	if (IS_ENABLED(CONFIG_DRM_I915_UNSTABLE_FAKE_LMEM)) {
+		if (INTEL_GEN(dev_priv) >= 9 && i915_selftest.live < 0 &&
+		    i915_modparams.fake_lmem_start) {
+			mkwrite_device_info(dev_priv)->memory_regions =
+				REGION_SMEM | REGION_LMEM | REGION_STOLEN;
+			mkwrite_device_info(dev_priv)->is_dgfx = true;
+			GEM_BUG_ON(!HAS_LMEM(dev_priv));
+			GEM_BUG_ON(!IS_DGFX(dev_priv));
+		}
+	}
+#endif
 
 	ret = pci_enable_device(pdev);
 	if (ret)
@@ -1802,7 +1820,9 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
-	i915_gem_sanitize(dev_priv);
+	intel_rc6_ctx_wa_resume(&dev_priv->gt.rc6);
+
+	intel_gt_sanitize(&dev_priv->gt, true);
 
 	ret = i915_ggtt_enable_hw(dev_priv);
 	if (ret)
@@ -1932,8 +1952,6 @@ static int i915_drm_resume_early(struct drm_device *dev)
 	intel_display_power_resume_early(dev_priv);
 
 	intel_power_domains_resume(dev_priv);
-
-	intel_gt_sanitize(&dev_priv->gt, true);
 
 	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 

@@ -127,8 +127,64 @@ static void set_scheduler_caps(struct drm_i915_private *i915)
 		i915->caps.scheduler = 0;
 }
 
+const char *intel_engine_class_repr(u8 class)
+{
+	static const char * const uabi_names[] = {
+		[RENDER_CLASS] = "rcs",
+		[COPY_ENGINE_CLASS] = "bcs",
+		[VIDEO_DECODE_CLASS] = "vcs",
+		[VIDEO_ENHANCEMENT_CLASS] = "vecs",
+	};
+
+	if (class >= ARRAY_SIZE(uabi_names) || !uabi_names[class])
+		return "xxx";
+
+	return uabi_names[class];
+}
+
+struct legacy_ring {
+	struct intel_gt *gt;
+	u8 class;
+	u8 instance;
+};
+
+static int legacy_ring_idx(const struct legacy_ring *ring)
+{
+	static const struct {
+		u8 base, max;
+	} map[] = {
+		[RENDER_CLASS] = { RCS0, 1 },
+		[COPY_ENGINE_CLASS] = { BCS0, 1 },
+		[VIDEO_DECODE_CLASS] = { VCS0, I915_MAX_VCS },
+		[VIDEO_ENHANCEMENT_CLASS] = { VECS0, I915_MAX_VECS },
+	};
+
+	if (GEM_DEBUG_WARN_ON(ring->class >= ARRAY_SIZE(map)))
+		return INVALID_ENGINE;
+
+	if (GEM_DEBUG_WARN_ON(ring->instance >= map[ring->class].max))
+		return INVALID_ENGINE;
+
+	return map[ring->class].base + ring->instance;
+}
+
+static void add_legacy_ring(struct legacy_ring *ring,
+			    struct intel_engine_cs *engine)
+{
+	if (engine->gt != ring->gt || engine->class != ring->class) {
+		ring->gt = engine->gt;
+		ring->class = engine->class;
+		ring->instance = 0;
+	}
+
+	engine->legacy_idx = legacy_ring_idx(ring);
+	if (engine->legacy_idx != INVALID_ENGINE)
+		ring->instance++;
+}
+
 void intel_engines_driver_register(struct drm_i915_private *i915)
 {
+	struct legacy_ring ring = {};
 	u8 uabi_instances[4] = {};
 	struct list_head *it, *next;
 	struct rb_node **p, *prev;
@@ -142,6 +198,7 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		struct intel_engine_cs *engine =
 			container_of((struct rb_node *)it, typeof(*engine),
 				     uabi_node);
+		char old[sizeof(engine->name)];
 
 		GEM_BUG_ON(engine->class >= ARRAY_SIZE(uabi_classes));
 		engine->uabi_class = uabi_classes[engine->class];
@@ -149,12 +206,22 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		GEM_BUG_ON(engine->uabi_class >= ARRAY_SIZE(uabi_instances));
 		engine->uabi_instance = uabi_instances[engine->uabi_class]++;
 
+		/* Replace the internal name with the final user facing name */
+		memcpy(old, engine->name, sizeof(engine->name));
+		scnprintf(engine->name, sizeof(engine->name), "%s%u",
+			  intel_engine_class_repr(engine->class),
+			  engine->uabi_instance);
+		DRM_DEBUG_DRIVER("renamed %s to %s\n", old, engine->name);
+
 		rb_link_node(&engine->uabi_node, prev, p);
 		rb_insert_color(&engine->uabi_node, &i915->uabi_engines);
 
 		GEM_BUG_ON(intel_engine_lookup_user(i915,
 						    engine->uabi_class,
 						    engine->uabi_instance) != engine);
+
+		/* Fix up the mapping to match default execbuf::user_map[] */
+		add_legacy_ring(&ring, engine);
 
 		prev = &engine->uabi_node;
 		p = &prev->rb_right;

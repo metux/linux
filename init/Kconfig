@@ -191,16 +191,13 @@ config HAVE_KERNEL_LZO
 config HAVE_KERNEL_LZ4
 	bool
 
-config HAVE_KERNEL_ZSTD
-	bool
-
 config HAVE_KERNEL_UNCOMPRESSED
 	bool
 
 choice
 	prompt "Kernel compression mode"
 	default KERNEL_GZIP
-	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA || HAVE_KERNEL_XZ || HAVE_KERNEL_LZO || HAVE_KERNEL_LZ4 || HAVE_KERNEL_ZSTD || HAVE_KERNEL_UNCOMPRESSED
+	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA || HAVE_KERNEL_XZ || HAVE_KERNEL_LZO || HAVE_KERNEL_LZ4 || HAVE_KERNEL_UNCOMPRESSED
 	help
 	  The linux kernel is a kind of self-extracting executable.
 	  Several compression algorithms are available, which differ
@@ -278,16 +275,6 @@ config KERNEL_LZ4
 	  Its compression ratio is worse than LZO. The size of the kernel
 	  is about 8% bigger than LZO. But the decompression speed is
 	  faster than LZO.
-
-config KERNEL_ZSTD
-	bool "ZSTD"
-	depends on HAVE_KERNEL_ZSTD
-	help
-	  ZSTD is a compression algorithm targeting intermediate compression
-	  with fast decompression speed. It will compress better than GZIP and
-	  decompress around the same speed as LZO, but slower than LZ4. You
-	  will need at least 192 KB RAM or more for booting. The zstd command
-	  line tool is required for compression.
 
 config KERNEL_UNCOMPRESSED
 	bool "None"
@@ -505,23 +492,8 @@ config HAVE_SCHED_AVG_IRQ
 	depends on SMP
 
 config SCHED_THERMAL_PRESSURE
-	bool
-	default y if ARM && ARM_CPU_TOPOLOGY
-	default y if ARM64
+	bool "Enable periodic averaging of thermal pressure"
 	depends on SMP
-	depends on CPU_FREQ_THERMAL
-	help
-	  Select this option to enable thermal pressure accounting in the
-	  scheduler. Thermal pressure is the value conveyed to the scheduler
-	  that reflects the reduction in CPU compute capacity resulted from
-	  thermal throttling. Thermal throttling occurs when the performance of
-	  a CPU is capped due to high operating temperatures.
-
-	  If selected, the scheduler will be able to balance tasks accordingly,
-	  i.e. put less load on throttled CPUs than on non/less throttled ones.
-
-	  This requires the architecture to implement
-	  arch_set_thermal_pressure() and arch_get_thermal_pressure().
 
 config BSD_PROCESS_ACCT
 	bool "BSD Process Accounting"
@@ -1913,8 +1885,9 @@ config SLAB_MERGE_DEFAULT
 	  command line.
 
 config SLAB_FREELIST_RANDOM
-	bool "Randomize slab freelist"
+	default n
 	depends on SLAB || SLUB
+	bool "SLAB freelist randomization"
 	help
 	  Randomizes the freelist order used on creating new pages. This
 	  security feature reduces the predictability of the kernel slab
@@ -1922,14 +1895,12 @@ config SLAB_FREELIST_RANDOM
 
 config SLAB_FREELIST_HARDENED
 	bool "Harden slab freelist metadata"
-	depends on SLAB || SLUB
+	depends on SLUB
 	help
 	  Many kernel heap attacks try to target slab cache metadata and
 	  other infrastructure. This options makes minor performance
 	  sacrifices to harden the kernel slab allocator against common
-	  freelist exploit methods. Some slab implementations have more
-	  sanity-checking than others. This option is most effective with
-	  CONFIG_SLUB.
+	  freelist exploit methods.
 
 config SHUFFLE_PAGE_ALLOCATOR
 	bool "Page allocator randomization"
@@ -1986,7 +1957,7 @@ config MMAP_ALLOW_UNINITIALIZED
 	  userspace.  Since that isn't generally a problem on no-MMU systems,
 	  it is normally safe to say Y here.
 
-	  See Documentation/mm/nommu-mmap.rst for more information.
+	  See Documentation/nommu-mmap.txt for more information.
 
 config SYSTEM_DATA_VERIFICATION
 	def_bool n
@@ -2119,7 +2090,8 @@ config MODULE_SRCVERSION_ALL
 
 config MODULE_SIG
 	bool "Module signature verification"
-	select MODULE_SIG_FORMAT
+	depends on MODULES
+	select SYSTEM_DATA_VERIFICATION
 	help
 	  Check modules for valid signatures upon load: the signature
 	  is simply appended to the module. For more information see
@@ -2200,6 +2172,7 @@ config MODULE_SIG_HASH
 
 config MODULE_COMPRESS
 	bool "Compress modules on installation"
+	depends on MODULES
 	help
 
 	  Compresses kernel modules when 'make modules_install' is run; gzip or
@@ -2235,38 +2208,9 @@ config MODULE_COMPRESS_XZ
 
 endchoice
 
-config MODULE_ALLOW_MISSING_NAMESPACE_IMPORTS
-	bool "Allow loading of modules with missing namespace imports"
-	help
-	  Symbols exported with EXPORT_SYMBOL_NS*() are considered exported in
-	  a namespace. A module that makes use of a symbol exported with such a
-	  namespace is required to import the namespace via MODULE_IMPORT_NS().
-	  There is no technical reason to enforce correct namespace imports,
-	  but it creates consistency between symbols defining namespaces and
-	  users importing namespaces they make use of. This option relaxes this
-	  requirement and lifts the enforcement when loading a module.
-
-	  If unsure, say N.
-
-config UNUSED_SYMBOLS
-	bool "Enable unused/obsolete exported symbols"
-	default y if X86
-	help
-	  Unused but exported symbols make the kernel needlessly bigger.  For
-	  that reason most of these unused exports will soon be removed.  This
-	  option is provided temporarily to provide a transition period in case
-	  some external kernel module needs one of these symbols anyway. If you
-	  encounter such a case in your module, consider if you are actually
-	  using the right API.  (rationale: since nobody in the kernel is using
-	  this in a module, there is a pretty good chance it's actually the
-	  wrong interface to use).  If you really need the symbol, please send a
-	  mail to the linux kernel mailing list mentioning the symbol and why
-	  you really need it, and what the merge plan to the mainline kernel for
-	  your module is.
-
 config TRIM_UNUSED_KSYMS
 	bool "Trim unused exported kernel symbols"
-	depends on !UNUSED_SYMBOLS
+	depends on MODULES && !UNUSED_SYMBOLS
 	help
 	  The kernel and some modules make many symbols available for
 	  other modules to use via EXPORT_SYMBOL() and variants. Depending

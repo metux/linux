@@ -144,6 +144,9 @@
 #define GEN_DEFAULT_PAGE_SIZES \
 	.page_sizes = I915_GTT_PAGE_SIZE_4K
 
+#define GEN_DEFAULT_REGIONS \
+	.memory_regions = REGION_SMEM
+
 #define I830_FEATURES \
 	GEN(2), \
 	.is_mobile = 1, \
@@ -161,7 +164,8 @@
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	I9XX_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 #define I845_FEATURES \
 	GEN(2), \
@@ -178,7 +182,8 @@
 	I845_PIPE_OFFSETS, \
 	I845_CURSOR_OFFSETS, \
 	I9XX_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 static const struct intel_device_info intel_i830_info = {
 	I830_FEATURES,
@@ -212,7 +217,8 @@ static const struct intel_device_info intel_i865g_info = {
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	I9XX_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 static const struct intel_device_info intel_i915g_info = {
 	GEN3_FEATURES,
@@ -297,7 +303,8 @@ static const struct intel_device_info intel_pineview_m_info = {
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	I965_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 static const struct intel_device_info intel_i965g_info = {
 	GEN4_FEATURES,
@@ -347,7 +354,8 @@ static const struct intel_device_info intel_gm45_info = {
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	ILK_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 static const struct intel_device_info intel_ironlake_d_info = {
 	GEN5_FEATURES,
@@ -377,7 +385,8 @@ static const struct intel_device_info intel_ironlake_m_info = {
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	ILK_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 #define SNB_D_PLATFORM \
 	GEN6_FEATURES, \
@@ -425,7 +434,8 @@ static const struct intel_device_info intel_sandybridge_m_gt2_info = {
 	IVB_PIPE_OFFSETS, \
 	IVB_CURSOR_OFFSETS, \
 	IVB_COLORS, \
-	GEN_DEFAULT_PAGE_SIZES
+	GEN_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 #define IVB_D_PLATFORM \
 	GEN7_FEATURES, \
@@ -486,6 +496,7 @@ static const struct intel_device_info intel_valleyview_info = {
 	I9XX_CURSOR_OFFSETS,
 	I965_COLORS,
 	GEN_DEFAULT_PAGE_SIZES,
+	GEN_DEFAULT_REGIONS,
 };
 
 #define G75_FEATURES  \
@@ -580,6 +591,7 @@ static const struct intel_device_info intel_cherryview_info = {
 	CHV_CURSOR_OFFSETS,
 	CHV_COLORS,
 	GEN_DEFAULT_PAGE_SIZES,
+	GEN_DEFAULT_REGIONS,
 };
 
 #define GEN9_DEFAULT_PAGE_SIZES \
@@ -654,7 +666,8 @@ static const struct intel_device_info intel_skylake_gt4_info = {
 	HSW_PIPE_OFFSETS, \
 	IVB_CURSOR_OFFSETS, \
 	IVB_COLORS, \
-	GEN9_DEFAULT_PAGE_SIZES
+	GEN9_DEFAULT_PAGE_SIZES, \
+	GEN_DEFAULT_REGIONS
 
 static const struct intel_device_info intel_broxton_info = {
 	GEN9_LP_FEATURES,

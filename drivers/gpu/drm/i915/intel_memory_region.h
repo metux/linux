@@ -18,7 +18,12 @@ struct drm_i915_gem_object;
 struct intel_memory_region;
 struct sg_table;
 
-#define I915_ALLOC_MIN_PAGE_SIZE   BIT(0)
+enum intel_region_id {
+	INTEL_REGION_UNKNOWN = 0, /* Should be last */
+};
+
+#define I915_ALLOC_MIN_PAGE_SIZE  BIT(0)
+#define I915_ALLOC_CONTIGUOUS     BIT(1)
 
 struct intel_memory_region_ops {
 	unsigned int flags;
@@ -51,6 +56,12 @@ struct intel_memory_region {
 	unsigned int type;
 	unsigned int instance;
 	unsigned int id;
+
+	struct {
+		struct mutex lock; /* Protects access to objects */
+		struct list_head list;
+		struct list_head purgeable;
+	} objects;
 };
 
 int intel_memory_region_init_buddy(struct intel_memory_region *mem);

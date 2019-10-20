@@ -4055,8 +4055,6 @@ static void ept_set_mmio_spte_mask(void)
  */
 static void vmx_vcpu_setup(struct vcpu_vmx *vmx)
 {
-	int i;
-
 	if (nested)
 		nested_vmx_vcpu_setup();
 
@@ -4115,21 +4113,6 @@ static void vmx_vcpu_setup(struct vcpu_vmx *vmx)
 
 	if (vmcs_config.vmentry_ctrl & VM_ENTRY_LOAD_IA32_PAT)
 		vmcs_write64(GUEST_IA32_PAT, vmx->vcpu.arch.pat);
-
-	for (i = 0; i < ARRAY_SIZE(vmx_msr_index); ++i) {
-		u32 index = vmx_msr_index[i];
-		u32 data_low, data_high;
-		int j = vmx->nmsrs;
-
-		if (rdmsr_safe(index, &data_low, &data_high) < 0)
-			continue;
-		if (wrmsr_safe(index, data_low, data_high) < 0)
-			continue;
-		vmx->guest_msrs[j].index = i;
-		vmx->guest_msrs[j].data = 0;
-		vmx->guest_msrs[j].mask = -1ull;
-		++vmx->nmsrs;
-	}
 
 	vm_exit_controls_set(vmx, vmx_vmexit_ctrl());
 
@@ -6652,7 +6635,7 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 	int err;
 	struct vcpu_vmx *vmx;
 	unsigned long *msr_bitmap;
-	int cpu;
+	int i, cpu;
 
 	vmx = kmem_cache_zalloc(kvm_vcpu_cache, GFP_KERNEL_ACCOUNT);
 	if (!vmx)
@@ -6700,6 +6683,21 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 
 	if (!vmx->guest_msrs)
 		goto free_pml;
+
+	for (i = 0; i < ARRAY_SIZE(vmx_msr_index); ++i) {
+		u32 index = vmx_msr_index[i];
+		u32 data_low, data_high;
+		int j = vmx->nmsrs;
+
+		if (rdmsr_safe(index, &data_low, &data_high) < 0)
+			continue;
+		if (wrmsr_safe(index, data_low, data_high) < 0)
+			continue;
+		vmx->guest_msrs[j].index = i;
+		vmx->guest_msrs[j].data = 0;
+		vmx->guest_msrs[j].mask = -1ull;
+		++vmx->nmsrs;
+	}
 
 	err = alloc_loaded_vmcs(&vmx->vmcs01);
 	if (err < 0)

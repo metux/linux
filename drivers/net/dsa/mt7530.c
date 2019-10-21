@@ -566,7 +566,7 @@ mt7530_mib_reset(struct dsa_switch *ds)
 static void
 mt7530_port_set_status(struct mt7530_priv *priv, int port, int enable)
 {
-	u32 mask = PMCR_TX_EN | PMCR_RX_EN | PMCR_FORCE_LNK;
+	u32 mask = PMCR_TX_EN | PMCR_RX_EN;
 
 	if (enable)
 		mt7530_set(priv, MT7530_PMCR_P(port), mask);
@@ -1223,8 +1223,7 @@ mt7530_port_vlan_del(struct dsa_switch *ds, int port,
 }
 
 static enum dsa_tag_protocol
-mtk_get_tag_protocol(struct dsa_switch *ds, int port,
-		     enum dsa_tag_protocol mp)
+mtk_get_tag_protocol(struct dsa_switch *ds, int port)
 {
 	struct mt7530_priv *priv = ds->priv;
 
@@ -1341,9 +1340,7 @@ mt7530_setup(struct dsa_switch *ds)
 
 	if (!dsa_is_unused_port(ds, 5)) {
 		priv->p5_intf_sel = P5_INTF_SEL_GMAC5;
-		ret = of_get_phy_mode(dsa_to_port(ds, 5)->dn, &interface);
-		if (ret && ret != -ENODEV)
-			return ret;
+		interface = of_get_phy_mode(dsa_to_port(ds, 5)->dn);
 	} else {
 		/* Scan the ethernet nodes. look for GMAC1, lookup used phy */
 		for_each_child_of_node(dn, mac_np) {
@@ -1357,9 +1354,7 @@ mt7530_setup(struct dsa_switch *ds)
 
 			phy_node = of_parse_phandle(mac_np, "phy-handle", 0);
 			if (phy_node->parent == priv->dev->of_node->parent) {
-				ret = of_get_phy_mode(mac_np, &interface);
-				if (ret && ret != -ENODEV)
-					return ret;
+				interface = of_get_phy_mode(mac_np);
 				id = of_mdio_parse_addr(ds->dev, phy_node);
 				if (id == 0)
 					priv->p5_intf_sel = P5_INTF_SEL_PHY_P0;
@@ -1444,7 +1439,7 @@ static void mt7530_phylink_mac_config(struct dsa_switch *ds, int port,
 	mcr_new &= ~(PMCR_FORCE_SPEED_1000 | PMCR_FORCE_SPEED_100 |
 		     PMCR_FORCE_FDX | PMCR_TX_FC_EN | PMCR_RX_FC_EN);
 	mcr_new |= PMCR_IFG_XMIT(1) | PMCR_MAC_MODE | PMCR_BACKOFF_EN |
-		   PMCR_BACKPR_EN | PMCR_FORCE_MODE;
+		   PMCR_BACKPR_EN | PMCR_FORCE_MODE | PMCR_FORCE_LNK;
 
 	/* Are we connected to external phy */
 	if (port == 5 && dsa_is_user_port(ds, 5))
@@ -1637,12 +1632,9 @@ mt7530_probe(struct mdio_device *mdiodev)
 	if (!priv)
 		return -ENOMEM;
 
-	priv->ds = devm_kzalloc(&mdiodev->dev, sizeof(*priv->ds), GFP_KERNEL);
+	priv->ds = dsa_switch_alloc(&mdiodev->dev, DSA_MAX_PORTS);
 	if (!priv->ds)
 		return -ENOMEM;
-
-	priv->ds->dev = &mdiodev->dev;
-	priv->ds->num_ports = DSA_MAX_PORTS;
 
 	/* Use medatek,mcm property to distinguish hardware type that would
 	 * casues a little bit differences on power-on sequence.

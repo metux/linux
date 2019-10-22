@@ -184,7 +184,7 @@ EXPORT_SYMBOL_GPL(xen_destroy_contiguous_region);
 const struct dma_map_ops *xen_dma_ops;
 EXPORT_SYMBOL(xen_dma_ops);
 
-int __init xen_mm_init(void)
+static int __init xen_mm_init(void)
 {
 	struct gnttab_cache_flush cflush;
 	if (!xen_initial_domain())

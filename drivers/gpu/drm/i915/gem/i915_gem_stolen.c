@@ -551,6 +551,7 @@ static struct drm_i915_gem_object *
 _i915_gem_object_create_stolen(struct drm_i915_private *dev_priv,
 			       struct drm_mm_node *stolen)
 {
+	static struct lock_class_key lock_class;
 	struct drm_i915_gem_object *obj;
 	unsigned int cache_level;
 	int err = -ENOMEM;
@@ -560,7 +561,7 @@ _i915_gem_object_create_stolen(struct drm_i915_private *dev_priv,
 		goto err;
 
 	drm_gem_private_object_init(&dev_priv->drm, &obj->base, stolen->size);
-	i915_gem_object_init(obj, &i915_gem_object_stolen_ops);
+	i915_gem_object_init(obj, &i915_gem_object_stolen_ops, &lock_class);
 
 	obj->stolen = stolen;
 	obj->read_domains = I915_GEM_DOMAIN_CPU | I915_GEM_DOMAIN_GTT;

@@ -56,9 +56,10 @@ frontbuffer_retire(struct i915_active_request *active,
 }
 
 void i915_gem_object_init(struct drm_i915_gem_object *obj,
-			  const struct drm_i915_gem_object_ops *ops)
+			  const struct drm_i915_gem_object_ops *ops,
+			  struct lock_class_key *key)
 {
-	mutex_init(&obj->mm.lock);
+	__mutex_init(&obj->mm.lock, "obj->mm.lock", key);
 
 	spin_lock_init(&obj->vma.lock);
 	INIT_LIST_HEAD(&obj->vma.list);

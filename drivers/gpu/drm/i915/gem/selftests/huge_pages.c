@@ -152,6 +152,7 @@ huge_pages_object(struct drm_i915_private *i915,
 		  u64 size,
 		  unsigned int page_mask)
 {
+	static struct lock_class_key lock_class;
 	struct drm_i915_gem_object *obj;
 
 	GEM_BUG_ON(!size);
@@ -168,7 +169,7 @@ huge_pages_object(struct drm_i915_private *i915,
 		return ERR_PTR(-ENOMEM);
 
 	drm_gem_private_object_init(&i915->drm, &obj->base, size);
-	i915_gem_object_init(obj, &huge_page_ops);
+	i915_gem_object_init(obj, &huge_page_ops, &lock_class);
 
 	obj->write_domain = I915_GEM_DOMAIN_CPU;
 	obj->read_domains = I915_GEM_DOMAIN_CPU;
@@ -301,6 +302,7 @@ static const struct drm_i915_gem_object_ops fake_ops_single = {
 static struct drm_i915_gem_object *
 fake_huge_pages_object(struct drm_i915_private *i915, u64 size, bool single)
 {
+	static struct lock_class_key lock_class;
 	struct drm_i915_gem_object *obj;
 
 	GEM_BUG_ON(!size);
@@ -319,9 +321,9 @@ fake_huge_pages_object(struct drm_i915_private *i915, u64 size, bool single)
 	drm_gem_private_object_init(&i915->drm, &obj->base, size);
 
 	if (single)
-		i915_gem_object_init(obj, &fake_ops_single);
+		i915_gem_object_init(obj, &fake_ops_single, &lock_class);
 	else
-		i915_gem_object_init(obj, &fake_ops);
+		i915_gem_object_init(obj, &fake_ops, &lock_class);
 
 	obj->write_domain = I915_GEM_DOMAIN_CPU;
 	obj->read_domains = I915_GEM_DOMAIN_CPU;

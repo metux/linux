@@ -12,20 +12,9 @@ config DRM_I915_USERFAULT_AUTOSUSPEND
 	  May be 0 to disable the extra delay and solely use the device level
 	  runtime pm autosuspend delay tunable.
 
-config DRM_I915_HEARTBEAT_INTERVAL
-	int "Interval between heartbeat pulses (ms)"
-	default 2500 # milliseconds
-	help
-	  The driver sends a periodic heartbeat down all active engines to
-	  check the health of the GPU and undertake regular house-keeping of
-	  internal driver state.
-
-	  May be 0 to disable heartbeats and therefore disable automatic GPU
-	  hang detection.
-
 config DRM_I915_PREEMPT_TIMEOUT
 	int "Preempt timeout (ms, jiffy granularity)"
-	default 640 # milliseconds
+	default 100 # milliseconds
 	help
 	  How long to wait (in milliseconds) for a preemption event to occur
 	  when submitting a new context via execlists. If the current context
@@ -59,18 +48,3 @@ config DRM_I915_STOP_TIMEOUT
 	  damage as the system is reset in order to recover. The corollary is
 	  that the reset itself may take longer and so be more disruptive to
 	  interactive or low latency workloads.
-
-config DRM_I915_TIMESLICE_DURATION
-	int "Scheduling quantum for userspace batches (ms, jiffy granularity)"
-	default 1 # milliseconds
-	help
-	  When two user batches of equal priority are executing, we will
-	  alternate execution of each batch to ensure forward progress of
-	  all users. This is necessary in some cases where there may be
-	  an implicit dependency between those batches that requires
-	  concurrent execution in order for them to proceed, e.g. they
-	  interact with each other via userspace semaphores. Each context
-	  is scheduled for execution for the timeslice duration, before
-	  switching to the next context.
-
-	  May be 0 to disable timeslicing.

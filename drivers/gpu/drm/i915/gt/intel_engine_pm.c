@@ -7,6 +7,7 @@
 #include "i915_drv.h"
 
 #include "intel_engine.h"
+#include "intel_engine_heartbeat.h"
 #include "intel_engine_pm.h"
 #include "intel_engine_pool.h"
 #include "intel_gt.h"
@@ -34,7 +35,7 @@ static int __engine_unpark(struct intel_wakeref *wf)
 	if (engine->unpark)
 		engine->unpark(engine);
 
-	intel_engine_init_hangcheck(engine);
+	intel_engine_unpark_heartbeat(engine);
 	return 0;
 }
 
@@ -124,6 +125,19 @@ out_unlock:
 	return result;
 }
 
+static void call_idle_barriers(struct intel_engine_cs *engine)
+{
+	struct llist_node *node, *next;
+
+	llist_for_each_safe(node, next, llist_del_all(&engine->barrier_tasks)) {
+		struct dma_fence_cb *cb =
+			container_of((struct list_head *)node,
+				     typeof(*cb), node);
+
+		cb->func(NULL, cb);
+	}
+}
+
 static int __engine_park(struct intel_wakeref *wf)
 {
 	struct intel_engine_cs *engine =
@@ -143,6 +157,9 @@ static int __engine_park(struct intel_wakeref *wf)
 
 	GEM_TRACE("%s\n", engine->name);
 
+	call_idle_barriers(engine); /* cleanup after wedging */
+
+	intel_engine_park_heartbeat(engine);
 	intel_engine_disarm_breadcrumbs(engine);
 	intel_engine_pool_park(&engine->pool);
 
@@ -173,6 +190,7 @@ void intel_engine_init__pm(struct intel_engine_cs *engine)
 	struct intel_runtime_pm *rpm = engine->uncore->rpm;
 
 	intel_wakeref_init(&engine->wakeref, rpm, &wf_ops);
+	intel_engine_init_heartbeat(engine);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

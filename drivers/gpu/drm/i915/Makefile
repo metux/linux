@@ -47,6 +47,7 @@ i915-y += i915_drv.o \
 	  i915_pci.o \
 	  i915_scatterlist.o \
 	  i915_suspend.o \
+	  i915_switcheroo.o \
 	  i915_sysfs.o \
 	  i915_utils.o \
 	  intel_csr.o \
@@ -87,7 +88,7 @@ gt-y += \
 	gt/intel_gt_pm.o \
 	gt/intel_gt_pm_irq.o \
 	gt/intel_gt_requests.o \
-	gt/intel_hangcheck.o \
+	gt/intel_llc.o \
 	gt/intel_lrc.o \
 	gt/intel_rc6.o \
 	gt/intel_renderstate.o \
@@ -178,6 +179,7 @@ i915-y += \
 	display/intel_display_power.o \
 	display/intel_dpio_phy.o \
 	display/intel_dpll_mgr.o \
+	display/intel_dsb.o \
 	display/intel_fbc.o \
 	display/intel_fifo_underrun.o \
 	display/intel_frontbuffer.o \

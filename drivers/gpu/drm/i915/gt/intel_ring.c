@@ -57,10 +57,9 @@ int intel_ring_pin(struct intel_ring *ring)
 
 	i915_vma_make_unshrinkable(vma);
 
-	/* Discard any unused bytes beyond that submitted to hw. */
-	intel_ring_reset(ring, ring->emit);
-
+	GEM_BUG_ON(ring->vaddr);
 	ring->vaddr = addr;
+
 	return 0;
 
 err_ring:
@@ -86,14 +85,20 @@ void intel_ring_unpin(struct intel_ring *ring)
 	if (!atomic_dec_and_test(&ring->pin_count))
 		return;
 
+	/* Discard any unused bytes beyond that submitted to hw. */
+	intel_ring_reset(ring, ring->emit);
+
 	i915_vma_unset_ggtt_write(vma);
 	if (i915_vma_is_map_and_fenceable(vma))
 		i915_vma_unpin_iomap(vma);
 	else
 		i915_gem_object_unpin_map(vma->obj);
 
-	i915_vma_make_purgeable(vma);
+	GEM_BUG_ON(!ring->vaddr);
+	ring->vaddr = NULL;
+
 	i915_vma_unpin(vma);
+	i915_vma_make_purgeable(vma);
 }
 
 static struct i915_vma *create_ring_vma(struct i915_ggtt *ggtt, int size)
@@ -103,9 +108,7 @@ static struct i915_vma *create_ring_vma(struct i915_ggtt *ggtt, int size)
 	struct drm_i915_gem_object *obj;
 	struct i915_vma *vma;
 
-	obj = ERR_PTR(-ENODEV);
-	if (i915_ggtt_has_aperture(ggtt))
-		obj = i915_gem_object_create_stolen(i915, size);
+	obj = i915_gem_object_create_stolen(i915, size);
 	if (IS_ERR(obj))
 		obj = i915_gem_object_create_internal(i915, size);
 	if (IS_ERR(obj))
@@ -145,7 +148,6 @@ intel_engine_create_ring(struct intel_engine_cs *engine, int size)
 
 	kref_init(&ring->ref);
 	ring->size = size;
-	ring->wrap = BITS_PER_TYPE(ring->size) - ilog2(size);
 
 	/*
 	 * Workaround an erratum on the i830 which causes a hang if

@@ -198,6 +198,7 @@
 #include "gem/i915_gem_context.h"
 #include "gem/i915_gem_pm.h"
 #include "gt/intel_lrc_reg.h"
+#include "gt/intel_ring.h"
 
 #include "i915_drv.h"
 #include "i915_perf.h"

@@ -8,6 +8,8 @@
 #include <linux/highmem.h>
 #include <linux/mempool.h>
 #include <linux/ioprio.h>
+
+#ifdef CONFIG_BLOCK
 /* struct bio, bio_vec and BIO_* flags are defined in blk_types.h */
 #include <linux/blk_types.h>
 
@@ -489,12 +491,21 @@ do {						\
 #define bio_dev(bio) \
 	disk_devt((bio)->bi_disk)
 
+#if defined(CONFIG_MEMCG) && defined(CONFIG_BLK_CGROUP)
+void bio_associate_blkg_from_page(struct bio *bio, struct page *page);
+#else
+static inline void bio_associate_blkg_from_page(struct bio *bio,
+						struct page *page) { }
+#endif
+
 #ifdef CONFIG_BLK_CGROUP
+void bio_disassociate_blkg(struct bio *bio);
 void bio_associate_blkg(struct bio *bio);
 void bio_associate_blkg_from_css(struct bio *bio,
 				 struct cgroup_subsys_state *css);
 void bio_clone_blkg_association(struct bio *dst, struct bio *src);
 #else	/* CONFIG_BLK_CGROUP */
+static inline void bio_disassociate_blkg(struct bio *bio) { }
 static inline void bio_associate_blkg(struct bio *bio) { }
 static inline void bio_associate_blkg_from_css(struct bio *bio,
 					       struct cgroup_subsys_state *css)
@@ -543,6 +554,11 @@ static inline void bvec_kunmap_irq(char *buffer, unsigned long *flags)
 	*flags = 0;
 }
 #endif
+
+enum blk_crypto_mode_num {
+	BLK_ENCRYPTION_MODE_INVALID	= 0,
+	BLK_ENCRYPTION_MODE_AES_256_XTS	= 1,
+};
 
 /*
  * BIO list management for use by remapping drivers (e.g. DM or MD) and loop.
@@ -813,4 +829,5 @@ static inline void bio_set_polled(struct bio *bio, struct kiocb *kiocb)
 		bio->bi_opf |= REQ_NOWAIT;
 }
 
+#endif /* CONFIG_BLOCK */
 #endif /* __LINUX_BIO_H */

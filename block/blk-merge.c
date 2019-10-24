@@ -154,7 +154,7 @@ static inline unsigned get_max_io_size(struct request_queue *q,
 	if (max_sectors > start_offset)
 		return max_sectors - start_offset;
 
-	return sectors & ~(lbs - 1);
+	return sectors & (lbs - 1);
 }
 
 static inline unsigned get_max_segment_size(const struct request_queue *q,
@@ -283,20 +283,20 @@ split:
 
 /**
  * __blk_queue_split - split a bio and submit the second half
+ * @q:       [in] request queue pointer
  * @bio:     [in, out] bio to be split
  * @nr_segs: [out] number of segments in the first bio
  *
  * Split a bio into two bios, chain the two bios, submit the second half and
  * store a pointer to the first half in *@bio. If the second bio is still too
  * big it will be split by a recursive call to this function. Since this
- * function may allocate a new bio from @bio->bi_disk->queue->bio_split, it is
- * the responsibility of the caller to ensure that
- * @bio->bi_disk->queue->bio_split is only released after processing of the
+ * function may allocate a new bio from @q->bio_split, it is the responsibility
+ * of the caller to ensure that @q is only released after processing of the
  * split bio has finished.
  */
-void __blk_queue_split(struct bio **bio, unsigned int *nr_segs)
+void __blk_queue_split(struct request_queue *q, struct bio **bio,
+		unsigned int *nr_segs)
 {
-	struct request_queue *q = (*bio)->bi_disk->queue;
 	struct bio *split = NULL;
 
 	switch (bio_op(*bio)) {
@@ -338,26 +338,27 @@ void __blk_queue_split(struct bio **bio, unsigned int *nr_segs)
 
 		bio_chain(split, *bio);
 		trace_block_split(q, split, (*bio)->bi_iter.bi_sector);
-		submit_bio_noacct(*bio);
+		generic_make_request(*bio);
 		*bio = split;
 	}
 }
 
 /**
  * blk_queue_split - split a bio and submit the second half
+ * @q:   [in] request queue pointer
  * @bio: [in, out] bio to be split
  *
  * Split a bio into two bios, chains the two bios, submit the second half and
  * store a pointer to the first half in *@bio. Since this function may allocate
- * a new bio from @bio->bi_disk->queue->bio_split, it is the responsibility of
- * the caller to ensure that @bio->bi_disk->queue->bio_split is only released
- * after processing of the split bio has finished.
+ * a new bio from @q->bio_split, it is the responsibility of the caller to
+ * ensure that @q is only released after processing of the split bio has
+ * finished.
  */
-void blk_queue_split(struct bio **bio)
+void blk_queue_split(struct request_queue *q, struct bio **bio)
 {
 	unsigned int nr_segs;
 
-	__blk_queue_split(bio, &nr_segs);
+	__blk_queue_split(q, bio, &nr_segs);
 }
 EXPORT_SYMBOL(blk_queue_split);
 
@@ -472,7 +473,7 @@ static int __blk_bios_map_sg(struct request_queue *q, struct bio *bio,
 			     struct scatterlist *sglist,
 			     struct scatterlist **sg)
 {
-	struct bio_vec bvec, bvprv = { NULL };
+	struct bio_vec uninitialized_var(bvec), bvprv = { NULL };
 	struct bvec_iter iter;
 	int nsegs = 0;
 	bool new_bio = false;
@@ -533,20 +534,16 @@ int __blk_rq_map_sg(struct request_queue *q, struct request *rq,
 }
 EXPORT_SYMBOL(__blk_rq_map_sg);
 
-static inline unsigned int blk_rq_get_max_segments(struct request *rq)
-{
-	if (req_op(rq) == REQ_OP_DISCARD)
-		return queue_max_discard_segments(rq->q);
-	return queue_max_segments(rq->q);
-}
-
 static inline int ll_new_hw_segment(struct request *req, struct bio *bio,
 		unsigned int nr_phys_segs)
 {
-	if (req->nr_phys_segments + nr_phys_segs > blk_rq_get_max_segments(req))
+	if (req->nr_phys_segments + nr_phys_segs > queue_max_segments(req->q))
 		goto no_merge;
 
 	if (blk_integrity_merge_bio(req->q, req, bio) == false)
+		goto no_merge;
+
+	if (WARN_ON_ONCE(!bio_crypt_ctx_compatible(bio, req->bio)))
 		goto no_merge;
 
 	/*
@@ -631,7 +628,7 @@ static int ll_merge_requests_fn(struct request_queue *q, struct request *req,
 		return 0;
 
 	total_phys_segments = req->nr_phys_segments + next->nr_phys_segments;
-	if (total_phys_segments > blk_rq_get_max_segments(req))
+	if (total_phys_segments > queue_max_segments(q))
 		return 0;
 
 	if (blk_integrity_merge_rq(q, req, next) == false)
@@ -707,8 +704,14 @@ static enum elv_merge blk_try_req_merge(struct request *req,
 {
 	if (blk_discard_mergable(req))
 		return ELEVATOR_DISCARD_MERGE;
-	else if (blk_rq_pos(req) + blk_rq_sectors(req) == blk_rq_pos(next))
+	else if (blk_rq_pos(req) + blk_rq_sectors(req) == blk_rq_pos(next)) {
+		if (!bio_crypt_ctx_back_mergeable(req->bio,
+						  blk_rq_sectors(req),
+						  next->bio)) {
+			return ELEVATOR_NO_MERGE;
+		}
 		return ELEVATOR_BACK_MERGE;
+	}
 
 	return ELEVATOR_NO_MERGE;
 }
@@ -742,6 +745,9 @@ static struct request *attempt_merge(struct request_queue *q,
 		return NULL;
 
 	if (req->ioprio != next->ioprio)
+		return NULL;
+
+	if (!bio_crypt_ctx_compatible(req->bio, next->bio))
 		return NULL;
 
 	/*
@@ -798,8 +804,6 @@ static struct request *attempt_merge(struct request_queue *q,
 	 * 'next' is going away, so update stats accordingly
 	 */
 	blk_account_io_merge_request(next);
-
-	trace_block_rq_merge(q, next);
 
 	/*
 	 * ownership of bio passed from next to req, return 'next' for
@@ -882,16 +886,31 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	if (rq->ioprio != bio_prio(bio))
 		return false;
 
+	/* Only merge if the crypt contexts are compatible */
+	if (!bio_crypt_ctx_compatible(bio, rq->bio))
+		return false;
+
 	return true;
 }
 
 enum elv_merge blk_try_merge(struct request *rq, struct bio *bio)
 {
-	if (blk_discard_mergable(rq))
+	if (blk_discard_mergable(rq)) {
 		return ELEVATOR_DISCARD_MERGE;
-	else if (blk_rq_pos(rq) + blk_rq_sectors(rq) == bio->bi_iter.bi_sector)
+	} else if (blk_rq_pos(rq) + blk_rq_sectors(rq) ==
+		   bio->bi_iter.bi_sector) {
+		if (!bio_crypt_ctx_back_mergeable(rq->bio,
+						  blk_rq_sectors(rq), bio)) {
+			return ELEVATOR_NO_MERGE;
+		}
 		return ELEVATOR_BACK_MERGE;
-	else if (blk_rq_pos(rq) - bio_sectors(bio) == bio->bi_iter.bi_sector)
+	} else if (blk_rq_pos(rq) - bio_sectors(bio) ==
+		   bio->bi_iter.bi_sector) {
+		if (!bio_crypt_ctx_back_mergeable(bio,
+						  bio_sectors(bio), rq->bio)) {
+			return ELEVATOR_NO_MERGE;
+		}
 		return ELEVATOR_FRONT_MERGE;
+	}
 	return ELEVATOR_NO_MERGE;
 }

@@ -45,13 +45,15 @@ static void free_master_key(struct fscrypt_master_key *mk)
 	wipe_master_key_secret(&mk->mk_secret);
 
 	for (i = 0; i <= __FSCRYPT_MODE_MAX; i++) {
-		fscrypt_destroy_prepared_key(&mk->mk_direct_keys[i]);
-		fscrypt_destroy_prepared_key(&mk->mk_iv_ino_lblk_64_keys[i]);
-		fscrypt_destroy_prepared_key(&mk->mk_iv_ino_lblk_32_keys[i]);
+		crypto_free_skcipher(mk->mk_direct_keys[i]);
+		crypto_free_skcipher(mk->mk_iv_ino_lblk_64_keys[i]);
+		crypto_free_skcipher(mk->mk_iv_ino_lblk_32_keys[i]);
 	}
 
+	fscrypt_evict_inline_crypt_keys(mk);
+
 	key_put(mk->mk_users);
-	kfree_sensitive(mk);
+	kzfree(mk);
 }
 
 static inline bool valid_key_spec(const struct fscrypt_key_specifier *spec)
@@ -213,11 +215,7 @@ static int allocate_filesystem_keyring(struct super_block *sb)
 	if (IS_ERR(keyring))
 		return PTR_ERR(keyring);
 
-	/*
-	 * Pairs with the smp_load_acquire() in fscrypt_find_master_key().
-	 * I.e., here we publish ->s_master_keys with a RELEASE barrier so that
-	 * concurrent tasks can ACQUIRE it.
-	 */
+	/* Pairs with READ_ONCE() in fscrypt_find_master_key() */
 	smp_store_release(&sb->s_master_keys, keyring);
 	return 0;
 }
@@ -238,13 +236,8 @@ struct key *fscrypt_find_master_key(struct super_block *sb,
 	struct key *keyring;
 	char description[FSCRYPT_MK_DESCRIPTION_SIZE];
 
-	/*
-	 * Pairs with the smp_store_release() in allocate_filesystem_keyring().
-	 * I.e., another task can publish ->s_master_keys concurrently,
-	 * executing a RELEASE barrier.  We need to use smp_load_acquire() here
-	 * to safely ACQUIRE the memory the other task published.
-	 */
-	keyring = smp_load_acquire(&sb->s_master_keys);
+	/* pairs with smp_store_release() in allocate_filesystem_keyring() */
+	keyring = READ_ONCE(sb->s_master_keys);
 	if (keyring == NULL)
 		return ERR_PTR(-ENOKEY); /* No keyring yet, so no keys yet. */
 
@@ -531,7 +524,7 @@ static int fscrypt_provisioning_key_preparse(struct key_preparsed_payload *prep)
 static void fscrypt_provisioning_key_free_preparse(
 					struct key_preparsed_payload *prep)
 {
-	kfree_sensitive(prep->payload.data[0]);
+	kzfree(prep->payload.data[0]);
 }
 
 static void fscrypt_provisioning_key_describe(const struct key *key,
@@ -548,7 +541,7 @@ static void fscrypt_provisioning_key_describe(const struct key *key,
 
 static void fscrypt_provisioning_key_destroy(struct key *key)
 {
-	kfree_sensitive(key->payload.data[0]);
+	kzfree(key->payload.data[0]);
 }
 
 static struct key_type key_type_fscrypt_provisioning = {

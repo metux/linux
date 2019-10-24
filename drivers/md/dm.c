@@ -12,7 +12,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/blkpg.h>
 #include <linux/bio.h>
@@ -27,7 +26,6 @@
 #include <linux/pr.h>
 #include <linux/refcount.h>
 #include <linux/part_stat.h>
-#include <linux/blk-crypto.h>
 
 #define DM_MSG_PREFIX "core"
 
@@ -143,7 +141,6 @@ EXPORT_SYMBOL_GPL(dm_bio_get_target_bio_nr);
 #define DMF_NOFLUSH_SUSPENDING 5
 #define DMF_DEFERRED_REMOVE 6
 #define DMF_SUSPENDED_INTERNALLY 7
-#define DMF_POST_SUSPENDING 8
 
 #define DM_NUMA_NODE NUMA_NO_NODE
 static int dm_numa_node = DM_NUMA_NODE;
@@ -656,21 +653,38 @@ static void free_tio(struct dm_target_io *tio)
 	bio_put(&tio->clone);
 }
 
-u64 dm_start_time_ns_from_clone(struct bio *bio)
+static bool md_in_flight_bios(struct mapped_device *md)
 {
-	struct dm_target_io *tio = container_of(bio, struct dm_target_io, clone);
-	struct dm_io *io = tio->io;
+	int cpu;
+	struct hd_struct *part = &dm_disk(md)->part0;
+	long sum = 0;
 
-	return jiffies_to_nsecs(io->start_time);
+	for_each_possible_cpu(cpu) {
+		sum += part_stat_local_read_cpu(part, in_flight[0], cpu);
+		sum += part_stat_local_read_cpu(part, in_flight[1], cpu);
+	}
+
+	return sum != 0;
 }
-EXPORT_SYMBOL_GPL(dm_start_time_ns_from_clone);
+
+static bool md_in_flight(struct mapped_device *md)
+{
+	if (queue_is_mq(md->queue))
+		return blk_mq_queue_inflight(md->queue);
+	else
+		return md_in_flight_bios(md);
+}
 
 static void start_io_acct(struct dm_io *io)
 {
 	struct mapped_device *md = io->md;
 	struct bio *bio = io->orig_bio;
 
-	io->start_time = bio_start_io_acct(bio);
+	io->start_time = jiffies;
+
+	generic_start_io_acct(md->queue, bio_op(bio), bio_sectors(bio),
+			      &dm_disk(md)->part0);
+
 	if (unlikely(dm_stats_used(&md->stats)))
 		dm_stats_account_io(&md->stats, bio_data_dir(bio),
 				    bio->bi_iter.bi_sector, bio_sectors(bio),
@@ -683,7 +697,8 @@ static void end_io_acct(struct dm_io *io)
 	struct bio *bio = io->orig_bio;
 	unsigned long duration = jiffies - io->start_time;
 
-	bio_end_io_acct(bio, io->start_time);
+	generic_end_io_acct(md->queue, bio_op(bio), &dm_disk(md)->part0,
+			    io->start_time);
 
 	if (unlikely(dm_stats_used(&md->stats)))
 		dm_stats_account_io(&md->stats, bio_data_dir(bio),
@@ -989,7 +1004,6 @@ static void clone_endio(struct bio *bio)
 	struct dm_io *io = tio->io;
 	struct mapped_device *md = tio->io->md;
 	dm_endio_fn endio = tio->ti->type->end_io;
-	struct bio *orig_bio = io->orig_bio;
 
 	if (unlikely(error == BLK_STS_TARGET) && md->type != DM_TYPE_NVME_BIO_BASED) {
 		if (bio_op(bio) == REQ_OP_DISCARD &&
@@ -1001,18 +1015,6 @@ static void clone_endio(struct bio *bio)
 		else if (bio_op(bio) == REQ_OP_WRITE_ZEROES &&
 			 !bio->bi_disk->queue->limits.max_write_zeroes_sectors)
 			disable_write_zeroes(md);
-	}
-
-	/*
-	 * For zone-append bios get offset in zone of the written
-	 * sector and add that to the original bio sector pos.
-	 */
-	if (bio_op(orig_bio) == REQ_OP_ZONE_APPEND) {
-		sector_t written_sector = bio->bi_iter.bi_sector;
-		struct request_queue *q = orig_bio->bi_disk->queue;
-		u64 mask = (u64)blk_queue_zone_sectors(q) - 1;
-
-		orig_bio->bi_iter.bi_sector += written_sector & mask;
 	}
 
 	if (endio) {
@@ -1329,14 +1331,15 @@ static int clone_bio(struct dm_target_io *tio, struct bio *bio,
 		     sector_t sector, unsigned len)
 {
 	struct bio *clone = &tio->clone;
+	int ret;
 
 	__bio_clone_fast(clone, bio);
 
-	bio_crypt_clone(clone, bio, GFP_NOIO);
+	ret = bio_crypt_clone(clone, bio, GFP_NOIO);
+	if (ret < 0)
+		return ret;
 
 	if (bio_integrity(bio)) {
-		int r;
-
 		if (unlikely(!dm_target_has_integrity(tio->ti->type) &&
 			     !dm_target_passes_integrity(tio->ti->type))) {
 			DMWARN("%s: the target %s doesn't support integrity data.",
@@ -1345,9 +1348,11 @@ static int clone_bio(struct dm_target_io *tio, struct bio *bio,
 			return -EIO;
 		}
 
-		r = bio_integrity_clone(clone, bio, GFP_NOIO);
-		if (r < 0)
-			return r;
+		ret = bio_integrity_clone(clone, bio, GFP_NOIO);
+		if (ret < 0) {
+			bio_crypt_free_ctx(clone);
+			return ret;
+		}
 	}
 
 	bio_advance(clone, to_bytes(sector - clone->bi_iter.bi_sector));
@@ -1445,6 +1450,9 @@ static int __send_empty_flush(struct clone_info *ci)
 	BUG_ON(bio_has_data(ci->bio));
 	while ((ti = dm_table_get_target(ci->map, target_nr++)))
 		__send_duplicate_bios(ci, ti, ti->num_flush_bios, NULL);
+
+	bio_disassociate_blkg(ci->bio);
+
 	return 0;
 }
 
@@ -1632,7 +1640,6 @@ static blk_qc_t __split_and_process_bio(struct mapped_device *md,
 		ci.bio = &flush_bio;
 		ci.sector_count = 0;
 		error = __send_empty_flush(&ci);
-		bio_uninit(ci.bio);
 		/* dec_pending submits any data associated with flush */
 	} else if (op_is_zone_mgmt(bio_op(bio))) {
 		ci.bio = bio;
@@ -1707,7 +1714,6 @@ static blk_qc_t __process_bio(struct mapped_device *md, struct dm_table *map,
 		ci.bio = &flush_bio;
 		ci.sector_count = 0;
 		error = __send_empty_flush(&ci);
-		bio_uninit(ci.bio);
 		/* dec_pending submits any data associated with flush */
 	} else {
 		struct dm_target_io *tio;
@@ -1786,18 +1792,6 @@ static blk_qc_t dm_make_request(struct request_queue *q, struct bio *bio)
 	blk_qc_t ret = BLK_QC_T_NONE;
 	int srcu_idx;
 	struct dm_table *map;
-
-	if (dm_get_md_type(md) == DM_TYPE_REQUEST_BASED) {
-		/*
-		 * We are called with a live reference on q_usage_counter, but
-		 * that one will be released as soon as we return.  Grab an
-		 * extra one as blk_mq_make_request expects to be able to
-		 * consume a reference (which lives until the request is freed
-		 * in case a request is allocated).
-		 */
-		percpu_ref_get(&q->q_usage_counter);
-		return blk_mq_make_request(q, bio);
-	}
 
 	map = dm_get_live_table(md, &srcu_idx);
 
@@ -2409,7 +2403,6 @@ static void __dm_destroy(struct mapped_device *md, bool wait)
 	if (!dm_suspended_md(md)) {
 		dm_table_presuspend_targets(map);
 		set_bit(DMF_SUSPENDED, &md->flags);
-		set_bit(DMF_POST_SUSPENDING, &md->flags);
 		dm_table_postsuspend_targets(map);
 	}
 	/* dm_put_live_table must be before msleep, otherwise deadlock is possible */
@@ -2450,29 +2443,15 @@ void dm_put(struct mapped_device *md)
 }
 EXPORT_SYMBOL_GPL(dm_put);
 
-static bool md_in_flight_bios(struct mapped_device *md)
-{
-	int cpu;
-	struct hd_struct *part = &dm_disk(md)->part0;
-	long sum = 0;
-
-	for_each_possible_cpu(cpu) {
-		sum += part_stat_local_read_cpu(part, in_flight[0], cpu);
-		sum += part_stat_local_read_cpu(part, in_flight[1], cpu);
-	}
-
-	return sum != 0;
-}
-
-static int dm_wait_for_bios_completion(struct mapped_device *md, long task_state)
+static int dm_wait_for_completion(struct mapped_device *md, long task_state)
 {
 	int r = 0;
 	DEFINE_WAIT(wait);
 
-	while (true) {
+	while (1) {
 		prepare_to_wait(&md->wait, &wait, task_state);
 
-		if (!md_in_flight_bios(md))
+		if (!md_in_flight(md))
 			break;
 
 		if (signal_pending_state(task_state, current)) {
@@ -2483,28 +2462,6 @@ static int dm_wait_for_bios_completion(struct mapped_device *md, long task_state
 		io_schedule();
 	}
 	finish_wait(&md->wait, &wait);
-
-	return r;
-}
-
-static int dm_wait_for_completion(struct mapped_device *md, long task_state)
-{
-	int r = 0;
-
-	if (!queue_is_mq(md->queue))
-		return dm_wait_for_bios_completion(md, task_state);
-
-	while (true) {
-		if (!blk_mq_queue_inflight(md->queue))
-			break;
-
-		if (signal_pending_state(task_state, current)) {
-			r = -EINTR;
-			break;
-		}
-
-		msleep(5);
-	}
 
 	return r;
 }
@@ -2648,7 +2605,7 @@ static int __dm_suspend(struct mapped_device *md, struct dm_table *map,
 	if (noflush)
 		set_bit(DMF_NOFLUSH_SUSPENDING, &md->flags);
 	else
-		DMDEBUG("%s: suspending with flush", dm_device_name(md));
+		pr_debug("%s: suspending with flush\n", dm_device_name(md));
 
 	/*
 	 * This gets reverted if there's an error later and the targets
@@ -2768,9 +2725,7 @@ retry:
 	if (r)
 		goto out_unlock;
 
-	set_bit(DMF_POST_SUSPENDING, &md->flags);
 	dm_table_postsuspend_targets(map);
-	clear_bit(DMF_POST_SUSPENDING, &md->flags);
 
 out_unlock:
 	mutex_unlock(&md->suspend_lock);
@@ -2867,9 +2822,7 @@ static void __dm_internal_suspend(struct mapped_device *md, unsigned suspend_fla
 	(void) __dm_suspend(md, map, suspend_flags, TASK_UNINTERRUPTIBLE,
 			    DMF_SUSPENDED_INTERNALLY);
 
-	set_bit(DMF_POST_SUSPENDING, &md->flags);
 	dm_table_postsuspend_targets(map);
-	clear_bit(DMF_POST_SUSPENDING, &md->flags);
 }
 
 static void __dm_internal_resume(struct mapped_device *md)
@@ -2946,25 +2899,17 @@ EXPORT_SYMBOL_GPL(dm_internal_resume_fast);
 int dm_kobject_uevent(struct mapped_device *md, enum kobject_action action,
 		       unsigned cookie)
 {
-	int r;
-	unsigned noio_flag;
 	char udev_cookie[DM_COOKIE_LENGTH];
 	char *envp[] = { udev_cookie, NULL };
 
-	noio_flag = memalloc_noio_save();
-
 	if (!cookie)
-		r = kobject_uevent(&disk_to_dev(md->disk)->kobj, action);
+		return kobject_uevent(&disk_to_dev(md->disk)->kobj, action);
 	else {
 		snprintf(udev_cookie, DM_COOKIE_LENGTH, "%s=%u",
 			 DM_COOKIE_ENV_VAR_NAME, cookie);
-		r = kobject_uevent_env(&disk_to_dev(md->disk)->kobj,
-				       action, envp);
+		return kobject_uevent_env(&disk_to_dev(md->disk)->kobj,
+					  action, envp);
 	}
-
-	memalloc_noio_restore(noio_flag);
-
-	return r;
 }
 
 uint32_t dm_next_uevent_seq(struct mapped_device *md)
@@ -3030,11 +2975,6 @@ int dm_suspended_md(struct mapped_device *md)
 	return test_bit(DMF_SUSPENDED, &md->flags);
 }
 
-static int dm_post_suspending_md(struct mapped_device *md)
-{
-	return test_bit(DMF_POST_SUSPENDING, &md->flags);
-}
-
 int dm_suspended_internally_md(struct mapped_device *md)
 {
 	return test_bit(DMF_SUSPENDED_INTERNALLY, &md->flags);
@@ -3050,12 +2990,6 @@ int dm_suspended(struct dm_target *ti)
 	return dm_suspended_md(dm_table_get_md(ti->table));
 }
 EXPORT_SYMBOL_GPL(dm_suspended);
-
-int dm_post_suspending(struct dm_target *ti)
-{
-	return dm_post_suspending_md(dm_table_get_md(ti->table));
-}
-EXPORT_SYMBOL_GPL(dm_post_suspending);
 
 int dm_noflush_suspending(struct dm_target *ti)
 {

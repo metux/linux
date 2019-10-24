@@ -15,221 +15,235 @@
 #include <linux/blk-crypto.h>
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>
-#include <linux/sched/mm.h>
-#include <linux/slab.h>
+#include <linux/keyslot-manager.h>
 
 #include "fscrypt_private.h"
 
-struct fscrypt_blk_crypto_key {
-	struct blk_crypto_key base;
-	int num_devs;
-	struct request_queue *devs[];
-};
-
-static int fscrypt_get_num_devices(struct super_block *sb)
-{
-	if (sb->s_cop->get_num_devices)
-		return sb->s_cop->get_num_devices(sb);
-	return 1;
-}
-
-static void fscrypt_get_devices(struct super_block *sb, int num_devs,
-				struct request_queue **devs)
-{
-	if (num_devs == 1)
-		devs[0] = bdev_get_queue(sb->s_bdev);
-	else
-		sb->s_cop->get_devices(sb, devs);
-}
-
-static unsigned int fscrypt_get_dun_bytes(const struct fscrypt_info *ci)
-{
-	struct super_block *sb = ci->ci_inode->i_sb;
-	unsigned int flags = fscrypt_policy_flags(&ci->ci_policy);
-	int ino_bits = 64, lblk_bits = 64;
-
-	if (flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY)
-		return offsetofend(union fscrypt_iv, nonce);
-
-	if (flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64)
-		return sizeof(__le64);
-
-	if (flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32)
-		return sizeof(__le32);
-
-	/* Default case: IVs are just the file logical block number */
-	if (sb->s_cop->get_ino_and_lblk_bits)
-		sb->s_cop->get_ino_and_lblk_bits(sb, &ino_bits, &lblk_bits);
-	return DIV_ROUND_UP(lblk_bits, 8);
-}
-
-/* Enable inline encryption for this file if supported. */
-int fscrypt_select_encryption_impl(struct fscrypt_info *ci)
+/* Return true iff inline encryption should be used for this file */
+bool fscrypt_should_use_inline_encryption(const struct fscrypt_info *ci)
 {
 	const struct inode *inode = ci->ci_inode;
 	struct super_block *sb = inode->i_sb;
-	struct blk_crypto_config crypto_cfg;
-	int num_devs;
-	struct request_queue **devs;
-	int i;
 
 	/* The file must need contents encryption, not filenames encryption */
 	if (!S_ISREG(inode->i_mode))
-		return 0;
+		return false;
 
-	/* The crypto mode must have a blk-crypto counterpart */
+	/* blk-crypto must implement the needed encryption algorithm */
 	if (ci->ci_mode->blk_crypto_mode == BLK_ENCRYPTION_MODE_INVALID)
-		return 0;
+		return false;
+
+	/* DIRECT_KEY needs a 24+ byte IV, so it can't work with 8-byte DUNs */
+	if (fscrypt_is_direct_key_policy(&ci->ci_policy))
+		return false;
 
 	/* The filesystem must be mounted with -o inlinecrypt */
-	if (!(sb->s_flags & SB_INLINECRYPT))
-		return 0;
+	if (!sb->s_cop->inline_crypt_enabled ||
+	    !sb->s_cop->inline_crypt_enabled(sb))
+		return false;
 
-	/*
-	 * When a page contains multiple logically contiguous filesystem blocks,
-	 * some filesystem code only calls fscrypt_mergeable_bio() for the first
-	 * block in the page. This is fine for most of fscrypt's IV generation
-	 * strategies, where contiguous blocks imply contiguous IVs. But it
-	 * doesn't work with IV_INO_LBLK_32. For now, simply exclude
-	 * IV_INO_LBLK_32 with blocksize != PAGE_SIZE from inline encryption.
-	 */
-	if ((fscrypt_policy_flags(&ci->ci_policy) &
-	     FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) &&
-	    sb->s_blocksize != PAGE_SIZE)
-		return 0;
-
-	/*
-	 * On all the filesystem's devices, blk-crypto must support the crypto
-	 * configuration that the file would use.
-	 */
-	crypto_cfg.crypto_mode = ci->ci_mode->blk_crypto_mode;
-	crypto_cfg.data_unit_size = sb->s_blocksize;
-	crypto_cfg.dun_bytes = fscrypt_get_dun_bytes(ci);
-	num_devs = fscrypt_get_num_devices(sb);
-	devs = kmalloc_array(num_devs, sizeof(*devs), GFP_KERNEL);
-	if (!devs)
-		return -ENOMEM;
-	fscrypt_get_devices(sb, num_devs, devs);
-
-	for (i = 0; i < num_devs; i++) {
-		if (!blk_crypto_config_supported(devs[i], &crypto_cfg))
-			goto out_free_devs;
-	}
-
-	ci->ci_inlinecrypt = true;
-out_free_devs:
-	kfree(devs);
-
-	return 0;
+	return true;
 }
 
-int fscrypt_prepare_inline_crypt_key(struct fscrypt_prepared_key *prep_key,
-				     const u8 *raw_key,
-				     const struct fscrypt_info *ci)
+/* Set a per-file inline encryption key (for passing to blk-crypto) */
+int fscrypt_set_inline_crypt_key(struct fscrypt_info *ci, const u8 *derived_key)
 {
-	const struct inode *inode = ci->ci_inode;
-	struct super_block *sb = inode->i_sb;
-	enum blk_crypto_mode_num crypto_mode = ci->ci_mode->blk_crypto_mode;
-	int num_devs = fscrypt_get_num_devices(sb);
-	int queue_refs = 0;
-	struct fscrypt_blk_crypto_key *blk_key;
-	int err;
-	int i;
+	const struct fscrypt_mode *mode = ci->ci_mode;
+	const struct super_block *sb = ci->ci_inode->i_sb;
 
-	blk_key = kzalloc(struct_size(blk_key, devs, num_devs), GFP_KERNEL);
-	if (!blk_key)
+	ci->ci_inline_crypt_key = kmemdup(derived_key, mode->keysize, GFP_NOFS);
+	if (!ci->ci_inline_crypt_key)
 		return -ENOMEM;
+	ci->ci_owns_key = true;
 
-	blk_key->num_devs = num_devs;
-	fscrypt_get_devices(sb, num_devs, blk_key->devs);
+	return blk_crypto_start_using_mode(mode->blk_crypto_mode,
+					   sb->s_blocksize,
+					   sb->s_bdev->bd_queue);
+}
 
-	err = blk_crypto_init_key(&blk_key->base, raw_key, crypto_mode,
-				  fscrypt_get_dun_bytes(ci), sb->s_blocksize);
-	if (err) {
-		fscrypt_err(inode, "error %d initializing blk-crypto key", err);
-		goto fail;
+/* Free a per-file inline encryption key and evict it from blk-crypto */
+void fscrypt_free_inline_crypt_key(struct fscrypt_info *ci)
+{
+	if (ci->ci_inline_crypt_key != NULL) {
+		const struct fscrypt_mode *mode = ci->ci_mode;
+		const struct super_block *sb = ci->ci_inode->i_sb;
+
+		blk_crypto_evict_key(sb->s_bdev->bd_queue,
+				     ci->ci_inline_crypt_key,
+				     mode->blk_crypto_mode, sb->s_blocksize);
+		kzfree(ci->ci_inline_crypt_key);
+	}
+}
+
+/*
+ * Set up ->inline_crypt_key (for passing to blk-crypto) for inodes which use an
+ * IV_INO_LBLK_64 encryption policy.
+ *
+ * Return: 0 on success, -errno on failure
+ */
+int fscrypt_setup_per_mode_inline_crypt_key(struct fscrypt_info *ci,
+					    struct fscrypt_master_key *mk)
+{
+	static DEFINE_MUTEX(inline_crypt_setup_mutex);
+	const struct super_block *sb = ci->ci_inode->i_sb;
+	struct block_device *bdev = sb->s_bdev;
+	const struct fscrypt_mode *mode = ci->ci_mode;
+	const u8 mode_num = mode - fscrypt_modes;
+	u8 *raw_key;
+	u8 hkdf_info[sizeof(mode_num) + sizeof(sb->s_uuid)];
+	int err;
+
+	if (WARN_ON(mode_num > __FSCRYPT_MODE_MAX))
+		return -EINVAL;
+
+	/* pairs with smp_store_release() below */
+	raw_key = smp_load_acquire(&mk->mk_iv_ino_lblk_64_raw_keys[mode_num]);
+	if (raw_key) {
+		err = 0;
+		goto out;
 	}
 
-	/*
-	 * We have to start using blk-crypto on all the filesystem's devices.
-	 * We also have to save all the request_queue's for later so that the
-	 * key can be evicted from them.  This is needed because some keys
-	 * aren't destroyed until after the filesystem was already unmounted
-	 * (namely, the per-mode keys in struct fscrypt_master_key).
-	 */
-	for (i = 0; i < num_devs; i++) {
-		if (!blk_get_queue(blk_key->devs[i])) {
-			fscrypt_err(inode, "couldn't get request_queue");
-			err = -EAGAIN;
-			goto fail;
-		}
-		queue_refs++;
+	mutex_lock(&inline_crypt_setup_mutex);
 
-		err = blk_crypto_start_using_key(&blk_key->base,
-						 blk_key->devs[i]);
-		if (err) {
-			fscrypt_err(inode,
-				    "error %d starting to use blk-crypto", err);
-			goto fail;
-		}
+	raw_key = mk->mk_iv_ino_lblk_64_raw_keys[mode_num];
+	if (raw_key) {
+		err = 0;
+		goto out_unlock;
 	}
-	/*
-	 * Pairs with the smp_load_acquire() in fscrypt_is_key_prepared().
-	 * I.e., here we publish ->blk_key with a RELEASE barrier so that
-	 * concurrent tasks can ACQUIRE it.  Note that this concurrency is only
-	 * possible for per-mode keys, not for per-file keys.
-	 */
-	smp_store_release(&prep_key->blk_key, blk_key);
-	return 0;
 
-fail:
-	for (i = 0; i < queue_refs; i++)
-		blk_put_queue(blk_key->devs[i]);
-	kfree_sensitive(blk_key);
+	raw_key = kmalloc(mode->keysize, GFP_NOFS);
+	if (!raw_key) {
+		err = -ENOMEM;
+		goto out_unlock;
+	}
+
+	BUILD_BUG_ON(sizeof(mode_num) != 1);
+	BUILD_BUG_ON(sizeof(sb->s_uuid) != 16);
+	BUILD_BUG_ON(sizeof(hkdf_info) != 17);
+	hkdf_info[0] = mode_num;
+	memcpy(&hkdf_info[1], &sb->s_uuid, sizeof(sb->s_uuid));
+
+	err = fscrypt_hkdf_expand(&mk->mk_secret.hkdf,
+				  HKDF_CONTEXT_IV_INO_LBLK_64_KEY,
+				  hkdf_info, sizeof(hkdf_info),
+				  raw_key, mode->keysize);
+	if (err)
+		goto out_unlock;
+
+	err = blk_crypto_start_using_mode(mode->blk_crypto_mode,
+					  sb->s_blocksize, bdev->bd_queue);
+	if (err)
+		goto out_unlock;
+
+	/*
+	 * When a master key's first inline encryption key is set up, save a
+	 * reference to the filesystem's block device so that the inline
+	 * encryption keys can be evicted when the master key is destroyed.
+	 */
+	if (!mk->mk_bdev) {
+		mk->mk_bdev = bdgrab(bdev);
+		mk->mk_data_unit_size = sb->s_blocksize;
+	}
+
+	/* pairs with smp_load_acquire() above */
+	smp_store_release(&mk->mk_iv_ino_lblk_64_raw_keys[mode_num], raw_key);
+	err = 0;
+out_unlock:
+	mutex_unlock(&inline_crypt_setup_mutex);
+out:
+	if (err == 0) {
+		ci->ci_inline_crypt_key = raw_key;
+		/*
+		 * Since each struct fscrypt_master_key belongs to a particular
+		 * filesystem (a struct super_block), there should be only one
+		 * block device, and only one data unit size as it should equal
+		 * the filesystem's blocksize (i.e. s_blocksize).
+		 */
+		if (WARN_ON(mk->mk_bdev != bdev))
+			err = -EINVAL;
+		if (WARN_ON(mk->mk_data_unit_size != sb->s_blocksize))
+			err = -EINVAL;
+	} else {
+		kzfree(raw_key);
+	}
 	return err;
 }
 
-void fscrypt_destroy_inline_crypt_key(struct fscrypt_prepared_key *prep_key)
+/*
+ * Evict per-mode inline encryption keys from blk-crypto when a master key is
+ * destroyed.
+ */
+void fscrypt_evict_inline_crypt_keys(struct fscrypt_master_key *mk)
 {
-	struct fscrypt_blk_crypto_key *blk_key = prep_key->blk_key;
-	int i;
+	struct block_device *bdev = mk->mk_bdev;
+	size_t i;
 
-	if (blk_key) {
-		for (i = 0; i < blk_key->num_devs; i++) {
-			blk_crypto_evict_key(blk_key->devs[i], &blk_key->base);
-			blk_put_queue(blk_key->devs[i]);
+	if (!bdev) /* No inline encryption keys? */
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(mk->mk_iv_ino_lblk_64_raw_keys); i++) {
+		u8 *raw_key = mk->mk_iv_ino_lblk_64_raw_keys[i];
+
+		if (raw_key != NULL) {
+			blk_crypto_evict_key(bdev->bd_queue, raw_key,
+					     fscrypt_modes[i].blk_crypto_mode,
+					     mk->mk_data_unit_size);
+			kzfree(raw_key);
 		}
-		kfree_sensitive(blk_key);
 	}
-}
-
-bool __fscrypt_inode_uses_inline_crypto(const struct inode *inode)
-{
-	return inode->i_crypt_info->ci_inlinecrypt;
-}
-EXPORT_SYMBOL_GPL(__fscrypt_inode_uses_inline_crypto);
-
-static void fscrypt_generate_dun(const struct fscrypt_info *ci, u64 lblk_num,
-				 u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE])
-{
-	union fscrypt_iv iv;
-	int i;
-
-	fscrypt_generate_iv(&iv, lblk_num, ci);
-
-	BUILD_BUG_ON(FSCRYPT_MAX_IV_SIZE > BLK_CRYPTO_MAX_IV_SIZE);
-	memset(dun, 0, BLK_CRYPTO_MAX_IV_SIZE);
-	for (i = 0; i < ci->ci_mode->ivsize/sizeof(dun[0]); i++)
-		dun[i] = le64_to_cpu(iv.dun[i]);
+	bdput(bdev);
 }
 
 /**
- * fscrypt_set_bio_crypt_ctx() - prepare a file contents bio for inline crypto
+ * fscrypt_inode_uses_inline_crypto - test whether an inode uses inline encryption
+ * @inode: an inode
+ *
+ * Return: true if the inode requires file contents encryption and if the
+ *	   encryption should be done in the block layer via blk-crypto rather
+ *	   than in the filesystem layer.
+ */
+bool fscrypt_inode_uses_inline_crypto(const struct inode *inode)
+{
+	return IS_ENCRYPTED(inode) && S_ISREG(inode->i_mode) &&
+		inode->i_crypt_info->ci_inline_crypt_key != NULL;
+}
+EXPORT_SYMBOL_GPL(fscrypt_inode_uses_inline_crypto);
+
+/**
+ * fscrypt_inode_uses_fs_layer_crypto - test whether an inode uses fs-layer encryption
+ * @inode: an inode
+ *
+ * Return: true if the inode requires file contents encryption and if the
+ *	   encryption should be done in the filesystem layer rather than in the
+ *	   block layer via blk-crypto.
+ */
+bool fscrypt_inode_uses_fs_layer_crypto(const struct inode *inode)
+{
+	return IS_ENCRYPTED(inode) && S_ISREG(inode->i_mode) &&
+		inode->i_crypt_info->ci_inline_crypt_key == NULL;
+}
+EXPORT_SYMBOL_GPL(fscrypt_inode_uses_fs_layer_crypto);
+
+static inline u64 fscrypt_generate_dun(const struct fscrypt_info *ci,
+				       u64 lblk_num)
+{
+	union fscrypt_iv iv;
+
+	fscrypt_generate_iv(&iv, lblk_num, ci);
+	/*
+	 * fscrypt_should_use_inline_encryption() ensures we never get here if
+	 * more than the first 8 bytes of the IV are nonzero.
+	 */
+	BUG_ON(memchr_inv(&iv.raw[8], 0, ci->ci_mode->ivsize - 8));
+	return le64_to_cpu(iv.lblk_num);
+}
+
+/**
+ * fscrypt_set_bio_crypt_ctx - prepare a file contents bio for inline encryption
  * @bio: a bio which will eventually be submitted to the file
  * @inode: the file's inode
  * @first_lblk: the first file logical block number in the I/O
- * @gfp_mask: memory allocation flags - these must be a waiting mask so that
- *					bio_crypt_set_ctx can't fail.
+ * @gfp_mask: memory allocation flags
  *
  * If the contents of the file should be encrypted (or decrypted) with inline
  * encryption, then assign the appropriate encryption context to the bio.
@@ -238,19 +252,24 @@ static void fscrypt_generate_dun(const struct fscrypt_info *ci, u64 lblk_num,
  * otherwise fscrypt_mergeable_bio() won't work as intended.
  *
  * The encryption context will be freed automatically when the bio is freed.
+ *
+ * Return: 0 on success, -errno on failure.  If __GFP_NOFAIL is specified, this
+ *	   is guaranteed to succeed.
  */
-void fscrypt_set_bio_crypt_ctx(struct bio *bio, const struct inode *inode,
-			       u64 first_lblk, gfp_t gfp_mask)
+int fscrypt_set_bio_crypt_ctx(struct bio *bio, const struct inode *inode,
+			      u64 first_lblk, gfp_t gfp_mask)
 {
-	const struct fscrypt_info *ci;
-	u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
+	const struct fscrypt_info *ci = inode->i_crypt_info;
+	u64 dun;
 
 	if (!fscrypt_inode_uses_inline_crypto(inode))
-		return;
-	ci = inode->i_crypt_info;
+		return 0;
 
-	fscrypt_generate_dun(ci, first_lblk, dun);
-	bio_crypt_set_ctx(bio, &ci->ci_enc_key.blk_key->base, dun, gfp_mask);
+	dun = fscrypt_generate_dun(ci, first_lblk);
+
+	return bio_crypt_set_ctx(bio, ci->ci_inline_crypt_key,
+				 ci->ci_mode->blk_crypto_mode,
+				 dun, inode->i_blkbits, gfp_mask);
 }
 EXPORT_SYMBOL_GPL(fscrypt_set_bio_crypt_ctx);
 
@@ -279,36 +298,39 @@ static bool bh_get_inode_and_lblk_num(const struct buffer_head *bh,
 }
 
 /**
- * fscrypt_set_bio_crypt_ctx_bh() - prepare a file contents bio for inline
- *				    crypto
+ * fscrypt_set_bio_crypt_ctx_bh - prepare a file contents bio for inline encryption
  * @bio: a bio which will eventually be submitted to the file
  * @first_bh: the first buffer_head for which I/O will be submitted
  * @gfp_mask: memory allocation flags
  *
  * Same as fscrypt_set_bio_crypt_ctx(), except this takes a buffer_head instead
  * of an inode and block number directly.
+ *
+ * Return: 0 on success, -errno on failure
  */
-void fscrypt_set_bio_crypt_ctx_bh(struct bio *bio,
-				  const struct buffer_head *first_bh,
-				  gfp_t gfp_mask)
+int fscrypt_set_bio_crypt_ctx_bh(struct bio *bio,
+				 const struct buffer_head *first_bh,
+				 gfp_t gfp_mask)
 {
 	const struct inode *inode;
 	u64 first_lblk;
 
-	if (bh_get_inode_and_lblk_num(first_bh, &inode, &first_lblk))
-		fscrypt_set_bio_crypt_ctx(bio, inode, first_lblk, gfp_mask);
+	if (!bh_get_inode_and_lblk_num(first_bh, &inode, &first_lblk))
+		return 0;
+
+	return fscrypt_set_bio_crypt_ctx(bio, inode, first_lblk, gfp_mask);
 }
 EXPORT_SYMBOL_GPL(fscrypt_set_bio_crypt_ctx_bh);
 
 /**
- * fscrypt_mergeable_bio() - test whether data can be added to a bio
+ * fscrypt_mergeable_bio - test whether data can be added to a bio
  * @bio: the bio being built up
  * @inode: the inode for the next part of the I/O
  * @next_lblk: the next file logical block number in the I/O
  *
  * When building a bio which may contain data which should undergo inline
  * encryption (or decryption) via fscrypt, filesystems should call this function
- * to ensure that the resulting bio contains only contiguous data unit numbers.
+ * to ensure that the resulting bio contains only logically contiguous data.
  * This will return false if the next part of the I/O cannot be merged with the
  * bio because either the encryption key would be different or the encryption
  * data unit numbers would be discontiguous.
@@ -320,29 +342,32 @@ EXPORT_SYMBOL_GPL(fscrypt_set_bio_crypt_ctx_bh);
 bool fscrypt_mergeable_bio(struct bio *bio, const struct inode *inode,
 			   u64 next_lblk)
 {
-	const struct bio_crypt_ctx *bc = bio->bi_crypt_context;
-	u64 next_dun[BLK_CRYPTO_DUN_ARRAY_SIZE];
+	const struct bio_crypt_ctx *bc;
+	const u8 *next_key;
+	u64 next_dun;
 
-	if (!!bc != fscrypt_inode_uses_inline_crypto(inode))
+	if (bio_has_crypt_ctx(bio) != fscrypt_inode_uses_inline_crypto(inode))
 		return false;
-	if (!bc)
+	if (!bio_has_crypt_ctx(bio))
 		return true;
+	bc = bio->bi_crypt_context;
+	next_key = inode->i_crypt_info->ci_inline_crypt_key;
+	next_dun = fscrypt_generate_dun(inode->i_crypt_info, next_lblk);
 
 	/*
 	 * Comparing the key pointers is good enough, as all I/O for each key
 	 * uses the same pointer.  I.e., there's currently no need to support
 	 * merging requests where the keys are the same but the pointers differ.
 	 */
-	if (bc->bc_key != &inode->i_crypt_info->ci_enc_key.blk_key->base)
-		return false;
-
-	fscrypt_generate_dun(inode->i_crypt_info, next_lblk, next_dun);
-	return bio_crypt_dun_is_contiguous(bc, bio->bi_iter.bi_size, next_dun);
+	return next_key == bc->raw_key &&
+		next_dun == bc->data_unit_num +
+			    (bio_sectors(bio) >>
+			     (bc->data_unit_size_bits - SECTOR_SHIFT));
 }
 EXPORT_SYMBOL_GPL(fscrypt_mergeable_bio);
 
 /**
- * fscrypt_mergeable_bio_bh() - test whether data can be added to a bio
+ * fscrypt_mergeable_bio_bh - test whether data can be added to a bio
  * @bio: the bio being built up
  * @next_bh: the next buffer_head for which I/O will be submitted
  *
@@ -358,7 +383,7 @@ bool fscrypt_mergeable_bio_bh(struct bio *bio,
 	u64 next_lblk;
 
 	if (!bh_get_inode_and_lblk_num(next_bh, &inode, &next_lblk))
-		return !bio->bi_crypt_context;
+		return !bio_has_crypt_ctx(bio);
 
 	return fscrypt_mergeable_bio(bio, inode, next_lblk);
 }

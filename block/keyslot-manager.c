@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * keyslot-manager.c
+ *
  * Copyright 2019 Google LLC
  */
 
@@ -10,7 +12,7 @@
  * into which encryption contexts may be programmed, and requests can be tagged
  * with a slot number to specify the key to use for en/decryption.
  *
- * As the number of slots is limited, and programming keys is expensive on
+ * As the number of slots are limited, and programming keys is expensive on
  * many inline encryption hardware, we don't want to program the same key into
  * multiple slots - if multiple requests are using the same key, we want to
  * program just one slot with that key and use that slot for all requests.
@@ -22,72 +24,77 @@
  * and tell it how to perform device specific operations like programming/
  * evicting keys from keyslots.
  *
- * Upper layers will call blk_ksm_get_slot_for_key() to program a
+ * Upper layers will call keyslot_manager_get_slot_for_key() to program a
  * key into some slot in the inline encryption hardware.
  */
-
-#define pr_fmt(fmt) "blk-crypto: " fmt
-
 #include <linux/keyslot-manager.h>
 #include <linux/atomic.h>
 #include <linux/mutex.h>
-#include <linux/pm_runtime.h>
 #include <linux/wait.h>
 #include <linux/blkdev.h>
 
-struct blk_ksm_keyslot {
+struct keyslot {
 	atomic_t slot_refs;
 	struct list_head idle_slot_node;
-	struct hlist_node hash_node;
-	const struct blk_crypto_key *key;
-	struct blk_keyslot_manager *ksm;
 };
 
-static inline void blk_ksm_hw_enter(struct blk_keyslot_manager *ksm)
-{
-	/*
-	 * Calling into the driver requires ksm->lock held and the device
-	 * resumed.  But we must resume the device first, since that can acquire
-	 * and release ksm->lock via blk_ksm_reprogram_all_keys().
-	 */
-	if (ksm->dev)
-		pm_runtime_get_sync(ksm->dev);
-	down_write(&ksm->lock);
-}
+struct keyslot_manager {
+	unsigned int num_slots;
+	atomic_t num_idle_slots;
+	struct keyslot_mgmt_ll_ops ksm_ll_ops;
+	void *ll_priv_data;
 
-static inline void blk_ksm_hw_exit(struct blk_keyslot_manager *ksm)
-{
-	up_write(&ksm->lock);
-	if (ksm->dev)
-		pm_runtime_put_sync(ksm->dev);
-}
+	/* Protects programming and evicting keys from the device */
+	struct rw_semaphore lock;
+
+	/* List of idle slots, with least recently used slot at front */
+	wait_queue_head_t idle_slots_wait_queue;
+	struct list_head idle_slots;
+	spinlock_t idle_slots_lock;
+
+	/* Per-keyslot data */
+	struct keyslot slots[];
+};
 
 /**
- * blk_ksm_init() - Initialize a keyslot manager
- * @ksm: The keyslot_manager to initialize.
+ * keyslot_manager_create() - Create a keyslot manager
  * @num_slots: The number of key slots to manage.
+ * @ksm_ll_ops: The struct keyslot_mgmt_ll_ops for the device that this keyslot
+ *		manager will use to perform operations like programming and
+ *		evicting keys.
+ * @ll_priv_data: Private data passed as is to the functions in ksm_ll_ops.
  *
- * Allocate memory for keyslots and initialize a keyslot manager. Called by
- * e.g. storage drivers to set up a keyslot manager in their request_queue.
+ * Allocate memory for and initialize a keyslot manager. Called by e.g.
+ * storage drivers to set up a keyslot manager in their request_queue.
  *
- * Return: 0 on success, or else a negative error code.
+ * Context: May sleep
+ * Return: Pointer to constructed keyslot manager or NULL on error.
  */
-int blk_ksm_init(struct blk_keyslot_manager *ksm, unsigned int num_slots)
+struct keyslot_manager *keyslot_manager_create(unsigned int num_slots,
+				const struct keyslot_mgmt_ll_ops *ksm_ll_ops,
+				void *ll_priv_data)
 {
-	unsigned int slot;
-	unsigned int i;
-	unsigned int slot_hashtable_size;
-
-	memset(ksm, 0, sizeof(*ksm));
+	struct keyslot_manager *ksm;
+	int slot;
 
 	if (num_slots == 0)
-		return -EINVAL;
+		return NULL;
 
-	ksm->slots = kvcalloc(num_slots, sizeof(ksm->slots[0]), GFP_KERNEL);
-	if (!ksm->slots)
-		return -ENOMEM;
+	/* Check that all ops are specified */
+	if (ksm_ll_ops->keyslot_program == NULL ||
+	    ksm_ll_ops->keyslot_evict == NULL ||
+	    ksm_ll_ops->crypto_mode_supported == NULL ||
+	    ksm_ll_ops->keyslot_find == NULL)
+		return NULL;
+
+	ksm = kvzalloc(struct_size(ksm, slots, num_slots), GFP_KERNEL);
+	if (!ksm)
+		return NULL;
 
 	ksm->num_slots = num_slots;
+	atomic_set(&ksm->num_idle_slots, num_slots);
+	ksm->ksm_ll_ops = *ksm_ll_ops;
+	ksm->ll_priv_data = ll_priv_data;
 
 	init_rwsem(&ksm->lock);
 
@@ -95,309 +102,251 @@ int blk_ksm_init(struct blk_keyslot_manager *ksm, unsigned int num_slots)
 	INIT_LIST_HEAD(&ksm->idle_slots);
 
 	for (slot = 0; slot < num_slots; slot++) {
-		ksm->slots[slot].ksm = ksm;
 		list_add_tail(&ksm->slots[slot].idle_slot_node,
 			      &ksm->idle_slots);
 	}
 
 	spin_lock_init(&ksm->idle_slots_lock);
 
-	slot_hashtable_size = roundup_pow_of_two(num_slots);
-	/*
-	 * hash_ptr() assumes bits != 0, so ensure the hash table has at least 2
-	 * buckets.  This only makes a difference when there is only 1 keyslot.
-	 */
-	if (slot_hashtable_size < 2)
-		slot_hashtable_size = 2;
-
-	ksm->log_slot_ht_size = ilog2(slot_hashtable_size);
-	ksm->slot_hashtable = kvmalloc_array(slot_hashtable_size,
-					     sizeof(ksm->slot_hashtable[0]),
-					     GFP_KERNEL);
-	if (!ksm->slot_hashtable)
-		goto err_destroy_ksm;
-	for (i = 0; i < slot_hashtable_size; i++)
-		INIT_HLIST_HEAD(&ksm->slot_hashtable[i]);
-
-	return 0;
-
-err_destroy_ksm:
-	blk_ksm_destroy(ksm);
-	return -ENOMEM;
+	return ksm;
 }
-EXPORT_SYMBOL_GPL(blk_ksm_init);
+EXPORT_SYMBOL(keyslot_manager_create);
 
-static inline struct hlist_head *
-blk_ksm_hash_bucket_for_key(struct blk_keyslot_manager *ksm,
-			    const struct blk_crypto_key *key)
+static void remove_slot_from_lru_list(struct keyslot_manager *ksm, int slot)
 {
-	return &ksm->slot_hashtable[hash_ptr(key, ksm->log_slot_ht_size)];
-}
-
-static void blk_ksm_remove_slot_from_lru_list(struct blk_ksm_keyslot *slot)
-{
-	struct blk_keyslot_manager *ksm = slot->ksm;
 	unsigned long flags;
 
 	spin_lock_irqsave(&ksm->idle_slots_lock, flags);
-	list_del(&slot->idle_slot_node);
+	list_del(&ksm->slots[slot].idle_slot_node);
 	spin_unlock_irqrestore(&ksm->idle_slots_lock, flags);
+
+	atomic_dec(&ksm->num_idle_slots);
 }
 
-static struct blk_ksm_keyslot *blk_ksm_find_keyslot(
-					struct blk_keyslot_manager *ksm,
-					const struct blk_crypto_key *key)
+static int find_and_grab_keyslot(struct keyslot_manager *ksm, const u8 *key,
+				 enum blk_crypto_mode_num crypto_mode,
+				 unsigned int data_unit_size)
 {
-	const struct hlist_head *head = blk_ksm_hash_bucket_for_key(ksm, key);
-	struct blk_ksm_keyslot *slotp;
+	int slot;
 
-	hlist_for_each_entry(slotp, head, hash_node) {
-		if (slotp->key == key)
-			return slotp;
-	}
-	return NULL;
-}
-
-static struct blk_ksm_keyslot *blk_ksm_find_and_grab_keyslot(
-					struct blk_keyslot_manager *ksm,
-					const struct blk_crypto_key *key)
-{
-	struct blk_ksm_keyslot *slot;
-
-	slot = blk_ksm_find_keyslot(ksm, key);
-	if (!slot)
-		return NULL;
-	if (atomic_inc_return(&slot->slot_refs) == 1) {
+	slot = ksm->ksm_ll_ops.keyslot_find(ksm->ll_priv_data, key,
+					    crypto_mode, data_unit_size);
+	if (slot < 0)
+		return slot;
+	if (WARN_ON(slot >= ksm->num_slots))
+		return -EINVAL;
+	if (atomic_inc_return(&ksm->slots[slot].slot_refs) == 1) {
 		/* Took first reference to this slot; remove it from LRU list */
-		blk_ksm_remove_slot_from_lru_list(slot);
+		remove_slot_from_lru_list(ksm, slot);
 	}
 	return slot;
 }
 
-unsigned int blk_ksm_get_slot_idx(struct blk_ksm_keyslot *slot)
-{
-	return slot - slot->ksm->slots;
-}
-EXPORT_SYMBOL_GPL(blk_ksm_get_slot_idx);
-
 /**
- * blk_ksm_get_slot_for_key() - Program a key into a keyslot.
+ * keyslot_manager_get_slot_for_key() - Program a key into a keyslot.
  * @ksm: The keyslot manager to program the key into.
- * @key: Pointer to the key object to program, including the raw key, crypto
- *	 mode, and data unit size.
- * @slot_ptr: A pointer to return the pointer of the allocated keyslot.
+ * @key: Pointer to the bytes of the key to program. Must be the correct length
+ *      for the chosen @crypto_mode; see blk_crypto_modes in blk-crypto.c.
+ * @crypto_mode: Identifier for the encryption algorithm to use.
+ * @data_unit_size: The data unit size to use for en/decryption.
  *
- * Get a keyslot that's been programmed with the specified key.  If one already
- * exists, return it with incremented refcount.  Otherwise, wait for a keyslot
- * to become idle and program it.
+ * Get a keyslot that's been programmed with the specified key, crypto_mode, and
+ * data_unit_size.  If one already exists, return it with incremented refcount.
+ * Otherwise, wait for a keyslot to become idle and program it.
  *
  * Context: Process context. Takes and releases ksm->lock.
- * Return: BLK_STS_OK on success (and keyslot is set to the pointer of the
- *	   allocated keyslot), or some other blk_status_t otherwise (and
- *	   keyslot is set to NULL).
+ * Return: The keyslot on success, else a -errno value.
  */
-blk_status_t blk_ksm_get_slot_for_key(struct blk_keyslot_manager *ksm,
-				      const struct blk_crypto_key *key,
-				      struct blk_ksm_keyslot **slot_ptr)
+int keyslot_manager_get_slot_for_key(struct keyslot_manager *ksm,
+				     const u8 *key,
+				     enum blk_crypto_mode_num crypto_mode,
+				     unsigned int data_unit_size)
 {
-	struct blk_ksm_keyslot *slot;
-	int slot_idx;
+	int slot;
 	int err;
+	struct keyslot *idle_slot;
 
-	*slot_ptr = NULL;
 	down_read(&ksm->lock);
-	slot = blk_ksm_find_and_grab_keyslot(ksm, key);
+	slot = find_and_grab_keyslot(ksm, key, crypto_mode, data_unit_size);
 	up_read(&ksm->lock);
-	if (slot)
-		goto success;
+	if (slot != -ENOKEY)
+		return slot;
 
 	for (;;) {
-		blk_ksm_hw_enter(ksm);
-		slot = blk_ksm_find_and_grab_keyslot(ksm, key);
-		if (slot) {
-			blk_ksm_hw_exit(ksm);
-			goto success;
+		down_write(&ksm->lock);
+		slot = find_and_grab_keyslot(ksm, key, crypto_mode,
+					     data_unit_size);
+		if (slot != -ENOKEY) {
+			up_write(&ksm->lock);
+			return slot;
 		}
 
 		/*
 		 * If we're here, that means there wasn't a slot that was
 		 * already programmed with the key. So try to program it.
 		 */
-		if (!list_empty(&ksm->idle_slots))
+		if (atomic_read(&ksm->num_idle_slots) > 0)
 			break;
 
-		blk_ksm_hw_exit(ksm);
+		up_write(&ksm->lock);
 		wait_event(ksm->idle_slots_wait_queue,
-			   !list_empty(&ksm->idle_slots));
+			(atomic_read(&ksm->num_idle_slots) > 0));
 	}
 
-	slot = list_first_entry(&ksm->idle_slots, struct blk_ksm_keyslot,
-				idle_slot_node);
-	slot_idx = blk_ksm_get_slot_idx(slot);
+	idle_slot = list_first_entry(&ksm->idle_slots, struct keyslot,
+					     idle_slot_node);
+	slot = idle_slot - ksm->slots;
 
-	err = ksm->ksm_ll_ops.keyslot_program(ksm, key, slot_idx);
+	err = ksm->ksm_ll_ops.keyslot_program(ksm->ll_priv_data, key,
+					      crypto_mode,
+					      data_unit_size,
+					      slot);
+
 	if (err) {
 		wake_up(&ksm->idle_slots_wait_queue);
-		blk_ksm_hw_exit(ksm);
-		return errno_to_blk_status(err);
+		up_write(&ksm->lock);
+		return err;
 	}
 
-	/* Move this slot to the hash list for the new key. */
-	if (slot->key)
-		hlist_del(&slot->hash_node);
-	slot->key = key;
-	hlist_add_head(&slot->hash_node, blk_ksm_hash_bucket_for_key(ksm, key));
+	atomic_set(&ksm->slots[slot].slot_refs, 1);
+	remove_slot_from_lru_list(ksm, slot);
 
-	atomic_set(&slot->slot_refs, 1);
+	up_write(&ksm->lock);
+	return slot;
 
-	blk_ksm_remove_slot_from_lru_list(slot);
-
-	blk_ksm_hw_exit(ksm);
-success:
-	*slot_ptr = slot;
-	return BLK_STS_OK;
 }
+EXPORT_SYMBOL(keyslot_manager_get_slot_for_key);
 
 /**
- * blk_ksm_put_slot() - Release a reference to a slot
- * @slot: The keyslot to release the reference of.
+ * keyslot_manager_get_slot() - Increment the refcount on the specified slot.
+ * @ksm - The keyslot manager that we want to modify.
+ * @slot - The slot to increment the refcount of.
+ *
+ * This function assumes that there is already an active reference to that slot
+ * and simply increments the refcount. This is useful when cloning a bio that
+ * already has a reference to a keyslot, and we want the cloned bio to also have
+ * its own reference.
  *
  * Context: Any context.
  */
-void blk_ksm_put_slot(struct blk_ksm_keyslot *slot)
+void keyslot_manager_get_slot(struct keyslot_manager *ksm, unsigned int slot)
 {
-	struct blk_keyslot_manager *ksm;
-	unsigned long flags;
-
-	if (!slot)
+	if (WARN_ON(slot >= ksm->num_slots))
 		return;
 
-	ksm = slot->ksm;
+	WARN_ON(atomic_inc_return(&ksm->slots[slot].slot_refs) < 2);
+}
+EXPORT_SYMBOL(keyslot_manager_get_slot);
 
-	if (atomic_dec_and_lock_irqsave(&slot->slot_refs,
+/**
+ * keyslot_manager_put_slot() - Release a reference to a slot
+ * @ksm: The keyslot manager to release the reference from.
+ * @slot: The slot to release the reference from.
+ *
+ * Context: Any context.
+ */
+void keyslot_manager_put_slot(struct keyslot_manager *ksm, unsigned int slot)
+{
+	unsigned long flags;
+
+	if (WARN_ON(slot >= ksm->num_slots))
+		return;
+
+	if (atomic_dec_and_lock_irqsave(&ksm->slots[slot].slot_refs,
 					&ksm->idle_slots_lock, flags)) {
-		list_add_tail(&slot->idle_slot_node, &ksm->idle_slots);
+		list_add_tail(&ksm->slots[slot].idle_slot_node,
+			      &ksm->idle_slots);
 		spin_unlock_irqrestore(&ksm->idle_slots_lock, flags);
+		atomic_inc(&ksm->num_idle_slots);
 		wake_up(&ksm->idle_slots_wait_queue);
 	}
 }
+EXPORT_SYMBOL(keyslot_manager_put_slot);
 
 /**
- * blk_ksm_crypto_cfg_supported() - Find out if a crypto configuration is
- *				    supported by a ksm.
- * @ksm: The keyslot manager to check
- * @cfg: The crypto configuration to check for.
+ * keyslot_manager_crypto_mode_supported() - Find out if a crypto_mode/data
+ *					     unit size combination is supported
+ *					     by a ksm.
+ * @ksm - The keyslot manager to check
+ * @crypto_mode - The crypto mode to check for.
+ * @data_unit_size - The data_unit_size for the mode.
  *
- * Checks for crypto_mode/data unit size/dun bytes support.
+ * Calls and returns the result of the crypto_mode_supported function specified
+ * by the ksm.
  *
- * Return: Whether or not this ksm supports the specified crypto config.
+ * Context: Process context.
+ * Return: Whether or not this ksm supports the specified crypto_mode/
+ *	   data_unit_size combo.
  */
-bool blk_ksm_crypto_cfg_supported(struct blk_keyslot_manager *ksm,
-				  const struct blk_crypto_config *cfg)
+bool keyslot_manager_crypto_mode_supported(struct keyslot_manager *ksm,
+					   enum blk_crypto_mode_num crypto_mode,
+					   unsigned int data_unit_size)
 {
 	if (!ksm)
 		return false;
-	if (!(ksm->crypto_modes_supported[cfg->crypto_mode] &
-	      cfg->data_unit_size))
-		return false;
-	if (ksm->max_dun_bytes_supported < cfg->dun_bytes)
-		return false;
-	return true;
+	return ksm->ksm_ll_ops.crypto_mode_supported(ksm->ll_priv_data,
+						     crypto_mode,
+						     data_unit_size);
 }
+EXPORT_SYMBOL(keyslot_manager_crypto_mode_supported);
+
+bool keyslot_manager_rq_crypto_mode_supported(struct request_queue *q,
+					enum blk_crypto_mode_num crypto_mode,
+					unsigned int data_unit_size)
+{
+	return keyslot_manager_crypto_mode_supported(q->ksm, crypto_mode,
+						     data_unit_size);
+}
+EXPORT_SYMBOL(keyslot_manager_rq_crypto_mode_supported);
 
 /**
- * blk_ksm_evict_key() - Evict a key from the lower layer device.
- * @ksm: The keyslot manager to evict from
- * @key: The key to evict
+ * keyslot_manager_evict_key() - Evict a key from the lower layer device.
+ * @ksm - The keyslot manager to evict from
+ * @key - The key to evict
+ * @crypto_mode - The crypto algorithm the key was programmed with.
+ * @data_unit_size - The data_unit_size the key was programmed with.
  *
- * Find the keyslot that the specified key was programmed into, and evict that
- * slot from the lower layer device. The slot must not be in use by any
- * in-flight IO when this function is called.
+ * Finds the slot that the specified key, crypto_mode, data_unit_size combo
+ * was programmed into, and evicts that slot from the lower layer device if
+ * the refcount on the slot is 0. Returns -EBUSY if the refcount is not 0, and
+ * -errno on error.
  *
  * Context: Process context. Takes and releases ksm->lock.
- * Return: 0 on success or if there's no keyslot with the specified key, -EBUSY
- *	   if the keyslot is still in use, or another -errno value on other
- *	   error.
  */
-int blk_ksm_evict_key(struct blk_keyslot_manager *ksm,
-		      const struct blk_crypto_key *key)
+int keyslot_manager_evict_key(struct keyslot_manager *ksm,
+			      const u8 *key,
+			      enum blk_crypto_mode_num crypto_mode,
+			      unsigned int data_unit_size)
 {
-	struct blk_ksm_keyslot *slot;
+	int slot;
 	int err = 0;
 
-	blk_ksm_hw_enter(ksm);
-	slot = blk_ksm_find_keyslot(ksm, key);
-	if (!slot)
-		goto out_unlock;
+	down_write(&ksm->lock);
+	slot = ksm->ksm_ll_ops.keyslot_find(ksm->ll_priv_data, key,
+					    crypto_mode,
+					    data_unit_size);
 
-	if (WARN_ON_ONCE(atomic_read(&slot->slot_refs) != 0)) {
-		err = -EBUSY;
-		goto out_unlock;
+	if (slot < 0) {
+		up_write(&ksm->lock);
+		return slot;
 	}
-	err = ksm->ksm_ll_ops.keyslot_evict(ksm, key,
-					    blk_ksm_get_slot_idx(slot));
-	if (err)
-		goto out_unlock;
 
-	hlist_del(&slot->hash_node);
-	slot->key = NULL;
-	err = 0;
-out_unlock:
-	blk_ksm_hw_exit(ksm);
+	if (atomic_read(&ksm->slots[slot].slot_refs) == 0) {
+		err = ksm->ksm_ll_ops.keyslot_evict(ksm->ll_priv_data, key,
+						    crypto_mode,
+						    data_unit_size,
+						    slot);
+	} else {
+		err = -EBUSY;
+	}
+
+	up_write(&ksm->lock);
 	return err;
 }
+EXPORT_SYMBOL(keyslot_manager_evict_key);
 
-/**
- * blk_ksm_reprogram_all_keys() - Re-program all keyslots.
- * @ksm: The keyslot manager
- *
- * Re-program all keyslots that are supposed to have a key programmed.  This is
- * intended only for use by drivers for hardware that loses its keys on reset.
- *
- * Context: Process context. Takes and releases ksm->lock.
- */
-void blk_ksm_reprogram_all_keys(struct blk_keyslot_manager *ksm)
+void keyslot_manager_destroy(struct keyslot_manager *ksm)
 {
-	unsigned int slot;
-
-	/* This is for device initialization, so don't resume the device */
-	down_write(&ksm->lock);
-	for (slot = 0; slot < ksm->num_slots; slot++) {
-		const struct blk_crypto_key *key = ksm->slots[slot].key;
-		int err;
-
-		if (!key)
-			continue;
-
-		err = ksm->ksm_ll_ops.keyslot_program(ksm, key, slot);
-		WARN_ON(err);
-	}
-	up_write(&ksm->lock);
+	kvfree(ksm);
 }
-EXPORT_SYMBOL_GPL(blk_ksm_reprogram_all_keys);
-
-void blk_ksm_destroy(struct blk_keyslot_manager *ksm)
-{
-	if (!ksm)
-		return;
-	kvfree(ksm->slot_hashtable);
-	kvfree_sensitive(ksm->slots, sizeof(ksm->slots[0]) * ksm->num_slots);
-	memzero_explicit(ksm, sizeof(*ksm));
-}
-EXPORT_SYMBOL_GPL(blk_ksm_destroy);
-
-bool blk_ksm_register(struct blk_keyslot_manager *ksm, struct request_queue *q)
-{
-	if (blk_integrity_queue_supports_integrity(q)) {
-		pr_warn("Integrity and hardware inline encryption are not supported together. Disabling hardware inline encryption.\n");
-		return false;
-	}
-	q->ksm = ksm;
-	return true;
-}
-EXPORT_SYMBOL_GPL(blk_ksm_register);
-
-void blk_ksm_unregister(struct request_queue *q)
-{
-	q->ksm = NULL;
-}
+EXPORT_SYMBOL(keyslot_manager_destroy);

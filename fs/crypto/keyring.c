@@ -50,6 +50,8 @@ static void free_master_key(struct fscrypt_master_key *mk)
 		crypto_free_skcipher(mk->mk_iv_ino_lblk_32_keys[i]);
 	}
 
+	fscrypt_evict_inline_crypt_keys(mk);
+
 	key_put(mk->mk_users);
 	kzfree(mk);
 }

@@ -11,7 +11,6 @@
 #include <linux/list.h>
 
 /* dentry.c */
-extern struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name);
 extern void __d_free(struct dentry *dentry);
 extern void __d_drop(struct dentry *dentry);
 extern void __d_instantiate(struct dentry *dentry, struct inode *inode);

@@ -847,26 +847,26 @@ struct io_pgtable_init_fns io_pgtable_arm_v7s_init_fns = {
 
 #ifdef CONFIG_IOMMU_IO_PGTABLE_ARMV7S_SELFTEST
 
-static struct io_pgtable_cfg *cfg_cookie;
+static struct io_pgtable_cfg *cfg_cookie __initdata;
 
-static void dummy_tlb_flush_all(void *cookie)
+static void __init dummy_tlb_flush_all(void *cookie)
 {
 	WARN_ON(cookie != cfg_cookie);
 }
 
-static void dummy_tlb_add_flush(unsigned long iova, size_t size,
+static void __init dummy_tlb_add_flush(unsigned long iova, size_t size,
 				size_t granule, bool leaf, void *cookie)
 {
 	WARN_ON(cookie != cfg_cookie);
 	WARN_ON(!(size & cfg_cookie->pgsize_bitmap));
 }
 
-static void dummy_tlb_sync(void *cookie)
+static void __init dummy_tlb_sync(void *cookie)
 {
 	WARN_ON(cookie != cfg_cookie);
 }
 
-static const struct iommu_gather_ops dummy_tlb_ops = {
+static const struct iommu_gather_ops dummy_tlb_ops __initconst = {
 	.tlb_flush_all	= dummy_tlb_flush_all,
 	.tlb_add_flush	= dummy_tlb_add_flush,
 	.tlb_sync	= dummy_tlb_sync,

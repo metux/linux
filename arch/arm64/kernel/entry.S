@@ -172,10 +172,6 @@ alternative_cb_end
 
 	apply_ssbd 1, x22, x23
 
-#ifdef CONFIG_SHADOW_CALL_STACK
-	ldr	x18, [tsk, #TSK_TI_SCS]		// Restore shadow call stack
-	str	xzr, [tsk, #TSK_TI_SCS]		// Limit visibility of saved SCS
-#endif
 	.else
 	add	x21, sp, #S_FRAME_SIZE
 	get_current_task tsk
@@ -282,12 +278,6 @@ alternative_else_nop_endif
 	ct_user_enter
 	.endif
 
-#ifdef CONFIG_SHADOW_CALL_STACK
-	.if	\el == 0
-	str	x18, [tsk, #TSK_TI_SCS]		// Save shadow call stack
-	.endif
-#endif
-
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
 	/*
 	 * Restore access to TTBR0_EL1. If returning to EL0, no need for SPSR
@@ -393,9 +383,6 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 
 	.macro	irq_stack_entry
 	mov	x19, sp			// preserve the original sp
-#ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x20, x18		// preserve the original shadow stack
-#endif
 
 	/*
 	 * Compare sp with the base of the task stack.
@@ -413,24 +400,15 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 
 	/* switch to the irq stack */
 	mov	sp, x26
-
-#ifdef CONFIG_SHADOW_CALL_STACK
-	/* also switch to the irq shadow stack */
-	ldr_this_cpu x18, irq_shadow_call_stack_ptr, x26
-#endif
-
 9998:
 	.endm
 
 	/*
-	 * The callee-saved regs (x19-x29) should be preserved between
-	 * irq_stack_entry and irq_stack_exit.
+	 * x19 should be preserved between irq_stack_entry and
+	 * irq_stack_exit.
 	 */
 	.macro	irq_stack_exit
 	mov	sp, x19
-#ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x18, x20
-#endif
 	.endm
 
 /* GPRs used by entry code */
@@ -600,76 +578,9 @@ ENDPROC(el1_error_invalid)
 	.align	6
 el1_sync:
 	kernel_entry 1
-	mrs	x1, esr_el1			// read the syndrome register
-	lsr	x24, x1, #ESR_ELx_EC_SHIFT	// exception class
-	cmp	x24, #ESR_ELx_EC_DABT_CUR	// data abort in EL1
-	b.eq	el1_da
-	cmp	x24, #ESR_ELx_EC_IABT_CUR	// instruction abort in EL1
-	b.eq	el1_ia
-	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
-	b.eq	el1_undef
-	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
-	b.eq	el1_pc
-	cmp	x24, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL1
-	b.eq	el1_undef
-	cmp	x24, #ESR_ELx_EC_BREAKPT_CUR	// debug exception in EL1
-	b.ge	el1_dbg
-	b	el1_inv
-
-el1_ia:
-	/*
-	 * Fall through to the Data abort case
-	 */
-el1_da:
-	/*
-	 * Data abort handling
-	 */
-	mrs	x3, far_el1
-	inherit_daif	pstate=x23, tmp=x2
-	untagged_addr	x0, x3
-	mov	x2, sp				// struct pt_regs
-	bl	do_mem_abort
-
-	kernel_exit 1
-el1_pc:
-	/*
-	 * PC alignment exception handling. We don't handle SP alignment faults,
-	 * since we will have hit a recursive exception when trying to push the
-	 * initial pt_regs.
-	 */
-	mrs	x0, far_el1
-	inherit_daif	pstate=x23, tmp=x2
-	mov	x2, sp
-	bl	do_sp_pc_abort
-	ASM_BUG()
-el1_undef:
-	/*
-	 * Undefined instruction
-	 */
-	inherit_daif	pstate=x23, tmp=x2
 	mov	x0, sp
-	bl	do_undefinstr
+	bl	el1_sync_handler
 	kernel_exit 1
-el1_dbg:
-	/*
-	 * Debug exception handling
-	 */
-	cmp	x24, #ESR_ELx_EC_BRK64		// if BRK64
-	cinc	x24, x24, eq			// set bit '0'
-	tbz	x24, #0, el1_inv		// EL1 only
-	gic_prio_kentry_setup tmp=x3
-	mrs	x0, far_el1
-	mov	x2, sp				// struct pt_regs
-	bl	do_debug_exception
-	kernel_exit 1
-el1_inv:
-	// TODO: add support for undefined instructions in kernel mode
-	inherit_daif	pstate=x23, tmp=x2
-	mov	x0, sp
-	mov	x2, x1
-	mov	x1, #BAD_SYNC
-	bl	bad_mode
-	ASM_BUG()
 ENDPROC(el1_sync)
 
 	.align	6
@@ -702,7 +613,7 @@ alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	orr	x24, x24, x0
 alternative_else_nop_endif
 	cbnz	x24, 1f				// preempt count != 0 || NMI return path
-	bl	arm64_preempt_schedule_irq	// irq en/disable is done inside
+	bl	preempt_schedule_irq		// irq en/disable is done inside
 1:
 #endif
 
@@ -830,7 +741,7 @@ el0_da:
 	mrs	x26, far_el1
 	ct_user_exit_irqoff
 	enable_daif
-	untagged_addr	x0, x26
+	clear_address_tag x0, x26
 	mov	x1, x25
 	mov	x2, sp
 	bl	do_mem_abort
@@ -1093,9 +1004,7 @@ alternative_insn isb, nop, ARM64_WORKAROUND_QCOM_FALKOR_E1003
 #else
 	ldr	x30, =vectors
 #endif
-alternative_if_not ARM64_WORKAROUND_CAVIUM_TX2_219_PRFM
 	prfm	plil1strm, [x30, #(1b - tramp_vectors)]
-alternative_else_nop_endif
 	msr	vbar_el1, x30
 	add	x30, x30, #(1b - tramp_vectors)
 	isb
@@ -1177,11 +1086,6 @@ ENTRY(cpu_switch_to)
 	ldr	lr, [x8]
 	mov	sp, x9
 	msr	sp_el0, x1
-#ifdef CONFIG_SHADOW_CALL_STACK
-	str	x18, [x0, #TSK_TI_SCS]
-	ldr	x18, [x1, #TSK_TI_SCS]
-	str	xzr, [x1, #TSK_TI_SCS]		// limit visibility of saved SCS
-#endif
 	ret
 ENDPROC(cpu_switch_to)
 NOKPROBE(cpu_switch_to)

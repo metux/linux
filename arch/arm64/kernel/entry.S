@@ -60,24 +60,23 @@
 	.macro kernel_ventry, el, label, regsize = 64
 	.align 7
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-	.if	\el == 0
 alternative_if ARM64_UNMAP_KERNEL_AT_EL0
+	.if	\el == 0
 	.if	\regsize == 64
 	mrs	x30, tpidrro_el0
 	msr	tpidrro_el0, xzr
 	.else
 	mov	x30, xzr
 	.endif
-alternative_else_nop_endif
 	.endif
+alternative_else_nop_endif
 #endif
 
 	sub	sp, sp, #S_FRAME_SIZE
 #ifdef CONFIG_VMAP_STACK
 	/*
 	 * Test whether the SP has overflowed, without corrupting a GPR.
-	 * Task and IRQ stacks are aligned so that SP & (1 << THREAD_SHIFT)
-	 * should always be zero.
+	 * Task and IRQ stacks are aligned to (1 << THREAD_SHIFT).
 	 */
 	add	sp, sp, x0			// sp' = sp + x0
 	sub	x0, sp, x0			// x0' = sp' - x0 = (sp + x0) - x0 = sp
@@ -167,20 +166,12 @@ alternative_cb_end
 	.if	\el == 0
 	clear_gp_regs
 	mrs	x21, sp_el0
-	ldr_this_cpu	tsk, __entry_task, x20
-	msr	sp_el0, tsk
-
-	// Ensure MDSCR_EL1.SS is clear, since we can unmask debug exceptions
-	// when scheduling.
-	ldr	x19, [tsk, #TSK_TI_FLAGS]
-	disable_step_tsk x19, x20
+	ldr_this_cpu	tsk, __entry_task, x20	// Ensure MDSCR_EL1.SS is clear,
+	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
+	disable_step_tsk x19, x20		// exceptions when scheduling.
 
 	apply_ssbd 1, x22, x23
 
-#ifdef CONFIG_SHADOW_CALL_STACK
-	ldr	x18, [tsk, #TSK_TI_SCS]		// Restore shadow call stack
-	str	xzr, [tsk, #TSK_TI_SCS]		// Limit visibility of saved SCS
-#endif
 	.else
 	add	x21, sp, #S_FRAME_SIZE
 	get_current_task tsk
@@ -240,6 +231,13 @@ alternative_else_nop_endif
 	str	w21, [sp, #S_SYSCALLNO]
 	.endif
 
+	/*
+	 * Set sp_el0 to current thread_info.
+	 */
+	.if	\el == 0
+	msr	sp_el0, tsk
+	.endif
+
 	/* Save pmr */
 alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	mrs_s	x20, SYS_ICC_PMR_EL1
@@ -271,22 +269,14 @@ alternative_else_nop_endif
 alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	ldr	x20, [sp, #S_PMR_SAVE]
 	msr_s	SYS_ICC_PMR_EL1, x20
-	mrs_s	x21, SYS_ICC_CTLR_EL1
-	tbz	x21, #6, .L__skip_pmr_sync\@	// Check for ICC_CTLR_EL1.PMHE
-	dsb	sy				// Ensure priority change is seen by redistributor
-.L__skip_pmr_sync\@:
+	/* Ensure priority change is seen by redistributor */
+	dsb	sy
 alternative_else_nop_endif
 
 	ldp	x21, x22, [sp, #S_PC]		// load ELR, SPSR
 	.if	\el == 0
 	ct_user_enter
 	.endif
-
-#ifdef CONFIG_SHADOW_CALL_STACK
-	.if	\el == 0
-	str	x18, [tsk, #TSK_TI_SCS]		// Save shadow call stack
-	.endif
-#endif
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
 	/*
@@ -393,9 +383,6 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 
 	.macro	irq_stack_entry
 	mov	x19, sp			// preserve the original sp
-#ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x20, x18		// preserve the original shadow stack
-#endif
 
 	/*
 	 * Compare sp with the base of the task stack.
@@ -413,24 +400,15 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 
 	/* switch to the irq stack */
 	mov	sp, x26
-
-#ifdef CONFIG_SHADOW_CALL_STACK
-	/* also switch to the irq shadow stack */
-	ldr_this_cpu x18, irq_shadow_call_stack_ptr, x26
-#endif
-
 9998:
 	.endm
 
 	/*
-	 * The callee-saved regs (x19-x29) should be preserved between
-	 * irq_stack_entry and irq_stack_exit.
+	 * x19 should be preserved between irq_stack_entry and
+	 * irq_stack_exit.
 	 */
 	.macro	irq_stack_exit
 	mov	sp, x19
-#ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x18, x20
-#endif
 	.endm
 
 /* GPRs used by entry code */
@@ -624,7 +602,7 @@ el1_irq:
 
 	irq_handler
 
-#ifdef CONFIG_PREEMPTION
+#ifdef CONFIG_PREEMPT
 	ldr	x24, [tsk, #TSK_TI_PREEMPT]	// get preempt count
 alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	/*
@@ -635,7 +613,7 @@ alternative_if ARM64_HAS_IRQ_PRIO_MASKING
 	orr	x24, x24, x0
 alternative_else_nop_endif
 	cbnz	x24, 1f				// preempt count != 0 || NMI return path
-	bl	arm64_preempt_schedule_irq	// irq en/disable is done inside
+	bl	preempt_schedule_irq		// irq en/disable is done inside
 1:
 #endif
 
@@ -669,31 +647,213 @@ ENDPROC(el1_irq)
 	.align	6
 el0_sync:
 	kernel_entry 0
-	mov	x0, sp
-	bl	el0_sync_handler
-	b	ret_to_user
-ENDPROC(el0_sync)
+	mrs	x25, esr_el1			// read the syndrome register
+	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
+	cmp	x24, #ESR_ELx_EC_SVC64		// SVC in 64-bit state
+	b.eq	el0_svc
+	cmp	x24, #ESR_ELx_EC_DABT_LOW	// data abort in EL0
+	b.eq	el0_da
+	cmp	x24, #ESR_ELx_EC_IABT_LOW	// instruction abort in EL0
+	b.eq	el0_ia
+	cmp	x24, #ESR_ELx_EC_FP_ASIMD	// FP/ASIMD access
+	b.eq	el0_fpsimd_acc
+	cmp	x24, #ESR_ELx_EC_SVE		// SVE access
+	b.eq	el0_sve_acc
+	cmp	x24, #ESR_ELx_EC_FP_EXC64	// FP/ASIMD exception
+	b.eq	el0_fpsimd_exc
+	cmp	x24, #ESR_ELx_EC_SYS64		// configurable trap
+	ccmp	x24, #ESR_ELx_EC_WFx, #4, ne
+	b.eq	el0_sys
+	cmp	x24, #ESR_ELx_EC_SP_ALIGN	// stack alignment exception
+	b.eq	el0_sp
+	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
+	b.eq	el0_pc
+	cmp	x24, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL0
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_BREAKPT_LOW	// debug exception in EL0
+	b.ge	el0_dbg
+	b	el0_inv
 
 #ifdef CONFIG_COMPAT
 	.align	6
 el0_sync_compat:
 	kernel_entry 0, 32
+	mrs	x25, esr_el1			// read the syndrome register
+	lsr	x24, x25, #ESR_ELx_EC_SHIFT	// exception class
+	cmp	x24, #ESR_ELx_EC_SVC32		// SVC in 32-bit state
+	b.eq	el0_svc_compat
+	cmp	x24, #ESR_ELx_EC_DABT_LOW	// data abort in EL0
+	b.eq	el0_da
+	cmp	x24, #ESR_ELx_EC_IABT_LOW	// instruction abort in EL0
+	b.eq	el0_ia
+	cmp	x24, #ESR_ELx_EC_FP_ASIMD	// FP/ASIMD access
+	b.eq	el0_fpsimd_acc
+	cmp	x24, #ESR_ELx_EC_FP_EXC32	// FP/ASIMD exception
+	b.eq	el0_fpsimd_exc
+	cmp	x24, #ESR_ELx_EC_PC_ALIGN	// pc alignment exception
+	b.eq	el0_pc
+	cmp	x24, #ESR_ELx_EC_UNKNOWN	// unknown exception in EL0
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_CP15_32	// CP15 MRC/MCR trap
+	b.eq	el0_cp15
+	cmp	x24, #ESR_ELx_EC_CP15_64	// CP15 MRRC/MCRR trap
+	b.eq	el0_cp15
+	cmp	x24, #ESR_ELx_EC_CP14_MR	// CP14 MRC/MCR trap
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_CP14_LS	// CP14 LDC/STC trap
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_CP14_64	// CP14 MRRC/MCRR trap
+	b.eq	el0_undef
+	cmp	x24, #ESR_ELx_EC_BREAKPT_LOW	// debug exception in EL0
+	b.ge	el0_dbg
+	b	el0_inv
+el0_svc_compat:
+	gic_prio_kentry_setup tmp=x1
 	mov	x0, sp
-	bl	el0_sync_compat_handler
+	bl	el0_svc_compat_handler
 	b	ret_to_user
-ENDPROC(el0_sync_compat)
 
 	.align	6
 el0_irq_compat:
 	kernel_entry 0, 32
 	b	el0_irq_naked
-ENDPROC(el0_irq_compat)
 
 el0_error_compat:
 	kernel_entry 0, 32
 	b	el0_error_naked
-ENDPROC(el0_error_compat)
+
+el0_cp15:
+	/*
+	 * Trapped CP15 (MRC, MCR, MRRC, MCRR) instructions
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_cp15instr
+	b	ret_to_user
 #endif
+
+el0_da:
+	/*
+	 * Data abort handling
+	 */
+	mrs	x26, far_el1
+	ct_user_exit_irqoff
+	enable_daif
+	clear_address_tag x0, x26
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_mem_abort
+	b	ret_to_user
+el0_ia:
+	/*
+	 * Instruction abort handling
+	 */
+	mrs	x26, far_el1
+	gic_prio_kentry_setup tmp=x0
+	ct_user_exit_irqoff
+	enable_da_f
+#ifdef CONFIG_TRACE_IRQFLAGS
+	bl	trace_hardirqs_off
+#endif
+	mov	x0, x26
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_el0_ia_bp_hardening
+	b	ret_to_user
+el0_fpsimd_acc:
+	/*
+	 * Floating Point or Advanced SIMD access
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_fpsimd_acc
+	b	ret_to_user
+el0_sve_acc:
+	/*
+	 * Scalable Vector Extension access
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_sve_acc
+	b	ret_to_user
+el0_fpsimd_exc:
+	/*
+	 * Floating Point, Advanced SIMD or SVE exception
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_fpsimd_exc
+	b	ret_to_user
+el0_sp:
+	ldr	x26, [sp, #S_SP]
+	b	el0_sp_pc
+el0_pc:
+	mrs	x26, far_el1
+el0_sp_pc:
+	/*
+	 * Stack or PC alignment exception handling
+	 */
+	gic_prio_kentry_setup tmp=x0
+	ct_user_exit_irqoff
+	enable_da_f
+#ifdef CONFIG_TRACE_IRQFLAGS
+	bl	trace_hardirqs_off
+#endif
+	mov	x0, x26
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_sp_pc_abort
+	b	ret_to_user
+el0_undef:
+	/*
+	 * Undefined instruction
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, sp
+	bl	do_undefinstr
+	b	ret_to_user
+el0_sys:
+	/*
+	 * System instructions, for trapped cache maintenance instructions
+	 */
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, x25
+	mov	x1, sp
+	bl	do_sysinstr
+	b	ret_to_user
+el0_dbg:
+	/*
+	 * Debug exception handling
+	 */
+	tbnz	x24, #0, el0_inv		// EL0 only
+	mrs	x24, far_el1
+	gic_prio_kentry_setup tmp=x3
+	ct_user_exit_irqoff
+	mov	x0, x24
+	mov	x1, x25
+	mov	x2, sp
+	bl	do_debug_exception
+	enable_da_f
+	b	ret_to_user
+el0_inv:
+	ct_user_exit_irqoff
+	enable_daif
+	mov	x0, sp
+	mov	x1, #BAD_SYNC
+	mov	x2, x25
+	bl	bad_el0_sync
+	b	ret_to_user
+ENDPROC(el0_sync)
 
 	.align	6
 el0_irq:
@@ -772,6 +932,17 @@ finish_ret_to_user:
 	kernel_exit 0
 ENDPROC(ret_to_user)
 
+/*
+ * SVC handler.
+ */
+	.align	6
+el0_svc:
+	gic_prio_kentry_setup tmp=x1
+	mov	x0, sp
+	bl	el0_svc_handler
+	b	ret_to_user
+ENDPROC(el0_svc)
+
 	.popsection				// .entry.text
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
@@ -833,9 +1004,7 @@ alternative_insn isb, nop, ARM64_WORKAROUND_QCOM_FALKOR_E1003
 #else
 	ldr	x30, =vectors
 #endif
-alternative_if_not ARM64_WORKAROUND_CAVIUM_TX2_219_PRFM
 	prfm	plil1strm, [x30, #(1b - tramp_vectors)]
-alternative_else_nop_endif
 	msr	vbar_el1, x30
 	add	x30, x30, #(1b - tramp_vectors)
 	isb
@@ -917,11 +1086,6 @@ ENTRY(cpu_switch_to)
 	ldr	lr, [x8]
 	mov	sp, x9
 	msr	sp_el0, x1
-#ifdef CONFIG_SHADOW_CALL_STACK
-	str	x18, [x0, #TSK_TI_SCS]
-	ldr	x18, [x1, #TSK_TI_SCS]
-	str	xzr, [x1, #TSK_TI_SCS]		// limit visibility of saved SCS
-#endif
 	ret
 ENDPROC(cpu_switch_to)
 NOKPROBE(cpu_switch_to)

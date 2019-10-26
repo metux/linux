@@ -136,6 +136,7 @@ enum intel_ppgtt_type {
 	func(has_dp_mst); \
 	func(has_fbc); \
 	func(has_gmch); \
+	func(has_hdcp); \
 	func(has_hotplug); \
 	func(has_ipc); \
 	func(has_overlay); \

@@ -66,35 +66,22 @@ void null_zone_exit(struct nullb_device *dev)
 	kvfree(dev->zones);
 }
 
-int null_report_zones(struct gendisk *disk, sector_t sector,
-		unsigned int nr_zones, report_zones_cb cb, void *data)
+int null_zone_report(struct gendisk *disk, sector_t sector,
+		     struct blk_zone *zones, unsigned int *nr_zones)
 {
 	struct nullb *nullb = disk->private_data;
 	struct nullb_device *dev = nullb->dev;
-	unsigned int first_zone, i;
-	struct blk_zone zone;
-	int error;
+	unsigned int zno, nrz = 0;
 
-	first_zone = null_zone_no(dev, sector);
-	if (first_zone >= dev->nr_zones)
-		return 0;
-
-	nr_zones = min(nr_zones, dev->nr_zones - first_zone);
-	for (i = 0; i < nr_zones; i++) {
-		/*
-		 * Stacked DM target drivers will remap the zone information by
-		 * modifying the zone information passed to the report callback.
-		 * So use a local copy to avoid corruption of the device zone
-		 * array.
-		 */
-		memcpy(&zone, &dev->zones[first_zone + i],
-		       sizeof(struct blk_zone));
-		error = cb(&zone, i, data);
-		if (error)
-			return error;
+	zno = null_zone_no(dev, sector);
+	if (zno < dev->nr_zones) {
+		nrz = min_t(unsigned int, *nr_zones, dev->nr_zones - zno);
+		memcpy(zones, &dev->zones[zno], nrz * sizeof(struct blk_zone));
 	}
 
-	return nr_zones;
+	*nr_zones = nrz;
+
+	return 0;
 }
 
 size_t null_zone_valid_read_len(struct nullb *nullb,
@@ -129,13 +116,11 @@ static blk_status_t null_zone_write(struct nullb_cmd *cmd, sector_t sector,
 		return BLK_STS_IOERR;
 	case BLK_ZONE_COND_EMPTY:
 	case BLK_ZONE_COND_IMP_OPEN:
-	case BLK_ZONE_COND_EXP_OPEN:
-	case BLK_ZONE_COND_CLOSED:
 		/* Writes must be at the write pointer position */
 		if (sector != zone->wp)
 			return BLK_STS_IOERR;
 
-		if (zone->cond != BLK_ZONE_COND_EXP_OPEN)
+		if (zone->cond == BLK_ZONE_COND_EMPTY)
 			zone->cond = BLK_ZONE_COND_IMP_OPEN;
 
 		zone->wp += nr_sectors;
@@ -188,10 +173,7 @@ static blk_status_t null_zone_mgmt(struct nullb_cmd *cmd, enum req_opf op,
 		if (zone->cond == BLK_ZONE_COND_FULL)
 			return BLK_STS_IOERR;
 
-		if (zone->wp == zone->start)
-			zone->cond = BLK_ZONE_COND_EMPTY;
-		else
-			zone->cond = BLK_ZONE_COND_CLOSED;
+		zone->cond = BLK_ZONE_COND_CLOSED;
 		break;
 	case REQ_OP_ZONE_FINISH:
 		if (zone->type == BLK_ZONE_TYPE_CONVENTIONAL)

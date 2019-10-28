@@ -16,7 +16,7 @@
 
 OBJCOPYFLAGS_Image :=-O binary -R .note -R .note.gnu.build-id -R .comment -S
 
-targets := Image
+targets := Image loader
 
 $(obj)/Image: vmlinux FORCE
 	$(call if_changed,objcopy)
@@ -24,17 +24,10 @@ $(obj)/Image: vmlinux FORCE
 $(obj)/Image.gz: $(obj)/Image FORCE
 	$(call if_changed,gzip)
 
-$(obj)/Image.bz2: $(obj)/Image FORCE
-	$(call if_changed,bzip2)
+loader.o: $(src)/loader.S $(obj)/Image
 
-$(obj)/Image.lz4: $(obj)/Image FORCE
-	$(call if_changed,lz4)
-
-$(obj)/Image.lzma: $(obj)/Image FORCE
-	$(call if_changed,lzma)
-
-$(obj)/Image.lzo: $(obj)/Image FORCE
-	$(call if_changed,lzo)
+$(obj)/loader: $(obj)/loader.o $(obj)/Image $(obj)/loader.lds FORCE
+	$(Q)$(LD) -T $(obj)/loader.lds -o $@ $(obj)/loader.o
 
 install:
 	$(CONFIG_SHELL) $(srctree)/$(src)/install.sh $(KERNELRELEASE) \

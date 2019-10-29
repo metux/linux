@@ -3441,7 +3441,7 @@ static noinline_for_stack int __extent_writepage_io(struct inode *inode,
 				 struct extent_page_data *epd,
 				 loff_t i_size,
 				 unsigned long nr_written,
-				 unsigned int write_flags, int *nr_ret)
+				 int *nr_ret)
 {
 	struct extent_io_tree *tree = epd->tree;
 	u64 start = page_offset(page);
@@ -3457,6 +3457,7 @@ static noinline_for_stack int __extent_writepage_io(struct inode *inode,
 	size_t blocksize;
 	int ret = 0;
 	int nr = 0;
+	const unsigned int write_flags = wbc_to_write_flags(wbc);
 	bool compressed;
 
 	ret = btrfs_writepage_cow_fixup(page, start, page_end);
@@ -3590,10 +3591,7 @@ static int __extent_writepage(struct page *page, struct writeback_control *wbc,
 	size_t pg_offset = 0;
 	loff_t i_size = i_size_read(inode);
 	unsigned long end_index = i_size >> PAGE_SHIFT;
-	unsigned int write_flags = 0;
 	unsigned long nr_written = 0;
-
-	write_flags = wbc_to_write_flags(wbc);
 
 	trace___extent_writepage(page, inode, wbc);
 
@@ -3632,7 +3630,7 @@ static int __extent_writepage(struct page *page, struct writeback_control *wbc,
 	}
 
 	ret = __extent_writepage_io(inode, page, wbc, epd,
-				    i_size, nr_written, write_flags, &nr);
+				    i_size, nr_written, &nr);
 	if (ret == 1)
 		goto done_unlocked;
 

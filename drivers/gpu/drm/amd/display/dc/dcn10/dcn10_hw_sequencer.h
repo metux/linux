@@ -27,7 +27,6 @@
 #define __DC_HWSS_DCN10_H__
 
 #include "core_types.h"
-#include "hw_sequencer_private.h"
 
 struct dc;
 
@@ -132,7 +131,7 @@ void dcn10_get_position(struct pipe_ctx **pipe_ctx,
 		int num_pipes,
 		struct crtc_position *position);
 void dcn10_set_static_screen_control(struct pipe_ctx **pipe_ctx,
-		int num_pipes, const struct dc_static_screen_params *params);
+		int num_pipes, const struct dc_static_screen_events *events);
 void dcn10_setup_stereo(struct pipe_ctx *pipe_ctx, struct dc *dc);
 void dce110_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 void dcn10_log_hw_state(struct dc *dc,

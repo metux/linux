@@ -38,6 +38,7 @@
 #include <net/netevent.h>
 #include <net/arp.h>
 #include <net/devlink.h>
+#include <net/ipv6_stubs.h>
 
 #include "eswitch.h"
 #include "en.h"
@@ -46,6 +47,9 @@
 #include "en/tc_tun.h"
 #include "fs_core.h"
 #include "lib/port_tun.h"
+#include "lib/mlx5.h"
+#define CREATE_TRACE_POINTS
+#include "diag/en_rep_tracepoint.h"
 
 #define MLX5E_REP_PARAMS_DEF_LOG_SQ_SIZE \
         max(0x7, MLX5E_PARAMS_MINIMUM_LOG_SQ_SIZE)
@@ -497,16 +501,18 @@ void mlx5e_remove_sqs_fwd_rules(struct mlx5e_priv *priv)
 	mlx5e_sqs2vport_stop(esw, rep);
 }
 
+static unsigned long mlx5e_rep_ipv6_interval(void)
+{
+	if (IS_ENABLED(CONFIG_IPV6) && ipv6_stub->nd_tbl)
+		return NEIGH_VAR(&ipv6_stub->nd_tbl->parms, DELAY_PROBE_TIME);
+
+	return ~0UL;
+}
+
 static void mlx5e_rep_neigh_update_init_interval(struct mlx5e_rep_priv *rpriv)
 {
-#if IS_ENABLED(CONFIG_IPV6)
-	unsigned long ipv6_interval = NEIGH_VAR(&nd_tbl.parms,
-						DELAY_PROBE_TIME);
-#else
-	unsigned long ipv6_interval = ~0UL;
-#endif
-	unsigned long ipv4_interval = NEIGH_VAR(&arp_tbl.parms,
-						DELAY_PROBE_TIME);
+	unsigned long ipv4_interval = NEIGH_VAR(&arp_tbl.parms, DELAY_PROBE_TIME);
+	unsigned long ipv6_interval = mlx5e_rep_ipv6_interval();
 	struct net_device *netdev = rpriv->netdev;
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 
@@ -595,12 +601,26 @@ static void mlx5e_rep_update_flows(struct mlx5e_priv *priv,
 				   unsigned char ha[ETH_ALEN])
 {
 	struct ethhdr *eth = (struct ethhdr *)e->encap_header;
+	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
+	bool encap_connected;
+	LIST_HEAD(flow_list);
 
 	ASSERT_RTNL();
 
+	/* wait for encap to be fully initialized */
+	wait_for_completion(&e->res_ready);
+
+	mutex_lock(&esw->offloads.encap_tbl_lock);
+	encap_connected = !!(e->flags & MLX5_ENCAP_ENTRY_VALID);
+	if (e->compl_result < 0 || (encap_connected == neigh_connected &&
+				    ether_addr_equal(e->h_dest, ha)))
+		goto unlock;
+
+	mlx5e_take_all_encap_flows(e, &flow_list);
+
 	if ((e->flags & MLX5_ENCAP_ENTRY_VALID) &&
 	    (!neigh_connected || !ether_addr_equal(e->h_dest, ha)))
-		mlx5e_tc_encap_flows_del(priv, e);
+		mlx5e_tc_encap_flows_del(priv, e, &flow_list);
 
 	if (neigh_connected && !(e->flags & MLX5_ENCAP_ENTRY_VALID)) {
 		ether_addr_copy(e->h_dest, ha);
@@ -610,8 +630,11 @@ static void mlx5e_rep_update_flows(struct mlx5e_priv *priv,
 		 */
 		ether_addr_copy(eth->h_source, e->route_dev->dev_addr);
 
-		mlx5e_tc_encap_flows_add(priv, e);
+		mlx5e_tc_encap_flows_add(priv, e, &flow_list);
 	}
+unlock:
+	mutex_unlock(&esw->offloads.encap_tbl_lock);
+	mlx5e_put_encap_flow_list(priv, &flow_list);
 }
 
 static void mlx5e_rep_neigh_update(struct work_struct *work)
@@ -623,7 +646,6 @@ static void mlx5e_rep_neigh_update(struct work_struct *work)
 	unsigned char ha[ETH_ALEN];
 	struct mlx5e_priv *priv;
 	bool neigh_connected;
-	bool encap_connected;
 	u8 nud_state, dead;
 
 	rtnl_lock();
@@ -641,17 +663,14 @@ static void mlx5e_rep_neigh_update(struct work_struct *work)
 
 	neigh_connected = (nud_state & NUD_VALID) && !dead;
 
+	trace_mlx5e_rep_neigh_update(nhe, ha, neigh_connected);
+
 	list_for_each_entry(e, &nhe->encap_list, encap_list) {
 		if (!mlx5e_encap_take(e))
 			continue;
 
-		encap_connected = !!(e->flags & MLX5_ENCAP_ENTRY_VALID);
 		priv = netdev_priv(e->out_dev);
-
-		if (encap_connected != neigh_connected ||
-		    !ether_addr_equal(e->h_dest, ha))
-			mlx5e_rep_update_flows(priv, e, neigh_connected, ha);
-
+		mlx5e_rep_update_flows(priv, e, neigh_connected, ha);
 		mlx5e_encap_put(priv, e);
 	}
 	mlx5e_rep_neigh_entry_release(nhe);
@@ -748,6 +767,7 @@ mlx5e_rep_indr_setup_tc_block(struct net_device *netdev,
 	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
 		return -EOPNOTSUPP;
 
+	f->unlocked_driver_cb = true;
 	f->driver_block_list = &mlx5e_block_cb_list;
 
 	switch (f->command) {
@@ -901,7 +921,7 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 	case NETEVENT_NEIGH_UPDATE:
 		n = ptr;
 #if IS_ENABLED(CONFIG_IPV6)
-		if (n->tbl != &nd_tbl && n->tbl != &arp_tbl)
+		if (n->tbl != ipv6_stub->nd_tbl && n->tbl != &arp_tbl)
 #else
 		if (n->tbl != &arp_tbl)
 #endif
@@ -928,7 +948,7 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 		 * done per device delay prob time parameter.
 		 */
 #if IS_ENABLED(CONFIG_IPV6)
-		if (!p->dev || (p->tbl != &nd_tbl && p->tbl != &arp_tbl))
+		if (!p->dev || (p->tbl != ipv6_stub->nd_tbl && p->tbl != &arp_tbl))
 #else
 		if (!p->dev || p->tbl != &arp_tbl)
 #endif
@@ -1230,9 +1250,11 @@ static int mlx5e_rep_setup_tc(struct net_device *dev, enum tc_setup_type type,
 			      void *type_data)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
+	struct flow_block_offload *f = type_data;
 
 	switch (type) {
 	case TC_SETUP_BLOCK:
+		f->unlocked_driver_cb = true;
 		return flow_block_cb_setup_simple(type_data,
 						  &mlx5e_rep_block_cb_list,
 						  mlx5e_rep_setup_tc_cb,
@@ -1603,7 +1625,7 @@ static int mlx5e_init_rep_tx(struct mlx5e_priv *priv)
 {
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
 	struct mlx5_rep_uplink_priv *uplink_priv;
-	int tc, err;
+	int err;
 
 	err = mlx5e_create_tises(priv);
 	if (err) {
@@ -1639,18 +1661,15 @@ static int mlx5e_init_rep_tx(struct mlx5e_priv *priv)
 tc_esw_cleanup:
 	mlx5e_tc_esw_cleanup(&uplink_priv->tc_ht);
 destroy_tises:
-	for (tc = 0; tc < priv->profile->max_tc; tc++)
-		mlx5e_destroy_tis(priv->mdev, priv->tisn[tc]);
+	mlx5e_destroy_tises(priv);
 	return err;
 }
 
 static void mlx5e_cleanup_rep_tx(struct mlx5e_priv *priv)
 {
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
-	int tc;
 
-	for (tc = 0; tc < priv->profile->max_tc; tc++)
-		mlx5e_destroy_tis(priv->mdev, priv->tisn[tc]);
+	mlx5e_destroy_tises(priv);
 
 	if (rpriv->rep->vport == MLX5_VPORT_UPLINK) {
 		/* clean indirect TC block notifications */
@@ -1859,6 +1878,7 @@ mlx5e_vport_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 		return -EINVAL;
 	}
 
+	dev_net_set(netdev, mlx5_core_net(dev));
 	rpriv->netdev = netdev;
 	rep->rep_data[REP_ETH].priv = rpriv;
 	INIT_LIST_HEAD(&rpriv->vport_sqs_list);

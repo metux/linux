@@ -2228,8 +2228,7 @@ static int check_exports(struct module *mod)
 			add_namespace(&mod->required_namespaces,
 				      exp->namespace);
 
-			if (!write_namespace_deps &&
-			    !module_imports_namespace(mod, exp->namespace)) {
+			if (!module_imports_namespace(mod, exp->namespace)) {
 				warn("module %s uses symbol %s from namespace %s, but does not import it.\n",
 				     basename, exp->name, exp->namespace);
 			}
@@ -2649,8 +2648,6 @@ int main(int argc, char **argv)
 
 		err |= check_modname_len(mod);
 		err |= check_exports(mod);
-		if (write_namespace_deps)
-			continue;
 
 		add_header(&buf, mod);
 		add_intree_flag(&buf, !external_module);
@@ -2665,10 +2662,8 @@ int main(int argc, char **argv)
 		write_if_changed(&buf, fname);
 	}
 
-	if (write_namespace_deps) {
+	if (write_namespace_deps)
 		write_namespace_deps_files();
-		return 0;
-	}
 
 	if (dump_write)
 		write_dump(dump_write);

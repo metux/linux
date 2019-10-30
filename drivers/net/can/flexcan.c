@@ -1670,6 +1670,7 @@ static int flexcan_probe(struct platform_device *pdev)
 		goto failed_register;
 	}
 
+	of_can_transceiver(dev);
 	devm_can_led_init(dev);
 
 	if (priv->devtype_data->quirks & FLEXCAN_QUIRK_SETUP_STOP_MODE) {

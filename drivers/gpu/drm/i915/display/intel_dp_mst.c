@@ -303,21 +303,23 @@ static void intel_mst_pre_enable_dp(struct intel_encoder *encoder,
 		to_intel_connector(conn_state->connector);
 	int ret;
 	u32 temp;
+	bool first_mst_stream;
 
 	/* MST encoders are bound to a crtc, not to a connector,
 	 * force the mapping here for get_hw_state.
 	 */
 	connector->encoder = encoder;
 	intel_mst->connector = connector;
+	first_mst_stream = intel_dp->active_mst_links == 0;
 
 	DRM_DEBUG_KMS("active links %d\n", intel_dp->active_mst_links);
 
-	if (intel_dp->active_mst_links == 0)
+	if (first_mst_stream)
 		intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
 
 	drm_dp_send_power_updown_phy(&intel_dp->mst_mgr, connector->port, true);
 
-	if (intel_dp->active_mst_links == 0)
+	if (first_mst_stream)
 		intel_dig_port->base.pre_enable(&intel_dig_port->base,
 						pipe_config, NULL);
 
@@ -334,9 +336,15 @@ static void intel_mst_pre_enable_dp(struct intel_encoder *encoder,
 
 	ret = drm_dp_update_payload_part1(&intel_dp->mst_mgr);
 
-	intel_ddi_enable_pipe_clock(pipe_config);
-
-	intel_ddi_set_dp_msa(pipe_config, conn_state);
+	/*
+	 * Before Gen 12 this is not done as part of
+	 * intel_dig_port->base.pre_enable() and should be done here. For
+	 * Gen 12+ the step in which this should be done is different for the
+	 * first MST stream, so it's done on the DDI for the first stream and
+	 * here for the following ones.
+	 */
+	if (INTEL_GEN(dev_priv) < 12 || !first_mst_stream)
+		intel_ddi_enable_pipe_clock(pipe_config);
 }
 
 static void intel_mst_enable_dp(struct intel_encoder *encoder,
@@ -397,7 +405,20 @@ static int intel_dp_mst_get_ddc_modes(struct drm_connector *connector)
 	return ret;
 }
 
+static enum drm_connector_status
+intel_dp_mst_detect(struct drm_connector *connector, bool force)
+{
+	struct intel_connector *intel_connector = to_intel_connector(connector);
+	struct intel_dp *intel_dp = intel_connector->mst_port;
+
+	if (drm_connector_is_unregistered(connector))
+		return connector_status_disconnected;
+	return drm_dp_mst_detect_port(connector, &intel_dp->mst_mgr,
+				      intel_connector->port);
+}
+
 static const struct drm_connector_funcs intel_dp_mst_connector_funcs = {
+	.detect = intel_dp_mst_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.atomic_get_property = intel_digital_connector_atomic_get_property,
 	.atomic_set_property = intel_digital_connector_atomic_set_property,
@@ -458,26 +479,11 @@ static struct drm_encoder *intel_mst_atomic_best_encoder(struct drm_connector *c
 	return &intel_dp->mst_encoders[crtc->pipe]->base.base;
 }
 
-static int
-intel_dp_mst_detect(struct drm_connector *connector,
-		    struct drm_modeset_acquire_ctx *ctx, bool force)
-{
-	struct intel_connector *intel_connector = to_intel_connector(connector);
-	struct intel_dp *intel_dp = intel_connector->mst_port;
-
-	if (drm_connector_is_unregistered(connector))
-		return connector_status_disconnected;
-
-	return drm_dp_mst_detect_port(connector, ctx, &intel_dp->mst_mgr,
-				      intel_connector->port);
-}
-
 static const struct drm_connector_helper_funcs intel_dp_mst_connector_helper_funcs = {
 	.get_modes = intel_dp_mst_get_modes,
 	.mode_valid = intel_dp_mst_mode_valid,
 	.atomic_best_encoder = intel_mst_atomic_best_encoder,
 	.atomic_check = intel_dp_mst_atomic_check,
-	.detect_ctx = intel_dp_mst_detect,
 };
 
 static void intel_dp_mst_encoder_destroy(struct drm_encoder *encoder)

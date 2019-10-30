@@ -10,7 +10,6 @@
 #include <linux/phy/phy.h>
 #include <linux/gpio/consumer.h>
 #include <linux/reset-controller.h>
-#include <linux/devfreq.h>
 
 #include "ufshcd.h"
 #include "ufshcd-pltfrm.h"
@@ -246,7 +245,7 @@ static void ufs_qcom_select_unipro_mode(struct ufs_qcom_host *host)
 	mb();
 }
 
-/*
+/**
  * ufs_qcom_host_reset - reset host controller and PHY
  */
 static int ufs_qcom_host_reset(struct ufs_hba *hba)
@@ -365,7 +364,7 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 		/* check if UFS PHY moved from DISABLED to HIBERN8 */
 		err = ufs_qcom_check_hibern8(hba);
 		ufs_qcom_enable_hw_clk_gating(hba);
-		ufs_qcom_ice_enable(host);
+
 		break;
 	default:
 		dev_err(hba->dev, "%s: invalid status %d\n", __func__, status);
@@ -375,7 +374,7 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 	return err;
 }
 
-/*
+/**
  * Returns zero for success and non-zero in case of a failure
  */
 static int ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
@@ -554,7 +553,9 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 		 * completed.
 		 */
 		if (ufshcd_get_local_unipro_ver(hba) != UFS_UNIPRO_VER_1_41)
-			err = ufshcd_disable_host_tx_lcc(hba);
+			err = ufshcd_dme_set(hba,
+					UIC_ARG_MIB(PA_LOCAL_TX_LCC_ENABLE),
+					0);
 
 		break;
 	case POST_CHANGE:
@@ -612,10 +613,6 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		if (err)
 			return err;
 	}
-
-	err = ufs_qcom_ice_resume(host);
-	if (err)
-		return err;
 
 	hba->is_sys_suspended = false;
 	return 0;
@@ -847,27 +844,11 @@ static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
 		/*
 		 * If we are here to disable this clock it might be immediately
 		 * after entering into hibern8 in which case we need to make
-		 * sure that device ref_clk is active for specific time after
+		 * sure that device ref_clk is active at least 1us after the
 		 * hibern8 enter.
 		 */
-		if (!enable) {
-			unsigned long gating_wait;
-
-			gating_wait = host->hba->dev_info.clk_gating_wait_us;
-			if (!gating_wait) {
-				udelay(1);
-			} else {
-				/*
-				 * bRefClkGatingWaitTime defines the minimum
-				 * time for which the reference clock is
-				 * required by device during transition from
-				 * HS-MODE to LS-MODE or HIBERN8 state. Give it
-				 * more delay to be on the safe side.
-				 */
-				gating_wait += 10;
-				usleep_range(gating_wait, gating_wait + 10);
-			}
-		}
+		if (!enable)
+			udelay(1);
 
 		writel_relaxed(temp, host->dev_ref_clk_ctrl_mmio);
 
@@ -944,20 +925,6 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 		if (!ufshcd_is_hs_mode(&hba->pwr_info) &&
 			ufshcd_is_hs_mode(dev_req_params))
 			ufs_qcom_dev_ref_clk_ctrl(host, true);
-
-		if (host->hw_ver.major >= 0x4) {
-			if (dev_req_params->gear_tx == UFS_HS_G4) {
-				/* INITIAL ADAPT */
-				ufshcd_dme_set(hba,
-					       UIC_ARG_MIB(PA_TXHSADAPTTYPE),
-					       PA_INITIAL_ADAPT);
-			} else {
-				/* NO ADAPT */
-				ufshcd_dme_set(hba,
-					       UIC_ARG_MIB(PA_TXHSADAPTTYPE),
-					       PA_NO_ADAPT);
-			}
-		}
 		break;
 	case POST_CHANGE:
 		if (ufs_qcom_cfg_timers(hba, dev_req_params->gear_rx,
@@ -1015,9 +982,6 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 
 	if (hba->dev_quirks & UFS_DEVICE_QUIRK_HOST_PA_SAVECONFIGTIME)
 		err = ufs_qcom_quirk_host_pa_saveconfigtime(hba);
-
-	if (hba->dev_info.wmanufacturerid == UFS_VENDOR_WDC)
-		hba->dev_quirks |= UFS_DEVICE_QUIRK_HOST_PA_TACTIVATE;
 
 	return err;
 }
@@ -1082,7 +1046,6 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 	hba->caps |= UFSHCD_CAP_CLK_SCALING;
 	hba->caps |= UFSHCD_CAP_AUTO_BKOPS_SUSPEND;
 	hba->caps |= UFSHCD_CAP_WB_EN;
-	hba->caps |= UFSHCD_CAP_CRYPTO;
 
 	if (host->hw_ver.major >= 0x2) {
 		host->caps = UFS_QCOM_CAP_QUNIPRO |
@@ -1112,26 +1075,19 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 	if (!host)
 		return 0;
 
-	switch (status) {
-	case PRE_CHANGE:
-		if (on) {
-			err = ufs_qcom_set_bus_vote(hba, true);
-		} else {
-			if (!ufs_qcom_is_link_active(hba)) {
-				/* disable device ref_clk */
-				ufs_qcom_dev_ref_clk_ctrl(host, false);
-			}
+	if (on && (status == PRE_CHANGE)) {
+		err = ufs_qcom_set_bus_vote(hba, true);
+	} else if (on && (status == POST_CHANGE)) {
+		/* enable the device ref clock for HS mode*/
+		if (ufshcd_is_hs_mode(&hba->pwr_info))
+			ufs_qcom_dev_ref_clk_ctrl(host, true);
+	} else if (!on && (status == PRE_CHANGE)) {
+		if (!ufs_qcom_is_link_active(hba)) {
+			/* disable device ref_clk */
+			ufs_qcom_dev_ref_clk_ctrl(host, false);
 		}
-		break;
-	case POST_CHANGE:
-		if (on) {
-			/* enable the device ref clock for HS mode*/
-			if (ufshcd_is_hs_mode(&hba->pwr_info))
-				ufs_qcom_dev_ref_clk_ctrl(host, true);
-		} else {
-			err = ufs_qcom_set_bus_vote(hba, false);
-		}
-		break;
+	} else if (!on && (status == POST_CHANGE)) {
+		err = ufs_qcom_set_bus_vote(hba, false);
 	}
 
 	return err;
@@ -1287,8 +1243,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		host->dev_ref_clk_en_mask = BIT(26);
 	} else {
 		/* "dev_ref_clk_ctrl_mem" is optional resource */
-		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-						   "dev_ref_clk_ctrl_mem");
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 		if (res) {
 			host->dev_ref_clk_ctrl_mmio =
 					devm_ioremap_resource(dev, res);
@@ -1309,10 +1264,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
-
-	err = ufs_qcom_ice_init(host);
-	if (err)
-		goto out_variant_clear;
 
 	ufs_qcom_set_bus_vote(hba, true);
 	ufs_qcom_setup_clocks(hba, true, POST_CHANGE);
@@ -1717,30 +1668,7 @@ static void ufs_qcom_device_reset(struct ufs_hba *hba)
 	usleep_range(10, 15);
 }
 
-#if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND)
-static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
-					  struct devfreq_dev_profile *p,
-					  void *data)
-{
-	static struct devfreq_simple_ondemand_data *d;
-
-	if (!data)
-		return;
-
-	d = (struct devfreq_simple_ondemand_data *)data;
-	p->polling_ms = 60;
-	d->upthreshold = 70;
-	d->downdifferential = 5;
-}
-#else
-static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
-					  struct devfreq_dev_profile *p,
-					  void *data)
-{
-}
-#endif
-
-/*
+/**
  * struct ufs_hba_qcom_vops - UFS QCOM specific variant operations
  *
  * The variant operations configure the necessary controller and PHY
@@ -1761,8 +1689,6 @@ static const struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 	.resume			= ufs_qcom_resume,
 	.dbg_register_dump	= ufs_qcom_dump_dbg_regs,
 	.device_reset		= ufs_qcom_device_reset,
-	.config_scaling_param = ufs_qcom_config_scaling_param,
-	.program_key		= ufs_qcom_ice_program_key,
 };
 
 /**

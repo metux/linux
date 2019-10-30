@@ -918,7 +918,7 @@ static const struct resource_caps res_cap_nv14 = {
 		.num_audio = 6,
 		.num_stream_encoder = 5,
 		.num_pll = 5,
-		.num_dwb = 0,
+		.num_dwb = 1,
 		.num_ddc = 5,
 		.num_vmid = 16,
 #ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
@@ -1192,6 +1192,7 @@ struct clock_source *dcn20_clock_source_create(
 		return &clk_src->base;
 	}
 
+	kfree(clk_src);
 	BREAK_TO_DEBUGGER();
 	return NULL;
 }
@@ -1220,6 +1221,11 @@ struct stream_encoder *dcn20_stream_encoder_create(
 
 	if (!enc1)
 		return NULL;
+
+	if (ASICREV_IS_NAVI14_M(ctx->asic_id.hw_internal_rev)) {
+		if (eng_id >= ENGINE_ID_DIGD)
+			eng_id++;
+	}
 
 	dcn20_stream_encoder_construct(enc1, ctx, ctx->dc_bios, eng_id,
 					&stream_enc_regs[eng_id],
@@ -1718,12 +1724,8 @@ bool dcn20_split_stream_for_odm(
 		struct pipe_ctx *next_odm_pipe)
 {
 	int pipe_idx = next_odm_pipe->pipe_idx;
-	struct scaler_data *sd = &prev_odm_pipe->plane_res.scl_data;
-	struct pipe_ctx *sec_next_pipe = next_odm_pipe->next_odm_pipe;
-	int new_width;
 
 	*next_odm_pipe = *prev_odm_pipe;
-	next_odm_pipe->next_odm_pipe = sec_next_pipe;
 
 	next_odm_pipe->pipe_idx = pipe_idx;
 	next_odm_pipe->plane_res.mi = pool->mis[next_odm_pipe->pipe_idx];
@@ -1742,11 +1744,11 @@ bool dcn20_split_stream_for_odm(
 	ASSERT(next_odm_pipe->top_pipe == NULL);
 
 	if (prev_odm_pipe->plane_state) {
+		struct scaler_data *sd = &prev_odm_pipe->plane_res.scl_data;
+		int new_width;
+
 		/* HACTIVE halved for odm combine */
 		sd->h_active /= 2;
-		/* Copy scl_data to secondary pipe */
-		next_odm_pipe->plane_res.scl_data = *sd;
-
 		/* Calculate new vp and recout for left pipe */
 		/* Need at least 16 pixels width per side */
 		if (sd->recout.x + 16 >= sd->h_active)
@@ -1760,10 +1762,12 @@ bool dcn20_split_stream_for_odm(
 
 		/* Calculate new vp and recout for right pipe */
 		sd = &next_odm_pipe->plane_res.scl_data;
-		new_width = sd->recout.width + sd->recout.x - sd->h_active;
+		/* HACTIVE halved for odm combine */
+		sd->h_active /= 2;
 		/* Need at least 16 pixels width per side */
 		if (new_width <= 16)
 			return false;
+		new_width = sd->recout.width + sd->recout.x - sd->h_active;
 		sd->viewport.width -= dc_fixpt_floor(dc_fixpt_mul_int(
 				sd->ratios.horz, sd->recout.width - new_width));
 		sd->viewport_c.width -= dc_fixpt_floor(dc_fixpt_mul_int(
@@ -1856,6 +1860,22 @@ void dcn20_populate_dml_writeback_from_context(
 
 }
 
+static int get_num_odm_heads(struct pipe_ctx *pipe)
+{
+	int odm_head_count = 0;
+	struct pipe_ctx *next_pipe = pipe->next_odm_pipe;
+	while (next_pipe) {
+		odm_head_count++;
+		next_pipe = next_pipe->next_odm_pipe;
+	}
+	pipe = pipe->prev_odm_pipe;
+	while (pipe) {
+		odm_head_count++;
+		pipe = pipe->prev_odm_pipe;
+	}
+	return odm_head_count ? odm_head_count + 1 : 0;
+}
+
 int dcn20_populate_dml_pipes_from_context(
 		struct dc *dc, struct dc_state *context, display_e2e_pipe_params_st *pipes)
 {
@@ -1895,6 +1915,8 @@ int dcn20_populate_dml_pipes_from_context(
 		pipes[pipe_cnt].pipe.src.dcc = 0;
 		pipes[pipe_cnt].pipe.src.vm = 0;*/
 
+		pipes[pipe_cnt].clks_cfg.refclk_mhz = dc->res_pool->ref_clocks.dchub_ref_clock_inKhz / 1000.0;
+
 		pipes[pipe_cnt].dout.dsc_enable = res_ctx->pipe_ctx[i].stream->timing.flags.DSC;
 		/* todo: rotation?*/
 		pipes[pipe_cnt].dout.dsc_slices = res_ctx->pipe_ctx[i].stream->timing.dsc_cfg.num_slices_h;
@@ -1933,6 +1955,24 @@ int dcn20_populate_dml_pipes_from_context(
 		pipes[pipe_cnt].dout.dp_lanes = 4;
 		pipes[pipe_cnt].pipe.dest.vtotal_min = res_ctx->pipe_ctx[i].stream->adjust.v_total_min;
 		pipes[pipe_cnt].pipe.dest.vtotal_max = res_ctx->pipe_ctx[i].stream->adjust.v_total_max;
+		switch (get_num_odm_heads(&res_ctx->pipe_ctx[i])) {
+		case 2:
+			pipes[pipe_cnt].pipe.dest.odm_combine = dm_odm_combine_mode_2to1;
+			break;
+		default:
+			pipes[pipe_cnt].pipe.dest.odm_combine = dm_odm_combine_mode_disabled;
+		}
+		pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].pipe_idx;
+		if (res_ctx->pipe_ctx[i].top_pipe && res_ctx->pipe_ctx[i].top_pipe->plane_state
+				== res_ctx->pipe_ctx[i].plane_state)
+			pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].top_pipe->pipe_idx;
+		else if (res_ctx->pipe_ctx[i].prev_odm_pipe) {
+			struct pipe_ctx *first_pipe = res_ctx->pipe_ctx[i].prev_odm_pipe;
+
+			while (first_pipe->prev_odm_pipe)
+				first_pipe = first_pipe->prev_odm_pipe;
+			pipes[pipe_cnt].pipe.src.hsplit_grp = first_pipe->pipe_idx;
+		}
 
 		switch (res_ctx->pipe_ctx[i].stream->signal) {
 		case SIGNAL_TYPE_DISPLAY_PORT_MST:
@@ -1983,7 +2023,6 @@ int dcn20_populate_dml_pipes_from_context(
 			break;
 		}
 
-
 		switch (res_ctx->pipe_ctx[i].stream->timing.pixel_encoding) {
 		case PIXEL_ENCODING_RGB:
 		case PIXEL_ENCODING_YCBCR444:
@@ -2005,10 +2044,6 @@ int dcn20_populate_dml_pipes_from_context(
 			pipes[pipe_cnt].dout.output_format = dm_444;
 			pipes[pipe_cnt].dout.output_bpp = output_bpc * 3;
 		}
-		pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].pipe_idx;
-		if (res_ctx->pipe_ctx[i].top_pipe && res_ctx->pipe_ctx[i].top_pipe->plane_state
-				== res_ctx->pipe_ctx[i].plane_state)
-			pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].top_pipe->pipe_idx;
 
 		if (res_ctx->pipe_ctx[i].stream->timing.flags.DSC)
 			pipes[pipe_cnt].dout.output_bpp = res_ctx->pipe_ctx[i].stream->timing.dsc_cfg.bits_per_pixel / 16.0;
@@ -2036,6 +2071,9 @@ int dcn20_populate_dml_pipes_from_context(
 			if (pipes[pipe_cnt].pipe.src.viewport_height > 1080)
 				pipes[pipe_cnt].pipe.src.viewport_height = 1080;
 			pipes[pipe_cnt].pipe.src.surface_height_y = pipes[pipe_cnt].pipe.src.viewport_height;
+			pipes[pipe_cnt].pipe.src.surface_width_y = pipes[pipe_cnt].pipe.src.viewport_width;
+			pipes[pipe_cnt].pipe.src.surface_height_c = pipes[pipe_cnt].pipe.src.viewport_height;
+			pipes[pipe_cnt].pipe.src.surface_width_c = pipes[pipe_cnt].pipe.src.viewport_width;
 			pipes[pipe_cnt].pipe.src.data_pitch = ((pipes[pipe_cnt].pipe.src.viewport_width + 63) / 64) * 64; /* linear sw only */
 			pipes[pipe_cnt].pipe.src.source_format = dm_444_32;
 			pipes[pipe_cnt].pipe.dest.recout_width = pipes[pipe_cnt].pipe.src.viewport_width; /*vp_width/hratio*/
@@ -2061,14 +2099,6 @@ int dcn20_populate_dml_pipes_from_context(
 					&& res_ctx->pipe_ctx[i].bottom_pipe->plane_state == pln)
 					|| (res_ctx->pipe_ctx[i].top_pipe
 					&& res_ctx->pipe_ctx[i].top_pipe->plane_state == pln);
-			pipes[pipe_cnt].pipe.dest.odm_combine = (res_ctx->pipe_ctx[i].bottom_pipe
-					&& res_ctx->pipe_ctx[i].bottom_pipe->plane_state == pln
-					&& res_ctx->pipe_ctx[i].bottom_pipe->stream_res.opp
-						!= res_ctx->pipe_ctx[i].stream_res.opp)
-				|| (res_ctx->pipe_ctx[i].top_pipe
-					&& res_ctx->pipe_ctx[i].top_pipe->plane_state == pln
-					&& res_ctx->pipe_ctx[i].top_pipe->stream_res.opp
-						!= res_ctx->pipe_ctx[i].stream_res.opp);
 			pipes[pipe_cnt].pipe.src.source_scan = pln->rotation == ROTATION_ANGLE_90
 					|| pln->rotation == ROTATION_ANGLE_270 ? dm_vert : dm_horz;
 			pipes[pipe_cnt].pipe.src.viewport_y_y = scl->viewport.y;
@@ -2077,7 +2107,10 @@ int dcn20_populate_dml_pipes_from_context(
 			pipes[pipe_cnt].pipe.src.viewport_width_c = scl->viewport_c.width;
 			pipes[pipe_cnt].pipe.src.viewport_height = scl->viewport.height;
 			pipes[pipe_cnt].pipe.src.viewport_height_c = scl->viewport_c.height;
+			pipes[pipe_cnt].pipe.src.surface_width_y = pln->plane_size.surface_size.width;
 			pipes[pipe_cnt].pipe.src.surface_height_y = pln->plane_size.surface_size.height;
+			pipes[pipe_cnt].pipe.src.surface_width_c = pln->plane_size.chroma_size.width;
+			pipes[pipe_cnt].pipe.src.surface_height_c = pln->plane_size.chroma_size.height;
 			if (pln->format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN) {
 				pipes[pipe_cnt].pipe.src.data_pitch = pln->plane_size.surface_pitch;
 				pipes[pipe_cnt].pipe.src.data_pitch_c = pln->plane_size.chroma_pitch;
@@ -2491,7 +2524,7 @@ int dcn20_validate_apply_pipe_split_flags(
 			split[i] = true;
 		if (dc->debug.force_odm_combine & (1 << pipe->stream_res.tg->inst)) {
 			split[i] = true;
-			context->bw_ctx.dml.vba.ODMCombineEnablePerState[vlevel][pipe_idx] = true;
+			context->bw_ctx.dml.vba.ODMCombineEnablePerState[vlevel][pipe_idx] = dm_odm_combine_mode_2to1;
 		}
 		context->bw_ctx.dml.vba.ODMCombineEnabled[pipe_idx] =
 			context->bw_ctx.dml.vba.ODMCombineEnablePerState[vlevel][pipe_idx];

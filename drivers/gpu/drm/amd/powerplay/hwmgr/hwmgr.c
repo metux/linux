@@ -282,7 +282,10 @@ err:
 
 int hwmgr_hw_fini(struct pp_hwmgr *hwmgr)
 {
-	if (!hwmgr || !hwmgr->pm_en || !hwmgr->not_vf)
+	if (!hwmgr->not_vf)
+		return 0;
+
+	if (!hwmgr || !hwmgr->pm_en)
 		return 0;
 
 	phm_stop_thermal_controller(hwmgr);
@@ -302,7 +305,10 @@ int hwmgr_suspend(struct pp_hwmgr *hwmgr)
 {
 	int ret = 0;
 
-	if (!hwmgr || !hwmgr->pm_en || !hwmgr->not_vf)
+	if (!hwmgr->not_vf)
+		return 0;
+
+	if (!hwmgr || !hwmgr->pm_en)
 		return 0;
 
 	phm_disable_smc_firmware_ctf(hwmgr);
@@ -321,10 +327,13 @@ int hwmgr_resume(struct pp_hwmgr *hwmgr)
 {
 	int ret = 0;
 
+	if (!hwmgr->not_vf)
+		return 0;
+
 	if (!hwmgr)
 		return -EINVAL;
 
-	if (!hwmgr->not_vf || !hwmgr->pm_en)
+	if (!hwmgr->pm_en)
 		return 0;
 
 	ret = phm_setup_asic(hwmgr);

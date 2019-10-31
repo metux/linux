@@ -1904,7 +1904,7 @@ intel_set_cdclk_post_plane_update(struct drm_i915_private *dev_priv,
 
 static int intel_pixel_rate_to_cdclk(const struct intel_crtc_state *crtc_state)
 {
-	struct drm_i915_private *dev_priv = to_i915(crtc_state->uapi.crtc->dev);
+	struct drm_i915_private *dev_priv = to_i915(crtc_state->base.crtc->dev);
 	int pixel_rate = crtc_state->pixel_rate;
 
 	if (INTEL_GEN(dev_priv) >= 10 || IS_GEMINILAKE(dev_priv))
@@ -1922,7 +1922,7 @@ static int intel_pixel_rate_to_cdclk(const struct intel_crtc_state *crtc_state)
 
 static int intel_planes_min_cdclk(const struct intel_crtc_state *crtc_state)
 {
-	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	struct intel_plane *plane;
 	int min_cdclk = 0;
@@ -1936,7 +1936,7 @@ static int intel_planes_min_cdclk(const struct intel_crtc_state *crtc_state)
 int intel_crtc_compute_min_cdclk(const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *dev_priv =
-		to_i915(crtc_state->uapi.crtc->dev);
+		to_i915(crtc_state->base.crtc->dev);
 	int min_cdclk;
 
 	if (!crtc_state->hw.enable)
@@ -2003,18 +2003,6 @@ int intel_crtc_compute_min_cdclk(const struct intel_crtc_state *crtc_state)
 
 	/* Account for additional needs from the planes */
 	min_cdclk = max(intel_planes_min_cdclk(crtc_state), min_cdclk);
-
-	/*
-	 * HACK. Currently for TGL platforms we calculate
-	 * min_cdclk initially based on pixel_rate divided
-	 * by 2, accounting for also plane requirements,
-	 * however in some cases the lowest possible CDCLK
-	 * doesn't work and causing the underruns.
-	 * Explicitly stating here that this seems to be currently
-	 * rather a Hack, than final solution.
-	 */
-	if (IS_TIGERLAKE(dev_priv))
-		min_cdclk = max(min_cdclk, (int)crtc_state->pixel_rate);
 
 	if (min_cdclk > dev_priv->max_cdclk_freq) {
 		DRM_DEBUG_KMS("required cdclk (%d kHz) exceeds max (%d kHz)\n",
@@ -2296,10 +2284,10 @@ static int intel_modeset_all_pipes(struct intel_atomic_state *state)
 			return PTR_ERR(crtc_state);
 
 		if (!crtc_state->hw.active ||
-		    drm_atomic_crtc_needs_modeset(&crtc_state->uapi))
+		    drm_atomic_crtc_needs_modeset(&crtc_state->base))
 			continue;
 
-		crtc_state->uapi.mode_changed = true;
+		crtc_state->base.mode_changed = true;
 
 		ret = drm_atomic_add_affected_connectors(&state->base,
 							 &crtc->base);
@@ -2380,7 +2368,7 @@ int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
 		if (IS_ERR(crtc_state))
 			return PTR_ERR(crtc_state);
 
-		if (drm_atomic_crtc_needs_modeset(&crtc_state->uapi))
+		if (drm_atomic_crtc_needs_modeset(&crtc_state->base))
 			pipe = INVALID_PIPE;
 	} else {
 		pipe = INVALID_PIPE;

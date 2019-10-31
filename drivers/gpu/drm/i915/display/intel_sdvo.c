@@ -180,7 +180,7 @@ static struct intel_sdvo *to_sdvo(struct intel_encoder *encoder)
 	return container_of(encoder, struct intel_sdvo, base);
 }
 
-static struct intel_sdvo *intel_attached_sdvo(struct intel_connector *connector)
+static struct intel_sdvo *intel_attached_sdvo(struct drm_connector *connector)
 {
 	return to_sdvo(intel_attached_encoder(connector));
 }
@@ -1349,9 +1349,9 @@ static int intel_sdvo_compute_config(struct intel_encoder *encoder,
 	if (IS_TV(intel_sdvo_connector))
 		i9xx_adjust_sdvo_tv_clock(pipe_config);
 
-	if (conn_state->picture_aspect_ratio)
-		adjusted_mode->picture_aspect_ratio =
-			conn_state->picture_aspect_ratio;
+	/* Set user selected PAR to incoming mode's member */
+	if (intel_sdvo_connector->is_hdmi)
+		adjusted_mode->picture_aspect_ratio = conn_state->picture_aspect_ratio;
 
 	if (!intel_sdvo_compute_avi_infoframe(intel_sdvo,
 					      pipe_config, conn_state)) {
@@ -1429,7 +1429,7 @@ static void intel_sdvo_pre_enable(struct intel_encoder *intel_encoder,
 				  const struct drm_connector_state *conn_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(intel_encoder->base.dev);
-	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->base.crtc);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	const struct intel_sdvo_connector_state *sdvo_state =
 		to_intel_sdvo_connector_state(conn_state);
@@ -1551,7 +1551,7 @@ static bool intel_sdvo_connector_get_hw_state(struct intel_connector *connector)
 {
 	struct intel_sdvo_connector *intel_sdvo_connector =
 		to_intel_sdvo_connector(&connector->base);
-	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
+	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(&connector->base);
 	u16 active_outputs = 0;
 
 	intel_sdvo_get_active_outputs(intel_sdvo, &active_outputs);
@@ -1723,7 +1723,7 @@ static void intel_disable_sdvo(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_sdvo *intel_sdvo = to_sdvo(encoder);
-	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
+	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->base.crtc);
 	u32 temp;
 
 	if (old_crtc_state->has_audio)
@@ -1785,7 +1785,7 @@ static void intel_enable_sdvo(struct intel_encoder *encoder,
 	struct drm_device *dev = encoder->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_sdvo *intel_sdvo = to_sdvo(encoder);
-	struct intel_crtc *intel_crtc = to_intel_crtc(pipe_config->uapi.crtc);
+	struct intel_crtc *intel_crtc = to_intel_crtc(pipe_config->base.crtc);
 	u32 temp;
 	bool input1, input2;
 	int i;
@@ -1823,7 +1823,7 @@ static enum drm_mode_status
 intel_sdvo_mode_valid(struct drm_connector *connector,
 		      struct drm_display_mode *mode)
 {
-	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
 	struct intel_sdvo_connector *intel_sdvo_connector =
 		to_intel_sdvo_connector(connector);
 	int max_dotclk = to_i915(connector->dev)->max_dotclk_freq;
@@ -1941,7 +1941,7 @@ intel_sdvo_multifunc_encoder(struct intel_sdvo *intel_sdvo)
 static struct edid *
 intel_sdvo_get_edid(struct drm_connector *connector)
 {
-	struct intel_sdvo *sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *sdvo = intel_attached_sdvo(connector);
 	return drm_get_edid(connector, &sdvo->ddc);
 }
 
@@ -1959,7 +1959,7 @@ intel_sdvo_get_analog_edid(struct drm_connector *connector)
 static enum drm_connector_status
 intel_sdvo_tmds_sink_detect(struct drm_connector *connector)
 {
-	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
 	struct intel_sdvo_connector *intel_sdvo_connector =
 		to_intel_sdvo_connector(connector);
 	enum drm_connector_status status;
@@ -2028,7 +2028,7 @@ static enum drm_connector_status
 intel_sdvo_detect(struct drm_connector *connector, bool force)
 {
 	u16 response;
-	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
 	struct intel_sdvo_connector *intel_sdvo_connector = to_intel_sdvo_connector(connector);
 	enum drm_connector_status ret;
 
@@ -2175,7 +2175,7 @@ static const struct drm_display_mode sdvo_tv_modes[] = {
 
 static void intel_sdvo_get_tv_modes(struct drm_connector *connector)
 {
-	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
 	const struct drm_connector_state *conn_state = connector->state;
 	struct intel_sdvo_sdtv_resolution_request tv_res;
 	u32 reply = 0, format_map = 0;
@@ -2215,7 +2215,7 @@ static void intel_sdvo_get_tv_modes(struct drm_connector *connector)
 
 static void intel_sdvo_get_lvds_modes(struct drm_connector *connector)
 {
-	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *intel_sdvo = intel_attached_sdvo(connector);
 	struct drm_i915_private *dev_priv = to_i915(connector->dev);
 	struct drm_display_mode *newmode;
 
@@ -2379,7 +2379,7 @@ intel_sdvo_connector_atomic_set_property(struct drm_connector *connector,
 static int
 intel_sdvo_connector_register(struct drm_connector *connector)
 {
-	struct intel_sdvo *sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *sdvo = intel_attached_sdvo(connector);
 	int ret;
 
 	ret = intel_connector_register(connector);
@@ -2394,7 +2394,7 @@ intel_sdvo_connector_register(struct drm_connector *connector)
 static void
 intel_sdvo_connector_unregister(struct drm_connector *connector)
 {
-	struct intel_sdvo *sdvo = intel_attached_sdvo(to_intel_connector(connector));
+	struct intel_sdvo *sdvo = intel_attached_sdvo(connector);
 
 	sysfs_remove_link(&connector->kdev->kobj,
 			  sdvo->ddc.dev.kobj.name);
@@ -2654,6 +2654,7 @@ intel_sdvo_add_hdmi_properties(struct intel_sdvo *intel_sdvo,
 		intel_attach_broadcast_rgb_property(&connector->base.base);
 	}
 	intel_attach_aspect_ratio_property(&connector->base.base);
+	connector->base.base.state->picture_aspect_ratio = HDMI_PICTURE_ASPECT_NONE;
 }
 
 static struct intel_sdvo_connector *intel_sdvo_connector_alloc(void)
@@ -2932,7 +2933,7 @@ static void intel_sdvo_output_cleanup(struct intel_sdvo *intel_sdvo)
 
 	list_for_each_entry_safe(connector, tmp,
 				 &dev->mode_config.connector_list, head) {
-		if (intel_attached_encoder(to_intel_connector(connector)) == &intel_sdvo->base) {
+		if (intel_attached_encoder(connector) == &intel_sdvo->base) {
 			drm_connector_unregister(connector);
 			intel_connector_destroy(connector);
 		}

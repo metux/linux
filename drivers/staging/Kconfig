@@ -122,4 +122,6 @@ source "drivers/staging/isdn/Kconfig"
 
 source "drivers/staging/qlge/Kconfig"
 
+source "drivers/staging/hp/Kconfig"
+
 endif # STAGING

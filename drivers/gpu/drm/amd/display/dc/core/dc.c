@@ -511,7 +511,7 @@ void dc_stream_set_static_screen_events(struct dc *dc,
 	dc->hwss.set_static_screen_control(pipes_affected, num_pipes_affected, events);
 }
 
-static void destruct(struct dc *dc)
+static void dc_destruct(struct dc *dc)
 {
 	if (dc->current_state) {
 		dc_release_state(dc->current_state);
@@ -557,7 +557,7 @@ static void destruct(struct dc *dc)
 
 }
 
-static bool construct(struct dc *dc,
+static bool dc_construct(struct dc *dc,
 		const struct dc_init_data *init_params)
 {
 	struct dc_context *dc_ctx;
@@ -709,7 +709,7 @@ static bool construct(struct dc *dc,
 
 fail:
 
-	destruct(dc);
+	dc_destruct(dc);
 	return false;
 }
 
@@ -775,7 +775,7 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	if (NULL == dc)
 		goto alloc_fail;
 
-	if (false == construct(dc, init_params))
+	if (false == dc_construct(dc, init_params))
 		goto construct_fail;
 
 	/*TODO: separate HW and SW initialization*/
@@ -820,7 +820,7 @@ void dc_init_callbacks(struct dc *dc,
 
 void dc_destroy(struct dc **dc)
 {
-	destruct(*dc);
+	dc_destruct(*dc);
 	kfree(*dc);
 	*dc = NULL;
 }

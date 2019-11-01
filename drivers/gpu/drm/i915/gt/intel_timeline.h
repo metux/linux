@@ -77,17 +77,18 @@ static inline bool intel_timeline_sync_is_later(struct intel_timeline *tl,
 }
 
 int intel_timeline_pin(struct intel_timeline *tl);
+void intel_timeline_enter(struct intel_timeline *tl);
 int intel_timeline_get_seqno(struct intel_timeline *tl,
 			     struct i915_request *rq,
 			     u32 *seqno);
+void intel_timeline_exit(struct intel_timeline *tl);
 void intel_timeline_unpin(struct intel_timeline *tl);
 
 int intel_timeline_read_hwsp(struct i915_request *from,
 			     struct i915_request *until,
 			     u32 *hwsp_offset);
 
-void intel_timelines_init(struct drm_i915_private *i915);
-void intel_timelines_park(struct drm_i915_private *i915);
-void intel_timelines_fini(struct drm_i915_private *i915);
+void intel_gt_init_timelines(struct intel_gt *gt);
+void intel_gt_fini_timelines(struct intel_gt *gt);
 
 #endif

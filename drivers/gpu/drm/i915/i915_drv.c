@@ -63,7 +63,6 @@
 #include "gem/i915_gem_ioctls.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
-#include "gt/intel_rc6.h"
 
 #include "i915_debugfs.h"
 #include "i915_drv.h"
@@ -1388,7 +1387,7 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 
 static void i915_welcome_messages(struct drm_i915_private *dev_priv)
 {
-	if (drm_debug_enabled(DRM_UT_DRIVER)) {
+	if (drm_debug & DRM_UT_DRIVER) {
 		struct drm_printer p = drm_debug_printer("i915 device info:");
 
 		drm_printf(&p, "pciid=0x%04x rev=0x%02x platform=%s (subplatform=0x%x) gen=%i\n",
@@ -1819,8 +1818,6 @@ static int i915_drm_resume(struct drm_device *dev)
 	int ret;
 
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
-
-	intel_rc6_ctx_wa_resume(&dev_priv->gt.rc6);
 
 	intel_gt_sanitize(&dev_priv->gt, true);
 

@@ -4,8 +4,6 @@
  * Copyright © 2019 Intel Corporation
  */
 
-#include <linux/suspend.h>
-
 #include "i915_drv.h"
 #include "i915_globals.h"
 #include "i915_params.h"
@@ -19,24 +17,6 @@
 #include "intel_rc6.h"
 #include "intel_rps.h"
 #include "intel_wakeref.h"
-
-static void user_forcewake(struct intel_gt *gt, bool suspend)
-{
-	int count = atomic_read(&gt->user_wakeref);
-
-	/* Inside suspend/resume so single threaded, no races to worry about. */
-	if (likely(!count))
-		return;
-
-	intel_gt_pm_get(gt);
-	if (suspend) {
-		GEM_BUG_ON(count > atomic_read(&gt->wakeref.count));
-		atomic_sub(count, &gt->wakeref.count);
-	} else {
-		atomic_add(count, &gt->wakeref.count);
-	}
-	intel_gt_pm_put(gt);
-}
 
 static int __gt_unpark(struct intel_wakeref *wf)
 {
@@ -61,13 +41,6 @@ static int __gt_unpark(struct intel_wakeref *wf)
 	gt->awake = intel_display_power_get(i915, POWER_DOMAIN_GT_IRQ);
 	GEM_BUG_ON(!gt->awake);
 
-	if (NEEDS_RC6_CTX_CORRUPTION_WA(i915))
-		intel_uncore_forcewake_get(&i915->uncore, FORCEWAKE_ALL);
-
-	intel_enable_gt_powersave(i915);
-
-	i915_update_gfx_val(i915);
-
 	intel_rps_unpark(&gt->rps);
 	i915_pmu_gt_unparked(i915);
 
@@ -90,22 +63,11 @@ static int __gt_park(struct intel_wakeref *wf)
 	i915_pmu_gt_parked(i915);
 	intel_rps_park(&gt->rps);
 
-	if (NEEDS_RC6_CTX_CORRUPTION_WA(i915)) {
-		i915_rc6_ctx_wa_check(i915);
-		intel_uncore_forcewake_put(&i915->uncore, FORCEWAKE_ALL);
-	}
-
 	/* Everything switched off, flush any residual interrupt just in case */
 	intel_synchronize_irq(i915);
 
-	if (NEEDS_RC6_CTX_CORRUPTION_WA(i915)) {
-		intel_rc6_ctx_wa_check(&i915->gt.rc6);
-		intel_uncore_forcewake_put(&i915->uncore, FORCEWAKE_ALL);
-	}
-
-	/* Defer dropping the display power well for 100ms, it's slow! */
 	GEM_BUG_ON(!wakeref);
-	intel_display_power_put_async(i915, POWER_DOMAIN_GT_IRQ, wakeref);
+	intel_display_power_put(i915, POWER_DOMAIN_GT_IRQ, wakeref);
 
 	i915_globals_park();
 
@@ -115,6 +77,7 @@ static int __gt_park(struct intel_wakeref *wf)
 static const struct intel_wakeref_ops wf_ops = {
 	.get = __gt_unpark,
 	.put = __gt_park,
+	.flags = INTEL_WAKEREF_PUT_ASYNC,
 };
 
 void intel_gt_pm_init_early(struct intel_gt *gt)
@@ -247,19 +210,14 @@ int intel_gt_resume(struct intel_gt *gt)
 
 	intel_uc_resume(&gt->uc);
 
-	user_forcewake(gt, false);
-
 	intel_uncore_forcewake_put(gt->uncore, FORCEWAKE_ALL);
 	intel_gt_pm_put(gt);
 
 	return err;
 }
 
-static void wait_for_suspend(struct intel_gt *gt)
+static void wait_for_idle(struct intel_gt *gt)
 {
-	if (!intel_gt_pm_is_awake(gt))
-		return;
-
 	if (intel_gt_wait_for_idle(gt, I915_GEM_IDLE_TIMEOUT) == -ETIME) {
 		/*
 		 * Forcibly cancel outstanding work and leave
@@ -271,42 +229,14 @@ static void wait_for_suspend(struct intel_gt *gt)
 	intel_gt_pm_wait_for_idle(gt);
 }
 
-void intel_gt_suspend_prepare(struct intel_gt *gt)
-{
-	user_forcewake(gt, true);
-	wait_for_suspend(gt);
-
-	intel_uc_suspend(&gt->uc);
-}
-
-static suspend_state_t pm_suspend_target(void)
-{
-#if IS_ENABLED(CONFIG_SUSPEND) && IS_ENABLED(CONFIG_PM_SLEEP)
-	return pm_suspend_target_state;
-#else
-	return PM_SUSPEND_TO_IDLE;
-#endif
-}
-
-void intel_gt_suspend_late(struct intel_gt *gt)
+void intel_gt_suspend(struct intel_gt *gt)
 {
 	intel_wakeref_t wakeref;
 
 	/* We expect to be idle already; but also want to be independent */
-	wait_for_suspend(gt);
+	wait_for_idle(gt);
 
-	/*
-	 * On disabling the device, we want to turn off HW access to memory
-	 * that we no longer own.
-	 *
-	 * However, not all suspend-states disable the device. S0 (s2idle)
-	 * is effectively runtime-suspend, the device is left powered on
-	 * but needs to be put into a low power state. We need to keep
-	 * powermanagement enabled, but we also retain system state and so
-	 * it remains safe to keep on using our allocated memory.
-	 */
-	if (pm_suspend_target() == PM_SUSPEND_TO_IDLE)
-		return;
+	intel_uc_suspend(&gt->uc);
 
 	with_intel_runtime_pm(gt->uncore->rpm, wakeref) {
 		intel_rps_disable(&gt->rps);

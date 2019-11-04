@@ -174,8 +174,7 @@ static void mtk_iommu_tlb_flush_all(void *cookie)
 }
 
 static void mtk_iommu_tlb_add_flush_nosync(unsigned long iova, size_t size,
-					   size_t granule, bool leaf,
-					   void *cookie)
+					   size_t granule, void *cookie)
 {
 	struct mtk_iommu_data *data = cookie;
 
@@ -218,7 +217,10 @@ static void mtk_iommu_tlb_sync(void *cookie)
 
 static const struct iommu_gather_ops mtk_iommu_gather_ops = {
 	.tlb_flush_all = mtk_iommu_tlb_flush_all,
+	.tlb_flush_walk = mtk_iommu_tlb_flush_walk,
+	.tlb_flush_leaf = mtk_iommu_tlb_flush_walk,
 	.tlb_add_flush = mtk_iommu_tlb_add_flush_nosync,
+	.tlb_add_page = mtk_iommu_tlb_flush_page_nosync,
 	.tlb_sync = mtk_iommu_tlb_sync,
 };
 
@@ -433,7 +435,7 @@ static void mtk_iommu_iotlb_sync(struct iommu_domain *domain)
 
 	spin_lock_irqsave(&data->tlb_lock, flags);
 	mtk_iommu_tlb_add_flush_nosync(gather->start, length, gather->pgsize,
-				       false, data);
+				       data);
 	mtk_iommu_tlb_sync(data);
 	spin_unlock_irqrestore(&data->tlb_lock, flags);
 }

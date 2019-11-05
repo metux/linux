@@ -114,22 +114,22 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 	 */
 	if (safe_to_lower) {
 		/* check that we're not already in lower */
-		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_OPTIMIZED) {
+		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_LOW_POWER) {
 
 			display_count = rn_get_active_display_cnt_wa(dc, context);
 			/* if we can go lower, go lower */
 			if (display_count == 0) {
-				rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_OPTIMIZED);
+				rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_LOW_POWER);
 				/* update power state */
-				clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_OPTIMIZED;
+				clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_LOW_POWER;
 			}
 		}
 	} else {
-		/* check that we're not already in the normal state */
-		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_NORMAL) {
-			rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_NORMAL);
+		/* check that we're not already in D0 */
+		if (clk_mgr_base->clks.pwr_state != DCN_PWR_STATE_MISSION_MODE) {
+			rn_vbios_smu_set_dcn_low_power_state(clk_mgr, DCN_PWR_STATE_MISSION_MODE);
 			/* update power state */
-			clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_NORMAL;
+			clk_mgr_base->clks.pwr_state = DCN_PWR_STATE_MISSION_MODE;
 		}
 	}
 
@@ -171,7 +171,8 @@ void rn_update_clocks(struct clk_mgr *clk_mgr_base,
 		// if clock is being raised, increase refclk before lowering DTO
 		if (update_dppclk || update_dispclk)
 			rn_vbios_smu_set_dppclk(clk_mgr, clk_mgr_base->clks.dppclk_khz);
-		if (update_dppclk)
+		// always update dtos unless clock is lowered and not safe to lower
+		if (new_clocks->dppclk_khz >= dc->current_state->bw_ctx.bw.dcn.clk.dppclk_khz)
 			dcn20_update_clocks_update_dpp_dto(clk_mgr, context);
 	}
 
@@ -377,7 +378,7 @@ void rn_get_clk_states(struct clk_mgr *clk_mgr_base, struct clk_states *s)
 
 	rn_dump_clk_registers(&sb, clk_mgr_base, &log_info);
 
-	s->dprefclk_khz = sb.dprefclk;
+	s->dprefclk_khz = sb.dprefclk * 1000;
 }
 
 void rn_enable_pme_wa(struct clk_mgr *clk_mgr_base)
@@ -393,86 +394,10 @@ void rn_init_clocks(struct clk_mgr *clk_mgr)
 	// Assumption is that boot state always supports pstate
 	clk_mgr->clks.p_state_change_support = true;
 	clk_mgr->clks.prev_p_state_change_support = true;
-	clk_mgr->clks.pwr_state = DCN_PWR_STATE_NORMAL;
+	clk_mgr->clks.pwr_state = DCN_PWR_STATE_UNKNOWN;
 }
 
-static struct clk_mgr_funcs dcn21_funcs = {
-	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
-	.update_clocks = rn_update_clocks,
-	.init_clocks = rn_init_clocks,
-	.enable_pme_wa = rn_enable_pme_wa,
-	/* .dump_clk_registers = rn_dump_clk_registers */
-};
-
-struct clk_bw_params rn_bw_params = {
-	.vram_type = Ddr4MemType,
-	.num_channels = 1,
-	.clk_table = {
-		.entries = {
-			{
-				.voltage = 0,
-				.dcfclk_mhz = 400,
-				.fclk_mhz = 400,
-				.memclk_mhz = 800,
-				.socclk_mhz = 0,
-			},
-			{
-				.voltage = 0,
-				.dcfclk_mhz = 483,
-				.fclk_mhz = 800,
-				.memclk_mhz = 1600,
-				.socclk_mhz = 0,
-			},
-			{
-				.voltage = 0,
-				.dcfclk_mhz = 602,
-				.fclk_mhz = 1067,
-				.memclk_mhz = 1067,
-				.socclk_mhz = 0,
-			},
-			{
-				.voltage = 0,
-				.dcfclk_mhz = 738,
-				.fclk_mhz = 1333,
-				.memclk_mhz = 1600,
-				.socclk_mhz = 0,
-			},
-		},
-
-		.num_entries = 4,
-	},
-
-	.wm_table = {
-		.entries = {
-			{
-				.wm_inst = WM_A,
-				.wm_type = WM_TYPE_PSTATE_CHG,
-				.pstate_latency_us = 23.84,
-				.valid = true,
-			},
-			{
-				.wm_inst = WM_B,
-				.wm_type = WM_TYPE_PSTATE_CHG,
-				.pstate_latency_us = 23.84,
-				.valid = true,
-			},
-			{
-				.wm_inst = WM_C,
-				.wm_type = WM_TYPE_PSTATE_CHG,
-				.pstate_latency_us = 23.84,
-				.valid = true,
-			},
-			{
-				.wm_inst = WM_D,
-				.wm_type = WM_TYPE_PSTATE_CHG,
-				.pstate_latency_us = 23.84,
-				.valid = true,
-			},
-		},
-	}
-};
-
-static void rn_build_watermark_ranges(struct clk_bw_params *bw_params, struct pp_smu_wm_range_sets *ranges)
+void build_watermark_ranges(struct clk_bw_params *bw_params, struct pp_smu_wm_range_sets *ranges)
 {
 	int i, num_valid_sets;
 
@@ -529,6 +454,108 @@ static void rn_build_watermark_ranges(struct clk_bw_params *bw_params, struct pp
 
 }
 
+static void rn_notify_wm_ranges(struct clk_mgr *clk_mgr_base)
+{
+	struct dc_debug_options *debug = &clk_mgr_base->ctx->dc->debug;
+	struct pp_smu_wm_range_sets ranges = {0};
+	struct clk_mgr_internal *clk_mgr = TO_CLK_MGR_INTERNAL(clk_mgr_base);
+	struct pp_smu_funcs *pp_smu = clk_mgr->pp_smu;
+
+	if (!debug->disable_pplib_wm_range) {
+		build_watermark_ranges(clk_mgr_base->bw_params, &ranges);
+
+		/* Notify PP Lib/SMU which Watermarks to use for which clock ranges */
+		if (pp_smu && pp_smu->rn_funcs.set_wm_ranges)
+			pp_smu->rn_funcs.set_wm_ranges(&pp_smu->rn_funcs.pp_smu, &ranges);
+	}
+
+}
+
+static struct clk_mgr_funcs dcn21_funcs = {
+	.get_dp_ref_clk_frequency = dce12_get_dp_ref_freq_khz,
+	.update_clocks = rn_update_clocks,
+	.init_clocks = rn_init_clocks,
+	.enable_pme_wa = rn_enable_pme_wa,
+	/* .dump_clk_registers = rn_dump_clk_registers, */
+	.notify_wm_ranges = rn_notify_wm_ranges
+};
+
+struct clk_bw_params rn_bw_params = {
+	.vram_type = Ddr4MemType,
+	.num_channels = 1,
+	.clk_table = {
+		.entries = {
+			{
+				.voltage = 0,
+				.dcfclk_mhz = 400,
+				.fclk_mhz = 400,
+				.memclk_mhz = 800,
+				.socclk_mhz = 0,
+			},
+			{
+				.voltage = 0,
+				.dcfclk_mhz = 483,
+				.fclk_mhz = 800,
+				.memclk_mhz = 1600,
+				.socclk_mhz = 0,
+			},
+			{
+				.voltage = 0,
+				.dcfclk_mhz = 602,
+				.fclk_mhz = 1067,
+				.memclk_mhz = 1067,
+				.socclk_mhz = 0,
+			},
+			{
+				.voltage = 0,
+				.dcfclk_mhz = 738,
+				.fclk_mhz = 1333,
+				.memclk_mhz = 1600,
+				.socclk_mhz = 0,
+			},
+		},
+
+		.num_entries = 4,
+	},
+
+	.wm_table = {
+		.entries = {
+			{
+				.wm_inst = WM_A,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 11.72,
+				.sr_exit_time_us = 6.09,
+				.sr_enter_plus_exit_time_us = 7.14,
+				.valid = true,
+			},
+			{
+				.wm_inst = WM_B,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 11.72,
+				.sr_exit_time_us = 10.12,
+				.sr_enter_plus_exit_time_us = 11.48,
+				.valid = true,
+			},
+			{
+				.wm_inst = WM_C,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 11.72,
+				.sr_exit_time_us = 10.12,
+				.sr_enter_plus_exit_time_us = 11.48,
+				.valid = true,
+			},
+			{
+				.wm_inst = WM_D,
+				.wm_type = WM_TYPE_PSTATE_CHG,
+				.pstate_latency_us = 11.72,
+				.sr_exit_time_us = 10.12,
+				.sr_enter_plus_exit_time_us = 11.48,
+				.valid = true,
+			},
+		},
+	}
+};
+
 static unsigned int find_dcfclk_for_voltage(struct dpm_clocks *clock_table, unsigned int voltage)
 {
 	int i;
@@ -546,6 +573,8 @@ static void rn_clk_mgr_helper_populate_bw_params(struct clk_bw_params *bw_params
 {
 	int i, j = 0;
 
+	j = -1;
+
 	ASSERT(PP_SMU_NUM_FCLK_DPM_LEVELS <= MAX_NUM_DPM_LVL);
 
 	/* Find lowest DPM, FCLK is filled in reverse order*/
@@ -555,6 +584,12 @@ static void rn_clk_mgr_helper_populate_bw_params(struct clk_bw_params *bw_params
 			j = i;
 			break;
 		}
+	}
+
+	if (j == -1) {
+		/* clock table is all 0s, just use our own hardcode */
+		ASSERT(0);
+		return;
 	}
 
 	bw_params->clk_table.num_entries = j + 1;
@@ -633,40 +668,24 @@ void rn_clk_mgr_construct(
 			clk_mgr->base.dentist_vco_freq_khz = 3600000;
 
 		rn_dump_clk_registers(&s, &clk_mgr->base, &log_info);
-		clk_mgr->base.dprefclk_khz = s.dprefclk;
-
-		if (clk_mgr->base.dprefclk_khz != 600000) {
-			clk_mgr->base.dprefclk_khz = 600000;
-			ASSERT(1); //TODO: Renoir follow up.
-		}
+		/* Convert dprefclk units from MHz to KHz */
+		/* Value already divided by 10, some resolution lost */
+		clk_mgr->base.dprefclk_khz = s.dprefclk * 1000;
 
 		/* in case we don't get a value from the register, use default */
-		if (clk_mgr->base.dprefclk_khz == 0)
+		if (clk_mgr->base.dprefclk_khz == 0) {
+			ASSERT(clk_mgr->base.dprefclk_khz == 600000);
 			clk_mgr->base.dprefclk_khz = 600000;
+		}
 	}
 
 	dce_clock_read_ss_info(clk_mgr);
 
 	clk_mgr->base.bw_params = &rn_bw_params;
 
-	if (pp_smu) {
+	if (pp_smu && pp_smu->rn_funcs.get_dpm_clock_table) {
 		pp_smu->rn_funcs.get_dpm_clock_table(&pp_smu->rn_funcs.pp_smu, &clock_table);
 		rn_clk_mgr_helper_populate_bw_params(clk_mgr->base.bw_params, &clock_table, &ctx->asic_id);
-	}
-
-	/*
-	 * Notify SMU which set of WM should be selected for different ranges of fclk
-	 * On Renoir there is a maximumum of 4 DF pstates supported, could be less
-	 * depending on DDR speed and fused maximum fclk.
-	 */
-	if (!debug->disable_pplib_wm_range) {
-		struct pp_smu_wm_range_sets ranges = {0};
-
-		rn_build_watermark_ranges(clk_mgr->base.bw_params, &ranges);
-
-		/* Notify PP Lib/SMU which Watermarks to use for which clock ranges */
-		if (pp_smu && pp_smu->rn_funcs.set_wm_ranges)
-			pp_smu->rn_funcs.set_wm_ranges(&pp_smu->rn_funcs.pp_smu, &ranges);
 	}
 
 	if (!IS_FPGA_MAXIMUS_DC(ctx->dce_environment) && clk_mgr->smu_ver >= 0x00371500) {

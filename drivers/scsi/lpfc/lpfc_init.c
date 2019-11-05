@@ -1362,7 +1362,7 @@ lpfc_hb_timeout_handler(struct lpfc_hba *phba)
 	if (vports != NULL)
 		for (i = 0; i <= phba->max_vports && vports[i] != NULL; i++) {
 			lpfc_rcv_seq_check_edtov(vports[i]);
-			lpfc_fdmi_change_check(vports[i]);
+			lpfc_fdmi_num_disc_check(vports[i]);
 		}
 	lpfc_destroy_vport_work_array(phba, vports);
 
@@ -5883,7 +5883,7 @@ void lpfc_sli4_async_event_proc(struct lpfc_hba *phba)
 			break;
 		default:
 			lpfc_printf_log(phba, KERN_ERR, LOG_SLI,
-					"1804 Invalid asynchronous event code: "
+					"1804 Invalid asynchrous event code: "
 					"x%x\n", bf_get(lpfc_trailer_code,
 					&cq_event->cqe.mcqe_cmpl));
 			break;
@@ -6005,13 +6005,19 @@ static void
 lpfc_cpumask_of_node_init(struct lpfc_hba *phba)
 {
 	unsigned int cpu, numa_node;
-	struct cpumask *numa_mask = &phba->sli4_hba.numa_mask;
+	struct cpumask *numa_mask = NULL;
+
+#ifdef CONFIG_NUMA
+	numa_node = phba->pcidev->dev.numa_node;
+#else
+	numa_node = NUMA_NO_NODE;
+#endif
+	numa_mask = &phba->sli4_hba.numa_mask;
 
 	cpumask_clear(numa_mask);
 
 	/* Check if we're a NUMA architecture */
-	numa_node = dev_to_node(&phba->pcidev->dev);
-	if (numa_node == NUMA_NO_NODE)
+	if (!cpumask_of_node(numa_node))
 		return;
 
 	for_each_possible_cpu(cpu)
@@ -6460,7 +6466,7 @@ lpfc_sli4_driver_resource_setup(struct lpfc_hba *phba)
 	u32 if_fam;
 
 	phba->sli4_hba.num_present_cpu = lpfc_present_cpu;
-	phba->sli4_hba.num_possible_cpu = cpumask_last(cpu_possible_mask) + 1;
+	phba->sli4_hba.num_possible_cpu = num_possible_cpus();
 	phba->sli4_hba.curr_disp_cpu = 0;
 	lpfc_cpumask_of_node_init(phba);
 
@@ -8320,6 +8326,14 @@ lpfc_map_topology(struct lpfc_hba *phba, struct lpfc_mbx_read_config *rd_config)
 	phba->hba_flag |= HBA_PERSISTENT_TOPO;
 	switch (phba->pcidev->device) {
 	case PCI_DEVICE_ID_LANCER_G7_FC:
+		if (tf || (pt == LINK_FLAGS_LOOP)) {
+			/* Invalid values from FW - use driver params */
+			phba->hba_flag &= ~HBA_PERSISTENT_TOPO;
+		} else {
+			/* Prism only supports PT2PT topology */
+			phba->cfg_topology = FLAGS_TOPOLOGY_MODE_PT_PT;
+		}
+		break;
 	case PCI_DEVICE_ID_LANCER_G6_FC:
 		if (!tf) {
 			phba->cfg_topology = ((pt == LINK_FLAGS_LOOP)
@@ -10441,8 +10455,6 @@ lpfc_sli4_pci_mem_unset(struct lpfc_hba *phba)
 	case LPFC_SLI_INTF_IF_TYPE_6:
 		iounmap(phba->sli4_hba.drbl_regs_memmap_p);
 		iounmap(phba->sli4_hba.conf_regs_memmap_p);
-		if (phba->sli4_hba.dpp_regs_memmap_p)
-			iounmap(phba->sli4_hba.dpp_regs_memmap_p);
 		break;
 	case LPFC_SLI_INTF_IF_TYPE_1:
 	default:
@@ -10996,7 +11008,7 @@ found_any:
 				cpu, cpup->phys_id, cpup->core_id,
 				cpup->hdwq, cpup->eq, cpup->flag);
 	}
-	/* Associate a hdwq with each cpu_map entry
+	/* Finally we need to associate a hdwq with each cpu_map entry
 	 * This will be 1 to 1 - hdwq to cpu, unless there are less
 	 * hardware queues then CPUs. For that case we will just round-robin
 	 * the available hardware queues as they get assigned to CPUs.
@@ -11073,23 +11085,6 @@ found_any:
 				"hdwq %d eq %d flg x%x\n",
 				cpu, cpup->phys_id, cpup->core_id,
 				cpup->hdwq, cpup->eq, cpup->flag);
-	}
-
-	/*
-	 * Initialize the cpu_map slots for not-present cpus in case
-	 * a cpu is hot-added. Perform a simple hdwq round robin assignment.
-	 */
-	idx = 0;
-	for_each_possible_cpu(cpu) {
-		cpup = &phba->sli4_hba.cpu_map[cpu];
-		if (cpup->hdwq != LPFC_VECTOR_MAP_EMPTY)
-			continue;
-
-		cpup->hdwq = idx++ % phba->cfg_hdw_queue;
-		lpfc_printf_log(phba, KERN_INFO, LOG_INIT,
-				"3340 Set Affinity: not present "
-				"CPU %d hdwq %d\n",
-				cpu, cpup->hdwq);
 	}
 
 	/* The cpu_map array will be used later during initialization
@@ -11583,7 +11578,9 @@ lpfc_sli4_enable_intr(struct lpfc_hba *phba, uint32_t cfg_mode)
 		retval = 0;
 		if (!retval) {
 			/* Now, try to enable MSI-X interrupt mode */
+			get_online_cpus();
 			retval = lpfc_sli4_enable_msix(phba);
+			put_online_cpus();
 			if (!retval) {
 				/* Indicate initialization to MSI-X mode */
 				phba->intr_type = MSIX;

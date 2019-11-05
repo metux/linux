@@ -124,6 +124,7 @@ bool pci_ats_disabled(void)
 {
 	return pcie_ats_disabled;
 }
+EXPORT_SYMBOL_GPL(pci_ats_disabled);
 
 /* Disable bridge_d3 for all PCIe ports */
 static bool pci_bridge_d3_disable;
@@ -887,7 +888,7 @@ static int pci_raw_set_power_state(struct pci_dev *dev, pci_power_t state)
 	if (state == PCI_D3hot || dev->current_state == PCI_D3hot)
 		pci_dev_d3_sleep(dev);
 	else if (state == PCI_D2 || dev->current_state == PCI_D2)
-		udelay(PCI_PM_D2_DELAY);
+		msleep(PCI_PM_D2_DELAY);
 
 	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 	dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
@@ -1004,28 +1005,31 @@ void pci_wakeup_bus(struct pci_bus *bus)
 }
 
 /**
- * __pci_start_power_transition - Start power transition of a PCI device
- * @dev: PCI device to handle.
- * @state: State to put the device into.
+ * pci_power_up - Put the given device into D0
+ * @dev: PCI device to power up
  */
-static void __pci_start_power_transition(struct pci_dev *dev, pci_power_t state)
+int pci_power_up(struct pci_dev *dev)
 {
-	if (state == PCI_D0) {
-		pci_platform_power_transition(dev, PCI_D0);
+	pci_platform_power_transition(dev, PCI_D0);
+
+	/*
+	 * Mandatory power management transition delays, see PCI Express Base
+	 * Specification Revision 2.0 Section 6.6.1: Conventional Reset.  Do not
+	 * delay for devices powered on/off by corresponding bridge, because
+	 * have already delayed for the bridge.
+	 */
+	if (dev->runtime_d3cold) {
+		if (dev->d3cold_delay && !dev->imm_ready)
+			msleep(dev->d3cold_delay);
 		/*
-		 * Mandatory power management transition delays are
-		 * handled in the PCIe portdrv resume hooks.
+		 * When powering on a bridge from D3cold, the whole hierarchy
+		 * may be powered on into D0uninitialized state, resume them to
+		 * give them a chance to suspend again
 		 */
-		if (dev->runtime_d3cold) {
-			/*
-			 * When powering on a bridge from D3cold, the
-			 * whole hierarchy may be powered on into
-			 * D0uninitialized state, resume them to give
-			 * them a chance to suspend again
-			 */
-			pci_wakeup_bus(dev->subordinate);
-		}
+		pci_wakeup_bus(dev->subordinate);
 	}
+
+	return pci_raw_set_power_state(dev, PCI_D0);
 }
 
 /**
@@ -1113,7 +1117,8 @@ int pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 	if (dev->current_state == state)
 		return 0;
 
-	__pci_start_power_transition(dev, state);
+	if (state == PCI_D0)
+		return pci_power_up(dev);
 
 	/*
 	 * This device is quirked not to be put into D3, so don't put it in
@@ -1135,16 +1140,6 @@ int pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 	return error;
 }
 EXPORT_SYMBOL(pci_set_power_state);
-
-/**
- * pci_power_up - Put the given device into D0 forcibly
- * @dev: PCI device to power up
- */
-void pci_power_up(struct pci_dev *dev)
-{
-	__pci_start_power_transition(dev, PCI_D0);
-	pci_raw_set_power_state(dev, PCI_D0);
-}
 
 /**
  * pci_choose_state - Choose the power state of a PCI device
@@ -1354,6 +1349,7 @@ int pci_save_state(struct pci_dev *dev)
 
 	pci_save_ltr_state(dev);
 	pci_save_dpc_state(dev);
+	pci_save_aer_state(dev);
 	return pci_save_vc_state(dev);
 }
 EXPORT_SYMBOL(pci_save_state);
@@ -1467,6 +1463,7 @@ void pci_restore_state(struct pci_dev *dev)
 	pci_restore_dpc_state(dev);
 
 	pci_cleanup_aer_error_status_regs(dev);
+	pci_restore_aer_state(dev);
 
 	pci_restore_config_space(dev);
 
@@ -5862,6 +5859,24 @@ int pci_set_vga_state(struct pci_dev *dev, bool decode,
 	}
 	return 0;
 }
+
+#ifdef CONFIG_ACPI
+bool pci_pr3_present(struct pci_dev *pdev)
+{
+	struct acpi_device *adev;
+
+	if (acpi_disabled)
+		return false;
+
+	adev = ACPI_COMPANION(&pdev->dev);
+	if (!adev)
+		return false;
+
+	return adev->power.flags.power_resources &&
+		acpi_has_method(adev->handle, "_PR3");
+}
+EXPORT_SYMBOL_GPL(pci_pr3_present);
+#endif
 
 /**
  * pci_add_dma_alias - Add a DMA devfn alias for a device

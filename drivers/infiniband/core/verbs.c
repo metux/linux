@@ -2388,6 +2388,16 @@ int ib_set_vf_guid(struct ib_device *device, int vf, u8 port, u64 guid,
 }
 EXPORT_SYMBOL(ib_set_vf_guid);
 
+int ib_get_vf_guid(struct ib_device *device, int vf, u8 port,
+		   struct ifla_vf_guid *node_guid,
+		   struct ifla_vf_guid *port_guid)
+{
+	if (!device->ops.get_vf_guid)
+		return -EOPNOTSUPP;
+
+	return device->ops.get_vf_guid(device, vf, port, node_guid, port_guid);
+}
+EXPORT_SYMBOL(ib_get_vf_guid);
 /**
  * ib_map_mr_sg() - Map the largest prefix of a dma mapped SG list
  *     and set it the memory region.

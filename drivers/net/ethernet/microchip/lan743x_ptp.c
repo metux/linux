@@ -492,10 +492,6 @@ static int lan743x_ptp_perout(struct lan743x_adapter *adapter, int on,
 	unsigned int index = perout_request->index;
 	struct lan743x_ptp_perout *perout = &ptp->perout[index];
 
-	/* Reject requests with unsupported flags */
-	if (perout_request->flags)
-		return -EOPNOTSUPP;
-
 	if (on) {
 		perout_pin = ptp_find_pin(ptp->ptp_clock, PTP_PF_PEROUT,
 					  perout_request->index);
@@ -1264,9 +1260,6 @@ int lan743x_ptp_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 							 true, true);
 
 		lan743x_ptp_set_sync_ts_insert(adapter, true);
-		break;
-	case HWTSTAMP_TX_ONESTEP_P2P:
-		ret = -ERANGE;
 		break;
 	default:
 		netif_warn(adapter, drv, adapter->netdev,

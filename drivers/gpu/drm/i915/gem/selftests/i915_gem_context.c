@@ -150,7 +150,7 @@ static int live_nop_switch(void *arg)
 	}
 
 out_file:
-	mock_file_free(i915, file);
+	mock_file_put(file);
 	return err;
 }
 
@@ -355,7 +355,7 @@ out:
 	}
 	kfree(data);
 out_file:
-	mock_file_free(i915, file);
+	mock_file_put(file);
 	return err;
 }
 
@@ -699,7 +699,7 @@ out_file:
 		if (igt_live_test_end(&t))
 			err = -EIO;
 
-		mock_file_free(i915, file);
+		mock_file_put(file);
 		if (err)
 			return err;
 
@@ -838,7 +838,7 @@ out_test:
 	if (igt_live_test_end(&t))
 		err = -EIO;
 out_file:
-	mock_file_free(i915, file);
+	mock_file_put(file);
 	return err;
 }
 
@@ -1415,7 +1415,7 @@ out_file:
 	if (igt_live_test_end(&t))
 		err = -EIO;
 
-	mock_file_free(i915, file);
+	mock_file_put(file);
 	return err;
 }
 
@@ -1740,7 +1740,7 @@ static int igt_vm_isolation(void *arg)
 out_file:
 	if (igt_live_test_end(&t))
 		err = -EIO;
-	mock_file_free(i915, file);
+	mock_file_put(file);
 	return err;
 }
 

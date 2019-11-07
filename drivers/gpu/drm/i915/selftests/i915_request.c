@@ -1287,7 +1287,7 @@ out_contexts:
 out_threads:
 	kfree(threads);
 out_file:
-	mock_file_free(i915, file);
+	mock_file_put(file);
 out_rpm:
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 

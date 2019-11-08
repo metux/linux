@@ -23,6 +23,7 @@
 
 #include "amdgpu.h"
 #include "amdgpu_smu.h"
+#include "smu_internal.h"
 #include "soc15_common.h"
 #include "smu_v12_0_ppsmc.h"
 #include "smu12_driver_if.h"
@@ -179,10 +180,12 @@ static int renoir_print_clk_levels(struct smu_context *smu,
 	int i, size = 0, ret = 0;
 	uint32_t cur_value = 0, value = 0, count = 0, min = 0, max = 0;
 	DpmClocks_t *clk_table = smu->smu_table.clocks_table;
-	SmuMetrics_t metrics = {0};
+	SmuMetrics_t metrics;
 
 	if (!clk_table || clk_type >= SMU_CLK_COUNT)
 		return -EINVAL;
+
+	memset(&metrics, 0, sizeof(metrics));
 
 	ret = smu_update_table(smu, SMU_TABLE_SMU_METRICS, 0,
 			       (void *)&metrics, false);
@@ -281,7 +284,7 @@ static int renoir_dpm_set_uvd_enable(struct smu_context *smu, bool enable)
 	if (enable) {
 		/* vcn dpm on is a prerequisite for vcn power gate messages */
 		if (smu_feature_is_enabled(smu, SMU_FEATURE_VCN_PG_BIT)) {
-			ret = smu_send_smc_msg_with_param(smu, SMU_MSG_PowerUpVcn, 1);
+			ret = smu_send_smc_msg_with_param(smu, SMU_MSG_PowerUpVcn, 0);
 			if (ret)
 				return ret;
 		}
@@ -690,6 +693,21 @@ static const struct pptable_funcs renoir_ppt_funcs = {
 	.get_dpm_clock_table = renoir_get_dpm_clock_table,
 	.set_watermarks_table = renoir_set_watermarks_table,
 	.get_power_profile_mode = renoir_get_power_profile_mode,
+	.check_fw_status = smu_v12_0_check_fw_status,
+	.check_fw_version = smu_v12_0_check_fw_version,
+	.powergate_sdma = smu_v12_0_powergate_sdma,
+	.powergate_vcn = smu_v12_0_powergate_vcn,
+	.powergate_jpeg = smu_v12_0_powergate_jpeg,
+	.send_smc_msg_with_param = smu_v12_0_send_msg_with_param,
+	.read_smc_arg = smu_v12_0_read_arg,
+	.set_gfx_cgpg = smu_v12_0_set_gfx_cgpg,
+	.gfx_off_control = smu_v12_0_gfx_off_control,
+	.init_smc_tables = smu_v12_0_init_smc_tables,
+	.fini_smc_tables = smu_v12_0_fini_smc_tables,
+	.populate_smc_tables = smu_v12_0_populate_smc_tables,
+	.get_dpm_ultimate_freq = smu_v12_0_get_dpm_ultimate_freq,
+	.mode2_reset = smu_v12_0_mode2_reset,
+	.set_soft_freq_limited_range = smu_v12_0_set_soft_freq_limited_range,
 };
 
 void renoir_set_ppt_funcs(struct smu_context *smu)

@@ -29,16 +29,24 @@ static DEFINE_PER_CPU(struct llist_head, lazy_list);
  */
 static bool irq_work_claim(struct irq_work *work)
 {
-	int oflags;
+	int flags, oflags, nflags;
 
-	oflags = atomic_fetch_or(IRQ_WORK_CLAIMED, &work->flags);
 	/*
-	 * If the work is already pending, no need to raise the IPI.
-	 * The pairing atomic_fetch_andnot() in irq_work_run() makes sure
-	 * everything we did before is visible.
+	 * Start with our best wish as a premise but only trust any
+	 * flag value after cmpxchg() result.
 	 */
-	if (oflags & IRQ_WORK_PENDING)
-		return false;
+	flags = atomic_read(&work->flags) & ~IRQ_WORK_PENDING;
+	for (;;) {
+		nflags = flags | IRQ_WORK_CLAIMED;
+		oflags = atomic_cmpxchg(&work->flags, flags, nflags);
+		if (oflags == flags)
+			break;
+		if (oflags & IRQ_WORK_PENDING)
+			return false;
+		flags = oflags;
+		cpu_relax();
+	}
+
 	return true;
 }
 
@@ -135,6 +143,7 @@ static void irq_work_run_list(struct llist_head *list)
 {
 	struct irq_work *work, *tmp;
 	struct llist_node *llnode;
+	int flags;
 
 	BUG_ON(!irqs_disabled());
 
@@ -143,7 +152,6 @@ static void irq_work_run_list(struct llist_head *list)
 
 	llnode = llist_del_all(list);
 	llist_for_each_entry_safe(work, tmp, llnode, llnode) {
-		int flags;
 		/*
 		 * Clear the PENDING bit, after this point the @work
 		 * can be re-used.
@@ -151,14 +159,14 @@ static void irq_work_run_list(struct llist_head *list)
 		 * to claim that work don't rely on us to handle their data
 		 * while we are in the middle of the func.
 		 */
-		flags = atomic_fetch_andnot(IRQ_WORK_PENDING, &work->flags);
+		flags = atomic_read(&work->flags) & ~IRQ_WORK_PENDING;
+		atomic_xchg(&work->flags, flags);
 
 		work->func(work);
 		/*
 		 * Clear the BUSY bit and return to the free state if
 		 * no-one else claimed it meanwhile.
 		 */
-		flags &= ~IRQ_WORK_PENDING;
 		(void)atomic_cmpxchg(&work->flags, flags, flags & ~IRQ_WORK_BUSY);
 	}
 }

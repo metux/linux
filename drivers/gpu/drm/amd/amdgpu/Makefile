@@ -68,7 +68,7 @@ amdgpu-$(CONFIG_DRM_AMDGPU_SI)+= si.o gmc_v6_0.o gfx_v6_0.o si_ih.o si_dma.o dce
 amdgpu-y += \
 	vi.o mxgpu_vi.o nbio_v6_1.o soc15.o emu_soc.o mxgpu_ai.o nbio_v7_0.o vega10_reg_init.o \
 	vega20_reg_init.o nbio_v7_4.o nbio_v2_3.o nv.o navi10_reg_init.o navi14_reg_init.o \
-	arct_reg_init.o navi12_reg_init.o
+	arct_reg_init.o navi12_reg_init.o mxgpu_nv.o
 
 # add DF block
 amdgpu-y += \
@@ -84,7 +84,7 @@ amdgpu-y += \
 
 # add UMC block
 amdgpu-y += \
-	umc_v6_1.o
+	umc_v6_1.o umc_v6_0.o
 
 # add IH block
 amdgpu-y += \
@@ -147,12 +147,14 @@ amdgpu-y += \
 	vce_v3_0.o \
 	vce_v4_0.o
 
-# add VCN block
+# add VCN and JPEG block
 amdgpu-y += \
 	amdgpu_vcn.o \
 	vcn_v1_0.o \
 	vcn_v2_0.o \
-	vcn_v2_5.o
+	vcn_v2_5.o \
+	amdgpu_jpeg.o \
+	jpeg_v1_0.o
 
 # add ATHUB block
 amdgpu-y += \

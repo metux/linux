@@ -190,7 +190,7 @@ static u64 get_rc6(struct intel_gt *gt)
 	val = 0;
 	if (intel_gt_pm_get_if_awake(gt)) {
 		val = __get_rc6(gt);
-		intel_gt_pm_put_async(gt);
+		intel_gt_pm_put(gt);
 	}
 
 	spin_lock_irqsave(&pmu->lock, flags);
@@ -302,7 +302,7 @@ engines_sample(struct intel_gt *gt, unsigned int period_ns)
 	if ((i915->pmu.enable & ENGINE_SAMPLE_MASK) == 0)
 		return;
 
-	for_each_engine(engine, i915, id) {
+	for_each_engine(engine, gt, id) {
 		struct intel_engine_pmu *pmu = &engine->pmu;
 		unsigned long flags;
 		bool busy;
@@ -322,6 +322,10 @@ engines_sample(struct intel_gt *gt, unsigned int period_ns)
 		if (val & RING_WAIT_SEMAPHORE)
 			add_sample(&pmu->sample[I915_SAMPLE_SEMA], period_ns);
 
+		/* No need to sample when busy stats are supported. */
+		if (intel_engine_supports_stats(engine))
+			goto skip;
+
 		/*
 		 * While waiting on a semaphore or event, MI_MODE reports the
 		 * ring as idle. However, previously using the seqno, and with
@@ -339,7 +343,7 @@ engines_sample(struct intel_gt *gt, unsigned int period_ns)
 
 skip:
 		spin_unlock_irqrestore(&engine->uncore->lock, flags);
-		intel_engine_pm_put_async(engine);
+		intel_engine_pm_put(engine);
 	}
 }
 
@@ -362,9 +366,22 @@ frequency_sample(struct intel_gt *gt, unsigned int period_ns)
 
 		val = rps->cur_freq;
 		if (intel_gt_pm_get_if_awake(gt)) {
-			val = intel_uncore_read_notrace(uncore, GEN6_RPSTAT1);
-			val = intel_get_cagf(rps, val);
-			intel_gt_pm_put_async(gt);
+			u32 stat;
+
+			/*
+			 * We take a quick peek here without using forcewake
+			 * so that we don't perturb the system under observation
+			 * (forcewake => !rc6 => increased power use). We expect
+			 * that if the read fails because it is outside of the
+			 * mmio power well, then it will return 0 -- in which
+			 * case we assume the system is running at the intended
+			 * frequency. Fortunately, the read should rarely fail!
+			 */
+			stat = intel_uncore_read_fw(uncore, GEN6_RPSTAT1);
+			if (stat)
+				val = intel_get_cagf(rps, stat);
+
+			intel_gt_pm_put(gt);
 		}
 
 		add_sample_mult(&pmu->sample[__I915_SAMPLE_FREQ_ACT],
@@ -1078,6 +1095,17 @@ static void i915_pmu_unregister_cpuhp_state(struct i915_pmu *pmu)
 	cpuhp_remove_multi_state(cpuhp_slot);
 }
 
+static bool is_igp(struct drm_i915_private *i915)
+{
+	struct pci_dev *pdev = i915->drm.pdev;
+
+	/* IGP is 0000:00:02.0 */
+	return pci_domain_nr(pdev->bus) == 0 &&
+	       pdev->bus->number == 0 &&
+	       PCI_SLOT(pdev->devfn) == 2 &&
+	       PCI_FUNC(pdev->devfn) == 0;
+}
+
 void i915_pmu_register(struct drm_i915_private *i915)
 {
 	struct i915_pmu *pmu = &i915->pmu;
@@ -1088,9 +1116,22 @@ void i915_pmu_register(struct drm_i915_private *i915)
 		return;
 	}
 
+	spin_lock_init(&pmu->lock);
+	hrtimer_init(&pmu->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	pmu->timer.function = i915_sample;
+
+	if (!is_igp(i915))
+		pmu->name = kasprintf(GFP_KERNEL,
+				      "i915-%s",
+				      dev_name(i915->drm.dev));
+	else
+		pmu->name = "i915";
+	if (!pmu->name)
+		goto err;
+
 	i915_pmu_events_attr_group.attrs = create_event_attributes(pmu);
 	if (!i915_pmu_events_attr_group.attrs)
-		goto err;
+		goto err_name;
 
 	pmu->base.attr_groups	= i915_pmu_attr_groups;
 	pmu->base.task_ctx_nr	= perf_invalid_context;
@@ -1102,13 +1143,9 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	pmu->base.read		= i915_pmu_event_read;
 	pmu->base.event_idx	= i915_pmu_event_event_idx;
 
-	spin_lock_init(&pmu->lock);
-	hrtimer_init(&pmu->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	pmu->timer.function = i915_sample;
-
-	ret = perf_pmu_register(&pmu->base, "i915", -1);
+	ret = perf_pmu_register(&pmu->base, pmu->name, -1);
 	if (ret)
-		goto err;
+		goto err_attr;
 
 	ret = i915_pmu_register_cpuhp_state(pmu);
 	if (ret)
@@ -1118,10 +1155,14 @@ void i915_pmu_register(struct drm_i915_private *i915)
 
 err_unreg:
 	perf_pmu_unregister(&pmu->base);
-err:
+err_attr:
 	pmu->base.event_init = NULL;
 	free_event_attributes(pmu);
-	DRM_NOTE("Failed to register PMU! (err=%d)\n", ret);
+err_name:
+	if (!is_igp(i915))
+		kfree(pmu->name);
+err:
+	dev_notice(i915->drm.dev, "Failed to register PMU!\n");
 }
 
 void i915_pmu_unregister(struct drm_i915_private *i915)
@@ -1139,5 +1180,7 @@ void i915_pmu_unregister(struct drm_i915_private *i915)
 
 	perf_pmu_unregister(&pmu->base);
 	pmu->base.event_init = NULL;
+	if (!is_igp(i915))
+		kfree(pmu->name);
 	free_event_attributes(pmu);
 }

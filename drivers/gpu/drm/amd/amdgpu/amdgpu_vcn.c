@@ -173,6 +173,8 @@ int amdgpu_vcn_sw_fini(struct amdgpu_device *adev)
 
 	kvfree(adev->vcn.inst[0].saved_bo);
 
+	cancel_delayed_work_sync(&adev->vcn.idle_work);
+
 	if (adev->vcn.indirect_sram) {
 		amdgpu_bo_free_kernel(&adev->vcn.dpg_sram_bo,
 			      &adev->vcn.dpg_sram_gpu_addr,

@@ -100,15 +100,6 @@ struct i915_gem_context {
 	 */
 	struct pid *pid;
 
-	/**
-	 * @name: arbitrary name
-	 *
-	 * A name is constructed for the context from the creator's process
-	 * name, pid and user handle in order to uniquely identify the
-	 * context in messages.
-	 */
-	const char *name;
-
 	/** link: place with &drm_i915_private.context_list */
 	struct list_head link;
 	struct llist_node free_link;
@@ -159,7 +150,7 @@ struct i915_gem_context {
 	 * @active_count: How many times this context was active during a GPU
 	 * hang, but did not cause it.
 	 */
-	atomic_t active_count;
+	atomic_t active_count.
 
 	/**
 	 * @hang_timestamp: The last time(s) this context caused a GPU hang
@@ -183,6 +174,15 @@ struct i915_gem_context {
 	unsigned long *jump_whitelist;
 	/** jump_whitelist_cmds: No of cmd slots available */
 	u32 jump_whitelist_cmds;
+
+	/**
+	 * @name: arbitrary name, used for user debug
+	 *
+	 * A name is constructed for the context from the creator's process
+	 * name, pid and user handle in order to uniquely identify the
+	 * context in messages.
+	 */
+	char name[TASK_COMM_LEN + 8];
 };
 
 #endif /* __I915_GEM_CONTEXT_TYPES_H__ */

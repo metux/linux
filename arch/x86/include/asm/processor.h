@@ -25,7 +25,6 @@ struct vm86;
 #include <asm/special_insns.h>
 #include <asm/fpu/types.h>
 #include <asm/unwind_hints.h>
-#include <asm/vmxfeatures.h>
 
 #include <linux/personality.h>
 #include <linux/cache.h>
@@ -85,9 +84,6 @@ struct cpuinfo_x86 {
 #ifdef CONFIG_X86_64
 	/* Number of 4K pages in DTLB/ITLB combined(in pages): */
 	int			x86_tlbsize;
-#endif
-#ifdef CONFIG_X86_VMX_FEATURE_NAMES
-	__u32			vmx_capability[NVMXINTS];
 #endif
 	__u8			x86_virt_bits;
 	__u8			x86_phys_bits;
@@ -170,6 +166,7 @@ enum cpuid_regs_idx {
 extern struct cpuinfo_x86	boot_cpu_data;
 extern struct cpuinfo_x86	new_cpu_data;
 
+extern struct x86_hw_tss	doublefault_tss;
 extern __u32			cpu_caps_cleared[NCAPINTS + NBUGINTS];
 extern __u32			cpu_caps_set[NCAPINTS + NBUGINTS];
 
@@ -351,18 +348,13 @@ struct x86_hw_tss {
 	(offsetof(struct tss_struct, io_bitmap.mapall) -	\
 	 offsetof(struct tss_struct, x86_tss))
 
-#ifdef CONFIG_X86_IOPL_IOPERM
 /*
  * sizeof(unsigned long) coming from an extra "long" at the end of the
  * iobitmap. The limit is inclusive, i.e. the last valid byte.
  */
-# define __KERNEL_TSS_LIMIT	\
+#define __KERNEL_TSS_LIMIT	\
 	(IO_BITMAP_OFFSET_VALID_ALL + IO_BITMAP_BYTES + \
 	 sizeof(unsigned long) - 1)
-#else
-# define __KERNEL_TSS_LIMIT	\
-	(offsetof(struct tss_struct, x86_tss) + sizeof(struct x86_hw_tss) - 1)
-#endif
 
 /* Base offset outside of TSS_LIMIT so unpriviledged IO causes #GP */
 #define IO_BITMAP_OFFSET_INVALID	(__KERNEL_TSS_LIMIT + 1)
@@ -532,10 +524,10 @@ struct thread_struct {
 	struct io_bitmap	*io_bitmap;
 
 	/*
-	 * IOPL. Priviledge level dependent I/O permission which is
-	 * emulated via the I/O bitmap to prevent user space from disabling
-	 * interrupts.
+	 * IOPL. Priviledge level dependent I/O permission which includes
+	 * user space CLI/STI when granted.
 	 */
+	unsigned long		iopl;
 	unsigned long		iopl_emul;
 
 	mm_segment_t		addr_limit;
@@ -567,6 +559,25 @@ static inline void arch_thread_struct_whitelist(unsigned long *offset,
  * have to worry about atomic accesses.
  */
 #define TS_COMPAT		0x0002	/* 32bit syscall active (64BIT)*/
+
+/*
+ * Set IOPL bits in EFLAGS from given mask
+ */
+static inline void native_set_iopl_mask(unsigned mask)
+{
+#ifdef CONFIG_X86_32
+	unsigned int reg;
+
+	asm volatile ("pushfl;"
+		      "popl %0;"
+		      "andl %1, %0;"
+		      "orl %2, %0;"
+		      "pushl %0;"
+		      "popfl"
+		      : "=&r" (reg)
+		      : "i" (~X86_EFLAGS_IOPL), "r" (mask));
+#endif
+}
 
 static inline void
 native_load_sp0(unsigned long sp0)
@@ -607,6 +618,7 @@ static inline void load_sp0(unsigned long sp0)
 	native_load_sp0(sp0);
 }
 
+#define set_iopl_mask native_set_iopl_mask
 #endif /* CONFIG_PARAVIRT_XXL */
 
 /* Free all resources held by a thread. */
@@ -947,6 +959,24 @@ extern int set_tsc_mode(unsigned int val);
 
 DECLARE_PER_CPU(u64, msr_misc_features_shadow);
 
+/* Register/unregister a process' MPX related resource */
+#define MPX_ENABLE_MANAGEMENT()	mpx_enable_management()
+#define MPX_DISABLE_MANAGEMENT()	mpx_disable_management()
+
+#ifdef CONFIG_X86_INTEL_MPX
+extern int mpx_enable_management(void);
+extern int mpx_disable_management(void);
+#else
+static inline int mpx_enable_management(void)
+{
+	return -EINVAL;
+}
+static inline int mpx_disable_management(void)
+{
+	return -EINVAL;
+}
+#endif /* CONFIG_X86_INTEL_MPX */
+
 #ifdef CONFIG_CPU_SUP_AMD
 extern u16 amd_get_nb_id(int cpu);
 extern u32 amd_get_nodes_per_socket(void);
@@ -982,6 +1012,7 @@ bool xen_set_default_idle(void);
 #endif
 
 void stop_this_cpu(void *dummy);
+void df_debug(struct pt_regs *regs, long error_code);
 void microcode_check(void);
 
 enum l1tf_mitigations {
@@ -999,6 +1030,13 @@ enum mds_mitigations {
 	MDS_MITIGATION_OFF,
 	MDS_MITIGATION_FULL,
 	MDS_MITIGATION_VMWERV,
+};
+
+enum taa_mitigations {
+	TAA_MITIGATION_OFF,
+	TAA_MITIGATION_UCODE_NEEDED,
+	TAA_MITIGATION_VERW,
+	TAA_MITIGATION_TSX_DISABLED,
 };
 
 #endif /* _ASM_X86_PROCESSOR_H */

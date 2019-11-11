@@ -322,7 +322,6 @@ void arch_setup_new_exec(void)
 	}
 }
 
-#ifdef CONFIG_X86_IOPL_IOPERM
 static inline void tss_invalidate_io_bitmap(struct tss_struct *tss)
 {
 	/*
@@ -374,44 +373,42 @@ static void tss_copy_io_bitmap(struct tss_struct *tss, struct io_bitmap *iobm)
 /**
  * tss_update_io_bitmap - Update I/O bitmap before exiting to usermode
  */
-void native_tss_update_io_bitmap(void)
+void tss_update_io_bitmap(void)
 {
 	struct tss_struct *tss = this_cpu_ptr(&cpu_tss_rw);
-	struct thread_struct *t = &current->thread;
 	u16 *base = &tss->x86_tss.io_bitmap_base;
 
-	if (!test_thread_flag(TIF_IO_BITMAP)) {
-		tss_invalidate_io_bitmap(tss);
-		return;
-	}
+	if (test_thread_flag(TIF_IO_BITMAP)) {
+		struct thread_struct *t = &current->thread;
 
-	if (IS_ENABLED(CONFIG_X86_IOPL_IOPERM) && t->iopl_emul == 3) {
-		*base = IO_BITMAP_OFFSET_VALID_ALL;
-	} else {
-		struct io_bitmap *iobm = t->io_bitmap;
+		if (IS_ENABLED(CONFIG_X86_IOPL_EMULATION) &&
+		    t->iopl_emul == 3) {
+			*base = IO_BITMAP_OFFSET_VALID_ALL;
+		} else {
+			struct io_bitmap *iobm = t->io_bitmap;
+			/*
+			 * Only copy bitmap data when the sequence number
+			 * differs. The update time is accounted to the
+			 * incoming task.
+			 */
+			if (tss->io_bitmap.prev_sequence != iobm->sequence)
+				tss_copy_io_bitmap(tss, iobm);
 
+			/* Enable the bitmap */
+			*base = IO_BITMAP_OFFSET_VALID_MAP;
+		}
 		/*
-		 * Only copy bitmap data when the sequence number differs. The
-		 * update time is accounted to the incoming task.
+		 * Make sure that the TSS limit is covering the io bitmap.
+		 * It might have been cut down by a VMEXIT to 0x67 which
+		 * would cause a subsequent I/O access from user space to
+		 * trigger a #GP because tbe bitmap is outside the TSS
+		 * limit.
 		 */
-		if (tss->io_bitmap.prev_sequence != iobm->sequence)
-			tss_copy_io_bitmap(tss, iobm);
-
-		/* Enable the bitmap */
-		*base = IO_BITMAP_OFFSET_VALID_MAP;
+		refresh_tss_limit();
+	} else {
+		tss_invalidate_io_bitmap(tss);
 	}
-
-	/*
-	 * Make sure that the TSS limit is covering the IO bitmap. It might have
-	 * been cut down by a VMEXIT to 0x67 which would cause a subsequent I/O
-	 * access from user space to trigger a #GP because tbe bitmap is outside
-	 * the TSS limit.
-	 */
-	refresh_tss_limit();
 }
-#else /* CONFIG_X86_IOPL_IOPERM */
-static inline void switch_to_bitmap(unsigned long tifp) { }
-#endif
 
 #ifdef CONFIG_SMP
 
@@ -615,7 +612,11 @@ void speculation_ctrl_update_current(void)
 
 void __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p)
 {
+	struct thread_struct *prev, *next;
 	unsigned long tifp, tifn;
+
+	prev = &prev_p->thread;
+	next = &next_p->thread;
 
 	tifn = READ_ONCE(task_thread_info(next_p)->flags);
 	tifp = READ_ONCE(task_thread_info(prev_p)->flags);

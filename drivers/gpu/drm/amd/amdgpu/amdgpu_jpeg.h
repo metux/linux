@@ -26,6 +26,9 @@
 
 #define AMDGPU_MAX_JPEG_INSTANCES	2
 
+#define AMDGPU_JPEG_HARVEST_JPEG0 (1 << 0)
+#define AMDGPU_JPEG_HARVEST_JPEG1 (1 << 1)
+
 struct amdgpu_jpeg_reg{
 	unsigned jpeg_pitch;
 };

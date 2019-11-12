@@ -102,7 +102,7 @@ void fs_set_vol_flags(struct super_block *sb, u32 new_flag)
 	if (p_fs->vol_type == EXFAT) {
 		if (!p_fs->pbr_bh) {
 			if (sector_read(sb, p_fs->PBR_sector,
-					&p_fs->pbr_bh, 1) != FFS_SUCCESS)
+					&p_fs->pbr_bh, 1) != 0)
 				return;
 		}
 
@@ -139,7 +139,7 @@ void fs_error(struct super_block *sb)
 s32 clear_cluster(struct super_block *sb, u32 clu)
 {
 	sector_t s, n;
-	s32 ret = FFS_SUCCESS;
+	s32 ret = 0;
 	struct buffer_head *tmp_bh = NULL;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
@@ -154,12 +154,12 @@ s32 clear_cluster(struct super_block *sb, u32 clu)
 
 	for (; s < n; s++) {
 		ret = sector_read(sb, s, &tmp_bh, 0);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		memset((char *)tmp_bh->b_data, 0x0, p_bd->sector_size);
 		ret = sector_write(sb, s, tmp_bh, 0);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			break;
 	}
 
@@ -251,14 +251,14 @@ s32 exfat_alloc_cluster(struct super_block *sb, s32 num_alloc,
 			}
 		}
 
-		if (set_alloc_bitmap(sb, new_clu - 2) != FFS_SUCCESS)
-			return -1;
+		if (set_alloc_bitmap(sb, new_clu - 2) != 0)
+			return -EIO;
 
 		num_clusters++;
 
 		if (p_chain->flags == 0x01) {
 			if (FAT_write(sb, new_clu, CLUSTER_32(~0)) < 0)
-				return -1;
+				return -EIO;
 		}
 
 		if (p_chain->dir == CLUSTER_32(~0)) {
@@ -266,7 +266,7 @@ s32 exfat_alloc_cluster(struct super_block *sb, s32 num_alloc,
 		} else {
 			if (p_chain->flags == 0x01) {
 				if (FAT_write(sb, last_clu, new_clu) < 0)
-					return -1;
+					return -EIO;
 			}
 		}
 		last_clu = new_clu;
@@ -370,7 +370,7 @@ void exfat_free_cluster(struct super_block *sb, struct chain_t *p_chain,
 					buf_release(sb, sector + i);
 			}
 
-			if (clr_alloc_bitmap(sb, clu - 2) != FFS_SUCCESS)
+			if (clr_alloc_bitmap(sb, clu - 2) != 0)
 				break;
 			clu++;
 
@@ -387,7 +387,7 @@ void exfat_free_cluster(struct super_block *sb, struct chain_t *p_chain,
 					buf_release(sb, sector + i);
 			}
 
-			if (clr_alloc_bitmap(sb, clu - 2) != FFS_SUCCESS)
+			if (clr_alloc_bitmap(sb, clu - 2) != 0)
 				break;
 
 			if (FAT_read(sb, clu, &clu) == -1)
@@ -470,7 +470,8 @@ s32 exfat_count_used_clusters(struct super_block *sb)
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
 
-	map_i = map_b = 0;
+	map_i = 0;
+	map_b = 0;
 
 	for (i = 2; i < p_fs->num_clusters; i += 8) {
 		k = *(((u8 *)p_fs->vol_amap[map_i]->b_data) + map_b);
@@ -525,7 +526,7 @@ s32 load_alloc_bitmap(struct super_block *sb)
 			ep = (struct bmap_dentry_t *)get_entry_in_dir(sb, &clu,
 								      i, NULL);
 			if (!ep)
-				return FFS_MEDIAERR;
+				return -ENOENT;
 
 			type = p_fs->fs_func->get_entry_type((struct dentry_t *)ep);
 
@@ -544,14 +545,14 @@ s32 load_alloc_bitmap(struct super_block *sb)
 							       sizeof(struct buffer_head *),
 							       GFP_KERNEL);
 				if (!p_fs->vol_amap)
-					return FFS_MEMORYERR;
+					return -ENOMEM;
 
 				sector = START_SECTOR(p_fs->map_clu);
 
 				for (j = 0; j < p_fs->map_sectors; j++) {
 					p_fs->vol_amap[j] = NULL;
-					ret = sector_read(sb, sector + j, &(p_fs->vol_amap[j]), 1);
-					if (ret != FFS_SUCCESS) {
+					ret = sector_read(sb, sector + j, &p_fs->vol_amap[j], 1);
+					if (ret != 0) {
 						/*  release all buffers and free vol_amap */
 						i = 0;
 						while (i < j)
@@ -564,15 +565,15 @@ s32 load_alloc_bitmap(struct super_block *sb)
 				}
 
 				p_fs->pbr_bh = NULL;
-				return FFS_SUCCESS;
+				return 0;
 			}
 		}
 
 		if (FAT_read(sb, clu.dir, &clu.dir) != 0)
-			return FFS_MEDIAERR;
+			return -EIO;
 	}
 
-	return FFS_FORMATERR;
+	return -EFSCORRUPTED;
 }
 
 void free_alloc_bitmap(struct super_block *sb)
@@ -698,7 +699,7 @@ void sync_alloc_bitmap(struct super_block *sb)
 static s32 __load_upcase_table(struct super_block *sb, sector_t sector,
 			       u32 num_sectors, u32 utbl_checksum)
 {
-	int i, ret = FFS_ERROR;
+	int i, ret = -EINVAL;
 	u32 j;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
@@ -712,15 +713,15 @@ static s32 __load_upcase_table(struct super_block *sb, sector_t sector,
 
 	u32 checksum = 0;
 
-	upcase_table = p_fs->vol_utbl = kmalloc(UTBL_COL_COUNT * sizeof(u16 *),
-						GFP_KERNEL);
+	upcase_table = kmalloc_array(UTBL_COL_COUNT, sizeof(u16 *), GFP_KERNEL);
+	p_fs->vol_utbl = upcase_table;
 	if (!upcase_table)
-		return FFS_MEMORYERR;
+		return -ENOMEM;
 	memset(upcase_table, 0, UTBL_COL_COUNT * sizeof(u16 *));
 
 	while (sector < end_sector) {
 		ret = sector_read(sb, sector, &tmp_bh, 1);
-		if (ret != FFS_SUCCESS) {
+		if (ret != 0) {
 			pr_debug("sector read (0x%llX)fail\n",
 				 (unsigned long long)sector);
 			goto error;
@@ -755,7 +756,7 @@ static s32 __load_upcase_table(struct super_block *sb, sector_t sector,
 					upcase_table[col_index] = kmalloc_array(UTBL_ROW_COUNT,
 						sizeof(u16), GFP_KERNEL);
 					if (!upcase_table[col_index]) {
-						ret = FFS_MEMORYERR;
+						ret = -ENOMEM;
 						goto error;
 					}
 
@@ -771,9 +772,9 @@ static s32 __load_upcase_table(struct super_block *sb, sector_t sector,
 	if (index >= 0xFFFF && utbl_checksum == checksum) {
 		if (tmp_bh)
 			brelse(tmp_bh);
-		return FFS_SUCCESS;
+		return 0;
 	}
-	ret = FFS_ERROR;
+	ret = -EINVAL;
 error:
 	if (tmp_bh)
 		brelse(tmp_bh);
@@ -783,7 +784,7 @@ error:
 
 static s32 __load_default_upcase_table(struct super_block *sb)
 {
-	int i, ret = FFS_ERROR;
+	int i, ret = -EINVAL;
 	u32 j;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 
@@ -792,10 +793,10 @@ static s32 __load_default_upcase_table(struct super_block *sb)
 	u16	uni = 0;
 	u16 **upcase_table;
 
-	upcase_table = p_fs->vol_utbl = kmalloc(UTBL_COL_COUNT * sizeof(u16 *),
-						GFP_KERNEL);
+	upcase_table = kmalloc_array(UTBL_COL_COUNT, sizeof(u16 *), GFP_KERNEL);
+	p_fs->vol_utbl = upcase_table;
 	if (!upcase_table)
-		return FFS_MEMORYERR;
+		return -ENOMEM;
 	memset(upcase_table, 0, UTBL_COL_COUNT * sizeof(u16 *));
 
 	for (i = 0; index <= 0xFFFF && i < NUM_UPCASE * 2; i += 2) {
@@ -818,7 +819,7 @@ static s32 __load_default_upcase_table(struct super_block *sb)
 									sizeof(u16),
 									GFP_KERNEL);
 				if (!upcase_table[col_index]) {
-					ret = FFS_MEMORYERR;
+					ret = -ENOMEM;
 					goto error;
 				}
 
@@ -832,7 +833,7 @@ static s32 __load_default_upcase_table(struct super_block *sb)
 	}
 
 	if (index >= 0xFFFF)
-		return FFS_SUCCESS;
+		return 0;
 
 error:
 	/* FATAL error: default upcase table has error */
@@ -855,14 +856,14 @@ s32 load_upcase_table(struct super_block *sb)
 	clu.flags = 0x01;
 
 	if (p_fs->dev_ejected)
-		return FFS_MEDIAERR;
+		return -EIO;
 
 	while (clu.dir != CLUSTER_32(~0)) {
 		for (i = 0; i < p_fs->dentries_per_clu; i++) {
 			ep = (struct case_dentry_t *)get_entry_in_dir(sb, &clu,
 								      i, NULL);
 			if (!ep)
-				return FFS_MEDIAERR;
+				return -ENOENT;
 
 			type = p_fs->fs_func->get_entry_type((struct dentry_t *)ep);
 
@@ -877,12 +878,12 @@ s32 load_upcase_table(struct super_block *sb)
 			sector = START_SECTOR(tbl_clu);
 			num_sectors = ((tbl_size - 1) >> p_bd->sector_size_bits) + 1;
 			if (__load_upcase_table(sb, sector, num_sectors,
-						GET32_A(ep->checksum)) != FFS_SUCCESS)
+						GET32_A(ep->checksum)) != 0)
 				break;
-			return FFS_SUCCESS;
+			return 0;
 		}
 		if (FAT_read(sb, clu.dir, &clu.dir) != 0)
-			return FFS_MEDIAERR;
+			return -EIO;
 	}
 	/* load default upcase table */
 	return __load_default_upcase_table(sb);
@@ -910,10 +911,10 @@ u32 fat_get_entry_type(struct dentry_t *p_entry)
 {
 	struct dos_dentry_t *ep = (struct dos_dentry_t *)p_entry;
 
-	if (*(ep->name) == 0x0)
+	if (*ep->name == 0x0)
 		return TYPE_UNUSED;
 
-	else if (*(ep->name) == 0xE5)
+	else if (*ep->name == 0xE5)
 		return TYPE_DELETED;
 
 	else if (ep->attr == ATTR_EXTEND)
@@ -978,10 +979,10 @@ void fat_set_entry_type(struct dentry_t *p_entry, u32 type)
 	struct dos_dentry_t *ep = (struct dos_dentry_t *)p_entry;
 
 	if (type == TYPE_UNUSED)
-		*(ep->name) = 0x0;
+		*ep->name = 0x0;
 
 	else if (type == TYPE_DELETED)
-		*(ep->name) = 0xE5;
+		*ep->name = 0xE5;
 
 	else if (type == TYPE_EXTEND)
 		ep->attr = ATTR_EXTEND;
@@ -1245,12 +1246,12 @@ s32 fat_init_dir_entry(struct super_block *sb, struct chain_t *p_dir, s32 entry,
 	dos_ep = (struct dos_dentry_t *)get_entry_in_dir(sb, p_dir, entry,
 							 &sector);
 	if (!dos_ep)
-		return FFS_MEDIAERR;
+		return -EIO;
 
 	init_dos_entry(dos_ep, type, start_clu);
 	buf_modify(sb, sector);
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 s32 exfat_init_dir_entry(struct super_block *sb, struct chain_t *p_dir,
@@ -1267,12 +1268,12 @@ s32 exfat_init_dir_entry(struct super_block *sb, struct chain_t *p_dir,
 	file_ep = (struct file_dentry_t *)get_entry_in_dir(sb, p_dir, entry,
 							   &sector);
 	if (!file_ep)
-		return FFS_MEDIAERR;
+		return -ENOENT;
 
 	strm_ep = (struct strm_dentry_t *)get_entry_in_dir(sb, p_dir, entry + 1,
 							   &sector);
 	if (!strm_ep)
-		return FFS_MEDIAERR;
+		return -ENOENT;
 
 	init_file_entry(file_ep, type);
 	buf_modify(sb, sector);
@@ -1280,58 +1281,7 @@ s32 exfat_init_dir_entry(struct super_block *sb, struct chain_t *p_dir,
 	init_strm_entry(strm_ep, flags, start_clu, size);
 	buf_modify(sb, sector);
 
-	return FFS_SUCCESS;
-}
-
-static s32 fat_init_ext_entry(struct super_block *sb, struct chain_t *p_dir,
-			      s32 entry, s32 num_entries,
-			      struct uni_name_t *p_uniname,
-			      struct dos_name_t *p_dosname)
-{
-	int i;
-	sector_t sector;
-	u8 chksum;
-	u16 *uniname = p_uniname->name;
-	struct dos_dentry_t *dos_ep;
-	struct ext_dentry_t *ext_ep;
-
-	dos_ep = (struct dos_dentry_t *)get_entry_in_dir(sb, p_dir, entry,
-							 &sector);
-	if (!dos_ep)
-		return FFS_MEDIAERR;
-
-	dos_ep->lcase = p_dosname->name_case;
-	memcpy(dos_ep->name, p_dosname->name, DOS_NAME_LENGTH);
-	buf_modify(sb, sector);
-
-	if ((--num_entries) > 0) {
-		chksum = calc_checksum_1byte((void *)dos_ep->name,
-					     DOS_NAME_LENGTH, 0);
-
-		for (i = 1; i < num_entries; i++) {
-			ext_ep = (struct ext_dentry_t *)get_entry_in_dir(sb,
-									 p_dir,
-									 entry - i,
-									 &sector);
-			if (!ext_ep)
-				return FFS_MEDIAERR;
-
-			init_ext_entry(ext_ep, i, chksum, uniname);
-			buf_modify(sb, sector);
-			uniname += 13;
-		}
-
-		ext_ep = (struct ext_dentry_t *)get_entry_in_dir(sb, p_dir,
-								 entry - i,
-								 &sector);
-		if (!ext_ep)
-			return FFS_MEDIAERR;
-
-		init_ext_entry(ext_ep, i + 0x40, chksum, uniname);
-		buf_modify(sb, sector);
-	}
-
-	return FFS_SUCCESS;
+	return 0;
 }
 
 static s32 exfat_init_ext_entry(struct super_block *sb, struct chain_t *p_dir,
@@ -1349,7 +1299,7 @@ static s32 exfat_init_ext_entry(struct super_block *sb, struct chain_t *p_dir,
 	file_ep = (struct file_dentry_t *)get_entry_in_dir(sb, p_dir, entry,
 							   &sector);
 	if (!file_ep)
-		return FFS_MEDIAERR;
+		return -ENOENT;
 
 	file_ep->num_ext = (u8)(num_entries - 1);
 	buf_modify(sb, sector);
@@ -1357,7 +1307,7 @@ static s32 exfat_init_ext_entry(struct super_block *sb, struct chain_t *p_dir,
 	strm_ep = (struct strm_dentry_t *)get_entry_in_dir(sb, p_dir, entry + 1,
 							   &sector);
 	if (!strm_ep)
-		return FFS_MEDIAERR;
+		return -ENOENT;
 
 	strm_ep->name_len = p_uniname->name_len;
 	SET16_A(strm_ep->name_hash, p_uniname->name_hash);
@@ -1368,7 +1318,7 @@ static s32 exfat_init_ext_entry(struct super_block *sb, struct chain_t *p_dir,
 								   entry + i,
 								   &sector);
 		if (!name_ep)
-			return FFS_MEDIAERR;
+			return -ENOENT;
 
 		init_name_entry(name_ep, uniname);
 		buf_modify(sb, sector);
@@ -1377,7 +1327,7 @@ static s32 exfat_init_ext_entry(struct super_block *sb, struct chain_t *p_dir,
 
 	update_dir_checksum(sb, p_dir, entry);
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 void init_dos_entry(struct dos_dentry_t *ep, u32 type, u32 start_clu)
@@ -1502,7 +1452,7 @@ void fat_delete_dir_entry(struct super_block *sb, struct chain_t *p_dir,
 }
 
 void exfat_delete_dir_entry(struct super_block *sb, struct chain_t *p_dir,
-		s32 entry, s32 order, s32 num_entries)
+			    s32 entry, s32 order, s32 num_entries)
 {
 	int i;
 	sector_t sector;
@@ -1562,7 +1512,7 @@ void update_dir_checksum_with_entry_set(struct super_block *sb,
 	u16 chksum = 0;
 	s32 chksum_type = CS_DIR_ENTRY, i;
 
-	ep = (struct dentry_t *)&(es->__buf);
+	ep = (struct dentry_t *)&es->__buf;
 	for (i = 0; i < es->num_entries; i++) {
 		pr_debug("%s ep %p\n", __func__, ep);
 		chksum = calc_checksum_2byte((void *)ep, DENTRY_SIZE, chksum,
@@ -1571,7 +1521,7 @@ void update_dir_checksum_with_entry_set(struct super_block *sb,
 		chksum_type = CS_DEFAULT;
 	}
 
-	ep = (struct dentry_t *)&(es->__buf);
+	ep = (struct dentry_t *)&es->__buf;
 	SET16_A(((struct file_dentry_t *)ep)->checksum, chksum);
 	write_whole_entry_set(sb, es);
 }
@@ -1591,14 +1541,14 @@ static s32 _walk_fat_chain(struct super_block *sb, struct chain_t *p_dir,
 	} else {
 		while (clu_offset > 0) {
 			if (FAT_read(sb, cur_clu, &cur_clu) == -1)
-				return FFS_MEDIAERR;
+				return -EIO;
 			clu_offset--;
 		}
 	}
 
 	if (clu)
 		*clu = cur_clu;
-	return FFS_SUCCESS;
+	return 0;
 }
 
 s32 find_location(struct super_block *sb, struct chain_t *p_dir, s32 entry,
@@ -1617,7 +1567,7 @@ s32 find_location(struct super_block *sb, struct chain_t *p_dir, s32 entry,
 		*sector += p_fs->root_start_sector;
 	} else {
 		ret = _walk_fat_chain(sb, p_dir, off, &clu);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		/* byte offset in cluster */
@@ -1630,7 +1580,7 @@ s32 find_location(struct super_block *sb, struct chain_t *p_dir, s32 entry,
 		*sector = off >> p_bd->sector_size_bits;
 		*sector += START_SECTOR(clu);
 	}
-	return FFS_SUCCESS;
+	return 0;
 }
 
 struct dentry_t *get_entry_with_sector(struct super_block *sb, sector_t sector,
@@ -1653,7 +1603,7 @@ struct dentry_t *get_entry_in_dir(struct super_block *sb, struct chain_t *p_dir,
 	sector_t sec;
 	u8 *buf;
 
-	if (find_location(sb, p_dir, entry, &sec, &off) != FFS_SUCCESS)
+	if (find_location(sb, p_dir, entry, &sec, &off) != 0)
 		return NULL;
 
 	buf = buf_getblk(sb, sec);
@@ -1703,11 +1653,11 @@ struct entry_set_cache_t *get_entry_set_in_dir(struct super_block *sb,
 	size_t bufsize;
 
 	pr_debug("%s entered p_dir dir %u flags %x size %d\n",
-		__func__, p_dir->dir, p_dir->flags, p_dir->size);
+		 __func__, p_dir->dir, p_dir->flags, p_dir->size);
 
 	byte_offset = entry << DENTRY_SIZE_BITS;
 	ret = _walk_fat_chain(sb, p_dir, byte_offset, &clu);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return NULL;
 
 	/* byte offset in cluster */
@@ -1727,8 +1677,7 @@ struct entry_set_cache_t *get_entry_set_in_dir(struct super_block *sb,
 	ep = (struct dentry_t *)(buf + off);
 	entry_type = p_fs->fs_func->get_entry_type(ep);
 
-	if ((entry_type != TYPE_FILE)
-		&& (entry_type != TYPE_DIR))
+	if ((entry_type != TYPE_FILE) && (entry_type != TYPE_DIR))
 		goto err_out;
 
 	if (type == ES_ALL_ENTRIES)
@@ -1832,11 +1781,11 @@ struct entry_set_cache_t *get_entry_set_in_dir(struct super_block *sb,
 	}
 
 	if (file_ep)
-		*file_ep = (struct dentry_t *)&(es->__buf);
+		*file_ep = (struct dentry_t *)&es->__buf;
 
 	pr_debug("%s exiting es %p sec %llu offset %d flags %d, num_entries %u buf ptr %p\n",
-		   __func__, es, (unsigned long long)es->sector, es->offset,
-		   es->alloc_flag, es->num_entries, &es->__buf);
+		 __func__, es, (unsigned long long)es->sector, es->offset,
+		 es->alloc_flag, es->num_entries, &es->__buf);
 	return es;
 err_out:
 	pr_debug("%s exited NULL (es %p)\n", __func__, es);
@@ -1859,10 +1808,10 @@ static s32 __write_partial_entries_in_entry_set(struct super_block *sb,
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
 	u32 clu;
-	u8 *buf, *esbuf = (u8 *)&(es->__buf);
+	u8 *buf, *esbuf = (u8 *)&es->__buf;
 
 	pr_debug("%s entered es %p sec %llu off %d count %d\n",
-		__func__, es, (unsigned long long)sec, off, count);
+		 __func__, es, (unsigned long long)sec, off, count);
 	num_entries = count;
 
 	while (num_entries) {
@@ -1876,8 +1825,8 @@ static s32 __write_partial_entries_in_entry_set(struct super_block *sb,
 			goto err_out;
 		pr_debug("es->buf %p buf_off %u\n", esbuf, buf_off);
 		pr_debug("copying %d entries from %p to sector %llu\n",
-			copy_entries, (esbuf + buf_off),
-			(unsigned long long)sec);
+			 copy_entries, (esbuf + buf_off),
+			 (unsigned long long)sec);
 		memcpy(buf + off, esbuf + buf_off,
 		       copy_entries << DENTRY_SIZE_BITS);
 		buf_modify(sb, sec);
@@ -1903,10 +1852,10 @@ static s32 __write_partial_entries_in_entry_set(struct super_block *sb,
 	}
 
 	pr_debug("%s exited successfully\n", __func__);
-	return FFS_SUCCESS;
+	return 0;
 err_out:
 	pr_debug("%s failed\n", __func__);
-	return FFS_ERROR;
+	return -EINVAL;
 }
 
 /* write back all entries in entry set */
@@ -1919,7 +1868,8 @@ s32 write_whole_entry_set(struct super_block *sb, struct entry_set_cache_t *es)
 
 /* write back some entries in entry set */
 s32 write_partial_entries_in_entry_set(struct super_block *sb,
-	struct entry_set_cache_t *es, struct dentry_t *ep, u32 count)
+				       struct entry_set_cache_t *es,
+				       struct dentry_t *ep, u32 count)
 {
 	s32 ret, byte_offset, off;
 	u32 clu = 0;
@@ -1929,8 +1879,8 @@ s32 write_partial_entries_in_entry_set(struct super_block *sb,
 	struct chain_t dir;
 
 	/* vaidity check */
-	if (ep + count  > ((struct dentry_t *)&(es->__buf)) + es->num_entries)
-		return FFS_ERROR;
+	if (ep + count  > ((struct dentry_t *)&es->__buf) + es->num_entries)
+		return -EINVAL;
 
 	dir.dir = GET_CLUSTER_FROM_SECTOR(es->sector);
 	dir.flags = es->alloc_flag;
@@ -1938,10 +1888,10 @@ s32 write_partial_entries_in_entry_set(struct super_block *sb,
 
 	byte_offset = (es->sector - START_SECTOR(dir.dir)) <<
 			p_bd->sector_size_bits;
-	byte_offset += ((void **)ep - &(es->__buf)) + es->offset;
+	byte_offset += ((void **)ep - &es->__buf) + es->offset;
 
 	ret = _walk_fat_chain(sb, &dir, byte_offset, &clu);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	/* byte offset in cluster */
@@ -2083,10 +2033,10 @@ s32 find_empty_entry(struct inode *inode, struct chain_t *p_dir, s32 num_entries
 		/* (1) allocate a cluster */
 		ret = p_fs->fs_func->alloc_cluster(sb, 1, &clu);
 		if (ret < 1)
-			return -1;
+			return -EIO;
 
-		if (clear_cluster(sb, clu.dir) != FFS_SUCCESS)
-			return -1;
+		if (clear_cluster(sb, clu.dir) != 0)
+			return -EIO;
 
 		/* (2) append to the FAT chain */
 		if (clu.flags != p_dir->flags) {
@@ -2096,7 +2046,7 @@ s32 find_empty_entry(struct inode *inode, struct chain_t *p_dir, s32 num_entries
 		}
 		if (clu.flags == 0x01)
 			if (FAT_write(sb, last_clu, clu.dir) < 0)
-				return -1;
+				return -EIO;
 
 		if (p_fs->hint_uentry.entry == -1) {
 			p_fs->hint_uentry.dir = p_dir->dir;
@@ -2117,12 +2067,12 @@ s32 find_empty_entry(struct inode *inode, struct chain_t *p_dir, s32 num_entries
 				ep = get_entry_in_dir(sb, &fid->dir,
 						      fid->entry + 1, &sector);
 				if (!ep)
-					return -1;
+					return -ENOENT;
 				p_fs->fs_func->set_entry_size(ep, size);
 				p_fs->fs_func->set_entry_flag(ep, p_dir->flags);
 				buf_modify(sb, sector);
 
-				update_dir_checksum(sb, &(fid->dir),
+				update_dir_checksum(sb, &fid->dir,
 						    fid->entry);
 			}
 		}
@@ -2463,7 +2413,7 @@ s32 count_dos_name_entries(struct super_block *sb, struct chain_t *p_dir,
 		for (i = 0; i < dentries_per_clu; i++) {
 			ep = get_entry_in_dir(sb, &clu, i, NULL);
 			if (!ep)
-				return -1;
+				return -ENOENT;
 
 			entry_type = p_fs->fs_func->get_entry_type(ep);
 
@@ -2487,7 +2437,7 @@ s32 count_dos_name_entries(struct super_block *sb, struct chain_t *p_dir,
 				clu.dir = CLUSTER_32(~0);
 		} else {
 			if (FAT_read(sb, clu.dir, &clu.dir) != 0)
-				return -1;
+				return -EIO;
 		}
 	}
 
@@ -2596,7 +2546,7 @@ s32 get_num_entries_and_dos_name(struct super_block *sb, struct chain_t *p_dir,
 
 	*entries = num_entries;
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 void get_uni_name_from_dos_entry(struct super_block *sb,
@@ -2771,7 +2721,7 @@ s32 fat_generate_dos_name(struct super_block *sb, struct chain_t *p_dir,
 			ep = (struct dos_dentry_t *)get_entry_in_dir(sb, &clu,
 								     i, NULL);
 			if (!ep)
-				return FFS_MEDIAERR;
+				return -ENOENT;
 
 			type = p_fs->fs_func->get_entry_type((struct dentry_t *)
 							     ep);
@@ -2810,7 +2760,7 @@ s32 fat_generate_dos_name(struct super_block *sb, struct chain_t *p_dir,
 			break; /* FAT16 root_dir */
 
 		if (FAT_read(sb, clu.dir, &clu.dir) != 0)
-			return FFS_MEDIAERR;
+			return -EIO;
 	}
 
 	count = 0;
@@ -2828,11 +2778,11 @@ s32 fat_generate_dos_name(struct super_block *sb, struct chain_t *p_dir,
 	}
 
 	if ((count == 0) || (count >= 1024))
-		return FFS_FILEEXIST;
+		return -EEXIST;
 	fat_attach_count_to_dos_name(p_dosname->name, count);
 
 	/* Now dos_name has DOS~????.EXT */
-	return FFS_SUCCESS;
+	return 0;
 }
 
 void fat_attach_count_to_dos_name(u8 *dosname, s32 count)
@@ -2974,154 +2924,12 @@ s32 resolve_path(struct inode *inode, char *path, struct chain_t *p_dir,
 	p_dir->size = (s32)(fid->size >> p_fs->cluster_size_bits);
 	p_dir->flags = fid->flags;
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 /*
  *  File Operation Functions
  */
-static struct fs_func fat_fs_func = {
-	.alloc_cluster = fat_alloc_cluster,
-	.free_cluster = fat_free_cluster,
-	.count_used_clusters = fat_count_used_clusters,
-
-	.init_dir_entry = fat_init_dir_entry,
-	.init_ext_entry = fat_init_ext_entry,
-	.find_dir_entry = fat_find_dir_entry,
-	.delete_dir_entry = fat_delete_dir_entry,
-	.get_uni_name_from_ext_entry = fat_get_uni_name_from_ext_entry,
-	.count_ext_entries = fat_count_ext_entries,
-	.calc_num_entries = fat_calc_num_entries,
-
-	.get_entry_type = fat_get_entry_type,
-	.set_entry_type = fat_set_entry_type,
-	.get_entry_attr = fat_get_entry_attr,
-	.set_entry_attr = fat_set_entry_attr,
-	.get_entry_flag = fat_get_entry_flag,
-	.set_entry_flag = fat_set_entry_flag,
-	.get_entry_clu0 = fat_get_entry_clu0,
-	.set_entry_clu0 = fat_set_entry_clu0,
-	.get_entry_size = fat_get_entry_size,
-	.set_entry_size = fat_set_entry_size,
-	.get_entry_time = fat_get_entry_time,
-	.set_entry_time = fat_set_entry_time,
-};
-
-s32 fat16_mount(struct super_block *sb, struct pbr_sector_t *p_pbr)
-{
-	s32 num_reserved, num_root_sectors;
-	struct bpb16_t *p_bpb = (struct bpb16_t *)p_pbr->bpb;
-	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
-	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
-
-	if (p_bpb->num_fats == 0)
-		return FFS_FORMATERR;
-
-	num_root_sectors = GET16(p_bpb->num_root_entries) << DENTRY_SIZE_BITS;
-	num_root_sectors = ((num_root_sectors - 1) >>
-			    p_bd->sector_size_bits) + 1;
-
-	p_fs->sectors_per_clu = p_bpb->sectors_per_clu;
-	p_fs->sectors_per_clu_bits = ilog2(p_bpb->sectors_per_clu);
-	p_fs->cluster_size_bits = p_fs->sectors_per_clu_bits +
-				  p_bd->sector_size_bits;
-	p_fs->cluster_size = 1 << p_fs->cluster_size_bits;
-
-	p_fs->num_FAT_sectors = GET16(p_bpb->num_fat_sectors);
-
-	p_fs->FAT1_start_sector = p_fs->PBR_sector + GET16(p_bpb->num_reserved);
-	if (p_bpb->num_fats == 1)
-		p_fs->FAT2_start_sector = p_fs->FAT1_start_sector;
-	else
-		p_fs->FAT2_start_sector = p_fs->FAT1_start_sector +
-					  p_fs->num_FAT_sectors;
-
-	p_fs->root_start_sector = p_fs->FAT2_start_sector +
-				  p_fs->num_FAT_sectors;
-	p_fs->data_start_sector = p_fs->root_start_sector + num_root_sectors;
-
-	p_fs->num_sectors = GET16(p_bpb->num_sectors);
-	if (p_fs->num_sectors == 0)
-		p_fs->num_sectors = GET32(p_bpb->num_huge_sectors);
-
-	num_reserved = p_fs->data_start_sector - p_fs->PBR_sector;
-	p_fs->num_clusters = ((p_fs->num_sectors - num_reserved) >>
-			      p_fs->sectors_per_clu_bits) + 2;
-	/* because the cluster index starts with 2 */
-
-	if (p_fs->num_clusters < FAT12_THRESHOLD)
-		p_fs->vol_type = FAT12;
-	else
-		p_fs->vol_type = FAT16;
-	p_fs->vol_id = GET32(p_bpb->vol_serial);
-
-	p_fs->root_dir = 0;
-	p_fs->dentries_in_root = GET16(p_bpb->num_root_entries);
-	p_fs->dentries_per_clu = 1 << (p_fs->cluster_size_bits -
-				       DENTRY_SIZE_BITS);
-
-	p_fs->vol_flag = VOL_CLEAN;
-	p_fs->clu_srch_ptr = 2;
-	p_fs->used_clusters = UINT_MAX;
-
-	p_fs->fs_func = &fat_fs_func;
-
-	return FFS_SUCCESS;
-}
-
-s32 fat32_mount(struct super_block *sb, struct pbr_sector_t *p_pbr)
-{
-	s32 num_reserved;
-	struct bpb32_t *p_bpb = (struct bpb32_t *)p_pbr->bpb;
-	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
-	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
-
-	if (p_bpb->num_fats == 0)
-		return FFS_FORMATERR;
-
-	p_fs->sectors_per_clu = p_bpb->sectors_per_clu;
-	p_fs->sectors_per_clu_bits = ilog2(p_bpb->sectors_per_clu);
-	p_fs->cluster_size_bits = p_fs->sectors_per_clu_bits +
-				  p_bd->sector_size_bits;
-	p_fs->cluster_size = 1 << p_fs->cluster_size_bits;
-
-	p_fs->num_FAT_sectors = GET32(p_bpb->num_fat32_sectors);
-
-	p_fs->FAT1_start_sector = p_fs->PBR_sector + GET16(p_bpb->num_reserved);
-	if (p_bpb->num_fats == 1)
-		p_fs->FAT2_start_sector = p_fs->FAT1_start_sector;
-	else
-		p_fs->FAT2_start_sector = p_fs->FAT1_start_sector +
-					  p_fs->num_FAT_sectors;
-
-	p_fs->root_start_sector = p_fs->FAT2_start_sector +
-				  p_fs->num_FAT_sectors;
-	p_fs->data_start_sector = p_fs->root_start_sector;
-
-	p_fs->num_sectors = GET32(p_bpb->num_huge_sectors);
-	num_reserved = p_fs->data_start_sector - p_fs->PBR_sector;
-
-	p_fs->num_clusters = ((p_fs->num_sectors - num_reserved) >>
-			      p_fs->sectors_per_clu_bits) + 2;
-	/* because the cluster index starts with 2 */
-
-	p_fs->vol_type = FAT32;
-	p_fs->vol_id = GET32(p_bpb->vol_serial);
-
-	p_fs->root_dir = GET32(p_bpb->root_cluster);
-	p_fs->dentries_in_root = 0;
-	p_fs->dentries_per_clu = 1 << (p_fs->cluster_size_bits -
-				       DENTRY_SIZE_BITS);
-
-	p_fs->vol_flag = VOL_CLEAN;
-	p_fs->clu_srch_ptr = 2;
-	p_fs->used_clusters = UINT_MAX;
-
-	p_fs->fs_func = &fat_fs_func;
-
-	return FFS_SUCCESS;
-}
-
 static struct fs_func exfat_fs_func = {
 	.alloc_cluster = exfat_alloc_cluster,
 	.free_cluster = exfat_free_cluster,
@@ -3156,7 +2964,7 @@ s32 exfat_mount(struct super_block *sb, struct pbr_sector_t *p_pbr)
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
 
 	if (p_bpb->num_fats == 0)
-		return FFS_FORMATERR;
+		return -EFSCORRUPTED;
 
 	p_fs->sectors_per_clu = 1 << p_bpb->sectors_per_clu_bits;
 	p_fs->sectors_per_clu_bits = p_bpb->sectors_per_clu_bits;
@@ -3194,7 +3002,7 @@ s32 exfat_mount(struct super_block *sb, struct pbr_sector_t *p_pbr)
 
 	p_fs->fs_func = &exfat_fs_func;
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 s32 create_dir(struct inode *inode, struct chain_t *p_dir,
@@ -3216,7 +3024,7 @@ s32 create_dir(struct inode *inode, struct chain_t *p_dir,
 	/* find_empty_entry must be called before alloc_cluster */
 	dentry = find_empty_entry(inode, p_dir, num_entries);
 	if (dentry < 0)
-		return FFS_FULL;
+		return -ENOSPC;
 
 	clu.dir = CLUSTER_32(~0);
 	clu.size = 0;
@@ -3225,12 +3033,12 @@ s32 create_dir(struct inode *inode, struct chain_t *p_dir,
 	/* (1) allocate a cluster */
 	ret = fs_func->alloc_cluster(sb, 1, &clu);
 	if (ret < 0)
-		return FFS_MEDIAERR;
+		return ret;
 	else if (ret == 0)
-		return FFS_FULL;
+		return -ENOSPC;
 
 	ret = clear_cluster(sb, clu.dir);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	if (p_fs->vol_type == EXFAT) {
@@ -3248,11 +3056,11 @@ s32 create_dir(struct inode *inode, struct chain_t *p_dir,
 
 		ret = fs_func->init_dir_entry(sb, &clu, 0, TYPE_DIR, clu.dir,
 					      0);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		ret = fs_func->init_ext_entry(sb, &clu, 0, 1, NULL, &dot_name);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		memcpy(dot_name.name, DOS_PAR_DIR_NAME, DOS_NAME_LENGTH);
@@ -3264,12 +3072,12 @@ s32 create_dir(struct inode *inode, struct chain_t *p_dir,
 			ret = fs_func->init_dir_entry(sb, &clu, 1, TYPE_DIR,
 						      p_dir->dir, 0);
 
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		ret = p_fs->fs_func->init_ext_entry(sb, &clu, 1, 1, NULL,
 						    &dot_name);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 	}
 
@@ -3277,12 +3085,12 @@ s32 create_dir(struct inode *inode, struct chain_t *p_dir,
 	/* make sub-dir entry in parent directory */
 	ret = fs_func->init_dir_entry(sb, p_dir, dentry, TYPE_DIR, clu.dir,
 				      size);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	ret = fs_func->init_ext_entry(sb, p_dir, dentry, num_entries, p_uniname,
 				      &dos_name);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	fid->dir.dir = p_dir->dir;
@@ -3299,7 +3107,7 @@ s32 create_dir(struct inode *inode, struct chain_t *p_dir,
 	fid->rwoffset = 0;
 	fid->hint_last_off = -1;
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 s32 create_file(struct inode *inode, struct chain_t *p_dir,
@@ -3319,7 +3127,7 @@ s32 create_file(struct inode *inode, struct chain_t *p_dir,
 	/* find_empty_entry must be called before alloc_cluster() */
 	dentry = find_empty_entry(inode, p_dir, num_entries);
 	if (dentry < 0)
-		return FFS_FULL;
+		return -ENOSPC;
 
 	/* (1) update the directory entry */
 	/* fill the dos name directory entry information of the created file.
@@ -3327,12 +3135,12 @@ s32 create_file(struct inode *inode, struct chain_t *p_dir,
 	 */
 	ret = fs_func->init_dir_entry(sb, p_dir, dentry, TYPE_FILE | mode,
 				      CLUSTER_32(0), 0);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	ret = fs_func->init_ext_entry(sb, p_dir, dentry, num_entries, p_uniname,
 				      &dos_name);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	fid->dir.dir = p_dir->dir;
@@ -3349,7 +3157,7 @@ s32 create_file(struct inode *inode, struct chain_t *p_dir,
 	fid->rwoffset = 0;
 	fid->hint_last_off = -1;
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 void remove_file(struct inode *inode, struct chain_t *p_dir, s32 entry)
@@ -3394,7 +3202,7 @@ s32 rename_file(struct inode *inode, struct chain_t *p_dir, s32 oldentry,
 
 	epold = get_entry_in_dir(sb, p_dir, oldentry, &sector_old);
 	if (!epold)
-		return FFS_MEDIAERR;
+		return -ENOENT;
 
 	buf_lock(sb, sector_old);
 
@@ -3403,7 +3211,7 @@ s32 rename_file(struct inode *inode, struct chain_t *p_dir, s32 oldentry,
 						     epold);
 	if (num_old_entries < 0) {
 		buf_unlock(sb, sector_old);
-		return FFS_MEDIAERR;
+		return -ENOENT;
 	}
 	num_old_entries++;
 
@@ -3418,13 +3226,13 @@ s32 rename_file(struct inode *inode, struct chain_t *p_dir, s32 oldentry,
 		newentry = find_empty_entry(inode, p_dir, num_new_entries);
 		if (newentry < 0) {
 			buf_unlock(sb, sector_old);
-			return FFS_FULL;
+			return -ENOSPC;
 		}
 
 		epnew = get_entry_in_dir(sb, p_dir, newentry, &sector_new);
 		if (!epnew) {
 			buf_unlock(sb, sector_old);
-			return FFS_MEDIAERR;
+			return -ENOENT;
 		}
 
 		memcpy((void *)epnew, (void *)epold, DENTRY_SIZE);
@@ -3446,7 +3254,7 @@ s32 rename_file(struct inode *inode, struct chain_t *p_dir, s32 oldentry,
 
 			if (!epold || !epnew) {
 				buf_unlock(sb, sector_old);
-				return FFS_MEDIAERR;
+				return -ENOENT;
 			}
 
 			memcpy((void *)epnew, (void *)epold, DENTRY_SIZE);
@@ -3457,7 +3265,7 @@ s32 rename_file(struct inode *inode, struct chain_t *p_dir, s32 oldentry,
 		ret = fs_func->init_ext_entry(sb, p_dir, newentry,
 					      num_new_entries, p_uniname,
 					      &dos_name);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		fs_func->delete_dir_entry(sb, p_dir, oldentry, 0,
@@ -3476,14 +3284,14 @@ s32 rename_file(struct inode *inode, struct chain_t *p_dir, s32 oldentry,
 		ret = fs_func->init_ext_entry(sb, p_dir, oldentry,
 					      num_new_entries, p_uniname,
 					      &dos_name);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			return ret;
 
 		fs_func->delete_dir_entry(sb, p_dir, oldentry, num_new_entries,
 					  num_old_entries);
 	}
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
@@ -3501,7 +3309,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 
 	epmov = get_entry_in_dir(sb, p_olddir, oldentry, &sector_mov);
 	if (!epmov)
-		return FFS_MEDIAERR;
+		return -ENOENT;
 
 	/* check if the source and target directory is the same */
 	if (fs_func->get_entry_type(epmov) == TYPE_DIR &&
@@ -3515,7 +3323,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 						     epmov);
 	if (num_old_entries < 0) {
 		buf_unlock(sb, sector_mov);
-		return FFS_MEDIAERR;
+		return -ENOENT;
 	}
 	num_old_entries++;
 
@@ -3529,13 +3337,13 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 	newentry = find_empty_entry(inode, p_newdir, num_new_entries);
 	if (newentry < 0) {
 		buf_unlock(sb, sector_mov);
-		return FFS_FULL;
+		return -ENOSPC;
 	}
 
 	epnew = get_entry_in_dir(sb, p_newdir, newentry, &sector_new);
 	if (!epnew) {
 		buf_unlock(sb, sector_mov);
-		return FFS_MEDIAERR;
+		return -ENOENT;
 	}
 
 	memcpy((void *)epnew, (void *)epmov, DENTRY_SIZE);
@@ -3555,7 +3363,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 					 &sector_new);
 		if (!epmov || !epnew) {
 			buf_unlock(sb, sector_mov);
-			return FFS_MEDIAERR;
+			return -ENOENT;
 		}
 
 		memcpy((void *)epnew, (void *)epmov, DENTRY_SIZE);
@@ -3568,7 +3376,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 
 		epnew = get_entry_in_dir(sb, &clu, 1, &sector_new);
 		if (!epnew)
-			return FFS_MEDIAERR;
+			return -ENOENT;
 
 		if (p_newdir->dir == p_fs->root_dir)
 			fs_func->set_entry_clu0(epnew, CLUSTER_32(0));
@@ -3579,7 +3387,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 
 	ret = fs_func->init_ext_entry(sb, p_newdir, newentry, num_new_entries,
 				      p_uniname, &dos_name);
-	if (ret != FFS_SUCCESS)
+	if (ret != 0)
 		return ret;
 
 	fs_func->delete_dir_entry(sb, p_olddir, oldentry, 0, num_old_entries);
@@ -3590,7 +3398,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 
 	fid->entry = newentry;
 
-	return FFS_SUCCESS;
+	return 0;
 }
 
 /*
@@ -3600,7 +3408,7 @@ s32 move_file(struct inode *inode, struct chain_t *p_olddir, s32 oldentry,
 int sector_read(struct super_block *sb, sector_t sec, struct buffer_head **bh,
 		bool read)
 {
-	s32 ret = FFS_MEDIAERR;
+	s32 ret = -EIO;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 
 	if ((sec >= (p_fs->PBR_sector + p_fs->num_sectors)) &&
@@ -3613,7 +3421,7 @@ int sector_read(struct super_block *sb, sector_t sec, struct buffer_head **bh,
 
 	if (!p_fs->dev_ejected) {
 		ret = bdev_read(sb, sec, bh, 1, read);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			p_fs->dev_ejected = 1;
 	}
 
@@ -3623,7 +3431,7 @@ int sector_read(struct super_block *sb, sector_t sec, struct buffer_head **bh,
 int sector_write(struct super_block *sb, sector_t sec, struct buffer_head *bh,
 		 bool sync)
 {
-	s32 ret = FFS_MEDIAERR;
+	s32 ret = -EIO;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 
 	if (sec >= (p_fs->PBR_sector + p_fs->num_sectors) &&
@@ -3642,7 +3450,7 @@ int sector_write(struct super_block *sb, sector_t sec, struct buffer_head *bh,
 
 	if (!p_fs->dev_ejected) {
 		ret = bdev_write(sb, sec, bh, 1, sync);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			p_fs->dev_ejected = 1;
 	}
 
@@ -3652,7 +3460,7 @@ int sector_write(struct super_block *sb, sector_t sec, struct buffer_head *bh,
 int multi_sector_read(struct super_block *sb, sector_t sec,
 		      struct buffer_head **bh, s32 num_secs, bool read)
 {
-	s32 ret = FFS_MEDIAERR;
+	s32 ret = -EIO;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 
 	if (((sec + num_secs) > (p_fs->PBR_sector + p_fs->num_sectors)) &&
@@ -3665,7 +3473,7 @@ int multi_sector_read(struct super_block *sb, sector_t sec,
 
 	if (!p_fs->dev_ejected) {
 		ret = bdev_read(sb, sec, bh, num_secs, read);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			p_fs->dev_ejected = 1;
 	}
 
@@ -3675,7 +3483,7 @@ int multi_sector_read(struct super_block *sb, sector_t sec,
 int multi_sector_write(struct super_block *sb, sector_t sec,
 		       struct buffer_head *bh, s32 num_secs, bool sync)
 {
-	s32 ret = FFS_MEDIAERR;
+	s32 ret = -EIO;
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 
 	if ((sec + num_secs) > (p_fs->PBR_sector + p_fs->num_sectors) &&
@@ -3693,7 +3501,7 @@ int multi_sector_write(struct super_block *sb, sector_t sec,
 
 	if (!p_fs->dev_ejected) {
 		ret = bdev_write(sb, sec, bh, num_secs, sync);
-		if (ret != FFS_SUCCESS)
+		if (ret != 0)
 			p_fs->dev_ejected = 1;
 	}
 

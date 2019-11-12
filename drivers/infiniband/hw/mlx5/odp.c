@@ -144,55 +144,133 @@ void mlx5_odp_populate_klm(struct mlx5_klm *pklm, size_t idx, size_t nentries,
 	}
 }
 
-static void mr_leaf_free_action(struct work_struct *work)
+static void dma_fence_odp_mr(struct mlx5_ib_mr *mr)
 {
-	struct ib_umem_odp *odp = container_of(work, struct ib_umem_odp, work);
-	int idx = ib_umem_start(odp) >> MLX5_IMR_MTT_SHIFT;
-	struct mlx5_ib_mr *mr = odp->private, *imr = mr->parent;
+	struct ib_umem_odp *odp = to_ib_umem_odp(mr->umem);
+
+	/* Ensure mlx5_ib_invalidate_range() will not touch the MR any more */
+	mutex_lock(&odp->umem_mutex);
+	if (odp->npages) {
+		mlx5_mr_cache_invalidate(mr);
+		ib_umem_odp_unmap_dma_pages(odp, ib_umem_start(odp),
+					    ib_umem_end(odp));
+		WARN_ON(odp->npages);
+	}
+	odp->private = NULL;
+	mutex_unlock(&odp->umem_mutex);
+
+	if (!mr->allocated_from_cache) {
+		mlx5_core_destroy_mkey(mr->dev->mdev, &mr->mmkey);
+		WARN_ON(mr->descs);
+	}
+}
+
+/*
+ * This must be called after the mr has been removed from implicit_children
+ * and the SRCU synchronized.  NOTE: The MR does not necessarily have to be
+ * empty here, parallel page faults could have raced with the free process and
+ * added pages to it.
+ */
+static void free_implicit_child_mr(struct mlx5_ib_mr *mr, bool need_imr_xlt)
+{
+	struct mlx5_ib_mr *imr = mr->parent;
 	struct ib_umem_odp *odp_imr = to_ib_umem_odp(imr->umem);
+	struct ib_umem_odp *odp = to_ib_umem_odp(mr->umem);
+	unsigned long idx = ib_umem_start(odp) >> MLX5_IMR_MTT_SHIFT;
 	int srcu_key;
 
-	mr->parent = NULL;
-	synchronize_srcu(&mr->dev->odp_srcu);
+	/* implicit_child_mr's are not allowed to have deferred work */
+	WARN_ON(atomic_read(&mr->num_deferred_work));
 
-	if (xa_load(&mr->dev->odp_mkeys, mlx5_base_mkey(imr->mmkey.key))) {
+	if (need_imr_xlt) {
 		srcu_key = srcu_read_lock(&mr->dev->odp_srcu);
 		mutex_lock(&odp_imr->umem_mutex);
-		mlx5_ib_update_xlt(imr, idx, 1, 0,
+		mlx5_ib_update_xlt(mr->parent, idx, 1, 0,
 				   MLX5_IB_UPD_XLT_INDIRECT |
 				   MLX5_IB_UPD_XLT_ATOMIC);
 		mutex_unlock(&odp_imr->umem_mutex);
 		srcu_read_unlock(&mr->dev->odp_srcu, srcu_key);
 	}
-	ib_umem_odp_release(odp);
-	mlx5_mr_cache_free(mr->dev, mr);
 
-	if (atomic_dec_and_test(&imr->num_leaf_free))
-		wake_up(&imr->q_leaf_free);
+	dma_fence_odp_mr(mr);
+
+	mr->parent = NULL;
+	mlx5_mr_cache_free(mr->dev, mr);
+	ib_umem_odp_release(odp);
+	atomic_dec(&imr->num_deferred_work);
 }
 
-void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
-			      unsigned long end)
+static void free_implicit_child_mr_work(struct work_struct *work)
 {
+	struct mlx5_ib_mr *mr =
+		container_of(work, struct mlx5_ib_mr, odp_destroy.work);
+
+	free_implicit_child_mr(mr, true);
+}
+
+static void free_implicit_child_mr_rcu(struct rcu_head *head)
+{
+	struct mlx5_ib_mr *mr =
+		container_of(head, struct mlx5_ib_mr, odp_destroy.rcu);
+
+	/* Freeing a MR is a sleeping operation, so bounce to a work queue */
+	INIT_WORK(&mr->odp_destroy.work, free_implicit_child_mr_work);
+	queue_work(system_unbound_wq, &mr->odp_destroy.work);
+}
+
+static void destroy_unused_implicit_child_mr(struct mlx5_ib_mr *mr)
+{
+	struct ib_umem_odp *odp = to_ib_umem_odp(mr->umem);
+	unsigned long idx = ib_umem_start(odp) >> MLX5_IMR_MTT_SHIFT;
+	struct mlx5_ib_mr *imr = mr->parent;
+
+	xa_lock(&imr->implicit_children);
+	/*
+	 * This can race with mlx5_ib_free_implicit_mr(), the first one to
+	 * reach the xa lock wins the race and destroys the MR.
+	 */
+	if (__xa_cmpxchg(&imr->implicit_children, idx, mr, NULL, GFP_ATOMIC) !=
+	    mr)
+		goto out_unlock;
+
+	atomic_inc(&imr->num_deferred_work);
+	call_srcu(&mr->dev->odp_srcu, &mr->odp_destroy.rcu,
+		  free_implicit_child_mr_rcu);
+
+out_unlock:
+	xa_unlock(&imr->implicit_children);
+}
+
+static bool mlx5_ib_invalidate_range(struct mmu_interval_notifier *mni,
+				     const struct mmu_notifier_range *range,
+				     unsigned long cur_seq)
+{
+	struct ib_umem_odp *umem_odp =
+		container_of(mni, struct ib_umem_odp, notifier);
 	struct mlx5_ib_mr *mr;
 	const u64 umr_block_mask = (MLX5_UMR_MTT_ALIGNMENT /
 				    sizeof(struct mlx5_mtt)) - 1;
 	u64 idx = 0, blk_start_idx = 0;
+	unsigned long start;
+	unsigned long end;
 	int in_block = 0;
 	u64 addr;
 
-	if (!umem_odp) {
-		pr_err("invalidation called on NULL umem or non-ODP umem\n");
-		return;
-	}
+	if (!mmu_notifier_range_blockable(range))
+		return false;
 
+	mutex_lock(&umem_odp->umem_mutex);
+	mmu_interval_set_seq(mni, cur_seq);
+	/*
+	 * If npages is zero then umem_odp->private may not be setup yet. This
+	 * does not complete until after the first page is mapped for DMA.
+	 */
+	if (!umem_odp->npages)
+		goto out;
 	mr = umem_odp->private;
 
-	if (!mr || !mr->ibmr.pd)
-		return;
-
-	start = max_t(u64, ib_umem_start(umem_odp), start);
-	end = min_t(u64, ib_umem_end(umem_odp), end);
+	start = max_t(u64, ib_umem_start(umem_odp), range->start);
+	end = min_t(u64, ib_umem_end(umem_odp), range->end);
 
 	/*
 	 * Iteration one - zap the HW's MTTs. The notifiers_count ensures that
@@ -200,7 +278,6 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 	 * overwrite the same MTTs.  Concurent invalidations might race us,
 	 * but they will write 0s as well, so no difference in the end result.
 	 */
-	mutex_lock(&umem_odp->umem_mutex);
 	for (addr = start; addr < end; addr += BIT(umem_odp->page_shift)) {
 		idx = (addr - ib_umem_start(umem_odp)) >> umem_odp->page_shift;
 		/*
@@ -240,17 +317,16 @@ void mlx5_ib_invalidate_range(struct ib_umem_odp *umem_odp, unsigned long start,
 
 	ib_umem_odp_unmap_dma_pages(umem_odp, start, end);
 
-	if (unlikely(!umem_odp->npages && mr->parent &&
-		     !umem_odp->dying)) {
-		xa_erase(&mr->parent->implicit_children,
-			 ib_umem_start(umem_odp) >> MLX5_IMR_MTT_SHIFT);
-		xa_erase(&mr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
-		umem_odp->dying = 1;
-		atomic_inc(&mr->parent->num_leaf_free);
-		schedule_work(&umem_odp->work);
-	}
+	if (unlikely(!umem_odp->npages && mr->parent))
+		destroy_unused_implicit_child_mr(mr);
+out:
 	mutex_unlock(&umem_odp->umem_mutex);
+	return true;
 }
+
+const struct mmu_interval_notifier_ops mlx5_mn_ops = {
+	.invalidate = mlx5_ib_invalidate_range,
+};
 
 void mlx5_ib_internal_fill_odp_caps(struct mlx5_ib_dev *dev)
 {
@@ -352,20 +428,13 @@ static struct mlx5_ib_mr *implicit_get_child_mr(struct mlx5_ib_mr *imr,
 
 	odp = ib_umem_odp_alloc_child(to_ib_umem_odp(imr->umem),
 				      idx * MLX5_IMR_MTT_SIZE,
-				      MLX5_IMR_MTT_SIZE);
+				      MLX5_IMR_MTT_SIZE, &mlx5_mn_ops);
 	if (IS_ERR(odp))
 		return ERR_CAST(odp);
 
 	ret = mr = mlx5_mr_cache_alloc(imr->dev, MLX5_IMR_MTT_CACHE_ENTRY);
 	if (IS_ERR(mr))
 		goto out_umem;
-
-	err = xa_reserve(&imr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key),
-			 GFP_KERNEL);
-	if (err) {
-		ret = ERR_PTR(err);
-		goto out_mr;
-	}
 
 	mr->ibmr.pd = imr->ibmr.pd;
 	mr->access_flags = imr->access_flags;
@@ -375,96 +444,43 @@ static struct mlx5_ib_mr *implicit_get_child_mr(struct mlx5_ib_mr *imr,
 	mr->mmkey.iova = idx * MLX5_IMR_MTT_SIZE;
 	mr->parent = imr;
 	odp->private = mr;
-	INIT_WORK(&odp->work, mr_leaf_free_action);
 
 	err = mlx5_ib_update_xlt(mr, 0,
 				 MLX5_IMR_MTT_ENTRIES,
 				 PAGE_SHIFT,
 				 MLX5_IB_UPD_XLT_ZAP |
-				 MLX5_IB_UPD_XLT_ENABLE |
-				 MLX5_IB_UPD_XLT_ATOMIC);
+				 MLX5_IB_UPD_XLT_ENABLE);
 	if (err) {
 		ret = ERR_PTR(err);
-		goto out_release;
+		goto out_mr;
 	}
 
 	/*
 	 * Once the store to either xarray completes any error unwind has to
 	 * use synchronize_srcu(). Avoid this with xa_reserve()
 	 */
-	err = xa_err(xa_store(&imr->implicit_children, idx, mr, GFP_KERNEL));
-	if (err) {
-		ret = ERR_PTR(err);
-		goto out_release;
+	ret = xa_cmpxchg(&imr->implicit_children, idx, NULL, mr,
+			 GFP_KERNEL);
+	if (unlikely(ret)) {
+		if (xa_is_err(ret)) {
+			ret = ERR_PTR(xa_err(ret));
+			goto out_mr;
+		}
+		/*
+		 * Another thread beat us to creating the child mr, use
+		 * theirs.
+		 */
+		goto out_mr;
 	}
-
-	xa_store(&imr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key),
-		 &mr->mmkey, GFP_ATOMIC);
 
 	mlx5_ib_dbg(imr->dev, "key %x mr %p\n", mr->mmkey.key, mr);
 	return mr;
 
-out_release:
-	xa_release(&imr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
 out_mr:
 	mlx5_mr_cache_free(imr->dev, mr);
 out_umem:
 	ib_umem_odp_release(odp);
 	return ret;
-}
-
-static struct mlx5_ib_mr *implicit_mr_get_data(struct mlx5_ib_mr *imr,
-						u64 io_virt, size_t bcnt)
-{
-	struct ib_umem_odp *odp_imr = to_ib_umem_odp(imr->umem);
-	unsigned long end_idx = (io_virt + bcnt - 1) >> MLX5_IMR_MTT_SHIFT;
-	unsigned long idx = io_virt >> MLX5_IMR_MTT_SHIFT;
-	unsigned long inv_start_idx = end_idx + 1;
-	unsigned long inv_len = 0;
-	struct mlx5_ib_mr *result = NULL;
-	int ret;
-
-	mutex_lock(&odp_imr->umem_mutex);
-	for (idx = idx; idx <= end_idx; idx++) {
-		struct mlx5_ib_mr *mtt = xa_load(&imr->implicit_children, idx);
-
-		if (unlikely(!mtt)) {
-			mtt = implicit_get_child_mr(imr, idx);
-			if (IS_ERR(mtt)) {
-				result = mtt;
-				goto out;
-			}
-			inv_start_idx = min(inv_start_idx, idx);
-			inv_len = idx - inv_start_idx + 1;
-		}
-
-		/* Return first odp if region not covered by single one */
-		if (likely(!result))
-			result = mtt;
-	}
-
-	/*
-	 * Any time the implicit_children are changed we must perform an
-	 * update of the xlt before exiting to ensure the HW and the
-	 * implicit_children remains synchronized.
-	 */
-out:
-	if (likely(!inv_len))
-		goto out_unlock;
-
-	ret = mlx5_ib_update_xlt(imr, inv_start_idx, inv_len, 0,
-				 MLX5_IB_UPD_XLT_INDIRECT |
-					 MLX5_IB_UPD_XLT_ATOMIC);
-	if (ret) {
-		mlx5_ib_err(to_mdev(imr->ibmr.pd->device),
-			    "Failed to update PAS\n");
-		result = ERR_PTR(ret);
-		goto out_unlock;
-	}
-
-out_unlock:
-	mutex_unlock(&odp_imr->umem_mutex);
-	return result;
 }
 
 struct mlx5_ib_mr *mlx5_ib_alloc_implicit_mr(struct mlx5_ib_pd *pd,
@@ -493,9 +509,7 @@ struct mlx5_ib_mr *mlx5_ib_alloc_implicit_mr(struct mlx5_ib_pd *pd,
 	imr->ibmr.lkey = imr->mmkey.key;
 	imr->ibmr.rkey = imr->mmkey.key;
 	imr->umem = &umem_odp->umem;
-	init_waitqueue_head(&imr->q_leaf_free);
-	atomic_set(&imr->num_leaf_free, 0);
-	atomic_set(&imr->num_pending_prefetch, 0);
+	atomic_set(&imr->num_deferred_work, 0);
 	xa_init(&imr->implicit_children);
 
 	err = mlx5_ib_update_xlt(imr, 0,
@@ -525,35 +539,74 @@ out_umem:
 void mlx5_ib_free_implicit_mr(struct mlx5_ib_mr *imr)
 {
 	struct ib_umem_odp *odp_imr = to_ib_umem_odp(imr->umem);
+	struct mlx5_ib_dev *dev = imr->dev;
+	struct list_head destroy_list;
 	struct mlx5_ib_mr *mtt;
+	struct mlx5_ib_mr *tmp;
 	unsigned long idx;
 
-	mutex_lock(&odp_imr->umem_mutex);
+	INIT_LIST_HEAD(&destroy_list);
+
+	xa_erase(&dev->odp_mkeys, mlx5_base_mkey(imr->mmkey.key));
+	/*
+	 * This stops the SRCU protected page fault path from touching either
+	 * the imr or any children. The page fault path can only reach the
+	 * children xarray via the imr.
+	 */
+	synchronize_srcu(&dev->odp_srcu);
+
+	xa_lock(&imr->implicit_children);
 	xa_for_each (&imr->implicit_children, idx, mtt) {
-		struct ib_umem_odp *umem_odp = to_ib_umem_odp(mtt->umem);
-
-		xa_erase(&imr->implicit_children, idx);
-
-		mutex_lock(&umem_odp->umem_mutex);
-		ib_umem_odp_unmap_dma_pages(umem_odp, ib_umem_start(umem_odp),
-					    ib_umem_end(umem_odp));
-
-		if (umem_odp->dying) {
-			mutex_unlock(&umem_odp->umem_mutex);
-			continue;
-		}
-
-		umem_odp->dying = 1;
-		atomic_inc(&imr->num_leaf_free);
-		schedule_work(&umem_odp->work);
-		mutex_unlock(&umem_odp->umem_mutex);
+		__xa_erase(&imr->implicit_children, idx);
+		list_add(&mtt->odp_destroy.elm, &destroy_list);
 	}
-	mutex_unlock(&odp_imr->umem_mutex);
+	xa_unlock(&imr->implicit_children);
 
-	wait_event(imr->q_leaf_free, !atomic_read(&imr->num_leaf_free));
-	WARN_ON(!xa_empty(&imr->implicit_children));
-	/* Remove any left over reserved elements */
-	xa_destroy(&imr->implicit_children);
+	/*
+	 * num_deferred_work can only be incremented inside the odp_srcu, or
+	 * under xa_lock while the child is in the xarray. Thus at this point
+	 * it is only decreasing, and all work holding it is now on the wq.
+	 */
+	if (atomic_read(&imr->num_deferred_work)) {
+		flush_workqueue(system_unbound_wq);
+		WARN_ON(atomic_read(&imr->num_deferred_work));
+	}
+
+	/*
+	 * Fence the imr before we destroy the children. This allows us to
+	 * skip updating the XLT of the imr during destroy of the child mkey
+	 * the imr points to.
+	 */
+	mlx5_mr_cache_invalidate(imr);
+
+	list_for_each_entry_safe (mtt, tmp, &destroy_list, odp_destroy.elm)
+		free_implicit_child_mr(mtt, false);
+
+	mlx5_mr_cache_free(dev, imr);
+	ib_umem_odp_release(odp_imr);
+}
+
+/**
+ * mlx5_ib_fence_odp_mr - Stop all access to the ODP MR
+ * @mr: to fence
+ *
+ * On return no parallel threads will be touching this MR and no DMA will be
+ * active.
+ */
+void mlx5_ib_fence_odp_mr(struct mlx5_ib_mr *mr)
+{
+	/* Prevent new page faults and prefetch requests from succeeding */
+	xa_erase(&mr->dev->odp_mkeys, mlx5_base_mkey(mr->mmkey.key));
+
+	/* Wait for all running page-fault handlers to finish. */
+	synchronize_srcu(&mr->dev->odp_srcu);
+
+	if (atomic_read(&mr->num_deferred_work)) {
+		flush_workqueue(system_unbound_wq);
+		WARN_ON(atomic_read(&mr->num_deferred_work));
+	}
+
+	dma_fence_odp_mr(mr);
 }
 
 #define MLX5_PF_FLAGS_DOWNGRADE BIT(1)
@@ -561,8 +614,9 @@ static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
 			     u64 user_va, size_t bcnt, u32 *bytes_mapped,
 			     u32 flags)
 {
-	int current_seq, page_shift, ret, np;
+	int page_shift, ret, np;
 	bool downgrade = flags & MLX5_PF_FLAGS_DOWNGRADE;
+	unsigned long current_seq;
 	u64 access_mask;
 	u64 start_idx, page_mask;
 
@@ -574,12 +628,7 @@ static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
 	if (odp->umem.writable && !downgrade)
 		access_mask |= ODP_WRITE_ALLOWED_BIT;
 
-	current_seq = READ_ONCE(odp->notifiers_seq);
-	/*
-	 * Ensure the sequence number is valid for some time before we call
-	 * gup.
-	 */
-	smp_rmb();
+	current_seq = mmu_interval_read_begin(&odp->notifier);
 
 	np = ib_umem_odp_map_dma_pages(odp, user_va, bcnt, access_mask,
 				       current_seq);
@@ -587,7 +636,7 @@ static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
 		return np;
 
 	mutex_lock(&odp->umem_mutex);
-	if (!ib_umem_mmu_notifier_retry(odp, current_seq)) {
+	if (!mmu_interval_read_retry(&odp->notifier, current_seq)) {
 		/*
 		 * No need to check whether the MTTs really belong to
 		 * this MR, since ib_umem_odp_map_dma_pages already
@@ -617,19 +666,84 @@ static int pagefault_real_mr(struct mlx5_ib_mr *mr, struct ib_umem_odp *odp,
 	return np << (page_shift - PAGE_SHIFT);
 
 out:
-	if (ret == -EAGAIN) {
-		unsigned long timeout = msecs_to_jiffies(MMU_NOTIFIER_TIMEOUT);
+	return ret;
+}
 
-		if (!wait_for_completion_timeout(&odp->notifier_completion,
-						 timeout)) {
-			mlx5_ib_warn(
-				mr->dev,
-				"timeout waiting for mmu notifier. seq %d against %d. notifiers_count=%d\n",
-				current_seq, odp->notifiers_seq,
-				odp->notifiers_count);
+static int pagefault_implicit_mr(struct mlx5_ib_mr *imr,
+				 struct ib_umem_odp *odp_imr, u64 user_va,
+				 size_t bcnt, u32 *bytes_mapped, u32 flags)
+{
+	unsigned long end_idx = (user_va + bcnt - 1) >> MLX5_IMR_MTT_SHIFT;
+	unsigned long upd_start_idx = end_idx + 1;
+	unsigned long upd_len = 0;
+	unsigned long npages = 0;
+	int err;
+	int ret;
+
+	if (unlikely(user_va >= mlx5_imr_ksm_entries * MLX5_IMR_MTT_SIZE ||
+		     mlx5_imr_ksm_entries * MLX5_IMR_MTT_SIZE - user_va < bcnt))
+		return -EFAULT;
+
+	/* Fault each child mr that intersects with our interval. */
+	while (bcnt) {
+		unsigned long idx = user_va >> MLX5_IMR_MTT_SHIFT;
+		struct ib_umem_odp *umem_odp;
+		struct mlx5_ib_mr *mtt;
+		u64 len;
+
+		mtt = xa_load(&imr->implicit_children, idx);
+		if (unlikely(!mtt)) {
+			mtt = implicit_get_child_mr(imr, idx);
+			if (IS_ERR(mtt)) {
+				ret = PTR_ERR(mtt);
+				goto out;
+			}
+			upd_start_idx = min(upd_start_idx, idx);
+			upd_len = idx - upd_start_idx + 1;
 		}
+
+		umem_odp = to_ib_umem_odp(mtt->umem);
+		len = min_t(u64, user_va + bcnt, ib_umem_end(umem_odp)) -
+		      user_va;
+
+		ret = pagefault_real_mr(mtt, umem_odp, user_va, len,
+					bytes_mapped, flags);
+		if (ret < 0)
+			goto out;
+		user_va += len;
+		bcnt -= len;
+		npages += ret;
 	}
 
+	ret = npages;
+
+	/*
+	 * Any time the implicit_children are changed we must perform an
+	 * update of the xlt before exiting to ensure the HW and the
+	 * implicit_children remains synchronized.
+	 */
+out:
+	if (likely(!upd_len))
+		return ret;
+
+	/*
+	 * Notice this is not strictly ordered right, the KSM is updated after
+	 * the implicit_children is updated, so a parallel page fault could
+	 * see a MR that is not yet visible in the KSM.  This is similar to a
+	 * parallel page fault seeing a MR that is being concurrently removed
+	 * from the KSM. Both of these improbable situations are resolved
+	 * safely by resuming the HW and then taking another page fault. The
+	 * next pagefault handler will see the new information.
+	 */
+	mutex_lock(&odp_imr->umem_mutex);
+	err = mlx5_ib_update_xlt(imr, upd_start_idx, upd_len, 0,
+				 MLX5_IB_UPD_XLT_INDIRECT |
+					 MLX5_IB_UPD_XLT_ATOMIC);
+	mutex_unlock(&odp_imr->umem_mutex);
+	if (err) {
+		mlx5_ib_err(imr->dev, "Failed to update PAS\n");
+		return err;
+	}
 	return ret;
 }
 
@@ -646,8 +760,6 @@ static int pagefault_mr(struct mlx5_ib_mr *mr, u64 io_virt, size_t bcnt,
 			u32 *bytes_mapped, u32 flags)
 {
 	struct ib_umem_odp *odp = to_ib_umem_odp(mr->umem);
-	struct mlx5_ib_mr *mtt;
-	int npages = 0;
 
 	if (!odp->is_implicit_odp) {
 		if (unlikely(io_virt < ib_umem_start(odp) ||
@@ -656,48 +768,8 @@ static int pagefault_mr(struct mlx5_ib_mr *mr, u64 io_virt, size_t bcnt,
 		return pagefault_real_mr(mr, odp, io_virt, bcnt, bytes_mapped,
 					 flags);
 	}
-
-	if (unlikely(io_virt >= mlx5_imr_ksm_entries * MLX5_IMR_MTT_SIZE ||
-		     mlx5_imr_ksm_entries * MLX5_IMR_MTT_SIZE - io_virt < bcnt))
-		return -EFAULT;
-
-	mtt = implicit_mr_get_data(mr, io_virt, bcnt);
-	if (IS_ERR(mtt))
-		return PTR_ERR(mtt);
-
-	/* Fault each child mr that intersects with our interval. */
-	while (bcnt) {
-		struct ib_umem_odp *umem_odp = to_ib_umem_odp(mtt->umem);
-		u64 end = min_t(u64, io_virt + bcnt, ib_umem_end(umem_odp));
-		u64 len = end - io_virt;
-		int ret;
-
-		ret = pagefault_real_mr(mtt, umem_odp, io_virt, len,
-					bytes_mapped, flags);
-		if (ret < 0)
-			return ret;
-		io_virt += len;
-		bcnt -= len;
-		npages += ret;
-
-		if (unlikely(bcnt)) {
-			mtt = xa_load(&mr->implicit_children,
-				      io_virt >> MLX5_IMR_MTT_SHIFT);
-
-			/*
-			 * implicit_mr_get_data sets up all the leaves, this
-			 * means they got invalidated before we got to them.
-			 */
-			if (!mtt) {
-				mlx5_ib_dbg(
-					mr->dev,
-					"next implicit leaf removed at 0x%llx.\n",
-					io_virt);
-				return -EAGAIN;
-			}
-		}
-	}
-	return npages;
+	return pagefault_implicit_mr(mr, odp, io_virt, bcnt, bytes_mapped,
+				     flags);
 }
 
 struct pf_frame {
@@ -1534,7 +1606,6 @@ void mlx5_odp_init_mr_cache_entry(struct mlx5_cache_ent *ent)
 
 static const struct ib_device_ops mlx5_ib_dev_odp_ops = {
 	.advise_mr = mlx5_ib_advise_mr,
-	.invalidate_range = mlx5_ib_invalidate_range,
 };
 
 int mlx5_ib_odp_init_one(struct mlx5_ib_dev *dev)
@@ -1591,7 +1662,7 @@ static void destroy_prefetch_work(struct prefetch_mr_work *work)
 	u32 i;
 
 	for (i = 0; i < work->num_sge; ++i)
-		atomic_dec(&work->frags[i].mr->num_pending_prefetch);
+		atomic_dec(&work->frags[i].mr->num_deferred_work);
 	kvfree(work);
 }
 
@@ -1613,13 +1684,6 @@ get_prefetchable_mr(struct ib_pd *pd, enum ib_uverbs_advise_mr_advice advice,
 	mr = container_of(mmkey, struct mlx5_ib_mr, mmkey);
 
 	if (mr->ibmr.pd != pd)
-		return NULL;
-
-	/*
-	 * Implicit child MRs are internal and userspace should not refer to
-	 * them.
-	 */
-	if (mr->parent)
 		return NULL;
 
 	odp = to_ib_umem_odp(mr->umem);
@@ -1670,7 +1734,7 @@ static bool init_prefetch_work(struct ib_pd *pd,
 		}
 
 		/* Keep the MR pointer will valid outside the SRCU */
-		atomic_inc(&work->frags[i].mr->num_pending_prefetch);
+		atomic_inc(&work->frags[i].mr->num_deferred_work);
 	}
 	work->num_sge = num_sge;
 	return true;

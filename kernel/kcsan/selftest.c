@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#define pr_fmt(fmt) "kcsan: " fmt
-
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/printk.h>
@@ -36,7 +34,7 @@ static bool test_encode_decode(void)
 		if (WARN_ON(!check_encodable(addr, size)))
 			return false;
 
-		/* Encode and decode */
+		/* encode and decode */
 		{
 			const long encoded_watchpoint =
 				encode_watchpoint(addr, size, is_write);
@@ -44,7 +42,7 @@ static bool test_encode_decode(void)
 			size_t verif_size;
 			bool verif_is_write;
 
-			/* Check special watchpoints */
+			/* check special watchpoints */
 			if (WARN_ON(decode_watchpoint(
 				    INVALID_WATCHPOINT, &verif_masked_addr,
 				    &verif_size, &verif_is_write)))
@@ -54,7 +52,7 @@ static bool test_encode_decode(void)
 				    &verif_size, &verif_is_write)))
 				return false;
 
-			/* Check decoding watchpoint returns same data */
+			/* check decoding watchpoint returns same data */
 			if (WARN_ON(!decode_watchpoint(
 				    encoded_watchpoint, &verif_masked_addr,
 				    &verif_size, &verif_is_write)))
@@ -94,16 +92,6 @@ static bool test_matching_access(void)
 		return false;
 	if (WARN_ON(matching_access(9, 1, 10, 1)))
 		return false;
-
-	/*
-	 * An access of size 0 could match another access, as demonstrated here.
-	 * Rather than add more comparisons to 'matching_access()', which would
-	 * end up in the fast-path for *all* checks, check_access() simply
-	 * returns for all accesses of size 0.
-	 */
-	if (WARN_ON(!matching_access(8, 8, 12, 0)))
-		return false;
-
 	return true;
 }
 
@@ -118,16 +106,16 @@ static int __init kcsan_selftest(void)
 		if (do_test())                                                 \
 			++passed;                                              \
 		else                                                           \
-			pr_err("selftest: " #do_test " failed");               \
+			pr_err("KCSAN selftest: " #do_test " failed");         \
 	} while (0)
 
 	RUN_TEST(test_requires);
 	RUN_TEST(test_encode_decode);
 	RUN_TEST(test_matching_access);
 
-	pr_info("selftest: %d/%d tests passed\n", passed, total);
+	pr_info("KCSAN selftest: %d/%d tests passed\n", passed, total);
 	if (passed != total)
-		panic("selftests failed");
+		panic("KCSAN selftests failed");
 	return 0;
 }
 postcore_initcall(kcsan_selftest);

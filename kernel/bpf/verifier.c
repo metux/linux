@@ -3810,6 +3810,9 @@ static int check_func_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	/* only increment it after check_reg_arg() finished */
 	state->curframe++;
 
+	if (btf_check_func_arg_match(env, subprog))
+		return -EINVAL;
+
 	/* and go analyze first insn of the callee */
 	*insn_idx = target_insn;
 
@@ -6406,6 +6409,7 @@ static int check_btf_func(struct bpf_verifier_env *env,
 	u32 i, nfuncs, urec_size, min_size;
 	u32 krec_size = sizeof(struct bpf_func_info);
 	struct bpf_func_info *krecord;
+	struct bpf_func_info_aux *info_aux = NULL;
 	const struct btf_type *type;
 	struct bpf_prog *prog;
 	const struct btf *btf;
@@ -6439,6 +6443,9 @@ static int check_btf_func(struct bpf_verifier_env *env,
 	krecord = kvcalloc(nfuncs, krec_size, GFP_KERNEL | __GFP_NOWARN);
 	if (!krecord)
 		return -ENOMEM;
+	info_aux = kcalloc(nfuncs, sizeof(*info_aux), GFP_KERNEL | __GFP_NOWARN);
+	if (!info_aux)
+		goto err_free;
 
 	for (i = 0; i < nfuncs; i++) {
 		ret = bpf_check_uarg_tail_zero(urecord, krec_size, urec_size);
@@ -6490,29 +6497,31 @@ static int check_btf_func(struct bpf_verifier_env *env,
 			ret = -EINVAL;
 			goto err_free;
 		}
-
 		prev_offset = krecord[i].insn_off;
 		urecord += urec_size;
 	}
 
 	prog->aux->func_info = krecord;
 	prog->aux->func_info_cnt = nfuncs;
+	prog->aux->func_info_aux = info_aux;
 	return 0;
 
 err_free:
 	kvfree(krecord);
+	kfree(info_aux);
 	return ret;
 }
 
 static void adjust_btf_func(struct bpf_verifier_env *env)
 {
+	struct bpf_prog_aux *aux = env->prog->aux;
 	int i;
 
-	if (!env->prog->aux->func_info)
+	if (!aux->func_info)
 		return;
 
 	for (i = 0; i < env->subprog_cnt; i++)
-		env->prog->aux->func_info[i].insn_off = env->subprog_info[i].start;
+		aux->func_info[i].insn_off = env->subprog_info[i].start;
 }
 
 #define MIN_BPF_LINEINFO_SIZE	(offsetof(struct bpf_line_info, line_col) + \
@@ -7228,7 +7237,7 @@ static int is_state_visited(struct bpf_verifier_env *env, int insn_idx)
 	struct bpf_verifier_state_list *sl, **pprev;
 	struct bpf_verifier_state *cur = env->cur_state, *new;
 	int i, j, err, states_cnt = 0;
-	bool add_new_state = false;
+	bool add_new_state = env->test_state_freq ? true : false;
 
 	cur->last_insn_idx = env->prev_insn_idx;
 	if (!env->insn_aux_data[insn_idx].prune_point)
@@ -7491,6 +7500,9 @@ static int do_check(struct bpf_verifier_env *env)
 			BPF_MAIN_FUNC /* callsite */,
 			0 /* frameno */,
 			0 /* subprogno, zero == main subprog */);
+
+	if (btf_check_func_arg_match(env, 0))
+		return -EINVAL;
 
 	for (;;) {
 		struct bpf_insn *insn;
@@ -8624,8 +8636,8 @@ static int convert_ctx_accesses(struct bpf_verifier_env *env)
 		}
 
 		if (is_narrower_load && size < target_size) {
-			u8 shift = bpf_ctx_narrow_load_shift(off, size,
-							     size_default);
+			u8 shift = bpf_ctx_narrow_access_offset(
+				off, size, size_default) * 8;
 			if (ctx_field_size <= 4) {
 				if (shift)
 					insn_buf[cnt++] = BPF_ALU32_IMM(BPF_RSH,
@@ -9267,6 +9279,9 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
 		env->strict_alignment = false;
 
 	env->allow_ptr_leaks = is_priv;
+
+	if (is_priv)
+		env->test_state_freq = attr->prog_flags & BPF_F_TEST_STATE_FREQ;
 
 	ret = replace_map_fd_with_map_ptr(env);
 	if (ret < 0)

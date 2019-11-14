@@ -8,16 +8,10 @@
 #ifndef _KERNEL_KCSAN_KCSAN_H
 #define _KERNEL_KCSAN_KCSAN_H
 
-#include <linux/atomic.h>
 #include <linux/kcsan.h>
-#include <linux/sched.h>
 
 /* The number of adjacent watchpoints to check. */
 #define KCSAN_CHECK_ADJACENT 1
-#define NUM_SLOTS (1 + 2*KCSAN_CHECK_ADJACENT)
-
-extern unsigned int kcsan_udelay_task;
-extern unsigned int kcsan_udelay_interrupt;
 
 /*
  * Globally enable and disable KCSAN.
@@ -25,20 +19,10 @@ extern unsigned int kcsan_udelay_interrupt;
 extern bool kcsan_enabled;
 
 /*
- * Save/restore IRQ flags state trace dirtied by KCSAN.
- */
-void kcsan_save_irqtrace(struct task_struct *task);
-void kcsan_restore_irqtrace(struct task_struct *task);
-
-/*
  * Initialize debugfs file.
  */
 void kcsan_debugfs_init(void);
 
-/*
- * Statistics counters displayed via debugfs; should only be modified in
- * slow-paths.
- */
 enum kcsan_counter_id {
 	/*
 	 * Number of watchpoints currently in use.
@@ -54,13 +38,6 @@ enum kcsan_counter_id {
 	 * Total number of data races.
 	 */
 	KCSAN_COUNTER_DATA_RACES,
-
-	/*
-	 * Total number of ASSERT failures due to races. If the observed race is
-	 * due to two conflicting ASSERT type accesses, then both will be
-	 * counted.
-	 */
-	KCSAN_COUNTER_ASSERT_FAILURES,
 
 	/*
 	 * Number of times no watchpoints were available.
@@ -91,34 +68,18 @@ enum kcsan_counter_id {
 
 	KCSAN_COUNTER_COUNT, /* number of counters */
 };
-extern atomic_long_t kcsan_counters[KCSAN_COUNTER_COUNT];
+
+/*
+ * Increment/decrement counter with given id; avoid calling these in fast-path.
+ */
+void kcsan_counter_inc(enum kcsan_counter_id id);
+void kcsan_counter_dec(enum kcsan_counter_id id);
 
 /*
  * Returns true if data races in the function symbol that maps to func_addr
  * (offsets are ignored) should *not* be reported.
  */
-extern bool kcsan_skip_report_debugfs(unsigned long func_addr);
-
-/*
- * Value-change states.
- */
-enum kcsan_value_change {
-	/*
-	 * Did not observe a value-change, however, it is valid to report the
-	 * race, depending on preferences.
-	 */
-	KCSAN_VALUE_CHANGE_MAYBE,
-
-	/*
-	 * Did not observe a value-change, and it is invalid to report the race.
-	 */
-	KCSAN_VALUE_CHANGE_FALSE,
-
-	/*
-	 * The value was observed to change, and the race should be reported.
-	 */
-	KCSAN_VALUE_CHANGE_TRUE,
-};
+bool kcsan_skip_report_debugfs(unsigned long func_addr);
 
 enum kcsan_report_type {
 	/*
@@ -138,12 +99,10 @@ enum kcsan_report_type {
 	 */
 	KCSAN_REPORT_RACE_UNKNOWN_ORIGIN,
 };
-
 /*
  * Print a race report from thread that encountered the race.
  */
-extern void kcsan_report(const volatile void *ptr, size_t size, int access_type,
-			 enum kcsan_value_change value_change,
-			 enum kcsan_report_type type, int watchpoint_idx);
+void kcsan_report(const volatile void *ptr, size_t size, bool is_write,
+		  bool value_change, int cpu_id, enum kcsan_report_type type);
 
 #endif /* _KERNEL_KCSAN_KCSAN_H */

@@ -172,7 +172,6 @@ struct symbol {
 	unsigned int vmlinux:1;    /* 1 if symbol is defined in vmlinux */
 	unsigned int kernel:1;     /* 1 if symbol is from kernel
 				    *  (only for external modules) **/
-	unsigned int preloaded:1;  /* 1 if symbol from Module.symvers */
 	unsigned int is_static:1;  /* 1 if symbol is not global */
 	enum export  export;       /* Type of export */
 	char name[0];
@@ -397,7 +396,8 @@ static struct symbol *sym_add_exported(const char *name, struct module *mod,
 	if (!s) {
 		s = new_symbol(name, mod, export);
 	} else {
-		if (!s->preloaded) {
+		if (!external_module || is_vmlinux(s->module->name) ||
+		    s->module == mod) {
 			warn("%s: '%s' exported twice. Previous export was in %s%s\n",
 			     mod->name, name, s->module->name,
 			     is_vmlinux(s->module->name) ? "" : ".ko");
@@ -406,7 +406,6 @@ static struct symbol *sym_add_exported(const char *name, struct module *mod,
 			s->module = mod;
 		}
 	}
-	s->preloaded = 0;
 	s->vmlinux   = is_vmlinux(mod->name);
 	s->kernel    = 0;
 	s->export    = export;
@@ -2488,7 +2487,6 @@ static void read_dump(const char *fname, unsigned int kernel)
 		}
 		s = sym_add_exported(symname, mod, export_no(export));
 		s->kernel    = kernel;
-		s->preloaded = 1;
 		s->is_static = 0;
 		sym_set_crc(symname, crc);
 		sym_update_namespace(symname, namespace);

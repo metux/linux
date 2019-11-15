@@ -105,7 +105,6 @@ static int regulator_balance_voltage(struct regulator_dev *rdev,
 static struct regulator *create_regulator(struct regulator_dev *rdev,
 					  struct device *dev,
 					  const char *supply_name);
-static void destroy_regulator(struct regulator *regulator);
 static void _regulator_put(struct regulator *regulator);
 
 const char *rdev_get_name(struct regulator_dev *rdev)
@@ -234,8 +233,8 @@ static bool regulator_supply_is_couple(struct regulator_dev *rdev)
 static void regulator_unlock_recursive(struct regulator_dev *rdev,
 				       unsigned int n_coupled)
 {
-	struct regulator_dev *c_rdev, *supply_rdev;
-	int i, supply_n_coupled;
+	struct regulator_dev *c_rdev;
+	int i;
 
 	for (i = n_coupled; i > 0; i--) {
 		c_rdev = rdev->coupling_desc.coupled_rdevs[i - 1];
@@ -243,13 +242,10 @@ static void regulator_unlock_recursive(struct regulator_dev *rdev,
 		if (!c_rdev)
 			continue;
 
-		if (c_rdev->supply && !regulator_supply_is_couple(c_rdev)) {
-			supply_rdev = c_rdev->supply->rdev;
-			supply_n_coupled = supply_rdev->coupling_desc.n_coupled;
-
-			regulator_unlock_recursive(supply_rdev,
-						   supply_n_coupled);
-		}
+		if (c_rdev->supply && !regulator_supply_is_couple(c_rdev))
+			regulator_unlock_recursive(
+					c_rdev->supply->rdev,
+					c_rdev->coupling_desc.n_coupled);
 
 		regulator_unlock(c_rdev);
 	}
@@ -1237,10 +1233,6 @@ static int machine_constraints_voltage(struct regulator_dev *rdev,
 			return -EINVAL;
 		}
 
-		/* no need to loop voltages if range is continuous */
-		if (rdev->desc->continuous_voltage_range)
-			return 0;
-
 		/* initial: [cmin..cmax] valid, [min_uV..max_uV] not */
 		for (i = 0; i < count; i++) {
 			int	value;
@@ -1436,9 +1428,7 @@ static int set_machine_constraints(struct regulator_dev *rdev)
 			rdev_err(rdev, "failed to enable: %pe\n", ERR_PTR(ret));
 			return ret;
 		}
-
-		if (rdev->constraints->always_on)
-			rdev->use_count++;
+		rdev->use_count++;
 	}
 
 	print_constraints(rdev);
@@ -1489,7 +1479,7 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 				      const char *consumer_dev_name,
 				      const char *supply)
 {
-	struct regulator_map *node, *new_node;
+	struct regulator_map *node;
 	int has_dev;
 
 	if (supply == NULL)
@@ -1500,22 +1490,6 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 	else
 		has_dev = 0;
 
-	new_node = kzalloc(sizeof(struct regulator_map), GFP_KERNEL);
-	if (new_node == NULL)
-		return -ENOMEM;
-
-	new_node->regulator = rdev;
-	new_node->supply = supply;
-
-	if (has_dev) {
-		new_node->dev_name = kstrdup(consumer_dev_name, GFP_KERNEL);
-		if (new_node->dev_name == NULL) {
-			kfree(new_node);
-			return -ENOMEM;
-		}
-	}
-
-	mutex_lock(&regulator_list_mutex);
 	list_for_each_entry(node, &regulator_map_list, list) {
 		if (node->dev_name && consumer_dev_name) {
 			if (strcmp(node->dev_name, consumer_dev_name) != 0)
@@ -1533,19 +1507,26 @@ static int set_consumer_device_supply(struct regulator_dev *rdev,
 			 node->regulator->desc->name,
 			 supply,
 			 dev_name(&rdev->dev), rdev_get_name(rdev));
-		goto fail;
+		return -EBUSY;
 	}
 
-	list_add(&new_node->list, &regulator_map_list);
-	mutex_unlock(&regulator_list_mutex);
+	node = kzalloc(sizeof(struct regulator_map), GFP_KERNEL);
+	if (node == NULL)
+		return -ENOMEM;
 
+	node->regulator = rdev;
+	node->supply = supply;
+
+	if (has_dev) {
+		node->dev_name = kstrdup(consumer_dev_name, GFP_KERNEL);
+		if (node->dev_name == NULL) {
+			kfree(node);
+			return -ENOMEM;
+		}
+	}
+
+	list_add(&node->list, &regulator_map_list);
 	return 0;
-
-fail:
-	mutex_unlock(&regulator_list_mutex);
-	kfree(new_node->dev_name);
-	kfree(new_node);
-	return -EBUSY;
 }
 
 static void unset_regulator_supplies(struct regulator_dev *rdev)
@@ -1617,53 +1598,44 @@ static struct regulator *create_regulator(struct regulator_dev *rdev,
 					  const char *supply_name)
 {
 	struct regulator *regulator;
-	int err;
-
-	if (dev) {
-		char buf[REG_STR_SIZE];
-		int size;
-
-		size = snprintf(buf, REG_STR_SIZE, "%s-%s",
-				dev->kobj.name, supply_name);
-		if (size >= REG_STR_SIZE)
-			return NULL;
-
-		supply_name = kstrdup(buf, GFP_KERNEL);
-		if (supply_name == NULL)
-			return NULL;
-	} else {
-		supply_name = kstrdup_const(supply_name, GFP_KERNEL);
-		if (supply_name == NULL)
-			return NULL;
-	}
+	char buf[REG_STR_SIZE];
+	int err, size;
 
 	regulator = kzalloc(sizeof(*regulator), GFP_KERNEL);
-	if (regulator == NULL) {
-		kfree(supply_name);
+	if (regulator == NULL)
 		return NULL;
-	}
-
-	regulator->rdev = rdev;
-	regulator->supply_name = supply_name;
 
 	regulator_lock(rdev);
+	regulator->rdev = rdev;
 	list_add(&regulator->list, &rdev->consumer_list);
-	regulator_unlock(rdev);
 
 	if (dev) {
 		regulator->dev = dev;
 
 		/* Add a link to the device sysfs entry */
+		size = snprintf(buf, REG_STR_SIZE, "%s-%s",
+				dev->kobj.name, supply_name);
+		if (size >= REG_STR_SIZE)
+			goto overflow_err;
+
+		regulator->supply_name = kstrdup(buf, GFP_KERNEL);
+		if (regulator->supply_name == NULL)
+			goto overflow_err;
+
 		err = sysfs_create_link_nowarn(&rdev->dev.kobj, &dev->kobj,
-					       supply_name);
+					buf);
 		if (err) {
 			rdev_dbg(rdev, "could not add device link %s: %pe\n",
 				  dev->kobj.name, ERR_PTR(err));
 			/* non-fatal */
 		}
+	} else {
+		regulator->supply_name = kstrdup_const(supply_name, GFP_KERNEL);
+		if (regulator->supply_name == NULL)
+			goto overflow_err;
 	}
 
-	regulator->debugfs = debugfs_create_dir(supply_name,
+	regulator->debugfs = debugfs_create_dir(regulator->supply_name,
 						rdev->debugfs);
 	if (!regulator->debugfs) {
 		rdev_dbg(rdev, "Failed to create debugfs directory\n");
@@ -1688,7 +1660,13 @@ static struct regulator *create_regulator(struct regulator_dev *rdev,
 	    _regulator_is_enabled(rdev))
 		regulator->always_on = true;
 
+	regulator_unlock(rdev);
 	return regulator;
+overflow_err:
+	list_del(&regulator->list);
+	kfree(regulator);
+	regulator_unlock(rdev);
+	return NULL;
 }
 
 static int _regulator_get_enable_time(struct regulator_dev *rdev)
@@ -1899,6 +1877,7 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 {
 	struct regulator_dev *rdev;
 	struct regulator *regulator;
+	const char *devname = dev ? dev_name(dev) : "deviceless";
 	struct device_link *link;
 	int ret;
 
@@ -1936,7 +1915,9 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 			 * enabled, even if it isn't hooked up, and just
 			 * provide a dummy.
 			 */
-			dev_warn(dev, "supply %s not found, using dummy regulator\n", id);
+			dev_warn(dev,
+				 "%s supply %s not found, using dummy regulator\n",
+				 devname, id);
 			rdev = dummy_regulator_rdev;
 			get_device(&rdev->dev);
 			break;
@@ -1944,7 +1925,7 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 		case EXCLUSIVE_GET:
 			dev_warn(dev,
 				 "dummy supplies not allowed for exclusive requests\n");
-			fallthrough;
+			/* fall through */
 
 		default:
 			return ERR_PTR(-ENODEV);
@@ -1989,8 +1970,8 @@ struct regulator *_regulator_get(struct device *dev, const char *id,
 	regulator = create_regulator(rdev, dev, id);
 	if (regulator == NULL) {
 		regulator = ERR_PTR(-ENOMEM);
-		module_put(rdev->owner);
 		put_device(&rdev->dev);
+		module_put(rdev->owner);
 		return regulator;
 	}
 
@@ -2084,9 +2065,20 @@ struct regulator *regulator_get_optional(struct device *dev, const char *id)
 }
 EXPORT_SYMBOL_GPL(regulator_get_optional);
 
-static void destroy_regulator(struct regulator *regulator)
+/* regulator_list_mutex lock held by regulator_put() */
+static void _regulator_put(struct regulator *regulator)
 {
-	struct regulator_dev *rdev = regulator->rdev;
+	struct regulator_dev *rdev;
+
+	if (IS_ERR_OR_NULL(regulator))
+		return;
+
+	lockdep_assert_held_once(&regulator_list_mutex);
+
+	/* Docs say you must disable before calling regulator_put() */
+	WARN_ON(regulator->enable_count);
+
+	rdev = regulator->rdev;
 
 	debugfs_remove_recursive(regulator->debugfs);
 
@@ -2103,31 +2095,13 @@ static void destroy_regulator(struct regulator *regulator)
 
 	rdev->open_count--;
 	rdev->exclusive = 0;
+	put_device(&rdev->dev);
 	regulator_unlock(rdev);
 
 	kfree_const(regulator->supply_name);
 	kfree(regulator);
-}
-
-/* regulator_list_mutex lock held by regulator_put() */
-static void _regulator_put(struct regulator *regulator)
-{
-	struct regulator_dev *rdev;
-
-	if (IS_ERR_OR_NULL(regulator))
-		return;
-
-	lockdep_assert_held_once(&regulator_list_mutex);
-
-	/* Docs say you must disable before calling regulator_put() */
-	WARN_ON(regulator->enable_count);
-
-	rdev = regulator->rdev;
-
-	destroy_regulator(regulator);
 
 	module_put(rdev->owner);
-	put_device(&rdev->dev);
 }
 
 /**
@@ -2279,13 +2253,10 @@ EXPORT_SYMBOL_GPL(regulator_bulk_unregister_supply_alias);
 static int regulator_ena_gpio_request(struct regulator_dev *rdev,
 				const struct regulator_config *config)
 {
-	struct regulator_enable_gpio *pin, *new_pin;
+	struct regulator_enable_gpio *pin;
 	struct gpio_desc *gpiod;
 
 	gpiod = config->ena_gpiod;
-	new_pin = kzalloc(sizeof(*new_pin), GFP_KERNEL);
-
-	mutex_lock(&regulator_list_mutex);
 
 	list_for_each_entry(pin, &regulator_ena_gpio_list, list) {
 		if (pin->gpiod == gpiod) {
@@ -2294,13 +2265,9 @@ static int regulator_ena_gpio_request(struct regulator_dev *rdev,
 		}
 	}
 
-	if (new_pin == NULL) {
-		mutex_unlock(&regulator_list_mutex);
+	pin = kzalloc(sizeof(struct regulator_enable_gpio), GFP_KERNEL);
+	if (pin == NULL)
 		return -ENOMEM;
-	}
-
-	pin = new_pin;
-	new_pin = NULL;
 
 	pin->gpiod = gpiod;
 	list_add(&pin->list, &regulator_ena_gpio_list);
@@ -2308,10 +2275,6 @@ static int regulator_ena_gpio_request(struct regulator_dev *rdev,
 update_ena_gpio_to_rdev:
 	pin->request_count++;
 	rdev->ena_pin = pin;
-
-	mutex_unlock(&regulator_list_mutex);
-	kfree(new_pin);
-
 	return 0;
 }
 
@@ -2324,19 +2287,19 @@ static void regulator_ena_gpio_free(struct regulator_dev *rdev)
 
 	/* Free the GPIO only in case of no use */
 	list_for_each_entry_safe(pin, n, &regulator_ena_gpio_list, list) {
-		if (pin != rdev->ena_pin)
-			continue;
-
-		if (--pin->request_count)
-			break;
-
-		gpiod_put(pin->gpiod);
-		list_del(&pin->list);
-		kfree(pin);
-		break;
+		if (pin->gpiod == rdev->ena_pin->gpiod) {
+			if (pin->request_count <= 1) {
+				pin->request_count = 0;
+				gpiod_put(pin->gpiod);
+				list_del(&pin->list);
+				kfree(pin);
+				rdev->ena_pin = NULL;
+				return;
+			} else {
+				pin->request_count--;
+			}
+		}
 	}
-
-	rdev->ena_pin = NULL;
 }
 
 /**
@@ -2415,37 +2378,6 @@ static void _regulator_enable_delay(unsigned int delay)
 		udelay(us);
 }
 
-/**
- * _regulator_check_status_enabled
- *
- * A helper function to check if the regulator status can be interpreted
- * as 'regulator is enabled'.
- * @rdev: the regulator device to check
- *
- * Return:
- * * 1			- if status shows regulator is in enabled state
- * * 0			- if not enabled state
- * * Error Value	- as received from ops->get_status()
- */
-static inline int _regulator_check_status_enabled(struct regulator_dev *rdev)
-{
-	int ret = rdev->desc->ops->get_status(rdev);
-
-	if (ret < 0) {
-		rdev_info(rdev, "get_status returned error: %d\n", ret);
-		return ret;
-	}
-
-	switch (ret) {
-	case REGULATOR_STATUS_OFF:
-	case REGULATOR_STATUS_ERROR:
-	case REGULATOR_STATUS_UNDEFINED:
-		return 0;
-	default:
-		return 1;
-	}
-}
-
 static int _regulator_do_enable(struct regulator_dev *rdev)
 {
 	int ret, delay;
@@ -2506,37 +2438,7 @@ static int _regulator_do_enable(struct regulator_dev *rdev)
 	 * together.  */
 	trace_regulator_enable_delay(rdev_get_name(rdev));
 
-	/* If poll_enabled_time is set, poll upto the delay calculated
-	 * above, delaying poll_enabled_time uS to check if the regulator
-	 * actually got enabled.
-	 * If the regulator isn't enabled after enable_delay has
-	 * expired, return -ETIMEDOUT.
-	 */
-	if (rdev->desc->poll_enabled_time) {
-		unsigned int time_remaining = delay;
-
-		while (time_remaining > 0) {
-			_regulator_enable_delay(rdev->desc->poll_enabled_time);
-
-			if (rdev->desc->ops->get_status) {
-				ret = _regulator_check_status_enabled(rdev);
-				if (ret < 0)
-					return ret;
-				else if (ret)
-					break;
-			} else if (rdev->desc->ops->is_enabled(rdev))
-				break;
-
-			time_remaining -= rdev->desc->poll_enabled_time;
-		}
-
-		if (time_remaining <= 0) {
-			rdev_err(rdev, "Enabled check timed out\n");
-			return -ETIMEDOUT;
-		}
-	} else {
-		_regulator_enable_delay(delay);
-	}
+	_regulator_enable_delay(delay);
 
 	trace_regulator_enable_complete(rdev_get_name(rdev));
 
@@ -3597,7 +3499,6 @@ int regulator_set_voltage_rdev(struct regulator_dev *rdev, int min_uV,
 out:
 	return ret;
 }
-EXPORT_SYMBOL_GPL(regulator_set_voltage_rdev);
 
 static int regulator_limit_voltage_step(struct regulator_dev *rdev,
 					int *current_uV, int *min_uV)
@@ -4173,7 +4074,6 @@ int regulator_get_voltage_rdev(struct regulator_dev *rdev)
 		return ret;
 	return ret - rdev->constraints->uV_offset;
 }
-EXPORT_SYMBOL_GPL(regulator_get_voltage_rdev);
 
 /**
  * regulator_get_voltage - get regulator output voltage
@@ -5009,8 +4909,12 @@ static void regulator_resolve_coupling(struct regulator_dev *rdev)
 			return;
 		}
 
+		regulator_lock(c_rdev);
+
 		c_desc->coupled_rdevs[i] = c_rdev;
 		c_desc->n_resolved++;
+
+		regulator_unlock(c_rdev);
 
 		regulator_resolve_coupling(c_rdev);
 	}
@@ -5096,10 +5000,7 @@ static int regulator_init_coupling(struct regulator_dev *rdev)
 	if (!of_check_coupling_data(rdev))
 		return -EPERM;
 
-	mutex_lock(&regulator_list_mutex);
 	rdev->coupling_desc.coupler = regulator_find_coupler(rdev);
-	mutex_unlock(&regulator_list_mutex);
-
 	if (IS_ERR(rdev->coupling_desc.coupler)) {
 		err = PTR_ERR(rdev->coupling_desc.coupler);
 		rdev_err(rdev, "failed to get coupler: %pe\n", ERR_PTR(err));
@@ -5116,12 +5017,6 @@ static int generic_coupler_attach(struct regulator_coupler *coupler,
 		rdev_err(rdev,
 			 "Voltage balancing for multiple regulator couples is unimplemented\n");
 		return -EPERM;
-	}
-
-	if (!rdev->constraints->always_on) {
-		rdev_err(rdev,
-			 "Coupling of a non always-on regulator is unimplemented\n");
-		return -ENOTSUPP;
 	}
 
 	return 0;
@@ -5199,7 +5094,6 @@ regulator_register(const struct regulator_desc *regulator_desc,
 		ret = -ENOMEM;
 		goto rinse;
 	}
-	device_initialize(&rdev->dev);
 
 	/*
 	 * Duplicate the config so the driver could override it after
@@ -5207,8 +5101,9 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	 */
 	config = kmemdup(cfg, sizeof(*cfg), GFP_KERNEL);
 	if (config == NULL) {
+		kfree(rdev);
 		ret = -ENOMEM;
-		goto clean;
+		goto rinse;
 	}
 
 	init_data = regulator_of_get_init_data(dev, regulator_desc, config,
@@ -5220,8 +5115,10 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	 * from a gpio extender or something else.
 	 */
 	if (PTR_ERR(init_data) == -EPROBE_DEFER) {
+		kfree(config);
+		kfree(rdev);
 		ret = -EPROBE_DEFER;
-		goto clean;
+		goto rinse;
 	}
 
 	/*
@@ -5262,7 +5159,9 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	}
 
 	if (config->ena_gpiod) {
+		mutex_lock(&regulator_list_mutex);
 		ret = regulator_ena_gpio_request(rdev, config);
+		mutex_unlock(&regulator_list_mutex);
 		if (ret != 0) {
 			rdev_err(rdev, "Failed to request enable GPIO: %pe\n",
 				 ERR_PTR(ret));
@@ -5278,7 +5177,6 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	rdev->dev.parent = dev;
 	dev_set_name(&rdev->dev, "regulator.%lu",
 		    (unsigned long) atomic_inc_return(&regulator_no));
-	dev_set_drvdata(&rdev->dev, rdev);
 
 	/* set regulator constraints */
 	if (init_data)
@@ -5315,22 +5213,27 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	if (ret < 0)
 		goto wash;
 
+	mutex_lock(&regulator_list_mutex);
 	ret = regulator_init_coupling(rdev);
+	mutex_unlock(&regulator_list_mutex);
 	if (ret < 0)
 		goto wash;
 
 	/* add consumers devices */
 	if (init_data) {
+		mutex_lock(&regulator_list_mutex);
 		for (i = 0; i < init_data->num_consumer_supplies; i++) {
 			ret = set_consumer_device_supply(rdev,
 				init_data->consumer_supplies[i].dev_name,
 				init_data->consumer_supplies[i].supply);
 			if (ret < 0) {
+				mutex_unlock(&regulator_list_mutex);
 				dev_err(dev, "Failed to set supply %s\n",
 					init_data->consumer_supplies[i].supply);
 				goto unset_supplies;
 			}
 		}
+		mutex_unlock(&regulator_list_mutex);
 	}
 
 	if (!rdev->desc->ops->get_voltage &&
@@ -5338,9 +5241,12 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	    !rdev->desc->fixed_uV)
 		rdev->is_switch = true;
 
-	ret = device_add(&rdev->dev);
-	if (ret != 0)
+	dev_set_drvdata(&rdev->dev, rdev);
+	ret = device_register(&rdev->dev);
+	if (ret != 0) {
+		put_device(&rdev->dev);
 		goto unset_supplies;
+	}
 
 	rdev_init_debugfs(rdev);
 
@@ -5361,15 +5267,15 @@ unset_supplies:
 	regulator_remove_coupling(rdev);
 	mutex_unlock(&regulator_list_mutex);
 wash:
-	kfree(rdev->coupling_desc.coupled_rdevs);
+	kfree(rdev->constraints);
 	mutex_lock(&regulator_list_mutex);
 	regulator_ena_gpio_free(rdev);
 	mutex_unlock(&regulator_list_mutex);
 clean:
 	if (dangling_of_gpiod)
 		gpiod_put(config->ena_gpiod);
+	kfree(rdev);
 	kfree(config);
-	put_device(&rdev->dev);
 rinse:
 	if (dangling_cfg_gpiod)
 		gpiod_put(cfg->ena_gpiod);

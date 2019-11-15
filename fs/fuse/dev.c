@@ -276,10 +276,12 @@ static void flush_bg_queue(struct fuse_conn *fc)
 void fuse_request_end(struct fuse_conn *fc, struct fuse_req *req)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
+	bool async;
 
 	if (test_and_set_bit(FR_FINISHED, &req->flags))
 		goto put_request;
 
+	async = req->args->end;
 	/*
 	 * test_and_set_bit() implies smp_mb() between bit
 	 * changing and below intr_entry check. Pairs with
@@ -322,7 +324,7 @@ void fuse_request_end(struct fuse_conn *fc, struct fuse_req *req)
 		wake_up(&req->waitq);
 	}
 
-	if (test_bit(FR_ASYNC, &req->flags))
+	if (async)
 		req->args->end(fc, req->args, req->out.h.error);
 put_request:
 	fuse_put_request(fc, req);
@@ -469,8 +471,6 @@ static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 	req->in.h.opcode = args->opcode;
 	req->in.h.nodeid = args->nodeid;
 	req->args = args;
-	if (args->end)
-		__set_bit(FR_ASYNC, &req->flags);
 }
 
 ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args)
@@ -705,7 +705,7 @@ static int fuse_copy_fill(struct fuse_copy_state *cs)
 			cs->pipebufs++;
 			cs->nr_segs--;
 		} else {
-			if (cs->nr_segs >= cs->pipe->max_usage)
+			if (cs->nr_segs >= cs->pipe->ring_size)
 				return -EIO;
 
 			page = alloc_page(GFP_HIGHUSER);
@@ -881,7 +881,7 @@ static int fuse_ref_page(struct fuse_copy_state *cs, struct page *page,
 	struct pipe_buffer *buf;
 	int err;
 
-	if (cs->nr_segs >= cs->pipe->max_usage)
+	if (cs->nr_segs >= cs->pipe->ring_size)
 		return -EIO;
 
 	err = unlock_request(cs->req);
@@ -1343,7 +1343,7 @@ static ssize_t fuse_dev_splice_read(struct file *in, loff_t *ppos,
 	if (!fud)
 		return -EPERM;
 
-	bufs = kvmalloc_array(pipe->max_usage, sizeof(struct pipe_buffer),
+	bufs = kvmalloc_array(pipe->ring_size, sizeof(struct pipe_buffer),
 			      GFP_KERNEL);
 	if (!bufs)
 		return -ENOMEM;
@@ -1355,7 +1355,7 @@ static ssize_t fuse_dev_splice_read(struct file *in, loff_t *ppos,
 	if (ret < 0)
 		goto out;
 
-	if (pipe_occupancy(pipe->head, pipe->tail) + cs.nr_segs > pipe->max_usage) {
+	if (pipe_occupancy(pipe->head, pipe->tail) + cs.nr_segs > pipe->ring_size) {
 		ret = -EIO;
 		goto out;
 	}
@@ -1965,7 +1965,7 @@ static ssize_t fuse_dev_splice_write(struct pipe_inode_info *pipe,
 
 	nbuf = 0;
 	rem = 0;
-	for (idx = tail; idx != head && rem < len; idx++)
+	for (idx = tail; idx < head && rem < len; idx++)
 		rem += pipe->bufs[idx & mask].len;
 
 	ret = -EINVAL;
@@ -2267,7 +2267,7 @@ const struct file_operations fuse_dev_operations = {
 	.release	= fuse_dev_release,
 	.fasync		= fuse_dev_fasync,
 	.unlocked_ioctl = fuse_dev_ioctl,
-	.compat_ioctl   = compat_ptr_ioctl,
+	.compat_ioctl   = fuse_dev_ioctl,
 };
 EXPORT_SYMBOL_GPL(fuse_dev_operations);
 

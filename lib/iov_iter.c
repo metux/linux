@@ -395,7 +395,7 @@ static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t by
 		i_head++;
 		buf = &pipe->bufs[i_head & p_mask];
 	}
-	if (pipe_full(i_head, p_tail, pipe->max_usage))
+	if (pipe_full(i_head, p_tail, pipe->ring_size))
 		return 0;
 
 	buf->ops = &page_cache_pipe_buf_ops;
@@ -528,7 +528,7 @@ static size_t push_pipe(struct iov_iter *i, size_t size,
 		pipe->bufs[iter_head & p_mask].len = PAGE_SIZE;
 		iter_head++;
 	}
-	while (!pipe_full(iter_head, p_tail, pipe->max_usage)) {
+	while (!pipe_full(iter_head, p_tail, pipe->ring_size)) {
 		struct pipe_buffer *buf = &pipe->bufs[iter_head & p_mask];
 		struct page *page = alloc_page(GFP_USER);
 		if (!page)
@@ -1222,12 +1222,11 @@ EXPORT_SYMBOL(iov_iter_discard);
 
 unsigned long iov_iter_alignment(const struct iov_iter *i)
 {
+	unsigned int p_mask = i->pipe->ring_size - 1;
 	unsigned long res = 0;
 	size_t size = i->count;
 
 	if (unlikely(iov_iter_is_pipe(i))) {
-		unsigned int p_mask = i->pipe->ring_size - 1;
-
 		if (size && i->iov_offset && allocated(&i->pipe->bufs[i->head & p_mask]))
 			return size | i->iov_offset;
 		return size;
@@ -1712,7 +1711,6 @@ ssize_t compat_import_iovec(int type,
 	*iov = p == *iov ? NULL : p;
 	return n;
 }
-EXPORT_SYMBOL(compat_import_iovec);
 #endif
 
 int import_single_range(int rw, void __user *buf, size_t len,

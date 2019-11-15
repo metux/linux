@@ -101,6 +101,8 @@
 #include "i915_vma.h"
 #include "i915_irq.h"
 
+#include "intel_region_lmem.h"
+
 #include "intel_gvt.h"
 
 /* General customization:
@@ -108,8 +110,8 @@
 
 #define DRIVER_NAME		"i915"
 #define DRIVER_DESC		"Intel Graphics"
-#define DRIVER_DATE		"20191021"
-#define DRIVER_TIMESTAMP	1571651766
+#define DRIVER_DATE		"20191101"
+#define DRIVER_TIMESTAMP	1572604873
 
 struct drm_i915_gem_object;
 
@@ -625,13 +627,9 @@ struct ddi_vbt_port_info {
 
 	int max_tmds_clock;
 
-	/*
-	 * This is an index in the HDMI/DVI DDI buffer translation table.
-	 * The special value HDMI_LEVEL_SHIFT_UNKNOWN means the VBT didn't
-	 * populate this field.
-	 */
-#define HDMI_LEVEL_SHIFT_UNKNOWN	0xff
+	/* This is an index in the HDMI/DVI DDI buffer translation table. */
 	u8 hdmi_level_shift;
+	u8 hdmi_level_shift_set:1;
 
 	u8 supports_dvi:1;
 	u8 supports_hdmi:1;
@@ -722,8 +720,7 @@ struct intel_vbt_data {
 
 	int crt_ddc_pin;
 
-	int child_dev_num;
-	struct child_device_config *child_dev;
+	struct list_head display_devices;
 
 	struct ddi_vbt_port_info ddi_port_info[I915_MAX_PORTS];
 	struct sdvo_device_mapping sdvo_mappings[2];
@@ -889,6 +886,10 @@ struct intel_cdclk_state {
 	u8 voltage_level;
 };
 
+struct i915_selftest_stash {
+	atomic_t counter;
+};
+
 struct drm_i915_private {
 	struct drm_device drm;
 
@@ -1012,13 +1013,14 @@ struct drm_i915_private {
 	unsigned int fdi_pll_freq;
 	unsigned int czclk_freq;
 
+	/*
+	 * For reading holding any crtc lock is sufficient,
+	 * for writing must hold all of them.
+	 */
 	struct {
 		/*
 		 * The current logical cdclk state.
 		 * See intel_atomic_state.cdclk.logical
-		 *
-		 * For reading holding any crtc lock is sufficient,
-		 * for writing must hold all of them.
 		 */
 		struct intel_cdclk_state logical;
 		/*
@@ -1088,6 +1090,10 @@ struct drm_i915_private {
 	 */
 	struct mutex dpll_lock;
 
+	/*
+	 * For reading active_pipes, min_cdclk, min_voltage_level holding
+	 * any crtc lock is sufficient, for writing must hold all of them.
+	 */
 	u8 active_pipes;
 	/* minimum acceptable cdclk for each pipe */
 	int min_cdclk[I915_MAX_PIPES];
@@ -1245,8 +1251,6 @@ struct drm_i915_private {
 	struct intel_gt gt;
 
 	struct {
-		struct notifier_block pm_notifier;
-
 		struct i915_gem_contexts {
 			spinlock_t lock; /* locks list */
 			struct list_head list;
@@ -1282,6 +1286,8 @@ struct drm_i915_private {
 
 	/* Mutex to protect the above hdcp component related values. */
 	struct mutex hdcp_comp_mutex;
+
+	I915_SELFTEST_DECLARE(struct i915_selftest_stash selftest;)
 
 	/*
 	 * NOTE: This is the dri1/ums dungeon, don't add stuff here. Your patch
@@ -1454,6 +1460,7 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 }
 
 #define IS_MOBILE(dev_priv)	(INTEL_INFO(dev_priv)->is_mobile)
+#define IS_DGFX(dev_priv)   (INTEL_INFO(dev_priv)->is_dgfx)
 
 #define IS_I830(dev_priv)	IS_PLATFORM(dev_priv, INTEL_I830)
 #define IS_I845G(dev_priv)	IS_PLATFORM(dev_priv, INTEL_I845G)
@@ -1612,9 +1619,16 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define ALL_ENGINES	(~0u)
 #define HAS_ENGINE(dev_priv, id) (INTEL_INFO(dev_priv)->engine_mask & BIT(id))
 
+/*
+ * The Gen7 cmdparser copies the scanned buffer to the ggtt for execution
+ * All later gens can run the final buffer from the ppgtt
+ */
+#define CMDPARSER_USES_GGTT(dev_priv) IS_GEN(dev_priv, 7)
+
 #define HAS_LLC(dev_priv)	(INTEL_INFO(dev_priv)->has_llc)
 #define HAS_SNOOP(dev_priv)	(INTEL_INFO(dev_priv)->has_snoop)
 #define HAS_EDRAM(dev_priv)	((dev_priv)->edram_size_mb)
+#define HAS_SECURE_BATCHES(dev_priv) (INTEL_GEN(dev_priv) < 6)
 #define HAS_WT(dev_priv)	((IS_HASWELL(dev_priv) || \
 				 IS_BROADWELL(dev_priv)) && HAS_EDRAM(dev_priv))
 
@@ -1652,7 +1666,7 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 
 /* WaRsDisableCoarsePowerGating:skl,cnl */
 #define NEEDS_WaRsDisableCoarsePowerGating(dev_priv) \
-	(IS_CANNONLAKE(dev_priv) || IS_GEN(dev_priv, 9))
+	IS_GEN_RANGE(dev_priv, 9, 10)
 
 #define HAS_GMBUS_IRQ(dev_priv) (INTEL_GEN(dev_priv) >= 4)
 #define HAS_GMBUS_BURST_READ(dev_priv) (INTEL_GEN(dev_priv) >= 10 || \
@@ -1695,6 +1709,7 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define HAS_IPC(dev_priv)		 (INTEL_INFO(dev_priv)->display.has_ipc)
 
 #define HAS_REGION(i915, i) (INTEL_INFO(i915)->memory_regions & (i))
+#define HAS_LMEM(i915) HAS_REGION(i915, REGION_LMEM)
 
 #define HAS_GT_UC(dev_priv)	(INTEL_INFO(dev_priv)->has_gt_uc)
 
@@ -1778,7 +1793,6 @@ int i915_getparam_ioctl(struct drm_device *dev, void *data,
 /* i915_gem.c */
 int i915_gem_init_userptr(struct drm_i915_private *dev_priv);
 void i915_gem_cleanup_userptr(struct drm_i915_private *dev_priv);
-void i915_gem_sanitize(struct drm_i915_private *i915);
 void i915_gem_init_early(struct drm_i915_private *dev_priv);
 void i915_gem_cleanup_early(struct drm_i915_private *dev_priv);
 int i915_gem_freeze(struct drm_i915_private *dev_priv);
@@ -1834,6 +1848,14 @@ int i915_gem_object_unbind(struct drm_i915_gem_object *obj,
 			   unsigned long flags);
 #define I915_GEM_OBJECT_UNBIND_ACTIVE BIT(0)
 
+struct i915_vma * __must_check
+i915_gem_object_pin(struct drm_i915_gem_object *obj,
+		    struct i915_address_space *vm,
+		    const struct i915_ggtt_view *view,
+		    u64 size,
+		    u64 alignment,
+		    u64 flags);
+
 void i915_gem_runtime_suspend(struct drm_i915_private *dev_priv);
 
 static inline int __must_check
@@ -1862,7 +1884,6 @@ static inline u32 i915_reset_engine_count(struct i915_gpu_error *error,
 	return atomic_read(&error->reset_engine_count[engine->uabi_class]);
 }
 
-void i915_gem_init_mmio(struct drm_i915_private *i915);
 int __must_check i915_gem_init(struct drm_i915_private *dev_priv);
 void i915_gem_driver_register(struct drm_i915_private *i915);
 void i915_gem_driver_unregister(struct drm_i915_private *i915);
@@ -1940,12 +1961,14 @@ const char *i915_cache_level_str(struct drm_i915_private *i915, int type);
 int i915_cmd_parser_get_version(struct drm_i915_private *dev_priv);
 void intel_engine_init_cmd_parser(struct intel_engine_cs *engine);
 void intel_engine_cleanup_cmd_parser(struct intel_engine_cs *engine);
-int intel_engine_cmd_parser(struct intel_engine_cs *engine,
+int intel_engine_cmd_parser(struct i915_gem_context *cxt,
+			    struct intel_engine_cs *engine,
 			    struct drm_i915_gem_object *batch_obj,
-			    struct drm_i915_gem_object *shadow_batch_obj,
+			    u64 user_batch_start,
 			    u32 batch_start_offset,
 			    u32 batch_len,
-			    bool is_master);
+			    struct drm_i915_gem_object *shadow_batch_obj,
+			    u64 shadow_batch_start);
 
 /* intel_device_info.c */
 static inline struct intel_device_info *

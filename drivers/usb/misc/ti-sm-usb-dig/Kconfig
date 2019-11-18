@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config USB_TI_SM_USB_DIG
+	tristate "TI SM-USB-DIG multi interface adapter"
+	select I2C
+	select NEW_LEDS
+	select LEDS_CLASS
+	select SPI
+	help
+	  Enables the driver for Texas Intstruments SM-USB-DIG multiple
+	  interface adapter. The device provides I2C/SPI/GPIO/W1 interface
+	  to connect various evaluation for TI chips.
+
+	  The driver currently only supports I2C functionality and switching
+	  DUT power (via LED).
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ti-sm-usb-dig.

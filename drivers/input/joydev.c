@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/usb/usb_ids.h>
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@ucw.cz>");
 MODULE_DESCRIPTION("Joystick device interfaces");
@@ -747,14 +748,10 @@ static void joydev_cleanup(struct joydev *joydev)
  * These codes are copied from from hid-ids.h, unfortunately there is no common
  * usb_ids/bt_ids.h header.
  */
-#define USB_VENDOR_ID_SONY			0x054c
 #define USB_DEVICE_ID_SONY_PS3_CONTROLLER		0x0268
 #define USB_DEVICE_ID_SONY_PS4_CONTROLLER		0x05c4
 #define USB_DEVICE_ID_SONY_PS4_CONTROLLER_2		0x09cc
 #define USB_DEVICE_ID_SONY_PS4_CONTROLLER_DONGLE	0x0ba0
-
-#define USB_VENDOR_ID_THQ			0x20d6
-#define USB_DEVICE_ID_THQ_PS3_UDRAW			0xcb17
 
 #define ACCEL_DEV(vnd, prd)						\
 	{								\

@@ -22,6 +22,7 @@
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/usb.h>
+#include <linux/usb/usb_ids.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
@@ -64,7 +65,6 @@ MODULE_PARM_DESC(dma_agg_timeout, "Set DMA aggregation timeout (range 1-127)");
 module_param_named(dma_agg_pages, rtl8xxxu_dma_agg_pages, int, 0600);
 MODULE_PARM_DESC(dma_agg_pages, "Set DMA aggregation pages (range 1-127, 0 to disable)");
 
-#define USB_VENDOR_ID_REALTEK		0x0bda
 #define RTL8XXXU_RX_URBS		32
 #define RTL8XXXU_RX_URB_PENDING_WATER	8
 #define RTL8XXXU_TX_URBS		64

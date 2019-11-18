@@ -24,11 +24,10 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/usb/input.h>
+#include <linux/usb/usb_ids.h>
 #include <linux/hid.h>
 #include <linux/mutex.h>
 #include <linux/input/mt.h>
-
-#define USB_VENDOR_ID_APPLE		0x05ac
 
 /* MacbookAir, aka wellspring */
 #define USB_DEVICE_ID_APPLE_WELLSPRING_ANSI	0x0223

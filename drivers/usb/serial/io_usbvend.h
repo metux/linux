@@ -26,7 +26,6 @@
 //
 
 #define	USB_VENDOR_ID_ION	0x1608		// Our VID
-#define	USB_VENDOR_ID_TI	0x0451		// TI VID
 #define USB_VENDOR_ID_AXIOHM	0x05D9		/* Axiohm VID */
 
 //

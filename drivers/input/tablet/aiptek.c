@@ -62,6 +62,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/usb/input.h>
+#include <linux/usb/usb_ids.h>
 #include <linux/uaccess.h>
 #include <asm/unaligned.h>
 
@@ -162,8 +163,6 @@
  * (Step 9 can be omitted, but you'll then have no function keys.)
  */
 
-#define USB_VENDOR_ID_AIPTEK				0x08ca
-#define USB_VENDOR_ID_KYE				0x0458
 #define USB_REQ_GET_REPORT				0x01
 #define USB_REQ_SET_REPORT				0x09
 

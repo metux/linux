@@ -39,10 +39,10 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/usb.h>
+#include <linux/usb/usb_ids.h>
 #include <linux/input.h>
 #include <linux/usb/input.h>
 
-#define USB_VENDOR_ID_SYNAPTICS	0x06cb
 #define USB_DEVICE_ID_SYNAPTICS_TP	0x0001	/* Synaptics USB TouchPad */
 #define USB_DEVICE_ID_SYNAPTICS_INT_TP	0x0002	/* Integrated USB TouchPad */
 #define USB_DEVICE_ID_SYNAPTICS_CPAD	0x0003	/* Synaptics cPad */

@@ -6309,11 +6309,12 @@ static void intel_encoders_update_complete(struct intel_atomic_state *state)
 	}
 }
 
-static void intel_encoders_pre_pll_enable(struct intel_crtc *crtc,
-					  struct intel_crtc_state *crtc_state,
-					  struct intel_atomic_state *state)
+static void intel_encoders_pre_pll_enable(struct intel_atomic_state *state,
+					  struct intel_crtc *crtc)
 {
-	struct drm_connector_state *conn_state;
+	const struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_connector_state *conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6329,11 +6330,12 @@ static void intel_encoders_pre_pll_enable(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_encoders_pre_enable(struct intel_crtc *crtc,
-				      struct intel_crtc_state *crtc_state,
-				      struct intel_atomic_state *state)
+static void intel_encoders_pre_enable(struct intel_atomic_state *state,
+				      struct intel_crtc *crtc)
 {
-	struct drm_connector_state *conn_state;
+	const struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_connector_state *conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6349,11 +6351,12 @@ static void intel_encoders_pre_enable(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_encoders_enable(struct intel_crtc *crtc,
-				  struct intel_crtc_state *crtc_state,
-				  struct intel_atomic_state *state)
+static void intel_encoders_enable(struct intel_atomic_state *state,
+				  struct intel_crtc *crtc)
 {
-	struct drm_connector_state *conn_state;
+	const struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_connector_state *conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6370,11 +6373,12 @@ static void intel_encoders_enable(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_encoders_disable(struct intel_crtc *crtc,
-				   struct intel_crtc_state *old_crtc_state,
-				   struct intel_atomic_state *state)
+static void intel_encoders_disable(struct intel_atomic_state *state,
+				   struct intel_crtc *crtc)
 {
-	struct drm_connector_state *old_conn_state;
+	const struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
+	const struct drm_connector_state *old_conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6391,11 +6395,12 @@ static void intel_encoders_disable(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_encoders_post_disable(struct intel_crtc *crtc,
-					struct intel_crtc_state *old_crtc_state,
-					struct intel_atomic_state *state)
+static void intel_encoders_post_disable(struct intel_atomic_state *state,
+					struct intel_crtc *crtc)
 {
-	struct drm_connector_state *old_conn_state;
+	const struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
+	const struct drm_connector_state *old_conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6411,11 +6416,12 @@ static void intel_encoders_post_disable(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_encoders_post_pll_disable(struct intel_crtc *crtc,
-					    struct intel_crtc_state *old_crtc_state,
-					    struct intel_atomic_state *state)
+static void intel_encoders_post_pll_disable(struct intel_atomic_state *state,
+					    struct intel_crtc *crtc)
 {
-	struct drm_connector_state *old_conn_state;
+	const struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
+	const struct drm_connector_state *old_conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6431,11 +6437,12 @@ static void intel_encoders_post_pll_disable(struct intel_crtc *crtc,
 	}
 }
 
-static void intel_encoders_update_pipe(struct intel_crtc *crtc,
-				       struct intel_crtc_state *crtc_state,
-				       struct intel_atomic_state *state)
+static void intel_encoders_update_pipe(struct intel_atomic_state *state,
+				       struct intel_crtc *crtc)
 {
-	struct drm_connector_state *conn_state;
+	const struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_connector_state *conn_state;
 	struct drm_connector *conn;
 	int i;
 
@@ -6502,7 +6509,7 @@ static void ironlake_crtc_enable(struct intel_crtc_state *pipe_config,
 
 	intel_crtc->active = true;
 
-	intel_encoders_pre_enable(intel_crtc, pipe_config, state);
+	intel_encoders_pre_enable(state, intel_crtc);
 
 	if (pipe_config->has_pch_encoder) {
 		/* Note: FDI PLL enabling _must_ be done before we enable the
@@ -6535,7 +6542,7 @@ static void ironlake_crtc_enable(struct intel_crtc_state *pipe_config,
 	assert_vblank_disabled(crtc);
 	intel_crtc_vblank_on(pipe_config);
 
-	intel_encoders_enable(intel_crtc, pipe_config, state);
+	intel_encoders_enable(state, intel_crtc);
 
 	if (HAS_PCH_CPT(dev_priv))
 		cpt_verify_modeset(dev, intel_crtc->pipe);
@@ -6619,12 +6626,12 @@ static void haswell_crtc_enable(struct intel_crtc_state *pipe_config,
 	if (WARN_ON(intel_crtc->active))
 		return;
 
-	intel_encoders_pre_pll_enable(intel_crtc, pipe_config, state);
+	intel_encoders_pre_pll_enable(state, intel_crtc);
 
 	if (pipe_config->shared_dpll)
 		intel_enable_shared_dpll(pipe_config);
 
-	intel_encoders_pre_enable(intel_crtc, pipe_config, state);
+	intel_encoders_pre_enable(state, intel_crtc);
 
 	if (intel_crtc_has_dp_encoder(pipe_config))
 		intel_dp_set_m_n(pipe_config, M1_N1);
@@ -6701,7 +6708,7 @@ static void haswell_crtc_enable(struct intel_crtc_state *pipe_config,
 	assert_vblank_disabled(crtc);
 	intel_crtc_vblank_on(pipe_config);
 
-	intel_encoders_enable(intel_crtc, pipe_config, state);
+	intel_encoders_enable(state, intel_crtc);
 
 	if (psl_clkgate_wa) {
 		intel_wait_for_vblank(dev_priv, pipe);
@@ -6749,7 +6756,7 @@ static void ironlake_crtc_disable(struct intel_crtc_state *old_crtc_state,
 	intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, false);
 	intel_set_pch_fifo_underrun_reporting(dev_priv, pipe, false);
 
-	intel_encoders_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_disable(state, intel_crtc);
 
 	drm_crtc_vblank_off(crtc);
 	assert_vblank_disabled(crtc);
@@ -6761,7 +6768,7 @@ static void ironlake_crtc_disable(struct intel_crtc_state *old_crtc_state,
 	if (old_crtc_state->has_pch_encoder)
 		ironlake_fdi_disable(crtc);
 
-	intel_encoders_post_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_post_disable(state, intel_crtc);
 
 	if (old_crtc_state->has_pch_encoder) {
 		ironlake_disable_pch_transcoder(dev_priv, pipe);
@@ -6799,7 +6806,7 @@ static void haswell_crtc_disable(struct intel_crtc_state *old_crtc_state,
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	enum transcoder cpu_transcoder = old_crtc_state->cpu_transcoder;
 
-	intel_encoders_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_disable(state, intel_crtc);
 
 	drm_crtc_vblank_off(crtc);
 	assert_vblank_disabled(crtc);
@@ -6821,9 +6828,9 @@ static void haswell_crtc_disable(struct intel_crtc_state *old_crtc_state,
 	else
 		ironlake_pfit_disable(old_crtc_state);
 
-	intel_encoders_post_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_post_disable(state, intel_crtc);
 
-	intel_encoders_post_pll_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_post_pll_disable(state, intel_crtc);
 }
 
 static void i9xx_pfit_enable(const struct intel_crtc_state *crtc_state)
@@ -7054,7 +7061,7 @@ static void valleyview_crtc_enable(struct intel_crtc_state *pipe_config,
 
 	intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, true);
 
-	intel_encoders_pre_pll_enable(intel_crtc, pipe_config, state);
+	intel_encoders_pre_pll_enable(state, intel_crtc);
 
 	if (IS_CHERRYVIEW(dev_priv)) {
 		chv_prepare_pll(intel_crtc, pipe_config);
@@ -7064,7 +7071,7 @@ static void valleyview_crtc_enable(struct intel_crtc_state *pipe_config,
 		vlv_enable_pll(intel_crtc, pipe_config);
 	}
 
-	intel_encoders_pre_enable(intel_crtc, pipe_config, state);
+	intel_encoders_pre_enable(state, intel_crtc);
 
 	i9xx_pfit_enable(pipe_config);
 
@@ -7079,7 +7086,7 @@ static void valleyview_crtc_enable(struct intel_crtc_state *pipe_config,
 	assert_vblank_disabled(crtc);
 	intel_crtc_vblank_on(pipe_config);
 
-	intel_encoders_enable(intel_crtc, pipe_config, state);
+	intel_encoders_enable(state, intel_crtc);
 }
 
 static void i9xx_set_pll_dividers(const struct intel_crtc_state *crtc_state)
@@ -7118,7 +7125,7 @@ static void i9xx_crtc_enable(struct intel_crtc_state *pipe_config,
 	if (!IS_GEN(dev_priv, 2))
 		intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, true);
 
-	intel_encoders_pre_enable(intel_crtc, pipe_config, state);
+	intel_encoders_pre_enable(state, intel_crtc);
 
 	i9xx_enable_pll(intel_crtc, pipe_config);
 
@@ -7139,7 +7146,7 @@ static void i9xx_crtc_enable(struct intel_crtc_state *pipe_config,
 	assert_vblank_disabled(crtc);
 	intel_crtc_vblank_on(pipe_config);
 
-	intel_encoders_enable(intel_crtc, pipe_config, state);
+	intel_encoders_enable(state, intel_crtc);
 }
 
 static void i9xx_pfit_disable(const struct intel_crtc_state *old_crtc_state)
@@ -7173,7 +7180,7 @@ static void i9xx_crtc_disable(struct intel_crtc_state *old_crtc_state,
 	if (IS_GEN(dev_priv, 2))
 		intel_wait_for_vblank(dev_priv, pipe);
 
-	intel_encoders_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_disable(state, intel_crtc);
 
 	drm_crtc_vblank_off(crtc);
 	assert_vblank_disabled(crtc);
@@ -7182,7 +7189,7 @@ static void i9xx_crtc_disable(struct intel_crtc_state *old_crtc_state,
 
 	i9xx_pfit_disable(old_crtc_state);
 
-	intel_encoders_post_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_post_disable(state, intel_crtc);
 
 	if (!intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DSI)) {
 		if (IS_CHERRYVIEW(dev_priv))
@@ -7193,7 +7200,7 @@ static void i9xx_crtc_disable(struct intel_crtc_state *old_crtc_state,
 			i9xx_disable_pll(old_crtc_state);
 	}
 
-	intel_encoders_post_pll_disable(intel_crtc, old_crtc_state, state);
+	intel_encoders_post_pll_disable(state, intel_crtc);
 
 	if (!IS_GEN(dev_priv, 2))
 		intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, false);
@@ -14368,7 +14375,7 @@ static void intel_update_crtc(struct intel_crtc *crtc,
 		intel_pre_plane_update(old_crtc_state, new_crtc_state);
 
 		if (new_crtc_state->update_pipe)
-			intel_encoders_update_pipe(crtc, new_crtc_state, state);
+			intel_encoders_update_pipe(state, crtc);
 	}
 
 	if (new_crtc_state->update_pipe && !new_crtc_state->enable_fbc)

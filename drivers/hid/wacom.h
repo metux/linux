@@ -90,6 +90,7 @@
 #include <linux/kfifo.h>
 #include <linux/leds.h>
 #include <linux/usb/input.h>
+#include <linux/usb/usb_ids.h>
 #include <linux/power_supply.h>
 #include <asm/unaligned.h>
 
@@ -99,9 +100,6 @@
 #define DRIVER_VERSION "v2.00"
 #define DRIVER_AUTHOR "Vojtech Pavlik <vojtech@ucw.cz>"
 #define DRIVER_DESC "USB Wacom tablet driver"
-
-#define USB_VENDOR_ID_WACOM	0x056a
-#define USB_VENDOR_ID_LENOVO	0x17ef
 
 enum wacom_worker {
 	WACOM_WORKER_WIRELESS,

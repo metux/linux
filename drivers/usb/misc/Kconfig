@@ -172,7 +172,7 @@ config USB_IOWARRIOR
 	help
 	  Say Y here if you want to support the IO Warrior devices from Code
 	  Mercenaries.  This includes support for the following devices:
-	  	IO Warrior 40
+		IO Warrior 40
 		IO Warrior 24
 		IO Warrior 56
 		IO Warrior 24 Power Vampire

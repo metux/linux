@@ -20,7 +20,7 @@
 MODULE_FIRMWARE(HTC_7010_MODULE_FW);
 MODULE_FIRMWARE(HTC_9271_MODULE_FW);
 
-static const struct usb_device_id ath9k_hif_usb_ids[] = {
+DECLARE_MODULE_USB_TABLE(ath9k_hif_usb_ids,
 	{ USB_DEVICE(0x0cf3, 0x9271) }, /* Atheros */
 	{ USB_DEVICE(0x0cf3, 0x1006) }, /* Atheros */
 	{ USB_DEVICE(0x0846, 0x9030) }, /* Netgear N150 */
@@ -61,12 +61,8 @@ static const struct usb_device_id ath9k_hif_usb_ids[] = {
 	  .driver_info = AR9280_USB },  /* Toshiba WLM-20U2 and GN-1080 */
 
 	{ USB_DEVICE(0x0cf3, 0x20ff),
-	  .driver_info = STORAGE_DEVICE },
-
-	{ },
-};
-
-MODULE_DEVICE_TABLE(usb, ath9k_hif_usb_ids);
+	  .driver_info = STORAGE_DEVICE }
+);
 
 static int __hif_usb_tx(struct hif_device_usb *hif_dev);
 

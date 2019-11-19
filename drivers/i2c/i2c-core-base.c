@@ -1420,6 +1420,44 @@ int i2c_add_adapter(struct i2c_adapter *adapter)
 }
 EXPORT_SYMBOL(i2c_add_adapter);
 
+static void devm_i2c_adapter_release(struct device *dev, void *res)
+{
+	i2c_del_adapter(*(struct i2c_adapter**)res);
+}
+
+/**
+ * devm_i2c_add_adapter - devm version of i2c_add_adapter()
+ * @adapter: the adapter to add
+ * @data: private data to attach (if non-NULL)
+ * Context: can sleep
+ */
+int devm_i2c_add_adapter(struct device *parent,
+			 struct i2c_adapter *adap,
+			 void *data)
+{
+	struct i2c_adapter **dr;
+	int rc;
+
+	dr = devres_alloc(devm_i2c_adapter_release, sizeof(*dr), GFP_KERNEL);
+	if (!dr)
+		return -ENOMEM;
+
+	rc = i2c_add_adapter(adap);
+	if (rc) {
+		devres_free(dr);
+		return rc;
+	}
+
+	if (data)
+		i2c_set_adapdata(adap, data);
+
+	*dr = adap;
+	devres_add(parent, dr);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_i2c_add_adapter);
+
 /**
  * i2c_add_numbered_adapter - declare i2c adapter, use static bus number
  * @adap: the adapter to register (with adap->nr initialized)

@@ -146,6 +146,13 @@ struct usb_device_id {
 		__attribute__((aligned(sizeof(kernel_ulong_t))));
 };
 
+#define DECLARE_MODULE_USB_TABLE(name, ...) \
+	static const struct usb_device_id name[] = { \
+		__VA_ARGS__, \
+		{ } /* sentinel */ \
+	}; \
+	MODULE_DEVICE_TABLE(usb, name);
+
 /* Some useful macros to use to create struct usb_device_id */
 #define USB_DEVICE_ID_MATCH_VENDOR		0x0001
 #define USB_DEVICE_ID_MATCH_PRODUCT		0x0002

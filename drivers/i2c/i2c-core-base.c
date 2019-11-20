@@ -2392,7 +2392,7 @@ struct i2c_adapter *i2c_get_adapter(int nr)
 	else
 		adapter = NULL;
 
- exit:
+exit:
 	mutex_unlock(&core_lock);
 	return adapter;
 }

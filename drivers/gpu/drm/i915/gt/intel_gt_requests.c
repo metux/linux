@@ -4,6 +4,7 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include "i915_drv.h" /* for_each_engine() */
 #include "i915_request.h"
 #include "intel_gt.h"
 #include "intel_gt_pm.h"
@@ -19,12 +20,20 @@ static void retire_requests(struct intel_timeline *tl)
 			break;
 }
 
+static void flush_submission(struct intel_gt *gt)
+{
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+
+	for_each_engine(engine, gt, id)
+		intel_engine_flush_submission(engine);
+}
+
 long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 {
 	struct intel_gt_timelines *timelines = &gt->timelines;
 	struct intel_timeline *tl, *tn;
 	unsigned long active_count = 0;
-	unsigned long flags;
 	bool interruptible;
 	LIST_HEAD(free);
 
@@ -32,15 +41,19 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 	if (unlikely(timeout < 0))
 		timeout = -timeout, interruptible = false;
 
-	spin_lock_irqsave(&timelines->lock, flags);
+	flush_submission(gt); /* kick the ksoftirqd tasklets */
+
+	spin_lock(&timelines->lock);
 	list_for_each_entry_safe(tl, tn, &timelines->active_list, link) {
-		if (!mutex_trylock(&tl->mutex))
+		if (!mutex_trylock(&tl->mutex)) {
+			active_count++; /* report busy to caller, try again? */
 			continue;
+		}
 
 		intel_timeline_get(tl);
-		GEM_BUG_ON(!tl->active_count);
-		tl->active_count++; /* pin the list element */
-		spin_unlock_irqrestore(&timelines->lock, flags);
+		GEM_BUG_ON(!atomic_read(&tl->active_count));
+		atomic_inc(&tl->active_count); /* pin the list element */
+		spin_unlock(&timelines->lock);
 
 		if (timeout > 0) {
 			struct dma_fence *fence;
@@ -48,7 +61,7 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 			fence = i915_active_fence_get(&tl->last_request);
 			if (fence) {
 				timeout = dma_fence_wait_timeout(fence,
-								 true,
+								 interruptible,
 								 timeout);
 				dma_fence_put(fence);
 			}
@@ -56,24 +69,24 @@ long intel_gt_retire_requests_timeout(struct intel_gt *gt, long timeout)
 
 		retire_requests(tl);
 
-		spin_lock_irqsave(&timelines->lock, flags);
+		spin_lock(&timelines->lock);
 
 		/* Resume iteration after dropping lock */
 		list_safe_reset_next(tl, tn, link);
-		if (--tl->active_count)
-			active_count += !!rcu_access_pointer(tl->last_request.fence);
-		else
+		if (atomic_dec_and_test(&tl->active_count))
 			list_del(&tl->link);
+		else
+			active_count += !!rcu_access_pointer(tl->last_request.fence);
 
 		mutex_unlock(&tl->mutex);
 
 		/* Defer the final release to after the spinlock */
 		if (refcount_dec_and_test(&tl->kref.refcount)) {
-			GEM_BUG_ON(tl->active_count);
+			GEM_BUG_ON(atomic_read(&tl->active_count));
 			list_add(&tl->link, &free);
 		}
 	}
-	spin_unlock_irqrestore(&timelines->lock, flags);
+	spin_unlock(&timelines->lock);
 
 	list_for_each_entry_safe(tl, tn, &free, link)
 		__intel_timeline_free(&tl->kref);
@@ -101,9 +114,9 @@ static void retire_work_handler(struct work_struct *work)
 	struct intel_gt *gt =
 		container_of(work, typeof(*gt), requests.retire_work.work);
 
-	intel_gt_retire_requests(gt);
 	schedule_delayed_work(&gt->requests.retire_work,
 			      round_jiffies_up_relative(HZ));
+	intel_gt_retire_requests(gt);
 }
 
 void intel_gt_init_requests(struct intel_gt *gt)
@@ -120,4 +133,10 @@ void intel_gt_unpark_requests(struct intel_gt *gt)
 {
 	schedule_delayed_work(&gt->requests.retire_work,
 			      round_jiffies_up_relative(HZ));
+}
+
+void intel_gt_fini_requests(struct intel_gt *gt)
+{
+	/* Wait until the work is marked as finished before unloading! */
+	cancel_delayed_work_sync(&gt->requests.retire_work);
 }

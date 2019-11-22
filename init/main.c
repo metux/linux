@@ -1058,8 +1058,17 @@ static void __init do_initcall_level(int level)
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(initcall_from_entry(fn));
 
-	for (fn = initdrv_plat_levels[level]; fn < initdrv_plat_levels[level+1]; fn++)
+	// HACK: ugly debug output - not doing it too early :o
+	if (level > 2) {
+		printk(KERN_INFO "do_initcall_level: %d %s\n", level, initcall_level_names[level]);
+	}
+
+	for (fn = initdrv_plat_levels[level]; fn < initdrv_plat_levels[level+1]; fn++) {
+		if (level > 2) {
+			printk(KERN_INFO "do_initcall_level: platform driver %p %i\n", fn, *fn);
+		}
 		do_one_initdrv_plat(initdrv_plat_from_entry(fn));
+	}
 }
 
 static void __init do_initcalls(void)

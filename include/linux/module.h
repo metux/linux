@@ -233,6 +233,12 @@ extern typeof(name) __mod_##type##__##name##_device_table		\
 #define MODULE_DEVICE_TABLE(type, name)
 #endif
 
+/*
+#define REGISTER_PLATFORM_DRIVER(name)					\
+extern typeof(name) __mod_##type##__##name##_device_table		\
+    __attribute__ ((unused, alias(__stringify(name))))
+*/
+
 /* Version of form [<epoch>:]<version>[-<extra-version>].
  * Or for CVS/RCS ID version, everything but the number is stripped.
  * <epoch>: A (small) unsigned integer which allows you to start versions

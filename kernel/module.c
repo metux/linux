@@ -3574,6 +3574,7 @@ static noinline int do_init_module(struct module *mod)
 	/* Start the module */
 	if (mod->init != NULL)
 		ret = do_one_initcall(mod->init);
+// FIXME: do platform driver init here
 	if (ret < 0) {
 		goto fail_free_freeinit;
 	}

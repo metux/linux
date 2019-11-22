@@ -93,6 +93,7 @@
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
 #include <linux/mem_encrypt.h>
+#include <linux/platform_device.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -954,6 +955,35 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	return ret;
 }
 
+int __init_or_module do_one_initdrv_plat(struct platform_driver *pd)
+{
+	int count = preempt_count();
+	char msgbuf[64];
+	int ret;
+/*
+	if (initcall_blacklisted(pd))
+		return -EPERM;
+*/
+
+//	do_trace_initcall_start(pd);
+	ret = platform_driver_register(pd);
+//	do_trace_initcall_finish(pd, ret);
+
+	msgbuf[0] = 0;
+
+	if (preempt_count() != count) {
+		sprintf(msgbuf, "PD: preemption imbalance ");
+		preempt_count_set(count);
+	}
+	if (irqs_disabled()) {
+		strlcat(msgbuf, "PD: disabled interrupts ", sizeof(msgbuf));
+		local_irq_enable();
+	}
+	WARN(msgbuf[0], "PD platform_driver_register %pS returned with %s\n", pd, msgbuf);
+
+	add_latent_entropy();
+	return ret;
+}
 
 extern initcall_entry_t __initcall_start[];
 extern initcall_entry_t __initcall0_start[];
@@ -976,6 +1006,29 @@ static initcall_entry_t *initcall_levels[] __initdata = {
 	__initcall6_start,
 	__initcall7_start,
 	__initcall_end,
+};
+
+extern initcall_entry_t __initdrv_plat_start[];
+extern initcall_entry_t __initdrv_plat0_start[];
+extern initcall_entry_t __initdrv_plat1_start[];
+extern initcall_entry_t __initdrv_plat2_start[];
+extern initcall_entry_t __initdrv_plat3_start[];
+extern initcall_entry_t __initdrv_plat4_start[];
+extern initcall_entry_t __initdrv_plat5_start[];
+extern initcall_entry_t __initdrv_plat6_start[];
+extern initcall_entry_t __initdrv_plat7_start[];
+extern initcall_entry_t __initdrv_plat_end[];
+
+static initcall_entry_t *initdrv_plat_levels[] __initdata = {
+	__initdrv_plat0_start,
+	__initdrv_plat1_start,
+	__initdrv_plat2_start,
+	__initdrv_plat3_start,
+	__initdrv_plat4_start,
+	__initdrv_plat5_start,
+	__initdrv_plat6_start,
+	__initdrv_plat7_start,
+	__initdrv_plat_end,
 };
 
 /* Keep these in sync with initcalls in include/linux/init.h */
@@ -1004,6 +1057,9 @@ static void __init do_initcall_level(int level)
 	trace_initcall_level(initcall_level_names[level]);
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(initcall_from_entry(fn));
+
+	for (fn = initdrv_plat_levels[level]; fn < initdrv_plat_levels[level+1]; fn++)
+		do_one_initdrv_plat(initdrv_plat_from_entry(fn));
 }
 
 static void __init do_initcalls(void)

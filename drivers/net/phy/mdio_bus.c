@@ -62,8 +62,8 @@ static int mdiobus_register_reset(struct mdio_device *mdiodev)
 	struct reset_control *reset = NULL;
 
 	if (mdiodev->dev.of_node)
-		reset = devm_reset_control_get_exclusive(&mdiodev->dev,
-							 "phy");
+		reset = of_reset_control_get_exclusive(mdiodev->dev.of_node,
+						       "phy");
 	if (IS_ERR(reset)) {
 		if (PTR_ERR(reset) == -ENOENT || PTR_ERR(reset) == -ENOSYS ||
 		    PTR_ERR(reset) == -ENOTSUPP)
@@ -107,6 +107,8 @@ int mdiobus_unregister_device(struct mdio_device *mdiodev)
 {
 	if (mdiodev->bus->mdio_map[mdiodev->addr] != mdiodev)
 		return -EINVAL;
+
+	reset_control_put(mdiodev->reset_ctrl);
 
 	mdiodev->bus->mdio_map[mdiodev->addr] = NULL;
 

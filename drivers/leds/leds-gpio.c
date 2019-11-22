@@ -311,8 +311,7 @@ static struct platform_driver gpio_led_driver = {
 		.of_match_table = of_gpio_leds_match,
 	},
 };
-
-module_platform_driver(gpio_led_driver);
+MODULE_PLATFORM_DRIVER(gpio_led_driver);
 
 MODULE_AUTHOR("Raphael Assenat <raph@8d.com>, Trent Piepho <tpiepho@freescale.com>");
 MODULE_DESCRIPTION("GPIO LED driver");

@@ -257,6 +257,15 @@ static inline void platform_set_drvdata(struct platform_device *pdev,
 	module_driver(__platform_driver, platform_driver_register, \
 			platform_driver_unregister)
 
+#ifdef MODULE
+#define MODULE_PLATFORM_DRIVER(__platform_driver) \
+	module_driver(__platform_driver, platform_driver_register, \
+			platform_driver_unregister)
+#else
+#define MODULE_PLATFORM_DRIVER(__platform_driver) \
+	__define_platform_driver(__platform_driver, 6)
+#endif
+
 /* builtin_platform_driver() - Helper macro for builtin drivers that
  * don't do anything special in driver init.  This eliminates some
  * boilerplate.  Each driver may only use this macro once, and

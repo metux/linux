@@ -97,6 +97,7 @@
 #include <linux/mem_encrypt.h>
 #include <linux/kcsan.h>
 #include <linux/init_syscalls.h>
+#include <linux/platform_device.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -1239,6 +1240,22 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	return ret;
 }
 
+struct platform_driver;
+
+int __init_or_module do_one_initdrv_plat(struct platform_driver *pd)
+{
+	int rc;
+
+	rc = platform_driver_register(pd);
+	if (rc)
+		pr_warn("init: failed registering platform driver: %s: %d\n",
+			pd->driver.name, rc);
+	else
+		pr_info("init: registered platform driver: %s\n",
+			pd->driver.name);
+
+	return rc;
+}
 
 extern initcall_entry_t __initcall_start[];
 extern initcall_entry_t __initcall0_start[];
@@ -1261,6 +1278,29 @@ static initcall_entry_t *initcall_levels[] __initdata = {
 	__initcall6_start,
 	__initcall7_start,
 	__initcall_end,
+};
+
+extern initcall_entry_t __initdrv_plat_start[];
+extern initcall_entry_t __initdrv_plat0_start[];
+extern initcall_entry_t __initdrv_plat1_start[];
+extern initcall_entry_t __initdrv_plat2_start[];
+extern initcall_entry_t __initdrv_plat3_start[];
+extern initcall_entry_t __initdrv_plat4_start[];
+extern initcall_entry_t __initdrv_plat5_start[];
+extern initcall_entry_t __initdrv_plat6_start[];
+extern initcall_entry_t __initdrv_plat7_start[];
+extern initcall_entry_t __initdrv_plat_end[];
+
+static initcall_entry_t *initdrv_plat_levels[] __initdata = {
+	__initdrv_plat0_start,
+	__initdrv_plat1_start,
+	__initdrv_plat2_start,
+	__initdrv_plat3_start,
+	__initdrv_plat4_start,
+	__initdrv_plat5_start,
+	__initdrv_plat6_start,
+	__initdrv_plat7_start,
+	__initdrv_plat_end,
 };
 
 /* Keep these in sync with initcalls in include/linux/init.h */
@@ -1294,6 +1334,9 @@ static void __init do_initcall_level(int level, char *command_line)
 	trace_initcall_level(initcall_level_names[level]);
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(initcall_from_entry(fn));
+
+	for (fn = initdrv_plat_levels[level]; fn < initdrv_plat_levels[level+1]; fn++)
+		do_one_initdrv_plat(initdrv_plat_from_entry(fn));
 }
 
 static void __init do_initcalls(void)

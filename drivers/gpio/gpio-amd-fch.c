@@ -183,8 +183,7 @@ static struct platform_driver amd_fch_gpio_driver = {
 	},
 	.probe = amd_fch_gpio_probe,
 };
-
-module_platform_driver(amd_fch_gpio_driver);
+MODULE_PLATFORM_DRIVER(amd_fch_gpio_driver);
 
 MODULE_AUTHOR("Enrico Weigelt, metux IT consult <info@metux.net>");
 MODULE_DESCRIPTION("AMD G-series FCH GPIO driver");

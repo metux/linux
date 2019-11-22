@@ -123,10 +123,20 @@ static inline initcall_t initcall_from_entry(initcall_entry_t *entry)
 {
 	return offset_to_ptr(entry);
 }
+
+static inline struct platform_driver *initdrv_plat_from_entry(initcall_entry_t *entry)
+{
+	return offset_to_ptr(entry);
+}
 #else
 typedef initcall_t initcall_entry_t;
 
 static inline initcall_t initcall_from_entry(initcall_entry_t *entry)
+{
+	return *entry;
+}
+
+static inline struct platform_driver *initdrv_plat_from_entry(initcall_entry_t *entry)
 {
 	return *entry;
 }
@@ -191,13 +201,28 @@ extern bool initcall_debug;
 	"__initcall_" #fn #id ":			\n"	\
 	    ".long	" #fn " - .			\n"	\
 	    ".previous					\n");
+
+#define ___define_platform_driver(pd, id, __sec)		\
+	__ADDRESSABLE(pd)					\
+	asm(".section	\"" #__sec ".init\", \"a\"	\n"	\
+	"__plat_drv__" #pd #id ":			\n"	\
+	    ".long	" #pd " - .			\n"	\
+	    ".previous					\n");
+
+
 #else
 #define ___define_initcall(fn, id, __sec) \
 	static initcall_t __initcall_##fn##id __used \
 		__attribute__((__section__(#__sec ".init"))) = fn;
+
+#define ___define_platform_driver(fn, id, __sec) \
+	static initcall_t __initcall_##pd##id __used \
+		__attribute__((__section__(#__sec ".init"))) = fn;
+
 #endif
 
 #define __define_initcall(fn, id) ___define_initcall(fn, id, .initcall##id)
+#define __define_platform_driver(fn, id) ___define_platform_driver(fn, id, .initdrv_plat##id)
 
 /*
  * Early initcalls run before initializing SMP.

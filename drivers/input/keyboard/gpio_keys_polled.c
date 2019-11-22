@@ -383,7 +383,7 @@ static struct platform_driver gpio_keys_polled_driver = {
 		.of_match_table = gpio_keys_polled_of_match,
 	},
 };
-module_platform_driver(gpio_keys_polled_driver);
+MODULE_PLATFORM_DRIVER(gpio_keys_polled_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Gabor Juhos <juhosg@openwrt.org>");

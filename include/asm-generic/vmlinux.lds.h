@@ -929,6 +929,25 @@
 		INIT_CALLS_LEVEL(7)					\
 		__initcall_end = .;
 
+#define INIT_DRVS_PLAT_LEVEL(level)					\
+		__initdrv_plat##level##_start = .;			\
+		KEEP(*(.initdrv_plat##level##.init))			\
+		KEEP(*(.initdrv_plat##level##s.init))			\
+
+#define INIT_DRVS							\
+		__initdrv_plat_start = .;				\
+		KEEP(*(.initdrv_plat_early.init))			\
+		INIT_DRVS_PLAT_LEVEL(0)					\
+		INIT_DRVS_PLAT_LEVEL(1)					\
+		INIT_DRVS_PLAT_LEVEL(2)					\
+		INIT_DRVS_PLAT_LEVEL(3)					\
+		INIT_DRVS_PLAT_LEVEL(4)					\
+		INIT_DRVS_PLAT_LEVEL(5)					\
+		INIT_DRVS_PLAT_LEVEL(rootfs)				\
+		INIT_DRVS_PLAT_LEVEL(6)					\
+		INIT_DRVS_PLAT_LEVEL(7)					\
+		__initdrv_plat_end = .;
+
 #define CON_INITCALL							\
 		__con_initcall_start = .;				\
 		KEEP(*(.con_initcall.init))				\
@@ -1139,6 +1158,7 @@
 		INIT_DATA						\
 		INIT_SETUP(initsetup_align)				\
 		INIT_CALLS						\
+		INIT_DRVS						\
 		CON_INITCALL						\
 		INIT_RAM_FS						\
 	}

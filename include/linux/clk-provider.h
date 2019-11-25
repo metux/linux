@@ -773,7 +773,6 @@ struct clk_gpio {
 #define to_clk_gpio(_hw) container_of(_hw, struct clk_gpio, hw)
 
 extern const struct clk_ops clk_gpio_gate_ops;
-void clk_hw_unregister_gpio_gate(struct clk_hw *hw);
 
 extern const struct clk_ops clk_gpio_mux_ops;
 struct clk *clk_register_gpio_mux(struct device *dev, const char *name,

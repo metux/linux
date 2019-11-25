@@ -186,7 +186,7 @@ struct clk_hw *clk_hw_register_gpio_gate(struct device *dev, const char *name,
 }
 EXPORT_SYMBOL_GPL(clk_hw_register_gpio_gate);
 
-struct clk *clk_register_gpio_gate(struct device *dev, const char *name,
+static struct clk *clk_register_gpio_gate(struct device *dev, const char *name,
 		const char *parent_name, struct gpio_desc *gpiod,
 		unsigned long flags)
 {
@@ -197,7 +197,6 @@ struct clk *clk_register_gpio_gate(struct device *dev, const char *name,
 		return ERR_CAST(hw);
 	return hw->clk;
 }
-EXPORT_SYMBOL_GPL(clk_register_gpio_gate);
 
 /**
  * clk_hw_register_gpio_mux - register a gpio clock mux with the clock framework

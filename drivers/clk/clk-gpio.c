@@ -220,7 +220,7 @@ struct clk_hw *clk_hw_register_gpio_mux(struct device *dev, const char *name,
 }
 EXPORT_SYMBOL_GPL(clk_hw_register_gpio_mux);
 
-struct clk *clk_register_gpio_mux(struct device *dev, const char *name,
+static struct clk *clk_register_gpio_mux(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents, struct gpio_desc *gpiod,
 		unsigned long flags)
 {
@@ -232,7 +232,6 @@ struct clk *clk_register_gpio_mux(struct device *dev, const char *name,
 		return ERR_CAST(hw);
 	return hw->clk;
 }
-EXPORT_SYMBOL_GPL(clk_register_gpio_mux);
 
 static int gpio_clk_driver_probe(struct platform_device *pdev)
 {

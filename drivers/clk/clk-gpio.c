@@ -111,12 +111,11 @@ static int clk_gpio_mux_set_parent(struct clk_hw *hw, u8 index)
 	return 0;
 }
 
-const struct clk_ops clk_gpio_mux_ops = {
+static const struct clk_ops clk_gpio_mux_ops = {
 	.get_parent = clk_gpio_mux_get_parent,
 	.set_parent = clk_gpio_mux_set_parent,
 	.determine_rate = __clk_mux_determine_rate,
 };
-EXPORT_SYMBOL_GPL(clk_gpio_mux_ops);
 
 static struct clk_hw *clk_register_gpio(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents, struct gpio_desc *gpiod,

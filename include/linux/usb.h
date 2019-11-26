@@ -1790,11 +1790,15 @@ void usb_buffer_unmap_sg(const struct usb_device *dev, int is_in,
 extern int usb_control_msg(struct usb_device *dev, unsigned int pipe,
 	__u8 request, __u8 requesttype, __u16 value, __u16 index,
 	void *data, __u16 size, int timeout);
-extern int usb_interrupt_msg(struct usb_device *usb_dev, unsigned int pipe,
-	void *data, int len, int *actual_length, int timeout);
 extern int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe,
 	void *data, int len, int *actual_length,
 	int timeout);
+
+static inline int usb_interrupt_msg(struct usb_device *usb_dev, unsigned int pipe,
+	void *data, int len, int *actual_length, int timeout)
+{
+	return usb_bulk_msg(usb_dev, pipe, data, len, actual_length, timeout);
+}
 
 /* wrappers around usb_control_msg() for the most common standard requests */
 extern int usb_get_descriptor(struct usb_device *dev, unsigned char desctype,

@@ -511,12 +511,12 @@ static void pwm_apply_state_debug(struct pwm_device *pwm,
 	    last->period > s2.period &&
 	    last->period <= state->period)
 		dev_warn(chip->dev,
-			 ".apply didn't pick the best available period (requested: %llu, applied: %llu, possible: %llu)\n",
+			 ".apply didn't pick the best available period (requested: %u, applied: %u, possible: %u)\n",
 			 state->period, s2.period, last->period);
 
 	if (state->enabled && state->period < s2.period)
 		dev_warn(chip->dev,
-			 ".apply is supposed to round down period (requested: %llu, applied: %llu)\n",
+			 ".apply is supposed to round down period (requested: %u, applied: %u)\n",
 			 state->period, s2.period);
 
 	if (state->enabled &&
@@ -525,14 +525,14 @@ static void pwm_apply_state_debug(struct pwm_device *pwm,
 	    last->duty_cycle > s2.duty_cycle &&
 	    last->duty_cycle <= state->duty_cycle)
 		dev_warn(chip->dev,
-			 ".apply didn't pick the best available duty cycle (requested: %llu/%llu, applied: %llu/%llu, possible: %llu/%llu)\n",
+			 ".apply didn't pick the best available duty cycle (requested: %u/%u, applied: %u/%u, possible: %u/%u)\n",
 			 state->duty_cycle, state->period,
 			 s2.duty_cycle, s2.period,
 			 last->duty_cycle, last->period);
 
 	if (state->enabled && state->duty_cycle < s2.duty_cycle)
 		dev_warn(chip->dev,
-			 ".apply is supposed to round down duty_cycle (requested: %llu/%llu, applied: %llu/%llu)\n",
+			 ".apply is supposed to round down duty_cycle (requested: %u/%u, applied: %u/%u)\n",
 			 state->duty_cycle, state->period,
 			 s2.duty_cycle, s2.period);
 
@@ -559,7 +559,7 @@ static void pwm_apply_state_debug(struct pwm_device *pwm,
 	    (s1.enabled && s1.period != last->period) ||
 	    (s1.enabled && s1.duty_cycle != last->duty_cycle)) {
 		dev_err(chip->dev,
-			".apply is not idempotent (ena=%d pol=%d %llu/%llu) -> (ena=%d pol=%d %llu/%llu)\n",
+			".apply is not idempotent (ena=%d pol=%d %u/%u) -> (ena=%d pol=%d %u/%u)\n",
 			s1.enabled, s1.polarity, s1.duty_cycle, s1.period,
 			last->enabled, last->polarity, last->duty_cycle,
 			last->period);
@@ -1328,19 +1328,30 @@ static int pwm_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-static const struct seq_operations pwm_debugfs_sops = {
+static const struct seq_operations pwm_seq_ops = {
 	.start = pwm_seq_start,
 	.next = pwm_seq_next,
 	.stop = pwm_seq_stop,
 	.show = pwm_seq_show,
 };
 
-DEFINE_SEQ_ATTRIBUTE(pwm_debugfs);
+static int pwm_seq_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &pwm_seq_ops);
+}
+
+static const struct file_operations pwm_debugfs_ops = {
+	.owner = THIS_MODULE,
+	.open = pwm_seq_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
 
 static int __init pwm_debugfs_init(void)
 {
 	debugfs_create_file("pwm", S_IFREG | S_IRUGO, NULL, NULL,
-			    &pwm_debugfs_fops);
+			    &pwm_debugfs_ops);
 
 	return 0;
 }

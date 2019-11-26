@@ -204,7 +204,7 @@ static struct clk *clk_register_gpio_gate(struct device *dev, const char *name,
  * @gpiod: gpio descriptor to gate this clock
  * @flags: clock flags
  */
-struct clk_hw *clk_hw_register_gpio_mux(struct device *dev, const char *name,
+static struct clk_hw *clk_hw_register_gpio_mux(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents, struct gpio_desc *gpiod,
 		unsigned long flags)
 {
@@ -216,7 +216,6 @@ struct clk_hw *clk_hw_register_gpio_mux(struct device *dev, const char *name,
 	return clk_register_gpio(dev, name, parent_names, num_parents,
 			gpiod, flags, &clk_gpio_mux_ops);
 }
-EXPORT_SYMBOL_GPL(clk_hw_register_gpio_mux);
 
 static struct clk *clk_register_gpio_mux(struct device *dev, const char *name,
 		const char * const *parent_names, u8 num_parents, struct gpio_desc *gpiod,

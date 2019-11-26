@@ -77,9 +77,6 @@
 
 #endif /* cmpxchg64_relaxed */
 
-#define arch_atomic_read atomic_read
-#define arch_atomic_read_acquire atomic_read_acquire
-
 #ifndef atomic_read_acquire
 static __always_inline int
 atomic_read_acquire(const atomic_t *v)
@@ -89,9 +86,6 @@ atomic_read_acquire(const atomic_t *v)
 #define atomic_read_acquire atomic_read_acquire
 #endif
 
-#define arch_atomic_set atomic_set
-#define arch_atomic_set_release atomic_set_release
-
 #ifndef atomic_set_release
 static __always_inline void
 atomic_set_release(atomic_t *v, int i)
@@ -100,13 +94,6 @@ atomic_set_release(atomic_t *v, int i)
 }
 #define atomic_set_release atomic_set_release
 #endif
-
-#define arch_atomic_add atomic_add
-
-#define arch_atomic_add_return atomic_add_return
-#define arch_atomic_add_return_acquire atomic_add_return_acquire
-#define arch_atomic_add_return_release atomic_add_return_release
-#define arch_atomic_add_return_relaxed atomic_add_return_relaxed
 
 #ifndef atomic_add_return_relaxed
 #define atomic_add_return_acquire atomic_add_return
@@ -150,11 +137,6 @@ atomic_add_return(int i, atomic_t *v)
 
 #endif /* atomic_add_return_relaxed */
 
-#define arch_atomic_fetch_add atomic_fetch_add
-#define arch_atomic_fetch_add_acquire atomic_fetch_add_acquire
-#define arch_atomic_fetch_add_release atomic_fetch_add_release
-#define arch_atomic_fetch_add_relaxed atomic_fetch_add_relaxed
-
 #ifndef atomic_fetch_add_relaxed
 #define atomic_fetch_add_acquire atomic_fetch_add
 #define atomic_fetch_add_release atomic_fetch_add
@@ -196,13 +178,6 @@ atomic_fetch_add(int i, atomic_t *v)
 #endif
 
 #endif /* atomic_fetch_add_relaxed */
-
-#define arch_atomic_sub atomic_sub
-
-#define arch_atomic_sub_return atomic_sub_return
-#define arch_atomic_sub_return_acquire atomic_sub_return_acquire
-#define arch_atomic_sub_return_release atomic_sub_return_release
-#define arch_atomic_sub_return_relaxed atomic_sub_return_relaxed
 
 #ifndef atomic_sub_return_relaxed
 #define atomic_sub_return_acquire atomic_sub_return
@@ -246,11 +221,6 @@ atomic_sub_return(int i, atomic_t *v)
 
 #endif /* atomic_sub_return_relaxed */
 
-#define arch_atomic_fetch_sub atomic_fetch_sub
-#define arch_atomic_fetch_sub_acquire atomic_fetch_sub_acquire
-#define arch_atomic_fetch_sub_release atomic_fetch_sub_release
-#define arch_atomic_fetch_sub_relaxed atomic_fetch_sub_relaxed
-
 #ifndef atomic_fetch_sub_relaxed
 #define atomic_fetch_sub_acquire atomic_fetch_sub
 #define atomic_fetch_sub_release atomic_fetch_sub
@@ -293,8 +263,6 @@ atomic_fetch_sub(int i, atomic_t *v)
 
 #endif /* atomic_fetch_sub_relaxed */
 
-#define arch_atomic_inc atomic_inc
-
 #ifndef atomic_inc
 static __always_inline void
 atomic_inc(atomic_t *v)
@@ -303,11 +271,6 @@ atomic_inc(atomic_t *v)
 }
 #define atomic_inc atomic_inc
 #endif
-
-#define arch_atomic_inc_return atomic_inc_return
-#define arch_atomic_inc_return_acquire atomic_inc_return_acquire
-#define arch_atomic_inc_return_release atomic_inc_return_release
-#define arch_atomic_inc_return_relaxed atomic_inc_return_relaxed
 
 #ifndef atomic_inc_return_relaxed
 #ifdef atomic_inc_return
@@ -390,11 +353,6 @@ atomic_inc_return(atomic_t *v)
 
 #endif /* atomic_inc_return_relaxed */
 
-#define arch_atomic_fetch_inc atomic_fetch_inc
-#define arch_atomic_fetch_inc_acquire atomic_fetch_inc_acquire
-#define arch_atomic_fetch_inc_release atomic_fetch_inc_release
-#define arch_atomic_fetch_inc_relaxed atomic_fetch_inc_relaxed
-
 #ifndef atomic_fetch_inc_relaxed
 #ifdef atomic_fetch_inc
 #define atomic_fetch_inc_acquire atomic_fetch_inc
@@ -476,8 +434,6 @@ atomic_fetch_inc(atomic_t *v)
 
 #endif /* atomic_fetch_inc_relaxed */
 
-#define arch_atomic_dec atomic_dec
-
 #ifndef atomic_dec
 static __always_inline void
 atomic_dec(atomic_t *v)
@@ -486,11 +442,6 @@ atomic_dec(atomic_t *v)
 }
 #define atomic_dec atomic_dec
 #endif
-
-#define arch_atomic_dec_return atomic_dec_return
-#define arch_atomic_dec_return_acquire atomic_dec_return_acquire
-#define arch_atomic_dec_return_release atomic_dec_return_release
-#define arch_atomic_dec_return_relaxed atomic_dec_return_relaxed
 
 #ifndef atomic_dec_return_relaxed
 #ifdef atomic_dec_return
@@ -573,11 +524,6 @@ atomic_dec_return(atomic_t *v)
 
 #endif /* atomic_dec_return_relaxed */
 
-#define arch_atomic_fetch_dec atomic_fetch_dec
-#define arch_atomic_fetch_dec_acquire atomic_fetch_dec_acquire
-#define arch_atomic_fetch_dec_release atomic_fetch_dec_release
-#define arch_atomic_fetch_dec_relaxed atomic_fetch_dec_relaxed
-
 #ifndef atomic_fetch_dec_relaxed
 #ifdef atomic_fetch_dec
 #define atomic_fetch_dec_acquire atomic_fetch_dec
@@ -659,13 +605,6 @@ atomic_fetch_dec(atomic_t *v)
 
 #endif /* atomic_fetch_dec_relaxed */
 
-#define arch_atomic_and atomic_and
-
-#define arch_atomic_fetch_and atomic_fetch_and
-#define arch_atomic_fetch_and_acquire atomic_fetch_and_acquire
-#define arch_atomic_fetch_and_release atomic_fetch_and_release
-#define arch_atomic_fetch_and_relaxed atomic_fetch_and_relaxed
-
 #ifndef atomic_fetch_and_relaxed
 #define atomic_fetch_and_acquire atomic_fetch_and
 #define atomic_fetch_and_release atomic_fetch_and
@@ -708,8 +647,6 @@ atomic_fetch_and(int i, atomic_t *v)
 
 #endif /* atomic_fetch_and_relaxed */
 
-#define arch_atomic_andnot atomic_andnot
-
 #ifndef atomic_andnot
 static __always_inline void
 atomic_andnot(int i, atomic_t *v)
@@ -718,11 +655,6 @@ atomic_andnot(int i, atomic_t *v)
 }
 #define atomic_andnot atomic_andnot
 #endif
-
-#define arch_atomic_fetch_andnot atomic_fetch_andnot
-#define arch_atomic_fetch_andnot_acquire atomic_fetch_andnot_acquire
-#define arch_atomic_fetch_andnot_release atomic_fetch_andnot_release
-#define arch_atomic_fetch_andnot_relaxed atomic_fetch_andnot_relaxed
 
 #ifndef atomic_fetch_andnot_relaxed
 #ifdef atomic_fetch_andnot
@@ -805,13 +737,6 @@ atomic_fetch_andnot(int i, atomic_t *v)
 
 #endif /* atomic_fetch_andnot_relaxed */
 
-#define arch_atomic_or atomic_or
-
-#define arch_atomic_fetch_or atomic_fetch_or
-#define arch_atomic_fetch_or_acquire atomic_fetch_or_acquire
-#define arch_atomic_fetch_or_release atomic_fetch_or_release
-#define arch_atomic_fetch_or_relaxed atomic_fetch_or_relaxed
-
 #ifndef atomic_fetch_or_relaxed
 #define atomic_fetch_or_acquire atomic_fetch_or
 #define atomic_fetch_or_release atomic_fetch_or
@@ -853,13 +778,6 @@ atomic_fetch_or(int i, atomic_t *v)
 #endif
 
 #endif /* atomic_fetch_or_relaxed */
-
-#define arch_atomic_xor atomic_xor
-
-#define arch_atomic_fetch_xor atomic_fetch_xor
-#define arch_atomic_fetch_xor_acquire atomic_fetch_xor_acquire
-#define arch_atomic_fetch_xor_release atomic_fetch_xor_release
-#define arch_atomic_fetch_xor_relaxed atomic_fetch_xor_relaxed
 
 #ifndef atomic_fetch_xor_relaxed
 #define atomic_fetch_xor_acquire atomic_fetch_xor
@@ -903,11 +821,6 @@ atomic_fetch_xor(int i, atomic_t *v)
 
 #endif /* atomic_fetch_xor_relaxed */
 
-#define arch_atomic_xchg atomic_xchg
-#define arch_atomic_xchg_acquire atomic_xchg_acquire
-#define arch_atomic_xchg_release atomic_xchg_release
-#define arch_atomic_xchg_relaxed atomic_xchg_relaxed
-
 #ifndef atomic_xchg_relaxed
 #define atomic_xchg_acquire atomic_xchg
 #define atomic_xchg_release atomic_xchg
@@ -950,11 +863,6 @@ atomic_xchg(atomic_t *v, int i)
 
 #endif /* atomic_xchg_relaxed */
 
-#define arch_atomic_cmpxchg atomic_cmpxchg
-#define arch_atomic_cmpxchg_acquire atomic_cmpxchg_acquire
-#define arch_atomic_cmpxchg_release atomic_cmpxchg_release
-#define arch_atomic_cmpxchg_relaxed atomic_cmpxchg_relaxed
-
 #ifndef atomic_cmpxchg_relaxed
 #define atomic_cmpxchg_acquire atomic_cmpxchg
 #define atomic_cmpxchg_release atomic_cmpxchg
@@ -996,11 +904,6 @@ atomic_cmpxchg(atomic_t *v, int old, int new)
 #endif
 
 #endif /* atomic_cmpxchg_relaxed */
-
-#define arch_atomic_try_cmpxchg atomic_try_cmpxchg
-#define arch_atomic_try_cmpxchg_acquire atomic_try_cmpxchg_acquire
-#define arch_atomic_try_cmpxchg_release atomic_try_cmpxchg_release
-#define arch_atomic_try_cmpxchg_relaxed atomic_try_cmpxchg_relaxed
 
 #ifndef atomic_try_cmpxchg_relaxed
 #ifdef atomic_try_cmpxchg
@@ -1099,8 +1002,6 @@ atomic_try_cmpxchg(atomic_t *v, int *old, int new)
 
 #endif /* atomic_try_cmpxchg_relaxed */
 
-#define arch_atomic_sub_and_test atomic_sub_and_test
-
 #ifndef atomic_sub_and_test
 /**
  * atomic_sub_and_test - subtract value from variable and test result
@@ -1119,8 +1020,6 @@ atomic_sub_and_test(int i, atomic_t *v)
 #define atomic_sub_and_test atomic_sub_and_test
 #endif
 
-#define arch_atomic_dec_and_test atomic_dec_and_test
-
 #ifndef atomic_dec_and_test
 /**
  * atomic_dec_and_test - decrement and test
@@ -1137,8 +1036,6 @@ atomic_dec_and_test(atomic_t *v)
 }
 #define atomic_dec_and_test atomic_dec_and_test
 #endif
-
-#define arch_atomic_inc_and_test atomic_inc_and_test
 
 #ifndef atomic_inc_and_test
 /**
@@ -1157,8 +1054,6 @@ atomic_inc_and_test(atomic_t *v)
 #define atomic_inc_and_test atomic_inc_and_test
 #endif
 
-#define arch_atomic_add_negative atomic_add_negative
-
 #ifndef atomic_add_negative
 /**
  * atomic_add_negative - add and test if negative
@@ -1176,8 +1071,6 @@ atomic_add_negative(int i, atomic_t *v)
 }
 #define atomic_add_negative atomic_add_negative
 #endif
-
-#define arch_atomic_fetch_add_unless atomic_fetch_add_unless
 
 #ifndef atomic_fetch_add_unless
 /**
@@ -1204,8 +1097,6 @@ atomic_fetch_add_unless(atomic_t *v, int a, int u)
 #define atomic_fetch_add_unless atomic_fetch_add_unless
 #endif
 
-#define arch_atomic_add_unless atomic_add_unless
-
 #ifndef atomic_add_unless
 /**
  * atomic_add_unless - add unless the number is already a given value
@@ -1224,8 +1115,6 @@ atomic_add_unless(atomic_t *v, int a, int u)
 #define atomic_add_unless atomic_add_unless
 #endif
 
-#define arch_atomic_inc_not_zero atomic_inc_not_zero
-
 #ifndef atomic_inc_not_zero
 /**
  * atomic_inc_not_zero - increment unless the number is zero
@@ -1241,8 +1130,6 @@ atomic_inc_not_zero(atomic_t *v)
 }
 #define atomic_inc_not_zero atomic_inc_not_zero
 #endif
-
-#define arch_atomic_inc_unless_negative atomic_inc_unless_negative
 
 #ifndef atomic_inc_unless_negative
 static __always_inline bool
@@ -1260,8 +1147,6 @@ atomic_inc_unless_negative(atomic_t *v)
 #define atomic_inc_unless_negative atomic_inc_unless_negative
 #endif
 
-#define arch_atomic_dec_unless_positive atomic_dec_unless_positive
-
 #ifndef atomic_dec_unless_positive
 static __always_inline bool
 atomic_dec_unless_positive(atomic_t *v)
@@ -1277,8 +1162,6 @@ atomic_dec_unless_positive(atomic_t *v)
 }
 #define atomic_dec_unless_positive atomic_dec_unless_positive
 #endif
-
-#define arch_atomic_dec_if_positive atomic_dec_if_positive
 
 #ifndef atomic_dec_if_positive
 static __always_inline int
@@ -1297,12 +1180,12 @@ atomic_dec_if_positive(atomic_t *v)
 #define atomic_dec_if_positive atomic_dec_if_positive
 #endif
 
+#define atomic_cond_read_acquire(v, c) smp_cond_load_acquire(&(v)->counter, (c))
+#define atomic_cond_read_relaxed(v, c) smp_cond_load_relaxed(&(v)->counter, (c))
+
 #ifdef CONFIG_GENERIC_ATOMIC64
 #include <asm-generic/atomic64.h>
 #endif
-
-#define arch_atomic64_read atomic64_read
-#define arch_atomic64_read_acquire atomic64_read_acquire
 
 #ifndef atomic64_read_acquire
 static __always_inline s64
@@ -1313,9 +1196,6 @@ atomic64_read_acquire(const atomic64_t *v)
 #define atomic64_read_acquire atomic64_read_acquire
 #endif
 
-#define arch_atomic64_set atomic64_set
-#define arch_atomic64_set_release atomic64_set_release
-
 #ifndef atomic64_set_release
 static __always_inline void
 atomic64_set_release(atomic64_t *v, s64 i)
@@ -1324,13 +1204,6 @@ atomic64_set_release(atomic64_t *v, s64 i)
 }
 #define atomic64_set_release atomic64_set_release
 #endif
-
-#define arch_atomic64_add atomic64_add
-
-#define arch_atomic64_add_return atomic64_add_return
-#define arch_atomic64_add_return_acquire atomic64_add_return_acquire
-#define arch_atomic64_add_return_release atomic64_add_return_release
-#define arch_atomic64_add_return_relaxed atomic64_add_return_relaxed
 
 #ifndef atomic64_add_return_relaxed
 #define atomic64_add_return_acquire atomic64_add_return
@@ -1374,11 +1247,6 @@ atomic64_add_return(s64 i, atomic64_t *v)
 
 #endif /* atomic64_add_return_relaxed */
 
-#define arch_atomic64_fetch_add atomic64_fetch_add
-#define arch_atomic64_fetch_add_acquire atomic64_fetch_add_acquire
-#define arch_atomic64_fetch_add_release atomic64_fetch_add_release
-#define arch_atomic64_fetch_add_relaxed atomic64_fetch_add_relaxed
-
 #ifndef atomic64_fetch_add_relaxed
 #define atomic64_fetch_add_acquire atomic64_fetch_add
 #define atomic64_fetch_add_release atomic64_fetch_add
@@ -1420,13 +1288,6 @@ atomic64_fetch_add(s64 i, atomic64_t *v)
 #endif
 
 #endif /* atomic64_fetch_add_relaxed */
-
-#define arch_atomic64_sub atomic64_sub
-
-#define arch_atomic64_sub_return atomic64_sub_return
-#define arch_atomic64_sub_return_acquire atomic64_sub_return_acquire
-#define arch_atomic64_sub_return_release atomic64_sub_return_release
-#define arch_atomic64_sub_return_relaxed atomic64_sub_return_relaxed
 
 #ifndef atomic64_sub_return_relaxed
 #define atomic64_sub_return_acquire atomic64_sub_return
@@ -1470,11 +1331,6 @@ atomic64_sub_return(s64 i, atomic64_t *v)
 
 #endif /* atomic64_sub_return_relaxed */
 
-#define arch_atomic64_fetch_sub atomic64_fetch_sub
-#define arch_atomic64_fetch_sub_acquire atomic64_fetch_sub_acquire
-#define arch_atomic64_fetch_sub_release atomic64_fetch_sub_release
-#define arch_atomic64_fetch_sub_relaxed atomic64_fetch_sub_relaxed
-
 #ifndef atomic64_fetch_sub_relaxed
 #define atomic64_fetch_sub_acquire atomic64_fetch_sub
 #define atomic64_fetch_sub_release atomic64_fetch_sub
@@ -1517,8 +1373,6 @@ atomic64_fetch_sub(s64 i, atomic64_t *v)
 
 #endif /* atomic64_fetch_sub_relaxed */
 
-#define arch_atomic64_inc atomic64_inc
-
 #ifndef atomic64_inc
 static __always_inline void
 atomic64_inc(atomic64_t *v)
@@ -1527,11 +1381,6 @@ atomic64_inc(atomic64_t *v)
 }
 #define atomic64_inc atomic64_inc
 #endif
-
-#define arch_atomic64_inc_return atomic64_inc_return
-#define arch_atomic64_inc_return_acquire atomic64_inc_return_acquire
-#define arch_atomic64_inc_return_release atomic64_inc_return_release
-#define arch_atomic64_inc_return_relaxed atomic64_inc_return_relaxed
 
 #ifndef atomic64_inc_return_relaxed
 #ifdef atomic64_inc_return
@@ -1614,11 +1463,6 @@ atomic64_inc_return(atomic64_t *v)
 
 #endif /* atomic64_inc_return_relaxed */
 
-#define arch_atomic64_fetch_inc atomic64_fetch_inc
-#define arch_atomic64_fetch_inc_acquire atomic64_fetch_inc_acquire
-#define arch_atomic64_fetch_inc_release atomic64_fetch_inc_release
-#define arch_atomic64_fetch_inc_relaxed atomic64_fetch_inc_relaxed
-
 #ifndef atomic64_fetch_inc_relaxed
 #ifdef atomic64_fetch_inc
 #define atomic64_fetch_inc_acquire atomic64_fetch_inc
@@ -1700,8 +1544,6 @@ atomic64_fetch_inc(atomic64_t *v)
 
 #endif /* atomic64_fetch_inc_relaxed */
 
-#define arch_atomic64_dec atomic64_dec
-
 #ifndef atomic64_dec
 static __always_inline void
 atomic64_dec(atomic64_t *v)
@@ -1710,11 +1552,6 @@ atomic64_dec(atomic64_t *v)
 }
 #define atomic64_dec atomic64_dec
 #endif
-
-#define arch_atomic64_dec_return atomic64_dec_return
-#define arch_atomic64_dec_return_acquire atomic64_dec_return_acquire
-#define arch_atomic64_dec_return_release atomic64_dec_return_release
-#define arch_atomic64_dec_return_relaxed atomic64_dec_return_relaxed
 
 #ifndef atomic64_dec_return_relaxed
 #ifdef atomic64_dec_return
@@ -1797,11 +1634,6 @@ atomic64_dec_return(atomic64_t *v)
 
 #endif /* atomic64_dec_return_relaxed */
 
-#define arch_atomic64_fetch_dec atomic64_fetch_dec
-#define arch_atomic64_fetch_dec_acquire atomic64_fetch_dec_acquire
-#define arch_atomic64_fetch_dec_release atomic64_fetch_dec_release
-#define arch_atomic64_fetch_dec_relaxed atomic64_fetch_dec_relaxed
-
 #ifndef atomic64_fetch_dec_relaxed
 #ifdef atomic64_fetch_dec
 #define atomic64_fetch_dec_acquire atomic64_fetch_dec
@@ -1883,13 +1715,6 @@ atomic64_fetch_dec(atomic64_t *v)
 
 #endif /* atomic64_fetch_dec_relaxed */
 
-#define arch_atomic64_and atomic64_and
-
-#define arch_atomic64_fetch_and atomic64_fetch_and
-#define arch_atomic64_fetch_and_acquire atomic64_fetch_and_acquire
-#define arch_atomic64_fetch_and_release atomic64_fetch_and_release
-#define arch_atomic64_fetch_and_relaxed atomic64_fetch_and_relaxed
-
 #ifndef atomic64_fetch_and_relaxed
 #define atomic64_fetch_and_acquire atomic64_fetch_and
 #define atomic64_fetch_and_release atomic64_fetch_and
@@ -1932,8 +1757,6 @@ atomic64_fetch_and(s64 i, atomic64_t *v)
 
 #endif /* atomic64_fetch_and_relaxed */
 
-#define arch_atomic64_andnot atomic64_andnot
-
 #ifndef atomic64_andnot
 static __always_inline void
 atomic64_andnot(s64 i, atomic64_t *v)
@@ -1942,11 +1765,6 @@ atomic64_andnot(s64 i, atomic64_t *v)
 }
 #define atomic64_andnot atomic64_andnot
 #endif
-
-#define arch_atomic64_fetch_andnot atomic64_fetch_andnot
-#define arch_atomic64_fetch_andnot_acquire atomic64_fetch_andnot_acquire
-#define arch_atomic64_fetch_andnot_release atomic64_fetch_andnot_release
-#define arch_atomic64_fetch_andnot_relaxed atomic64_fetch_andnot_relaxed
 
 #ifndef atomic64_fetch_andnot_relaxed
 #ifdef atomic64_fetch_andnot
@@ -2029,13 +1847,6 @@ atomic64_fetch_andnot(s64 i, atomic64_t *v)
 
 #endif /* atomic64_fetch_andnot_relaxed */
 
-#define arch_atomic64_or atomic64_or
-
-#define arch_atomic64_fetch_or atomic64_fetch_or
-#define arch_atomic64_fetch_or_acquire atomic64_fetch_or_acquire
-#define arch_atomic64_fetch_or_release atomic64_fetch_or_release
-#define arch_atomic64_fetch_or_relaxed atomic64_fetch_or_relaxed
-
 #ifndef atomic64_fetch_or_relaxed
 #define atomic64_fetch_or_acquire atomic64_fetch_or
 #define atomic64_fetch_or_release atomic64_fetch_or
@@ -2077,13 +1888,6 @@ atomic64_fetch_or(s64 i, atomic64_t *v)
 #endif
 
 #endif /* atomic64_fetch_or_relaxed */
-
-#define arch_atomic64_xor atomic64_xor
-
-#define arch_atomic64_fetch_xor atomic64_fetch_xor
-#define arch_atomic64_fetch_xor_acquire atomic64_fetch_xor_acquire
-#define arch_atomic64_fetch_xor_release atomic64_fetch_xor_release
-#define arch_atomic64_fetch_xor_relaxed atomic64_fetch_xor_relaxed
 
 #ifndef atomic64_fetch_xor_relaxed
 #define atomic64_fetch_xor_acquire atomic64_fetch_xor
@@ -2127,11 +1931,6 @@ atomic64_fetch_xor(s64 i, atomic64_t *v)
 
 #endif /* atomic64_fetch_xor_relaxed */
 
-#define arch_atomic64_xchg atomic64_xchg
-#define arch_atomic64_xchg_acquire atomic64_xchg_acquire
-#define arch_atomic64_xchg_release atomic64_xchg_release
-#define arch_atomic64_xchg_relaxed atomic64_xchg_relaxed
-
 #ifndef atomic64_xchg_relaxed
 #define atomic64_xchg_acquire atomic64_xchg
 #define atomic64_xchg_release atomic64_xchg
@@ -2174,11 +1973,6 @@ atomic64_xchg(atomic64_t *v, s64 i)
 
 #endif /* atomic64_xchg_relaxed */
 
-#define arch_atomic64_cmpxchg atomic64_cmpxchg
-#define arch_atomic64_cmpxchg_acquire atomic64_cmpxchg_acquire
-#define arch_atomic64_cmpxchg_release atomic64_cmpxchg_release
-#define arch_atomic64_cmpxchg_relaxed atomic64_cmpxchg_relaxed
-
 #ifndef atomic64_cmpxchg_relaxed
 #define atomic64_cmpxchg_acquire atomic64_cmpxchg
 #define atomic64_cmpxchg_release atomic64_cmpxchg
@@ -2220,11 +2014,6 @@ atomic64_cmpxchg(atomic64_t *v, s64 old, s64 new)
 #endif
 
 #endif /* atomic64_cmpxchg_relaxed */
-
-#define arch_atomic64_try_cmpxchg atomic64_try_cmpxchg
-#define arch_atomic64_try_cmpxchg_acquire atomic64_try_cmpxchg_acquire
-#define arch_atomic64_try_cmpxchg_release atomic64_try_cmpxchg_release
-#define arch_atomic64_try_cmpxchg_relaxed atomic64_try_cmpxchg_relaxed
 
 #ifndef atomic64_try_cmpxchg_relaxed
 #ifdef atomic64_try_cmpxchg
@@ -2323,8 +2112,6 @@ atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
 
 #endif /* atomic64_try_cmpxchg_relaxed */
 
-#define arch_atomic64_sub_and_test atomic64_sub_and_test
-
 #ifndef atomic64_sub_and_test
 /**
  * atomic64_sub_and_test - subtract value from variable and test result
@@ -2343,8 +2130,6 @@ atomic64_sub_and_test(s64 i, atomic64_t *v)
 #define atomic64_sub_and_test atomic64_sub_and_test
 #endif
 
-#define arch_atomic64_dec_and_test atomic64_dec_and_test
-
 #ifndef atomic64_dec_and_test
 /**
  * atomic64_dec_and_test - decrement and test
@@ -2361,8 +2146,6 @@ atomic64_dec_and_test(atomic64_t *v)
 }
 #define atomic64_dec_and_test atomic64_dec_and_test
 #endif
-
-#define arch_atomic64_inc_and_test atomic64_inc_and_test
 
 #ifndef atomic64_inc_and_test
 /**
@@ -2381,8 +2164,6 @@ atomic64_inc_and_test(atomic64_t *v)
 #define atomic64_inc_and_test atomic64_inc_and_test
 #endif
 
-#define arch_atomic64_add_negative atomic64_add_negative
-
 #ifndef atomic64_add_negative
 /**
  * atomic64_add_negative - add and test if negative
@@ -2400,8 +2181,6 @@ atomic64_add_negative(s64 i, atomic64_t *v)
 }
 #define atomic64_add_negative atomic64_add_negative
 #endif
-
-#define arch_atomic64_fetch_add_unless atomic64_fetch_add_unless
 
 #ifndef atomic64_fetch_add_unless
 /**
@@ -2428,8 +2207,6 @@ atomic64_fetch_add_unless(atomic64_t *v, s64 a, s64 u)
 #define atomic64_fetch_add_unless atomic64_fetch_add_unless
 #endif
 
-#define arch_atomic64_add_unless atomic64_add_unless
-
 #ifndef atomic64_add_unless
 /**
  * atomic64_add_unless - add unless the number is already a given value
@@ -2448,8 +2225,6 @@ atomic64_add_unless(atomic64_t *v, s64 a, s64 u)
 #define atomic64_add_unless atomic64_add_unless
 #endif
 
-#define arch_atomic64_inc_not_zero atomic64_inc_not_zero
-
 #ifndef atomic64_inc_not_zero
 /**
  * atomic64_inc_not_zero - increment unless the number is zero
@@ -2465,8 +2240,6 @@ atomic64_inc_not_zero(atomic64_t *v)
 }
 #define atomic64_inc_not_zero atomic64_inc_not_zero
 #endif
-
-#define arch_atomic64_inc_unless_negative atomic64_inc_unless_negative
 
 #ifndef atomic64_inc_unless_negative
 static __always_inline bool
@@ -2484,8 +2257,6 @@ atomic64_inc_unless_negative(atomic64_t *v)
 #define atomic64_inc_unless_negative atomic64_inc_unless_negative
 #endif
 
-#define arch_atomic64_dec_unless_positive atomic64_dec_unless_positive
-
 #ifndef atomic64_dec_unless_positive
 static __always_inline bool
 atomic64_dec_unless_positive(atomic64_t *v)
@@ -2501,8 +2272,6 @@ atomic64_dec_unless_positive(atomic64_t *v)
 }
 #define atomic64_dec_unless_positive atomic64_dec_unless_positive
 #endif
-
-#define arch_atomic64_dec_if_positive atomic64_dec_if_positive
 
 #ifndef atomic64_dec_if_positive
 static __always_inline s64
@@ -2521,5 +2290,8 @@ atomic64_dec_if_positive(atomic64_t *v)
 #define atomic64_dec_if_positive atomic64_dec_if_positive
 #endif
 
+#define atomic64_cond_read_acquire(v, c) smp_cond_load_acquire(&(v)->counter, (c))
+#define atomic64_cond_read_relaxed(v, c) smp_cond_load_relaxed(&(v)->counter, (c))
+
 #endif /* _LINUX_ATOMIC_FALLBACK_H */
-// 9d95b56f98d82a2a26c7b79ccdd0c47572d50a6f
+// baaf45f4c24ed88ceae58baca39d7fd80bb8101b

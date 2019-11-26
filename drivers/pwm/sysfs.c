@@ -87,10 +87,10 @@ static ssize_t duty_cycle_store(struct device *child,
 	struct pwm_export *export = child_to_pwm_export(child);
 	struct pwm_device *pwm = export->pwm;
 	struct pwm_state state;
-	u64 val;
+	unsigned int val;
 	int ret;
 
-	ret = kstrtou64(buf, 0, &val);
+	ret = kstrtouint(buf, 0, &val);
 	if (ret)
 		return ret;
 
@@ -212,7 +212,7 @@ static ssize_t capture_show(struct device *child,
 	if (ret)
 		return ret;
 
-	return sprintf(buf, "%u %u\n", result.period, result.duty_cycle);
+	return sprintf(buf, "%llu %llu\n", result.period, result.duty_cycle);
 }
 
 static ssize_t output_type_show(struct device *child,

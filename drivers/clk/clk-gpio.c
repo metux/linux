@@ -51,12 +51,11 @@ static int clk_gpio_gate_is_enabled(struct clk_hw *hw)
 	return gpiod_get_value(clk->gpiod);
 }
 
-const struct clk_ops clk_gpio_gate_ops = {
+static const struct clk_ops clk_gpio_gate_ops = {
 	.enable = clk_gpio_gate_enable,
 	.disable = clk_gpio_gate_disable,
 	.is_enabled = clk_gpio_gate_is_enabled,
 };
-EXPORT_SYMBOL_GPL(clk_gpio_gate_ops);
 
 static int clk_sleeping_gpio_gate_prepare(struct clk_hw *hw)
 {

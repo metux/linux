@@ -17,6 +17,7 @@
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
+#include <linux/module.h>
 
 /**
  * DOC: basic gpio gated clock which can be enabled and disabled
@@ -246,4 +247,4 @@ static struct platform_driver gpio_clk_driver = {
 		.of_match_table = gpio_clk_match_table,
 	},
 };
-builtin_platform_driver(gpio_clk_driver);
+module_platform_driver(gpio_clk_driver);

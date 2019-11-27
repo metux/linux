@@ -907,6 +907,13 @@ config DMI
 	  affected by entries in the DMI blacklist. Required by PNP
 	  BIOS code.
 
+config X86_BOOT_VIDEO
+	default y
+	bool "Setup video on boot" if EXPERT
+	---help---
+	  Enable setting video mode on boot. Say Y here unless your machine
+	  doesn't have any video adapter (eg. embedded systems)
+
 config GART_IOMMU
 	bool "Old AMD GART IOMMU support"
 	select IOMMU_HELPER

@@ -174,7 +174,9 @@ void main(void)
 #endif
 
 	/* Set the video mode */
+#if defined(CONFIG_X86_BOOT_VIDEO)
 	set_video();
+#endif
 
 	/* Do the last things and invoke protected mode */
 	go_to_protected_mode();

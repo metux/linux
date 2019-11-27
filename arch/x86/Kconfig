@@ -568,10 +568,10 @@ config X86_UV
 config X86_GOLDFISH
 	bool "Goldfish (Virtual Platform)"
 	depends on X86_EXTENDED_PLATFORM
-	help
-	 Enable support for the Goldfish virtual platform used primarily
-	 for Android development. Unless you are building for the Android
-	 Goldfish emulator say N here.
+	---help---
+	  Enable support for the Goldfish virtual platform used primarily
+	  for Android development. Unless you are building for the Android
+	  Goldfish emulator say N here.
 
 config X86_INTEL_CE
 	bool "CE4100 TV platform"
@@ -889,11 +889,11 @@ config APB_TIMER
 	select DW_APB_TIMER
 	depends on X86_INTEL_MID && SFI
 	help
-	 APB timer is the replacement for 8254, HPET on X86 MID platforms.
-	 The APBT provides a stable time base on SMP
-	 systems, unlike the TSC, but it is more expensive to access,
-	 as it is off-chip. APB timers are always running regardless of CPU
-	 C states, they are used as per CPU clockevent device when possible.
+	  APB timer is the replacement for 8254, HPET on X86 MID platforms.
+	  The APBT provides a stable time base on SMP
+	  systems, unlike the TSC, but it is more expensive to access,
+	  as it is off-chip. APB timers are always running regardless of CPU
+	  C states, they are used as per CPU clockevent device when possible.
 
 # Mark as expert because too many people got it wrong.
 # The code disables itself when not needed.
@@ -1116,17 +1116,17 @@ config X86_MCE_INTEL
 	def_bool y
 	prompt "Intel MCE features"
 	depends on X86_MCE && X86_LOCAL_APIC
-	help
-	   Additional support for intel specific MCE features such as
-	   the thermal monitor.
+	---help---
+	  Additional support for intel specific MCE features such as
+	  the thermal monitor.
 
 config X86_MCE_AMD
 	def_bool y
 	prompt "AMD MCE features"
 	depends on X86_MCE && X86_LOCAL_APIC && AMD_NB
-	help
-	   Additional support for AMD specific MCE features such as
-	   the DRAM Error Threshold.
+	---help---
+	  Additional support for AMD specific MCE features such as
+	  the DRAM Error Threshold.
 
 config X86_ANCIENT_MCE
 	bool "Support for old Pentium 5 / WinChip machine checks"
@@ -1207,19 +1207,19 @@ config X86_VSYSCALL_EMULATION
 	bool "Enable vsyscall emulation" if EXPERT
 	default y
 	depends on X86_64
-	help
-	 This enables emulation of the legacy vsyscall page.  Disabling
-	 it is roughly equivalent to booting with vsyscall=none, except
-	 that it will also disable the helpful warning if a program
-	 tries to use a vsyscall.  With this option set to N, offending
-	 programs will just segfault, citing addresses of the form
-	 0xffffffffff600?00.
+	---help---
+	  This enables emulation of the legacy vsyscall page.  Disabling
+	  it is roughly equivalent to booting with vsyscall=none, except
+	  that it will also disable the helpful warning if a program
+	  tries to use a vsyscall.  With this option set to N, offending
+	  programs will just segfault, citing addresses of the form
+	  0xffffffffff600?00.
 
-	 This option is required by many programs built before 2013, and
-	 care should be used even with newer programs if set to N.
+	  This option is required by many programs built before 2013, and
+	  care should be used even with newer programs if set to N.
 
-	 Disabling this option saves about 7K of kernel size and
-	 possibly 4K of additional runtime pagetable memory.
+	  Disabling this option saves about 7K of kernel size and
+	  possibly 4K of additional runtime pagetable memory.
 
 config X86_IOPL_IOPERM
 	bool "IOPERM and IOPL Emulation"
@@ -1956,16 +1956,16 @@ config EFI_STUB
 config EFI_MIXED
 	bool "EFI mixed-mode support"
 	depends on EFI_STUB && X86_64
-	help
-	   Enabling this feature allows a 64-bit kernel to be booted
-	   on a 32-bit firmware, provided that your CPU supports 64-bit
-	   mode.
+	---help---
+	  Enabling this feature allows a 64-bit kernel to be booted
+	  on a 32-bit firmware, provided that your CPU supports 64-bit
+	  mode.
 
-	   Note that it is not possible to boot a mixed-mode enabled
-	   kernel via the EFI boot stub - a bootloader that supports
-	   the EFI handover protocol must be used.
+	  Note that it is not possible to boot a mixed-mode enabled
+	  kernel via the EFI boot stub - a bootloader that supports
+	  the EFI handover protocol must be used.
 
-	   If unsure, say N.
+	  If unsure, say N.
 
 config SECCOMP
 	def_bool y
@@ -2205,17 +2205,17 @@ config RANDOMIZE_MEMORY
 	depends on RANDOMIZE_BASE
 	select DYNAMIC_MEMORY_LAYOUT
 	default RANDOMIZE_BASE
-	help
-	   Randomizes the base virtual address of kernel memory sections
-	   (physical memory mapping, vmalloc & vmemmap). This security feature
-	   makes exploits relying on predictable memory locations less reliable.
+	---help---
+	  Randomizes the base virtual address of kernel memory sections
+	  (physical memory mapping, vmalloc & vmemmap). This security feature
+	  makes exploits relying on predictable memory locations less reliable.
 
-	   The order of allocations remains unchanged. Entropy is generated in
-	   the same way as RANDOMIZE_BASE. Current implementation in the optimal
-	   configuration have in average 30,000 different possible virtual
-	   addresses for each memory section.
+	  The order of allocations remains unchanged. Entropy is generated in
+	  the same way as RANDOMIZE_BASE. Current implementation in the optimal
+	  configuration have in average 30,000 different possible virtual
+	  addresses for each memory section.
 
-	   If unsure, say Y.
+	  If unsure, say Y.
 
 config RANDOMIZE_MEMORY_PHYSICAL_PADDING
 	hex "Physical memory mapping padding" if EXPERT
@@ -2224,13 +2224,13 @@ config RANDOMIZE_MEMORY_PHYSICAL_PADDING
 	default "0x0"
 	range 0x1 0x40 if MEMORY_HOTPLUG
 	range 0x0 0x40
-	help
-	   Define the padding in terabytes added to the existing physical
-	   memory size during kernel memory randomization. It is useful
-	   for memory hotplug support but reduces the entropy available for
-	   address randomization.
+	---help---
+	  Define the padding in terabytes added to the existing physical
+	  memory size during kernel memory randomization. It is useful
+	  for memory hotplug support but reduces the entropy available for
+	  address randomization.
 
-	   If unsure, leave at the default value.
+	  If unsure, leave at the default value.
 
 config HOTPLUG_CPU
 	def_bool y

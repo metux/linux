@@ -21,7 +21,6 @@
 #include <linux/lockdep.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
-#include <linux/nospec.h>
 #include <linux/stddef.h>
 #include <linux/sysctl.h>
 #include <linux/unistd.h>
@@ -44,8 +43,6 @@
 #include <linux/percpu.h>
 #include <linux/thread_info.h>
 #include <linux/prctl.h>
-#include <trace/hooks/fpsimd.h>
-#include <trace/hooks/mpam.h>
 
 #include <asm/alternative.h>
 #include <asm/arch_gicv3.h>
@@ -71,6 +68,8 @@ EXPORT_SYMBOL(__stack_chk_guard);
  */
 void (*pm_power_off)(void);
 EXPORT_SYMBOL_GPL(pm_power_off);
+
+void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
 
 static void __cpu_do_idle(void)
 {
@@ -201,7 +200,10 @@ void machine_restart(char *cmd)
 		efi_reboot(reboot_mode, NULL);
 
 	/* Now call the architecture specific reboot code. */
-	do_kernel_restart(cmd);
+	if (arm_pm_restart)
+		arm_pm_restart(reboot_mode, cmd);
+	else
+		do_kernel_restart(cmd);
 
 	/*
 	 * Whoops - the architecture was unable to reboot.
@@ -427,7 +429,8 @@ int copy_thread(unsigned long clone_flags, unsigned long stack_start,
 		    cpus_have_const_cap(ARM64_HAS_UAO))
 			childregs->pstate |= PSR_UAO_BIT;
 
-		spectre_v4_enable_task_mitigation(p);
+		if (arm64_get_ssbd_state() == ARM64_SSBD_FORCE_DISABLE)
+			set_ssbs_bit(childregs);
 
 		if (system_uses_irq_prio_masking())
 			childregs->pmr_save = GIC_PRIO_IRQON;
@@ -477,6 +480,8 @@ void uao_thread_switch(struct task_struct *next)
  */
 static void ssbs_thread_switch(struct task_struct *next)
 {
+	struct pt_regs *regs = task_pt_regs(next);
+
 	/*
 	 * Nothing to do for kernel threads, but 'regs' may be junk
 	 * (e.g. idle task) so check the flags and bail early.
@@ -488,10 +493,18 @@ static void ssbs_thread_switch(struct task_struct *next)
 	 * If all CPUs implement the SSBS extension, then we just need to
 	 * context-switch the PSTATE field.
 	 */
-	if (cpus_have_const_cap(ARM64_SSBS))
+	if (cpu_have_feature(cpu_feature(SSBS)))
 		return;
 
-	spectre_v4_enable_task_mitigation(next);
+	/* If the mitigation is enabled, then we leave SSBS clear. */
+	if ((arm64_get_ssbd_state() == ARM64_SSBD_FORCE_ENABLE) ||
+	    test_tsk_thread_flag(next, TIF_SSBD))
+		return;
+
+	if (compat_user_mode(regs))
+		set_compat_ssbs_bit(regs);
+	else if (user_mode(regs))
+		set_ssbs_bit(regs);
 }
 
 /*
@@ -557,11 +570,6 @@ __notrace_funcgraph struct task_struct *__switch_to(struct task_struct *prev,
 	uao_thread_switch(next);
 	ssbs_thread_switch(next);
 	erratum_1418040_thread_switch(prev, next);
-	/*
-	 *  vendor hook is needed before the dsb(),
-	 *  because MPAM is related to cache maintenance.
-	 */
-	trace_android_vh_mpam_set(prev, next);
 
 	/*
 	 * Complete any pending TLB or cache maintenance on this CPU in case
@@ -571,7 +579,12 @@ __notrace_funcgraph struct task_struct *__switch_to(struct task_struct *prev,
 	 */
 	dsb(ish);
 
-	trace_android_vh_is_fpsimd_save(prev, next);
+	/*
+	 * MTE thread switching must happen after the DSB above to ensure that
+	 * any asynchronous tag check faults have been logged in the TFSR*_EL1
+	 * registers.
+	 */
+	mte_thread_switch(next);
 
 	/* the actual thread switch */
 	last = cpu_switch_to(prev, next);
@@ -622,11 +635,6 @@ void arch_setup_new_exec(void)
 	current->mm->context.flags = is_compat_task() ? MMCF_AARCH32 : 0;
 
 	ptrauth_thread_init_user(current);
-
-	if (task_spec_ssb_noexec(current)) {
-		arch_prctl_spec_ctrl_set(current, PR_SPEC_STORE_BYPASS,
-					 PR_SPEC_ENABLE);
-	}
 }
 
 #ifdef CONFIG_ARM64_TAGGED_ADDR_ABI
@@ -637,9 +645,15 @@ static unsigned int tagged_addr_disabled;
 
 long set_tagged_addr_ctrl(unsigned long arg)
 {
+	unsigned long valid_mask = PR_TAGGED_ADDR_ENABLE;
+
 	if (is_compat_task())
 		return -EINVAL;
-	if (arg & ~PR_TAGGED_ADDR_ENABLE)
+
+	if (system_supports_mte())
+		valid_mask |= PR_MTE_TCF_MASK;
+
+	if (arg & ~valid_mask)
 		return -EINVAL;
 
 	/*
@@ -649,6 +663,9 @@ long set_tagged_addr_ctrl(unsigned long arg)
 	if (arg & PR_TAGGED_ADDR_ENABLE && tagged_addr_disabled)
 		return -EINVAL;
 
+	if (set_mte_ctrl(arg) != 0)
+		return -EINVAL;
+
 	update_thread_flag(TIF_TAGGED_ADDR, arg & PR_TAGGED_ADDR_ENABLE);
 
 	return 0;
@@ -656,13 +673,17 @@ long set_tagged_addr_ctrl(unsigned long arg)
 
 long get_tagged_addr_ctrl(void)
 {
+	long ret = 0;
+
 	if (is_compat_task())
 		return -EINVAL;
 
 	if (test_thread_flag(TIF_TAGGED_ADDR))
-		return PR_TAGGED_ADDR_ENABLE;
+		ret = PR_TAGGED_ADDR_ENABLE;
 
-	return 0;
+	ret |= get_mte_ctrl();
+
+	return ret;
 }
 
 /*

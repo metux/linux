@@ -339,7 +339,11 @@ void kbd_flush(void);
 int getchar_timeout(void);
 
 /* video.c */
+#if defined(CONFIG_X86_BOOT_VIDEO)
 void set_video(void);
+#else
+static inline void set_video(void) { }
+#endif
 
 /* video-mode.c */
 int set_mode(u16 mode);

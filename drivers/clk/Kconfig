@@ -34,7 +34,7 @@ config COMMON_CLK_WM831X
 	tristate "Clock driver for WM831x/2x PMICs"
 	depends on MFD_WM831X
 	---help---
-          Supports the clocking subsystem of the WM831x/2x series of
+	  Supports the clocking subsystem of the WM831x/2x series of
 	  PMICs from Wolfson Microelectronics.
 
 source "drivers/clk/versatile/Kconfig"
@@ -80,7 +80,7 @@ config COMMON_CLK_HI655X
 config COMMON_CLK_SCMI
 	tristate "Clock driver controlled via SCMI interface"
 	depends on ARM_SCMI_PROTOCOL || COMPILE_TEST
-	  ---help---
+	---help---
 	  This driver provides support for clocks that are controlled
 	  by firmware that implements the SCMI interface.
 
@@ -90,7 +90,7 @@ config COMMON_CLK_SCMI
 config COMMON_CLK_SCPI
 	tristate "Clock driver controlled via SCPI interface"
 	depends on ARM_SCPI_PROTOCOL || COMPILE_TEST
-	  ---help---
+	---help---
 	  This driver provides support for clocks that are controlled
 	  by firmware that implements the SCPI interface.
 

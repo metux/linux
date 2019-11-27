@@ -1355,6 +1355,6 @@ config SYSTEM76_ACPI
 endif # X86_PLATFORM_DEVICES
 
 config PMC_ATOM
-       def_bool y
-       depends on PCI
-       select COMMON_CLK
+	def_bool y
+	depends on PCI
+	select COMMON_CLK

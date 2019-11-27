@@ -96,7 +96,7 @@ config COMMON_CLK_HI655X
 config COMMON_CLK_SCMI
 	tristate "Clock driver controlled via SCMI interface"
 	depends on ARM_SCMI_PROTOCOL || COMPILE_TEST
-	help
+	---help---
 	  This driver provides support for clocks that are controlled
 	  by firmware that implements the SCMI interface.
 
@@ -106,7 +106,7 @@ config COMMON_CLK_SCMI
 config COMMON_CLK_SCPI
 	tristate "Clock driver controlled via SCPI interface"
 	depends on ARM_SCPI_PROTOCOL || COMPILE_TEST
-	help
+	---help---
 	  This driver provides support for clocks that are controlled
 	  by firmware that implements the SCPI interface.
 

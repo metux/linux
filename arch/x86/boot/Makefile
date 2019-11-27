@@ -34,17 +34,17 @@ subdir-		:= compressed
 
 setup-y		+= a20.o bioscall.o cmdline.o copy.o cpu.o cpuflags.o cpucheck.o
 setup-y		+= early_serial_console.o edd.o header.o main.o memory.o
-setup-y		+= pm.o pmjump.o printf.o regs.o string.o tty.o video.o
-setup-y		+= video-mode.o version.o
+setup-y		+= pm.o pmjump.o printf.o regs.o string.o tty.o version.o
 setup-$(CONFIG_X86_APM_BOOT) += apm.o
+setup-$(CONFIG_X86_BOOT_VIDEO) += video.o video-mode.o
 
 # The link order of the video-*.o modules can matter.  In particular,
 # video-vga.o *must* be listed first, followed by video-vesa.o.
 # Hardware-specific drivers should follow in the order they should be
 # probed, and video-bios.o should typically be last.
-setup-y		+= video-vga.o
-setup-y		+= video-vesa.o
-setup-y		+= video-bios.o
+setup-$(CONFIG_X86_BOOT_VIDEO)	+= video-vga.o
+setup-$(CONFIG_X86_BOOT_VIDEO)	+= video-vesa.o
+setup-$(CONFIG_X86_BOOT_VIDEO)	+= video-bios.o
 
 targets		+= $(setup-y)
 hostprogs	:= tools/build

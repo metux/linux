@@ -335,8 +335,7 @@ static int __init mod_init(void)
 	struct intel_rng_hw *intel_rng_hw;
 
 	for (i = 0; !dev && pci_tbl[i].vendor; ++i)
-		dev = pci_get_device(pci_tbl[i].vendor, pci_tbl[i].device,
-				     NULL);
+		dev = pci_get_device_by_id(&pci_tbl[i]);
 
 	if (!dev)
 		goto out; /* Device not found. */

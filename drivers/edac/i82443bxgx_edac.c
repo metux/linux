@@ -407,15 +407,13 @@ static int __init i82443bxgx_edacmc_init(void)
 		goto fail0;
 
 	if (mci_pdev == NULL) {
-		const struct pci_device_id *id = &i82443bxgx_pci_tbl[0];
 		int i = 0;
 		i82443bxgx_registered = 0;
 
-		while (mci_pdev == NULL && id->vendor != 0) {
-			mci_pdev = pci_get_device(id->vendor,
-					id->device, NULL);
+		while (mci_pdev == NULL && i82443bxgx_pci_tbl[i].vendor) {
+			mci_pdev = pci_get_device_by_id(
+				&i82443bxgx_pci_tbl[i]);
 			i++;
-			id = &i82443bxgx_pci_tbl[i];
 		}
 		if (!mci_pdev) {
 			edac_dbg(0, "i82443bxgx pci_get_device fail\n");

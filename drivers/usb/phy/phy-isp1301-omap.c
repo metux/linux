@@ -729,7 +729,7 @@ static irqreturn_t omap_otg_irq(int irq, void *_isp)
 	/* A-supplied voltage fell too low; overcurrent */
 	} else if (otg_irq & A_VBUS_ERR) {
 		otg_ctrl = omap_readl(OTG_CTRL);
-		printk(KERN_ERR "otg: %s, VBUS_ERR %04x ctrl %06x\n",
+		pr_err("otg: %s, VBUS_ERR %04x ctrl %06x\n",
 			state_name(isp), otg_irq, otg_ctrl);
 
 		otg_ctrl |= OTG_BUSDROP;

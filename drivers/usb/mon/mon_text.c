@@ -651,7 +651,7 @@ static int mon_text_release(struct inode *inode, struct file *file)
 	mbus = inode->i_private;
 
 	if (mbus->nreaders <= 0) {
-		printk(KERN_ERR TAG ": consistency error on close\n");
+		pr_err(TAG ": consistency error on close\n");
 		mutex_unlock(&mon_lock);
 		return 0;
 	}

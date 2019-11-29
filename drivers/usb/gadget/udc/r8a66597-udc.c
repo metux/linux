@@ -354,7 +354,8 @@ static int pipe_buffer_setting(struct r8a66597 *r8a66597,
 	}
 
 	if (buf_bsize && ((bufnum + 16) >= R8A66597_MAX_BUFNUM)) {
-		pr_err("r8a66597 pipe memory is insufficient\n");
+		dev_err(r8a66597_to_dev(r8a66597),
+			"pipe memory is insufficient\n");
 		return -ENOMEM;
 	}
 
@@ -823,8 +824,8 @@ static void init_controller(struct r8a66597 *r8a66597)
 	} else {
 		r8a66597_bset(r8a66597, vif | endian, PINCFG);
 		r8a66597_bset(r8a66597, HSE, SYSCFG0);		/* High spd */
-		r8a66597_mdfy(r8a66597, get_xtal_from_pdata(r8a66597->pdata),
-				XTAL, SYSCFG0);
+		r8a66597_mdfy(r8a66597, get_xtal_from_pdata(r8a66597),
+			      XTAL, SYSCFG0);
 
 		r8a66597_bclr(r8a66597, USBE, SYSCFG0);
 		r8a66597_bclr(r8a66597, DPRPU, SYSCFG0);

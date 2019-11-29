@@ -232,11 +232,11 @@ static inline void r8a66597_write_fifo(struct r8a66597 *r8a66597,
 		r8a66597_bclr(r8a66597, MBW_16, ep->fifosel);
 }
 
-static inline u16 get_xtal_from_pdata(struct r8a66597_platdata *pdata)
+static inline u16 get_xtal_from_pdata(struct r8a66597 *r8a66597)
 {
 	u16 clock = 0;
 
-	switch (pdata->xtal) {
+	switch (r8a66597->pdata->xtal) {
 	case R8A66597_PLATDATA_XTAL_12MHZ:
 		clock = XTAL12;
 		break;
@@ -247,7 +247,8 @@ static inline u16 get_xtal_from_pdata(struct r8a66597_platdata *pdata)
 		clock = XTAL48;
 		break;
 	default:
-		printk(KERN_ERR "r8a66597: platdata clock is wrong.\n");
+		dev_err(r8a66597_to_dev(r8a66597),
+			"platdata clock is wrong.\n");
 		break;
 	}
 

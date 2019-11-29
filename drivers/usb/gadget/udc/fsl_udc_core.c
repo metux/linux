@@ -1474,7 +1474,7 @@ __acquires(udc->lock)
 			mdelay(10);
 			tmp = fsl_readl(&dr_regs->portsc1) | (ptc << 16);
 			fsl_writel(tmp, &dr_regs->portsc1);
-			printk(KERN_INFO "udc: switch to test mode %d.\n", ptc);
+			pr_info("udc: switch to test mode %d.\n", ptc);
 		}
 
 		return;
@@ -1952,7 +1952,7 @@ static int fsl_udc_start(struct usb_gadget *g,
 	if (!IS_ERR_OR_NULL(udc_controller->transceiver)) {
 		/* Suspend the controller until OTG enable it */
 		udc_controller->stopped = 1;
-		printk(KERN_INFO "Suspend udc for OTG auto detect\n");
+		pr_info("Suspend udc for OTG auto detect\n");
 
 		/* connect to bus through transceiver */
 		if (!IS_ERR_OR_NULL(udc_controller->transceiver)) {

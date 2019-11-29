@@ -423,7 +423,7 @@ panfrost_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct panfrost_file_priv *panfrost_priv = file->driver_priv;
 
-	panfrost_perfcnt_close(panfrost_priv);
+	panfrost_perfcnt_close(file);
 	panfrost_job_close(panfrost_priv);
 
 	kfree(panfrost_priv);

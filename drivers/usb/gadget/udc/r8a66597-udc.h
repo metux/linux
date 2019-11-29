@@ -247,7 +247,7 @@ static inline u16 get_xtal_from_pdata(struct r8a66597_platdata *pdata)
 		clock = XTAL48;
 		break;
 	default:
-		printk(KERN_ERR "r8a66597: platdata clock is wrong.\n");
+		pr_err("r8a66597: platdata clock is wrong.\n");
 		break;
 	}
 

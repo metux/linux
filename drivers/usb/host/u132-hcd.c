@@ -2234,7 +2234,7 @@ static int u132_urb_enqueue(struct usb_hcd *hcd, struct urb *urb,
 	struct u132 *u132 = hcd_to_u132(hcd);
 	if (irqs_disabled()) {
 		if (gfpflags_allow_blocking(mem_flags)) {
-			printk(KERN_ERR "invalid context for function that might sleep\n");
+			pr_err("invalid context for function that might sleep\n");
 			return -EINVAL;
 		}
 	}
@@ -2986,7 +2986,7 @@ static int u132_remove(struct platform_device *pdev)
 					u132_endp_cancel_work(u132, endp);
 			}
 			u132->going += 1;
-			printk(KERN_INFO "removing device u132.%d\n",
+			pr_info("removing device u132.%d\n",
 				u132->sequence_num);
 			mutex_unlock(&u132->sw_lock);
 			usb_remove_hcd(hcd);
@@ -3077,7 +3077,7 @@ static int u132_probe(struct platform_device *pdev)
 
 	hcd = usb_create_hcd(&u132_hc_driver, &pdev->dev, dev_name(&pdev->dev));
 	if (!hcd) {
-		printk(KERN_ERR "failed to create the usb hcd struct for U132\n"
+		pr_err("failed to create the usb hcd struct for U132\n"
 			);
 		ftdi_elan_gone_away(pdev);
 		return -ENOMEM;
@@ -3193,7 +3193,7 @@ static int __init u132_hcd_init(void)
 	mutex_init(&u132_module_lock);
 	if (usb_disabled())
 		return -ENODEV;
-	printk(KERN_INFO "driver %s\n", hcd_name);
+	pr_info("driver %s\n", hcd_name);
 	workqueue = create_singlethread_workqueue("u132");
 	if (!workqueue)
 		return -ENOMEM;
@@ -3212,7 +3212,7 @@ static void __exit u132_hcd_exit(void)
 	u132_exiting += 1;
 	mutex_unlock(&u132_module_lock);
 	platform_driver_unregister(&u132_platform_driver);
-	printk(KERN_INFO "u132-hcd driver deregistered\n");
+	pr_info("u132-hcd driver deregistered\n");
 	wait_event(u132_hcd_wait, u132_instances == 0);
 	flush_workqueue(workqueue);
 	destroy_workqueue(workqueue);

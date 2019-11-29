@@ -215,12 +215,12 @@ static int get_1284_register(struct parport *pp, unsigned char reg, unsigned cha
 		ret = rq->urb->status;
 		*val = priv->reg[(reg >= 9) ? 0 : regindex[reg]];
 		if (ret)
-			printk(KERN_WARNING "get_1284_register: "
-			       "usb error %d\n", ret);
+			pr_warn("get_1284_register: "
+				"usb error %d\n", ret);
 		kref_put(&rq->ref_count, destroy_async);
 		return ret;
 	}
-	printk(KERN_WARNING "get_1284_register timeout\n");
+	pr_warn("get_1284_register timeout\n");
 	kill_all_async_requests_priv(priv);
 	return -EIO;
 }
@@ -510,7 +510,7 @@ static size_t parport_uss720_epp_write_data(struct parport *pp, const void *buf,
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), (void *)buf, length, &rlen, 20000);
 	if (i)
-		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %zu rlen %u\n", buf, length, rlen);
+		pr_err("uss720: sendbulk ep 1 buf %p len %zu rlen %u\n", buf, length, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 #endif
@@ -571,7 +571,7 @@ static size_t parport_uss720_ecp_write_data(struct parport *pp, const void *buff
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), (void *)buffer, len, &rlen, 20000);
 	if (i)
-		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %zu rlen %u\n", buffer, len, rlen);
+		pr_err("uss720: sendbulk ep 1 buf %p len %zu rlen %u\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 }
@@ -589,7 +589,7 @@ static size_t parport_uss720_ecp_read_data(struct parport *pp, void *buffer, siz
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_rcvbulkpipe(usbdev, 2), buffer, len, &rlen, 20000);
 	if (i)
-		printk(KERN_ERR "uss720: recvbulk ep 2 buf %p len %zu rlen %u\n", buffer, len, rlen);
+		pr_err("uss720: recvbulk ep 2 buf %p len %zu rlen %u\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 }
@@ -622,7 +622,7 @@ static size_t parport_uss720_write_compat(struct parport *pp, const void *buffer
 		return 0;
 	i = usb_bulk_msg(usbdev, usb_sndbulkpipe(usbdev, 1), (void *)buffer, len, &rlen, 20000);
 	if (i)
-		printk(KERN_ERR "uss720: sendbulk ep 1 buf %p len %zu rlen %u\n", buffer, len, rlen);
+		pr_err("uss720: sendbulk ep 1 buf %p len %zu rlen %u\n", buffer, len, rlen);
 	change_mode(pp, ECR_PS2);
 	return rlen;
 }
@@ -712,7 +712,7 @@ static int uss720_probe(struct usb_interface *intf,
 	INIT_LIST_HEAD(&priv->asynclist);
 	pp = parport_register_port(0, PARPORT_IRQ_NONE, PARPORT_DMA_NONE, &parport_uss720_ops);
 	if (!pp) {
-		printk(KERN_WARNING "uss720: could not register parport\n");
+		pr_warn("uss720: could not register parport\n");
 		goto probe_abort;
 	}
 
@@ -802,12 +802,12 @@ static int __init uss720_init(void)
 	if (retval)
 		goto out;
 
-	printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_DESC "\n");
-	printk(KERN_INFO KBUILD_MODNAME ": NOTE: this is a special purpose "
+	pr_info(KBUILD_MODNAME ": " DRIVER_DESC "\n");
+	pr_info(KBUILD_MODNAME ": NOTE: this is a special purpose "
 	       "driver to allow nonstandard\n");
-	printk(KERN_INFO KBUILD_MODNAME ": protocols (eg. bitbang) over "
+	pr_info(KBUILD_MODNAME ": protocols (eg. bitbang) over "
 	       "USS720 usb to parallel cables\n");
-	printk(KERN_INFO KBUILD_MODNAME ": If you just want to connect to a "
+	pr_info(KBUILD_MODNAME ": If you just want to connect to a "
 	       "printer, use usblp instead\n");
 out:
 	return retval;

@@ -8,6 +8,8 @@
 #ifndef AT91_UDC_H
 #define AT91_UDC_H
 
+#include "udc-debug.h"
+
 /*
  * USB Device Port (UDP) registers.
  * Based on AT91RM9200 datasheet revision E.
@@ -156,24 +158,4 @@ struct at91_request {
 	struct list_head		queue;
 };
 
-/*-------------------------------------------------------------------------*/
-
-#ifdef VERBOSE_DEBUG
-#    define VDBG		DBG
-#else
-#    define VDBG(stuff...)	do{}while(0)
-#endif
-
-#ifdef PACKET_TRACE
-#    define PACKET		VDBG
-#else
-#    define PACKET(stuff...)	do{}while(0)
-#endif
-
-#define ERR(stuff...)		pr_err("udc: " stuff)
-#define WARNING(stuff...)	pr_warn("udc: " stuff)
-#define INFO(stuff...)		pr_info("udc: " stuff)
-#define DBG(stuff...)		pr_debug("udc: " stuff)
-
-#endif
-
+#endif /* AT91_UDC_H */

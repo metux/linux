@@ -267,7 +267,7 @@ static void done(struct at91_ep *ep, struct at91_request *req, int status)
 	else
 		status = req->req.status;
 	if (status && status != -ESHUTDOWN)
-		VDBG("%s done %p, status %d\n", ep->ep.name, req, status);
+		ep_vdbg(ep, "done %p, status %d\n", req, status);
 
 	ep->stopped = 1;
 	spin_unlock(&udc->lock);
@@ -331,7 +331,7 @@ rescan:
 	if (count > ep->ep.maxpacket)
 		count = ep->ep.maxpacket;
 	if (count > bufferspace) {
-		DBG("%s buffer overflow\n", ep->ep.name);
+		ep_dbg(ep, "buffer overflow\n");
 		req->req.status = -EOVERFLOW;
 		count = bufferspace;
 	}
@@ -356,7 +356,7 @@ rescan:
 	if (count == bufferspace)
 		is_done = 1;
 
-	PACKET("%s %p out/%d%s\n", ep->ep.name, &req->req, count,
+	ep_trace(ep, "%p out/%d%s\n", &req->req, count,
 			is_done ? " (done)" : "");
 
 	/*
@@ -443,7 +443,7 @@ static int write_fifo(struct at91_ep *ep, struct at91_request *req)
 	__raw_writel(csr, creg);
 	req->req.actual += count;
 
-	PACKET("%s %p in/%d%s\n", ep->ep.name, &req->req, count,
+	ep_trace(ep, "%p in/%d%s\n", &req->req, count,
 			is_last ? " (done)" : "");
 	if (is_last)
 		done(ep, req, 0);
@@ -459,7 +459,7 @@ static void nuke(struct at91_ep *ep, int status)
 	if (list_empty(&ep->queue))
 		return;
 
-	VDBG("%s %s\n", __func__, ep->ep.name);
+	ep_vdbg(ep, "%s\n", __func__);
 	while (!list_empty(&ep->queue)) {
 		req = list_entry(ep->queue.next, struct at91_request, queue);
 		done(ep, req, status);
@@ -482,20 +482,20 @@ static int at91_ep_enable(struct usb_ep *_ep,
 			|| desc->bDescriptorType != USB_DT_ENDPOINT
 			|| (maxpacket = usb_endpoint_maxp(desc)) == 0
 			|| maxpacket > ep->maxpacket) {
-		DBG("bad ep or descriptor\n");
+		ep_dbg(ep, "bad ep or descriptor\n");
 		return -EINVAL;
 	}
 
 	udc = ep->udc;
 	if (!udc->driver || udc->gadget.speed == USB_SPEED_UNKNOWN) {
-		DBG("bogus device state\n");
+		ep_dbg(ep, "bogus device state\n");
 		return -ESHUTDOWN;
 	}
 
 	tmp = usb_endpoint_type(desc);
 	switch (tmp) {
 	case USB_ENDPOINT_XFER_CONTROL:
-		DBG("only one control endpoint\n");
+		ep_dbg(ep, "only one control endpoint\n");
 		return -EINVAL;
 	case USB_ENDPOINT_XFER_INT:
 		if (maxpacket > 64)
@@ -510,11 +510,11 @@ static int at91_ep_enable(struct usb_ep *_ep,
 			goto ok;
 		}
 bogus_max:
-		DBG("bogus maxpacket %d\n", maxpacket);
+		ep_dbg(ep, "bogus maxpacket %d\n", maxpacket);
 		return -EINVAL;
 	case USB_ENDPOINT_XFER_ISOC:
 		if (!ep->is_pingpong) {
-			DBG("iso requires double buffering\n");
+			ep_dbg(ep, "iso requires double buffering\n");
 			return -EINVAL;
 		}
 		break;
@@ -615,19 +615,19 @@ static int at91_ep_queue(struct usb_ep *_ep,
 
 	if (!_req || !_req->complete
 			|| !_req->buf || !list_empty(&req->queue)) {
-		DBG("invalid request\n");
+		ep_dbg(ep, "invalid request\n");
 		return -EINVAL;
 	}
 
 	if (!_ep || (!ep->ep.desc && ep->ep.name != ep0name)) {
-		DBG("invalid ep\n");
+		ep_dbg(ep, "invalid ep\n");
 		return -EINVAL;
 	}
 
 	udc = ep->udc;
 
 	if (!udc || !udc->driver || udc->gadget.speed == USB_SPEED_UNKNOWN) {
-		DBG("invalid device\n");
+		ep_dbg(ep, "invalid device\n");
 		return -EINVAL;
 	}
 
@@ -664,12 +664,12 @@ static int at91_ep_queue(struct usb_ep *_ep,
 			if (udc->wait_for_config_ack) {
 				tmp = at91_udp_read(udc, AT91_UDP_GLB_STAT);
 				tmp ^= AT91_UDP_CONFG;
-				VDBG("toggle config\n");
+				ep_vdbg(ep, "toggle config\n");
 				at91_udp_write(udc, AT91_UDP_GLB_STAT, tmp);
 			}
 			if (req->req.length == 0) {
 ep0_in_status:
-				PACKET("ep0 in/status\n");
+				ep_trace(ep, "ep0 in/status\n");
 				status = 0;
 				tmp = __raw_readl(ep->creg);
 				tmp &= ~SET_FX;
@@ -760,7 +760,7 @@ static int at91_ep_set_halt(struct usb_ep *_ep, int value)
 		csr &= ~SET_FX;
 		if (value) {
 			csr |= AT91_UDP_FORCESTALL;
-			VDBG("halt %s\n", ep->ep.name);
+			ep_vdbg(ep, "halt\n");
 		} else {
 			at91_udp_write(udc, AT91_UDP_RST_EP, ep->int_mask);
 			at91_udp_write(udc, AT91_UDP_RST_EP, 0);
@@ -801,7 +801,7 @@ static int at91_wakeup(struct usb_gadget *gadget)
 	u32		glbstate;
 	unsigned long	flags;
 
-	DBG("%s\n", __func__ );
+	udc_dbg(udc, "%s\n", __func__ );
 	spin_lock_irqsave(&udc->lock, flags);
 
 	if (!udc->clocked || !udc->suspended)
@@ -921,7 +921,7 @@ static void pullup(struct at91_udc *udc, int is_on)
 {
 	if (!udc->enabled || !udc->vbus)
 		is_on = 0;
-	DBG("%sactive\n", is_on ? "" : "in");
+	udc_dbg(udc, "%sactive\n", is_on ? "" : "in");
 
 	if (is_on) {
 		clk_on(udc);
@@ -1064,7 +1064,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 		}
 	} else {
 		/* REVISIT this happens sometimes under load; why?? */
-		ERR("SETUP len %d, csr %08x\n", rxcount, csr);
+		ep_err(ep, "SETUP len %d, csr %08x\n", rxcount, csr);
 		status = -EINVAL;
 	}
 	csr |= CLR_FX;
@@ -1080,7 +1080,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 #define w_value		le16_to_cpu(pkt.r.wValue)
 #define w_length	le16_to_cpu(pkt.r.wLength)
 
-	VDBG("SETUP %02x.%02x v%04x i%04x l%04x\n",
+	ep_vdbg(ep, "SETUP %02x.%02x v%04x i%04x l%04x\n",
 			pkt.r.bRequestType, pkt.r.bRequest,
 			w_value, w_index, w_length);
 
@@ -1111,7 +1111,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 		else
 			udc->wait_for_config_ack = (tmp != 0);
 		if (udc->wait_for_config_ack)
-			VDBG("wait for config\n");
+			ep_vdbg(ep, "wait for config\n");
 		/* CONFG is toggled later, if gadget driver succeeds */
 		break;
 
@@ -1124,7 +1124,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 		tmp = (udc->gadget.is_selfpowered << USB_DEVICE_SELF_POWERED);
 		if (at91_udp_read(udc, AT91_UDP_GLB_STAT) & AT91_UDP_ESR)
 			tmp |= (1 << USB_DEVICE_REMOTE_WAKEUP);
-		PACKET("get device status\n");
+		ep_trace(ep, "get device status\n");
 		__raw_writeb(tmp, dreg);
 		__raw_writeb(0, dreg);
 		goto write_in;
@@ -1152,7 +1152,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 	 */
 	case ((USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_INTERFACE) << 8)
 			| USB_REQ_GET_STATUS:
-		PACKET("get interface status\n");
+		ep_trace(ep, "get interface status\n");
 		__raw_writeb(0, dreg);
 		__raw_writeb(0, dreg);
 		goto write_in;
@@ -1181,7 +1181,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 			} else if (ep->is_in)
 				goto stall;
 		}
-		PACKET("get %s status\n", ep->ep.name);
+		ep_trace(ep, "get status\n");
 		if (__raw_readl(ep->creg) & AT91_UDP_FORCESTALL)
 			tmp = (1 << USB_ENDPOINT_HALT);
 		else
@@ -1250,7 +1250,7 @@ static void handle_setup(struct at91_udc *udc, struct at91_ep *ep, u32 csr)
 		status = -ENODEV;
 	if (status < 0) {
 stall:
-		VDBG("req %02x.%02x protocol STALL; stat %d\n",
+		ep_vdbg(ep, "req %02x.%02x protocol STALL; stat %d\n",
 				pkt.r.bRequestType, pkt.r.bRequest, status);
 		csr |= AT91_UDP_FORCESTALL;
 		__raw_writel(csr, creg);
@@ -1260,7 +1260,7 @@ stall:
 
 succeed:
 	/* immediate successful (IN) STATUS after zero length DATA */
-	PACKET("ep0 in/status\n");
+	ep_trace(ep, "ep0 in/status\n");
 write_in:
 	csr |= AT91_UDP_TXPKTRDY;
 	__raw_writel(csr, creg);
@@ -1280,7 +1280,7 @@ static void handle_ep0(struct at91_udc *udc)
 		csr |= CLR_FX;
 		csr &= ~(SET_FX | AT91_UDP_STALLSENT | AT91_UDP_FORCESTALL);
 		__raw_writel(csr, creg);
-		VDBG("ep0 stalled\n");
+		ep_vdbg(ep0, "ep0 stalled\n");
 		csr = __raw_readl(creg);
 	}
 	if (csr & AT91_UDP_RXSETUP) {
@@ -1333,7 +1333,7 @@ static void handle_ep0(struct at91_udc *udc)
 				at91_udp_write(udc, AT91_UDP_GLB_STAT, tmp);
 
 				udc->wait_for_addr_ack = 0;
-				VDBG("address %d\n", udc->addr);
+				udc_vdbg(udc, "address %d\n", udc->addr);
 			}
 		}
 	}
@@ -1348,7 +1348,7 @@ static void handle_ep0(struct at91_udc *udc)
 			if (req) {
 				if (handle_ep(ep0)) {
 					/* send IN/STATUS */
-					PACKET("ep0 in/status\n");
+					ep_trace(ep0, "ep0 in/status\n");
 					csr = __raw_readl(creg);
 					csr &= ~SET_FX;
 					csr |= CLR_FX | AT91_UDP_TXPKTRDY;
@@ -1373,14 +1373,14 @@ static void handle_ep0(struct at91_udc *udc)
 				 * stalling of the request.  Instead, demand
 				 * that gadget drivers not use this mode.
 				 */
-				DBG("no control-OUT deferred responses!\n");
+				ep_dbg(ep0, "no control-OUT deferred responses!\n");
 				__raw_writel(csr | AT91_UDP_FORCESTALL, creg);
 				udc->req_pending = 0;
 			}
 
 		/* STATUS stage for control-IN; ack.  */
 		} else {
-			PACKET("ep0 out/status ACK\n");
+			ep_trace(ep0, "ep0 out/status ACK\n");
 			__raw_writel(csr, creg);
 
 			/* "early" status stage */
@@ -1419,7 +1419,7 @@ static irqreturn_t at91_udc_irq (int irq, void *_udc)
 			/* Atmel code clears this irq twice */
 			at91_udp_write(udc, AT91_UDP_ICR, AT91_UDP_ENDBUSRES);
 			at91_udp_write(udc, AT91_UDP_ICR, AT91_UDP_ENDBUSRES);
-			VDBG("end bus reset\n");
+			udc_vdbg(udc, "end bus reset\n");
 			udc->addr = 0;
 			reset_gadget(udc);
 
@@ -1613,14 +1613,14 @@ static int at91rm9200_udc_init(struct at91_udc *udc)
 	}
 
 	if (!gpio_is_valid(udc->board.pullup_pin)) {
-		DBG("no D+ pullup?\n");
+		udc_dbg(udc, "no D+ pullup?\n");
 		return -ENODEV;
 	}
 
 	ret = devm_gpio_request(&udc->pdev->dev, udc->board.pullup_pin,
 				"udc_pullup");
 	if (ret) {
-		DBG("D+ pullup is busy\n");
+		udc_dbg(udc, "D+ pullup is busy\n");
 		return ret;
 	}
 
@@ -1877,7 +1877,7 @@ static int at91udc_probe(struct platform_device *pdev)
 	retval = devm_request_irq(dev, udc->udp_irq, at91_udc_irq, 0,
 				  driver_name, udc);
 	if (retval) {
-		DBG("request irq %d failed\n", udc->udp_irq);
+		udc_dbg(udc, "request irq %d failed\n", udc->udp_irq);
 		goto err_unprepare_iclk;
 	}
 
@@ -1885,7 +1885,7 @@ static int at91udc_probe(struct platform_device *pdev)
 		retval = devm_gpio_request(dev, udc->board.vbus_pin,
 					   "udc_vbus");
 		if (retval) {
-			DBG("request vbus pin failed\n");
+			udc_dbg(udc, "request vbus pin failed\n");
 			goto err_unprepare_iclk;
 		}
 
@@ -1908,13 +1908,13 @@ static int at91udc_probe(struct platform_device *pdev)
 					gpio_to_irq(udc->board.vbus_pin),
 					at91_vbus_irq, 0, driver_name, udc);
 			if (retval) {
-				DBG("request vbus irq %d failed\n",
+				udc_dbg(udc, "request vbus irq %d failed\n",
 				    udc->board.vbus_pin);
 				goto err_unprepare_iclk;
 			}
 		}
 	} else {
-		DBG("no VBUS detection, assuming always-on\n");
+		udc_dbg(udc, "no VBUS detection, assuming always-on\n");
 		udc->vbus = 1;
 	}
 	retval = usb_add_gadget_udc(dev, &udc->gadget);
@@ -1924,7 +1924,7 @@ static int at91udc_probe(struct platform_device *pdev)
 	device_init_wakeup(dev, 1);
 	create_debug_file(udc);
 
-	INFO("%s version %s\n", driver_name, DRIVER_VERSION);
+	udc_info(udc, "%s version %s\n", driver_name, DRIVER_VERSION);
 	return 0;
 
 err_unprepare_iclk:
@@ -1932,7 +1932,7 @@ err_unprepare_iclk:
 err_unprepare_fclk:
 	clk_unprepare(udc->fclk);
 
-	DBG("%s probe failed, %d\n", driver_name, retval);
+	udc_dbg(udc, "%s probe failed, %d\n", driver_name, retval);
 
 	return retval;
 }
@@ -1942,7 +1942,7 @@ static int at91udc_remove(struct platform_device *pdev)
 	struct at91_udc *udc = platform_get_drvdata(pdev);
 	unsigned long	flags;
 
-	DBG("remove\n");
+	udc_dbg(udc, "remove\n");
 
 	usb_del_gadget_udc(&udc->gadget);
 	if (udc->driver)

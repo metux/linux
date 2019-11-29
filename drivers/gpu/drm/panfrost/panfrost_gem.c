@@ -41,7 +41,7 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 	drm_gem_shmem_free_object(obj);
 }
 
-static int panfrost_gem_open(struct drm_gem_object *obj, struct drm_file *file_priv)
+int panfrost_gem_open(struct drm_gem_object *obj, struct drm_file *file_priv)
 {
 	int ret;
 	size_t size = obj->size;
@@ -77,7 +77,7 @@ out:
 	return ret;
 }
 
-static void panfrost_gem_close(struct drm_gem_object *obj, struct drm_file *file_priv)
+void panfrost_gem_close(struct drm_gem_object *obj, struct drm_file *file_priv)
 {
 	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
 	struct panfrost_device *pfdev = obj->dev->dev_private;

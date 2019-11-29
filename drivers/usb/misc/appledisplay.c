@@ -296,7 +296,7 @@ static int appledisplay_probe(struct usb_interface *iface,
 	/* save our data pointer in the interface device */
 	usb_set_intfdata(iface, pdata);
 
-	printk(KERN_INFO "appledisplay: Apple Cinema Display connected\n");
+	pr_info("appledisplay: Apple Cinema Display connected\n");
 
 	return 0;
 
@@ -334,7 +334,7 @@ static void appledisplay_disconnect(struct usb_interface *iface)
 		kfree(pdata);
 	}
 
-	printk(KERN_INFO "appledisplay: Apple Cinema Display disconnected\n");
+	pr_info("appledisplay: Apple Cinema Display disconnected\n");
 }
 
 static struct usb_driver appledisplay_driver = {

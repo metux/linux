@@ -900,7 +900,7 @@ int usb_register_device_driver(struct usb_device_driver *new_udriver,
 		pr_info("%s: registered new device driver %s\n",
 			usbcore_name, new_udriver->name);
 	else
-		printk(KERN_ERR "%s: error %d registering device "
+		pr_err("%s: error %d registering device "
 			"	driver %s\n",
 			usbcore_name, retval, new_udriver->name);
 
@@ -976,7 +976,7 @@ out:
 out_newid:
 	driver_unregister(&new_driver->drvwrap.driver);
 
-	printk(KERN_ERR "%s: error %d registering interface "
+	pr_err("%s: error %d registering interface "
 			"	driver %s\n",
 			usbcore_name, retval, new_driver->name);
 	goto out;

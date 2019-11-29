@@ -509,7 +509,7 @@ struct fsl_udc {
 /*-------------------------------------------------------------------------*/
 
 #ifdef DEBUG
-#define DBG(fmt, args...) 	printk(KERN_DEBUG "[%s]  " fmt "\n", \
+#define DBG(fmt, args...) 	pr_debug("[%s]  " fmt "\n", \
 				__func__, ## args)
 #else
 #define DBG(fmt, args...)	do{}while(0)
@@ -535,7 +535,7 @@ static void dump_msg(const char *label, const u8 * buf, unsigned int length)
 			p += 3;
 		}
 		*p = 0;
-		printk(KERN_DEBUG "%6x: %s\n", start, line);
+		pr_debug("%6x: %s\n", start, line);
 		buf += num;
 		start += num;
 		length -= num;

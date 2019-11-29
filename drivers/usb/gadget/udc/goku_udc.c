@@ -1745,7 +1745,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	int			retval;
 
 	if (!pdev->irq) {
-		printk(KERN_ERR "Check PCI %s IRQ setup!\n", pci_name(pdev));
+		pr_err("Check PCI %s IRQ setup!\n", pci_name(pdev));
 		retval = -ENODEV;
 		goto err;
 	}

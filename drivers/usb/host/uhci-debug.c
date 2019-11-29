@@ -33,7 +33,7 @@ static void lprintk(char *buf)
 		p = strchr(buf, '\n');
 		if (p)
 			*p = 0;
-		printk(KERN_DEBUG "%s\n", buf);
+		pr_debug("%s\n", buf);
 		buf = p;
 		if (buf)
 			buf++;

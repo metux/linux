@@ -623,9 +623,8 @@ static int alauda_read_map(struct us_data *us, unsigned int zone)
 
 		/* check even parity */
 		if (parity[data[6] ^ data[7]]) {
-			printk(KERN_WARNING
-			       "alauda_read_map: Bad parity in LBA for block %d"
-			       " (%02X %02X)\n", i, data[6], data[7]);
+			pr_warn("alauda_read_map: Bad parity in LBA for block %d"
+				" (%02X %02X)\n", i, data[6], data[7]);
 			pba_to_lba[i] = UNUSABLE;
 			continue;
 		}
@@ -644,17 +643,15 @@ static int alauda_read_map(struct us_data *us, unsigned int zone)
 		 */
 
 		if (lba_offset >= uzonesize) {
-			printk(KERN_WARNING
-			       "alauda_read_map: Bad low LBA %d for block %d\n",
-			       lba_real, blocknum);
+			pr_warn("alauda_read_map: Bad low LBA %d for block %d\n",
+				lba_real, blocknum);
 			continue;
 		}
 
 		if (lba_to_pba[lba_offset] != UNDEF) {
-			printk(KERN_WARNING
-			       "alauda_read_map: "
-			       "LBA %d seen for PBA %d and %d\n",
-			       lba_real, lba_to_pba[lba_offset], blocknum);
+			pr_warn("alauda_read_map: "
+				"LBA %d seen for PBA %d and %d\n",
+				lba_real, lba_to_pba[lba_offset], blocknum);
 			continue;
 		}
 
@@ -821,15 +818,13 @@ static int alauda_write_lba(struct us_data *us, u16 lba,
 		 * Maybe it is impossible to write to PBA 1.
 		 * Fake success, but don't do anything.
 		 */
-		printk(KERN_WARNING
-		       "alauda_write_lba: avoid writing to pba 1\n");
+		pr_warn("alauda_write_lba: avoid writing to pba 1\n");
 		return USB_STOR_TRANSPORT_GOOD;
 	}
 
 	new_pba = alauda_find_unused_pba(&MEDIA_INFO(us), zone);
 	if (!new_pba) {
-		printk(KERN_WARNING
-		       "alauda_write_lba: Out of unused blocks\n");
+		pr_arn("alauda_write_lba: Out of unused blocks\n");
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 

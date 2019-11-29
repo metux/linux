@@ -310,7 +310,7 @@ static int ld_usb_open(struct inode *inode, struct file *file)
 	interface = usb_find_interface(&ld_usb_driver, subminor);
 
 	if (!interface) {
-		printk(KERN_ERR "%s - error, can't find device for minor %d\n",
+		pr_err("%s - error, can't find device for minor %d\n",
 		       __func__, subminor);
 		return -ENODEV;
 	}
@@ -458,7 +458,7 @@ static ssize_t ld_usb_read(struct file *file, char __user *buffer, size_t count,
 	/* verify that the device wasn't unplugged */
 	if (dev->disconnected) {
 		retval = -ENODEV;
-		printk(KERN_ERR "ldusb: No device or device unplugged %d\n", retval);
+		pr_err("ldusb: No device or device unplugged %d\n", retval);
 		goto unlock_exit;
 	}
 
@@ -543,7 +543,7 @@ static ssize_t ld_usb_write(struct file *file, const char __user *buffer,
 	/* verify that the device wasn't unplugged */
 	if (dev->disconnected) {
 		retval = -ENODEV;
-		printk(KERN_ERR "ldusb: No device or device unplugged %d\n", retval);
+		pr_err("ldusb: No device or device unplugged %d\n", retval);
 		goto unlock_exit;
 	}
 

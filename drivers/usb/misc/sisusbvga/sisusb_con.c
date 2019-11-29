@@ -1141,7 +1141,7 @@ sisusbcon_do_font_op(struct sisusb_usb_data *sisusb, int set, int slot,
 			/* Scan lines to actually display-1 */
 			maxscan = rows * fh - 1;
 
-			/*printk(KERN_DEBUG "sisusb recalc rows %d maxscan %d fh %d sl %d\n",
+			/*pr_debug("sisusb recalc rows %d maxscan %d fh %d sl %d\n",
 				rows, maxscan, fh, c->vc_scan_lines);*/
 
 			sisusb_getidxreg(sisusb, SISCR, 0x07, &ovr);

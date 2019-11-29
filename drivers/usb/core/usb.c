@@ -242,7 +242,7 @@ struct usb_host_interface *usb_find_alt_setting(
 		if (intf_cache->altsetting[i].desc.bAlternateSetting == alt_num)
 			return &intf_cache->altsetting[i];
 
-	printk(KERN_DEBUG "Did not find alt setting %u for intf %u, "
+	pr_debug("Did not find alt setting %u for intf %u, "
 			"config %u\n", alt_num, iface_num,
 			config->desc.bConfigurationValue);
 	return NULL;

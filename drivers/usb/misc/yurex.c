@@ -360,7 +360,7 @@ static int yurex_open(struct inode *inode, struct file *file)
 
 	interface = usb_find_interface(&yurex_driver, subminor);
 	if (!interface) {
-		printk(KERN_ERR "%s - error, can't find device for minor %d",
+		pr_err("%s - error, can't find device for minor %d",
 		       __func__, subminor);
 		retval = -ENODEV;
 		goto exit;

@@ -179,21 +179,6 @@ struct omap_udc {
 	unsigned			clk_requested:1;
 };
 
-/*-------------------------------------------------------------------------*/
-
-#ifdef VERBOSE
-#    define VDBG		DBG
-#else
-#    define VDBG(stuff...)	do{}while(0)
-#endif
-
-#define ERR(stuff...)		pr_err("udc: " stuff)
-#define WARNING(stuff...)	pr_warn("udc: " stuff)
-#define INFO(stuff...)		pr_info("udc: " stuff)
-#define DBG(stuff...)		pr_debug("udc: " stuff)
-
-/*-------------------------------------------------------------------------*/
-
 /* MOD_CONF_CTRL_0 */
 #define VBUS_W2FC_1510		(1 << 17)	/* 0 gpio0, 1 dvdd2 pin */
 

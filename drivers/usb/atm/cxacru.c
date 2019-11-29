@@ -811,7 +811,7 @@ static int cxacru_atm_start(struct usbatm_data *usbatm_instance,
 	mutex_unlock(&instance->poll_state_serialize);
 	mutex_unlock(&instance->adsl_state_serialize);
 
-	printk(KERN_INFO "%s%d: %s %pM\n", atm_dev->type, atm_dev->number,
+	pr_info("%s%d: %s %pM\n", atm_dev->type, atm_dev->number,
 			usbatm_instance->description, atm_dev->esi);
 
 	if (start_polling)
@@ -853,15 +853,15 @@ static void cxacru_poll_status(struct work_struct *work)
 
 		switch (instance->adsl_status) {
 		case 0:
-			atm_printk(KERN_INFO, usbatm, "ADSL state: running\n");
+			atm_info(usbatm, "ADSL state: running\n");
 			break;
 
 		case 1:
-			atm_printk(KERN_INFO, usbatm, "ADSL state: stopped\n");
+			atm_info(usbatm, "ADSL state: stopped\n");
 			break;
 
 		default:
-			atm_printk(KERN_INFO, usbatm, "Unknown adsl status %02x\n", instance->adsl_status);
+			atm_info(usbatm, "Unknown adsl status %02x\n", instance->adsl_status);
 			break;
 		}
 	}

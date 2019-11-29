@@ -407,7 +407,7 @@ static void __exit mon_exit(void)
 		 * before reaching here. However, better be safe...
 		 */
 		if (mbus->nreaders) {
-			printk(KERN_ERR TAG
+			pr_err(TAG
 			    ": Outstanding opens (%d) on usb%d, leaking...\n",
 			    mbus->nreaders, mbus->u_bus->busnum);
 			kref_get(&mbus->ref); /* Force leak */

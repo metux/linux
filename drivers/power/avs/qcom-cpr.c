@@ -25,6 +25,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/clk.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/bitops.h>
 
 /* Register Offsets for RB-CPR and Bit Definitions */
 
@@ -517,7 +518,7 @@ static int cpr_scale(struct cpr_drv *drv, enum voltage_change_dir dir)
 		dev_dbg(drv->dev,
 			"UP: -> new_uV: %d last_uV: %d perf state: %u\n",
 			new_uV, last_uV, cpr_get_cur_perf_state(drv));
-	} else {
+	} else if (dir == DOWN) {
 		if (desc->clamp_timer_interval &&
 		    error_steps < desc->down_threshold) {
 			/*
@@ -567,7 +568,7 @@ static int cpr_scale(struct cpr_drv *drv, enum voltage_change_dir dir)
 		/* Disable auto nack down */
 		reg_mask = RBCPR_CTL_SW_AUTO_CONT_NACK_DN_EN;
 		val = 0;
-	} else {
+	} else if (dir == DOWN) {
 		/* Restore default threshold for UP */
 		reg_mask = RBCPR_CTL_UP_THRESHOLD_MASK;
 		reg_mask <<= RBCPR_CTL_UP_THRESHOLD_SHIFT;
@@ -834,7 +835,7 @@ static int cpr_read_efuse(struct device *dev, const char *cname, u32 *data)
 		*data |= ret[i] << (8 * i);
 
 	kfree(ret);
-	dev_dbg(dev, "efuse read(%s) = %x, bytes %zd\n", cname, *data, len);
+	dev_dbg(dev, "efuse read(%s) = %x, bytes %ld\n", cname, *data, len);
 
 	return 0;
 }
@@ -892,7 +893,7 @@ static int cpr_fuse_corner_init(struct cpr_drv *drv)
 	int i;
 	unsigned int step_volt;
 	struct fuse_corner_data *fdata;
-	struct fuse_corner *fuse, *end;
+	struct fuse_corner *fuse, *end, *prev;
 	int uV;
 	const struct reg_sequence *accs;
 	int ret;
@@ -908,7 +909,7 @@ static int cpr_fuse_corner_init(struct cpr_drv *drv)
 	end = &fuse[desc->num_fuse_corners - 1];
 	fdata = desc->cpr_fuses.fuse_corner_data;
 
-	for (i = 0; fuse <= end; fuse++, fuses++, i++, fdata++) {
+	for (i = 0, prev = NULL; fuse <= end; fuse++, fuses++, i++, fdata++) {
 		/*
 		 * Update SoC voltages: platforms might choose a different
 		 * regulators than the one used to characterize the algorithms
@@ -921,7 +922,7 @@ static int cpr_fuse_corner_init(struct cpr_drv *drv)
 		uV = cpr_read_fuse_uV(desc, fdata, fuses->init_voltage,
 				      step_volt, drv);
 		if (uV < 0)
-			return uV;
+			return ret;
 
 		fuse->min_uV = fdata->min_uV;
 		fuse->max_uV = fdata->max_uV;
@@ -1077,8 +1078,8 @@ static unsigned int cpr_get_fuse_corner(struct dev_pm_opp *opp)
 	return fuse_corner;
 }
 
-static unsigned long cpr_get_opp_hz_for_req(struct dev_pm_opp *ref,
-					    struct device *cpu_dev)
+unsigned long cpr_get_opp_hz_for_req(struct dev_pm_opp *ref,
+				     struct device *cpu_dev)
 {
 	u64 rate = 0;
 	struct device_node *ref_np;
@@ -1534,18 +1535,18 @@ static int cpr_pd_attach_dev(struct generic_pm_domain *domain,
 	 * The reason for this is that we need to know the highest
 	 * frequency associated with each fuse corner.
 	 */
-	ret = dev_pm_opp_get_opp_count(&drv->pd.dev);
-	if (ret < 0) {
-		dev_err(drv->dev, "could not get OPP count\n");
+	drv->num_corners = dev_pm_opp_get_opp_count(&drv->pd.dev);
+	if (drv->num_corners < 0) {
+		ret = drv->num_corners;
 		goto unlock;
 	}
-	drv->num_corners = ret;
-
 	if (drv->num_corners < 2) {
 		dev_err(drv->dev, "need at least 2 OPPs to use CPR\n");
 		ret = -EINVAL;
 		goto unlock;
 	}
+
+	dev_dbg(drv->dev, "number of OPPs: %d\n", drv->num_corners);
 
 	drv->corners = devm_kcalloc(drv->dev, drv->num_corners,
 				    sizeof(*drv->corners),
@@ -1583,9 +1584,6 @@ static int cpr_pd_attach_dev(struct generic_pm_domain *domain,
 		regmap_update_bits(drv->tcsr, acc_desc->enable_reg,
 				   acc_desc->enable_mask,
 				   acc_desc->enable_mask);
-
-	dev_info(drv->dev, "driver initialized with %u OPPs\n",
-		 drv->num_corners);
 
 unlock:
 	mutex_unlock(&drv->lock);

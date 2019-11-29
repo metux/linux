@@ -14,9 +14,8 @@ menuconfig POWER_AVS
 
 config QCOM_CPR
 	tristate "QCOM Core Power Reduction (CPR) support"
-	depends on POWER_AVS && HAS_IOMEM
+	depends on POWER_AVS
 	select PM_OPP
-	select REGMAP
 	help
 	  Say Y here to enable support for the CPR hardware found on Qualcomm
 	  SoCs like QCS404.

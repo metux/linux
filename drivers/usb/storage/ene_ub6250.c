@@ -1957,7 +1957,7 @@ static int ms_card_init(struct us_data *us)
 	u32 btBlk1stErred;
 	struct ene_ub6250_info *info = (struct ene_ub6250_info *) us->extra;
 
-	printk(KERN_INFO "MS_CardInit start\n");
+	pr_info("MS_CardInit start\n");
 
 	ms_lib_free_allocatedarea(us); /* Clean buffer and set struct us_data flag to 0 */
 
@@ -2064,7 +2064,7 @@ exit:
 	kfree(PageBuffer1);
 	kfree(PageBuffer0);
 
-	printk(KERN_INFO "MS_CardInit end\n");
+	pr_info("MS_CardInit end\n");
 	return result;
 }
 
@@ -2076,13 +2076,13 @@ static int ene_ms_init(struct us_data *us)
 	struct ene_ub6250_info *info = (struct ene_ub6250_info *) us->extra;
 	u8 *bbuf = info->bbuf;
 
-	printk(KERN_INFO "transport --- ENE_MSInit\n");
+	pr_info("transport --- ENE_MSInit\n");
 
 	/* the same part to test ENE */
 
 	result = ene_load_bincode(us, MS_INIT_PATTERN);
 	if (result != USB_STOR_XFER_GOOD) {
-		printk(KERN_ERR "Load MS Init Code Fail !!\n");
+		pr_err("Load MS Init Code Fail !!\n");
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 
@@ -2095,18 +2095,18 @@ static int ene_ms_init(struct us_data *us)
 
 	result = ene_send_scsi_cmd(us, FDIR_READ, bbuf, 0);
 	if (result != USB_STOR_XFER_GOOD) {
-		printk(KERN_ERR "Execution MS Init Code Fail !!\n");
+		pr_err("Execution MS Init Code Fail !!\n");
 		return USB_STOR_TRANSPORT_ERROR;
 	}
 	/* the same part to test ENE */
 	info->MS_Status = *(struct MS_STATUS *) bbuf;
 
 	if (info->MS_Status.Insert && info->MS_Status.Ready) {
-		printk(KERN_INFO "Insert     = %x\n", info->MS_Status.Insert);
-		printk(KERN_INFO "Ready      = %x\n", info->MS_Status.Ready);
-		printk(KERN_INFO "IsMSPro    = %x\n", info->MS_Status.IsMSPro);
-		printk(KERN_INFO "IsMSPHG    = %x\n", info->MS_Status.IsMSPHG);
-		printk(KERN_INFO "WtP= %x\n", info->MS_Status.WtP);
+		pr_info("Insert     = %x\n", info->MS_Status.Insert);
+		pr_info("Ready      = %x\n", info->MS_Status.Ready);
+		pr_info("IsMSPro    = %x\n", info->MS_Status.IsMSPro);
+		pr_info("IsMSPHG    = %x\n", info->MS_Status.IsMSPHG);
+		pr_info("WtP= %x\n", info->MS_Status.WtP);
 		if (info->MS_Status.IsMSPro) {
 			MSP_BlockSize      = (bbuf[6] << 8) | bbuf[7];
 			MSP_UserAreaBlocks = (bbuf[10] << 8) | bbuf[11];

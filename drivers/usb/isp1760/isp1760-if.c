@@ -40,19 +40,19 @@ static int isp1761_pci_init(struct pci_dev *dev)
 	mem_start = pci_resource_start(dev, 3);
 	mem_length = pci_resource_len(dev, 3);
 	if (mem_length < 0xffff) {
-		printk(KERN_ERR "memory length for this resource is wrong\n");
+		pr_err("memory length for this resource is wrong\n");
 		return -ENOMEM;
 	}
 
 	if (!request_mem_region(mem_start, mem_length, "ISP-PCI")) {
-		printk(KERN_ERR "host controller already in use\n");
+		pr_err("host controller already in use\n");
 		return -EBUSY;
 	}
 
 	/* map available memory */
 	iobase = ioremap(mem_start, mem_length);
 	if (!iobase) {
-		printk(KERN_ERR "Error ioremap failed\n");
+		pr_err("Error ioremap failed\n");
 		release_mem_region(mem_start, mem_length);
 		return -ENOMEM;
 	}
@@ -97,13 +97,13 @@ static int isp1761_pci_init(struct pci_dev *dev)
 	mem_length = pci_resource_len(dev, 0);
 
 	if (!request_mem_region(mem_start, mem_length, "ISP1761 IO MEM")) {
-		printk(KERN_ERR "request region #1\n");
+		pr_err("request region #1\n");
 		return -EBUSY;
 	}
 
 	iobase = ioremap(mem_start, mem_length);
 	if (!iobase) {
-		printk(KERN_ERR "ioremap #1\n");
+		pr_err("ioremap #1\n");
 		release_mem_region(mem_start, mem_length);
 		return -ENOMEM;
 	}
@@ -160,7 +160,7 @@ static void isp1761_pci_remove(struct pci_dev *dev)
 
 static void isp1761_pci_shutdown(struct pci_dev *dev)
 {
-	printk(KERN_ERR "ips1761_pci_shutdown\n");
+	pr_err("ips1761_pci_shutdown\n");
 }
 
 static const struct pci_device_id isp1760_plx[] = {

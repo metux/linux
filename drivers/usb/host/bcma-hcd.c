@@ -120,7 +120,7 @@ static void bcma_hcd_init_chip_mips(struct bcma_device *dev)
 			tmp |= 0x100;
 			bcma_write32(dev, 0x1e0, tmp);
 			if (bcma_wait_bits(dev, 0x1e0, 1 << 24, 100))
-				printk(KERN_EMERG "Failed to enable misc PPL!\n");
+				pr_emerg("Failed to enable misc PPL!\n");
 
 			/* Take out of resets */
 			bcma_write32(dev, 0x200, 0x4ff);
@@ -147,8 +147,7 @@ static void bcma_hcd_init_chip_mips(struct bcma_device *dev)
 
 			if (bcma_wait_bits(dev, 0x528, 0xc000, 10000)) {
 				tmp = bcma_read32(dev, 0x528);
-				printk(KERN_EMERG
-				       "USB20H mdio_rddata 0x%08x\n", tmp);
+				pr_emerg("USB20H mdio_rddata 0x%08x\n", tmp);
 			}
 			bcma_write32(dev, 0x528, 0x80000000);
 			tmp = bcma_read32(dev, 0x314);

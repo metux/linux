@@ -1569,7 +1569,7 @@ restart:
 		 * generate or receive a reply right away. */
 		usba_ep_writel(ep, CLR_STA, USBA_RX_SETUP);
 
-		/* printk(KERN_DEBUG "setup: %d: %02x.%02x\n",
+		/* pr_debug("setup: %d: %02x.%02x\n",
 			ep->state, crq.crq.bRequestType,
 			crq.crq.bRequest); */
 

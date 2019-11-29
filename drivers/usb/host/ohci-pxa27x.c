@@ -158,8 +158,7 @@ static int pxa27x_ohci_select_pmm(struct pxa27x_ohci *pxa_ohci, int mode)
 		uhcrhdb |= (0x7<<17);
 		break;
 	default:
-		printk( KERN_ERR
-			"Invalid mode %d, set to non-power switch mode.\n",
+		pr_err("Invalid mode %d, set to non-power switch mode.\n",
 			mode );
 
 		uhcrhda |= RH_A_NPS;

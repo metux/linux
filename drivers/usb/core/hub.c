@@ -5660,7 +5660,7 @@ static struct usb_driver hub_driver = {
 int usb_hub_init(void)
 {
 	if (usb_register(&hub_driver) < 0) {
-		printk(KERN_ERR "%s: can't register hub driver\n",
+		pr_err("%s: can't register hub driver\n",
 			usbcore_name);
 		return -1;
 	}

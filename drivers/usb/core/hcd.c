@@ -2979,7 +2979,7 @@ void usb_mon_deregister (void)
 {
 
 	if (mon_ops == NULL) {
-		printk(KERN_ERR "USB: monitor was not registered\n");
+		pr_err("USB: monitor was not registered\n");
 		return;
 	}
 	mon_ops = NULL;

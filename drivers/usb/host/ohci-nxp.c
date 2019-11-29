@@ -91,12 +91,12 @@ static void isp1301_configure_lpc32xx(void)
 	i2c_smbus_write_byte_data(isp1301_i2c_client,
 		ISP1301_I2C_INTERRUPT_RISING | ISP1301_I2C_REG_CLEAR_ADDR, ~0);
 
-	printk(KERN_INFO "ISP1301 Vendor ID  : 0x%04x\n",
-	      i2c_smbus_read_word_data(isp1301_i2c_client, 0x00));
-	printk(KERN_INFO "ISP1301 Product ID : 0x%04x\n",
-	      i2c_smbus_read_word_data(isp1301_i2c_client, 0x02));
-	printk(KERN_INFO "ISP1301 Version ID : 0x%04x\n",
-	      i2c_smbus_read_word_data(isp1301_i2c_client, 0x14));
+	pr_info("ISP1301 Vendor ID  : 0x%04x\n",
+		i2c_smbus_read_word_data(isp1301_i2c_client, 0x00));
+	pr_info("ISP1301 Product ID : 0x%04x\n",
+		i2c_smbus_read_word_data(isp1301_i2c_client, 0x02));
+	pr_info("ISP1301 Version ID : 0x%04x\n",
+		i2c_smbus_read_word_data(isp1301_i2c_client, 0x14));
 }
 
 static void isp1301_configure(void)

@@ -2013,7 +2013,7 @@ static int __init acm_init(void)
 		return retval;
 	}
 
-	printk(KERN_INFO KBUILD_MODNAME ": " DRIVER_DESC "\n");
+	pr_info(KBUILD_MODNAME ": " DRIVER_DESC "\n");
 
 	return 0;
 }

@@ -296,9 +296,9 @@ static void usblp_bulk_read(struct urb *urb)
 
 	if (usblp->present && usblp->used) {
 		if (status)
-			printk(KERN_WARNING "usblp%d: "
-			    "nonzero read bulk status received: %d\n",
-			    usblp->minor, status);
+			pr_warn("usblp%d: "
+				"nonzero read bulk status received: %d\n",
+				usblp->minor, status);
 	}
 	spin_lock_irqsave(&usblp->lock, flags);
 	if (status < 0)
@@ -320,9 +320,9 @@ static void usblp_bulk_write(struct urb *urb)
 
 	if (usblp->present && usblp->used) {
 		if (status)
-			printk(KERN_WARNING "usblp%d: "
-			    "nonzero write bulk status received: %d\n",
-			    usblp->minor, status);
+			pr_warn("usblp%d: "
+				"nonzero write bulk status received: %d\n",
+				usblp->minor, status);
 	}
 	spin_lock_irqsave(&usblp->lock, flags);
 	if (status < 0)
@@ -367,8 +367,8 @@ static int usblp_check_status(struct usblp *usblp, int err)
 		newerr = 2;
 
 	if (newerr != err) {
-		printk(KERN_INFO "usblp%d: %s\n",
-		   usblp->minor, usblp_messages[newerr]);
+		pr_info("usblp%d: %s\n",
+			usblp->minor, usblp_messages[newerr]);
 	}
 
 	return newerr;
@@ -440,7 +440,7 @@ out:
 
 static void usblp_cleanup(struct usblp *usblp)
 {
-	printk(KERN_INFO "usblp%d: removed\n", usblp->minor);
+	pr_info("usblp%d: removed\n", usblp->minor);
 
 	kfree(usblp->readbuf);
 	kfree(usblp->device_id_string);
@@ -828,8 +828,8 @@ static ssize_t usblp_read(struct file *file, char __user *buffer, size_t len, lo
 		return rv;
 
 	if ((avail = usblp->rstatus) < 0) {
-		printk(KERN_ERR "usblp%d: error %d reading from printer\n",
-		    usblp->minor, (int)avail);
+		pr_err("usblp%d: error %d reading from printer\n",
+			usblp->minor, (int)avail);
 		usblp_submit_read(usblp);
 		count = -EIO;
 		goto done;
@@ -1270,9 +1270,9 @@ static int usblp_select_alts(struct usblp *usblp)
 
 		/* Turn off reads for buggy bidirectional printers. */
 		if (usblp->quirks & USBLP_QUIRK_BIDIR) {
-			printk(KERN_INFO "usblp%d: Disabling reads from "
-			    "problematic bidirectional printer\n",
-			    usblp->minor);
+			pr_info("usblp%d: Disabling reads from "
+				"problematic bidirectional printer\n",
+				usblp->minor);
 			epread = NULL;
 		}
 
@@ -1312,7 +1312,7 @@ static int usblp_set_protocol(struct usblp *usblp, int protocol)
 		return -EINVAL;
 	r = usb_set_interface(usblp->dev, usblp->ifnum, alts);
 	if (r < 0) {
-		printk(KERN_ERR "usblp: can't set desired altsetting %d on interface %d\n",
+		pr_err("usblp: can't set desired altsetting %d on interface %d\n",
 			alts, usblp->ifnum);
 		return r;
 	}

@@ -1171,7 +1171,7 @@ static int proc_control(struct usb_dev_state *ps, void __user *arg)
 		snoop_urb(dev, NULL, pipe, max(i, 0), min(i, 0), COMPLETE, NULL, 0);
 	}
 	if (i < 0 && i != -EPIPE) {
-		dev_printk(KERN_DEBUG, &dev->dev, "usbfs: USBDEVFS_CONTROL "
+		dev_dbg(&dev->dev, "usbfs: USBDEVFS_CONTROL "
 			   "failed cmd %s rqt %u rq %u len %u ret %d\n",
 			   current->comm, ctrl.bRequestType, ctrl.bRequest,
 			   ctrl.wLength, i);
@@ -1847,8 +1847,8 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 	}
 
 	if (ret) {
-		dev_printk(KERN_DEBUG, &ps->dev->dev,
-			   "usbfs: usb_submit_urb returned %d\n", ret);
+		dev_dbg(&ps->dev->dev,
+			"usbfs: usb_submit_urb returned %d\n", ret);
 		snoop_urb(ps->dev, as->userurb, as->urb->pipe,
 				0, ret, COMPLETE, NULL, 0);
 		async_removepending(as);
@@ -2773,13 +2773,13 @@ int __init usb_devio_init(void)
 	retval = register_chrdev_region(USB_DEVICE_DEV, USB_DEVICE_MAX,
 					"usb_device");
 	if (retval) {
-		printk(KERN_ERR "Unable to register minors for usb_device\n");
+		pr_err("Unable to register minors for usb_device\n");
 		goto out;
 	}
 	cdev_init(&usb_device_cdev, &usbdev_file_operations);
 	retval = cdev_add(&usb_device_cdev, USB_DEVICE_DEV, USB_DEVICE_MAX);
 	if (retval) {
-		printk(KERN_ERR "Unable to get usb_device major %d\n",
+		pr_err("Unable to get usb_device major %d\n",
 		       USB_DEVICE_MAJOR);
 		goto error_cdev;
 	}

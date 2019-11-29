@@ -448,7 +448,7 @@ static void warn_level(void)
 
 	if (!level_warned) {
 		level_warned = 1;
-		printk(KERN_WARNING "WARNING! power/level is deprecated; "
+		pr_warn("WARNING! power/level is deprecated; "
 				"use power/control instead\n");
 	}
 }

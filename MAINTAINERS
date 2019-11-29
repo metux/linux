@@ -16275,6 +16275,13 @@ L:	alsa-devel@alsa-project.org (moderated for non-subscribers)
 S:	Maintained
 F:	sound/soc/ti/
 
+Texas Instruments' ADS1118 ADC driver
+M:	Enrico Weigelt, metux IT consult <info@metux.net>
+L:	linux-iio@vger.kernel.org
+S:	Supported
+F:	drivers/iio/adc/ti-ads1118.c
+F:	Documentation/devicetree/bindings/iio/dac/ti,ads1118.txt
+
 Texas Instruments' DAC7612 DAC Driver
 M:	Ricardo Ribalda <ricardo@ribalda.com>
 L:	linux-iio@vger.kernel.org

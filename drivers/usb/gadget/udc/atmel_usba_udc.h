@@ -213,26 +213,6 @@
 #define FIFO_IOMEM_ID	0
 #define CTRL_IOMEM_ID	1
 
-#define DBG_ERR		0x0001	/* report all error returns */
-#define DBG_HW		0x0002	/* debug hardware initialization */
-#define DBG_GADGET	0x0004	/* calls to/from gadget driver */
-#define DBG_INT		0x0008	/* interrupts */
-#define DBG_BUS		0x0010	/* report changes in bus state */
-#define DBG_QUEUE	0x0020  /* debug request queue processing */
-#define DBG_FIFO	0x0040  /* debug FIFO contents */
-#define DBG_DMA		0x0080  /* debug DMA handling */
-#define DBG_REQ		0x0100	/* print out queued request length */
-#define DBG_ALL		0xffff
-#define DBG_NONE	0x0000
-
-#define DEBUG_LEVEL	(DBG_ERR)
-
-#define DBG(level, fmt, ...)					\
-	do {							\
-		if ((level) & DEBUG_LEVEL)			\
-			pr_debug("udc: " fmt, ## __VA_ARGS__);	\
-	} while (0)
-
 enum usba_ctrl_state {
 	WAIT_FOR_SETUP,
 	DATA_STAGE_IN,

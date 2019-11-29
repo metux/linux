@@ -26,7 +26,9 @@
 #include <linux/irq.h>
 #include <linux/gpio/consumer.h>
 
+#include "udc-debug.h"
 #include "atmel_usba_udc.h"
+
 #define USBA_VBUS_IRQFLAGS (IRQF_ONESHOT \
 			   | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING)
 
@@ -349,7 +351,7 @@ static int usba_config_fifo_table(struct usba_udc *udc)
 		n = ARRAY_SIZE(mode_4_cfg);
 		break;
 	}
-	DBG(DBG_HW, "Setup fifo_mode %d\n", fifo_mode);
+	udc_dbg(udc, "Setup fifo_mode %d\n", fifo_mode);
 
 	return n;
 }
@@ -415,9 +417,8 @@ static void next_fifo_transaction(struct usba_ep *ep, struct usba_request *req)
 	} else if (transaction_len == ep->ep.maxpacket && req->req.zero)
 		req->last_transaction = 0;
 
-	DBG(DBG_QUEUE, "%s: submit_transaction, req %p (length %d)%s\n",
-		ep->ep.name, req, transaction_len,
-		req->last_transaction ? ", done" : "");
+	ep_dbg(ep, "submit_transaction, req %p (length %d)%s\n",
+	       req, transaction_len, req->last_transaction ? ", done" : "");
 
 	memcpy_toio(ep->fifo, req->req.buf + req->req.actual, transaction_len);
 	usba_ep_writel(ep, SET_STA, USBA_TX_PK_RDY);
@@ -426,8 +427,8 @@ static void next_fifo_transaction(struct usba_ep *ep, struct usba_request *req)
 
 static void submit_request(struct usba_ep *ep, struct usba_request *req)
 {
-	DBG(DBG_QUEUE, "%s: submit_request: req %p (length %d)\n",
-		ep->ep.name, req, req->req.length);
+	ep_dbg(ep, "submit_request: req %p (length %d)\n",
+	       req, req->req.length);
 
 	req->req.actual = 0;
 	req->submitted = 1;
@@ -491,7 +492,7 @@ static void receive_data(struct usba_ep *ep)
 	status = usba_ep_readl(ep, STA);
 	nr_busy = USBA_BFEXT(BUSY_BANKS, status);
 
-	DBG(DBG_QUEUE, "receive data: nr_busy=%u\n", nr_busy);
+	ep_dbg(ep, "receive data: nr_busy=%u\n", nr_busy);
 
 	while (nr_busy > 0) {
 		if (list_empty(&ep->queue)) {
@@ -517,7 +518,7 @@ static void receive_data(struct usba_ep *ep)
 		usba_ep_writel(ep, CLR_STA, USBA_RX_BK_RDY);
 
 		if (is_complete) {
-			DBG(DBG_QUEUE, "%s: request done\n", ep->ep.name);
+			ep_dbg("request done\n");
 			req->req.status = 0;
 			list_del_init(&req->queue);
 			usba_ep_writel(ep, CTL_DIS, USBA_RX_BK_RDY);
@@ -549,9 +550,8 @@ request_complete(struct usba_ep *ep, struct usba_request *req, int status)
 	if (req->using_dma)
 		usb_gadget_unmap_request(&udc->gadget, &req->req, ep->is_in);
 
-	DBG(DBG_GADGET | DBG_REQ,
-		"%s: req %p complete: status %d, actual %u\n",
-		ep->ep.name, req, req->req.status, req->req.actual);
+	ep_dbg(ep, "req %p complete: status %d, actual %u\n",
+	       req, req->req.status, req->req.actual);
 
 	spin_unlock(&udc->lock);
 	usb_gadget_giveback_request(&ep->ep, &req->req);
@@ -577,7 +577,7 @@ usba_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 	unsigned long flags, maxpacket;
 	unsigned int nr_trans;
 
-	DBG(DBG_GADGET, "%s: ep_enable: desc=%p\n", ep->ep.name, desc);
+	ep_dbg(ep, "ep_enable: desc=%p\n", desc);
 
 	maxpacket = usb_endpoint_maxp(desc);
 
@@ -586,15 +586,15 @@ usba_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 			|| desc->bDescriptorType != USB_DT_ENDPOINT
 			|| maxpacket == 0
 			|| maxpacket > ep->fifo_size) {
-		DBG(DBG_ERR, "ep_enable: Invalid argument");
+		ep_dbg(ep, "ep_enable: Invalid argument");
 		return -EINVAL;
 	}
 
 	ep->is_isoc = 0;
 	ep->is_in = 0;
 
-	DBG(DBG_ERR, "%s: EPT_CFG = 0x%lx (maxpacket = %lu)\n",
-			ep->ep.name, ep->ept_cfg, maxpacket);
+	ep_dbg(ep, "EPT_CFG = 0x%lx (maxpacket = %lu)\n",
+	       ep->ept_cfg, maxpacket);
 
 	if (usb_endpoint_dir_in(desc)) {
 		ep->is_in = 1;
@@ -607,8 +607,7 @@ usba_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 		break;
 	case USB_ENDPOINT_XFER_ISOC:
 		if (!ep->can_isoc) {
-			DBG(DBG_ERR, "ep_enable: %s is not isoc capable\n",
-					ep->ep.name);
+			ep_dbg(ep, "ep_enable: not isoc capable\n");
 			return -EINVAL;
 		}
 
@@ -654,10 +653,10 @@ usba_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 
 	spin_unlock_irqrestore(&udc->lock, flags);
 
-	DBG(DBG_HW, "EPT_CFG%d after init: %#08lx\n", ep->index,
-			(unsigned long)usba_ep_readl(ep, CFG));
-	DBG(DBG_HW, "INT_ENB after init: %#08lx\n",
-			(unsigned long)usba_int_enb_get(udc));
+	ep_dbg(ep, "EPT_CFG%d after init: %#08lx\n", ep->index,
+	       (unsigned long)usba_ep_readl(ep, CFG));
+	ep_dbg(ep, "INT_ENB after init: %#08lx\n",
+	       (unsigned long)usba_int_enb_get(udc));
 
 	return 0;
 }
@@ -669,13 +668,13 @@ static int usba_ep_disable(struct usb_ep *_ep)
 	LIST_HEAD(req_list);
 	unsigned long flags;
 
-	DBG(DBG_GADGET, "ep_disable: %s\n", ep->ep.name);
+	ep_dbg(ep, "ep_disable\n");
 
 	spin_lock_irqsave(&udc->lock, flags);
 
 	if (!ep->ep.desc) {
 		spin_unlock_irqrestore(&udc->lock, flags);
-		DBG(DBG_ERR, "ep_disable: %s not enabled\n", ep->ep.name);
+		ep_dbg(ep, "ep_disable: not enabled\n");
 		return -EINVAL;
 	}
 	ep->ep.desc = NULL;
@@ -700,8 +699,9 @@ static struct usb_request *
 usba_ep_alloc_request(struct usb_ep *_ep, gfp_t gfp_flags)
 {
 	struct usba_request *req;
+	struct usba_ep *ep = to_usba_ep(_ep);
 
-	DBG(DBG_GADGET, "ep_alloc_request: %p, 0x%x\n", _ep, gfp_flags);
+	ep_dbg(ep, "ep_alloc_request: %p, 0x%x\n", _ep, gfp_flags);
 
 	req = kzalloc(sizeof(*req), gfp_flags);
 	if (!req)
@@ -715,9 +715,10 @@ usba_ep_alloc_request(struct usb_ep *_ep, gfp_t gfp_flags)
 static void
 usba_ep_free_request(struct usb_ep *_ep, struct usb_request *_req)
 {
+	struct usba_ep *ep = to_usba_ep(_ep);
 	struct usba_request *req = to_usba_req(_req);
 
-	DBG(DBG_GADGET, "ep_free_request: %p, %p\n", _ep, _req);
+	ep_dbg(ep, "ep_free_request: %p, %p\n", _ep, _req);
 
 	kfree(req);
 }
@@ -728,7 +729,7 @@ static int queue_dma(struct usba_udc *udc, struct usba_ep *ep,
 	unsigned long flags;
 	int ret;
 
-	DBG(DBG_DMA, "%s: req l/%u d/%pad %c%c%c\n",
+	udc_dbg(udc, "%s: req l/%u d/%pad %c%c%c\n",
 		ep->ep.name, req->req.length, &req->req.dma,
 		req->req.zero ? 'Z' : 'z',
 		req->req.short_not_ok ? 'S' : 's',
@@ -736,7 +737,7 @@ static int queue_dma(struct usba_udc *udc, struct usba_ep *ep,
 
 	if (req->req.length > 0x10000) {
 		/* Lengths from 0 to 65536 (inclusive) are supported */
-		DBG(DBG_ERR, "invalid request length %u\n", req->req.length);
+		ep_dbg(ep, "invalid request length %u\n", req->req.length);
 		return -EINVAL;
 	}
 
@@ -780,8 +781,7 @@ usba_ep_queue(struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 	unsigned long flags;
 	int ret;
 
-	DBG(DBG_GADGET | DBG_QUEUE | DBG_REQ, "%s: queue req %p, len %u\n",
-			ep->ep.name, req, _req->length);
+	ep_dbg(ep, "queue req %p, len %u\n", req, _req->length);
 
 	if (!udc->driver || udc->gadget.speed == USB_SPEED_UNKNOWN ||
 	    !ep->ep.desc)
@@ -863,8 +863,7 @@ static int usba_ep_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 	unsigned long flags;
 	u32 status;
 
-	DBG(DBG_GADGET | DBG_QUEUE, "ep_dequeue: %s, req %p\n",
-			ep->ep.name, _req);
+	ep_dbg(ep, "ep_dequeue: req %p\n", _req);
 
 	spin_lock_irqsave(&udc->lock, flags);
 
@@ -920,17 +919,14 @@ static int usba_ep_set_halt(struct usb_ep *_ep, int value)
 	unsigned long flags;
 	int ret = 0;
 
-	DBG(DBG_GADGET, "endpoint %s: %s HALT\n", ep->ep.name,
-			value ? "set" : "clear");
+	ep_dbg(ep, "%s HALT\n", value ? "set" : "clear");
 
 	if (!ep->ep.desc) {
-		DBG(DBG_ERR, "Attempted to halt uninitialized ep %s\n",
-				ep->ep.name);
+		ep_dbg(ep, "Attempted to halt uninitialized ep\n");
 		return -ENODEV;
 	}
 	if (ep->is_isoc) {
-		DBG(DBG_ERR, "Attempted to halt isochronous ep %s\n",
-				ep->ep.name);
+		ep_dbg(ep, "Attempted to halt isochronous ep\n");
 		return -ENOTTY;
 	}
 
@@ -1183,7 +1179,7 @@ static inline void set_address(struct usba_udc *udc, unsigned int addr)
 {
 	u32 regval;
 
-	DBG(DBG_BUS, "setting address %u...\n", addr);
+	udc_dbg(udc, "setting address %u...\n", addr);
 	regval = usba_readl(udc, CTRL);
 	regval = USBA_BFINS(DEV_ADDR, addr, regval);
 	usba_writel(udc, CTRL, regval);
@@ -1414,9 +1410,9 @@ delegate:
 	return retval;
 
 stall:
-	pr_err("udc: %s: Invalid setup request: %02x.%02x v%04x i%04x l%d, "
+	ep_err(ep, "Invalid setup request: %02x.%02x v%04x i%04x l%d, "
 		"halting endpoint...\n",
-		ep->ep.name, crq->bRequestType, crq->bRequest,
+		crq->bRequestType, crq->bRequest,
 		le16_to_cpu(crq->wValue), le16_to_cpu(crq->wIndex),
 		le16_to_cpu(crq->wLength));
 	set_protocol_stall(udc, ep);
@@ -1433,8 +1429,7 @@ restart:
 	epstatus = usba_ep_readl(ep, STA);
 	epctrl = usba_ep_readl(ep, CTL);
 
-	DBG(DBG_INT, "%s [%d]: s/%08x c/%08x\n",
-			ep->ep.name, ep->state, epstatus, epctrl);
+	ep_dbg(ep, "%s [%d]: s/%08x c/%08x\n", ep->state, epstatus, epctrl);
 
 	req = NULL;
 	if (!list_empty(&ep->queue))
@@ -1485,9 +1480,8 @@ restart:
 				set_protocol_stall(udc, ep);
 			break;
 		default:
-			pr_err("udc: %s: TXCOMP: Invalid endpoint state %d, "
-				"halting endpoint...\n",
-				ep->ep.name, ep->state);
+			ep_err(ep, "TXCOMP: Invalid endpoint state %d, "
+				"halting endpoint...\n", ep->state);
 			set_protocol_stall(udc, ep);
 			break;
 		}
@@ -1514,9 +1508,8 @@ restart:
 		default:
 			usba_ep_writel(ep, CLR_STA, USBA_RX_BK_RDY);
 			usba_ep_writel(ep, CTL_DIS, USBA_RX_BK_RDY);
-			pr_err("udc: %s: RXRDY: Invalid endpoint state %d, "
-				"halting endpoint...\n",
-				ep->ep.name, ep->state);
+			ep_err(ep, "RXRDY: Invalid endpoint state %d, "
+			       "halting endpoint...\n", ep->state);
 			set_protocol_stall(udc, ep);
 			break;
 		}
@@ -1557,15 +1550,16 @@ restart:
 		}
 
 		pkt_len = USBA_BFEXT(BYTE_COUNT, usba_ep_readl(ep, STA));
-		DBG(DBG_HW, "Packet length: %u\n", pkt_len);
+		ep_dbg(ep, "Packet length: %u\n", pkt_len);
 		if (pkt_len != sizeof(crq)) {
-			pr_warn("udc: Invalid packet length %u (expected %zu)\n",
+			ep_warn(ep,
+				"Invalid packet length %u (expected %zu)\n",
 				pkt_len, sizeof(crq));
 			set_protocol_stall(udc, ep);
 			return;
 		}
 
-		DBG(DBG_FIFO, "Copying ctrl request from 0x%p:\n", ep->fifo);
+		ep_dbg(ep, "Copying ctrl request from 0x%p:\n", ep->fifo);
 		memcpy_fromio(crq.data, ep->fifo, sizeof(crq));
 
 		/* Free up one bank in the FIFO so that we can
@@ -1596,7 +1590,7 @@ restart:
 			spin_lock(&udc->lock);
 		}
 
-		DBG(DBG_BUS, "req %02x.%02x, length %d, state %d, ret %d\n",
+		ep_dbg(ep, "req %02x.%02x, length %d, state %d, ret %d\n",
 			crq.crq.bRequestType, crq.crq.bRequest,
 			le16_to_cpu(crq.crq.wLength), ep->state, ret);
 
@@ -1616,13 +1610,13 @@ static void usba_ep_irq(struct usba_udc *udc, struct usba_ep *ep)
 	epstatus = usba_ep_readl(ep, STA);
 	epctrl = usba_ep_readl(ep, CTL);
 
-	DBG(DBG_INT, "%s: interrupt, status: 0x%08x\n", ep->ep.name, epstatus);
+	ep_dbg(ep, "interrupt, status: 0x%08x\n", epstatus);
 
 	while ((epctrl & USBA_TX_PK_RDY) && !(epstatus & USBA_TX_PK_RDY)) {
-		DBG(DBG_BUS, "%s: TX PK ready\n", ep->ep.name);
+		ep_dbg(udc, "TX PK ready\n");
 
 		if (list_empty(&ep->queue)) {
-			dev_warn(&udc->pdev->dev, "ep_irq: queue empty\n");
+			ep_warn(ep, "ep_irq: queue empty\n");
 			usba_ep_writel(ep, CTL_DIS, USBA_TX_PK_RDY);
 			return;
 		}
@@ -1655,7 +1649,7 @@ static void usba_ep_irq(struct usba_udc *udc, struct usba_ep *ep)
 		epctrl = usba_ep_readl(ep, CTL);
 	}
 	if ((epstatus & epctrl) & USBA_RX_BK_RDY) {
-		DBG(DBG_BUS, "%s: RX data ready\n", ep->ep.name);
+		ep_dbg(ep, "RX data ready\n");
 		receive_data(ep);
 	}
 }
@@ -1671,14 +1665,12 @@ static void usba_dma_irq(struct usba_udc *udc, struct usba_ep *ep)
 	ep->last_dma_status = status;
 #endif
 	pending = status & control;
-	DBG(DBG_INT | DBG_DMA, "dma irq, s/%#08x, c/%#08x\n", status, control);
+	ep_dbg(ep, "dma irq, s/%#08x, c/%#08x\n", status, control);
 
 	if (status & USBA_DMA_CH_EN) {
-		dev_err(&udc->pdev->dev,
-			"DMA_CH_EN is set after transfer is finished!\n");
-		dev_err(&udc->pdev->dev,
-			"status=%#08x, pending=%#08x, control=%#08x\n",
-			status, pending, control);
+		ep_err(ep, "DMA_CH_EN is set after transfer is finished!\n");
+		ep_err(ep, "status=%#08x, pending=%#08x, control=%#08x\n",
+		       status, pending, control);
 
 		/*
 		 * try to pretend nothing happened. We might have to
@@ -1714,7 +1706,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 
 	int_enb = usba_int_enb_get(udc);
 	status = usba_readl(udc, INT_STA) & (int_enb | USBA_HIGH_SPEED);
-	DBG(DBG_INT, "irq, status=%#08x\n", status);
+	udc_dbg(udc, "irq, status=%#08x\n", status);
 
 	if (status & USBA_DET_SUSPEND) {
 		usba_writel(udc, INT_CLR, USBA_DET_SUSPEND|USBA_WAKE_UP);
@@ -1724,7 +1716,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 		toggle_bias(udc, 0);
 		udc->bias_pulse_needed = true;
 		stop_clock(udc);
-		DBG(DBG_BUS, "Suspend detected\n");
+		udc_dbg(udc, "Suspend detected\n");
 		if (udc->gadget.speed != USB_SPEED_UNKNOWN
 				&& udc->driver && udc->driver->suspend) {
 			spin_unlock(&udc->lock);
@@ -1737,7 +1729,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 		start_clock(udc);
 		toggle_bias(udc, 1);
 		usba_writel(udc, INT_CLR, USBA_WAKE_UP);
-		DBG(DBG_BUS, "Wake Up CPU detected\n");
+		udc_dbg(udc, "Wake Up CPU detected\n");
 	}
 
 	if (status & USBA_END_OF_RESUME) {
@@ -1746,7 +1738,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 		usba_int_enb_clear(udc, USBA_WAKE_UP);
 		usba_int_enb_set(udc, USBA_DET_SUSPEND);
 		generate_bias_pulse(udc);
-		DBG(DBG_BUS, "Resume detected\n");
+		udc_dbg(udc, "Resume detected\n");
 		if (udc->gadget.speed != USB_SPEED_UNKNOWN
 				&& udc->driver && udc->driver->resume) {
 			spin_unlock(&udc->lock);
@@ -1802,7 +1794,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 			udc->gadget.speed = USB_SPEED_HIGH;
 		else
 			udc->gadget.speed = USB_SPEED_FULL;
-		DBG(DBG_BUS, "%s bus reset detected\n",
+		udc_dbg(udc, "%s bus reset detected\n",
 		    usb_speed_string(udc->gadget.speed));
 
 		ep0 = &udc->usba_ep[0];
@@ -1827,8 +1819,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 		 * but it's clearly harmless...
 		 */
 		if (!(usba_ep_readl(ep0, CFG) & USBA_EPT_MAPPED))
-			dev_err(&udc->pdev->dev,
-				"ODD: EP0 configuration is invalid!\n");
+			udc_err(udc, "ODD: EP0 configuration is invalid!\n");
 
 		/* Preallocate other endpoints */
 		for (i = 1; i < udc->num_ep; i++) {
@@ -1836,7 +1827,7 @@ static irqreturn_t usba_udc_irq(int irq, void *devid)
 			if (ep->ep.claimed) {
 				usba_ep_writel(ep, CFG, ep->ept_cfg);
 				if (!(usba_ep_readl(ep, CFG) & USBA_EPT_MAPPED))
-					dev_err(&udc->pdev->dev,
+					udc_err(udc,
 						"ODD: EP%d configuration is invalid!\n", i);
 			}
 		}
@@ -2125,7 +2116,7 @@ static const struct of_device_id atmel_pmc_dt_ids[] = {
 };
 
 static struct usba_ep * atmel_udc_of_init(struct platform_device *pdev,
-						    struct usba_udc *udc)
+					  struct usba_udc *udc)
 {
 	struct device_node *np = pdev->dev.of_node;
 	const struct of_device_id *match;

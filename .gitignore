@@ -39,7 +39,6 @@
 *.o.*
 *.patch
 *.s
-.scmversion
 *.so
 *.so.dbg
 *.su

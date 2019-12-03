@@ -23,6 +23,6 @@ binary-arch:	debian/control
 clean:
 	rm -rf debian/*tmp debian/files debian/changelog debian/control debian/copyright debian/rules.auto debian/arch
 	$(MAKE) -C tools clean
-	$(MAKE) clean
+#	$(MAKE) clean
 
 binary: binary-arch

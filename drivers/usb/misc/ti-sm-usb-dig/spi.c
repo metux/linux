@@ -43,10 +43,10 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 
 	if (spi_priv->current_mode & SPI_CPOL) {
 		dev_info(spi_priv->priv->dev, "SPI_CPOL on\n");
-		packet->flags |= FLAG_CLOCK_HIGH;
+		packet->flags |= FLAG_CLOCK_LOW;
 	} else {
 		dev_info(spi_priv->priv->dev, "SPI_CPOL off\n");
-		packet->flags |= FLAG_CLOCK_LOW;
+		packet->flags |= FLAG_CLOCK_HIGH;
 	}
 
 	if (spi_priv->current_mode & SPI_CPHA) {

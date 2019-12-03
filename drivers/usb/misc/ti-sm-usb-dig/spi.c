@@ -98,7 +98,7 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 		// xfer size is 1 control byte plus xfer->len payload
 		packet->num = xfer->len+1;
 
-		memset(packet->data, 0xff, packet->num);
+		memset(packet->data, 0x23, packet->num);
 
 		// set CS = LOW (0x02 for HI)
 		if (cs)

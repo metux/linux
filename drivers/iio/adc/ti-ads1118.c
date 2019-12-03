@@ -243,6 +243,8 @@ static int ads1118_probe(struct spi_device *spi)
 //		return ret;
 	}
 
+	/* read configuration register */
+
 	dev_info(&spi->dev, "ads1118 initialized\n");
 
 	return 0;
@@ -268,7 +270,7 @@ MODULE_DEVICE_TABLE(of, ads1118_of_match);
 static struct spi_driver ads1118_driver = {
 	.driver = {
 		.name = "ads1118",
-//		.of_match_table = ads1118_of_match,
+		.of_match_table = ads1118_of_match,
 		.owner = THIS_MODULE,
 	},
 	.probe = ads1118_probe,

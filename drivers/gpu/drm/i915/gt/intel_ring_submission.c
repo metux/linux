@@ -1319,6 +1319,8 @@ static int ring_context_alloc(struct intel_context *ce)
 			return PTR_ERR(vma);
 
 		ce->state = vma;
+		if (engine->default_state)
+			__set_bit(CONTEXT_VALID_BIT, &ce->flags);
 	}
 
 	return 0;
@@ -1591,24 +1593,11 @@ static int switch_context(struct i915_request *rq)
 	GEM_BUG_ON(HAS_EXECLISTS(rq->i915));
 
 	if (vm) {
+		struct intel_engine_cs *engine = rq->engine;
+
 		ret = load_pd_dir(rq, i915_vm_to_ppgtt(vm));
 		if (ret)
 			return ret;
-	}
-
-	if (ce->state) {
-		GEM_BUG_ON(rq->engine->id != RCS0);
-
-		if (!rq->engine->default_state)
-			hw_flags = MI_RESTORE_INHIBIT;
-
-		ret = mi_set_context(rq, hw_flags);
-		if (ret)
-			return ret;
-	}
-
-	if (vm) {
-		struct intel_engine_cs *engine = rq->engine;
 
 		ret = engine->emit_flush(rq, EMIT_INVALIDATE);
 		if (ret)
@@ -1631,6 +1620,17 @@ static int switch_context(struct i915_request *rq)
 			return ret;
 
 		ret = engine->emit_flush(rq, EMIT_FLUSH);
+		if (ret)
+			return ret;
+	}
+
+	if (ce->state) {
+		GEM_BUG_ON(rq->engine->id != RCS0);
+
+		if (!test_bit(CONTEXT_VALID_BIT, &ce->flags))
+			hw_flags = MI_RESTORE_INHIBIT;
+
+		ret = mi_set_context(rq, hw_flags);
 		if (ret)
 			return ret;
 	}

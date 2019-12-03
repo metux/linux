@@ -41,24 +41,21 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 	packet->flags = 0;
 	packet->chan = chan;
 
-	if (spi_priv->current_mode & SPI_CPOL) {
-		dev_info(spi_priv->priv->dev, "SPI_CPOL on\n");
+	if (spi_priv->current_mode & SPI_CPOL)
 		packet->flags |= FLAG_CLOCK_LOW;
-	} else {
-		dev_info(spi_priv->priv->dev, "SPI_CPOL off\n");
+	else
 		packet->flags |= FLAG_CLOCK_HIGH;
-	}
 
-	if (spi_priv->current_mode & SPI_CPHA) {
-		dev_info(spi_priv->priv->dev, "SPI_CPHA on\n");
+	if (spi_priv->current_mode & SPI_CPHA)
 		packet->flags |= FLAG_EDGE_AFE;
-	} else {
-		dev_info(spi_priv->priv->dev, "SPI_CPHA off\n");
+	else
 		packet->flags |= FLAG_EDGE_BRE;
-	}
 
 	dev_info(spi_priv->priv->dev, "xfer_one: spi xfer flags: %02x\n",
 		 packet->flags);
+
+	dev_info(spi_priv->priv->dev, "xfer_one: chip_select=%d\n",
+		 msg->spi->chip_select);
 
 	if (xfer->rx_buf && xfer->tx_buf) {
 		dev_err(spi_priv->priv->dev, "cant do rx and tx in one xfer\n");
@@ -135,9 +132,6 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 	return 0;
 }
 
-// FIXME:
-// add chipselect: cmd flat set, data=0x01 CS low, data=0x02 CS hi
-// read: cmd flag set, data=0xff
 static int ti_sm_usb_dig_spi_xfer_one_msg(struct spi_master *master,
 					  struct spi_message *msg)
 {
@@ -168,7 +162,7 @@ static int ti_sm_usb_dig_spi_xfer_one_msg(struct spi_master *master,
 //		rc = ti_sm_usb_dig_spi_xfer_one_xfer(master, msg, xfer, 1, 1);
 //		dev_info(&msg->spi->dev, "result = %ld\n", rc);
 
-		spi_priv->current_mode = SPI_MODE_1;
+//		spi_priv->current_mode = SPI_MODE_1;
 
 		dev_info(&msg->spi->dev, "MODE1 CH0 CS0\n");
 		rc = ti_sm_usb_dig_spi_xfer_one_xfer(master, msg, xfer, 0, 0);
@@ -228,14 +222,6 @@ static int ti_sm_usb_dig_spi_xfer_one_msg(struct spi_master *master,
 		}
 	}
 
-	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
-		dev_dbg(&msg->spi->dev,
-			"  xfer %p: len %u tx %p/%pad rx %p/%pad\n",
-			xfer, xfer->len,
-			xfer->tx_buf, &xfer->tx_dma,
-			xfer->rx_buf, &xfer->rx_dma);
-	}
-
 msg_done:
 //	msg->status = as->done_status;
 	spi_finalize_current_message(msg->spi->master);
@@ -250,7 +236,10 @@ static int ti_sm_usb_dig_spi_setup(struct spi_device *spi)
 
 	spi_priv->current_mode = spi->mode;
 
-	dev_info(spi_priv->priv->dev, "setup() mode: %d\n", spi->mode);
+	dev_info(spi_priv->priv->dev, "setup() mode: %d %s%s\n",
+		spi->mode,
+		(spi->mode & SPI_CPOL) ? "CPOL " : "",
+		(spi->mode & SPI_CPHA) ? "CPHA" : "");
 
 	return 0;
 }
@@ -264,12 +253,21 @@ static void ti_sm_usb_dig_spi_cleanup(struct spi_device *spi)
 }
 
 // FIXME: ugly hack
-static struct spi_board_info dut_board_info = {
-	.modalias	= "ads1118",
-	.max_speed_hz	= 48000000, //48 Mbps
-	.bus_num	= 1,
-	.chip_select	= 0,
-	.mode		= SPI_MODE_1,
+static struct spi_board_info dut_board_info[] = {
+	{
+		.modalias	= "ads1118",
+		.max_speed_hz	= 48000000,
+		.bus_num	= 1,
+		.chip_select	= 0,
+		.mode		= SPI_MODE_1,
+	},
+	{
+		.modalias	= "ads1118",
+		.max_speed_hz	= 48000000,
+		.bus_num	= 1,
+		.chip_select	= 1,
+		.mode		= SPI_MODE_1,
+	},
 };
 
 int ti_sm_usb_dig_spi_init(struct ti_sm_usb_dig_priv *priv)
@@ -305,9 +303,14 @@ int ti_sm_usb_dig_spi_init(struct ti_sm_usb_dig_priv *priv)
 		return rc;
 	}
 
-	spi_device = spi_new_device(master, &dut_board_info);
+	spi_device = spi_new_device(master, &dut_board_info[0]);
 	if ((spi_device == NULL) || IS_ERR(spi_device)) {
-		dev_err(priv->dev, "failed registering spi dut device: %ld\n", PTR_ERR(spi_device));
+		dev_err(priv->dev, "failed registering spi dut device CS0: %ld\n", PTR_ERR(spi_device));
+	}
+
+	spi_device = spi_new_device(master, &dut_board_info[1]);
+	if ((spi_device == NULL) || IS_ERR(spi_device)) {
+		dev_err(priv->dev, "failed registering spi dut device CS1: %ld\n", PTR_ERR(spi_device));
 	}
 
 	dev_info(priv->dev, "registered spi dut device\n");

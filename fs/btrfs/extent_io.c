@@ -3625,7 +3625,7 @@ static int __extent_writepage(struct page *page, struct writeback_control *wbc,
 	if (!epd->extent_locked) {
 		ret = writepage_delalloc(inode, page, wbc, start, &nr_written);
 		if (ret == 1)
-			goto done_unlocked;
+			return 0;
 		if (ret)
 			goto done;
 	}
@@ -3633,7 +3633,7 @@ static int __extent_writepage(struct page *page, struct writeback_control *wbc,
 	ret = __extent_writepage_io(inode, page, wbc, epd,
 				    i_size, nr_written, &nr);
 	if (ret == 1)
-		goto done_unlocked;
+		return 0;
 
 done:
 	if (nr == 0) {
@@ -3648,9 +3648,6 @@ done:
 	unlock_page(page);
 	ASSERT(ret <= 0);
 	return ret;
-
-done_unlocked:
-	return 0;
 }
 
 void wait_on_extent_buffer_writeback(struct extent_buffer *eb)

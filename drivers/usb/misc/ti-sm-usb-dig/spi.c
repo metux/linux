@@ -123,6 +123,9 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 		 packet->data[3], packet->data[4], packet->data[5],
 		 packet->data[6], packet->data[7], packet->data[9]);
 
+	def_info(spi_priv->priv->dev, "OP=%02x CHAN=%02x Flags=%02x num=%02x\n",
+		packet->op, packet->chan, packet->flags, packet->num);
+
 	return 0;
 }
 

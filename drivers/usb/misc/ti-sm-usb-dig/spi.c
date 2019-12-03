@@ -91,15 +91,9 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 			return -ENOMEM;
 		}
 
-		packet->cmd_mask[0] = 0xff;
-/*
-		packet->cmd_mask[1] = 0xff;
-		packet->cmd_mask[2] = 0xff;
-		packet->cmd_mask[3] = 0xff;
-*/
+		packet->cmd_mask[0] = 0x80;
 		packet->cmd_mask[1] = 0;
 		packet->cmd_mask[2] = 0;
-		packet->cmd_mask[3] = 0;
 
 		// xfer size is 1 control byte plus xfer->len payload
 		packet->num = xfer->len+1;
@@ -166,19 +160,19 @@ static int ti_sm_usb_dig_spi_xfer_one_msg(struct spi_master *master,
 
 		dev_info(&msg->spi->dev, "MODE1 CH0 CS0\n");
 		rc = ti_sm_usb_dig_spi_xfer_one_xfer(master, msg, xfer, 0, 0);
-		dev_info(&msg->spi->dev, "result = %ld\n", rc);
+		dev_info(&msg->spi->dev, "result = %d\n", rc);
 
 		dev_info(&msg->spi->dev, "MODE1 CH1 CS0\n");
 		rc = ti_sm_usb_dig_spi_xfer_one_xfer(master, msg, xfer, 1, 0);
-		dev_info(&msg->spi->dev, "result = %ld\n", rc);
+		dev_info(&msg->spi->dev, "result = %d\n", rc);
 
 		dev_info(&msg->spi->dev, "MODE1 CH0 CS1\n");
 		rc = ti_sm_usb_dig_spi_xfer_one_xfer(master, msg, xfer, 0, 1);
-		dev_info(&msg->spi->dev, "result = %ld\n", rc);
+		dev_info(&msg->spi->dev, "result = %d\n", rc);
 
 		dev_info(&msg->spi->dev, "MODE1 CH1 CS1\n");
 		rc = ti_sm_usb_dig_spi_xfer_one_xfer(master, msg, xfer, 1, 1);
-		dev_info(&msg->spi->dev, "result = %ld\n", rc);
+		dev_info(&msg->spi->dev, "result = %d\n", rc);
 
 //		spi_priv->current_mode = SPI_MODE_2;
 

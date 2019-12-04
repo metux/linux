@@ -342,7 +342,7 @@ int getchar_timeout(void);
 #if defined(CONFIG_X86_BOOT_VIDEO)
 void set_video(void);
 #else
-static inline void set_video() { }
+static inline void set_video(void) { }
 #endif
 
 /* video-mode.c */

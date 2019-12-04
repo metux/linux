@@ -3918,6 +3918,79 @@ int spi_write_then_read(struct spi_device *spi,
 }
 EXPORT_SYMBOL_GPL(spi_write_then_read);
 
+static u8	*write_and_read_buf;
+
+/**
+ * spi_write_and_read - SPI synchronous full-duplex write and read
+ * @spi: device with which data will be exchanged
+ * @txbuf: data to be written (need not be dma-safe)
+ * @rxbuf: buffer into which data will be read (need not be dma-safe)
+ * @n: size of rxbuf and txbuf, in bytes (rx and tx have same size
+ * Context: can sleep
+ *
+ * This performs a full duplex transaction with the device, sending
+ * txbuf and reading rxbuf at the same time.  The return value
+ * is zero for success, else a negative errno status code.
+ * This call may only be used from a context that may sleep.
+ *
+ * Parameters to this routine are always copied using a small buffer;
+ * portable code should never use this for more than 32 bytes.
+ * Performance-sensitive or bulk transfer code should instead use
+ * spi_{async,sync}() calls with dma-safe buffers.
+ *
+ * Return: zero on success, else a negative error code.
+ */
+int spi_write_and_read(struct spi_device *spi,
+		const void *txbuf,
+		void *rxbuf, unsigned n)
+{
+	static DEFINE_MUTEX(lock);
+
+	int			status;
+	struct spi_message	message;
+	struct spi_transfer	xfer;
+	u8			*local_buf;
+
+	if (!n)
+		return -EINVAL;
+
+	/* Use preallocated DMA-safe buffer if we can.  We can't avoid
+	 * copying here, (as a pure convenience thing), but we can
+	 * keep heap costs out of the hot path unless someone else is
+	 * using the pre-allocated buffer or the transfer is too large.
+	 */
+	if ((n + n) > SPI_BUFSIZ || !mutex_trylock(&lock)) {
+		local_buf = kmalloc(max((unsigned)SPI_BUFSIZ, n + n),
+				    GFP_KERNEL | GFP_DMA);
+		if (!local_buf)
+			return -ENOMEM;
+	} else {
+		local_buf = write_and_read_buf;
+	}
+
+	spi_message_init(&message);
+	memset(&xfer, 0, sizeof(xfer));
+	xfer.len = n;
+	spi_message_add_tail(&xfer, &message);
+
+	memcpy(local_buf, txbuf, n);
+	xfer.tx_buf = local_buf;
+	xfer.rx_buf = local_buf + n;
+
+	/* do the i/o */
+	status = spi_sync(spi, &message);
+	if (status == 0)
+		memcpy(rxbuf, xfer.rx_buf, n);
+
+	if (xfer.tx_buf == write_and_read_buf)
+		mutex_unlock(&lock);
+	else
+		kfree(local_buf);
+
+	return status;
+}
+EXPORT_SYMBOL_GPL(spi_write_and_read);
+
 /*-------------------------------------------------------------------------*/
 
 #if IS_ENABLED(CONFIG_OF)
@@ -4078,6 +4151,12 @@ static int __init spi_init(void)
 
 	buf = kmalloc(SPI_BUFSIZ, GFP_KERNEL);
 	if (!buf) {
+		status = -ENOMEM;
+		goto err0;
+	}
+
+	write_and_read_buf = kmalloc(SPI_BUFSIZ, GFP_KERNEL);
+	if (!write_and_read_buf) {
 		status = -ENOMEM;
 		goto err0;
 	}

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * AMD Platform Security Processor (PSP) interface driver
  *
@@ -11,53 +11,54 @@
 #define __SEV_DEV_H__
 
 #include <linux/device.h>
-#include <linux/spinlock.h>
-#include <linux/mutex.h>
 #include <linux/list.h>
-#include <linux/wait.h>
-#include <linux/dmapool.h>
-#include <linux/hw_random.h>
-#include <linux/bitops.h>
+#include <linux/bits.h>
 #include <linux/interrupt.h>
-#include <linux/irqreturn.h>
-#include <linux/dmaengine.h>
-#include <linux/psp-sev.h>
-#include <linux/miscdevice.h>
-#include <linux/capability.h>
 
-#define SEV_CMD_COMPLETE		BIT(1)
-#define SEV_CMDRESP_CMD_SHIFT		16
-#define SEV_CMDRESP_IOC			BIT(0)
+#include "sp-dev.h"
 
-struct sev_misc_dev {
-	struct kref refcount;
-	struct miscdevice misc;
-};
+#define PSP_CMDRESP_RESP		BIT(31)
+#define PSP_CMDRESP_ERR_MASK		0xffff
 
-struct sev_device {
+#define MAX_PSP_NAME_LEN		16
+
+extern struct psp_device *psp_master;
+
+typedef void (*psp_irq_handler_t)(int, void *, unsigned int);
+
+struct psp_device {
+	struct list_head entry;
+
+	struct psp_vdata *vdata;
+	char name[MAX_PSP_NAME_LEN];
+
 	struct device *dev;
-	struct psp_device *psp;
+	struct sp_device *sp;
 
 	void __iomem *io_regs;
 
-	struct sev_vdata *vdata;
+	psp_irq_handler_t sev_irq_handler;
+	void *sev_irq_data;
 
-	int state;
-	unsigned int int_rcvd;
-	wait_queue_head_t int_queue;
-	struct sev_misc_dev *misc;
-	struct sev_user_data_status status_cmd_buf;
-	struct sev_data_init init_cmd_buf;
+	psp_irq_handler_t tee_irq_handler;
+	void *tee_irq_data;
 
-	u8 api_major;
-	u8 api_minor;
-	u8 build;
+	void *sev_data;
+	void *tee_data;
 };
 
-int sev_dev_init(struct psp_device *psp);
-void sev_dev_destroy(struct psp_device *psp);
+<<<<<<<< HEAD:drivers/crypto/ccp/psp-dev.h
+void psp_set_sev_irq_handler(struct psp_device *psp, psp_irq_handler_t handler,
+			     void *data);
+void psp_clear_sev_irq_handler(struct psp_device *psp);
 
-void sev_pci_init(void);
-void sev_pci_exit(void);
+void psp_set_tee_irq_handler(struct psp_device *psp, psp_irq_handler_t handler,
+			     void *data);
+void psp_clear_tee_irq_handler(struct psp_device *psp);
 
+struct psp_device *psp_get_master_device(void);
+
+#endif /* __PSP_DEV_H */
+========
 #endif /* __SEV_DEV_H */
+>>>>>>>> d744e6359cd6d (crypto: ccp - rename psp-dev files to sev-dev):drivers/crypto/ccp/sev-dev.h

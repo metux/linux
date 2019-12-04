@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * Copyright (C) 2017 Google, Inc.
+ * Copyright _ 2017-2019, Intel Corporation.
  *
  * Authors:
  * Sean Paul <seanpaul@chromium.org>
+ * Ramalingam C <ramalingam.c@intel.com>
  */
 
 #include <linux/component.h>
@@ -1525,7 +1527,7 @@ static int hdcp2_enable_encryption(struct intel_connector *connector)
 	struct intel_digital_port *intel_dig_port = conn_to_dig_port(connector);
 	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
 	struct intel_hdcp *hdcp = &connector->hdcp;
-	enum port port = connector->encoder->port;
+	enum port port = intel_attached_encoder(connector)->port;
 	enum transcoder cpu_transcoder = hdcp->cpu_transcoder;
 	int ret;
 
@@ -1563,7 +1565,7 @@ static int hdcp2_disable_encryption(struct intel_connector *connector)
 	struct intel_digital_port *intel_dig_port = conn_to_dig_port(connector);
 	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
 	struct intel_hdcp *hdcp = &connector->hdcp;
-	enum port port = connector->encoder->port;
+	enum port port = intel_attached_encoder(connector)->port;
 	enum transcoder cpu_transcoder = hdcp->cpu_transcoder;
 	int ret;
 
@@ -1674,7 +1676,7 @@ static int intel_hdcp2_check_link(struct intel_connector *connector)
 	struct intel_digital_port *intel_dig_port = conn_to_dig_port(connector);
 	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
 	struct intel_hdcp *hdcp = &connector->hdcp;
-	enum port port = connector->encoder->port;
+	enum port port = intel_attached_encoder(connector)->port;
 	enum transcoder cpu_transcoder;
 	int ret = 0;
 
@@ -1795,13 +1797,54 @@ static const struct component_ops i915_hdcp_component_ops = {
 	.unbind = i915_hdcp_component_unbind,
 };
 
+static inline
+enum mei_fw_ddi intel_get_mei_fw_ddi_index(enum port port)
+{
+	switch (port) {
+	case PORT_A:
+		return MEI_DDI_A;
+	case PORT_B ... PORT_F:
+		return (enum mei_fw_ddi)port;
+	default:
+		return MEI_DDI_INVALID_PORT;
+	}
+}
+
+static inline
+enum mei_fw_tc intel_get_mei_fw_tc(enum transcoder cpu_transcoder)
+{
+	switch (cpu_transcoder) {
+	case TRANSCODER_A ... TRANSCODER_D:
+		return (enum mei_fw_tc)(cpu_transcoder | 0x10);
+	default: /* eDP, DSI TRANSCODERS are non HDCP capable */
+		return MEI_INVALID_TRANSCODER;
+	}
+}
+
 static inline int initialize_hdcp_port_data(struct intel_connector *connector,
 					    const struct intel_hdcp_shim *shim)
 {
+	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
 	struct intel_hdcp *hdcp = &connector->hdcp;
 	struct hdcp_port_data *data = &hdcp->port_data;
 
-	data->port = connector->encoder->port;
+	if (INTEL_GEN(dev_priv) < 12)
+		data->fw_ddi =
+			intel_get_mei_fw_ddi_index(intel_attached_encoder(connector)->port);
+	else
+		/*
+		 * As per ME FW API expectation, for GEN 12+, fw_ddi is filled
+		 * with zero(INVALID PORT index).
+		 */
+		data->fw_ddi = MEI_DDI_INVALID_PORT;
+
+	/*
+	 * As associated transcoder is set and modified at modeset, here fw_tc
+	 * is initialized to zero (invalid transcoder index). This will be
+	 * retained for <Gen12 forever.
+	 */
+	data->fw_tc = MEI_INVALID_TRANSCODER;
+
 	data->port_type = (u8)HDCP_PORT_TYPE_INTEGRATED;
 	data->protocol = (u8)shim->protocol;
 
@@ -1827,7 +1870,7 @@ static bool is_hdcp2_supported(struct drm_i915_private *dev_priv)
 		return false;
 
 	return (INTEL_GEN(dev_priv) >= 10 || IS_GEMINILAKE(dev_priv) ||
-		IS_KABYLAKE(dev_priv));
+		IS_KABYLAKE(dev_priv) || IS_COFFEELAKE(dev_priv));
 }
 
 void intel_hdcp_component_init(struct drm_i915_private *dev_priv)
@@ -1899,8 +1942,10 @@ int intel_hdcp_init(struct intel_connector *connector,
 	return 0;
 }
 
-int intel_hdcp_enable(struct intel_connector *connector, u8 content_type)
+int intel_hdcp_enable(struct intel_connector *connector,
+		      enum transcoder cpu_transcoder, u8 content_type)
 {
+	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
 	struct intel_hdcp *hdcp = &connector->hdcp;
 	unsigned long check_link_interval = DRM_HDCP_CHECK_PERIOD_MS;
 	int ret = -EINVAL;
@@ -1911,6 +1956,11 @@ int intel_hdcp_enable(struct intel_connector *connector, u8 content_type)
 	mutex_lock(&hdcp->mutex);
 	WARN_ON(hdcp->value == DRM_MODE_CONTENT_PROTECTION_ENABLED);
 	hdcp->content_type = content_type;
+
+	if (INTEL_GEN(dev_priv) >= 12) {
+		hdcp->cpu_transcoder = cpu_transcoder;
+		hdcp->port_data.fw_tc = intel_get_mei_fw_tc(cpu_transcoder);
+	}
 
 	/*
 	 * Considering that HDCP2.2 is more secure than HDCP1.4, If the setup

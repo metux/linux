@@ -74,7 +74,7 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 	packet->num = xfer->len+1;
 
 	if (xfer->len+1 > sizeof(packet->data)) {
-		dev_err(spi_priv->priv->dev, "xfer length %ld larger than bufsz %ld\n",
+		dev_err(spi_priv->priv->dev, "xfer length %d larger than bufsz %ld\n",
 			xfer->len+1,
 			sizeof(packet->data));
 		return -ENOMEM;
@@ -109,7 +109,6 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 static int ti_sm_usb_dig_spi_xfer_one_msg(struct spi_master *master,
 					  struct spi_message *msg)
 {
-	struct spi_sm_usb_dig *spi_priv = spi_master_get_devdata(master);
 	struct spi_transfer *xfer;
 	int rc;
 

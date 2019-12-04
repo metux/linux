@@ -1068,7 +1068,6 @@ static void xgene_enet_delete_desc_rings(struct xgene_enet_pdata *pdata)
 				xgene_enet_delete_ring(ring->cp_ring);
 			pdata->tx_ring[i] = NULL;
 		}
-
 	}
 
 	for (i = 0; i < pdata->rxq_cnt; i++) {
@@ -1089,7 +1088,6 @@ static void xgene_enet_delete_desc_rings(struct xgene_enet_pdata *pdata)
 			xgene_enet_delete_ring(ring);
 			pdata->rx_ring[i] = NULL;
 		}
-
 	}
 }
 
@@ -2167,9 +2165,9 @@ static void xgene_enet_shutdown(struct platform_device *pdev)
 
 static struct platform_driver xgene_enet_driver = {
 	.driver = {
-		   .name = "xgene-enet",
-		   .of_match_table = of_match_ptr(xgene_enet_of_match),
-		   .acpi_match_table = ACPI_PTR(xgene_enet_acpi_match),
+		.name = "xgene-enet",
+		.of_match_table = of_match_ptr(xgene_enet_of_match),
+		.acpi_match_table = ACPI_PTR(xgene_enet_acpi_match),
 	},
 	.probe = xgene_enet_probe,
 	.remove = xgene_enet_remove,

@@ -69,6 +69,7 @@ static struct menu *current_menu, *current_entry;
 %token T_MENU
 %token T_MENUCONFIG
 %token T_MODULES
+%token T_MODNAME
 %token T_ON
 %token T_OPEN_PAREN
 %token T_OPTION
@@ -172,6 +173,13 @@ config_option_list:
 	| config_option_list depends
 	| config_option_list help
 ;
+
+config_option: type modname_stmt_opt T_EOL
+{
+	printd(DEBUG_PARSE, "%s:%d:type(%u)\n",
+		zconf_curname(), zconf_lineno(),
+		$1);
+}
 
 config_option: type prompt_stmt_opt T_EOL
 {
@@ -361,6 +369,7 @@ menu_option_list:
 	  /* empty */
 	| menu_option_list visible
 	| menu_option_list depends
+	| menu_option_list modname
 ;
 
 source_stmt: T_SOURCE prompt T_EOL
@@ -424,6 +433,19 @@ visible: T_VISIBLE if_expr T_EOL
 {
 	menu_add_visibility($2);
 };
+
+/* modname option */
+modname_stmt_opt:
+	  /* empty */
+	| modname if_expr
+{
+	menu_add_modname(P_MODNAME, $1, $2);
+//	printd(DEBUG_PARSE, "%s:%d:modname\n", zconf_curname(), zconf_lineno());
+};
+
+modname:	T_WORD
+		| T_WORD_QUOTE
+;
 
 /* prompt statement */
 

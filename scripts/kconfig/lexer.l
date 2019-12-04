@@ -114,6 +114,7 @@ n	[A-Za-z0-9_-]
 "menu"			return T_MENU;
 "menuconfig"		return T_MENUCONFIG;
 "modules"		return T_MODULES;
+"modname"		return T_MODNAME;
 "on"			return T_ON;
 "option"		return T_OPTION;
 "optional"		return T_OPTIONAL;

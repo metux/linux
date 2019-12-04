@@ -313,7 +313,7 @@ static int gpio_keys_polled_probe(struct platform_device *pdev)
 				fwnode_handle_put(child);
 				return error;
 			}
-		} else if (gpio_is_valid(button->gpio)) {
+		} else if ((button->gpio > 0) && gpio_is_valid(button->gpio)) {
 			/*
 			 * Legacy GPIO number so request the GPIO here and
 			 * convert it to descriptor.

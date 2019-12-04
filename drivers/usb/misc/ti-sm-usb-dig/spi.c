@@ -62,59 +62,36 @@ static int ti_sm_usb_dig_spi_xfer_one_xfer(struct spi_master *master,
 		return -EINVAL;
 	}
 
+	/* header: set CS */
+	packet->cmd_mask[0] = 0x80;
+	// set CS = LOW (0x02 for HI)
+	if (cs)
+		packet->data[0] = 0x02;
+	else
+		packet->data[0] = 0x01;
+
+	// xfer size is 1 control byte plus xfer->len payload
+	packet->num = xfer->len+1;
+
+	if (xfer->len+1 > sizeof(packet->data)) {
+		dev_err(spi_priv->priv->dev, "xfer length %ld larger than bufsz %ld\n",
+			xfer->len+1,
+			sizeof(packet->data));
+		return -ENOMEM;
+	}
+
 	/* write */
 	if (xfer->tx_buf) {
-		dev_info(spi_priv->priv->dev, "TX len=%d\n", xfer->len);
-		if (xfer->len > sizeof(packet->data)) {
-			dev_err(spi_priv->priv->dev, "TX len larger than bufsz %ld\n",
-				sizeof(packet->data));
-			return -ENOMEM;
-		}
-		memcpy(&packet->data, xfer->tx_buf, xfer->len);
-		packet->cmd_mask[0] = 0;
-		packet->cmd_mask[1] = 0;
-		packet->cmd_mask[2] = 0;
-		packet->num = xfer->len;
-		rc = ti_sm_usb_dig_xfer(spi_priv->priv, &p);
-		if (rc) {
-			dev_err(spi_priv->priv->dev, "TX: sending SPI packet failed: %d\n", rc);
-			return rc;
-		}
+		memcpy(&packet->data+1, xfer->tx_buf, xfer->len);
+	}
+
+	rc = ti_sm_usb_dig_xfer(spi_priv->priv, &p);
+	if (rc) {
+		dev_err(spi_priv->priv->dev, "sending SPI packet failed: %d\n", rc);
+		return rc;
 	}
 
 	if (xfer->rx_buf) {
-		dev_info(spi_priv->priv->dev, "RX len=%d\n", xfer->len);
-
-		if (xfer->len > sizeof(packet->data)) {
-			dev_err(spi_priv->priv->dev, "RX len larger than bufsz %ld\n",
-				sizeof(packet->data));
-			return -ENOMEM;
-		}
-
-		packet->cmd_mask[0] = 0x80;
-		packet->cmd_mask[1] = 0;
-		packet->cmd_mask[2] = 0;
-
-		// xfer size is 1 control byte plus xfer->len payload
-		packet->num = xfer->len+1;
-
-		memset(packet->data, 0x23, packet->num);
-
-		// set CS = LOW (0x02 for HI)
-		if (cs)
-			packet->data[0] = 0x02;
-		else
-			packet->data[0] = 0x01;
-
-		dev_info(spi_priv->priv->dev, "BUF before: %02x:%02x:%02x:%02x:%02x\n",
-			 packet->data[0], packet->data[1],
-			 packet->data[2], packet->data[3], packet->data[4]);
-
-		rc = ti_sm_usb_dig_xfer(spi_priv->priv, &p);
-		if (rc) {
-			dev_err(spi_priv->priv->dev, "RX: sending SPI packet failed: %d\n", rc);
-			return rc;
-		}
 		memcpy(xfer->rx_buf, &packet->data, xfer->len);
 	}
 

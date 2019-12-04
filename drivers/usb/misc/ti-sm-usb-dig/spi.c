@@ -283,7 +283,7 @@ int ti_sm_usb_dig_spi_init(struct ti_sm_usb_dig_priv *priv)
 	spi_priv = spi_master_get_devdata(master);
 	spi_priv->priv = priv;
 
-	master->num_chipselect = 1;
+	master->num_chipselect = 2;
 	master->mode_bits = SPI_CPHA | SPI_CPOL | SPI_3WIRE;
 	master->bits_per_word_mask = SPI_BPW_MASK(8);
 	master->flags = 0;

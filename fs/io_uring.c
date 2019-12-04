@@ -2698,9 +2698,6 @@ static int io_timeout(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	int ret;
 
 	ret = io_timeout_setup(req);
-	/* common setup allows flags (like links) set, we don't */
-	if (!ret && sqe->flags)
-		ret = -EINVAL;
 	if (ret)
 		return ret;
 

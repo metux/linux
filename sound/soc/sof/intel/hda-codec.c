@@ -75,8 +75,8 @@ void hda_codec_jack_check(struct snd_sof_dev *sdev)
 void hda_codec_jack_wake_enable(struct snd_sof_dev *sdev) {}
 void hda_codec_jack_check(struct snd_sof_dev *sdev) {}
 #endif /* CONFIG_SND_SOC_SOF_HDA_AUDIO_CODEC */
-EXPORT_SYMBOL_NS(hda_codec_jack_wake_enable, SND_SOC_SOF_HDA_AUDIO_CODEC);
-EXPORT_SYMBOL_NS(hda_codec_jack_check, SND_SOC_SOF_HDA_AUDIO_CODEC);
+EXPORT_SYMBOL(hda_codec_jack_wake_enable);
+EXPORT_SYMBOL(hda_codec_jack_check);
 
 /* probe individual codec */
 static int hda_codec_probe(struct snd_sof_dev *sdev, int address,
@@ -145,8 +145,8 @@ static int hda_codec_probe(struct snd_sof_dev *sdev, int address,
 }
 
 /* Codec initialization */
-void hda_codec_probe_bus(struct snd_sof_dev *sdev,
-			 bool hda_codec_use_common_hdmi)
+int hda_codec_probe_bus(struct snd_sof_dev *sdev,
+			bool hda_codec_use_common_hdmi)
 {
 	struct hdac_bus *bus = sof_to_bus(sdev);
 	int i, ret;
@@ -159,27 +159,36 @@ void hda_codec_probe_bus(struct snd_sof_dev *sdev,
 
 		ret = hda_codec_probe(sdev, i, hda_codec_use_common_hdmi);
 		if (ret < 0) {
-			dev_warn(bus->dev, "codec #%d probe error, ret: %d\n",
-				 i, ret);
-			bus->codec_mask &= ~BIT(i);
+			dev_err(bus->dev, "error: codec #%d probe error, ret: %d\n",
+				i, ret);
+			return ret;
 		}
 	}
+
+	return 0;
 }
-EXPORT_SYMBOL_NS(hda_codec_probe_bus, SND_SOC_SOF_HDA_AUDIO_CODEC);
+EXPORT_SYMBOL(hda_codec_probe_bus);
 
 #if IS_ENABLED(CONFIG_SND_HDA_CODEC_HDMI) || \
 	IS_ENABLED(CONFIG_SND_SOC_HDAC_HDMI)
 
-void hda_codec_i915_display_power(struct snd_sof_dev *sdev, bool enable)
+void hda_codec_i915_get(struct snd_sof_dev *sdev)
 {
 	struct hdac_bus *bus = sof_to_bus(sdev);
 
-	if (HDA_IDISP_CODEC(bus->codec_mask)) {
-		dev_dbg(bus->dev, "Turning i915 HDAC power %d\n", enable);
-		snd_hdac_display_power(bus, HDA_CODEC_IDX_CONTROLLER, enable);
-	}
+	dev_dbg(bus->dev, "Turning i915 HDAC power on\n");
+	snd_hdac_display_power(bus, HDA_CODEC_IDX_CONTROLLER, true);
 }
-EXPORT_SYMBOL_NS(hda_codec_i915_display_power, SND_SOC_SOF_HDA_AUDIO_CODEC_I915);
+EXPORT_SYMBOL(hda_codec_i915_get);
+
+void hda_codec_i915_put(struct snd_sof_dev *sdev)
+{
+	struct hdac_bus *bus = sof_to_bus(sdev);
+
+	dev_dbg(bus->dev, "Turning i915 HDAC power off\n");
+	snd_hdac_display_power(bus, HDA_CODEC_IDX_CONTROLLER, false);
+}
+EXPORT_SYMBOL(hda_codec_i915_put);
 
 int hda_codec_i915_init(struct snd_sof_dev *sdev)
 {
@@ -191,26 +200,24 @@ int hda_codec_i915_init(struct snd_sof_dev *sdev)
 	if (ret < 0)
 		return ret;
 
-	/* codec_mask not yet known, power up for probe */
-	snd_hdac_display_power(bus, HDA_CODEC_IDX_CONTROLLER, true);
+	hda_codec_i915_get(sdev);
 
 	return 0;
 }
-EXPORT_SYMBOL_NS(hda_codec_i915_init, SND_SOC_SOF_HDA_AUDIO_CODEC_I915);
+EXPORT_SYMBOL(hda_codec_i915_init);
 
 int hda_codec_i915_exit(struct snd_sof_dev *sdev)
 {
 	struct hdac_bus *bus = sof_to_bus(sdev);
 	int ret;
 
-	/* power down unconditionally */
-	snd_hdac_display_power(bus, HDA_CODEC_IDX_CONTROLLER, false);
+	hda_codec_i915_put(sdev);
 
 	ret = snd_hdac_i915_exit(bus);
 
 	return ret;
 }
-EXPORT_SYMBOL_NS(hda_codec_i915_exit, SND_SOC_SOF_HDA_AUDIO_CODEC_I915);
+EXPORT_SYMBOL(hda_codec_i915_exit);
 
 #endif
 

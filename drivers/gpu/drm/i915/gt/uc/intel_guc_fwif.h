@@ -31,6 +31,7 @@
 
 #define GUC_DOORBELL_INVALID		256
 
+#define GUC_PD_SIZE			(PAGE_SIZE)
 #define GUC_WQ_SIZE			(PAGE_SIZE * 2)
 
 /* Work queue item header definitions */

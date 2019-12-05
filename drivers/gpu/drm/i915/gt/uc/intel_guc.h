@@ -1,25 +1,6 @@
+/* SPDX-License-Identifier: MIT */
 /*
- * Copyright © 2014-2017 Intel Corporation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * Copyright © 2014-2019 Intel Corporation
  */
 
 #ifndef _INTEL_GUC_H_
@@ -39,16 +20,13 @@ struct __guc_ads_blob;
 
 /*
  * Top level structure of GuC. It handles firmware loading and manages client
- * pool and doorbells. intel_guc owns a intel_guc_client to replace the legacy
- * ExecList submission.
+ * pool. intel_guc owns a intel_guc_client to replace the legacy ExecList
+ * submission.
  */
 struct intel_guc {
 	struct intel_uc_fw fw;
 	struct intel_guc_log log;
 	struct intel_guc_ct ct;
-
-	/* Log snapshot if GuC errors during load */
-	struct drm_i915_gem_object *load_err_log;
 
 	/* intel_guc_recv interrupt related state */
 	spinlock_t irq_lock;
@@ -61,6 +39,8 @@ struct intel_guc {
 		void (*disable)(struct intel_guc *guc);
 	} interrupts;
 
+	bool submission_supported;
+
 	struct i915_vma *ads_vma;
 	struct __guc_ads_blob *ads_blob;
 
@@ -70,9 +50,8 @@ struct intel_guc {
 
 	struct intel_guc_client *execbuf_client;
 
-	DECLARE_BITMAP(doorbell_bitmap, GUC_NUM_DOORBELLS);
-	/* Cyclic counter mod pagesize	*/
-	u32 db_cacheline;
+	/* Control params for fw initialization */
+	u32 params[GUC_CTL_MAX_DWORDS];
 
 	/* GuC's FW specific registers used in MMIO send */
 	struct {
@@ -150,7 +129,7 @@ static inline u32 intel_guc_ggtt_offset(struct intel_guc *guc,
 
 void intel_guc_init_early(struct intel_guc *guc);
 void intel_guc_init_send_regs(struct intel_guc *guc);
-void intel_guc_init_params(struct intel_guc *guc);
+void intel_guc_write_params(struct intel_guc *guc);
 int intel_guc_init(struct intel_guc *guc);
 void intel_guc_fini(struct intel_guc *guc);
 int intel_guc_send_nop(struct intel_guc *guc, const u32 *action, u32 len,
@@ -169,9 +148,19 @@ struct i915_vma *intel_guc_allocate_vma(struct intel_guc *guc, u32 size);
 int intel_guc_allocate_and_map_vma(struct intel_guc *guc, u32 size,
 				   struct i915_vma **out_vma, void **out_vaddr);
 
-static inline bool intel_guc_is_loaded(struct intel_guc *guc)
+static inline bool intel_guc_is_supported(struct intel_guc *guc)
 {
-	return intel_uc_fw_is_loaded(&guc->fw);
+	return intel_uc_fw_is_supported(&guc->fw);
+}
+
+static inline bool intel_guc_is_enabled(struct intel_guc *guc)
+{
+	return intel_uc_fw_is_enabled(&guc->fw);
+}
+
+static inline bool intel_guc_is_running(struct intel_guc *guc)
+{
+	return intel_uc_fw_is_running(&guc->fw);
 }
 
 static inline int intel_guc_sanitize(struct intel_guc *guc)
@@ -180,6 +169,11 @@ static inline int intel_guc_sanitize(struct intel_guc *guc)
 	guc->mmio_msg = 0;
 
 	return 0;
+}
+
+static inline bool intel_guc_is_submission_supported(struct intel_guc *guc)
+{
+	return guc->submission_supported;
 }
 
 static inline void intel_guc_enable_msg(struct intel_guc *guc, u32 mask)

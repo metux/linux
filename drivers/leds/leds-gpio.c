@@ -146,6 +146,8 @@ static struct gpio_leds_priv *gpio_leds_create(struct platform_device *pdev)
 	if (!priv)
 		return ERR_PTR(-ENOMEM);
 
+	pr_info("gpio_leds_create() num_leds=%d\n", priv->num_leds);
+
 	device_for_each_child_node(dev, child) {
 		struct gpio_led_data *led_dat = &priv->leds[priv->num_leds];
 		struct gpio_led led = {};
@@ -155,9 +157,12 @@ static struct gpio_leds_priv *gpio_leds_create(struct platform_device *pdev)
 							     GPIOD_ASIS,
 							     led.name);
 		if (IS_ERR(led.gpiod)) {
+			pr_info("gpio_leds_create() failed to get gpiod for %d\n", priv->num_leds);
 			fwnode_handle_put(child);
 			return ERR_CAST(led.gpiod);
 		}
+
+		pr_info("gpio_leds_create() got gpiod for %d\n", priv->num_leds);
 
 		led_dat->gpiod = led.gpiod;
 
@@ -206,6 +211,8 @@ static struct gpio_desc *gpio_led_get_gpiod(struct device *dev, int idx,
 	unsigned long flags = GPIOF_OUT_INIT_LOW;
 	int ret;
 
+	pr_info("gpio_led_get_gpiod() idx=%d\n", idx);
+
 	/*
 	 * This means the LED does not come from the device tree
 	 * or ACPI, so let's try just getting it by index from the
@@ -214,11 +221,14 @@ static struct gpio_desc *gpio_led_get_gpiod(struct device *dev, int idx,
 	 */
 	gpiod = devm_gpiod_get_index(dev, NULL, idx, flags);
 	if (!IS_ERR(gpiod)) {
+		pr_info("gpio_led_get_gpiod() got valid gpiod\n");
 		gpiod_set_consumer_name(gpiod, template->name);
 		return gpiod;
 	}
-	if (PTR_ERR(gpiod) != -ENOENT)
+	if (PTR_ERR(gpiod) != -ENOENT) {
+		pr_info("gpio_led_get_gpiod() got error: %d\n", PTR_ERR(gpiod));
 		return gpiod;
+	}
 
 	/*
 	 * This is the legacy code path for platform code that
@@ -227,20 +237,26 @@ static struct gpio_desc *gpio_led_get_gpiod(struct device *dev, int idx,
 	 */
 
 	/* skip leds that aren't available */
-	if (!gpio_is_valid(template->gpio))
+	if (!gpio_is_valid(template->gpio)) {
+		pr_info("gpio is not valid: %d\n", template->gpio);
 		return ERR_PTR(-ENOENT);
+	}
 
 	if (template->active_low)
 		flags |= GPIOF_ACTIVE_LOW;
 
 	ret = devm_gpio_request_one(dev, template->gpio, flags,
 				    template->name);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_info("devm_gpio_request_one() failed: %d\n", ret);
 		return ERR_PTR(ret);
+	}
 
 	gpiod = gpio_to_desc(template->gpio);
-	if (!gpiod)
+	if (!gpiod) {
+		pr_info("gpio_to_desc() failed:\n");
 		return ERR_PTR(-EINVAL);
+	}
 
 	return gpiod;
 }

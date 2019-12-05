@@ -3,12 +3,6 @@
  *  Copyright (c) by Jaroslav Kysela <perex@perex.cz>
  *                   Creative Labs, Inc.
  *  Routines for control of EMU10K1 chips
- *
- *  BUGS:
- *    --
- *
- *  TODO:
- *    --
  */
 
 #include <linux/time.h>
@@ -18,7 +12,8 @@
 #include <linux/export.h>
 #include "p17v.h"
 
-unsigned int snd_emu10k1_ptr_read(struct snd_emu10k1 * emu, unsigned int reg, unsigned int chn)
+unsigned int snd_emu10k1_ptr_read(struct snd_emu10k1 * emu,
+				  unsigned int reg, unsigned int chn)
 {
 	unsigned long flags;
 	unsigned int regptr, val;
@@ -29,16 +24,16 @@ unsigned int snd_emu10k1_ptr_read(struct snd_emu10k1 * emu, unsigned int reg, un
 
 	if (reg & 0xff000000) {
 		unsigned char size, offset;
-		
+
 		size = (reg >> 24) & 0x3f;
 		offset = (reg >> 16) & 0x1f;
 		mask = ((1 << size) - 1) << offset;
-		
+
 		spin_lock_irqsave(&emu->emu_lock, flags);
 		outl(regptr, emu->port + PTR);
 		val = inl(emu->port + DATA);
 		spin_unlock_irqrestore(&emu->emu_lock, flags);
-		
+
 		return (val & mask) >> offset;
 	} else {
 		spin_lock_irqsave(&emu->emu_lock, flags);
@@ -51,7 +46,8 @@ unsigned int snd_emu10k1_ptr_read(struct snd_emu10k1 * emu, unsigned int reg, un
 
 EXPORT_SYMBOL(snd_emu10k1_ptr_read);
 
-void snd_emu10k1_ptr_write(struct snd_emu10k1 *emu, unsigned int reg, unsigned int chn, unsigned int data)
+void snd_emu10k1_ptr_write(struct snd_emu10k1 *emu, unsigned int reg,
+			   unsigned int chn, unsigned int data)
 {
 	unsigned int regptr;
 	unsigned long flags;
@@ -74,7 +70,7 @@ void snd_emu10k1_ptr_write(struct snd_emu10k1 *emu, unsigned int reg, unsigned i
 		outl(regptr, emu->port + PTR);
 		data |= inl(emu->port + DATA) & ~mask;
 		outl(data, emu->port + DATA);
-		spin_unlock_irqrestore(&emu->emu_lock, flags);		
+		spin_unlock_irqrestore(&emu->emu_lock, flags);
 	} else {
 		spin_lock_irqsave(&emu->emu_lock, flags);
 		outl(regptr, emu->port + PTR);
@@ -85,13 +81,13 @@ void snd_emu10k1_ptr_write(struct snd_emu10k1 *emu, unsigned int reg, unsigned i
 
 EXPORT_SYMBOL(snd_emu10k1_ptr_write);
 
-unsigned int snd_emu10k1_ptr20_read(struct snd_emu10k1 * emu, 
-					  unsigned int reg, 
-					  unsigned int chn)
+unsigned int snd_emu10k1_ptr20_read(struct snd_emu10k1 * emu,
+				    unsigned int reg,
+				    unsigned int chn)
 {
 	unsigned long flags;
 	unsigned int regptr, val;
-  
+
 	regptr = (reg << 16) | chn;
 
 	spin_lock_irqsave(&emu->emu_lock, flags);
@@ -101,10 +97,10 @@ unsigned int snd_emu10k1_ptr20_read(struct snd_emu10k1 * emu,
 	return val;
 }
 
-void snd_emu10k1_ptr20_write(struct snd_emu10k1 *emu, 
-				   unsigned int reg, 
-				   unsigned int chn, 
-				   unsigned int data)
+void snd_emu10k1_ptr20_write(struct snd_emu10k1 *emu,
+			     unsigned int reg,
+			     unsigned int chn,
+			     unsigned int data)
 {
 	unsigned int regptr;
 	unsigned long flags;
@@ -118,7 +114,7 @@ void snd_emu10k1_ptr20_write(struct snd_emu10k1 *emu,
 }
 
 int snd_emu10k1_spi_write(struct snd_emu10k1 * emu,
-				   unsigned int data)
+			  unsigned int data)
 {
 	unsigned int reset, set;
 	unsigned int reg, tmp;
@@ -172,8 +168,8 @@ spi_write_exit:
 
 /* The ADC does not support i2c read, so only write is implemented */
 int snd_emu10k1_i2c_write(struct snd_emu10k1 *emu,
-				u32 reg,
-				u32 value)
+			  u32 reg,
+			  u32 value)
 {
 	u32 tmp;
 	int timeout = 0;
@@ -228,7 +224,7 @@ int snd_emu10k1_i2c_write(struct snd_emu10k1 *emu,
 		/* dump_stack(); */
 		err = -EINVAL;
 	}
-    
+
 	spin_unlock(&emu->i2c_lock);
 	return err;
 }
@@ -364,7 +360,8 @@ void snd_emu10k1_voice_intr_ack(struct snd_emu10k1 *emu, unsigned int voicenum)
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
-void snd_emu10k1_voice_half_loop_intr_enable(struct snd_emu10k1 *emu, unsigned int voicenum)
+void snd_emu10k1_voice_half_loop_intr_enable(struct snd_emu10k1 *emu,
+					     unsigned int voicenum)
 {
 	unsigned long flags;
 	unsigned int val;
@@ -384,7 +381,8 @@ void snd_emu10k1_voice_half_loop_intr_enable(struct snd_emu10k1 *emu, unsigned i
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
-void snd_emu10k1_voice_half_loop_intr_disable(struct snd_emu10k1 *emu, unsigned int voicenum)
+void snd_emu10k1_voice_half_loop_intr_disable(struct snd_emu10k1 *emu,
+					      unsigned int voicenum)
 {
 	unsigned long flags;
 	unsigned int val;
@@ -404,7 +402,8 @@ void snd_emu10k1_voice_half_loop_intr_disable(struct snd_emu10k1 *emu, unsigned 
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
-void snd_emu10k1_voice_half_loop_intr_ack(struct snd_emu10k1 *emu, unsigned int voicenum)
+void snd_emu10k1_voice_half_loop_intr_ack(struct snd_emu10k1 *emu,
+					  unsigned int voicenum)
 {
 	unsigned long flags;
 
@@ -421,7 +420,8 @@ void snd_emu10k1_voice_half_loop_intr_ack(struct snd_emu10k1 *emu, unsigned int 
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
-void snd_emu10k1_voice_set_loop_stop(struct snd_emu10k1 *emu, unsigned int voicenum)
+void snd_emu10k1_voice_set_loop_stop(struct snd_emu10k1 *emu,
+				     unsigned int voicenum)
 {
 	unsigned long flags;
 	unsigned int sol;
@@ -441,7 +441,8 @@ void snd_emu10k1_voice_set_loop_stop(struct snd_emu10k1 *emu, unsigned int voice
 	spin_unlock_irqrestore(&emu->emu_lock, flags);
 }
 
-void snd_emu10k1_voice_clear_loop_stop(struct snd_emu10k1 *emu, unsigned int voicenum)
+void snd_emu10k1_voice_clear_loop_stop(struct snd_emu10k1 *emu,
+				       unsigned int voicenum)
 {
 	unsigned long flags;
 	unsigned int sol;

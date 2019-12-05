@@ -11,8 +11,6 @@
 
 #include "emu10k1_synth_local.h"
 
-/*
- */
 #define BLANK_LOOP_START	4
 #define BLANK_LOOP_END		8
 #define BLANK_LOOP_SIZE		12

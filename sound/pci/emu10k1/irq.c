@@ -3,12 +3,6 @@
  *  Copyright (c) by Jaroslav Kysela <perex@perex.cz>
  *                   Creative Labs, Inc.
  *  Routines for IRQ control of EMU10K1 chips
- *
- *  BUGS:
- *    --
- *
- *  TODO:
- *    --
  */
 
 #include <linux/time.h>
@@ -149,7 +143,7 @@ irqreturn_t snd_emu10k1_interrupt(int irq, void *dev_id)
 				if(status2 & mask) {
 					if(pvoice->use) {
 						snd_pcm_period_elapsed(pvoice->epcm->substream);
-					} else { 
+					} else {
 						dev_err(emu->card->dev,
 							"p16v: status: 0x%08x, mask=0x%08x, pvoice=%p, use=%d\n",
 							status2, mask, pvoice,

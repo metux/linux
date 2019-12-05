@@ -15993,8 +15993,7 @@ THERMAL
 M:	Zhang Rui <rui.zhang@intel.com>
 R:	Daniel Lezcano <daniel.lezcano@linaro.org>
 L:	linux-pm@vger.kernel.org
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/rzhang/linux.git
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/evalenti/linux-soc-thermal.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/thermal/linux.git
 Q:	https://patchwork.kernel.org/project/linux-pm/list/
 S:	Supported
 F:	drivers/thermal/

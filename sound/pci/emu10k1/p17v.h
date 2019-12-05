@@ -13,11 +13,11 @@
 /* 00 - 07: Not used */
 #define P17V_PLAYBACK_FIFO_PTR	0x08	/* Current playback fifo pointer
 					 * and number of sound samples in cache.
-					 */  
+					 */
 /* 09 - 12: Not used */
 #define P17V_CAPTURE_FIFO_PTR	0x13	/* Current capture fifo pointer
 					 * and number of sound samples in cache.
-					 */  
+					 */
 /* 14 - 17: Not used */
 #define P17V_PB_CHN_SEL		0x18	/* P17v playback channel select */
 #define P17V_SE_SLOT_SEL_L	0x19	/* Sound Engine slot select low */
@@ -32,7 +32,7 @@
 /* I2C values */
 #define I2C_A_ADC_ADD_MASK	0x000000fe	/*The address is a 7 bit address */
 #define I2C_A_ADC_RW_MASK	0x00000001	/*bit mask for R/W */
-#define I2C_A_ADC_TRANS_MASK	0x00000010  	/*Bit mask for I2c address DAC value  */
+#define I2C_A_ADC_TRANS_MASK	0x00000010	/*Bit mask for I2c address DAC value  */
 #define I2C_A_ADC_ABORT_MASK	0x00000020	/*Bit mask for I2C transaction abort flag */
 #define I2C_A_ADC_LAST_MASK	0x00000040	/*Bit mask for Last word transaction */
 #define I2C_A_ADC_BYTE_MASK	0x00000080	/*Bit mask for Byte Mode */
@@ -44,8 +44,8 @@
 #define I2C_A_ADC_LAST		0x00000400	/*I2C last transaction */
 #define I2C_A_ADC_BYTE		0x00000800	/*I2C one byte mode */
 
-#define I2C_D_ADC_REG_MASK	0xfe000000  	/*ADC address register */ 
-#define I2C_D_ADC_DAT_MASK	0x01ff0000  	/*ADC data register */
+#define I2C_D_ADC_REG_MASK	0xfe000000	/*ADC address register */
+#define I2C_D_ADC_DAT_MASK	0x01ff0000	/*ADC data register */
 
 #define ADC_TIMEOUT		0x00000007	/*ADC Timeout Clock Disable */
 #define ADC_IFC_CTRL		0x0000000b	/*ADC Interface Control */
@@ -58,7 +58,7 @@
 #define ADC_ALC_CTRL3		0x00000012	/*ADC ALC Control 3 */
 #define ADC_NOISE_CTRL		0x00000013	/*ADC Noise Gate Control */
 #define ADC_LIMIT_CTRL		0x00000014	/*ADC Limiter Control */
-#define ADC_MUX			0x00000015  	/*ADC Mux offset */
+#define ADC_MUX			0x00000015	/*ADC Mux offset */
 #if 0
 /* FIXME: Not tested yet. */
 #define ADC_GAIN_MASK		0x000000ff	//Mask for ADC Gain
@@ -136,9 +136,3 @@
 #define P17V_SRP_BYPASS			0x8D	/* srps channel bypass and srps bypass */
 /* 8E - 92: Not used */
 #define P17V_I2S_SRC_SEL		0x93	/* I2SIN mode sel */
-
-
-
-
-
-

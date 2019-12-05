@@ -171,10 +171,10 @@ static int print_buffer(struct sk_buff *buf);
 
 static inline void solos_pop(struct atm_vcc *vcc, struct sk_buff *skb)
 {
-        if (vcc->pop)
-                vcc->pop(vcc, skb);
-        else
-                dev_kfree_skb_any(skb);
+	if (vcc->pop)
+		vcc->pop(vcc, skb);
+	else
+		dev_kfree_skb_any(skb);
 }
 
 static ssize_t solos_param_show(struct device *dev, struct device_attribute *attr,
@@ -684,7 +684,7 @@ static int flash_upgrade(struct solos_card *card, int chip)
 	numblocks = fw->size / blocksize;
 	dev_info(&card->dev->dev, "Firmware size: %zd\n", fw->size);
 	dev_info(&card->dev->dev, "Number of blocks: %d\n", numblocks);
-	
+
 	dev_info(&card->dev->dev, "Changing FPGA to Update mode\n");
 	iowrite32(1, card->config_regs + FPGA_MODE);
 	(void) ioread32(card->config_regs + FPGA_MODE); 
@@ -695,7 +695,6 @@ static int flash_upgrade(struct solos_card *card, int chip)
 	if(chip == 1 || chip == 3)
 		dev_info(&card->dev->dev, "Set FPGA Flash mode to Solos Chip Erase\n");
 	iowrite32((chip * 2), card->config_regs + FLASH_MODE);
-
 
 	iowrite32(1, card->config_regs + WRITE_FLASH);
 	wait_event(card->fw_wq, !ioread32(card->config_regs + FLASH_BUSY));
@@ -909,7 +908,7 @@ static struct atm_vcc *find_vcc(struct atm_dev *dev, short vpi, int vci)
 			goto out;
 	}
 	vcc = NULL;
- out:
+out:
 	read_unlock(&vcc_sklist_lock);
 	return vcc;
 }
@@ -1333,19 +1332,18 @@ static int fpga_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	return 0;
 
- out_free_irq:
+out_free_irq:
 	iowrite32(0, card->config_regs + IRQ_EN_ADDR);
 	free_irq(dev->irq, card);
 	tasklet_kill(&card->tlet);
-	
- out_unmap_both:
+out_unmap_both:
 	kfree(card->dma_bounce);
 	pci_iounmap(dev, card->buffers);
- out_unmap_config:
+out_unmap_config:
 	pci_iounmap(dev, card->config_regs);
- out_release_regions:
+out_release_regions:
 	pci_release_regions(dev);
- out:
+out:
 	kfree(card);
 	return err;
 }
@@ -1425,7 +1423,6 @@ static void atm_remove(struct solos_card *card)
 			}
 			while ((skb = skb_dequeue(&card->tx_queue[i])))
 				dev_kfree_skb(skb);
- 
 		}
 	}
 }

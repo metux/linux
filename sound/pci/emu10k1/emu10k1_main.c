@@ -8,12 +8,6 @@
  *      Added support for Audigy 2 Value.
  *  	Added EMU 1010 support.
  *  	General bug fixes and enhancements.
- *
- *  BUGS:
- *    --
- *
- *  TODO:
- *    --
  */
 
 #include <linux/sched.h>
@@ -26,7 +20,6 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
-
 
 #include <sound/core.h>
 #include <sound/emu10k1.h>

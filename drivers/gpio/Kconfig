@@ -69,6 +69,16 @@ config GPIO_SYSFS
 	  ioctl() operations instead. The character device is always
 	  available.
 
+config GPIO_DEV
+	bool "/dev/gpiochipN userspace interface"
+	default y
+	help
+	  Say N here if you do not need the /dev/gpiochipN userspace
+	  interface and wanna make the kernel smaller (eg. on memory
+	  constrained embedded systems).
+
+	  Default is Y.
+
 config GPIO_GENERIC
 	depends on HAS_IOMEM # Only for IOMEM drivers
 	tristate

@@ -1144,6 +1144,7 @@ out_free_le:
 	return ret;
 }
 
+#ifdef CONFIG_GPIO_DEV
 /*
  * gpio_ioctl() - ioctl handler for the GPIO chardev
  */
@@ -1292,6 +1293,7 @@ static const struct file_operations gpio_fileops = {
 	.compat_ioctl = gpio_ioctl_compat,
 #endif
 };
+#endif /* CONFIG_GPIO_DEV */
 
 static void gpiodevice_release(struct device *dev)
 {
@@ -1304,10 +1306,9 @@ static void gpiodevice_release(struct device *dev)
 	kfree(gdev);
 }
 
-static int gpiochip_setup_dev(struct gpio_device *gdev)
+#ifdef CONFIG_GPIO_DEV
+static int gpiochip_setup_chardev(struct gpio_device *gdev)
 {
-	int ret;
-
 	cdev_init(&gdev->chrdev, &gpio_fileops);
 	gdev->chrdev.owner = THIS_MODULE;
 	gdev->dev.devt = MKDEV(MAJOR(gpio_devt), gdev->id);
@@ -1334,7 +1335,27 @@ static int gpiochip_setup_dev(struct gpio_device *gdev)
 err_remove_device:
 	cdev_device_del(&gdev->chrdev, &gdev->dev);
 	return ret;
+
+
+
 }
+
+#ifdef CONFIG_GPIO_DEV
+static int gpiochip_setup_dev(struct gpio_device *gdev)
+{
+	int ret;
+
+#ifdef CONFIG_GPIO_DEV
+}
+
+#else /* CONFIG_GPIO_DEV */
+
+static inline int gpiochip_setup_dev(struct gpio_device *gdev)
+{
+	return 0;
+}
+
+#endif /* CONFIG_GPIO_DEV */
 
 static void gpiochip_machine_hog(struct gpio_chip *chip, struct gpiod_hog *hog)
 {

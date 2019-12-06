@@ -4364,7 +4364,7 @@ static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 static void enable_irq_window(struct kvm_vcpu *vcpu)
 {
-	exec_controls_setbit(to_vmx(vcpu), CPU_BASED_VIRTUAL_INTR_PENDING);
+	exec_controls_setbit(to_vmx(vcpu), CPU_BASED_INTR_WINDOW_EXITING);
 }
 
 static void enable_nmi_window(struct kvm_vcpu *vcpu)
@@ -4998,7 +4998,7 @@ static int handle_tpr_below_threshold(struct kvm_vcpu *vcpu)
 
 static int handle_interrupt_window(struct kvm_vcpu *vcpu)
 {
-	exec_controls_clearbit(to_vmx(vcpu), CPU_BASED_VIRTUAL_INTR_PENDING);
+	exec_controls_clearbit(to_vmx(vcpu), CPU_BASED_INTR_WINDOW_EXITING);
 
 	kvm_make_request(KVM_REQ_EVENT, vcpu);
 
@@ -5237,7 +5237,7 @@ static int handle_invalid_guest_state(struct kvm_vcpu *vcpu)
 	WARN_ON_ONCE(vmx->emulation_required && vmx->nested.nested_run_pending);
 
 	intr_window_requested = exec_controls_get(vmx) &
-				CPU_BASED_VIRTUAL_INTR_PENDING;
+				CPU_BASED_INTR_WINDOW_EXITING;
 
 	while (vmx->emulation_required && count-- != 0) {
 		if (intr_window_requested && vmx_interrupt_allowed(vcpu))
@@ -5561,7 +5561,7 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[EXIT_REASON_CPUID]                   = handle_cpuid,
 	[EXIT_REASON_MSR_READ]                = handle_rdmsr,
 	[EXIT_REASON_MSR_WRITE]               = handle_wrmsr,
-	[EXIT_REASON_PENDING_INTERRUPT]       = handle_interrupt_window,
+	[EXIT_REASON_INTERRUPT_WINDOW]        = handle_interrupt_window,
 	[EXIT_REASON_HLT]                     = handle_halt,
 	[EXIT_REASON_INVD]		      = handle_invd,
 	[EXIT_REASON_INVLPG]		      = handle_invlpg,
@@ -5935,7 +5935,21 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu)
 	}
 
 	if (exit_reason < kvm_vmx_max_exit_handlers
-	    && kvm_vmx_exit_handlers[exit_reason])
+	    && kvm_vmx_exit_handlers[exit_reason]) {
+#ifdef CONFIG_RETPOLINE
+		if (exit_reason == EXIT_REASON_MSR_WRITE)
+			return kvm_emulate_wrmsr(vcpu);
+		else if (exit_reason == EXIT_REASON_PREEMPTION_TIMER)
+			return handle_preemption_timer(vcpu);
+		else if (exit_reason == EXIT_REASON_INTERRUPT_WINDOW)
+			return handle_interrupt_window(vcpu);
+		else if (exit_reason == EXIT_REASON_EXTERNAL_INTERRUPT)
+			return handle_external_interrupt(vcpu);
+		else if (exit_reason == EXIT_REASON_HLT)
+			return kvm_emulate_halt(vcpu);
+		else if (exit_reason == EXIT_REASON_EPT_MISCONFIG)
+			return handle_ept_misconfig(vcpu);
+#endif
 		return kvm_vmx_exit_handlers[exit_reason](vcpu);
 	else {
 		vcpu_unimpl(vcpu, "vmx: unexpected exit reason 0x%x\n",

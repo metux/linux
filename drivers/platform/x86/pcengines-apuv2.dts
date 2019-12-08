@@ -1,0 +1,16 @@
+/plugin/;	/* allow undefined label references and record them */
+/ {
+    /* various properties for loader use; i.e. part id etc. */
+    fragment@0 {
+/*	target = <&ocp>; */
+	target = "/";
+	__overlay__ {
+	    /* bar peripheral */
+	    pcengines_apu2 {
+		compatible = "DMI:PC Engines,APU2";
+		compatible = "DMI:PC Engines,apu2";
+		/* various properties and child nodes */
+	    }
+	};
+    };
+};

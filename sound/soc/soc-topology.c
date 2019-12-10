@@ -1948,6 +1948,7 @@ static int soc_tplg_fe_link_create(struct soc_tplg *tplg,
 
 	list_add(&link->dobj.list, &tplg->comp->dobj_list);
 
+	snd_soc_add_pcm_runtime(tplg->comp->card, link);
 	return 0;
 err:
 	kfree(link->name);

@@ -199,8 +199,8 @@ static ssize_t empty_read(struct file *file, char __user *buf,
 	return 0;
 }
 
-static const struct proc_ops empty_proc_ops = {
-	.proc_read	= empty_read,
+static const struct file_operations empty_fops = {
+	.read	= empty_read,
 };
 
 // ---------------------------------------------------------------------------
@@ -214,10 +214,10 @@ kcapi_proc_init(void)
 	proc_create_seq("capi/contrstats",   0, NULL, &seq_contrstats_ops);
 	proc_create_seq("capi/applications", 0, NULL, &seq_applications_ops);
 	proc_create_seq("capi/applstats",    0, NULL, &seq_applstats_ops);
-	proc_create("capi/driver",           0, NULL, &empty_proc_ops);
+	proc_create("capi/driver",           0, NULL, &empty_fops);
 }
 
-void
+void __exit
 kcapi_proc_exit(void)
 {
 	remove_proc_entry("capi/driver",       NULL);

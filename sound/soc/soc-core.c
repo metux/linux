@@ -389,22 +389,22 @@ struct snd_soc_component *snd_soc_lookup_component(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(snd_soc_lookup_component);
 
-struct snd_pcm_substream *snd_soc_get_dai_substream(struct snd_soc_card *card,
-		const char *dai_link, int stream)
+static const struct snd_soc_ops null_snd_soc_ops;
+
+struct snd_soc_pcm_runtime
+*snd_soc_get_pcm_runtime(struct snd_soc_card *card,
+			 struct snd_soc_dai_link *dai_link)
 {
 	struct snd_soc_pcm_runtime *rtd;
 
 	for_each_card_rtds(card, rtd) {
-		if (rtd->dai_link->no_pcm &&
-			!strcmp(rtd->dai_link->name, dai_link))
-			return rtd->pcm->streams[stream].substream;
+		if (rtd->dai_link == dai_link)
+			return rtd;
 	}
-	dev_dbg(card->dev, "ASoC: failed to find dai link %s\n", dai_link);
+	dev_dbg(card->dev, "ASoC: failed to find rtd %s\n", dai_link->name);
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(snd_soc_get_dai_substream);
-
-static const struct snd_soc_ops null_snd_soc_ops;
+EXPORT_SYMBOL_GPL(snd_soc_get_pcm_runtime);
 
 static void soc_release_rtd_dev(struct device *dev)
 {
@@ -516,20 +516,6 @@ free_rtd:
 	soc_free_pcm_runtime(rtd);
 	return NULL;
 }
-
-struct snd_soc_pcm_runtime *snd_soc_get_pcm_runtime(struct snd_soc_card *card,
-		const char *dai_link)
-{
-	struct snd_soc_pcm_runtime *rtd;
-
-	for_each_card_rtds(card, rtd) {
-		if (!strcmp(rtd->dai_link->name, dai_link))
-			return rtd;
-	}
-	dev_dbg(card->dev, "ASoC: failed to find rtd %s\n", dai_link);
-	return NULL;
-}
-EXPORT_SYMBOL_GPL(snd_soc_get_pcm_runtime);
 
 static void snd_soc_flush_all_delayed_work(struct snd_soc_card *card)
 {
@@ -926,50 +912,6 @@ struct snd_soc_dai *snd_soc_find_dai(
 }
 EXPORT_SYMBOL_GPL(snd_soc_find_dai);
 
-/**
- * snd_soc_find_dai_link - Find a DAI link
- *
- * @card: soc card
- * @id: DAI link ID to match
- * @name: DAI link name to match, optional
- * @stream_name: DAI link stream name to match, optional
- *
- * This function will search all existing DAI links of the soc card to
- * find the link of the same ID. Since DAI links may not have their
- * unique ID, so name and stream name should also match if being
- * specified.
- *
- * Return: pointer of DAI link, or NULL if not found.
- */
-struct snd_soc_dai_link *snd_soc_find_dai_link(struct snd_soc_card *card,
-					       int id, const char *name,
-					       const char *stream_name)
-{
-	struct snd_soc_pcm_runtime *rtd;
-	struct snd_soc_dai_link *link;
-
-	lockdep_assert_held(&client_mutex);
-
-	for_each_card_rtds(card, rtd) {
-		link = rtd->dai_link;
-
-		if (link->id != id)
-			continue;
-
-		if (name && (!link->name || strcmp(name, link->name)))
-			continue;
-
-		if (stream_name && (!link->stream_name
-			|| strcmp(stream_name, link->stream_name)))
-			continue;
-
-		return link;
-	}
-
-	return NULL;
-}
-EXPORT_SYMBOL_GPL(snd_soc_find_dai_link);
-
 static int soc_dai_link_sanity_check(struct snd_soc_card *card,
 				     struct snd_soc_dai_link *link)
 {
@@ -1067,33 +1009,26 @@ static int soc_dai_link_sanity_check(struct snd_soc_card *card,
 }
 
 /**
- * snd_soc_remove_dai_link - Remove a DAI link from the list
- * @card: The ASoC card that owns the link
- * @dai_link: The DAI link to remove
+ * snd_soc_remove_pcm_runtime - Remove a pcm_runtime from card
+ * @card: The ASoC card to which the pcm_runtime has
+ * @rtd: The pcm_runtime to remove
  *
- * This function removes a DAI link from the ASoC card's link list.
- *
- * For DAI links previously added by topology, topology should
- * remove them by using the dobj embedded in the link.
+ * This function removes a pcm_runtime from the ASoC card.
  */
-void snd_soc_remove_dai_link(struct snd_soc_card *card,
-			     struct snd_soc_dai_link *dai_link)
+void snd_soc_remove_pcm_runtime(struct snd_soc_card *card,
+				struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_pcm_runtime *rtd;
-
 	lockdep_assert_held(&client_mutex);
 
 	/*
 	 * Notify the machine driver for extra destruction
 	 */
 	if (card->remove_dai_link)
-		card->remove_dai_link(card, dai_link);
+		card->remove_dai_link(card, rtd->dai_link);
 
-	rtd = snd_soc_get_pcm_runtime(card, dai_link->name);
-	if (rtd)
-		soc_free_pcm_runtime(rtd);
+	soc_free_pcm_runtime(rtd);
 }
-EXPORT_SYMBOL_GPL(snd_soc_remove_dai_link);
+EXPORT_SYMBOL_GPL(snd_soc_remove_pcm_runtime);
 
 /**
  * snd_soc_add_pcm_runtime - Add a pcm_runtime dynamically via dai_link
@@ -1173,7 +1108,7 @@ int snd_soc_add_pcm_runtime(struct snd_soc_card *card,
 	return 0;
 
 _err_defer:
-	soc_free_pcm_runtime(rtd);
+	snd_soc_remove_pcm_runtime(card, rtd);
 	return -EPROBE_DEFER;
 }
 EXPORT_SYMBOL_GPL(snd_soc_add_pcm_runtime);
@@ -1454,18 +1389,6 @@ static int soc_probe_link_components(struct snd_soc_card *card)
 
 	return 0;
 }
-
-void snd_soc_disconnect_sync(struct device *dev)
-{
-	struct snd_soc_component *component =
-			snd_soc_lookup_component(dev, NULL);
-
-	if (!component || !component->card)
-		return;
-
-	snd_card_disconnect_sync(component->card->snd_card);
-}
-EXPORT_SYMBOL_GPL(snd_soc_disconnect_sync);
 
 static int soc_link_dai_pcm_new(struct snd_soc_dai **dais, int num_dais,
 				struct snd_soc_pcm_runtime *rtd)
@@ -1954,7 +1877,7 @@ static void soc_cleanup_card_resources(struct snd_soc_card *card,
 	soc_remove_link_components(card);
 
 	for_each_card_rtds_safe(card, rtd, n)
-		snd_soc_remove_dai_link(card, rtd->dai_link);
+		snd_soc_remove_pcm_runtime(card, rtd);
 
 	/* remove auxiliary devices */
 	soc_remove_aux_devices(card);

@@ -554,6 +554,9 @@ static void remove_link(struct snd_soc_component *comp,
 	kfree(link->name);
 	kfree(link->stream_name);
 	kfree(link->cpus->dai_name);
+
+	snd_soc_remove_pcm_runtime(comp->card,
+			snd_soc_get_pcm_runtime(comp->card, link));
 	kfree(link);
 }
 

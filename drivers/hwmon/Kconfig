@@ -1012,6 +1012,7 @@ config SENSORS_MENF21BMC_HWMON
 config SENSORS_ADCXX
 	tristate "National Semiconductor ADCxxxSxxx"
 	depends on SPI_MASTER
+	select SPI_CORE_WRITE_THEN_READ
 	help
 	  If you say yes here you get support for the National Semiconductor
 	  ADC<bb><c>S<sss> chip family, where
@@ -1041,6 +1042,7 @@ config SENSORS_LM63
 config SENSORS_LM70
 	tristate "National Semiconductor LM70 and compatibles"
 	depends on SPI_MASTER
+	select SPI_CORE_WRITE_THEN_READ
 	help
 	  If you say yes here you get support for the National Semiconductor
 	  LM70, LM71, LM74 and Texas Instruments TMP121/TMP123 digital tempera-

@@ -48,6 +48,13 @@ config SPI_MASTER
 
 if SPI_MASTER
 
+config SPI_CORE_WRITE_THEN_READ
+	bool "spi_write_then_read() helper"
+	default SPI_MASTER
+	help
+	  Disable the spi_write_then_read() helper, if you don't need it
+	  and wanna save some memory (about 0.5kb).
+
 config SPI_MEM
 	bool "SPI memory extension"
 	help

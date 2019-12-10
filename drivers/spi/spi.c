@@ -3852,6 +3852,7 @@ static u8	*buf;
  *
  * Return: zero on success, else a negative error code.
  */
+#ifdef IS_ENABLED(CONFIG_SPI_CORE_READ_THEN_WRITE)
 int spi_write_then_read(struct spi_device *spi,
 		const void *txbuf, unsigned n_tx,
 		void *rxbuf, unsigned n_rx)
@@ -3905,6 +3906,7 @@ int spi_write_then_read(struct spi_device *spi,
 	return status;
 }
 EXPORT_SYMBOL_GPL(spi_write_then_read);
+#endif /* IS_ENABLED(CONFIG_SPI_READ_THEN_WRITE) */
 
 /*-------------------------------------------------------------------------*/
 

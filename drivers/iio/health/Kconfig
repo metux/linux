@@ -11,6 +11,7 @@ menu "Heart Rate Monitors"
 config AFE4403
 	tristate "TI AFE4403 Heart Rate Monitor"
 	depends on SPI_MASTER
+	select SPI_CORE_WRITE_THEN_READ
 	select REGMAP_SPI
 	select IIO_BUFFER
 	select IIO_TRIGGERED_BUFFER

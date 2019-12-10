@@ -103,6 +103,7 @@ config BMA180
 config BMA220
 	tristate "Bosch BMA220 3-Axis Accelerometer Driver"
 	depends on SPI
+	select SPI_CORE_WRITE_THEN_READ
 	select IIO_BUFFER
 	select IIO_TRIGGERED_BUFFER
 	help

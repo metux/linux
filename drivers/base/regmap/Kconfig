@@ -27,6 +27,7 @@ config REGMAP_SLIMBUS
 config REGMAP_SPI
 	tristate
 	depends on SPI
+	select SPI_CORE_WRITE_THEN_READ
 
 config REGMAP_SPMI
 	tristate

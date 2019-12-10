@@ -19,6 +19,7 @@ config ABP060MG
 config BMP280
 	tristate "Bosch Sensortec BMP180/BMP280 pressure sensor I2C driver"
 	depends on (I2C || SPI_MASTER)
+	select SPI_CORE_WRITE_THEN_READ
 	select REGMAP
 	select BMP280_I2C if (I2C)
 	select BMP280_SPI if (SPI_MASTER)
@@ -149,6 +150,7 @@ config MS5611_I2C
 config MS5611_SPI
 	tristate "support SPI bus connection"
 	depends on SPI_MASTER && MS5611
+	select SPI_CORE_WRITE_THEN_READ
 	help
 	  Say Y here to build SPI bus support for MS5611.
 

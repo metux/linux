@@ -24,6 +24,7 @@ config MUX_ADG792A
 config MUX_ADGS1408
 	tristate "Analog Devices ADGS1408/ADGS1409 Multiplexers"
 	depends on SPI
+	select SPI_CORE_WRITE_THEN_READ
 	help
 	  ADGS1408 8:1 multiplexer and ADGS1409 double 4:1 multiplexer
 	  switches.

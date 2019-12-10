@@ -25,6 +25,7 @@ config ATLAS_PH_SENSOR
 config BME680
 	tristate "Bosch Sensortec BME680 sensor driver"
 	depends on (I2C || SPI)
+	select SPI_CORE_WRITE_THEN_READ
 	select REGMAP
 	select BME680_I2C if I2C
 	select BME680_SPI if SPI

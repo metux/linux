@@ -54,6 +54,7 @@ config MTD_MS02NV
 config MTD_DATAFLASH
 	tristate "Support for AT45xxx DataFlash"
 	depends on SPI_MASTER
+	select SPI_CORE_WRITE_THEN_READ
 	help
 	  This enables access to AT45xxx DataFlash chips, using SPI.
 	  Sometimes DataFlash chips are packaged inside MMC-format

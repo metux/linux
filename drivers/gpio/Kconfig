@@ -1459,6 +1459,7 @@ config GPIO_MAX3191X
 config GPIO_MAX7301
 	tristate "Maxim MAX7301 GPIO expander"
 	select GPIO_MAX730X
+	select SPI_CORE_WRITE_THEN_READ
 	help
 	  GPIO driver for Maxim MAX7301 SPI-based GPIO expander.
 

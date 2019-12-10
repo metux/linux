@@ -3,6 +3,7 @@
 config DVB_CXD2880
 	tristate "Sony CXD2880 DVB-T2/T tuner + demodulator"
 	depends on DVB_CORE && SPI
+	select SPI_CORE_WRITE_THEN_READ
 	default m if !MEDIA_SUBDRV_AUTOSELECT
 	help
 	  Say Y when you want to support this frontend.

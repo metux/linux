@@ -722,6 +722,7 @@ config INPUT_ADXL34X_I2C
 config INPUT_ADXL34X_SPI
 	tristate "support SPI bus connection"
 	depends on INPUT_ADXL34X && SPI
+	select SPI_CORE_WRITE_THEN_READ
 	default y
 	help
 	  Say Y here if you have ADXL345/6 hooked to a SPI bus.

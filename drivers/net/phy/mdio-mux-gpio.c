@@ -11,7 +11,6 @@
 #include <linux/mdio-mux.h>
 #include <linux/gpio/consumer.h>
 
-#define DRV_VERSION "1.1"
 #define DRV_DESCRIPTION "GPIO controlled MDIO bus multiplexer driver"
 
 struct mdio_mux_gpio_state {
@@ -98,6 +97,5 @@ static struct platform_driver mdio_mux_gpio_driver = {
 module_platform_driver(mdio_mux_gpio_driver);
 
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
-MODULE_VERSION(DRV_VERSION);
 MODULE_AUTHOR("David Daney");
 MODULE_LICENSE("GPL v2");

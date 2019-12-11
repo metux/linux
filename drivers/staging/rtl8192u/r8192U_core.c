@@ -90,7 +90,6 @@ static const struct usb_device_id rtl8192_usb_id_tbl[] = {
 };
 
 MODULE_LICENSE("GPL");
-MODULE_VERSION("V 1.1");
 MODULE_DEVICE_TABLE(usb, rtl8192_usb_id_tbl);
 MODULE_DESCRIPTION("Linux driver for Realtek RTL8192 USB WiFi cards");
 

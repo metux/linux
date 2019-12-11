@@ -20,8 +20,6 @@
  *
  */
 
-#define CY_VERSION	"2.6"
-
 /* If you need to install more boards than NR_CARDS, change the constant
    in the definition below. No other change is necessary to support up to
    eight boards. Beyond that you'll have to extend cy_isa_addresses. */
@@ -4020,7 +4018,7 @@ static int __init cy_init(void)
 	if (!cy_serial_driver)
 		goto err;
 
-	printk(KERN_INFO "Cyclades driver " CY_VERSION "\n");
+	printk(KERN_INFO "Cyclades driver\n");
 
 	/* Initialize the tty_driver structure */
 
@@ -4114,6 +4112,5 @@ module_init(cy_init);
 module_exit(cy_cleanup_module);
 
 MODULE_LICENSE("GPL");
-MODULE_VERSION(CY_VERSION);
 MODULE_ALIAS_CHARDEV_MAJOR(CYCLADES_MAJOR);
 MODULE_FIRMWARE("cyzfirm.bin");

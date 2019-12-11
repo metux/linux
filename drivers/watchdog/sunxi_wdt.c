@@ -32,7 +32,6 @@
 #define WDT_MODE_EN             (1 << 0)
 
 #define DRV_NAME		"sunxi-wdt"
-#define DRV_VERSION		"1.0"
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 static unsigned int timeout;
@@ -292,4 +291,3 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Carlo Caione <carlo.caione@gmail.com>");
 MODULE_AUTHOR("Henrik Nordstrom <henrik@henriknordstrom.net>");
 MODULE_DESCRIPTION("sunxi WatchDog Timer Driver");
-MODULE_VERSION(DRV_VERSION);

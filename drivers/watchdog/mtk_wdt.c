@@ -45,7 +45,6 @@
 #define WDT_SWRST_KEY		0x1209
 
 #define DRV_NAME		"mtk-wdt"
-#define DRV_VERSION		"1.0"
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 static unsigned int timeout;
@@ -249,4 +248,3 @@ MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Matthias Brugger <matthias.bgg@gmail.com>");
 MODULE_DESCRIPTION("Mediatek WatchDog Timer Driver");
-MODULE_VERSION(DRV_VERSION);

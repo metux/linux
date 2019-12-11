@@ -74,11 +74,7 @@
 #include <linux/io.h>		/* For inb/outb/... */
 
 /* Module and version information */
-#define WATCHDOG_VERSION "1.20"
-#define WATCHDOG_DATE "18 Feb 2007"
-#define WATCHDOG_DRIVER_NAME "ISA-PC Watchdog"
 #define WATCHDOG_NAME "pcwd"
-#define DRIVER_VERSION WATCHDOG_DRIVER_NAME " driver, v" WATCHDOG_VERSION "\n"
 
 /*
  * It should be noted that PCWD_REVISION_B was removed because A and B
@@ -857,8 +853,7 @@ static int pcwd_isa_probe(struct device *dev, unsigned int id)
 
 	cards_found++;
 	if (cards_found == 1)
-		pr_info("v%s Ken Hollis (kenji@bitgate.com)\n",
-							WATCHDOG_VERSION);
+		pr_info("Ken Hollis (kenji@bitgate.com)\n");
 
 	if (cards_found > 1) {
 		pr_err("This driver only supports 1 device\n");
@@ -999,5 +994,4 @@ module_isa_driver(pcwd_isa_driver, PCWD_ISA_NR_CARDS);
 MODULE_AUTHOR("Ken Hollis <kenji@bitgate.com>, "
 		"Wim Van Sebroeck <wim@iguana.be>");
 MODULE_DESCRIPTION("Berkshire ISA-PC Watchdog driver");
-MODULE_VERSION(WATCHDOG_VERSION);
 MODULE_LICENSE("GPL");

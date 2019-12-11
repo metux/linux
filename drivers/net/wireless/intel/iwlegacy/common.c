@@ -3335,7 +3335,6 @@ il_tx_cmd_complete(struct il_priv *il, struct il_rx_buf *rxb)
 EXPORT_SYMBOL(il_tx_cmd_complete);
 
 MODULE_DESCRIPTION("iwl-legacy: common functions for 3945 and 4965");
-MODULE_VERSION(IWLWIFI_VERSION);
 MODULE_AUTHOR(DRV_COPYRIGHT " " DRV_AUTHOR);
 MODULE_LICENSE("GPL");
 

@@ -10534,6 +10534,5 @@ int rt2800_get_survey(struct ieee80211_hw *hw, int idx,
 EXPORT_SYMBOL_GPL(rt2800_get_survey);
 
 MODULE_AUTHOR(DRV_PROJECT ", Bartlomiej Zolnierkiewicz");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DESCRIPTION("Ralink RT2800 library");
 MODULE_LICENSE("GPL");

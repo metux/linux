@@ -6182,17 +6182,10 @@ err_free_cookie:
 static int mwl8k_probe(struct pci_dev *pdev,
 				 const struct pci_device_id *id)
 {
-	static int printed_version;
 	struct ieee80211_hw *hw;
 	struct mwl8k_priv *priv;
 	struct mwl8k_device_info *di;
 	int rc;
-
-	if (!printed_version) {
-		printk(KERN_INFO "%s version %s\n", MWL8K_DESC, MWL8K_VERSION);
-		printed_version = 1;
-	}
-
 
 	rc = pci_enable_device(pdev);
 	if (rc) {
@@ -6358,6 +6351,5 @@ static struct pci_driver mwl8k_driver = {
 module_pci_driver(mwl8k_driver);
 
 MODULE_DESCRIPTION(MWL8K_DESC);
-MODULE_VERSION(MWL8K_VERSION);
 MODULE_AUTHOR("Lennert Buytenhek <buytenh@marvell.com>");
 MODULE_LICENSE("GPL");

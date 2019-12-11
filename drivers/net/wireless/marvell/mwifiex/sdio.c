@@ -29,8 +29,6 @@
 #include "sdio.h"
 
 
-#define SDIO_VERSION	"1.0"
-
 static void mwifiex_sdio_work(struct work_struct *work);
 
 static struct mwifiex_if_ops sdio_ops;
@@ -2717,8 +2715,7 @@ static struct mwifiex_if_ops sdio_ops = {
 module_driver(mwifiex_sdio, sdio_register_driver, sdio_unregister_driver);
 
 MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell WiFi-Ex SDIO Driver version " SDIO_VERSION);
-MODULE_VERSION(SDIO_VERSION);
+MODULE_DESCRIPTION("Marvell WiFi-Ex SDIO Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_FIRMWARE(SD8786_DEFAULT_FW_NAME);
 MODULE_FIRMWARE(SD8787_DEFAULT_FW_NAME);

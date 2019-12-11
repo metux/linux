@@ -169,7 +169,6 @@ static struct pm_qos_request ipw2100_pm_qos_req;
 #endif
 
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
-MODULE_VERSION(DRV_VERSION);
 MODULE_AUTHOR(DRV_COPYRIGHT);
 MODULE_LICENSE("GPL");
 
@@ -6564,7 +6563,7 @@ static int __init ipw2100_init(void)
 {
 	int ret;
 
-	printk(KERN_INFO DRV_NAME ": %s, %s\n", DRV_DESCRIPTION, DRV_VERSION);
+	printk(KERN_INFO DRV_NAME ": %s\n", DRV_DESCRIPTION);
 	printk(KERN_INFO DRV_NAME ": %s\n", DRV_COPYRIGHT);
 
 	cpu_latency_qos_add_request(&ipw2100_pm_qos_req, PM_QOS_DEFAULT_VALUE);

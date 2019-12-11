@@ -67,7 +67,6 @@
 #define ETH_P_80211_STATS (ETH_P_80211_RAW + 1)
 
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
-MODULE_VERSION(DRV_VERSION);
 MODULE_AUTHOR(DRV_COPYRIGHT);
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("ipw2200-ibss.fw");
@@ -11929,7 +11928,7 @@ static int __init ipw_init(void)
 {
 	int ret;
 
-	printk(KERN_INFO DRV_NAME ": " DRV_DESCRIPTION ", " DRV_VERSION "\n");
+	printk(KERN_INFO DRV_NAME ": " DRV_DESCRIPTION "\n");
 	printk(KERN_INFO DRV_NAME ": " DRV_COPYRIGHT "\n");
 
 	ret = pci_register_driver(&ipw_driver);

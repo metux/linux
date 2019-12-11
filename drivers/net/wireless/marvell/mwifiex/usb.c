@@ -20,8 +20,6 @@
 #include "main.h"
 #include "usb.h"
 
-#define USB_VERSION	"1.0"
-
 static struct mwifiex_if_ops usb_ops;
 
 static const struct usb_device_id mwifiex_usb_table[] = {
@@ -1603,8 +1601,7 @@ static struct mwifiex_if_ops usb_ops = {
 module_usb_driver(mwifiex_usb_driver);
 
 MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell WiFi-Ex USB Driver version" USB_VERSION);
-MODULE_VERSION(USB_VERSION);
+MODULE_DESCRIPTION("Marvell WiFi-Ex USB Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_FIRMWARE(USB8766_DEFAULT_FW_NAME);
 MODULE_FIRMWARE(USB8797_DEFAULT_FW_NAME);

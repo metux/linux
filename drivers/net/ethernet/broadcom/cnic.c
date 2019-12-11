@@ -64,7 +64,6 @@ MODULE_AUTHOR("Michael Chan <mchan@broadcom.com> and John(Zongxi) "
 	      "Chen (zongxi@broadcom.com");
 MODULE_DESCRIPTION("QLogic cnic Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(CNIC_MODULE_VERSION);
 
 /* cnic_dev_list modifications are protected by both rtnl and cnic_dev_lock */
 static LIST_HEAD(cnic_dev_list);

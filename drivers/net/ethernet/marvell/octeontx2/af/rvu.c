@@ -49,7 +49,6 @@ static const struct pci_device_id rvu_id_table[] = {
 MODULE_AUTHOR("Marvell International Ltd.");
 MODULE_DESCRIPTION(DRV_STRING);
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, rvu_id_table);
 
 static char *mkex_profile; /* MKEX profile name */

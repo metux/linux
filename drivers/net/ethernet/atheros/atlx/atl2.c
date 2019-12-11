@@ -47,7 +47,6 @@ static const struct ethtool_ops atl2_ethtool_ops;
 MODULE_AUTHOR("Atheros Corporation <xiong.huang@atheros.com>, Chris Snook <csnook@redhat.com>");
 MODULE_DESCRIPTION("Atheros Fast Ethernet Network Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(ATL2_DRV_VERSION);
 
 /*
  * atl2_pci_tbl - PCI Device ID Table

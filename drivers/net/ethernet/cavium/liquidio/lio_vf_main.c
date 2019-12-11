@@ -32,7 +32,6 @@
 MODULE_AUTHOR("Cavium Networks, <support@cavium.com>");
 MODULE_DESCRIPTION("Cavium LiquidIO Intelligent Server Adapter Virtual Function Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(LIQUIDIO_VERSION);
 
 static int debug = -1;
 module_param(debug, int, 0644);

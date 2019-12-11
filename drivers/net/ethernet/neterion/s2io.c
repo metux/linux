@@ -415,7 +415,6 @@ static const u64 fix_mac[] = {
 };
 
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 
 /* Module Loadable parameters. */

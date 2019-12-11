@@ -1158,5 +1158,4 @@ module_exit(vmlfb_cleanup);
 
 MODULE_AUTHOR("Tungsten Graphics");
 MODULE_DESCRIPTION("Initialization of the Vermilion display devices");
-MODULE_VERSION("1.0.0");
 MODULE_LICENSE("GPL");

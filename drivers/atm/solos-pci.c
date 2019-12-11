@@ -141,7 +141,6 @@ struct solos_param {
 
 MODULE_AUTHOR("Traverse Technologies <support@traverse.com.au>");
 MODULE_DESCRIPTION("Solos PCI driver");
-MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("solos-FPGA.bin");
 MODULE_FIRMWARE("solos-Firmware.bin");

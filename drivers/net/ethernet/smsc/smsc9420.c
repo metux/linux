@@ -27,7 +27,6 @@
 #define DRV_VERSION		"1.01"
 
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 struct smsc9420_dma_desc {
 	u32 status;

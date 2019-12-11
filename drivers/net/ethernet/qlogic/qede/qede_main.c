@@ -70,7 +70,6 @@ static char version[] =
 
 MODULE_DESCRIPTION("QLogic FastLinQ 4xxxx Ethernet Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 static uint debug;
 module_param(debug, uint, 0);

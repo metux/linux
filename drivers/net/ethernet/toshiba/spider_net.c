@@ -43,7 +43,6 @@ MODULE_AUTHOR("Utz Bacher <utz.bacher@de.ibm.com> and Jens Osterkamp " \
 	      "<Jens.Osterkamp@de.ibm.com>");
 MODULE_DESCRIPTION("Spider Southbridge Gigabit Ethernet driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(VERSION);
 MODULE_FIRMWARE(SPIDER_NET_FIRMWARE_NAME);
 
 static int rx_descriptors = SPIDER_NET_RX_DESCRIPTORS_DEFAULT;
@@ -2500,7 +2499,7 @@ static struct pci_driver spider_net_driver = {
  */
 static int __init spider_net_init(void)
 {
-	printk(KERN_INFO "Spidernet version %s.\n", VERSION);
+	printk(KERN_INFO "Spidernet version\n");
 
 	if (rx_descriptors < SPIDER_NET_RX_DESCRIPTORS_MIN) {
 		rx_descriptors = SPIDER_NET_RX_DESCRIPTORS_MIN;

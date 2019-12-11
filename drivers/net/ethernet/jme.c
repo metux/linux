@@ -3298,5 +3298,4 @@ module_exit(jme_cleanup_module);
 MODULE_AUTHOR("Guo-Fu Tseng <cooldavid@cooldavid.org>");
 MODULE_DESCRIPTION("JMicron JMC2x0 PCI Express Ethernet driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, jme_pci_tbl);

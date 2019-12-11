@@ -59,7 +59,6 @@ static const struct pci_device_id xcv_id_table[] = {
 MODULE_AUTHOR("Cavium Inc");
 MODULE_DESCRIPTION("Cavium Thunder RGX/XCV Driver");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, xcv_id_table);
 
 void xcv_init_hw(void)

@@ -45,7 +45,6 @@ static char version[] =
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_DESCRIPTION("NIU ethernet driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 #ifndef readq
 static u64 readq(void __iomem *reg)

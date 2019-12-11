@@ -50,7 +50,6 @@ static char version[] =
 MODULE_AUTHOR("Oracle");
 MODULE_DESCRIPTION("Sun4v LDOM Virtual Switch Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 /* Ordered from largest major to lowest */
 static struct vio_version vsw_versions[] = {

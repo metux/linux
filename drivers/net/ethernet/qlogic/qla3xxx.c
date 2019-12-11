@@ -51,7 +51,6 @@ static const char ql3xxx_driver_version[] = DRV_VERSION;
 MODULE_AUTHOR("QLogic Corporation");
 MODULE_DESCRIPTION("QLogic ISP3XXX Network Driver " DRV_VERSION " ");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 static const u32 default_msg
     = NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK

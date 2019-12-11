@@ -52,7 +52,6 @@ static const char ibmveth_driver_string[] = "IBM Power Virtual Ethernet Driver";
 MODULE_AUTHOR("Santiago Leon <santil@linux.vnet.ibm.com>");
 MODULE_DESCRIPTION("IBM Power Virtual Ethernet Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(ibmveth_driver_version);
 
 static unsigned int tx_copybreak __read_mostly = 128;
 module_param(tx_copybreak, uint, 0644);

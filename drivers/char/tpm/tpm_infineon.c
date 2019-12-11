@@ -621,5 +621,4 @@ module_pnp_driver(tpm_inf_pnp_driver);
 
 MODULE_AUTHOR("Marcel Selhorst <tpmdd@sirrix.com>");
 MODULE_DESCRIPTION("Driver for Infineon TPM SLD 9630 TT 1.1 / SLB 9635 TT 1.2");
-MODULE_VERSION("1.9.2");
 MODULE_LICENSE("GPL");

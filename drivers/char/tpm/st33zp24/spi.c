@@ -430,5 +430,4 @@ module_spi_driver(st33zp24_spi_driver);
 
 MODULE_AUTHOR("TPM support (TPMsupport@list.st.com)");
 MODULE_DESCRIPTION("STM TPM 1.2 SPI ST33 Driver");
-MODULE_VERSION("1.3.0");
 MODULE_LICENSE("GPL");

@@ -38,8 +38,6 @@
 #include <linux/timer.h>
 #include <linux/hrtimer.h>
 
-#define VERSION_STR "0.9.1"
-
 #define DEFAULT_IOFENCE_MARGIN 60	/* Default fudge factor, in seconds */
 #define DEFAULT_IOFENCE_TICK 180	/* Default timer timeout, in seconds */
 
@@ -61,7 +59,6 @@ MODULE_PARM_DESC(hangcheck_dump_tasks, "If nonzero, the machine will dump the sy
 MODULE_AUTHOR("Oracle");
 MODULE_DESCRIPTION("Hangcheck-timer detects when the system has gone out to lunch past a certain margin.");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(VERSION_STR);
 
 /* options - nonmodular */
 #ifndef MODULE
@@ -152,8 +149,8 @@ static void hangcheck_fire(struct timer_list *unused)
 
 static int __init hangcheck_init(void)
 {
-	printk("Hangcheck: starting hangcheck timer %s (tick is %d seconds, margin is %d seconds).\n",
-	       VERSION_STR, hangcheck_tick, hangcheck_margin);
+	printk("Hangcheck: starting hangcheck timer (tick is %d seconds, margin is %d seconds).\n",
+	       hangcheck_tick, hangcheck_margin);
 	hangcheck_tsc_margin =
 		(unsigned long long)hangcheck_margin + hangcheck_tick;
 	hangcheck_tsc_margin *= TIMER_FREQ;

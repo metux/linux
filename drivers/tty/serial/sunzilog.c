@@ -1649,5 +1649,4 @@ module_exit(sunzilog_exit);
 
 MODULE_AUTHOR("David S. Miller");
 MODULE_DESCRIPTION("Sun Zilog serial port driver");
-MODULE_VERSION("2.0");
 MODULE_LICENSE("GPL");

@@ -692,7 +692,6 @@ module_exit(l2tp_ip_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("James Chapman <jchapman@katalix.com>");
 MODULE_DESCRIPTION("L2TP over IP");
-MODULE_VERSION("1.0");
 
 /* Use the value of SOCK_DGRAM (2) directory, because __stringify doesn't like
  * enums

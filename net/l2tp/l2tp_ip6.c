@@ -825,7 +825,6 @@ module_exit(l2tp_ip6_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Chris Elston <celston@katalix.com>");
 MODULE_DESCRIPTION("L2TP IP encapsulation for IPv6");
-MODULE_VERSION("1.0");
 
 /* Use the value of SOCK_DGRAM (2) directory, because __stringify doesn't like
  * enums

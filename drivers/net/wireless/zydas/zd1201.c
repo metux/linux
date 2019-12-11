@@ -34,11 +34,8 @@ static const struct usb_device_id zd1201_table[] = {
 
 static int ap;	/* Are we an AP or a normal station? */
 
-#define ZD1201_VERSION	"0.15"
-
 MODULE_AUTHOR("Jeroen Vreeken <pe1rxq@amsat.org>");
 MODULE_DESCRIPTION("Driver for ZyDAS ZD1201 based USB Wireless adapters");
-MODULE_VERSION(ZD1201_VERSION);
 MODULE_LICENSE("GPL");
 module_param(ap, int, 0);
 MODULE_PARM_DESC(ap, "If non-zero Access Point firmware will be loaded");

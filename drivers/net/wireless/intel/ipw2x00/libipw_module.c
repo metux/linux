@@ -41,10 +41,8 @@
 #define DRV_DESCRIPTION "802.11 data/management/control stack"
 #define DRV_NAME        "libipw"
 #define DRV_PROCNAME	"ieee80211"
-#define DRV_VERSION	LIBIPW_VERSION
 #define DRV_COPYRIGHT   "Copyright (C) 2004-2005 Intel Corporation <jketreno@linux.intel.com>"
 
-MODULE_VERSION(DRV_VERSION);
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR(DRV_COPYRIGHT);
 MODULE_LICENSE("GPL");
@@ -270,7 +268,7 @@ static int __init libipw_init(void)
 	}
 #endif				/* CONFIG_LIBIPW_DEBUG */
 
-	printk(KERN_INFO DRV_NAME ": " DRV_DESCRIPTION ", " DRV_VERSION "\n");
+	printk(KERN_INFO DRV_NAME ": " DRV_DESCRIPTION "\n");
 	printk(KERN_INFO DRV_NAME ": " DRV_COPYRIGHT "\n");
 
 	return 0;

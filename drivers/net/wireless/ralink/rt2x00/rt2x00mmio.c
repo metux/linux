@@ -196,6 +196,5 @@ EXPORT_SYMBOL_GPL(rt2x00mmio_uninitialize);
  * rt2x00mmio module information.
  */
 MODULE_AUTHOR(DRV_PROJECT);
-MODULE_VERSION(DRV_VERSION);
 MODULE_DESCRIPTION("rt2x00 mmio library");
 MODULE_LICENSE("GPL");

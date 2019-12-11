@@ -252,6 +252,5 @@ static struct platform_driver rt2800soc_driver = {
 module_platform_driver(rt2800soc_driver);
 
 MODULE_AUTHOR(DRV_PROJECT);
-MODULE_VERSION(DRV_VERSION);
 MODULE_DESCRIPTION("Ralink WiSoC Wireless LAN driver.");
 MODULE_LICENSE("GPL");

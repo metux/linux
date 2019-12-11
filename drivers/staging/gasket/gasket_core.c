@@ -1810,7 +1810,6 @@ static int __init gasket_init(void)
 }
 
 MODULE_DESCRIPTION("Google Gasket driver framework");
-MODULE_VERSION(GASKET_FRAMEWORK_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Rob Springer <rspringer@google.com>");
 module_init(gasket_init);

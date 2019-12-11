@@ -1146,4 +1146,3 @@ module_exit(vsoc_cleanup_module);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Greg Hartman <ghartman@google.com>");
 MODULE_DESCRIPTION("VSoC interpretation of QEmu's ivshmem device");
-MODULE_VERSION("1.0");

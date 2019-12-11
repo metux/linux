@@ -45,7 +45,6 @@
 #endif
 
 #define DRV_NAME	"pata_macio"
-#define DRV_VERSION	"0.9"
 
 /* Models of macio ATA controller */
 enum {
@@ -1419,4 +1418,3 @@ module_exit(pata_macio_exit);
 MODULE_AUTHOR("Benjamin Herrenschmidt");
 MODULE_DESCRIPTION("Apple MacIO PATA driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);

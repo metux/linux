@@ -42,10 +42,8 @@
 
 /* These two are defined in "libata.h" */
 #undef	DRV_NAME
-#undef	DRV_VERSION
 
 #define DRV_NAME        "sata-dwc"
-#define DRV_VERSION     "1.3"
 
 #define sata_dwc_writel(a, v)	writel_relaxed(v, a)
 #define sata_dwc_readl(a)	readl_relaxed(a)
@@ -1327,4 +1325,3 @@ module_platform_driver(sata_dwc_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mark Miesfeld <mmiesfeld@amcc.com>");
 MODULE_DESCRIPTION("DesignWare Cores SATA controller low level driver");
-MODULE_VERSION(DRV_VERSION);

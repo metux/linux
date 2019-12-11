@@ -21,7 +21,6 @@
 #include <linux/ata_platform.h>
 
 #define DRV_NAME "pata_platform"
-#define DRV_VERSION "1.2"
 
 static int pio_mask = 1;
 
@@ -238,5 +237,4 @@ module_param(pio_mask, int, 0);
 MODULE_AUTHOR("Paul Mundt");
 MODULE_DESCRIPTION("low-level driver for platform device ATA");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 MODULE_ALIAS("platform:" DRV_NAME);

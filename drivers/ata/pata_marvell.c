@@ -20,7 +20,6 @@
 #include <linux/ata.h>
 
 #define DRV_NAME	"pata_marvell"
-#define DRV_VERSION	"0.1.6"
 
 /**
  *	marvell_pata_active	-	check if PATA is active
@@ -184,4 +183,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("SCSI low-level driver for Marvell ATA in legacy mode");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, marvell_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

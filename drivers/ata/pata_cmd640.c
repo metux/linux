@@ -23,7 +23,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_cmd640"
-#define DRV_VERSION "0.0.5"
 
 struct cmd640_reg {
 	int last;
@@ -269,4 +268,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for CMD640 PATA controllers");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, cmd640);
-MODULE_VERSION(DRV_VERSION);

@@ -24,7 +24,6 @@
 #include <linux/platform_data/ata-samsung_cf.h>
 
 #define DRV_NAME "pata_samsung_cf"
-#define DRV_VERSION "0.1"
 
 #define S3C_CFATA_REG(x)	(x)
 #define S3C_CFATA_MUX		S3C_CFATA_REG(0x0)
@@ -659,4 +658,3 @@ module_platform_driver_probe(pata_s3c_driver, pata_s3c_probe);
 MODULE_AUTHOR("Abhilash Kesavan, <a.kesavan@samsung.com>");
 MODULE_DESCRIPTION("low-level driver for Samsung PATA controller");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);

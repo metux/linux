@@ -25,7 +25,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "ata_generic"
-#define DRV_VERSION "0.2.15"
 
 /*
  *	A generic parallel ATA driver using libata
@@ -253,6 +252,5 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for generic ATA");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, ata_generic);
-MODULE_VERSION(DRV_VERSION);
 
 module_param(all_generic_ide, int, 0);

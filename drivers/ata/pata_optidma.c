@@ -453,4 +453,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for Opti Firestar/Firestar Plus");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, optidma);
-MODULE_VERSION(DRV_VERSION);

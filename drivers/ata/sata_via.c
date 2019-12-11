@@ -180,7 +180,6 @@ MODULE_AUTHOR("Jeff Garzik");
 MODULE_DESCRIPTION("SCSI low-level driver for VIA SATA controllers");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, svia_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 
 static int svia_scr_read(struct ata_link *link, unsigned int sc_reg, u32 *val)
 {

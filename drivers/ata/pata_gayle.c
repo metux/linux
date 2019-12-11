@@ -31,7 +31,6 @@
 #include <asm/setup.h>
 
 #define DRV_NAME "pata_gayle"
-#define DRV_VERSION "0.1.0"
 
 #define GAYLE_CONTROL	0x101a
 
@@ -216,4 +215,3 @@ MODULE_AUTHOR("Bartlomiej Zolnierkiewicz");
 MODULE_DESCRIPTION("low-level driver for Amiga Gayle PATA");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:amiga-gayle-ide");
-MODULE_VERSION(DRV_VERSION);

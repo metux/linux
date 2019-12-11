@@ -82,7 +82,6 @@ MODULE_AUTHOR("Peer Chen");
 MODULE_DESCRIPTION("low-level driver for ULi Electronics SATA controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, uli_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 
 static unsigned int get_scr_cfg_addr(struct ata_port *ap, unsigned int sc_reg)
 {

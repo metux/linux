@@ -41,7 +41,6 @@ MODULE_PARM_DESC(msr, "Force using MSR to configure IDE function (Default: 0)");
 #endif
 
 #define DRV_NAME	"pata_cs5536"
-#define DRV_VERSION	"0.0.8"
 
 enum {
 	MSR_IDE_CFG		= 0x51300010,
@@ -298,4 +297,3 @@ MODULE_AUTHOR("Martin K. Petersen");
 MODULE_DESCRIPTION("low-level driver for the CS5536 IDE controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, cs5536);
-MODULE_VERSION(DRV_VERSION);

@@ -250,4 +250,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("SCSI low-level driver for Radisys R82600 controllers");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, radisys_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

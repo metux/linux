@@ -21,7 +21,6 @@
 #include <linux/dmi.h>
 
 #define DRV_NAME	"pata_cs5530"
-#define DRV_VERSION	"0.7.4"
 
 static void __iomem *cs5530_port_base(struct ata_port *ap)
 {
@@ -354,4 +353,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for the Cyrix/NS/AMD 5530");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, cs5530);
-MODULE_VERSION(DRV_VERSION);

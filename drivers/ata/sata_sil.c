@@ -241,7 +241,6 @@ MODULE_AUTHOR("Jeff Garzik");
 MODULE_DESCRIPTION("low-level driver for Silicon Image SATA controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, sil_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 
 static int slow_down;
 module_param(slow_down, int, 0444);

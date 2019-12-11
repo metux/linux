@@ -35,7 +35,6 @@
 #include <linux/dmi.h>
 
 #define DRV_NAME "pata_ali"
-#define DRV_VERSION "0.7.8"
 
 static int ali_atapi_dma = 0;
 module_param_named(atapi_dma, ali_atapi_dma, int, 0644);
@@ -646,7 +645,6 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for ALi PATA");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, ali);
-MODULE_VERSION(DRV_VERSION);
 
 module_init(ali_init);
 module_exit(ali_exit);

@@ -27,7 +27,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"pata_hpt3x2n"
-#define DRV_VERSION	"0.3.15"
 
 enum {
 	HPT_PCI_FAST	=	(1 << 31),
@@ -627,4 +626,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for the Highpoint HPT3xxN");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, hpt3x2n);
-MODULE_VERSION(DRV_VERSION);

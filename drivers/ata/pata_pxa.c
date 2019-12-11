@@ -20,7 +20,6 @@
 #include <linux/platform_data/ata-pxa.h>
 
 #define DRV_NAME	"pata_pxa"
-#define DRV_VERSION	"0.1"
 
 struct pata_pxa_data {
 	struct dma_chan		*dma_chan;
@@ -320,5 +319,4 @@ module_platform_driver(pxa_ata_driver);
 MODULE_AUTHOR("Marek Vasut <marek.vasut@gmail.com>");
 MODULE_DESCRIPTION("DMA-capable driver for PATA on PXA CPU");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 MODULE_ALIAS("platform:" DRV_NAME);

@@ -26,7 +26,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"pata_hpt37x"
-#define DRV_VERSION	"0.6.23"
 
 struct hpt_clock {
 	u8	xfer_speed;
@@ -1061,4 +1060,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for the Highpoint HPT37x/30x");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, hpt37x);
-MODULE_VERSION(DRV_VERSION);

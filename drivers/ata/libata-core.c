@@ -157,7 +157,6 @@ MODULE_PARM_DESC(atapi_an, "Enable ATAPI AN media presence notification (0=0ff [
 MODULE_AUTHOR("Jeff Garzik");
 MODULE_DESCRIPTION("Library module for ATA devices");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 
 static bool ata_sstatus_online(u32 sstatus)

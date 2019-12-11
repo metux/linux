@@ -26,7 +26,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"pata_hpt366"
-#define DRV_VERSION	"0.6.11"
 
 struct hpt_clock {
 	u8	xfer_mode;
@@ -421,4 +420,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for the Highpoint HPT366/368");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, hpt36x);
-MODULE_VERSION(DRV_VERSION);

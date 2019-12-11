@@ -112,12 +112,9 @@
  * hvcs_write_room() and hvcs_chars_in_buffer() because they aren't needed.
  */
 
-#define HVCS_DRIVER_VERSION "1.3.3"
-
 MODULE_AUTHOR("Ryan S. Arnold <rsa@us.ibm.com>");
 MODULE_DESCRIPTION("IBM hvcs (Hypervisor Virtual Console Server) Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(HVCS_DRIVER_VERSION);
 
 /*
  * Wait this long per iteration while trying to push buffered data to the

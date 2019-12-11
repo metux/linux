@@ -650,6 +650,5 @@ device_initcall(sunhv_init);
 #if 0 /* ...def MODULE ; never supported as such */
 MODULE_AUTHOR("David S. Miller");
 MODULE_DESCRIPTION("SUN4V Hypervisor console driver");
-MODULE_VERSION("2.0");
 MODULE_LICENSE("GPL");
 #endif

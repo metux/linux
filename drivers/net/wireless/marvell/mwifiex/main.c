@@ -1806,6 +1806,5 @@ module_init(mwifiex_init_module);
 module_exit(mwifiex_cleanup_module);
 
 MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell WiFi-Ex Driver version " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Marvell WiFi-Ex Driver");
 MODULE_LICENSE("GPL v2");

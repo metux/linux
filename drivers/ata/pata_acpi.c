@@ -18,7 +18,6 @@
 #include <scsi/scsi_host.h>
 
 #define DRV_NAME	"pata_acpi"
-#define DRV_VERSION	"0.2.3"
 
 struct pata_acpi {
 	struct ata_acpi_gtm gtm;
@@ -278,4 +277,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("SCSI low-level driver for ATA in ACPI mode");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, pacpi_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

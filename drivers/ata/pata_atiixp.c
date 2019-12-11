@@ -23,7 +23,6 @@
 #include <linux/dmi.h>
 
 #define DRV_NAME "pata_atiixp"
-#define DRV_VERSION "0.4.6"
 
 enum {
 	ATIIXP_IDE_PIO_TIMING	= 0x40,
@@ -315,4 +314,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for ATI IXP200/300/400");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, atiixp);
-MODULE_VERSION(DRV_VERSION);

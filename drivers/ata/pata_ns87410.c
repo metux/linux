@@ -13,7 +13,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_ns87410"
-#define DRV_VERSION "0.4.6"
 
 /**
  *	ns87410_pre_reset		-	probe begin
@@ -160,4 +159,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for Nat Semi 87410");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, ns87410);
-MODULE_VERSION(DRV_VERSION);

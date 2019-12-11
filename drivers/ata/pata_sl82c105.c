@@ -26,7 +26,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_sl82c105"
-#define DRV_VERSION "0.3.3"
 
 enum {
 	/*
@@ -378,4 +377,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for Sl82c105");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, sl82c105);
-MODULE_VERSION(DRV_VERSION);

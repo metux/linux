@@ -1062,7 +1062,6 @@ static int __init octeon_cf_init(void)
 MODULE_AUTHOR("David Daney <ddaney@caviumnetworks.com>");
 MODULE_DESCRIPTION("low-level driver for Cavium OCTEON Compact Flash PATA");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 MODULE_ALIAS("platform:" DRV_NAME);
 
 module_init(octeon_cf_init);

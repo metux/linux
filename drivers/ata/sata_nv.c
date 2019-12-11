@@ -580,7 +580,6 @@ MODULE_AUTHOR("NVIDIA");
 MODULE_DESCRIPTION("low-level driver for NVIDIA nForce SATA controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, nv_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 
 static bool adma_enabled;
 static bool swncq_enabled = true;

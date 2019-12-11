@@ -553,4 +553,3 @@ MODULE_AUTHOR("John(Jung-Ik) Lee, Google Inc.");
 MODULE_DESCRIPTION("low level driver for Artop/Acard 867x ATA controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, atp867x_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

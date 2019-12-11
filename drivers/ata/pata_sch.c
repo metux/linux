@@ -80,7 +80,6 @@ MODULE_AUTHOR("Alek Du <alek.du@intel.com>");
 MODULE_DESCRIPTION("SCSI low-level driver for Intel SCH PATA controllers");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, sch_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 
 /**
  *	sch_set_piomode - Initialize host controller PATA PIO timings

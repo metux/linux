@@ -903,4 +903,3 @@ MODULE_AUTHOR("Tejun Heo");
 MODULE_DESCRIPTION("low-level driver for Initio 162x SATA");
 MODULE_LICENSE("GPL v2");
 MODULE_DEVICE_TABLE(pci, inic_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

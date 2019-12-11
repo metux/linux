@@ -80,7 +80,6 @@
 
 
 #define DRV_NAME "pata_it821x"
-#define DRV_VERSION "0.4.2"
 
 struct it821x_dev
 {
@@ -977,7 +976,6 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for the IT8211/IT8212 IDE RAID controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, it821x);
-MODULE_VERSION(DRV_VERSION);
 
 module_param_named(noraid, it8212_noraid, int, S_IRUGO);
 MODULE_PARM_DESC(noraid, "Force card into bypass mode");

@@ -25,7 +25,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"pata_sc1200"
-#define DRV_VERSION	"0.2.6"
 
 #define SC1200_REV_A	0x00
 #define SC1200_REV_B1	0x01
@@ -253,4 +252,3 @@ MODULE_AUTHOR("Alan Cox, Mark Lord");
 MODULE_DESCRIPTION("low-level driver for the NS/AMD SC1200");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, sc1200);
-MODULE_VERSION(DRV_VERSION);

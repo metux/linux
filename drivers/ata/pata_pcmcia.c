@@ -27,7 +27,6 @@
 
 
 #define DRV_NAME "pata_pcmcia"
-#define DRV_VERSION "0.3.5"
 
 /**
  *	pcmcia_set_mode	-	PCMCIA specific mode setup
@@ -379,4 +378,3 @@ module_pcmcia_driver(pcmcia_driver);
 MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for PCMCIA ATA");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);

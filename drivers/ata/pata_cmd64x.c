@@ -33,7 +33,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_cmd64x"
-#define DRV_VERSION "0.2.18"
 
 /*
  * CMD64x specific registers definition.
@@ -531,4 +530,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for CMD64x series PATA controllers");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, cmd64x);
-MODULE_VERSION(DRV_VERSION);

@@ -28,7 +28,6 @@ static const char fjes_copyright[] =
 MODULE_AUTHOR("Taku Izumi <izumi.taku@jp.fujitsu.com>");
 MODULE_DESCRIPTION("FUJITSU Extended Socket Network Device Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 #define ACPI_MOTHERBOARD_RESOURCE_HID "PNP0C02"
 

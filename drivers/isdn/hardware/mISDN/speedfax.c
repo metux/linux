@@ -19,8 +19,6 @@
 #include "ipac.h"
 #include "isar.h"
 
-#define SPEEDFAX_REV	"2.0"
-
 #define PCI_SUBVENDOR_SPEEDFAX_PYRAMID	0x51
 #define PCI_SUBVENDOR_SPEEDFAX_PCI	0x54
 #define PCI_SUB_ID_SEDLBAUER		0x01
@@ -98,7 +96,6 @@ set_debug(const char *val, const struct kernel_param *kp)
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(SPEEDFAX_REV);
 MODULE_FIRMWARE("isdn/ISAR.BIN");
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Speedfax debug mask");
@@ -503,8 +500,7 @@ Speedfax_init(void)
 {
 	int err;
 
-	pr_notice("Sedlbauer Speedfax+ Driver Rev. %s\n",
-		  SPEEDFAX_REV);
+	pr_notice("Sedlbauer Speedfax+ Driver\n");
 	err = pci_register_driver(&sfaxpci_driver);
 	return err;
 }

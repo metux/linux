@@ -148,8 +148,6 @@
  * #define HFC_REGISTER_DEBUG
  */
 
-#define HFC_MULTI_VERSION	"2.03"
-
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -222,7 +220,6 @@ static int	HFC_cnt, E1_cnt, bmask_cnt, Port_cnt, PCM_cnt = 99;
 
 MODULE_AUTHOR("Andreas Eversberg");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(HFC_MULTI_VERSION);
 module_param(debug, uint, S_IRUGO | S_IWUSR);
 module_param(poll, uint, S_IRUGO | S_IWUSR);
 module_param(clock, int, S_IRUGO | S_IWUSR);
@@ -5476,7 +5473,7 @@ HFCmulti_init(void)
 	int i, xhfc = 0;
 	struct hm_map m;
 
-	printk(KERN_INFO "mISDN: HFC-multi driver %s\n", HFC_MULTI_VERSION);
+	printk(KERN_INFO "mISDN: HFC-multi driver\n);
 
 #ifdef IRQ_DEBUG
 	printk(KERN_DEBUG "%s: IRQ_DEBUG IS ENABLED!\n", __func__);

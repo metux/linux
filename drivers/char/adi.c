@@ -235,5 +235,4 @@ module_exit(adi_exit);
 
 MODULE_AUTHOR("Tom Hromatka <tom.hromatka@oracle.com>");
 MODULE_DESCRIPTION("Privileged interface to ADI");
-MODULE_VERSION("1.0");
 MODULE_LICENSE("GPL v2");

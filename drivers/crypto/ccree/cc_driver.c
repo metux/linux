@@ -437,8 +437,8 @@ static int init_cc_resources(struct platform_device *plat_dev)
 		dev_info(dev, "Security Disabled mode is in effect. Security functions disabled.\n");
 
 	/* Display HW versions */
-	dev_info(dev, "ARM CryptoCell %s Driver: HW version 0x%08X/0x%8X, Driver version %s\n",
-		 hw_rev->name, hw_rev_pidr, sig_cidr, DRV_MODULE_VERSION);
+	dev_info(dev, "ARM CryptoCell %s Driver: HW version 0x%08X/0x%8X\n",
+		 hw_rev->name, hw_rev_pidr, sig_cidr);
 	/* register the driver isr function */
 	rc = devm_request_irq(dev, irq, cc_isr, IRQF_SHARED, "ccree",
 			      new_drvdata);
@@ -632,6 +632,5 @@ module_exit(ccree_exit);
 
 /* Module description */
 MODULE_DESCRIPTION("ARM TrustZone CryptoCell REE Driver");
-MODULE_VERSION(DRV_MODULE_VERSION);
 MODULE_AUTHOR("ARM");
 MODULE_LICENSE("GPL v2");

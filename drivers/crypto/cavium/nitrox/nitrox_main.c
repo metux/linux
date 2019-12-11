@@ -20,7 +20,6 @@
 #define DEFAULT_SE_GROUP 0
 #define DEFAULT_AE_GROUP 0
 
-#define DRIVER_VERSION "1.2"
 #define CNN55XX_UCD_BLOCK_SIZE 32768
 #define CNN55XX_MAX_UCODE_SIZE (CNN55XX_UCD_BLOCK_SIZE * 2)
 #define FW_DIR "cavium/"
@@ -422,8 +421,8 @@ static int nitrox_probe(struct pci_dev *pdev,
 	struct nitrox_device *ndev;
 	int err;
 
-	dev_info_once(&pdev->dev, "%s driver version %s\n",
-		      nitrox_driver_name, DRIVER_VERSION);
+	dev_info_once(&pdev->dev, "%s driver\n",
+		      nitrox_driver_name);
 
 	err = pci_enable_device_mem(pdev);
 	if (err)
@@ -591,7 +590,6 @@ static struct pci_driver nitrox_driver = {
 module_pci_driver(nitrox_driver);
 
 MODULE_AUTHOR("Srikanth Jampala <Jampala.Srikanth@cavium.com>");
-MODULE_DESCRIPTION("Cavium CNN55XX PF Driver" DRIVER_VERSION " ");
+MODULE_DESCRIPTION("Cavium CNN55XX PF Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_FIRMWARE(SE_FW);

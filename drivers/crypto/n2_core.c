@@ -33,16 +33,10 @@
 #include "n2_core.h"
 
 #define DRV_MODULE_NAME		"n2_crypto"
-#define DRV_MODULE_VERSION	"0.2"
-#define DRV_MODULE_RELDATE	"July 28, 2011"
-
-static const char version[] =
-	DRV_MODULE_NAME ".c:v" DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")\n";
 
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_DESCRIPTION("Niagara2 Crypto driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 #define N2_CRA_PRIORITY		200
 
@@ -1968,21 +1962,11 @@ static void free_n2cp(struct n2_crypto *np)
 	kfree(np);
 }
 
-static void n2_spu_driver_version(void)
-{
-	static int n2_spu_version_printed;
-
-	if (n2_spu_version_printed++ == 0)
-		pr_info("%s", version);
-}
-
 static int n2_crypto_probe(struct platform_device *dev)
 {
 	struct mdesc_handle *mdesc;
 	struct n2_crypto *np;
 	int err;
-
-	n2_spu_driver_version();
 
 	pr_info("Found N2CP at %pOF\n", dev->dev.of_node);
 
@@ -2088,8 +2072,6 @@ static int n2_mau_probe(struct platform_device *dev)
 	struct mdesc_handle *mdesc;
 	struct n2_mau *mp;
 	int err;
-
-	n2_spu_driver_version();
 
 	pr_info("Found NCP at %pOF\n", dev->dev.of_node);
 

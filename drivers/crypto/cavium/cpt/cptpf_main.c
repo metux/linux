@@ -15,7 +15,6 @@
 #include "cptpf.h"
 
 #define DRV_NAME	"thunder-cpt"
-#define DRV_VERSION	"1.0"
 
 static u32 num_vfs = 4; /* Default 4 VF enabled */
 module_param(num_vfs, uint, 0444);
@@ -668,5 +667,4 @@ module_pci_driver(cpt_pci_driver);
 MODULE_AUTHOR("George Cherian <george.cherian@cavium.com>");
 MODULE_DESCRIPTION("Cavium Thunder CPT Physical Function Driver");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, cpt_id_table);

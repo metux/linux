@@ -34,8 +34,6 @@
 extern bool cc_dump_desc;
 extern bool cc_dump_bytes;
 
-#define DRV_MODULE_VERSION "5.0"
-
 enum cc_hw_rev {
 	CC_HW_REV_630 = 630,
 	CC_HW_REV_710 = 710,

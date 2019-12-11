@@ -636,4 +636,3 @@ module_exit(chtls_unregister);
 MODULE_DESCRIPTION("Chelsio TLS Inline driver");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Chelsio Communications");
-MODULE_VERSION(DRV_VERSION);

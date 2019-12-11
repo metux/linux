@@ -849,4 +849,3 @@ module_exit(nx_fini);
 MODULE_AUTHOR("Kent Yoder <yoder1@us.ibm.com>");
 MODULE_DESCRIPTION(NX_STRING);
 MODULE_LICENSE("GPL");
-MODULE_VERSION(NX_VERSION);

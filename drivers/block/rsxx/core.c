@@ -32,7 +32,6 @@
 MODULE_DESCRIPTION("IBM Flash Adapter 900GB Full Height Device Driver");
 MODULE_AUTHOR("Joshua Morris/Philip Kelleher, IBM");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRIVER_VERSION);
 
 static unsigned int force_legacy = NO_LEGACY;
 module_param(force_legacy, uint, 0444);

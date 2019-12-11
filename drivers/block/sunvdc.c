@@ -32,7 +32,6 @@ static char version[] =
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_DESCRIPTION("Sun LDOM virtual disk client driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 #define VDC_TX_RING_SIZE	512
 #define VDC_DEFAULT_BLK_SIZE	512

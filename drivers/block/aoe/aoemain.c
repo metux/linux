@@ -13,7 +13,6 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Sam Hopkins <sah@coraid.com>");
 MODULE_DESCRIPTION("AoE block/char driver for 2.6.2 and newer 2.6 kernels");
-MODULE_VERSION(VERSION);
 
 static struct timer_list timer;
 

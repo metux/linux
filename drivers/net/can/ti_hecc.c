@@ -38,9 +38,7 @@
 #include <linux/can/rx-offload.h>
 
 #define DRV_NAME "ti_hecc"
-#define HECC_MODULE_VERSION     "0.7"
-MODULE_VERSION(HECC_MODULE_VERSION);
-#define DRV_DESC "TI High End CAN Controller Driver " HECC_MODULE_VERSION
+#define DRV_DESC "TI High End CAN Controller Driver"
 
 /* TX / RX Mailbox Configuration */
 #define HECC_MAX_MAILBOXES	32	/* hardware mailboxes - do not change */

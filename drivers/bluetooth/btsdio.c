@@ -23,8 +23,6 @@
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
-#define VERSION "0.1"
-
 static const struct sdio_device_id btsdio_table[] = {
 	/* Generic Bluetooth Type-A SDIO device */
 	{ SDIO_DEVICE_CLASS(SDIO_CLASS_BT_A) },
@@ -374,6 +372,5 @@ static struct sdio_driver btsdio_driver = {
 module_sdio_driver(btsdio_driver);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Generic Bluetooth SDIO driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Generic Bluetooth SDIO driver");
 MODULE_LICENSE("GPL");

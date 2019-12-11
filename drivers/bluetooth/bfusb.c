@@ -23,8 +23,6 @@
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
-#define VERSION "1.2"
-
 static struct usb_driver bfusb_driver;
 
 static const struct usb_device_id bfusb_table[] = {
@@ -716,7 +714,6 @@ static struct usb_driver bfusb_driver = {
 module_usb_driver(bfusb_driver);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("BlueFRITZ! USB driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("BlueFRITZ! USB driver");
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("bfubase.frm");

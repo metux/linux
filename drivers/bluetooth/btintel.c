@@ -16,8 +16,6 @@
 
 #include "btintel.h"
 
-#define VERSION "0.1"
-
 #define BDADDR_INTEL		(&(bdaddr_t){{0x00, 0x8b, 0x9e, 0x19, 0x03, 0x00}})
 #define RSA_HEADER_LEN		644
 #define CSS_HEADER_OFFSET	8
@@ -1100,8 +1098,7 @@ int btintel_set_debug_features(struct hci_dev *hdev,
 EXPORT_SYMBOL_GPL(btintel_set_debug_features);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Bluetooth support for Intel devices ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Bluetooth support for Intel devices");
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("intel/ibt-11-5.sfi");
 MODULE_FIRMWARE("intel/ibt-11-5.ddc");

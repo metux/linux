@@ -15,8 +15,6 @@
 
 #include "btrtl.h"
 
-#define VERSION "0.1"
-
 #define RTL_EPATCH_SIGNATURE	"Realtech"
 #define RTL_ROM_LMP_8723A	0x1200
 #define RTL_ROM_LMP_8723B	0x8723
@@ -848,8 +846,7 @@ int btrtl_get_uart_settings(struct hci_dev *hdev,
 EXPORT_SYMBOL_GPL(btrtl_get_uart_settings);
 
 MODULE_AUTHOR("Daniel Drake <drake@endlessm.com>");
-MODULE_DESCRIPTION("Bluetooth support for Realtek devices ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Bluetooth support for Realtek devices");
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("rtl_bt/rtl8723a_fw.bin");
 MODULE_FIRMWARE("rtl_bt/rtl8723b_fw.bin");

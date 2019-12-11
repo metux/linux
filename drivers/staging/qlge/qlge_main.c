@@ -49,7 +49,6 @@ const char qlge_driver_version[] = DRV_VERSION;
 MODULE_AUTHOR("Ron Mercer <ron.mercer@qlogic.com>");
 MODULE_DESCRIPTION(DRV_STRING " ");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 static const u32 default_msg =
 	NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK |

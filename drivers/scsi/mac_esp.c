@@ -34,8 +34,6 @@
 
 #define DRV_MODULE_NAME     "mac_esp"
 #define PFX                 DRV_MODULE_NAME ": "
-#define DRV_VERSION         "1.000"
-#define DRV_MODULE_RELDATE  "Sept 15, 2007"
 
 #define MAC_ESP_IO_BASE          0x50F00000
 #define MAC_ESP_REGS_QUADRA      (MAC_ESP_IO_BASE + 0x10000)
@@ -453,7 +451,6 @@ static void __exit mac_esp_exit(void)
 MODULE_DESCRIPTION("Mac ESP SCSI driver");
 MODULE_AUTHOR("Finn Thain");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_ALIAS("platform:" DRV_MODULE_NAME);
 
 module_init(mac_esp_init);

@@ -233,8 +233,6 @@ ahc_scb_timer_reset(struct scb *scb, u_int usec)
 /***************************** SMP support ************************************/
 #include <linux/spinlock.h>
 
-#define AIC7XXX_DRIVER_VERSION "7.0"
-
 /*************************** Device Data Structures ***************************/
 /*
  * A per probed device structure used to deal with some error recovery

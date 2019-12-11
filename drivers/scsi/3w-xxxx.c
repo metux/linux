@@ -229,7 +229,6 @@ static int twe_major = -1;
 MODULE_AUTHOR("LSI");
 MODULE_DESCRIPTION("3ware Storage Controller Linux Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(TW_DRIVER_VERSION);
 
 /* Function prototypes */
 static int tw_reset_device_extension(TW_Device_Extension *tw_dev);

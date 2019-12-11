@@ -25,7 +25,6 @@
 
 #define DRV_MODULE_NAME		"sun_esp"
 #define PFX DRV_MODULE_NAME	": "
-#define DRV_VERSION		"1.100"
 #define DRV_MODULE_RELDATE	"August 27, 2008"
 
 #define dma_read32(REG) \
@@ -620,7 +619,6 @@ static void __exit sunesp_exit(void)
 MODULE_DESCRIPTION("Sun ESP SCSI driver");
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 module_init(sunesp_init);
 module_exit(sunesp_exit);

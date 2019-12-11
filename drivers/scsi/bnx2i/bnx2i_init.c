@@ -34,7 +34,6 @@ MODULE_AUTHOR("Anil Veerabhadrappa <anilgv@broadcom.com> and "
 MODULE_DESCRIPTION("QLogic NetXtreme II BCM5706/5708/5709/57710/57711/57712"
 		   "/57800/57810/57840 iSCSI Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 static DEFINE_MUTEX(bnx2i_dev_lock);
 

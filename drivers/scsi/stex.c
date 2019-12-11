@@ -383,7 +383,6 @@ static const char console_inq_page[] =
 MODULE_AUTHOR("Ed Lin");
 MODULE_DESCRIPTION("Promise Technology SuperTrak EX Controllers");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(ST_DRIVER_VERSION);
 
 static struct status_msg *stex_get_status(struct st_hba *hba)
 {

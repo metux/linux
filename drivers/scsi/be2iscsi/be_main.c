@@ -55,8 +55,7 @@ static unsigned int be_iopoll_budget = 10;
 static unsigned int be_max_phys_size = 64;
 static unsigned int enable_msix = 1;
 
-MODULE_DESCRIPTION(DRV_DESC " " BUILD_STR);
-MODULE_VERSION(BUILD_STR);
+MODULE_DESCRIPTION(DRV_DESC);
 MODULE_AUTHOR("Emulex Corporation");
 MODULE_LICENSE("GPL");
 module_param(be_iopoll_budget, int, 0);

@@ -21,17 +21,10 @@
 #include "n2rng.h"
 
 #define DRV_MODULE_NAME		"n2rng"
-#define PFX DRV_MODULE_NAME	": "
-#define DRV_MODULE_VERSION	"0.3"
-#define DRV_MODULE_RELDATE	"Jan 7, 2017"
-
-static char version[] =
-	DRV_MODULE_NAME " v" DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")\n";
 
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_DESCRIPTION("Niagara2 RNG driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 /* The Niagara2 RNG provides a 64-bit read-only random number
  * register, plus a control register.  Access to the RNG is
@@ -684,14 +677,6 @@ static void n2rng_work(struct work_struct *work)
 		schedule_delayed_work(&np->work, HZ * 2);
 }
 
-static void n2rng_driver_version(void)
-{
-	static int n2rng_version_printed;
-
-	if (n2rng_version_printed++ == 0)
-		pr_info("%s", version);
-}
-
 static const struct of_device_id n2rng_match[];
 static int n2rng_probe(struct platform_device *op)
 {
@@ -703,7 +688,6 @@ static int n2rng_probe(struct platform_device *op)
 	if (!match)
 		return -EINVAL;
 
-	n2rng_driver_version();
 	np = devm_kzalloc(&op->dev, sizeof(*np), GFP_KERNEL);
 	if (!np)
 		goto out;

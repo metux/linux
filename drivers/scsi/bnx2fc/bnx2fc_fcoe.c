@@ -23,19 +23,14 @@ static DEFINE_MUTEX(bnx2fc_dev_lock);
 DEFINE_PER_CPU(struct bnx2fc_percpu_s, bnx2fc_percpu);
 
 #define DRV_MODULE_NAME		"bnx2fc"
-#define DRV_MODULE_VERSION	BNX2FC_VERSION
-#define DRV_MODULE_RELDATE	"October 15, 2015"
-
 
 static char version[] =
-		"QLogic FCoE Driver " DRV_MODULE_NAME \
-		" v" DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")\n";
+		"QLogic FCoE Driver " DRV_MODULE_NAME "\n";
 
 
 MODULE_AUTHOR("Bhanu Prakash Gollapudi <bprakash@broadcom.com>");
 MODULE_DESCRIPTION("QLogic FCoE Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 #define BNX2FC_MAX_QUEUE_DEPTH	256
 #define BNX2FC_MIN_QUEUE_DEPTH	32

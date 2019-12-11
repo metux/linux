@@ -4410,7 +4410,6 @@ MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("qlogic/1040.bin");
 MODULE_FIRMWARE("qlogic/1280.bin");
 MODULE_FIRMWARE("qlogic/12160.bin");
-MODULE_VERSION(QLA1280_VERSION);
 
 /*
  * Overrides for Emacs so that we almost follow Linus's tabbing style.

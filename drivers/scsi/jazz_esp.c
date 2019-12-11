@@ -24,11 +24,6 @@
 
 #include "esp_scsi.h"
 
-#define DRV_MODULE_NAME		"jazz_esp"
-#define PFX DRV_MODULE_NAME	": "
-#define DRV_VERSION		"1.000"
-#define DRV_MODULE_RELDATE	"May 19, 2007"
-
 static void jazz_esp_write8(struct esp *esp, u8 val, unsigned long reg)
 {
 	*(volatile u8 *)(esp->regs + reg) = val;
@@ -215,7 +210,6 @@ static void __exit jazz_esp_exit(void)
 MODULE_DESCRIPTION("JAZZ ESP SCSI driver");
 MODULE_AUTHOR("Thomas Bogendoerfer (tsbogend@alpha.franken.de)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 module_init(jazz_esp_init);
 module_exit(jazz_esp_exit);

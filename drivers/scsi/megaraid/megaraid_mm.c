@@ -44,7 +44,6 @@ static void mraid_mm_teardown_dma_pools(mraid_mmadp_t *);
 MODULE_AUTHOR("LSI Logic Corporation");
 MODULE_DESCRIPTION("LSI Logic Management Module");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(LSI_COMMON_MOD_VERSION);
 
 static int dbglevel = CL_ANN;
 module_param_named(dlevel, dbglevel, int, 0);

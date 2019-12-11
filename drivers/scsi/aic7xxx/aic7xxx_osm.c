@@ -329,7 +329,6 @@ static char *aic7xxx = NULL;
 MODULE_AUTHOR("Maintainer: Hannes Reinecke <hare@suse.de>");
 MODULE_DESCRIPTION("Adaptec AIC77XX/78XX SCSI Host Bus Adapter driver");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_VERSION(AIC7XXX_DRIVER_VERSION);
 module_param(aic7xxx, charp, 0444);
 MODULE_PARM_DESC(aic7xxx,
 "period-delimited options string:\n"
@@ -502,7 +501,7 @@ ahc_linux_info(struct Scsi_Host *host)
 	bp = &buffer[0];
 	ahc = *(struct ahc_softc **)host->hostdata;
 	memset(bp, 0, sizeof(buffer));
-	strcpy(bp, "Adaptec AIC7XXX EISA/VLB/PCI SCSI HBA DRIVER, Rev " AIC7XXX_DRIVER_VERSION "\n"
+	strcpy(bp, "Adaptec AIC7XXX EISA/VLB/PCI SCSI HBA DRIVER\n"
 			"        <");
 	strcat(bp, ahc->description);
 	strcat(bp, ">\n"

@@ -293,8 +293,7 @@ ahc_linux_show_info(struct seq_file *m, struct Scsi_Host *shost)
 	u_int	max_targ;
 	u_int	i;
 
-	seq_printf(m, "Adaptec AIC7xxx driver version: %s\n",
-		  AIC7XXX_DRIVER_VERSION);
+	seq_printf(m, "Adaptec AIC7xxx driver\n");
 	seq_printf(m, "%s\n", ahc->description);
 	ahc_controller_info(ahc, ahc_info);
 	seq_printf(m, "%s\n", ahc_info);

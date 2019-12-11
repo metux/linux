@@ -83,7 +83,6 @@ extern struct timezone sys_tz;
 MODULE_AUTHOR ("LSI");
 MODULE_DESCRIPTION ("LSI 3ware SAS/SATA-RAID Linux Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(TW_DRIVER_VERSION);
 
 static int use_msi;
 module_param(use_msi, int, S_IRUGO);

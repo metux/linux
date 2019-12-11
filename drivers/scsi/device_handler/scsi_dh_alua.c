@@ -16,7 +16,6 @@
 #include <scsi/scsi_dh.h>
 
 #define ALUA_DH_NAME "alua"
-#define ALUA_DH_VER "2.0"
 
 #define TPGS_SUPPORT_NONE		0x00
 #define TPGS_SUPPORT_OPTIMIZED		0x01
@@ -1200,4 +1199,3 @@ module_exit(alua_exit);
 MODULE_DESCRIPTION("DM Multipath ALUA support");
 MODULE_AUTHOR("Hannes Reinecke <hare@suse.de>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(ALUA_DH_VER);

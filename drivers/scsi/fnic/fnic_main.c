@@ -62,7 +62,6 @@ MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR("Abhijeet Joglekar <abjoglek@cisco.com>, "
 	      "Joseph R. Eykholt <jeykholt@cisco.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, fnic_id_table);
 
 unsigned int fnic_log_level;

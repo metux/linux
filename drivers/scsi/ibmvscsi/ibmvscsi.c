@@ -86,12 +86,9 @@ static DEFINE_SPINLOCK(ibmvscsi_driver_lock);
 
 static struct scsi_transport_template *ibmvscsi_transport_template;
 
-#define IBMVSCSI_VERSION "1.5.9"
-
 MODULE_DESCRIPTION("IBM Virtual SCSI");
 MODULE_AUTHOR("Dave Boutcher");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(IBMVSCSI_VERSION);
 
 module_param_named(max_id, max_id, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_id, "Largest ID value for each channel [Default=64]");
@@ -2066,7 +2063,7 @@ static struct device_attribute *ibmvscsi_attrs[] = {
  */
 static struct scsi_host_template driver_template = {
 	.module = THIS_MODULE,
-	.name = "IBM POWER Virtual SCSI Adapter " IBMVSCSI_VERSION,
+	.name = "IBM POWER Virtual SCSI Adapter",
 	.proc_name = "ibmvscsi",
 	.queuecommand = ibmvscsi_queuecommand,
 	.eh_timed_out = srp_timed_out,

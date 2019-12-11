@@ -31,7 +31,6 @@
 
 #define DRV_MODULE_NAME		"sun3x_esp"
 #define PFX DRV_MODULE_NAME	": "
-#define DRV_VERSION		"1.000"
 #define DRV_MODULE_RELDATE	"Nov 1, 2007"
 
 /*
@@ -284,7 +283,6 @@ static void __exit sun3x_esp_exit(void)
 MODULE_DESCRIPTION("Sun3x ESP SCSI driver");
 MODULE_AUTHOR("Thomas Bogendoerfer (tsbogend@alpha.franken.de)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 module_init(sun3x_esp_init);
 module_exit(sun3x_esp_exit);

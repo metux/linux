@@ -73,7 +73,6 @@
 MODULE_AUTHOR("Nick Cheng, C.L. Huang <support@areca.com.tw>");
 MODULE_DESCRIPTION("Areca ARC11xx/12xx/16xx/188x SAS/SATA RAID Controller Driver");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_VERSION(ARCMSR_DRIVER_VERSION);
 
 static int msix_enable = 1;
 module_param(msix_enable, int, S_IRUGO);

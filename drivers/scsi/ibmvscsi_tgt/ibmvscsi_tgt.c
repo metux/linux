@@ -4148,6 +4148,5 @@ static void __exit ibmvscsis_exit(void)
 MODULE_DESCRIPTION("IBMVSCSIS fabric driver");
 MODULE_AUTHOR("Bryant G. Ly and Michael Cyr");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(IBMVSCSIS_VERSION);
 module_init(ibmvscsis_init);
 module_exit(ibmvscsis_exit);

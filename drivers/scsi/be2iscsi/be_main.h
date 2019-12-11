@@ -26,9 +26,8 @@
 #include <scsi/scsi_transport_iscsi.h>
 
 #define DRV_NAME		"be2iscsi"
-#define BUILD_STR		"11.4.0.1"
 #define BE_NAME			"Emulex OneConnect" \
-				"Open-iSCSI Driver version" BUILD_STR
+				"Open-iSCSI Driver"
 #define DRV_DESC		BE_NAME " " "Driver"
 
 #define BE_VENDOR_ID		0x19A2

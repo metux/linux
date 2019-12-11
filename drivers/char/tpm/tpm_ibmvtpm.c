@@ -723,5 +723,4 @@ module_exit(ibmvtpm_module_exit);
 
 MODULE_AUTHOR("adlai@us.ibm.com");
 MODULE_DESCRIPTION("IBM vTPM Driver");
-MODULE_VERSION("1.0");
 MODULE_LICENSE("GPL");

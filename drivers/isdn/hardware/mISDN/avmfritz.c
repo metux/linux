@@ -17,8 +17,6 @@
 #include "ipac.h"
 
 
-#define AVMFRITZ_REV	"2.3"
-
 static int AVM_cnt;
 static int debug;
 
@@ -160,7 +158,6 @@ set_debug(const char *val, const struct kernel_param *kp)
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(AVMFRITZ_REV);
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "avmfritz debug mask");
 
@@ -1149,7 +1146,7 @@ static int __init AVM_init(void)
 {
 	int err;
 
-	pr_notice("AVM Fritz PCI driver Rev. %s\n", AVMFRITZ_REV);
+	pr_notice("AVM Fritz PCI driver\n");
 	err = pci_register_driver(&fcpci_driver);
 	return err;
 }

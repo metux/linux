@@ -31,8 +31,6 @@
 #include <linux/slab.h>
 #include "ipac.h"
 
-#define INFINEON_REV	"1.0"
-
 static int inf_cnt;
 static u32 debug;
 static u32 irqloops = 4;
@@ -246,7 +244,6 @@ set_debug(const char *val, const struct kernel_param *kp)
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(INFINEON_REV);
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "infineon debug mask");
 module_param(irqloops, uint, S_IRUGO | S_IWUSR);
@@ -1147,7 +1144,7 @@ infineon_init(void)
 {
 	int err;
 
-	pr_notice("Infineon ISDN Driver Rev. %s\n", INFINEON_REV);
+	pr_notice("Infineon ISDN Driver\n");
 	err = pci_register_driver(&infineon_driver);
 	return err;
 }

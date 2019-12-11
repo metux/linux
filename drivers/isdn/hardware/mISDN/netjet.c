@@ -18,8 +18,6 @@
 #include "netjet.h"
 #include "isdnhdlc.h"
 
-#define NETJET_REV	"2.0"
-
 enum nj_types {
 	NETJET_S_TJ300,
 	NETJET_S_TJ320,
@@ -115,7 +113,6 @@ set_debug(const char *val, const struct kernel_param *kp)
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(NETJET_REV);
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Netjet debug mask");
 
@@ -1141,7 +1138,7 @@ static int __init nj_init(void)
 {
 	int err;
 
-	pr_notice("Netjet PCI driver Rev. %s\n", NETJET_REV);
+	pr_notice("Netjet PCI driver\n");
 	err = pci_register_driver(&nj_driver);
 	return err;
 }

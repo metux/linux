@@ -17,10 +17,7 @@
 #define DBUSY_TIMER_VALUE	80
 #define ARCOFI_USE		1
 
-#define ISAC_REV		"2.0"
-
 MODULE_AUTHOR("Karsten Keil");
-MODULE_VERSION(ISAC_REV);
 MODULE_LICENSE("GPL v2");
 
 #define ReadISAC(is, o)		(is->read_reg(is->dch.hw, o + is->off))
@@ -1622,7 +1619,7 @@ EXPORT_SYMBOL(mISDNipac_init);
 static int __init
 isac_mod_init(void)
 {
-	pr_notice("mISDNipac module version %s\n", ISAC_REV);
+	pr_notice("mISDNipac modul\n");
 	return 0;
 }
 

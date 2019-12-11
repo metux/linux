@@ -48,7 +48,8 @@ struct phylink {
 	unsigned long phylink_disable_state; /* bitmask of disables */
 	struct phy_device *phydev;
 	phy_interface_t link_interface;	/* PHY_INTERFACE_xxx */
-	u8 link_an_mode;		/* MLO_AN_xxx */
+	u8 cfg_link_an_mode;		/* MLO_AN_xxx */
+	u8 cur_link_an_mode;
 	u8 link_port;			/* The current non-phy ethtool port */
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
 
@@ -256,12 +257,12 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 
 	dn = fwnode_get_named_child_node(fwnode, "fixed-link");
 	if (dn || fwnode_property_present(fwnode, "fixed-link"))
-		pl->link_an_mode = MLO_AN_FIXED;
+		pl->cfg_link_an_mode = MLO_AN_FIXED;
 	fwnode_handle_put(dn);
 
 	if (fwnode_property_read_string(fwnode, "managed", &managed) == 0 &&
 	    strcmp(managed, "in-band-status") == 0) {
-		if (pl->link_an_mode == MLO_AN_FIXED) {
+		if (pl->cfg_link_an_mode == MLO_AN_FIXED) {
 			phylink_err(pl,
 				    "can't use both fixed-link and in-band-status\n");
 			return -EINVAL;
@@ -273,7 +274,7 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 		phylink_set(pl->supported, Asym_Pause);
 		phylink_set(pl->supported, Pause);
 		pl->link_config.an_enabled = true;
-		pl->link_an_mode = MLO_AN_INBAND;
+		pl->cfg_link_an_mode = MLO_AN_INBAND;
 
 		switch (pl->link_config.interface) {
 		case PHY_INTERFACE_MODE_SGMII:
@@ -333,14 +334,14 @@ static void phylink_mac_config(struct phylink *pl,
 {
 	phylink_dbg(pl,
 		    "%s: mode=%s/%s/%s/%s adv=%*pb pause=%02x link=%u an=%u\n",
-		    __func__, phylink_an_mode_str(pl->link_an_mode),
+		    __func__, phylink_an_mode_str(pl->cur_link_an_mode),
 		    phy_modes(state->interface),
 		    phy_speed_to_str(state->speed),
 		    phy_duplex_to_str(state->duplex),
 		    __ETHTOOL_LINK_MODE_MASK_NBITS, state->advertising,
 		    state->pause, state->link, state->an_enabled);
 
-	pl->ops->mac_config(pl->config, pl->link_an_mode, state);
+	pl->ops->mac_config(pl->config, pl->cur_link_an_mode, state);
 }
 
 static void phylink_mac_config_up(struct phylink *pl,
@@ -441,7 +442,7 @@ static void phylink_mac_link_up(struct phylink *pl,
 	struct net_device *ndev = pl->netdev;
 
 	pl->cur_interface = link_state.interface;
-	pl->ops->mac_link_up(pl->config, pl->link_an_mode,
+	pl->ops->mac_link_up(pl->config, pl->cur_link_an_mode,
 			     pl->phy_state.interface,
 			     pl->phydev);
 
@@ -461,7 +462,7 @@ static void phylink_mac_link_down(struct phylink *pl)
 
 	if (ndev)
 		netif_carrier_off(ndev);
-	pl->ops->mac_link_down(pl->config, pl->link_an_mode,
+	pl->ops->mac_link_down(pl->config, pl->cur_link_an_mode,
 			       pl->cur_interface);
 	phylink_info(pl, "Link is Down\n");
 }
@@ -480,7 +481,7 @@ static void phylink_resolve(struct work_struct *w)
 	} else if (pl->mac_link_dropped) {
 		link_state.link = false;
 	} else {
-		switch (pl->link_an_mode) {
+		switch (pl->cur_link_an_mode) {
 		case MLO_AN_PHY:
 			link_state = pl->phy_state;
 			phylink_resolve_flow(pl, &link_state);
@@ -584,7 +585,7 @@ static int phylink_register_sfp(struct phylink *pl,
 
 /**
  * phylink_create() - create a phylink instance
- * @ndev: a pointer to the &struct net_device
+ * @config: a pointer to the target &struct phylink_config
  * @fwnode: a pointer to a &struct fwnode_handle describing the network
  *	interface
  * @iface: the desired link mode defined by &typedef phy_interface_t
@@ -592,6 +593,8 @@ static int phylink_register_sfp(struct phylink *pl,
  *
  * Create a new phylink instance, and parse the link parameters found in @np.
  * This will parse in-band modes, fixed-link or SFP configuration.
+ *
+ * Note: the rtnl lock must not be held when calling this function.
  *
  * Returns a pointer to a &struct phylink, or an error-pointer value. Users
  * must use IS_ERR() to check for errors from this function.
@@ -646,13 +649,15 @@ struct phylink *phylink_create(struct phylink_config *config,
 		return ERR_PTR(ret);
 	}
 
-	if (pl->link_an_mode == MLO_AN_FIXED) {
+	if (pl->cfg_link_an_mode == MLO_AN_FIXED) {
 		ret = phylink_parse_fixedlink(pl, fwnode);
 		if (ret < 0) {
 			kfree(pl);
 			return ERR_PTR(ret);
 		}
 	}
+
+	pl->cur_link_an_mode = pl->cfg_link_an_mode;
 
 	ret = phylink_register_sfp(pl, fwnode);
 	if (ret < 0) {
@@ -670,6 +675,8 @@ EXPORT_SYMBOL_GPL(phylink_create);
  *
  * Destroy a phylink instance. Any PHY that has been attached must have been
  * cleaned up via phylink_disconnect_phy() prior to calling this function.
+ *
+ * Note: the rtnl lock must not be held when calling this function.
  */
 void phylink_destroy(struct phylink *pl)
 {
@@ -707,7 +714,8 @@ static void phylink_phy_change(struct phy_device *phydev, bool up,
 		    phy_duplex_to_str(phydev->duplex));
 }
 
-static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy)
+static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
+			       phy_interface_t interface)
 {
 	struct phylink_link_state config;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
@@ -725,7 +733,7 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy)
 	memset(&config, 0, sizeof(config));
 	linkmode_copy(supported, phy->supported);
 	linkmode_copy(config.advertising, phy->advertising);
-	config.interface = pl->link_config.interface;
+	config.interface = interface;
 
 	ret = phylink_validate(pl, supported, &config);
 	if (ret)
@@ -741,6 +749,7 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy)
 	mutex_lock(&phy->lock);
 	mutex_lock(&pl->state_mutex);
 	pl->phydev = phy;
+	pl->phy_state.interface = interface;
 	linkmode_copy(pl->supported, supported);
 	linkmode_copy(pl->link_config.advertising, config.advertising);
 
@@ -760,28 +769,18 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy)
 	return 0;
 }
 
-static int __phylink_connect_phy(struct phylink *pl, struct phy_device *phy,
-		phy_interface_t interface)
+static int phylink_attach_phy(struct phylink *pl, struct phy_device *phy,
+			      phy_interface_t interface)
 {
-	int ret;
-
-	if (WARN_ON(pl->link_an_mode == MLO_AN_FIXED ||
-		    (pl->link_an_mode == MLO_AN_INBAND &&
+	if (WARN_ON(pl->cfg_link_an_mode == MLO_AN_FIXED ||
+		    (pl->cfg_link_an_mode == MLO_AN_INBAND &&
 		     phy_interface_mode_is_8023z(interface))))
 		return -EINVAL;
 
 	if (pl->phydev)
 		return -EBUSY;
 
-	ret = phy_attach_direct(pl->netdev, phy, 0, interface);
-	if (ret)
-		return ret;
-
-	ret = phylink_bringup_phy(pl, phy);
-	if (ret)
-		phy_detach(phy);
-
-	return ret;
+	return phy_attach_direct(pl->netdev, phy, 0, interface);
 }
 
 /**
@@ -801,13 +800,23 @@ static int __phylink_connect_phy(struct phylink *pl, struct phy_device *phy,
  */
 int phylink_connect_phy(struct phylink *pl, struct phy_device *phy)
 {
+	int ret;
+
 	/* Use PHY device/driver interface */
 	if (pl->link_interface == PHY_INTERFACE_MODE_NA) {
 		pl->link_interface = phy->interface;
 		pl->link_config.interface = pl->link_interface;
 	}
 
-	return __phylink_connect_phy(pl, phy, pl->link_interface);
+	ret = phylink_attach_phy(pl, phy, pl->link_interface);
+	if (ret < 0)
+		return ret;
+
+	ret = phylink_bringup_phy(pl, phy, pl->link_config.interface);
+	if (ret)
+		phy_detach(phy);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(phylink_connect_phy);
 
@@ -831,8 +840,8 @@ int phylink_of_phy_connect(struct phylink *pl, struct device_node *dn,
 	int ret;
 
 	/* Fixed links and 802.3z are handled without needing a PHY */
-	if (pl->link_an_mode == MLO_AN_FIXED ||
-	    (pl->link_an_mode == MLO_AN_INBAND &&
+	if (pl->cfg_link_an_mode == MLO_AN_FIXED ||
+	    (pl->cfg_link_an_mode == MLO_AN_INBAND &&
 	     phy_interface_mode_is_8023z(pl->link_interface)))
 		return 0;
 
@@ -843,7 +852,7 @@ int phylink_of_phy_connect(struct phylink *pl, struct device_node *dn,
 		phy_node = of_parse_phandle(dn, "phy-device", 0);
 
 	if (!phy_node) {
-		if (pl->link_an_mode == MLO_AN_PHY)
+		if (pl->cfg_link_an_mode == MLO_AN_PHY)
 			return -ENODEV;
 		return 0;
 	}
@@ -856,7 +865,7 @@ int phylink_of_phy_connect(struct phylink *pl, struct device_node *dn,
 	if (!phy_dev)
 		return -ENODEV;
 
-	ret = phylink_bringup_phy(pl, phy_dev);
+	ret = phylink_bringup_phy(pl, phy_dev, pl->link_config.interface);
 	if (ret)
 		phy_detach(phy_dev);
 
@@ -906,7 +915,7 @@ int phylink_fixed_state_cb(struct phylink *pl,
 	/* It does not make sense to let the link be overriden unless we use
 	 * MLO_AN_FIXED
 	 */
-	if (pl->link_an_mode != MLO_AN_FIXED)
+	if (pl->cfg_link_an_mode != MLO_AN_FIXED)
 		return -EINVAL;
 
 	mutex_lock(&pl->state_mutex);
@@ -956,7 +965,7 @@ void phylink_start(struct phylink *pl)
 	ASSERT_RTNL();
 
 	phylink_info(pl, "configuring for %s/%s link mode\n",
-		     phylink_an_mode_str(pl->link_an_mode),
+		     phylink_an_mode_str(pl->cur_link_an_mode),
 		     phy_modes(pl->link_config.interface));
 
 	/* Always set the carrier off */
@@ -979,7 +988,7 @@ void phylink_start(struct phylink *pl)
 	clear_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state);
 	phylink_run_resolve(pl);
 
-	if (pl->link_an_mode == MLO_AN_FIXED && pl->link_gpio) {
+	if (pl->cfg_link_an_mode == MLO_AN_FIXED && pl->link_gpio) {
 		int irq = gpiod_to_irq(pl->link_gpio);
 
 		if (irq > 0) {
@@ -994,7 +1003,7 @@ void phylink_start(struct phylink *pl)
 		if (irq <= 0)
 			mod_timer(&pl->link_poll, jiffies + HZ);
 	}
-	if (pl->link_an_mode == MLO_AN_FIXED && pl->get_fixed_state)
+	if (pl->cfg_link_an_mode == MLO_AN_FIXED && pl->get_fixed_state)
 		mod_timer(&pl->link_poll, jiffies + HZ);
 	if (pl->phydev)
 		phy_start(pl->phydev);
@@ -1121,7 +1130,7 @@ int phylink_ethtool_ksettings_get(struct phylink *pl,
 
 	linkmode_copy(kset->link_modes.supported, pl->supported);
 
-	switch (pl->link_an_mode) {
+	switch (pl->cur_link_an_mode) {
 	case MLO_AN_FIXED:
 		/* We are using fixed settings. Report these as the
 		 * current link settings - and note that these also
@@ -1193,7 +1202,7 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 		/* If we have a fixed link (as specified by firmware), refuse
 		 * to change link parameters.
 		 */
-		if (pl->link_an_mode == MLO_AN_FIXED &&
+		if (pl->cur_link_an_mode == MLO_AN_FIXED &&
 		    (s->speed != pl->link_config.speed ||
 		     s->duplex != pl->link_config.duplex))
 			return -EINVAL;
@@ -1205,7 +1214,7 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 		__clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, config.advertising);
 	} else {
 		/* If we have a fixed link, refuse to enable autonegotiation */
-		if (pl->link_an_mode == MLO_AN_FIXED)
+		if (pl->cur_link_an_mode == MLO_AN_FIXED)
 			return -EINVAL;
 
 		config.speed = SPEED_UNKNOWN;
@@ -1242,7 +1251,13 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 	pl->link_config.duplex = our_kset.base.duplex;
 	pl->link_config.an_enabled = our_kset.base.autoneg != AUTONEG_DISABLE;
 
-	if (!test_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state)) {
+	/* If we have a PHY, phylib will call our link state function if the
+	 * mode has changed, which will trigger a resolve and update the MAC
+	 * configuration. For a fixed link, this isn't able to change any
+	 * parameters, which just leaves inband mode.
+	 */
+	if (pl->cur_link_an_mode == MLO_AN_INBAND &&
+	    !test_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state)) {
 		phylink_mac_config(pl, &pl->link_config);
 		phylink_mac_an_restart(pl);
 	}
@@ -1322,15 +1337,16 @@ int phylink_ethtool_set_pauseparam(struct phylink *pl,
 	if (pause->tx_pause)
 		config->pause |= MLO_PAUSE_TX;
 
-	if (!test_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state)) {
-		switch (pl->link_an_mode) {
-		case MLO_AN_PHY:
-			/* Silently mark the carrier down, and then trigger a resolve */
-			if (pl->netdev)
-				netif_carrier_off(pl->netdev);
-			phylink_run_resolve(pl);
-			break;
-
+	/* If we have a PHY, phylib will call our link state function if the
+	 * mode has changed, which will trigger a resolve and update the MAC
+	 * configuration.
+	 */
+	if (pl->phydev) {
+		phy_set_asym_pause(pl->phydev, pause->rx_pause,
+				   pause->tx_pause);
+	} else if (!test_bit(PHYLINK_DISABLE_STOPPED,
+			     &pl->phylink_disable_state)) {
+		switch (pl->cur_link_an_mode) {
 		case MLO_AN_FIXED:
 			/* Should we allow fixed links to change against the config? */
 			phylink_resolve_flow(pl, config);
@@ -1537,7 +1553,7 @@ static int phylink_mii_read(struct phylink *pl, unsigned int phy_id,
 	struct phylink_link_state state;
 	int val = 0xffff;
 
-	switch (pl->link_an_mode) {
+	switch (pl->cur_link_an_mode) {
 	case MLO_AN_FIXED:
 		if (phy_id == 0) {
 			phylink_get_fixed_state(pl, &state);
@@ -1562,7 +1578,7 @@ static int phylink_mii_read(struct phylink *pl, unsigned int phy_id,
 static int phylink_mii_write(struct phylink *pl, unsigned int phy_id,
 			     unsigned int reg, unsigned int val)
 {
-	switch (pl->link_an_mode) {
+	switch (pl->cur_link_an_mode) {
 	case MLO_AN_FIXED:
 		break;
 
@@ -1735,10 +1751,10 @@ static int phylink_sfp_module_insert(void *upstream,
 		linkmode_copy(pl->link_config.advertising, config.advertising);
 	}
 
-	if (pl->link_an_mode != MLO_AN_INBAND ||
+	if (pl->cur_link_an_mode != MLO_AN_INBAND ||
 	    pl->link_config.interface != config.interface) {
 		pl->link_config.interface = config.interface;
-		pl->link_an_mode = MLO_AN_INBAND;
+		pl->cur_link_an_mode = MLO_AN_INBAND;
 
 		changed = true;
 
@@ -1754,6 +1770,26 @@ static int phylink_sfp_module_insert(void *upstream,
 		phylink_mac_config(pl, &pl->link_config);
 
 	return ret;
+}
+
+static int phylink_sfp_module_start(void *upstream)
+{
+	struct phylink *pl = upstream;
+
+	/* If this SFP module has a PHY, start the PHY now. */
+	if (pl->phydev)
+		phy_start(pl->phydev);
+
+	return 0;
+}
+
+static void phylink_sfp_module_stop(void *upstream)
+{
+	struct phylink *pl = upstream;
+
+	/* If this SFP module has a PHY, stop it. */
+	if (pl->phydev)
+		phy_stop(pl->phydev);
 }
 
 static void phylink_sfp_link_down(void *upstream)
@@ -1778,8 +1814,26 @@ static void phylink_sfp_link_up(void *upstream)
 static int phylink_sfp_connect_phy(void *upstream, struct phy_device *phy)
 {
 	struct phylink *pl = upstream;
+	phy_interface_t interface = pl->link_config.interface;
+	int ret;
 
-	return __phylink_connect_phy(upstream, phy, pl->link_config.interface);
+	ret = phylink_attach_phy(pl, phy, pl->link_config.interface);
+	if (ret < 0)
+		return ret;
+
+	/* Clause 45 PHYs switch their Serdes lane between several different
+	 * modes, normally 10GBASE-R, SGMII. Some use 2500BASE-X for 2.5G
+	 * speeds.  We really need to know which interface modes the PHY and
+	 * MAC supports to properly work out which linkmodes can be supported.
+	 */
+	if (phy->is_c45)
+		interface = PHY_INTERFACE_MODE_NA;
+
+	ret = phylink_bringup_phy(pl, phy, interface);
+	if (ret)
+		phy_detach(phy);
+
+	return ret;
 }
 
 static void phylink_sfp_disconnect_phy(void *upstream)
@@ -1791,6 +1845,8 @@ static const struct sfp_upstream_ops sfp_phylink_ops = {
 	.attach = phylink_sfp_attach,
 	.detach = phylink_sfp_detach,
 	.module_insert = phylink_sfp_module_insert,
+	.module_start = phylink_sfp_module_start,
+	.module_stop = phylink_sfp_module_stop,
 	.link_up = phylink_sfp_link_up,
 	.link_down = phylink_sfp_link_down,
 	.connect_phy = phylink_sfp_connect_phy,

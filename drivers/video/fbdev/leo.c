@@ -687,5 +687,4 @@ module_exit(leo_exit);
 
 MODULE_DESCRIPTION("framebuffer driver for LEO chipsets");
 MODULE_AUTHOR("David S. Miller <davem@davemloft.net>");
-MODULE_VERSION("2.0");
 MODULE_LICENSE("GPL");

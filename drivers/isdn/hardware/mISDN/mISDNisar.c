@@ -19,11 +19,8 @@
 #include <linux/module.h>
 #include "isar.h"
 
-#define ISAR_REV	"2.1"
-
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(ISAR_REV);
 
 #define DEBUG_HW_FIRMWARE_FIFO	0x10000
 
@@ -1681,7 +1678,7 @@ EXPORT_SYMBOL(mISDNisar_init);
 
 static int __init isar_mod_init(void)
 {
-	pr_notice("mISDN: ISAR driver Rev. %s\n", ISAR_REV);
+	pr_notice("mISDN: ISAR driver\n");
 	return 0;
 }
 

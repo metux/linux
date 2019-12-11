@@ -16,8 +16,6 @@
 #include <linux/slab.h>
 #include "w6692.h"
 
-#define W6692_REV	"2.0"
-
 #define DBUSY_TIMER_VALUE	80
 
 enum {
@@ -102,7 +100,6 @@ set_debug(const char *val, const struct kernel_param *kp)
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(W6692_REV);
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "W6692 debug mask");
 module_param(led, uint, S_IRUGO | S_IWUSR);
@@ -1401,7 +1398,7 @@ static int __init w6692_init(void)
 {
 	int err;
 
-	pr_notice("Winbond W6692 PCI driver Rev. %s\n", W6692_REV);
+	pr_notice("Winbond W6692 PCI driver\n");
 
 	err = pci_register_driver(&w6692_driver);
 	return err;

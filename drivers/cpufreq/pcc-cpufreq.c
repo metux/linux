@@ -39,7 +39,6 @@
 
 #include <acpi/processor.h>
 
-#define PCC_VERSION	"1.10.00"
 #define POLL_LOOPS 	300
 
 #define CMD_COMPLETE 	0x1
@@ -521,8 +520,8 @@ static int __init pcc_cpufreq_probe(void)
 		goto pcch_free;
 	}
 
-	printk(KERN_DEBUG "pcc-cpufreq: (v%s) driver loaded with frequency"
-	       " limits: %d MHz, %d MHz\n", PCC_VERSION,
+	printk(KERN_DEBUG "pcc-cpufreq: driver loaded with frequency"
+	       " limits: %d MHz, %d MHz\n",
 	       ioread32(&pcch_hdr->minimum_frequency),
 	       ioread32(&pcch_hdr->nominal));
 	kfree(output.pointer);
@@ -624,7 +623,6 @@ static const struct acpi_device_id processor_device_ids[] = {
 MODULE_DEVICE_TABLE(acpi, processor_device_ids);
 
 MODULE_AUTHOR("Matthew Garrett, Naga Chumbalkar");
-MODULE_VERSION(PCC_VERSION);
 MODULE_DESCRIPTION("Processor Clocking Control interface driver");
 MODULE_LICENSE("GPL");
 

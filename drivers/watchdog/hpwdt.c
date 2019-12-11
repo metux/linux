@@ -22,7 +22,6 @@
 #include <linux/watchdog.h>
 #include <asm/nmi.h>
 
-#define HPWDT_VERSION			"2.0.3"
 #define SECS_TO_TICKS(secs)		((secs) * 1000 / 128)
 #define TICKS_TO_SECS(ticks)		((ticks) * 128 / 1000)
 #define HPWDT_MAX_TICKS			65535
@@ -346,8 +345,7 @@ static int hpwdt_init_one(struct pci_dev *dev,
 	if (retval < 0)
 		goto error_wd_register;
 
-	dev_info(&dev->dev, "HPE Watchdog Timer Driver: Version: %s\n",
-				HPWDT_VERSION);
+	dev_info(&dev->dev, "HPE Watchdog Timer Driver\n");
 	dev_info(&dev->dev, "timeout: %d seconds (nowayout=%d)\n",
 				hpwdt_dev.timeout, nowayout);
 	dev_info(&dev->dev, "pretimeout: %s.\n",
@@ -386,7 +384,6 @@ static struct pci_driver hpwdt_driver = {
 MODULE_AUTHOR("Tom Mingarelli");
 MODULE_DESCRIPTION("hpe watchdog driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(HPWDT_VERSION);
 
 module_param(soft_margin, int, 0);
 MODULE_PARM_DESC(soft_margin, "Watchdog timeout in seconds");

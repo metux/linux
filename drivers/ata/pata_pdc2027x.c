@@ -170,7 +170,6 @@ static struct ata_port_info pdc2027x_port_info[] = {
 MODULE_AUTHOR("Andre Hedrick, Frank Tiernan, Albert Lee");
 MODULE_DESCRIPTION("libata driver module for Promise PDC20268 to PDC20277");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, pdc2027x_pci_tbl);
 
 /**

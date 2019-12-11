@@ -57,7 +57,6 @@
 #include <linux/platform_device.h>
 
 #define DRV_NAME "pata_legacy"
-#define DRV_VERSION "0.6.5"
 
 #define NR_HOST 6
 
@@ -1246,7 +1245,6 @@ static __exit void legacy_exit(void)
 MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for legacy ATA");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 MODULE_ALIAS("pata_qdi");
 MODULE_ALIAS("pata_winbond");
 

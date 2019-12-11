@@ -26,7 +26,6 @@
 #include <asm/msr.h>
 
 #define DRV_NAME	"pata_cs5535"
-#define DRV_VERSION	"0.2.12"
 
 /*
  *	The Geode (Aka Athlon GX now) uses an internal MSR based
@@ -200,4 +199,3 @@ MODULE_AUTHOR("Alan Cox, Jens Altmann, Wolfgan Zuleger, Alexander Kiausch");
 MODULE_DESCRIPTION("low-level driver for the NS/AMD 5535");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, cs5535);
-MODULE_VERSION(DRV_VERSION);

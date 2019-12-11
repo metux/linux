@@ -31,7 +31,6 @@
 #include <asm/mach-rc32434/rb.h>
 
 #define DRV_NAME	"pata-rb532-cf"
-#define DRV_VERSION	"0.1.0"
 #define DRV_DESC	"PATA driver for RouterBOARD 532 Compact Flash"
 
 #define RB500_CF_MAXPORTS	1
@@ -172,13 +171,10 @@ static struct platform_driver rb532_pata_platform_driver = {
 	},
 };
 
-#define DRV_INFO DRV_DESC " version " DRV_VERSION
-
 module_platform_driver(rb532_pata_platform_driver);
 
 MODULE_AUTHOR("Gabor Juhos <juhosg at openwrt.org>");
 MODULE_AUTHOR("Florian Fainelli <florian@openwrt.org>");
 MODULE_DESCRIPTION(DRV_DESC);
-MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:" DRV_NAME);

@@ -31,7 +31,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"pata_cs5520"
-#define DRV_VERSION	"0.6.6"
 
 struct pio_clocks
 {
@@ -294,4 +293,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for Cyrix CS5510/5520");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, pata_cs5520);
-MODULE_VERSION(DRV_VERSION);

@@ -24,9 +24,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_piccolo"
-#define DRV_VERSION "0.0.1"
-
-
 
 static void tosh_set_piomode(struct ata_port *ap, struct ata_device *adev)
 {
@@ -122,4 +119,3 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("Low level driver for Toshiba Piccolo ATA");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, ata_tosh);
-MODULE_VERSION(DRV_VERSION);

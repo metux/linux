@@ -1630,4 +1630,3 @@ module_platform_driver(fsl_sata_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ashish Kalra, Freescale Semiconductor");
 MODULE_DESCRIPTION("Freescale 3.0Gbps SATA controller low level driver");
-MODULE_VERSION("1.10");

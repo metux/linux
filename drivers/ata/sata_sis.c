@@ -94,7 +94,6 @@ MODULE_AUTHOR("Uwe Koziolek");
 MODULE_DESCRIPTION("low-level driver for Silicon Integrated Systems SATA controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, sis_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 
 static unsigned int get_scr_cfg_addr(struct ata_link *link, unsigned int sc_reg)
 {

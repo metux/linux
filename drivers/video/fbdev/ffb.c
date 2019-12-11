@@ -1077,5 +1077,4 @@ module_exit(ffb_exit);
 
 MODULE_DESCRIPTION("framebuffer driver for Creator/Elite3D chipsets");
 MODULE_AUTHOR("David S. Miller <davem@davemloft.net>");
-MODULE_VERSION("2.0");
 MODULE_LICENSE("GPL");

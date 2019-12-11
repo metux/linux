@@ -881,5 +881,4 @@ module_exit(cg6_exit);
 
 MODULE_DESCRIPTION("framebuffer driver for CGsix chipsets");
 MODULE_AUTHOR("David S. Miller <davem@davemloft.net>");
-MODULE_VERSION("2.0");
 MODULE_LICENSE("GPL");

@@ -25,7 +25,6 @@
 MODULE_AUTHOR("Tom Lendacky <thomas.lendacky@amd.com>");
 MODULE_AUTHOR("Gary R Hook <gary.hook@amd.com>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.1.0");
 MODULE_DESCRIPTION("AMD Secure Processor driver");
 
 /* List of SPs, SP count, read-write access lock, and access functions

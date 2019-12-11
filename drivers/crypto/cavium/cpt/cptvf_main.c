@@ -9,7 +9,6 @@
 #include "cptvf.h"
 
 #define DRV_NAME	"thunder-cptvf"
-#define DRV_VERSION	"1.0"
 
 struct cptvf_wqe {
 	struct tasklet_struct twork;
@@ -860,5 +859,4 @@ module_pci_driver(cptvf_pci_driver);
 MODULE_AUTHOR("George Cherian <george.cherian@cavium.com>");
 MODULE_DESCRIPTION("Cavium Thunder CPT Virtual Function Driver");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, cptvf_id_table);

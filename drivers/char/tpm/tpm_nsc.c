@@ -412,5 +412,4 @@ module_exit(cleanup_nsc);
 
 MODULE_AUTHOR("Leendert van Doorn (leendert@watson.ibm.com)");
 MODULE_DESCRIPTION("TPM Driver");
-MODULE_VERSION("2.0");
 MODULE_LICENSE("GPL");

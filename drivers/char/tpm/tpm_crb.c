@@ -748,5 +748,4 @@ static struct acpi_driver crb_acpi_driver = {
 module_acpi_driver(crb_acpi_driver);
 MODULE_AUTHOR("Jarkko Sakkinen <jarkko.sakkinen@linux.intel.com>");
 MODULE_DESCRIPTION("TPM2 Driver");
-MODULE_VERSION("0.1");
 MODULE_LICENSE("GPL");

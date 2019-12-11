@@ -248,5 +248,4 @@ module_spi_driver(otm3225a_driver);
 
 MODULE_AUTHOR("Felix Brack <fb@ltec.ch>");
 MODULE_DESCRIPTION("OTM3225A TFT LCD driver");
-MODULE_VERSION("1.0.0");
 MODULE_LICENSE("GPL v2");

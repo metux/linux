@@ -40,7 +40,6 @@
 #include <linux/dma-iommu.h>
 #include <linux/irqdomain.h>
 
-#define DRIVER_VERSION  "0.2"
 #define DRIVER_AUTHOR   "Alex Williamson <alex.williamson@redhat.com>"
 #define DRIVER_DESC     "Type1 IOMMU driver for VFIO"
 
@@ -2901,7 +2900,6 @@ static void __exit vfio_iommu_type1_cleanup(void)
 module_init(vfio_iommu_type1_init);
 module_exit(vfio_iommu_type1_cleanup);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

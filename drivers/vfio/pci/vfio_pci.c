@@ -30,7 +30,6 @@
 
 #include "vfio_pci_private.h"
 
-#define DRIVER_VERSION  "0.2"
 #define DRIVER_AUTHOR   "Alex Williamson <alex.williamson@redhat.com>"
 #define DRIVER_DESC     "VFIO PCI - User Level meta-driver"
 
@@ -2355,7 +2354,6 @@ out_driver:
 module_init(vfio_pci_init);
 module_exit(vfio_pci_cleanup);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

@@ -17,7 +17,6 @@
 
 /* Module and version information */
 #define DRV_NAME	"iTCO_vendor_support"
-#define DRV_VERSION	"1.04"
 
 /* Includes */
 #include <linux/module.h>		/* For module specific items */
@@ -212,5 +211,4 @@ module_exit(iTCO_vendor_exit_module);
 MODULE_AUTHOR("Wim Van Sebroeck <wim@iguana.be>, "
 		"R. Seretny <lkpatches@paypc.com>");
 MODULE_DESCRIPTION("Intel TCO Vendor Specific WatchDog Timer Driver Support");
-MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL");

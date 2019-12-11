@@ -36,7 +36,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#define VERSION "0.6"
 #define WATCHDOG_NAME "mixcomwd"
 
 #include <linux/module.h>
@@ -280,8 +279,8 @@ static int __init mixcomwd_init(void)
 		goto error_misc_register_watchdog;
 	}
 
-	pr_info("MixCOM watchdog driver v%s, watchdog port at 0x%3x\n",
-		VERSION, watchdog_port);
+	pr_info("MixCOM watchdog driver watchdog port at 0x%3x\n",
+		watchdog_port);
 
 	return 0;
 
@@ -309,5 +308,4 @@ module_exit(mixcomwd_exit);
 
 MODULE_AUTHOR("Gergely Madarasz <gorgo@itc.hu>");
 MODULE_DESCRIPTION("MixCom Watchdog driver");
-MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");

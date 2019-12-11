@@ -40,8 +40,6 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Christoph Raisch <raisch@de.ibm.com>");
 MODULE_DESCRIPTION("IBM eServer HEA Driver");
-MODULE_VERSION(DRV_VERSION);
-
 
 static int msg_level = -1;
 static int rq1_entries = EHEA_DEF_ENTRIES_RQ1;

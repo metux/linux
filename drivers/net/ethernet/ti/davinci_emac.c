@@ -85,7 +85,6 @@ MODULE_PARM_DESC(debug_level, "DaVinci EMAC debug level (NETIF_MSG bits)");
 #define EMAC_MAJOR_VERSION	6
 #define EMAC_MINOR_VERSION	1
 #define EMAC_MODULE_VERSION	"6.1"
-MODULE_VERSION(EMAC_MODULE_VERSION);
 static const char emac_version_string[] = "TI DaVinci EMAC Linux v6.1";
 
 /* Configuration items */

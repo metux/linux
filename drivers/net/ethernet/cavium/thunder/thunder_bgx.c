@@ -91,7 +91,6 @@ static const struct pci_device_id bgx_id_table[] = {
 MODULE_AUTHOR("Cavium Inc");
 MODULE_DESCRIPTION("Cavium Thunder BGX/MAC Driver");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, bgx_id_table);
 
 /* The Cavium ThunderX network controller can *only* be found in SoCs

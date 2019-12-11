@@ -5294,4 +5294,3 @@ module_exit(sky2_cleanup_module);
 MODULE_DESCRIPTION("Marvell Yukon 2 Gigabit Ethernet driver");
 MODULE_AUTHOR("Stephen Hemminger <shemminger@linux-foundation.org>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);

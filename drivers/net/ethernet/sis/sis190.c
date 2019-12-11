@@ -350,7 +350,6 @@ MODULE_PARM_DESC(rx_copybreak, "Copy breakpoint for copy-only-tiny-frames");
 module_param_named(debug, debug.msg_enable, int, 0);
 MODULE_PARM_DESC(debug, "Debug verbosity level (0=none, ..., 16=all)");
 MODULE_AUTHOR("K.M. Liu <kmliu@sis.com>, Ueimor <romieu@fr.zoreil.com>");
-MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL");
 
 static const u32 sis190_intr_mask =

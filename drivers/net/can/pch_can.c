@@ -1265,4 +1265,3 @@ module_pci_driver(pch_can_pci_driver);
 
 MODULE_DESCRIPTION("Intel EG20T PCH CAN(Controller Area Network) Driver");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("0.94");

@@ -136,7 +136,6 @@ static struct pci_driver uio_pci_driver = {
 };
 
 module_pci_driver(uio_pci_driver);
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

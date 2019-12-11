@@ -21,7 +21,6 @@
 
 #include <linux/spi/spi.h>
 
-#define DRV_VERSION		"0.1.1"
 #define DRV_DESC		"Micrel KS8995 Ethernet switch SPI driver"
 
 /* ------------------------------------------------------------------------ */
@@ -544,6 +543,5 @@ static struct spi_driver ks8995_driver = {
 module_spi_driver(ks8995_driver);
 
 MODULE_DESCRIPTION(DRV_DESC);
-MODULE_VERSION(DRV_VERSION);
 MODULE_AUTHOR("Gabor Juhos <juhosg at openwrt.org>");
 MODULE_LICENSE("GPL v2");

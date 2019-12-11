@@ -718,7 +718,6 @@ static void apex_exit(void)
 	gasket_unregister_device(&apex_desc);
 }
 MODULE_DESCRIPTION("Google Apex driver");
-MODULE_VERSION(APEX_DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("John Joseph <jnjoseph@google.com>");
 MODULE_DEVICE_TABLE(pci, apex_pci_ids);

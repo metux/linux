@@ -530,5 +530,4 @@ EXPORT_SYMBOL(cxgbi_tagmask_set);
 
 MODULE_AUTHOR("Chelsio Communications");
 MODULE_DESCRIPTION("Chelsio common library");
-MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("Dual BSD/GPL");

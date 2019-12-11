@@ -21,8 +21,7 @@
 #include <net/busy_poll.h>
 #include <net/vxlan.h>
 
-MODULE_VERSION(DRV_VER);
-MODULE_DESCRIPTION(DRV_DESC " " DRV_VER);
+MODULE_DESCRIPTION(DRV_DESC);
 MODULE_AUTHOR("Emulex Corporation");
 MODULE_LICENSE("GPL");
 

@@ -2177,7 +2177,6 @@ static struct pci_driver dmfe_driver = {
 MODULE_AUTHOR("Sten Wang, sten_wang@davicom.com.tw");
 MODULE_DESCRIPTION("Davicom DM910X fast ethernet driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 module_param(debug, int, 0);
 module_param(mode, byte, 0);

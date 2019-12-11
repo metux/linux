@@ -47,7 +47,6 @@ static char version[] =
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_DESCRIPTION("Sun LDOM virtual network driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 /* Ordered from largest major to lowest */
 static struct vio_version vnet_versions[] = {

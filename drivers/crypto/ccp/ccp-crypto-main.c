@@ -20,7 +20,6 @@
 
 MODULE_AUTHOR("Tom Lendacky <thomas.lendacky@amd.com>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.0");
 MODULE_DESCRIPTION("AMD Cryptographic Coprocessor crypto API support");
 
 static unsigned int aes_disable;

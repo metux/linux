@@ -7,7 +7,6 @@
 
 #define NX_NAME		"nx-crypto"
 #define NX_STRING	"IBM Power7+ Nest Accelerator Crypto Driver"
-#define NX_VERSION	"1.0"
 
 /* a scatterlist in the format PHYP is expecting */
 struct nx_sg {

@@ -47,7 +47,6 @@
 MODULE_AUTHOR("Jeff Garzik");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Promise SATA SX8 block driver");
-MODULE_VERSION(DRV_VERSION);
 
 /*
  * SX8 hardware has a single message queue for all ATA ports.

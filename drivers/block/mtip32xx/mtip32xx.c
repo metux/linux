@@ -4445,7 +4445,6 @@ static void __exit mtip_exit(void)
 MODULE_AUTHOR("Micron Technology, Inc");
 MODULE_DESCRIPTION("Micron RealSSD PCIe Block Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(MTIP_DRV_VERSION);
 
 module_init(mtip_init);
 module_exit(mtip_exit);

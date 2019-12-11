@@ -24,7 +24,6 @@
 MODULE_AUTHOR("Google, Inc.");
 MODULE_DESCRIPTION("Android QEMU Audio Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0");
 
 struct goldfish_audio {
 	char __iomem *reg_base;

@@ -11,7 +11,6 @@
 
 #define MAX_NIC_TYPE		4
 #define MAX_RX_SUBMIT_COUNT	3
-#define DRIVER_VERSION		"3.7.17.0"
 
 enum TX_ERROR_CODE {
 	TX_NO_ERROR = 0,

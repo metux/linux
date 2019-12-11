@@ -1003,6 +1003,5 @@ static void __exit gdm_usb_lte_exit(void)
 module_init(gdm_usb_lte_init);
 module_exit(gdm_usb_lte_exit);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_DESCRIPTION("GCT LTE USB Device Driver");
 MODULE_LICENSE("GPL");

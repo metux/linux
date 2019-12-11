@@ -11,7 +11,6 @@
 
 #include "vfio_platform_private.h"
 
-#define DRIVER_VERSION  "0.10"
 #define DRIVER_AUTHOR   "Antonios Motakis <a.motakis@virtualopensystems.com>"
 #define DRIVER_DESC     "VFIO for AMBA devices - User Level meta-driver"
 
@@ -103,7 +102,6 @@ static struct amba_driver vfio_amba_driver = {
 
 module_amba_driver(vfio_amba_driver);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

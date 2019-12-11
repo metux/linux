@@ -19,7 +19,6 @@
 
 #include "vfio_platform_private.h"
 
-#define DRIVER_VERSION  "0.10"
 #define DRIVER_AUTHOR   "Antonios Motakis <a.motakis@virtualopensystems.com>"
 #define DRIVER_DESC     "VFIO platform base module"
 
@@ -745,7 +744,6 @@ void vfio_platform_unregister_reset(const char *compat,
 }
 EXPORT_SYMBOL_GPL(vfio_platform_unregister_reset);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

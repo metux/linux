@@ -16,7 +16,6 @@
 
 #include "mdev_private.h"
 
-#define DRIVER_VERSION		"0.1"
 #define DRIVER_AUTHOR		"NVIDIA Corporation"
 #define DRIVER_DESC		"Mediated device Core Driver"
 
@@ -420,7 +419,6 @@ static void __exit mdev_exit(void)
 module_init(mdev_init)
 module_exit(mdev_exit)
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

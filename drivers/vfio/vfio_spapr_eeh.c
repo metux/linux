@@ -11,7 +11,6 @@
 #include <linux/vfio.h>
 #include <asm/eeh.h>
 
-#define DRIVER_VERSION	"0.1"
 #define DRIVER_AUTHOR	"Gavin Shan, IBM Corporation"
 #define DRIVER_DESC	"VFIO IOMMU SPAPR EEH"
 
@@ -101,7 +100,6 @@ long vfio_spapr_iommu_eeh_ioctl(struct iommu_group *group,
 }
 EXPORT_SYMBOL_GPL(vfio_spapr_iommu_eeh_ioctl);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

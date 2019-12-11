@@ -25,7 +25,6 @@
 #include <asm/tce.h>
 #include <asm/mmu_context.h>
 
-#define DRIVER_VERSION  "0.1"
 #define DRIVER_AUTHOR   "aik@ozlabs.ru"
 #define DRIVER_DESC     "VFIO IOMMU SPAPR TCE"
 
@@ -1382,7 +1381,6 @@ static void __exit tce_iommu_cleanup(void)
 module_init(tce_iommu_init);
 module_exit(tce_iommu_cleanup);
 
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);

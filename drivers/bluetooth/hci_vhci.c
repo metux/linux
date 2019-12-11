@@ -25,8 +25,6 @@
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
 
-#define VERSION "1.5"
-
 static bool amp;
 
 struct vhci_data {
@@ -369,8 +367,7 @@ module_param(amp, bool, 0644);
 MODULE_PARM_DESC(amp, "Create AMP controller device");
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Bluetooth virtual HCI driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Bluetooth virtual HCI driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("devname:vhci");
 MODULE_ALIAS_MISCDEV(VHCI_MINOR);

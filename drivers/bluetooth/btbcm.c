@@ -15,8 +15,6 @@
 
 #include "btbcm.h"
 
-#define VERSION "0.1"
-
 #define BDADDR_BCM20702A0 (&(bdaddr_t) {{0x00, 0xa0, 0x02, 0x70, 0x20, 0x00}})
 #define BDADDR_BCM20702A1 (&(bdaddr_t) {{0x00, 0x00, 0xa0, 0x02, 0x70, 0x20}})
 #define BDADDR_BCM2076B1 (&(bdaddr_t) {{0x79, 0x56, 0x00, 0xa0, 0x76, 0x20}})
@@ -614,6 +612,5 @@ int btbcm_setup_apple(struct hci_dev *hdev)
 EXPORT_SYMBOL_GPL(btbcm_setup_apple);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Bluetooth support for Broadcom devices ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Bluetooth support for Broadcom devices");
 MODULE_LICENSE("GPL");

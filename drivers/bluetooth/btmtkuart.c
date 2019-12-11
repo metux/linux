@@ -29,8 +29,6 @@
 
 #include "h4_recv.h"
 
-#define VERSION "0.2"
-
 #define FIRMWARE_MT7622		"mediatek/mt7622pr2h.bin"
 #define FIRMWARE_MT7663		"mediatek/mt7663pr2h.bin"
 #define FIRMWARE_MT7668		"mediatek/mt7668pr2h.bin"
@@ -1127,8 +1125,7 @@ static struct serdev_device_driver btmtkuart_driver = {
 module_serdev_device_driver(btmtkuart_driver);
 
 MODULE_AUTHOR("Sean Wang <sean.wang@mediatek.com>");
-MODULE_DESCRIPTION("MediaTek Bluetooth Serial driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("MediaTek Bluetooth Serial driver");
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE(FIRMWARE_MT7622);
 MODULE_FIRMWARE(FIRMWARE_MT7663);

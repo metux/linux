@@ -25,8 +25,6 @@
 #include "btbcm.h"
 #include "btrtl.h"
 
-#define VERSION "0.8"
-
 static bool disable_scofix;
 static bool force_scofix;
 static bool enable_autosuspend = IS_ENABLED(CONFIG_BT_HCIBTUSB_AUTOSUSPEND);
@@ -4274,6 +4272,5 @@ module_param(reset, bool, 0644);
 MODULE_PARM_DESC(reset, "Send HCI reset command on initialization");
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Generic Bluetooth USB driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Generic Bluetooth USB driver");
 MODULE_LICENSE("GPL");

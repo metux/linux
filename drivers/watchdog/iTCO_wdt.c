@@ -44,7 +44,6 @@
 
 /* Module and version information */
 #define DRV_NAME	"iTCO_wdt"
-#define DRV_VERSION	"1.11"
 
 /* Includes */
 #include <linux/acpi.h>			/* For ACPI support */
@@ -653,7 +652,7 @@ static struct platform_driver iTCO_wdt_driver = {
 
 static int __init iTCO_wdt_init_module(void)
 {
-	pr_info("Intel TCO WatchDog Timer Driver v%s\n", DRV_VERSION);
+	pr_info("Intel TCO WatchDog Timer Driver\n");
 
 	return platform_driver_register(&iTCO_wdt_driver);
 }
@@ -669,6 +668,5 @@ module_exit(iTCO_wdt_cleanup_module);
 
 MODULE_AUTHOR("Wim Van Sebroeck <wim@iguana.be>");
 MODULE_DESCRIPTION("Intel TCO WatchDog Timer Driver");
-MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:" DRV_NAME);

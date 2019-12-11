@@ -16,7 +16,6 @@
 #include "esp_scsi.h"
 
 #define DRV_MODULE_NAME "am53c974"
-#define DRV_MODULE_VERSION "1.00"
 
 static bool am53c974_debug;
 static bool am53c974_fenab = true;
@@ -532,7 +531,6 @@ module_pci_driver(am53c974_driver);
 MODULE_DESCRIPTION("AM53C974 SCSI driver");
 MODULE_AUTHOR("Hannes Reinecke <hare@suse.de>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 MODULE_ALIAS("tmscsim");
 
 module_param(am53c974_debug, bool, 0644);

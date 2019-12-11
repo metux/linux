@@ -70,7 +70,6 @@
 #include "ufshci.h"
 
 #define UFSHCD "ufshcd"
-#define UFSHCD_DRIVER_VERSION "0.2"
 
 struct ufs_hba;
 

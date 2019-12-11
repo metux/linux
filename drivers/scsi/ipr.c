@@ -212,7 +212,6 @@ MODULE_PARM_DESC(number_of_msix, "Specify the number of MSIX interrupts to use o
 module_param_named(fast_reboot, ipr_fast_reboot, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(fast_reboot, "Skip adapter shutdown during reboot. Set to 1 to enable. (default: 0)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(IPR_DRIVER_VERSION);
 
 /*  A constant array of IOASCs/URCs/Error Messages */
 static const

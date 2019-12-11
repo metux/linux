@@ -1805,4 +1805,3 @@ module_exit(bfad_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("QLogic BR-series Fibre Channel HBA Driver" BFAD_PROTO_NAME);
 MODULE_AUTHOR("QLogic Corporation");
-MODULE_VERSION(BFAD_DRIVER_VERSION);

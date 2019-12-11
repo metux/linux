@@ -47,7 +47,6 @@ static struct scsi_transport_template *ibmvfc_transport_template;
 MODULE_DESCRIPTION("IBM Virtual Fibre Channel Driver");
 MODULE_AUTHOR("Brian King <brking@linux.vnet.ibm.com>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(IBMVFC_DRIVER_VERSION);
 
 module_param_named(init_timeout, init_timeout, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(init_timeout, "Initialization timeout in seconds. "

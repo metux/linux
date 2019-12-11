@@ -137,7 +137,6 @@ static int wait_till_fw_empty(adapter_t *);
 MODULE_AUTHOR("megaraidlinux@lsi.com");
 MODULE_DESCRIPTION("LSI Logic MegaRAID Mailbox Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(MEGARAID_VERSION);
 
 /*
  * ### modules parameters for driver ###

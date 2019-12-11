@@ -675,5 +675,4 @@ module_exit(grlib_apbuart_exit);
 
 MODULE_AUTHOR("Aeroflex Gaisler AB");
 MODULE_DESCRIPTION("GRLIB APBUART serial driver");
-MODULE_VERSION("2.1");
 MODULE_LICENSE("GPL");

@@ -1032,5 +1032,4 @@ module_exit(l2tp_nl_cleanup);
 MODULE_AUTHOR("James Chapman <jchapman@katalix.com>");
 MODULE_DESCRIPTION("L2TP netlink");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0");
 MODULE_ALIAS_GENL_FAMILY("l2tp");

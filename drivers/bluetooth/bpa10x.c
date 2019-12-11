@@ -22,8 +22,6 @@
 
 #include "h4_recv.h"
 
-#define VERSION "0.11"
-
 static const struct usb_device_id bpa10x_table[] = {
 	/* Tektronix BPA 100/105 (Digianswer) */
 	{ USB_DEVICE(0x08fd, 0x0002) },
@@ -440,6 +438,5 @@ static struct usb_driver bpa10x_driver = {
 module_usb_driver(bpa10x_driver);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Digianswer Bluetooth USB driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Digianswer Bluetooth USB driver");
 MODULE_LICENSE("GPL");

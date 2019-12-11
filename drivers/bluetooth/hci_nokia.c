@@ -27,8 +27,6 @@
 #include "hci_uart.h"
 #include "btbcm.h"
 
-#define VERSION "0.1"
-
 #define NOKIA_ID_BCM2048	0x04
 #define NOKIA_ID_TI1271		0x31
 
@@ -802,6 +800,5 @@ static struct serdev_device_driver nokia_bluetooth_serdev_driver = {
 module_serdev_device_driver(nokia_bluetooth_serdev_driver);
 
 MODULE_AUTHOR("Sebastian Reichel <sre@kernel.org>");
-MODULE_DESCRIPTION("Bluetooth HCI UART Nokia H4+ driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Bluetooth HCI UART Nokia H4+ driver");
 MODULE_LICENSE("GPL");

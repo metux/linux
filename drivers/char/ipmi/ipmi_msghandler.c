@@ -34,8 +34,6 @@
 #include <linux/uuid.h>
 #include <linux/nospec.h>
 
-#define IPMI_DRIVER_VERSION "39.2"
-
 static struct ipmi_recv_msg *ipmi_alloc_recv_msg(void);
 static int ipmi_init_msghandler(void);
 static void smi_recv_tasklet(unsigned long);
@@ -5148,8 +5146,6 @@ static int __init ipmi_init_msghandler_mod(void)
 {
 	int rv;
 
-	pr_info("version " IPMI_DRIVER_VERSION "\n");
-
 	mutex_lock(&ipmi_interfaces_mutex);
 	rv = ipmi_register_driver();
 	mutex_unlock(&ipmi_interfaces_mutex);
@@ -5200,5 +5196,4 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Corey Minyard <minyard@mvista.com>");
 MODULE_DESCRIPTION("Incoming and outgoing message routing for an IPMI"
 		   " interface.");
-MODULE_VERSION(IPMI_DRIVER_VERSION);
 MODULE_SOFTDEP("post: ipmi_devintf");

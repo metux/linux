@@ -3234,4 +3234,3 @@ module_spi_driver(ca8210_spi_driver);
 MODULE_AUTHOR("Harry Morris <h.morris@cascoda.com>");
 MODULE_DESCRIPTION("CA-8210 SoftMAC driver");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_VERSION("1.0");

@@ -93,7 +93,6 @@ MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("USB driver for devices with the ZD1211 chip.");
 MODULE_AUTHOR("Ulrich Kunitz");
 MODULE_AUTHOR("Daniel Drake");
-MODULE_VERSION("1.0");
 MODULE_DEVICE_TABLE(usb, usb_ids);
 
 #define FW_ZD1211_PREFIX	"zd1211/zd1211_"

@@ -28,7 +28,6 @@
 #include "11n.h"
 #include "pcie.h"
 
-#define PCIE_VERSION	"1.0"
 #define DRV_NAME        "Marvell mwifiex PCIe"
 
 static struct mwifiex_if_ops pcie_ops;
@@ -3250,6 +3249,5 @@ static struct mwifiex_if_ops pcie_ops = {
 module_pci_driver(mwifiex_pcie);
 
 MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell WiFi-Ex PCI-Express Driver version " PCIE_VERSION);
-MODULE_VERSION(PCIE_VERSION);
+MODULE_DESCRIPTION("Marvell WiFi-Ex PCI-Express Driver");
 MODULE_LICENSE("GPL v2");

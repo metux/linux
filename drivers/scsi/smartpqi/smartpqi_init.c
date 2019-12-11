@@ -49,7 +49,6 @@ MODULE_AUTHOR("Microsemi");
 MODULE_DESCRIPTION("Driver for Microsemi Smart Family Controller version "
 	DRIVER_VERSION);
 MODULE_SUPPORTED_DEVICE("Microsemi Smart Family Controllers");
-MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL");
 
 static void pqi_take_ctrl_offline(struct pqi_ctrl_info *ctrl_info);

@@ -70,7 +70,6 @@ static DECLARE_BITMAP(pmcraid_minor, PMCRAID_MAX_ADAPTERS);
 MODULE_AUTHOR("Anil Ravindranath<anil_ravindranath@pmc-sierra.com>");
 MODULE_DESCRIPTION("PMC Sierra MaxRAID Controller Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(PMCRAID_DRIVER_VERSION);
 
 module_param_named(log_level, pmcraid_log_level, uint, (S_IRUGO | S_IWUSR));
 MODULE_PARM_DESC(log_level,

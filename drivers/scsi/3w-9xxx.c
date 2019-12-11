@@ -111,7 +111,6 @@ extern struct timezone sys_tz;
 MODULE_AUTHOR ("LSI");
 MODULE_DESCRIPTION ("3ware 9000 Storage Controller Linux Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(TW_DRIVER_VERSION);
 
 static int use_msi = 0;
 module_param(use_msi, int, S_IRUGO);

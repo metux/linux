@@ -51,12 +51,9 @@
 
 #include "megaraid.h"
 
-#define MEGARAID_MODULE_VERSION "2.00.4"
-
 MODULE_AUTHOR ("sju@lsil.com");
 MODULE_DESCRIPTION ("LSI Logic MegaRAID legacy driver");
 MODULE_LICENSE ("GPL");
-MODULE_VERSION(MEGARAID_MODULE_VERSION);
 
 static DEFINE_MUTEX(megadev_mutex);
 static unsigned int max_cmd_per_lun = DEF_CMD_PER_LUN;

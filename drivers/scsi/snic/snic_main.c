@@ -1006,7 +1006,6 @@ module_exit(snic_cleanup_module);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION(SNIC_DRV_DESCRIPTION);
-MODULE_VERSION(SNIC_DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, snic_id_table);
 MODULE_AUTHOR("Narsimhulu Musini <nmusini@cisco.com>, "
 	      "Sesidhar Baddela <sebaddel@cisco.com>");

@@ -74,7 +74,6 @@ MODULE_PARM_DESC(excl, "List ioport addresses here to prevent controllers from b
 MODULE_PARM_DESC(safe, "Set other settings to a \"safe mode\"");
 
 MODULE_LICENSE("GPL");
-MODULE_VERSION(SYM_VERSION);
 MODULE_AUTHOR("Matthew Wilcox <matthew@wil.cx>");
 MODULE_DESCRIPTION("NCR, Symbios and LSI 8xx and 1010 PCI SCSI adapters");
 

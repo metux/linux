@@ -25,7 +25,6 @@
 
 #define DRV_MODULE_NAME		"sun_esp"
 #define PFX DRV_MODULE_NAME	": "
-#define DRV_VERSION		"1.100"
 #define DRV_MODULE_RELDATE	"August 27, 2008"
 
 #define dma_read32(REG) \
@@ -611,4 +610,3 @@ module_platform_driver(esp_sbus_driver);
 MODULE_DESCRIPTION("Sun ESP SCSI driver");
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);

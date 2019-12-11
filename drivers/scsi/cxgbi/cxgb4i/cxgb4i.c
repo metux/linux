@@ -42,16 +42,12 @@ static unsigned int dbg_level;
 
 #define	DRV_MODULE_NAME		"cxgb4i"
 #define DRV_MODULE_DESC		"Chelsio T4-T6 iSCSI Driver"
-#define	DRV_MODULE_VERSION	"0.9.5-ko"
-#define DRV_MODULE_RELDATE	"Apr. 2015"
 
 static char version[] =
-	DRV_MODULE_DESC " " DRV_MODULE_NAME
-	" v" DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")\n";
+	DRV_MODULE_DESC " " DRV_MODULE_NAME "\n";
 
 MODULE_AUTHOR("Chelsio Communications, Inc.");
 MODULE_DESCRIPTION(DRV_MODULE_DESC);
-MODULE_VERSION(DRV_MODULE_VERSION);
 MODULE_LICENSE("GPL");
 
 module_param(dbg_level, uint, 0644);

@@ -7092,8 +7092,7 @@ ips_init_phase2(int index)
 }
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("IBM ServeRAID Adapter Driver " IPS_VER_STRING);
-MODULE_VERSION(IPS_VER_STRING);
+MODULE_DESCRIPTION("IBM ServeRAID Adapter Driver");
 
 
 /*

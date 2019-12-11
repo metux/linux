@@ -30,11 +30,6 @@
 
 #include "esp_scsi.h"
 
-#define DRV_MODULE_NAME		"esp"
-#define PFX DRV_MODULE_NAME	": "
-#define DRV_VERSION		"2.000"
-#define DRV_MODULE_RELDATE	"April 19, 2007"
-
 /* SCSI bus reset settle time in seconds.  */
 static int esp_bus_reset_settle = 3;
 
@@ -2768,7 +2763,6 @@ static void __exit esp_exit(void)
 MODULE_DESCRIPTION("ESP SCSI driver core");
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
 
 module_param(esp_bus_reset_settle, int, 0);
 MODULE_PARM_DESC(esp_bus_reset_settle,

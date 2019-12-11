@@ -64,7 +64,6 @@ MODULE_DESCRIPTION("Dell PERC2, 2/Si, 3/Si, 3/Di, "
 		   "Adaptec Advanced Raid Products, "
 		   "HP NetRAID-4M, IBM ServeRAID & ICP SCSI driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(AAC_DRIVER_FULL_VERSION);
 
 static DEFINE_MUTEX(aac_mutex);
 static LIST_HEAD(aac_devices);

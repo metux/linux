@@ -1473,5 +1473,4 @@ module_platform_driver(qpti_sbus_driver);
 MODULE_DESCRIPTION("QlogicISP SBUS driver");
 MODULE_AUTHOR("David S. Miller (davem@davemloft.net)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("2.1");
 MODULE_FIRMWARE("qlogic/isp1000.bin");

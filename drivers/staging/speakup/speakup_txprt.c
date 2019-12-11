@@ -123,5 +123,3 @@ MODULE_AUTHOR("Kirk Reiser <kirk@braille.uwo.ca>");
 MODULE_AUTHOR("David Borowski");
 MODULE_DESCRIPTION("Speakup support for Transport synthesizers");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);
-

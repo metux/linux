@@ -23,8 +23,6 @@
 
 #include <net/bluetooth/bluetooth.h>
 
-#define VERSION "1.2"
-
 static const struct usb_device_id bcm203x_table[] = {
 	/* Broadcom Blutonium (BCM2033) */
 	{ USB_DEVICE(0x0a5c, 0x2033) },
@@ -260,8 +258,7 @@ static struct usb_driver bcm203x_driver = {
 module_usb_driver(bcm203x_driver);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Broadcom Blutonium firmware driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Broadcom Blutonium firmware driver");
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE("BCM2033-MD.hex");
 MODULE_FIRMWARE("BCM2033-FW.bin");

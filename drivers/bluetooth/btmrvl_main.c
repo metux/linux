@@ -27,8 +27,6 @@
 #include "btmrvl_drv.h"
 #include "btmrvl_sdio.h"
 
-#define VERSION "1.0"
-
 /*
  * This function is called by interface specific interrupt handler.
  * It updates Power Save & Host Sleep states, and wakes up the main
@@ -790,6 +788,5 @@ int btmrvl_remove_card(struct btmrvl_private *priv)
 EXPORT_SYMBOL_GPL(btmrvl_remove_card);
 
 MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell Bluetooth driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Marvell Bluetooth driver");
 MODULE_LICENSE("GPL v2");

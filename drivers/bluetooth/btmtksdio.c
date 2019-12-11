@@ -29,8 +29,6 @@
 
 #include "h4_recv.h"
 
-#define VERSION "0.1"
-
 #define FIRMWARE_MT7663		"mediatek/mt7663pr2h.bin"
 #define FIRMWARE_MT7668		"mediatek/mt7668pr2h.bin"
 
@@ -1095,8 +1093,7 @@ module_param(enable_autosuspend, bool, 0644);
 MODULE_PARM_DESC(enable_autosuspend, "Enable autosuspend by default");
 
 MODULE_AUTHOR("Sean Wang <sean.wang@mediatek.com>");
-MODULE_DESCRIPTION("MediaTek Bluetooth SDIO driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("MediaTek Bluetooth SDIO driver");
 MODULE_LICENSE("GPL");
 MODULE_FIRMWARE(FIRMWARE_MT7663);
 MODULE_FIRMWARE(FIRMWARE_MT7668);

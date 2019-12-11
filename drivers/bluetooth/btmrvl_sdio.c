@@ -33,8 +33,6 @@
 #include "btmrvl_drv.h"
 #include "btmrvl_sdio.h"
 
-#define VERSION "1.0"
-
 static struct memory_type_mapping mem_type_mapping_tbl[] = {
 	{"ITCM", NULL, 0, 0xF0},
 	{"DTCM", NULL, 0, 0xF1},
@@ -1822,8 +1820,7 @@ module_init(btmrvl_sdio_init_module);
 module_exit(btmrvl_sdio_exit_module);
 
 MODULE_AUTHOR("Marvell International Ltd.");
-MODULE_DESCRIPTION("Marvell BT-over-SDIO driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Marvell BT-over-SDIO driver");
 MODULE_LICENSE("GPL v2");
 MODULE_FIRMWARE("mrvl/sd8688_helper.bin");
 MODULE_FIRMWARE("mrvl/sd8688.bin");

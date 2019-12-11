@@ -35,8 +35,6 @@
 #include "btbcm.h"
 #include "hci_uart.h"
 
-#define VERSION "2.3"
-
 static const struct hci_uart_proto *hup[HCI_UART_MAX_PROTO];
 
 int hci_uart_register_proto(const struct hci_uart_proto *p)
@@ -823,7 +821,7 @@ static int __init hci_uart_init(void)
 	static struct tty_ldisc_ops hci_uart_ldisc;
 	int err;
 
-	BT_INFO("HCI UART driver ver %s", VERSION);
+	BT_INFO("HCI UART driver");
 
 	/* Register the tty discipline */
 
@@ -926,7 +924,6 @@ module_init(hci_uart_init);
 module_exit(hci_uart_exit);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");
-MODULE_DESCRIPTION("Bluetooth HCI UART driver ver " VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("Bluetooth HCI UART driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_LDISC(N_HCI);

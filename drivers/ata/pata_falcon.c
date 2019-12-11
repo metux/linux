@@ -31,7 +31,6 @@
 #include <asm/ide.h>
 
 #define DRV_NAME "pata_falcon"
-#define DRV_VERSION "0.1.0"
 
 #define ATA_HD_CONTROL	0x39
 
@@ -193,4 +192,3 @@ MODULE_AUTHOR("Bartlomiej Zolnierkiewicz");
 MODULE_DESCRIPTION("low-level driver for Atari Falcon PATA");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:atari-falcon-ide");
-MODULE_VERSION(DRV_VERSION);

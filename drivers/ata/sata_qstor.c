@@ -605,4 +605,3 @@ MODULE_AUTHOR("Mark Lord");
 MODULE_DESCRIPTION("Pacific Digital Corporation QStor SATA low-level driver");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, qs_ata_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

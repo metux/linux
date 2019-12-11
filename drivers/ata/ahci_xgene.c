@@ -885,4 +885,3 @@ module_platform_driver(xgene_ahci_driver);
 MODULE_DESCRIPTION("APM X-Gene AHCI SATA driver");
 MODULE_AUTHOR("Loc Ho <lho@apm.com>");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.4");

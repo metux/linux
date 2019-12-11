@@ -19,7 +19,6 @@
 #include <linux/ata.h>
 
 #define DRV_NAME	"pata_jmicron"
-#define DRV_VERSION	"0.1.5"
 
 typedef enum {
 	PORT_PATA0 = 0,
@@ -170,5 +169,4 @@ MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("SCSI low-level driver for Jmicron PATA ports");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, jmicron_pci_tbl);
-MODULE_VERSION(DRV_VERSION);
 

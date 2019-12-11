@@ -18,7 +18,6 @@
 #include <linux/libata.h>
 
 #define DRV_NAME "pata_isapnp"
-#define DRV_VERSION "0.2.5"
 
 static struct scsi_host_template isapnp_sht = {
 	ATA_PIO_SHT(DRV_NAME),
@@ -133,4 +132,3 @@ module_pnp_driver(isapnp_driver);
 MODULE_AUTHOR("Alan Cox");
 MODULE_DESCRIPTION("low-level driver for ISA PnP ATA");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_VERSION);

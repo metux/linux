@@ -421,4 +421,3 @@ MODULE_AUTHOR("Jeremy Higdon");
 MODULE_DESCRIPTION("low-level driver for Vitesse VSC7174 SATA controller");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, vsc_sata_pci_tbl);
-MODULE_VERSION(DRV_VERSION);

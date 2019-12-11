@@ -31,7 +31,6 @@
 #include <asm/setup.h>
 
 #define DRV_NAME "pata_buddha"
-#define DRV_VERSION "0.1.1"
 
 #define BUDDHA_BASE1	0x800
 #define BUDDHA_BASE2	0xa00
@@ -296,4 +295,3 @@ late_initcall(pata_buddha_late_init);
 MODULE_AUTHOR("Bartlomiej Zolnierkiewicz");
 MODULE_DESCRIPTION("low-level driver for Buddha/Catweasel/X-Surf PATA");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION(DRV_VERSION);

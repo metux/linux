@@ -43,12 +43,9 @@
 
 #include <linux/sonypi.h>
 
-#define SONYPI_DRIVER_VERSION	 "1.26"
-
 MODULE_AUTHOR("Stelian Pop <stelian@popies.net>");
 MODULE_DESCRIPTION("Sony Programmable I/O Control Device driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION(SONYPI_DRIVER_VERSION);
 
 static int minor = -1;
 module_param(minor, int, 0);
@@ -1500,8 +1497,7 @@ static int __init sonypi_init(void)
 	int error;
 
 	printk(KERN_INFO
-		"sonypi: Sony Programmable I/O Controller Driver v%s.\n",
-		SONYPI_DRIVER_VERSION);
+		"sonypi: Sony Programmable I/O Controller Driver\n");
 
 	if (!dmi_check_system(sonypi_dmi_table))
 		return -ENODEV;

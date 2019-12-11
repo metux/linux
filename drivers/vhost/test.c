@@ -377,7 +377,6 @@ static struct miscdevice vhost_test_misc = {
 };
 module_misc_device(vhost_test_misc);
 
-MODULE_VERSION("0.0.1");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Michael S. Tsirkin");
 MODULE_DESCRIPTION("Host kernel side for virtio simulator");

@@ -20,6 +20,8 @@
 #include <linux/gpio/machine.h>
 #include <linux/input.h>
 #include <linux/platform_data/gpio/gpio-amd-fch.h>
+#include <linux/portmux/gpio.h>
+#include <linux/portmux/driver.h>
 
 /*
  * NOTE: this driver only supports APUv2/3 - not APUv1, as this one
@@ -78,7 +80,6 @@ static const struct gpio_led apu2_leds[] = {
 	{ .name = "apu:green:1" },
 	{ .name = "apu:green:2" },
 	{ .name = "apu:green:3" },
-	{ .name = "apu:simswap" },
 };
 
 static const struct gpio_led_platform_data apu2_leds_pdata = {
@@ -95,8 +96,6 @@ static struct gpiod_lookup_table gpios_led_table = {
 				NULL, 1, GPIO_ACTIVE_LOW),
 		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED3,
 				NULL, 2, GPIO_ACTIVE_LOW),
-		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_SIMSWAP,
-				NULL, 3, GPIO_ACTIVE_LOW),
 	}
 };
 
@@ -127,6 +126,30 @@ static struct gpiod_lookup_table gpios_key_table = {
 		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_MODESW,
 				NULL, 0, GPIO_ACTIVE_LOW),
 	}
+};
+
+/* simswitch table */
+
+#define PORTMUX_DEVICE_NAME	"portmux-gpio"
+
+static struct gpiod_lookup_table gpios_portmux_table = {
+	.dev_id = PORTMUX_DEVICE_NAME,
+	.table = {
+		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_SIMSWAP,
+				NULL, 0, GPIO_ACTIVE_LOW)
+	}
+};
+
+const struct portmux_choice portmux_choices[] = {
+	{ .name = "sim-0",	.data = (void*)0, },
+	{ .name = "sim-1",	.data = (void*)1, },
+};
+
+static const struct portmux_gpio_pdata portmux_pdata = {
+	.num_choices = ARRAY_SIZE(portmux_choices),
+	.choices = portmux_choices,
+	.name = "simcard",
+	.type = "sim:modem",
 };
 
 /* Board setup */
@@ -222,6 +245,7 @@ static const struct dmi_system_id apu_gpio_dmi_table[] __initconst = {
 static struct platform_device *apu_gpio_pdev;
 static struct platform_device *apu_leds_pdev;
 static struct platform_device *apu_keys_pdev;
+static struct platform_device *apu_pmux_pdev;
 
 static struct platform_device * __init apu_create_pdev(
 	const char *name,
@@ -256,6 +280,7 @@ static int __init apu_board_init(void)
 
 	gpiod_add_lookup_table(&gpios_led_table);
 	gpiod_add_lookup_table(&gpios_key_table);
+	gpiod_add_lookup_table(&gpios_portmux_table);
 
 	apu_gpio_pdev = apu_create_pdev(
 		AMD_FCH_GPIO_DRIVER_NAME,
@@ -272,6 +297,11 @@ static int __init apu_board_init(void)
 		&apu2_keys_pdata,
 		sizeof(apu2_keys_pdata));
 
+	apu_pmux_pdev = apu_create_pdev(
+		"portmux-gpio",
+		&portmux_pdata,
+		sizeof(portmux_pdata));
+
 	return 0;
 }
 
@@ -279,10 +309,12 @@ static void __exit apu_board_exit(void)
 {
 	gpiod_remove_lookup_table(&gpios_led_table);
 	gpiod_remove_lookup_table(&gpios_key_table);
+	gpiod_remove_lookup_table(&gpios_portmux_table);
 
 	platform_device_unregister(apu_keys_pdev);
 	platform_device_unregister(apu_leds_pdev);
 	platform_device_unregister(apu_gpio_pdev);
+	platform_device_unregister(apu_pmux_pdev);
 }
 
 module_init(apu_board_init);

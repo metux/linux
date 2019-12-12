@@ -360,7 +360,7 @@ static void __vlan_vid_del(struct vlan_info *vlan_info,
 
 	err = vlan_kill_rx_filter_info(dev, proto, vid);
 	if (err)
-		pr_warn("failed to kill vid %04x/%d for device %s\n",
+		netdev_warn(dev, "failed to kill vid %04x/%d for device %s\n",
 			proto, vid, dev->name);
 
 	list_del(&vid_info->list);

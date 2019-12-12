@@ -170,6 +170,8 @@ source "drivers/devfreq/Kconfig"
 
 source "drivers/extcon/Kconfig"
 
+source "drivers/portmux/Kconfig"
+
 source "drivers/memory/Kconfig"
 
 source "drivers/iio/Kconfig"

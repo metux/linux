@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Port multiplexer devices
+#
+
+config PORTMUX
+	tristate "Enable the port multiplexer subsystem"
+	help
+	  Port multiplexers allow runtime configuration of signal routing
+	  between (usually external) ports and functional units.
+
+	  For example, some boards carry multiple SIM slots, where only
+	  one at a time can be routed to the baseband.
+
+	  The port multiplexer subsystem provides an hardware independent
+	  interface for accessing querying and controlling such multiplexers
+	  from userland or in-kernel drivers.
+
+	  Note: this is very different from the 'mux' subsystem, which just
+	  supports controlling mux chips as slaves by a master driver.
+
+menu "Port multiplexer subsystem"
+	depends on PORTMUX
+
+config PORTMUX_DUMMY
+	tristate "Dummy portmux driver for testing"
+	default n
+	help
+	  Dummy portmux driver, intented for testing the portmux subsystem.
+
+	  Unless you're hacking on the portmux subsystem, you'd most likely
+	  say N here.
+endmenu

@@ -123,7 +123,7 @@ int vlan_check_real_dev(struct net_device *real_dev,
 	const char *name = real_dev->name;
 
 	if (real_dev->features & NETIF_F_VLAN_CHALLENGED) {
-		pr_info("VLANs not supported on %s\n", name);
+		netdev_info(real_dev, "VLANs not supported on %s\n", name);
 		NL_SET_ERR_MSG_MOD(extack, "VLANs not supported on device");
 		return -EOPNOTSUPP;
 	}
@@ -376,7 +376,7 @@ static int vlan_device_event(struct notifier_block *unused, unsigned long event,
 
 	if ((event == NETDEV_UP) &&
 	    (dev->features & NETIF_F_HW_VLAN_CTAG_FILTER)) {
-		pr_info("adding VLAN 0 to HW filter on device %s\n",
+		netdev_info(dev, "adding VLAN 0 to HW filter on device %s\n",
 			dev->name);
 		vlan_vid_add(dev, htons(ETH_P_8021Q), 0);
 	}

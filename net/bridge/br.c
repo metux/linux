@@ -394,5 +394,4 @@ static void __exit br_deinit(void)
 module_init(br_init)
 module_exit(br_deinit)
 MODULE_LICENSE("GPL");
-MODULE_VERSION(BR_VERSION);
 MODULE_ALIAS_RTNL_LINK("bridge");

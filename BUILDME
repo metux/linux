@@ -1,0 +1,8 @@
+#!/bin/bash
+
+export CCACHE_DIR=$HOME/.tmp/ccache/
+export PATH="/usr/lib/ccache:$PATH"
+
+mkdir -p $CCACHE_DIR
+
+make

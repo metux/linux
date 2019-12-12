@@ -90,12 +90,14 @@ static const struct gpio_led_platform_data apu2_leds_pdata = {
 static struct gpiod_lookup_table gpios_led_table = {
 	.dev_id = "leds-gpio",
 	.table = {
-		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED1,
-				NULL, 0, GPIO_ACTIVE_LOW),
-		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED2,
-				NULL, 1, GPIO_ACTIVE_LOW),
-		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED3,
-				NULL, 2, GPIO_ACTIVE_LOW),
+//		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED1,
+//				NULL, 0, GPIO_ACTIVE_LOW),
+//		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED2,
+//				NULL, 1, GPIO_ACTIVE_LOW),
+//		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED3,
+//				NULL, 2, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_SIMSWAP,
+				NULL, 3, GPIO_ACTIVE_LOW),
 	}
 };
 
@@ -135,14 +137,26 @@ static struct gpiod_lookup_table gpios_key_table = {
 static struct gpiod_lookup_table gpios_portmux_table = {
 	.dev_id = PORTMUX_DEVICE_NAME,
 	.table = {
-		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_SIMSWAP,
-				NULL, 0, GPIO_ACTIVE_LOW)
+//		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_SIMSWAP,
+//				NULL, 0, GPIO_ACTIVE_LOW)
+		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED1,
+				NULL, 0, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED2,
+				NULL, 1, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX(AMD_FCH_GPIO_DRIVER_NAME, APU2_GPIO_LINE_LED3,
+				NULL, 2, GPIO_ACTIVE_LOW),
 	}
 };
 
 const struct portmux_choice portmux_choices[] = {
-	{ .name = "sim-0",	.data = (void*)0, },
-	{ .name = "sim-1",	.data = (void*)1, },
+	{ .name = "000",	.data = (void*)0, },
+	{ .name = "001",	.data = (void*)1, },
+	{ .name = "010",	.data = (void*)2, },
+	{ .name = "011",	.data = (void*)3, },
+	{ .name = "100",	.data = (void*)4, },
+	{ .name = "101",	.data = (void*)5, },
+	{ .name = "110",	.data = (void*)6, },
+	{ .name = "111",	.data = (void*)7, },
 };
 
 static const struct portmux_gpio_pdata portmux_pdata = {

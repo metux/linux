@@ -22,6 +22,20 @@ config PORTMUX
 menu "Port multiplexer subsystem"
 	depends on PORTMUX
 
+config PORTMUX_GPIO
+	tristate "GPIO-controlled port multiplexer"
+	depends on GPIOLIB || COMPILE_TEST
+	help
+	  GPIO-controlled port multiplexer controller.
+
+	  The driver builds a single multiplexer controller using a number
+	  of gpio pins. For N pins, there will be 2^N possible multiplexer
+	  states. The GPIO pins can be connected (by the hardware) to several
+	  multiplexers, which in that case will be operated in parallel.
+
+	  To compile the driver as a module, choose M here: the module will
+	  be called mux-gpio.
+
 config PORTMUX_DUMMY
 	tristate "Dummy portmux driver for testing"
 	default n

@@ -187,6 +187,7 @@ void devres_for_each_res(struct device *dev, dr_release_t release,
 			 void *data);
 void devres_free(void *res);
 void devres_add(struct device *dev, void *res);
+int devres_add_auto_ptr(struct device *dev, dr_release_t release, void *ptr);
 void *devres_find(struct device *dev, dr_release_t release,
 		  dr_match_t match, void *match_data);
 void *devres_get(struct device *dev, void *new_res,

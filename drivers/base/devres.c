@@ -237,6 +237,35 @@ void devres_add(struct device *dev, void *res)
 }
 EXPORT_SYMBOL_GPL(devres_add);
 
+/**
+ * devres_add_auto_ptr - Reigster pointer device resource
+ * @dev: Device to add resource to
+ * @release: release callback function
+ * @ptr: pointer to register
+ *
+ * Allocate a devres entry and register pointer @ptr to @dev. On driver
+ * detach, the associated release function will be invokied and devres
+ * will be freed automatically.
+ *
+ * The devres will be allocated w/ GFP_KERNEL
+ *
+ * In case of failure, the resource will be released automatically !
+ */
+int devres_add_auto_ptr(struct device *dev, dr_release_t release, void *ptr)
+{
+	void **dr;
+	dr = devres_alloc(release, sizeof(ptr), GFP_KERNEL);
+	if (!dr) {
+		pr_err("devm: out of memory!\n");
+		release(dev, ptr);
+		return -ENOMEM;
+	}
+
+	devres_add(dev, dr);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devres_add_auto_ptr);
+
 static struct devres *find_dr(struct device *dev, dr_release_t release,
 			      dr_match_t match, void *match_data)
 {

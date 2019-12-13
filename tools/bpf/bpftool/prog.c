@@ -17,9 +17,9 @@
 #include <linux/err.h>
 #include <linux/sizes.h>
 
-#include <bpf/bpf.h>
-#include <bpf/btf.h>
-#include <bpf/libbpf.h>
+#include <bpf.h>
+#include <btf.h>
+#include <libbpf.h>
 
 #include "cfg.h"
 #include "main.h"
@@ -82,7 +82,7 @@ static void print_boot_time(__u64 nsecs, char *buf, unsigned int size)
 		strftime(buf, size, "%FT%T%z", &load_tm);
 }
 
-static int prog_fd_by_nametag(void *nametag, int **fds, bool tag)
+static int prog_fd_by_tag(unsigned char *tag, int **fds)
 {
 	unsigned int id = 0;
 	int fd, nb_fds = 0;
@@ -116,8 +116,7 @@ static int prog_fd_by_nametag(void *nametag, int **fds, bool tag)
 			goto err_close_fd;
 		}
 
-		if ((tag && memcmp(nametag, info.tag, BPF_TAG_SIZE)) ||
-		    (!tag && strncmp(nametag, info.name, BPF_OBJ_NAME_LEN))) {
+		if (memcmp(tag, info.tag, BPF_TAG_SIZE)) {
 			close(fd);
 			continue;
 		}
@@ -175,20 +174,7 @@ static int prog_parse_fds(int *argc, char ***argv, int **fds)
 		}
 		NEXT_ARGP();
 
-		return prog_fd_by_nametag(tag, fds, true);
-	} else if (is_prefix(**argv, "name")) {
-		char *name;
-
-		NEXT_ARGP();
-
-		name = **argv;
-		if (strlen(name) > BPF_OBJ_NAME_LEN - 1) {
-			p_err("can't parse name");
-			return -1;
-		}
-		NEXT_ARGP();
-
-		return prog_fd_by_nametag(name, fds, false);
+		return prog_fd_by_tag(tag, fds);
 	} else if (is_prefix(**argv, "pinned")) {
 		char *path;
 
@@ -203,7 +189,7 @@ static int prog_parse_fds(int *argc, char ***argv, int **fds)
 		return 1;
 	}
 
-	p_err("expected 'id', 'tag', 'name' or 'pinned', got: '%s'?", **argv);
+	p_err("expected 'id', 'tag' or 'pinned', got: '%s'?", **argv);
 	return -1;
 }
 
@@ -536,7 +522,7 @@ prog_dump(struct bpf_prog_info *info, enum dump_mode mode,
 		buf = (unsigned char *)(info->jited_prog_insns);
 		member_len = info->jited_prog_len;
 	} else {	/* DUMP_XLATED */
-		if (info->xlated_prog_len == 0 || !info->xlated_prog_insns) {
+		if (info->xlated_prog_len == 0) {
 			p_err("error retrieving insn dump: kernel.kptr_restrict set?");
 			return -1;
 		}

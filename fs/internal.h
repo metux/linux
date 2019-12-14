@@ -390,4 +390,10 @@ extern int vfs_fcntl(int fd, unsigned int cmd, unsigned long arg);
 /* fs/dco.c */
 extern void fs_dco_free(struct fs_dco *dco);
 
+/*
+ * fs/stat.c:
+ */
+unsigned vfs_stat_set_lookup_flags(unsigned *lookup_flags, int flags);
+int cp_statx(const struct kstat *stat, struct statx __user *buffer);
+
 #endif /* _FS_INTERNAL_H */

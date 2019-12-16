@@ -180,7 +180,7 @@ KBUILD_HOSTCFLAGS += -DHAVE_ATTR_TEST=0
 
 HOSTCFLAGS_bpf_load.o += -I$(objtree)/usr/include -Wno-unused-variable
 
-KBUILD_HOSTLDLIBS		+= $(LIBBPF) -lelf
+KBUILD_HOSTLDLIBS		+= $(LIBBPF) -lelf -lz
 HOSTLDLIBS_tracex4		+= -lrt
 HOSTLDLIBS_trace_output	+= -lrt
 HOSTLDLIBS_map_perf_test	+= -lrt

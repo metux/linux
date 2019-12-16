@@ -496,6 +496,16 @@ static int is_12b_check(int off, int insn)
 	return 0;
 }
 
+static int is_21b_check(int off, int insn)
+{
+	if (!is_21b_int(off)) {
+		pr_err("bpf-jit: insn=%d 21b < offset=%d not supported yet!\n",
+		       insn, (int)off);
+		return -1;
+	}
+	return 0;
+}
+
 static void emit_imm(u8 rd, s64 val, struct rv_jit_context *ctx)
 {
 	/* Note that the immediate from the add is sign-extended,
@@ -552,7 +562,7 @@ static int epilogue_offset(struct rv_jit_context *ctx)
 	return (to - from) << 2;
 }
 
-static void __build_epilogue(bool is_tail_call, struct rv_jit_context *ctx)
+static void __build_epilogue(u8 reg, struct rv_jit_context *ctx)
 {
 	int stack_adjust = ctx->stack_size, store_offset = stack_adjust - 8;
 
@@ -589,11 +599,9 @@ static void __build_epilogue(bool is_tail_call, struct rv_jit_context *ctx)
 
 	emit(rv_addi(RV_REG_SP, RV_REG_SP, stack_adjust), ctx);
 	/* Set return value. */
-	if (!is_tail_call)
+	if (reg == RV_REG_RA)
 		emit(rv_addi(RV_REG_A0, RV_REG_A5, 0), ctx);
-	emit(rv_jalr(RV_REG_ZERO, is_tail_call ? RV_REG_T3 : RV_REG_RA,
-		     is_tail_call ? 4 : 0), /* skip TCC init */
-	     ctx);
+	emit(rv_jalr(RV_REG_ZERO, reg, 0), ctx);
 }
 
 /* return -1 or inverted cond */
@@ -733,7 +741,7 @@ static int emit_bpf_tail_call(int insn, struct rv_jit_context *ctx)
 	 */
 	emit(rv_addi(RV_REG_T1, tcc, -1), ctx);
 	off = (tc_ninsn - (ctx->ninsns - start_insn)) << 2;
-	emit_branch(BPF_JSLT, tcc, RV_REG_ZERO, off, ctx);
+	emit_branch(BPF_JSLT, RV_REG_T1, RV_REG_ZERO, off, ctx);
 
 	/* prog = array->ptrs[index];
 	 * if (!prog)
@@ -753,8 +761,9 @@ static int emit_bpf_tail_call(int insn, struct rv_jit_context *ctx)
 	if (is_12b_check(off, insn))
 		return -1;
 	emit(rv_ld(RV_REG_T3, off, RV_REG_T2), ctx);
+	emit(rv_addi(RV_REG_T3, RV_REG_T3, 4), ctx);
 	emit(rv_addi(RV_REG_TCC, RV_REG_T1, 0), ctx);
-	__build_epilogue(true, ctx);
+	__build_epilogue(RV_REG_T3, ctx);
 	return 0;
 }
 
@@ -811,48 +820,10 @@ static void emit_sext_32_rd(u8 *rd, struct rv_jit_context *ctx)
 	*rd = RV_REG_T2;
 }
 
-static void emit_jump_and_link(u8 rd, s64 rvoff, bool force_jalr,
-			       struct rv_jit_context *ctx)
-{
-	s64 upper, lower;
-
-	if (rvoff && is_21b_int(rvoff) && !force_jalr) {
-		emit(rv_jal(rd, rvoff >> 1), ctx);
-		return;
-	}
-
-	upper = (rvoff + (1 << 11)) >> 12;
-	lower = rvoff & 0xfff;
-	emit(rv_auipc(RV_REG_T1, upper), ctx);
-	emit(rv_jalr(rd, RV_REG_T1, lower), ctx);
-}
-
 static bool is_signed_bpf_cond(u8 cond)
 {
 	return cond == BPF_JSGT || cond == BPF_JSLT ||
 		cond == BPF_JSGE || cond == BPF_JSLE;
-}
-
-static int emit_call(bool fixed, u64 addr, struct rv_jit_context *ctx)
-{
-	s64 off = 0;
-	u64 ip;
-	u8 rd;
-
-	if (addr && ctx->insns) {
-		ip = (u64)(long)(ctx->insns + ctx->ninsns);
-		off = addr - ip;
-		if (!is_32b_int(off)) {
-			pr_err("bpf-jit: target call addr %pK is out of range\n",
-			       (void *)addr);
-			return -ERANGE;
-		}
-	}
-
-	emit_jump_and_link(RV_REG_RA, off, !fixed, ctx);
-	rd = bpf_to_rv_reg(BPF_REG_0, ctx);
-	emit(rv_addi(rd, RV_REG_A0, 0), ctx);
-	return 0;
 }
 
 static int emit_insn(const struct bpf_insn *insn, struct rv_jit_context *ctx,
@@ -1130,7 +1101,13 @@ out_be:
 	/* JUMP off */
 	case BPF_JMP | BPF_JA:
 		rvoff = rv_offset(i, off, ctx);
-		emit_jump_and_link(RV_REG_ZERO, rvoff, false, ctx);
+		if (!is_21b_int(rvoff)) {
+			pr_err("bpf-jit: insn=%d offset=%d not supported yet!\n",
+			       i, rvoff);
+			return -1;
+		}
+
+		emit(rv_jal(RV_REG_ZERO, rvoff >> 1), ctx);
 		break;
 
 	/* IF (dst COND src) JUMP off */
@@ -1232,7 +1209,7 @@ out_be:
 	case BPF_JMP | BPF_CALL:
 	{
 		bool fixed;
-		int ret;
+		int i, ret;
 		u64 addr;
 
 		mark_call(ctx);
@@ -1240,9 +1217,20 @@ out_be:
 					    &fixed);
 		if (ret < 0)
 			return ret;
-		ret = emit_call(fixed, addr, ctx);
-		if (ret)
-			return ret;
+		if (fixed) {
+			emit_imm(RV_REG_T1, addr, ctx);
+		} else {
+			i = ctx->ninsns;
+			emit_imm(RV_REG_T1, addr, ctx);
+			for (i = ctx->ninsns - i; i < 8; i++) {
+				/* nop */
+				emit(rv_addi(RV_REG_ZERO, RV_REG_ZERO, 0),
+				     ctx);
+			}
+		}
+		emit(rv_jalr(RV_REG_RA, RV_REG_T1, 0), ctx);
+		rd = bpf_to_rv_reg(BPF_REG_0, ctx);
+		emit(rv_addi(rd, RV_REG_A0, 0), ctx);
 		break;
 	}
 	/* tail call */
@@ -1257,7 +1245,9 @@ out_be:
 			break;
 
 		rvoff = epilogue_offset(ctx);
-		emit_jump_and_link(RV_REG_ZERO, rvoff, false, ctx);
+		if (is_21b_check(rvoff, i))
+			return -1;
+		emit(rv_jal(RV_REG_ZERO, rvoff >> 1), ctx);
 		break;
 
 	/* dst = imm64 */
@@ -1517,10 +1507,10 @@ static void build_prologue(struct rv_jit_context *ctx)
 
 static void build_epilogue(struct rv_jit_context *ctx)
 {
-	__build_epilogue(false, ctx);
+	__build_epilogue(RV_REG_RA, ctx);
 }
 
-static int build_body(struct rv_jit_context *ctx, bool extra_pass, int *offset)
+static int build_body(struct rv_jit_context *ctx, bool extra_pass)
 {
 	const struct bpf_prog *prog = ctx->prog;
 	int i;
@@ -1532,12 +1522,12 @@ static int build_body(struct rv_jit_context *ctx, bool extra_pass, int *offset)
 		ret = emit_insn(insn, ctx, extra_pass);
 		if (ret > 0) {
 			i++;
-			if (offset)
-				offset[i] = ctx->ninsns;
+			if (ctx->insns == NULL)
+				ctx->offset[i] = ctx->ninsns;
 			continue;
 		}
-		if (offset)
-			offset[i] = ctx->ninsns;
+		if (ctx->insns == NULL)
+			ctx->offset[i] = ctx->ninsns;
 		if (ret)
 			return ret;
 	}
@@ -1565,8 +1555,8 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	struct bpf_prog *tmp, *orig_prog = prog;
 	int pass = 0, prev_ninsns = 0, i;
 	struct rv_jit_data *jit_data;
-	unsigned int image_size = 0;
 	struct rv_jit_context *ctx;
+	unsigned int image_size;
 
 	if (!prog->jit_requested)
 		return orig_prog;
@@ -1611,51 +1601,36 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 	for (i = 0; i < 16; i++) {
 		pass++;
 		ctx->ninsns = 0;
-		if (build_body(ctx, extra_pass, ctx->offset)) {
+		if (build_body(ctx, extra_pass)) {
 			prog = orig_prog;
 			goto out_offset;
 		}
 		build_prologue(ctx);
 		ctx->epilogue_offset = ctx->ninsns;
 		build_epilogue(ctx);
-
-		if (ctx->ninsns == prev_ninsns) {
-			if (jit_data->header)
-				break;
-
-			image_size = sizeof(u32) * ctx->ninsns;
-			jit_data->header =
-				bpf_jit_binary_alloc(image_size,
-						     &jit_data->image,
-						     sizeof(u32),
-						     bpf_fill_ill_insns);
-			if (!jit_data->header) {
-				prog = orig_prog;
-				goto out_offset;
-			}
-
-			ctx->insns = (u32 *)jit_data->image;
-			/* Now, when the image is allocated, the image
-			 * can potentially shrink more (auipc/jalr ->
-			 * jal).
-			 */
-		}
+		if (ctx->ninsns == prev_ninsns)
+			break;
 		prev_ninsns = ctx->ninsns;
 	}
 
-	if (i == 16) {
-		pr_err("bpf-jit: image did not converge in <%d passes!\n", i);
-		bpf_jit_binary_free(jit_data->header);
+	/* Allocate image, now that we know the size. */
+	image_size = sizeof(u32) * ctx->ninsns;
+	jit_data->header = bpf_jit_binary_alloc(image_size, &jit_data->image,
+						sizeof(u32),
+						bpf_fill_ill_insns);
+	if (!jit_data->header) {
 		prog = orig_prog;
 		goto out_offset;
 	}
 
+	/* Second, real pass, that acutally emits the image. */
+	ctx->insns = (u32 *)jit_data->image;
 skip_init_ctx:
 	pass++;
 	ctx->ninsns = 0;
 
 	build_prologue(ctx);
-	if (build_body(ctx, extra_pass, NULL)) {
+	if (build_body(ctx, extra_pass)) {
 		bpf_jit_binary_free(jit_data->header);
 		prog = orig_prog;
 		goto out_offset;
@@ -1682,17 +1657,4 @@ out:
 		bpf_jit_prog_release_other(prog, prog == orig_prog ?
 					   tmp : orig_prog);
 	return prog;
-}
-
-void *bpf_jit_alloc_exec(unsigned long size)
-{
-	return __vmalloc_node_range(size, PAGE_SIZE, BPF_JIT_REGION_START,
-				    BPF_JIT_REGION_END, GFP_KERNEL,
-				    PAGE_KERNEL_EXEC, 0, NUMA_NO_NODE,
-				    __builtin_return_address(0));
-}
-
-void bpf_jit_free_exec(void *addr)
-{
-	return vfree(addr);
 }

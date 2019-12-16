@@ -31,6 +31,7 @@
 #define AMDGPU_VCN_MAX_ENC_RINGS	3
 
 #define AMDGPU_MAX_VCN_INSTANCES	2
+#define AMDGPU_MAX_VCN_ENC_RINGS  AMDGPU_VCN_MAX_ENC_RINGS * AMDGPU_MAX_VCN_INSTANCES
 
 #define VCN_DEC_CMD_FENCE		0x00000000
 #define VCN_DEC_CMD_TRAP		0x00000001
@@ -182,8 +183,12 @@ struct amdgpu_vcn {
 	uint32_t		*dpg_sram_curr_addr;
 
 	uint8_t	num_vcn_inst;
-	struct amdgpu_vcn_inst	inst[AMDGPU_MAX_VCN_INSTANCES];
-	struct amdgpu_vcn_reg	internal;
+	struct amdgpu_vcn_inst	 inst[AMDGPU_MAX_VCN_INSTANCES];
+	struct amdgpu_vcn_reg	 internal;
+	struct drm_gpu_scheduler *vcn_enc_sched[AMDGPU_MAX_VCN_ENC_RINGS];
+	struct drm_gpu_scheduler *vcn_dec_sched[AMDGPU_MAX_VCN_INSTANCES];
+	uint32_t		 num_vcn_enc_sched;
+	uint32_t		 num_vcn_dec_sched;
 
 	int (*pause_dpg_mode)(struct amdgpu_device *adev,
 		struct dpg_pause_state *new_state);

@@ -29,6 +29,7 @@
 #include "i915_gem_context.h"
 #include "i915_gem_object.h"
 #include "i915_globals.h"
+#include "i915_trace.h"
 
 static struct i915_global_object {
 	struct i915_global base;
@@ -43,16 +44,6 @@ struct drm_i915_gem_object *i915_gem_object_alloc(void)
 void i915_gem_object_free(struct drm_i915_gem_object *obj)
 {
 	return kmem_cache_free(global.slab_objects, obj);
-}
-
-static void
-frontbuffer_retire(struct i915_active_request *active,
-		   struct i915_request *request)
-{
-	struct drm_i915_gem_object *obj =
-		container_of(active, typeof(*obj), frontbuffer_write);
-
-	intel_fb_obj_flush(obj, ORIGIN_CS);
 }
 
 void i915_gem_object_init(struct drm_i915_gem_object *obj,
@@ -71,10 +62,6 @@ void i915_gem_object_init(struct drm_i915_gem_object *obj,
 	init_rcu_head(&obj->rcu);
 
 	obj->ops = ops;
-
-	obj->frontbuffer_ggtt_origin = ORIGIN_GTT;
-	i915_active_request_init(&obj->frontbuffer_write,
-				 NULL, frontbuffer_retire);
 
 	obj->mm.madv = I915_MADV_WILLNEED;
 	INIT_RADIX_TREE(&obj->mm.get_page.radix, GFP_KERNEL | __GFP_NOWARN);
@@ -154,6 +141,7 @@ static void __i915_gem_free_object_rcu(struct rcu_head *head)
 		container_of(head, typeof(*obj), rcu);
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 
+	reservation_object_fini(&obj->base._resv);
 	i915_gem_object_free(obj);
 
 	GEM_BUG_ON(!atomic_read(&i915->mm.free_count));
@@ -195,11 +183,7 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 
 		GEM_BUG_ON(atomic_read(&obj->bind_count));
 		GEM_BUG_ON(obj->userfault_count);
-		GEM_BUG_ON(atomic_read(&obj->frontbuffer_bits));
 		GEM_BUG_ON(!list_empty(&obj->lut_list));
-
-		if (obj->ops->release)
-			obj->ops->release(obj);
 
 		atomic_set(&obj->mm.pages_pin_count, 0);
 		__i915_gem_object_put_pages(obj, I915_MM_NORMAL);
@@ -209,7 +193,10 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 		if (obj->base.import_attach)
 			drm_prime_gem_destroy(&obj->base, NULL);
 
-		drm_gem_object_release(&obj->base);
+		drm_gem_free_mmap_offset(&obj->base);
+
+		if (obj->ops->release)
+			obj->ops->release(obj);
 
 		/* But keep the pointer alive for RCU-protected lookups */
 		call_rcu(&obj->rcu, __i915_gem_free_object_rcu);
@@ -219,54 +206,26 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 
 void i915_gem_flush_free_objects(struct drm_i915_private *i915)
 {
-	struct llist_node *freed;
+	struct llist_node *freed = llist_del_all(&i915->mm.free_list);
 
-	/* Free the oldest, most stale object to keep the free_list short */
-	freed = NULL;
-	if (!llist_empty(&i915->mm.free_list)) { /* quick test for hotpath */
-		/* Only one consumer of llist_del_first() allowed */
-		spin_lock(&i915->mm.free_lock);
-		freed = llist_del_first(&i915->mm.free_list);
-		spin_unlock(&i915->mm.free_lock);
-	}
-	if (unlikely(freed)) {
-		freed->next = NULL;
+	if (unlikely(freed))
 		__i915_gem_free_objects(i915, freed);
-	}
 }
 
 static void __i915_gem_free_work(struct work_struct *work)
 {
 	struct drm_i915_private *i915 =
 		container_of(work, struct drm_i915_private, mm.free_work);
-	struct llist_node *freed;
 
-	/*
-	 * All file-owned VMA should have been released by this point through
-	 * i915_gem_close_object(), or earlier by i915_gem_context_close().
-	 * However, the object may also be bound into the global GTT (e.g.
-	 * older GPUs without per-process support, or for direct access through
-	 * the GTT either for the user or for scanout). Those VMA still need to
-	 * unbound now.
-	 */
-
-	spin_lock(&i915->mm.free_lock);
-	while ((freed = llist_del_all(&i915->mm.free_list))) {
-		spin_unlock(&i915->mm.free_lock);
-
-		__i915_gem_free_objects(i915, freed);
-		if (need_resched())
-			return;
-
-		spin_lock(&i915->mm.free_lock);
-	}
-	spin_unlock(&i915->mm.free_lock);
+	i915_gem_flush_free_objects(i915);
 }
 
 void i915_gem_free_object(struct drm_gem_object *gem_obj)
 {
 	struct drm_i915_gem_object *obj = to_intel_bo(gem_obj);
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
+
+	GEM_BUG_ON(i915_gem_object_is_framebuffer(obj));
 
 	/*
 	 * Before we free the object, make sure any pure RCU-only
@@ -299,13 +258,6 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 		queue_work(i915->wq, &i915->mm.free_work);
 }
 
-static inline enum fb_op_origin
-fb_write_origin(struct drm_i915_gem_object *obj, unsigned int domain)
-{
-	return (domain == I915_GEM_DOMAIN_GTT ?
-		obj->frontbuffer_ggtt_origin : ORIGIN_CPU);
-}
-
 static bool gpu_write_needs_clflush(struct drm_i915_gem_object *obj)
 {
 	return !(obj->cache_level == I915_CACHE_NONE ||
@@ -328,8 +280,7 @@ i915_gem_object_flush_write_domain(struct drm_i915_gem_object *obj,
 		for_each_ggtt_vma(vma, obj)
 			intel_gt_flush_ggtt_writes(vma->vm->gt);
 
-		intel_fb_obj_flush(obj,
-				   fb_write_origin(obj, I915_GEM_DOMAIN_GTT));
+		i915_gem_object_flush_frontbuffer(obj, ORIGIN_CPU);
 
 		for_each_ggtt_vma(vma, obj) {
 			if (vma->iomap)
@@ -355,6 +306,30 @@ i915_gem_object_flush_write_domain(struct drm_i915_gem_object *obj,
 	}
 
 	obj->write_domain = 0;
+}
+
+void __i915_gem_object_flush_frontbuffer(struct drm_i915_gem_object *obj,
+					 enum fb_op_origin origin)
+{
+	struct intel_frontbuffer *front;
+
+	front = __intel_frontbuffer_get(obj);
+	if (front) {
+		intel_frontbuffer_flush(front, origin);
+		intel_frontbuffer_put(front);
+	}
+}
+
+void __i915_gem_object_invalidate_frontbuffer(struct drm_i915_gem_object *obj,
+					      enum fb_op_origin origin)
+{
+	struct intel_frontbuffer *front;
+
+	front = __intel_frontbuffer_get(obj);
+	if (front) {
+		intel_frontbuffer_invalidate(front, origin);
+		intel_frontbuffer_put(front);
+	}
 }
 
 void i915_gem_init__objects(struct drm_i915_private *i915)

@@ -714,6 +714,17 @@ static int tc_setup_taprio(struct stmmac_priv *priv,
 		return ret;
 	}
 
+	if (fpe && !priv->dma_cap.fpesel)
+		return -EOPNOTSUPP;
+
+	ret = stmmac_fpe_configure(priv, priv->ioaddr,
+				   priv->plat->tx_queues_to_use,
+				   priv->plat->rx_queues_to_use, fpe);
+	if (ret && fpe) {
+		netdev_err(priv->dev, "failed to enable Frame Preemption\n");
+		return ret;
+	}
+
 	ret = stmmac_est_configure(priv, priv->ioaddr, priv->plat->est,
 				   priv->plat->clk_ptp_rate);
 	if (ret) {

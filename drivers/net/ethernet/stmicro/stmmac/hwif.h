@@ -29,7 +29,6 @@ struct stmmac_extra_stats;
 struct stmmac_safety_stats;
 struct dma_desc;
 struct dma_extended_desc;
-struct dma_edesc;
 
 /* Descriptors helpers */
 struct stmmac_desc_ops {
@@ -96,7 +95,6 @@ struct stmmac_desc_ops {
 	void (*set_vlan_tag)(struct dma_desc *p, u16 tag, u16 inner_tag,
 			     u32 inner_type);
 	void (*set_vlan)(struct dma_desc *p, u32 type);
-	void (*set_tbs)(struct dma_edesc *p, u32 sec, u32 nsec);
 };
 
 #define stmmac_init_rx_desc(__priv, __args...) \
@@ -159,8 +157,6 @@ struct stmmac_desc_ops {
 	stmmac_do_void_callback(__priv, desc, set_vlan_tag, __args)
 #define stmmac_set_desc_vlan(__priv, __args...) \
 	stmmac_do_void_callback(__priv, desc, set_vlan, __args)
-#define stmmac_set_desc_tbs(__priv, __args...) \
-	stmmac_do_void_callback(__priv, desc, set_tbs, __args)
 
 struct stmmac_dma_cfg;
 struct dma_features;
@@ -214,7 +210,6 @@ struct stmmac_dma_ops {
 	void (*qmode)(void __iomem *ioaddr, u32 channel, u8 qmode);
 	void (*set_bfsize)(void __iomem *ioaddr, int bfsize, u32 chan);
 	void (*enable_sph)(void __iomem *ioaddr, bool en, u32 chan);
-	int (*enable_tbs)(void __iomem *ioaddr, bool en, u32 chan);
 };
 
 #define stmmac_reset(__priv, __args...) \
@@ -273,8 +268,6 @@ struct stmmac_dma_ops {
 	stmmac_do_void_callback(__priv, dma, set_bfsize, __args)
 #define stmmac_enable_sph(__priv, __args...) \
 	stmmac_do_void_callback(__priv, dma, enable_sph, __args)
-#define stmmac_enable_tbs(__priv, __args...) \
-	stmmac_do_callback(__priv, dma, enable_tbs, __args)
 
 struct mac_device_info;
 struct net_device;
@@ -383,8 +376,6 @@ struct stmmac_ops {
 	void (*set_arp_offload)(struct mac_device_info *hw, bool en, u32 addr);
 	int (*est_configure)(void __iomem *ioaddr, struct stmmac_est *cfg,
 			     unsigned int ptp_rate);
-	void (*fpe_configure)(void __iomem *ioaddr, u32 num_txq, u32 num_rxq,
-			      bool enable);
 };
 
 #define stmmac_core_init(__priv, __args...) \
@@ -473,8 +464,6 @@ struct stmmac_ops {
 	stmmac_do_void_callback(__priv, mac, set_arp_offload, __args)
 #define stmmac_est_configure(__priv, __args...) \
 	stmmac_do_callback(__priv, mac, est_configure, __args)
-#define stmmac_fpe_configure(__priv, __args...) \
-	stmmac_do_void_callback(__priv, mac, fpe_configure, __args)
 
 /* PTP and HW Timer helpers */
 struct stmmac_hwtimestamp {
@@ -532,8 +521,6 @@ struct stmmac_priv;
 struct tc_cls_u32_offload;
 struct tc_cbs_qopt_offload;
 struct flow_cls_offload;
-struct tc_taprio_qopt_offload;
-struct tc_etf_qopt_offload;
 
 struct stmmac_tc_ops {
 	int (*init)(struct stmmac_priv *priv);
@@ -543,10 +530,6 @@ struct stmmac_tc_ops {
 			 struct tc_cbs_qopt_offload *qopt);
 	int (*setup_cls)(struct stmmac_priv *priv,
 			 struct flow_cls_offload *cls);
-	int (*setup_taprio)(struct stmmac_priv *priv,
-			    struct tc_taprio_qopt_offload *qopt);
-	int (*setup_etf)(struct stmmac_priv *priv,
-			 struct tc_etf_qopt_offload *qopt);
 };
 
 #define stmmac_tc_init(__priv, __args...) \
@@ -557,10 +540,6 @@ struct stmmac_tc_ops {
 	stmmac_do_callback(__priv, tc, setup_cbs, __args)
 #define stmmac_tc_setup_cls(__priv, __args...) \
 	stmmac_do_callback(__priv, tc, setup_cls, __args)
-#define stmmac_tc_setup_taprio(__priv, __args...) \
-	stmmac_do_callback(__priv, tc, setup_taprio, __args)
-#define stmmac_tc_setup_etf(__priv, __args...) \
-	stmmac_do_callback(__priv, tc, setup_etf, __args)
 
 struct stmmac_counters;
 

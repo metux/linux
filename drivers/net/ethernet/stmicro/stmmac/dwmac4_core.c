@@ -420,7 +420,7 @@ static void dwmac4_set_filter(struct mac_device_info *hw,
 		value |= GMAC_PACKET_FILTER_PM;
 		/* Set all the bits of the HASH tab */
 		memset(mc_filter, 0xff, sizeof(mc_filter));
-	} else if (!netdev_mc_empty(dev) && (dev->flags & IFF_MULTICAST)) {
+	} else if (!netdev_mc_empty(dev)) {
 		struct netdev_hw_addr *ha;
 
 		/* Hash filter for multicast */
@@ -736,14 +736,11 @@ static void dwmac4_update_vlan_hash(struct mac_device_info *hw, u32 hash,
 				    __le16 perfect_match, bool is_double)
 {
 	void __iomem *ioaddr = hw->pcsr;
-	u32 value;
 
 	writel(hash, ioaddr + GMAC_VLAN_HASH_TABLE);
 
-	value = readl(ioaddr + GMAC_VLAN_TAG);
-
 	if (hash) {
-		value |= GMAC_VLAN_VTHM | GMAC_VLAN_ETV;
+		u32 value = GMAC_VLAN_VTHM | GMAC_VLAN_ETV;
 		if (is_double) {
 			value |= GMAC_VLAN_EDVLP;
 			value |= GMAC_VLAN_ESVL;
@@ -762,6 +759,8 @@ static void dwmac4_update_vlan_hash(struct mac_device_info *hw, u32 hash,
 
 		writel(value | perfect_match, ioaddr + GMAC_VLAN_TAG);
 	} else {
+		u32 value = readl(ioaddr + GMAC_VLAN_TAG);
+
 		value &= ~(GMAC_VLAN_VTHM | GMAC_VLAN_ETV);
 		value &= ~(GMAC_VLAN_EDVLP | GMAC_VLAN_ESVL);
 		value &= ~GMAC_VLAN_DOVLTC;
@@ -986,7 +985,6 @@ const struct stmmac_ops dwmac410_ops = {
 	.config_l3_filter = dwmac4_config_l3_filter,
 	.config_l4_filter = dwmac4_config_l4_filter,
 	.est_configure = dwmac5_est_configure,
-	.fpe_configure = dwmac5_fpe_configure,
 };
 
 const struct stmmac_ops dwmac510_ops = {
@@ -1031,7 +1029,6 @@ const struct stmmac_ops dwmac510_ops = {
 	.config_l3_filter = dwmac4_config_l3_filter,
 	.config_l4_filter = dwmac4_config_l4_filter,
 	.est_configure = dwmac5_est_configure,
-	.fpe_configure = dwmac5_fpe_configure,
 };
 
 int dwmac4_setup(struct stmmac_priv *priv)

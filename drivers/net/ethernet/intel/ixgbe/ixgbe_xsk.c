@@ -278,7 +278,7 @@ static bool ixgbe_alloc_buffer_zc(struct ixgbe_ring *rx_ring,
 
 	bi->handle = handle + umem->headroom;
 
-	xsk_umem_discard_addr(umem);
+	xsk_umem_release_addr(umem);
 	return true;
 }
 
@@ -305,7 +305,7 @@ static bool ixgbe_alloc_buffer_slow_zc(struct ixgbe_ring *rx_ring,
 
 	bi->handle = handle + umem->headroom;
 
-	xsk_umem_discard_addr_rq(umem);
+	xsk_umem_release_addr_rq(umem);
 	return true;
 }
 

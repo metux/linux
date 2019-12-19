@@ -67,9 +67,23 @@ module_param(disable_bypass, bool, S_IRUGO);
 MODULE_PARM_DESC(disable_bypass,
 	"Disable bypass streams such that incoming transactions from devices that are not attached to an iommu domain will report an abort back to the device and will not be allowed to pass through the SMMU.");
 
+struct arm_smmu_s2cr {
+	struct iommu_group		*group;
+	int				count;
+	enum arm_smmu_s2cr_type		type;
+	enum arm_smmu_s2cr_privcfg	privcfg;
+	u8				cbndx;
+};
+
 #define s2cr_init_val (struct arm_smmu_s2cr){				\
 	.type = disable_bypass ? S2CR_TYPE_FAULT : S2CR_TYPE_BYPASS,	\
 }
+
+struct arm_smmu_smr {
+	u16				mask;
+	u16				id;
+	bool				valid;
+};
 
 struct arm_smmu_cb {
 	u64				ttbr[2];
@@ -111,12 +125,6 @@ static struct arm_smmu_domain *to_smmu_domain(struct iommu_domain *dom)
 	return container_of(dom, struct arm_smmu_domain, domain);
 }
 
-static struct platform_driver arm_smmu_driver;
-static struct iommu_ops arm_smmu_ops;
-
-#ifdef CONFIG_ARM_SMMU_LEGACY_DT_BINDINGS
-static int arm_smmu_bus_init(struct iommu_ops *ops);
-
 static struct device_node *dev_get_dev_node(struct device *dev)
 {
 	if (dev_is_pci(dev)) {
@@ -151,6 +159,9 @@ static int __find_legacy_master_phandle(struct device *dev, void *data)
 	it->node = np;
 	return err == -ENOENT ? 0 : err;
 }
+
+static struct platform_driver arm_smmu_driver;
+static struct iommu_ops arm_smmu_ops;
 
 static int arm_smmu_register_legacy_master(struct device *dev,
 					   struct arm_smmu_device **smmu)
@@ -203,40 +214,9 @@ static int arm_smmu_register_legacy_master(struct device *dev,
 	return err;
 }
 
-/*
- * With the legacy DT binding in play, we have no guarantees about
- * probe order, but then we're also not doing default domains, so we can
- * delay setting bus ops until we're sure every possible SMMU is ready,
- * and that way ensure that no add_device() calls get missed.
- */
-static int arm_smmu_legacy_bus_init(void)
+static int __arm_smmu_alloc_bitmap(unsigned long *map, int start, int end)
 {
-	if (using_legacy_binding)
-		return arm_smmu_bus_init(&arm_smmu_ops);
-	return 0;
-}
-device_initcall_sync(arm_smmu_legacy_bus_init);
-#else
-static int arm_smmu_register_legacy_master(struct device *dev,
-					   struct arm_smmu_device **smmu)
-{
-	return -ENODEV;
-}
-#endif /* CONFIG_ARM_SMMU_LEGACY_DT_BINDINGS */
-
-static int __arm_smmu_alloc_cb(struct arm_smmu_device *smmu, int start,
-			       struct device *dev)
-{
-	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
-	unsigned long *map = smmu->context_map;
-	int end = smmu->num_context_banks;
 	int idx;
-	int i;
-
-	for_each_cfg_sme(fwspec, i, idx) {
-		if (smmu->s2crs[idx].pinned)
-			return smmu->s2crs[idx].cbndx;
-	}
 
 	do {
 		idx = find_next_zero_bit(map, end, start);
@@ -643,8 +623,7 @@ static void arm_smmu_write_context_bank(struct arm_smmu_device *smmu, int idx)
 }
 
 static int arm_smmu_init_domain_context(struct iommu_domain *domain,
-					struct arm_smmu_device *smmu,
-					struct device *dev)
+					struct arm_smmu_device *smmu)
 {
 	int irq, start, ret = 0;
 	unsigned long ias, oas;
@@ -758,7 +737,8 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		ret = -EINVAL;
 		goto out_unlock;
 	}
-	ret = __arm_smmu_alloc_cb(smmu, start, dev);
+	ret = __arm_smmu_alloc_bitmap(smmu->context_map, start,
+				      smmu->num_context_banks);
 	if (ret < 0)
 		goto out_unlock;
 
@@ -946,29 +926,10 @@ static void arm_smmu_write_sme(struct arm_smmu_device *smmu, int idx)
  */
 static void arm_smmu_test_smr_masks(struct arm_smmu_device *smmu)
 {
-	u32 s2cr;
 	u32 smr;
-	int idx;
 
 	if (!smmu->smrs)
 		return;
-
-	for (idx = 0; idx < smmu->num_mapping_groups; idx++) {
-		if (smmu->features & ARM_SMMU_FEAT_EXIDS) {
-			s2cr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(idx));
-			if (!FIELD_GET(S2CR_EXIDVALID, s2cr))
-				break;
-		} else {
-			smr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(idx));
-			if (!FIELD_GET(SMR_VALID, smr))
-				break;
-		}
-	}
-
-	if (idx == smmu->num_mapping_groups) {
-		dev_err(smmu->dev, "Unable to compute streamid_mask\n");
-		return;
-	}
 
 	/*
 	 * SMR.ID bits may not be preserved if the corresponding MASK
@@ -976,13 +937,13 @@ static void arm_smmu_test_smr_masks(struct arm_smmu_device *smmu)
 	 * masters later if they try to claim IDs outside these masks.
 	 */
 	smr = FIELD_PREP(SMR_ID, smmu->streamid_mask);
-	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(idx), smr);
-	smr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(idx));
+	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(0), smr);
+	smr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(0));
 	smmu->streamid_mask = FIELD_GET(SMR_ID, smr);
 
 	smr = FIELD_PREP(SMR_MASK, smmu->streamid_mask);
-	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(idx), smr);
-	smr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(idx));
+	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(0), smr);
+	smr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(0));
 	smmu->smr_mask_mask = FIELD_GET(SMR_MASK, smr);
 }
 
@@ -1030,19 +991,12 @@ static int arm_smmu_find_sme(struct arm_smmu_device *smmu, u16 id, u16 mask)
 
 static bool arm_smmu_free_sme(struct arm_smmu_device *smmu, int idx)
 {
-	bool pinned = smmu->s2crs[idx].pinned;
-	u8 cbndx = smmu->s2crs[idx].cbndx;;
-
 	if (--smmu->s2crs[idx].count)
 		return false;
 
 	smmu->s2crs[idx] = s2cr_init_val;
-	if (pinned) {
-		smmu->s2crs[idx].pinned = true;
-		smmu->s2crs[idx].cbndx = cbndx;
-	} else if (smmu->smrs) {
+	if (smmu->smrs)
 		smmu->smrs[idx].valid = false;
-	}
 
 	return true;
 }
@@ -1178,7 +1132,7 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 		return ret;
 
 	/* Ensure that the domain is finalised */
-	ret = arm_smmu_init_domain_context(domain, smmu, dev);
+	ret = arm_smmu_init_domain_context(domain, smmu);
 	if (ret < 0)
 		goto rpm_put;
 
@@ -2014,10 +1968,8 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 
 	legacy_binding = of_find_property(dev->of_node, "mmu-masters", NULL);
 	if (legacy_binding && !using_generic_binding) {
-		if (!using_legacy_binding) {
-			pr_notice("deprecated \"mmu-masters\" DT property in use; %s support unavailable\n",
-				  IS_ENABLED(CONFIG_ARM_SMMU_LEGACY_DT_BINDINGS) ? "DMA API" : "SMMU");
-		}
+		if (!using_legacy_binding)
+			pr_notice("deprecated \"mmu-masters\" DT property in use; DMA API support unavailable\n");
 		using_legacy_binding = true;
 	} else if (!legacy_binding && !using_legacy_binding) {
 		using_generic_binding = true;
@@ -2032,50 +1984,25 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 	return 0;
 }
 
-static int arm_smmu_bus_init(struct iommu_ops *ops)
+static void arm_smmu_bus_init(void)
 {
-	int err;
-
 	/* Oh, for a proper bus abstraction */
-	if (!iommu_present(&platform_bus_type)) {
-		err = bus_set_iommu(&platform_bus_type, ops);
-		if (err)
-			return err;
-	}
+	if (!iommu_present(&platform_bus_type))
+		bus_set_iommu(&platform_bus_type, &arm_smmu_ops);
 #ifdef CONFIG_ARM_AMBA
-	if (!iommu_present(&amba_bustype)) {
-		err = bus_set_iommu(&amba_bustype, ops);
-		if (err)
-			goto err_reset_platform_ops;
-	}
+	if (!iommu_present(&amba_bustype))
+		bus_set_iommu(&amba_bustype, &arm_smmu_ops);
 #endif
 #ifdef CONFIG_PCI
 	if (!iommu_present(&pci_bus_type)) {
-		err = bus_set_iommu(&pci_bus_type, ops);
-		if (err)
-			goto err_reset_amba_ops;
+		pci_request_acs();
+		bus_set_iommu(&pci_bus_type, &arm_smmu_ops);
 	}
 #endif
 #ifdef CONFIG_FSL_MC_BUS
-	if (!iommu_present(&fsl_mc_bus_type)) {
-		err = bus_set_iommu(&fsl_mc_bus_type, ops);
-		if (err)
-			goto err_reset_pci_ops;
-	}
+	if (!iommu_present(&fsl_mc_bus_type))
+		bus_set_iommu(&fsl_mc_bus_type, &arm_smmu_ops);
 #endif
-	return 0;
-
-err_reset_pci_ops: __maybe_unused;
-#ifdef CONFIG_PCI
-	bus_set_iommu(&pci_bus_type, NULL);
-#endif
-err_reset_amba_ops: __maybe_unused;
-#ifdef CONFIG_ARM_AMBA
-	bus_set_iommu(&amba_bustype, NULL);
-#endif
-err_reset_platform_ops: __maybe_unused;
-	bus_set_iommu(&platform_bus_type, NULL);
-	return err;
 }
 
 static int arm_smmu_device_probe(struct platform_device *pdev)
@@ -2223,10 +2150,24 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	 * ready to handle default domain setup as soon as any SMMU exists.
 	 */
 	if (!using_legacy_binding)
-		return arm_smmu_bus_init(&arm_smmu_ops);
+		arm_smmu_bus_init();
 
 	return 0;
 }
+
+/*
+ * With the legacy DT binding in play, though, we have no guarantees about
+ * probe order, but then we're also not doing default domains, so we can
+ * delay setting bus ops until we're sure every possible SMMU is ready,
+ * and that way ensure that no add_device() calls get missed.
+ */
+static int arm_smmu_legacy_bus_init(void)
+{
+	if (using_legacy_binding)
+		arm_smmu_bus_init();
+	return 0;
+}
+device_initcall_sync(arm_smmu_legacy_bus_init);
 
 static int arm_smmu_device_remove(struct platform_device *pdev)
 {
@@ -2237,10 +2178,6 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 
 	if (!bitmap_empty(smmu->context_map, ARM_SMMU_MAX_CBS))
 		dev_err(&pdev->dev, "removing device with active domains!\n");
-
-	arm_smmu_bus_init(NULL);
-	iommu_device_unregister(&smmu->iommu);
-	iommu_device_sysfs_remove(&smmu->iommu);
 
 	arm_smmu_rpm_get(smmu);
 	/* Turn the thing off */
@@ -2319,5 +2256,5 @@ static struct platform_driver arm_smmu_driver = {
 module_platform_driver(arm_smmu_driver);
 
 MODULE_DESCRIPTION("IOMMU API for ARM architected SMMU implementations");
-MODULE_AUTHOR("Will Deacon <will@kernel.org>");
+MODULE_AUTHOR("Will Deacon <will.deacon@arm.com>");
 MODULE_LICENSE("GPL v2");

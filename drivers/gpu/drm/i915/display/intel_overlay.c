@@ -1332,12 +1332,14 @@ err_put_bo:
 void intel_overlay_setup(struct drm_i915_private *dev_priv)
 {
 	struct intel_overlay *overlay;
+	struct intel_engine_cs *engine;
 	int ret;
 
 	if (!HAS_OVERLAY(dev_priv))
 		return;
 
-	if (!HAS_ENGINE(dev_priv, RCS0))
+	engine = dev_priv->engine[RCS0];
+	if (!engine || !engine->kernel_context)
 		return;
 
 	overlay = kzalloc(sizeof(*overlay), GFP_KERNEL);
@@ -1345,7 +1347,7 @@ void intel_overlay_setup(struct drm_i915_private *dev_priv)
 		return;
 
 	overlay->i915 = dev_priv;
-	overlay->context = dev_priv->engine[RCS0]->kernel_context;
+	overlay->context = engine->kernel_context;
 	GEM_BUG_ON(!overlay->context);
 
 	overlay->color_key = 0x0101fe;

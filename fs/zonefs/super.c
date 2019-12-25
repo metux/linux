@@ -178,8 +178,7 @@ static void zonefs_update_stats(struct inode *inode, loff_t new_isize)
  * amount of readable data in the zone.
  */
 static loff_t zonefs_check_zone_condition(struct inode *inode,
-					  struct blk_zone *zone, bool warn,
-					  bool mount)
+					  struct blk_zone *zone, bool warn)
 {
 	struct zonefs_inode_info *zi = ZONEFS_I(inode);
 
@@ -197,26 +196,13 @@ static loff_t zonefs_check_zone_condition(struct inode *inode,
 		zone->wp = zone->start;
 		return 0;
 	case BLK_ZONE_COND_READONLY:
-		/*
-		 * The write pointer of read-only zones is invalid. If such a
-		 * zone is found during mount, the file size cannot be retrieved
-		 * so we treat the zone as offline (mount == true case).
-		 * Otherwise, keep the file size as it was when last updated
-		 * so that the user can recover data. In both cases, writes are
-		 * always disabled for the zone.
-		 */
+		/* Do not allow writes in read-only zones */
 		if (warn)
 			zonefs_warn(inode->i_sb, "inode %lu: read-only zone\n",
 				    inode->i_ino);
 		inode->i_flags |= S_IMMUTABLE;
-		if (mount) {
-			zone->cond = BLK_ZONE_COND_OFFLINE;
-			inode->i_mode &= ~0777;
-			zone->wp = zone->start;
-			return 0;
-		}
 		inode->i_mode &= ~0222;
-		return i_size_read(inode);
+		/* fallthrough */
 	default:
 		if (zi->i_ztype == ZONEFS_ZTYPE_CNV)
 			return zi->i_max_size;
@@ -245,7 +231,7 @@ static int zonefs_io_error_cb(struct blk_zone *zone, unsigned int idx,
 	 * as there is no inconsistency between the inode size and the amount of
 	 * data writen in the zone (data_size).
 	 */
-	data_size = zonefs_check_zone_condition(inode, zone, true, false);
+	data_size = zonefs_check_zone_condition(inode, zone, true);
 	isize = i_size_read(inode);
 	if (zone->cond != BLK_ZONE_COND_OFFLINE &&
 	    zone->cond != BLK_ZONE_COND_READONLY &&
@@ -288,7 +274,7 @@ static int zonefs_io_error_cb(struct blk_zone *zone, unsigned int idx,
 		if (zone->cond != BLK_ZONE_COND_OFFLINE) {
 			zone->cond = BLK_ZONE_COND_OFFLINE;
 			data_size = zonefs_check_zone_condition(inode, zone,
-								false, false);
+								false);
 		}
 	} else if (zone->cond == BLK_ZONE_COND_READONLY ||
 		   sbi->s_mount_opts & ZONEFS_MNTOPT_ERRORS_ZRO) {
@@ -297,7 +283,7 @@ static int zonefs_io_error_cb(struct blk_zone *zone, unsigned int idx,
 		if (zone->cond != BLK_ZONE_COND_READONLY) {
 			zone->cond = BLK_ZONE_COND_READONLY;
 			data_size = zonefs_check_zone_condition(inode, zone,
-								false, false);
+								false);
 		}
 	}
 
@@ -615,13 +601,13 @@ static ssize_t zonefs_file_dio_write(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t ret;
 
 	/*
-	 * For async direct IOs to sequential zone files, refuse IOCB_NOWAIT
+	 * For async direct IOs to sequential zone files, ignore IOCB_NOWAIT
 	 * as this can cause write reordering (e.g. the first aio gets EAGAIN
 	 * on the inode lock but the second goes through but is now unaligned).
 	 */
-	if (zi->i_ztype == ZONEFS_ZTYPE_SEQ && !is_sync_kiocb(iocb) &&
-	    (iocb->ki_flags & IOCB_NOWAIT))
-		return -EOPNOTSUPP;
+	if (zi->i_ztype == ZONEFS_ZTYPE_SEQ && !is_sync_kiocb(iocb)
+	    && (iocb->ki_flags & IOCB_NOWAIT))
+		iocb->ki_flags &= ~IOCB_NOWAIT;
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		if (!inode_trylock(inode))
@@ -989,7 +975,7 @@ static void zonefs_init_file_inode(struct inode *inode, struct blk_zone *zone,
 	zi->i_zsector = zone->start;
 	zi->i_max_size = min_t(loff_t, MAX_LFS_FILESIZE,
 			       zone->len << SECTOR_SHIFT);
-	zi->i_wpoffset = zonefs_check_zone_condition(inode, zone, true, true);
+	zi->i_wpoffset = zonefs_check_zone_condition(inode, zone, true);
 
 	inode->i_uid = sbi->s_uid;
 	inode->i_gid = sbi->s_gid;

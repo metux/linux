@@ -44,6 +44,10 @@ struct keyslot_mgmt_ll_ops {
 	int (*keyslot_find)(void *ll_priv_data, const u8 *key,
 			    enum blk_crypto_mode_num crypto_mode,
 			    unsigned int data_unit_size);
+	int (*derive_raw_secret)(struct keyslot_manager *ksm,
+				 const u8 *wrapped_key,
+				 unsigned int wrapped_key_size,
+				 u8 *secret, unsigned int secret_size);
 };
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
@@ -92,6 +96,11 @@ keyslot_manager_rq_crypto_mode_supported(struct request_queue *q,
 	return false;
 }
 #endif /* CONFIG_BLK_INLINE_ENCRYPTION */
+
+int keyslot_manager_derive_raw_secret(struct keyslot_manager *ksm,
+				      const u8 *wrapped_key,
+				      unsigned int wrapped_key_size,
+				      u8 *secret, unsigned int secret_size);
 
 #endif /* __LINUX_KEYSLOT_MANAGER_H */
 

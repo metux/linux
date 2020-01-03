@@ -4492,7 +4492,7 @@ static int snd_hdspm_put_tco_word_term(struct snd_kcontrol *kcontrol,
 
 
 
-static struct snd_kcontrol_new snd_hdspm_controls_madi[] = {
+static const struct snd_kcontrol_new snd_hdspm_controls_madi[] = {
 	HDSPM_MIXER("Mixer", 0),
 	HDSPM_INTERNAL_CLOCK("Internal Clock", 0),
 	HDSPM_SYSTEM_CLOCK_MODE("System Clock Mode", 0),
@@ -4514,7 +4514,7 @@ static struct snd_kcontrol_new snd_hdspm_controls_madi[] = {
 };
 
 
-static struct snd_kcontrol_new snd_hdspm_controls_madiface[] = {
+static const struct snd_kcontrol_new snd_hdspm_controls_madiface[] = {
 	HDSPM_MIXER("Mixer", 0),
 	HDSPM_INTERNAL_CLOCK("Internal Clock", 0),
 	HDSPM_SYSTEM_CLOCK_MODE("System Clock Mode", 0),
@@ -4527,7 +4527,7 @@ static struct snd_kcontrol_new snd_hdspm_controls_madiface[] = {
 	HDSPM_MADI_SPEEDMODE("MADI Speed Mode", 0)
 };
 
-static struct snd_kcontrol_new snd_hdspm_controls_aio[] = {
+static const struct snd_kcontrol_new snd_hdspm_controls_aio[] = {
 	HDSPM_MIXER("Mixer", 0),
 	HDSPM_INTERNAL_CLOCK("Internal Clock", 0),
 	HDSPM_SYSTEM_CLOCK_MODE("System Clock Mode", 0),
@@ -4568,7 +4568,7 @@ static struct snd_kcontrol_new snd_hdspm_controls_aio[] = {
 		   */
 };
 
-static struct snd_kcontrol_new snd_hdspm_controls_raydat[] = {
+static const struct snd_kcontrol_new snd_hdspm_controls_raydat[] = {
 	HDSPM_MIXER("Mixer", 0),
 	HDSPM_INTERNAL_CLOCK("Internal Clock", 0),
 	HDSPM_SYSTEM_CLOCK_MODE("Clock Mode", 0),
@@ -4596,7 +4596,7 @@ static struct snd_kcontrol_new snd_hdspm_controls_raydat[] = {
 	HDSPM_TOGGLE_SETTING("Single Speed WordClock Out", HDSPM_c0_Wck48)
 };
 
-static struct snd_kcontrol_new snd_hdspm_controls_aes32[] = {
+static const struct snd_kcontrol_new snd_hdspm_controls_aes32[] = {
 	HDSPM_MIXER("Mixer", 0),
 	HDSPM_INTERNAL_CLOCK("Internal Clock", 0),
 	HDSPM_SYSTEM_CLOCK_MODE("System Clock Mode", 0),
@@ -4638,7 +4638,7 @@ static struct snd_kcontrol_new snd_hdspm_controls_aes32[] = {
 
 
 /* Control elements for the optional TCO module */
-static struct snd_kcontrol_new snd_hdspm_controls_tco[] = {
+static const struct snd_kcontrol_new snd_hdspm_controls_tco[] = {
 	HDSPM_TCO_SAMPLE_RATE("TCO Sample Rate", 0),
 	HDSPM_TCO_PULL("TCO Pull", 0),
 	HDSPM_TCO_WCK_CONVERSION("TCO WCK Conversion", 0),
@@ -4685,7 +4685,7 @@ static int snd_hdspm_create_controls(struct snd_card *card,
 	unsigned int idx, limit;
 	int err;
 	struct snd_kcontrol *kctl;
-	struct snd_kcontrol_new *list = NULL;
+	const struct snd_kcontrol_new *list = NULL;
 
 	switch (hdspm->io_type) {
 	case MADI:

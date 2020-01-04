@@ -1004,8 +1004,10 @@ int __pm_runtime_idle(struct device *dev, int rpmflags)
 	int retval;
 
 	if (rpmflags & RPM_GET_PUT) {
-		if (!atomic_dec_and_test(&dev->power.usage_count))
+		if (!atomic_dec_and_test(&dev->power.usage_count)) {
+			trace_rpm_usage_rcuidle(dev, rpmflags);
 			return 0;
+		}
 	}
 
 	might_sleep_if(!(rpmflags & RPM_ASYNC) && !dev->power.irq_safe);
@@ -1036,8 +1038,10 @@ int __pm_runtime_suspend(struct device *dev, int rpmflags)
 	int retval;
 
 	if (rpmflags & RPM_GET_PUT) {
-		if (!atomic_dec_and_test(&dev->power.usage_count))
+		if (!atomic_dec_and_test(&dev->power.usage_count)) {
+			trace_rpm_usage_rcuidle(dev, rpmflags);
 			return 0;
+		}
 	}
 
 	might_sleep_if(!(rpmflags & RPM_ASYNC) && !dev->power.irq_safe);
@@ -1099,6 +1103,7 @@ int pm_runtime_get_if_in_use(struct device *dev)
 	retval = dev->power.disable_depth > 0 ? -EINVAL :
 		dev->power.runtime_status == RPM_ACTIVE
 			&& atomic_inc_not_zero(&dev->power.usage_count);
+	trace_rpm_usage_rcuidle(dev, 0);
 	spin_unlock_irqrestore(&dev->power.lock, flags);
 	return retval;
 }
@@ -1432,6 +1437,8 @@ void pm_runtime_allow(struct device *dev)
 	dev->power.runtime_auto = true;
 	if (atomic_dec_and_test(&dev->power.usage_count))
 		rpm_idle(dev, RPM_AUTO | RPM_ASYNC);
+	else
+		trace_rpm_usage_rcuidle(dev, RPM_AUTO | RPM_ASYNC);
 
  out:
 	spin_unlock_irq(&dev->power.lock);
@@ -1499,6 +1506,8 @@ static void update_autosuspend(struct device *dev, int old_delay, int old_use)
 		if (!old_use || old_delay >= 0) {
 			atomic_inc(&dev->power.usage_count);
 			rpm_resume(dev, 0);
+		} else {
+			trace_rpm_usage_rcuidle(dev, 0);
 		}
 	}
 

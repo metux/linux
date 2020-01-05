@@ -26,6 +26,7 @@ extern void d_add(struct dentry *entry, struct inode *inode);
 extern struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry);
 extern struct dentry *d_materialise_unique(struct dentry *dentry, struct inode *inode);
 extern void d_prune_aliases(struct inode *inode);
+extern void guard_bio_eod(struct bio *bio);
 extern int d_set_mounted(struct dentry *dentry);
 extern long prune_dcache_sb(struct super_block *sb, struct shrink_control *sc);
 extern struct dentry *d_alloc_cursor(struct dentry *);

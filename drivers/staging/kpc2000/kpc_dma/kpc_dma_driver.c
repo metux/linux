@@ -121,7 +121,7 @@ int  kpc_dma_probe(struct platform_device *pldev)
 		rv = -ENXIO;
 		goto err_kfree;
 	}
-	ldev->eng_regs = ioremap_nocache(r->start, resource_size(r));
+	ldev->eng_regs = ioremap(r->start, resource_size(r));
 	if (!ldev->eng_regs) {
 		dev_err(&ldev->pldev->dev, "kpc_dma_probe: failed to ioremap engine regs!\n");
 		rv = -ENXIO;

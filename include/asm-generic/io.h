@@ -948,10 +948,6 @@ static inline void iounmap(void __iomem *addr)
 #endif
 #endif /* CONFIG_MMU */
 
-#ifndef ioremap_nocache
-#define ioremap_nocache ioremap
-#endif
-
 #ifndef ioremap_wc
 #define ioremap_wc ioremap
 #endif

@@ -6,7 +6,6 @@
 #include <linux/stop_machine.h>
 
 #include <asm/set_memory.h>
-#include <asm/smp.h>
 
 #include "intel_gt.h"
 #include "i915_drv.h"
@@ -430,7 +429,9 @@ static int ggtt_bind_vma(struct i915_vma *vma,
 			 enum i915_cache_level cache_level,
 			 u32 flags)
 {
+	struct drm_i915_private *i915 = vma->vm->i915;
 	struct drm_i915_gem_object *obj = vma->obj;
+	intel_wakeref_t wakeref;
 	u32 pte_flags;
 
 	/* Applicable to VLV (gen8+ do not support RO in the GGTT) */
@@ -438,7 +439,8 @@ static int ggtt_bind_vma(struct i915_vma *vma,
 	if (i915_gem_object_is_readonly(obj))
 		pte_flags |= PTE_READ_ONLY;
 
-	vma->vm->insert_entries(vma->vm, vma, cache_level, pte_flags);
+	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
+		vma->vm->insert_entries(vma->vm, vma, cache_level, pte_flags);
 
 	vma->page_sizes.gtt = I915_GTT_PAGE_SIZE;
 
@@ -454,7 +456,11 @@ static int ggtt_bind_vma(struct i915_vma *vma,
 
 static void ggtt_unbind_vma(struct i915_vma *vma)
 {
-	vma->vm->clear_range(vma->vm, vma->node.start, vma->size);
+	struct drm_i915_private *i915 = vma->vm->i915;
+	intel_wakeref_t wakeref;
+
+	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
+		vma->vm->clear_range(vma->vm, vma->node.start, vma->size);
 }
 
 static int ggtt_reserve_guc_top(struct i915_ggtt *ggtt)
@@ -488,7 +494,6 @@ static void cleanup_init_ggtt(struct i915_ggtt *ggtt)
 	ggtt_release_guc_top(ggtt);
 	if (drm_mm_node_allocated(&ggtt->error_capture))
 		drm_mm_remove_node(&ggtt->error_capture);
-	mutex_destroy(&ggtt->error_mutex);
 }
 
 static int init_ggtt(struct i915_ggtt *ggtt)
@@ -520,7 +525,6 @@ static int init_ggtt(struct i915_ggtt *ggtt)
 	if (ret)
 		return ret;
 
-	mutex_init(&ggtt->error_mutex);
 	if (ggtt->mappable_end) {
 		/* Reserve a mappable slot for our lockless error capture */
 		ret = drm_mm_insert_node_in_range(&ggtt->vm.mm,
@@ -564,6 +568,7 @@ static int aliasing_gtt_bind_vma(struct i915_vma *vma,
 				 enum i915_cache_level cache_level,
 				 u32 flags)
 {
+	struct drm_i915_private *i915 = vma->vm->i915;
 	u32 pte_flags;
 	int ret;
 
@@ -591,18 +596,28 @@ static int aliasing_gtt_bind_vma(struct i915_vma *vma,
 					 cache_level, pte_flags);
 	}
 
-	if (flags & I915_VMA_GLOBAL_BIND)
-		vma->vm->insert_entries(vma->vm, vma, cache_level, pte_flags);
+	if (flags & I915_VMA_GLOBAL_BIND) {
+		intel_wakeref_t wakeref;
+
+		with_intel_runtime_pm(&i915->runtime_pm, wakeref) {
+			vma->vm->insert_entries(vma->vm, vma,
+						cache_level, pte_flags);
+		}
+	}
 
 	return 0;
 }
 
 static void aliasing_gtt_unbind_vma(struct i915_vma *vma)
 {
+	struct drm_i915_private *i915 = vma->vm->i915;
+
 	if (i915_vma_is_bound(vma, I915_VMA_GLOBAL_BIND)) {
 		struct i915_address_space *vm = vma->vm;
+		intel_wakeref_t wakeref;
 
-		vm->clear_range(vm, vma->node.start, vma->size);
+		with_intel_runtime_pm(&i915->runtime_pm, wakeref)
+			vm->clear_range(vm, vma->node.start, vma->size);
 	}
 
 	if (test_and_clear_bit(I915_VMA_ALLOC_BIT, __i915_vma_flags(vma))) {
@@ -700,7 +715,6 @@ static void ggtt_cleanup_hw(struct i915_ggtt *ggtt)
 
 	if (drm_mm_node_allocated(&ggtt->error_capture))
 		drm_mm_remove_node(&ggtt->error_capture);
-	mutex_destroy(&ggtt->error_mutex);
 
 	ggtt_release_guc_top(ggtt);
 	intel_vgt_deballoon(ggtt);
@@ -787,7 +801,7 @@ static int ggtt_probe_common(struct i915_ggtt *ggtt, u64 size)
 	 * readback check when writing GTT PTE entries.
 	 */
 	if (IS_GEN9_LP(i915) || INTEL_GEN(i915) >= 10)
-		ggtt->gsm = ioremap(phys_addr, size);
+		ggtt->gsm = ioremap_nocache(phys_addr, size);
 	else
 		ggtt->gsm = ioremap_wc(phys_addr, size);
 	if (!ggtt->gsm) {
@@ -1182,7 +1196,7 @@ void i915_ggtt_disable_guc(struct i915_ggtt *ggtt)
 
 static void ggtt_restore_mappings(struct i915_ggtt *ggtt)
 {
-	struct i915_vma *vma;
+	struct i915_vma *vma, *vn;
 	bool flush = false;
 	int open;
 
@@ -1197,10 +1211,13 @@ static void ggtt_restore_mappings(struct i915_ggtt *ggtt)
 	open = atomic_xchg(&ggtt->vm.open, 0);
 
 	/* clflush objects bound into the GGTT and rebind them. */
-	list_for_each_entry(vma, &ggtt->vm.bound_list, vm_link) {
+	list_for_each_entry_safe(vma, vn, &ggtt->vm.bound_list, vm_link) {
 		struct drm_i915_gem_object *obj = vma->obj;
 
 		if (!i915_vma_is_bound(vma, I915_VMA_GLOBAL_BIND))
+			continue;
+
+		if (!__i915_vma_unbind(vma))
 			continue;
 
 		clear_bit(I915_VMA_GLOBAL_BIND_BIT, __i915_vma_flags(vma));

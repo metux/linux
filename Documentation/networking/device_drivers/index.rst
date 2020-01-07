@@ -24,6 +24,7 @@ Contents:
    google/gve
    mellanox/mlx5
    pensando/ionic
+   stmicro/stmmac
 
 .. only::  subproject and html
 

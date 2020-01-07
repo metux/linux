@@ -87,6 +87,8 @@ struct drm_panel_funcs {
 	 * @prepare:
 	 *
 	 * Turn on panel and perform set up.
+	 *
+	 * This function is optional.
 	 */
 	int (*prepare)(struct drm_panel *panel);
 
@@ -94,6 +96,8 @@ struct drm_panel_funcs {
 	 * @enable:
 	 *
 	 * Enable panel (turn on back light, etc.).
+	 *
+	 * This function is optional.
 	 */
 	int (*enable)(struct drm_panel *panel);
 
@@ -101,6 +105,8 @@ struct drm_panel_funcs {
 	 * @disable:
 	 *
 	 * Disable panel (turn off back light, etc.).
+	 *
+	 * This function is optional.
 	 */
 	int (*disable)(struct drm_panel *panel);
 
@@ -108,22 +114,29 @@ struct drm_panel_funcs {
 	 * @unprepare:
 	 *
 	 * Turn off panel.
+	 *
+	 * This function is optional.
 	 */
 	int (*unprepare)(struct drm_panel *panel);
 
 	/**
 	 * @get_modes:
 	 *
-	 * Add modes to the connector that the panel is attached to and
-	 * return the number of modes added.
+	 * Add modes to the connector that the panel is attached to
+	 * and returns the number of modes added.
+	 *
+	 * This function is mandatory.
 	 */
-	int (*get_modes)(struct drm_panel *panel);
+	int (*get_modes)(struct drm_panel *panel,
+			 struct drm_connector *connector);
 
 	/**
 	 * @get_timings:
 	 *
 	 * Copy display timings into the provided array and return
 	 * the number of display timings available.
+	 *
+	 * This function is optional.
 	 */
 	int (*get_timings)(struct drm_panel *panel, unsigned int num_timings,
 			   struct display_timing *timings);
@@ -133,20 +146,6 @@ struct drm_panel_funcs {
  * struct drm_panel - DRM panel object
  */
 struct drm_panel {
-	/**
-	 * @drm:
-	 *
-	 * DRM device owning the panel.
-	 */
-	struct drm_device *drm;
-
-	/**
-	 * @connector:
-	 *
-	 * DRM connector that the panel is attached to.
-	 */
-	struct drm_connector *connector;
-
 	/**
 	 * @dev:
 	 *
@@ -173,6 +172,15 @@ struct drm_panel {
 	const struct drm_panel_funcs *funcs;
 
 	/**
+	 * @connector_type:
+	 *
+	 * Type of the panel as a DRM_MODE_CONNECTOR_* value. This is used to
+	 * initialise the drm_connector corresponding to the panel with the
+	 * correct connector type.
+	 */
+	int connector_type;
+
+	/**
 	 * @list:
 	 *
 	 * Panel entry in registry.
@@ -188,7 +196,8 @@ struct drm_panel {
 };
 
 void drm_panel_init(struct drm_panel *panel, struct device *dev,
-		    const struct drm_panel_funcs *funcs);
+		    const struct drm_panel_funcs *funcs,
+		    int connector_type);
 
 int drm_panel_add(struct drm_panel *panel);
 void drm_panel_remove(struct drm_panel *panel);
@@ -209,7 +218,7 @@ int drm_panel_unprepare(struct drm_panel *panel);
 int drm_panel_enable(struct drm_panel *panel);
 int drm_panel_disable(struct drm_panel *panel);
 
-int drm_panel_get_modes(struct drm_panel *panel);
+int drm_panel_get_modes(struct drm_panel *panel, struct drm_connector *connector);
 
 #if defined(CONFIG_OF) && defined(CONFIG_DRM_PANEL)
 struct drm_panel *of_drm_find_panel(const struct device_node *np);
@@ -220,7 +229,8 @@ static inline struct drm_panel *of_drm_find_panel(const struct device_node *np)
 }
 #endif
 
-#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE)
+#if IS_ENABLED(CONFIG_DRM_PANEL) && (IS_BUILTIN(CONFIG_BACKLIGHT_CLASS_DEVICE) || \
+	(IS_MODULE(CONFIG_DRM) && IS_MODULE(CONFIG_BACKLIGHT_CLASS_DEVICE)))
 int drm_panel_of_backlight(struct drm_panel *panel);
 #else
 static inline int drm_panel_of_backlight(struct drm_panel *panel)

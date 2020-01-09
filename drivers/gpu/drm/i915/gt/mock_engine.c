@@ -150,7 +150,7 @@ static int mock_context_alloc(struct intel_context *ce)
 
 static int mock_context_pin(struct intel_context *ce)
 {
-	return intel_context_active_acquire(ce);
+	return 0;
 }
 
 static void mock_context_reset(struct intel_context *ce)

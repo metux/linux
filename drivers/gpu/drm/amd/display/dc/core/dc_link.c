@@ -45,6 +45,7 @@
 #include "dpcd_defs.h"
 #include "dmcu.h"
 #include "hw/clk_mgr.h"
+#include "../dce/dmub_psr.h"
 
 #define DC_LOGGER_INIT(logger)
 
@@ -372,7 +373,7 @@ bool dc_link_is_dp_sink_present(struct dc_link *link)
 
 	if (GPIO_RESULT_OK != dal_ddc_open(
 		ddc, GPIO_MODE_INPUT, GPIO_DDC_CONFIG_TYPE_MODE_I2C)) {
-		dal_gpio_destroy_ddc(&ddc);
+		dal_ddc_close(ddc);
 
 		return present;
 	}
@@ -743,7 +744,8 @@ static bool wait_for_alt_mode(struct dc_link *link)
  * This does not create remote sinks but will trigger DM
  * to start MST detection if a branch is detected.
  */
-bool dc_link_detect_helper(struct dc_link *link, enum dc_detect_reason reason)
+static bool dc_link_detect_helper(struct dc_link *link,
+				  enum dc_detect_reason reason)
 {
 	struct dc_sink_init_data sink_init_data = { 0 };
 	struct display_sink_capability sink_caps = { 0 };
@@ -816,8 +818,8 @@ bool dc_link_detect_helper(struct dc_link *link, enum dc_detect_reason reason)
 		}
 
 		case SIGNAL_TYPE_EDP: {
-			read_current_link_settings_on_detect(link);
 			detect_edp_sink_caps(link);
+			read_current_link_settings_on_detect(link);
 			sink_caps.transaction_type = DDC_TRANSACTION_TYPE_I2C_OVER_AUX;
 			sink_caps.signal = SIGNAL_TYPE_EDP;
 			break;
@@ -849,18 +851,12 @@ bool dc_link_detect_helper(struct dc_link *link, enum dc_detect_reason reason)
 				if (memcmp(&link->dpcd_caps, &prev_dpcd_caps, sizeof(struct dpcd_caps)))
 					same_dpcd = false;
 			}
-			/* Active dongle plug in without display or downstream unplug*/
+			/* Active dongle downstream unplug*/
 			if (link->type == dc_connection_active_dongle &&
 				link->dpcd_caps.sink_count.bits.SINK_COUNT == 0) {
-				if (prev_sink != NULL) {
+				if (prev_sink != NULL)
 					/* Downstream unplug */
 					dc_sink_release(prev_sink);
-				} else {
-					/* Empty dongle plug in */
-					dp_verify_link_cap_with_retries(link,
-							&link->reported_link_cap,
-							LINK_TRAINING_MAX_VERIFY_RETRY);
-				}
 				return true;
 			}
 
@@ -967,8 +963,7 @@ bool dc_link_detect_helper(struct dc_link *link, enum dc_detect_reason reason)
 			same_edid = is_same_edid(&prev_sink->dc_edid, &sink->dc_edid);
 
 		if (link->connector_signal == SIGNAL_TYPE_DISPLAY_PORT &&
-			sink_caps.transaction_type == DDC_TRANSACTION_TYPE_I2C_OVER_AUX &&
-			reason != DETECT_REASON_HPDRX) {
+			sink_caps.transaction_type == DDC_TRANSACTION_TYPE_I2C_OVER_AUX) {
 			/*
 			 * TODO debug why Dell 2413 doesn't like
 			 *  two link trainings
@@ -1494,7 +1489,6 @@ static enum dc_status enable_link_dp(
 	bool skip_video_pattern;
 	struct dc_link *link = stream->link;
 	struct dc_link_settings link_settings = {0};
-	enum dp_panel_mode panel_mode;
 	bool fec_enable;
 	int i;
 	bool apply_seamless_boot_optimization = false;
@@ -1511,15 +1505,6 @@ static enum dc_status enable_link_dp(
 	decide_link_settings(stream, &link_settings);
 
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP) {
-		/* If link settings are different than current and link already enabled
-		 * then need to disable before programming to new rate.
-		 */
-		if (link->link_status.link_active &&
-			(link->cur_link_settings.lane_count != link_settings.lane_count ||
-			 link->cur_link_settings.link_rate != link_settings.link_rate)) {
-			dp_disable_link_phy(link, pipe_ctx->stream->signal);
-		}
-
 		/*in case it is not on*/
 		link->dc->hwss.edp_power_control(link, true);
 		link->dc->hwss.edp_wait_for_hpd_ready(link, true);
@@ -1527,39 +1512,20 @@ static enum dc_status enable_link_dp(
 
 	pipe_ctx->stream_res.pix_clk_params.requested_sym_clk =
 			link_settings.link_rate * LINK_RATE_REF_FREQ_IN_KHZ;
-	if (!apply_seamless_boot_optimization)
+	if (state->clk_mgr && !apply_seamless_boot_optimization)
 		state->clk_mgr->funcs->update_clocks(state->clk_mgr, state, false);
-
-	dp_enable_link_phy(
-		link,
-		pipe_ctx->stream->signal,
-		pipe_ctx->clock_source->id,
-		&link_settings);
-
-	if (stream->sink_patches.dppowerup_delay > 0) {
-		int delay_dp_power_up_in_ms = stream->sink_patches.dppowerup_delay;
-
-		msleep(delay_dp_power_up_in_ms);
-	}
-
-	panel_mode = dp_get_panel_mode(link);
-	dp_set_panel_mode(link, panel_mode);
 
 	skip_video_pattern = true;
 
 	if (link_settings.link_rate == LINK_RATE_LOW)
 			skip_video_pattern = false;
 
-	if (link->aux_access_disabled) {
-		dc_link_dp_perform_link_training_skip_aux(link, &link_settings);
-
-		link->cur_link_settings = link_settings;
-		status = DC_OK;
-	} else if (perform_link_training_with_retries(
-			link,
+	if (perform_link_training_with_retries(
 			&link_settings,
 			skip_video_pattern,
-			LINK_TRAINING_ATTEMPTS)) {
+			LINK_TRAINING_ATTEMPTS,
+			pipe_ctx,
+			pipe_ctx->stream->signal)) {
 		link->cur_link_settings = link_settings;
 		status = DC_OK;
 	}
@@ -2058,6 +2024,45 @@ static void write_i2c_redriver_setting(
 		ASSERT(i2c_success);
 }
 
+static void disable_link(struct dc_link *link, enum signal_type signal)
+{
+	/*
+	 * TODO: implement call for dp_set_hw_test_pattern
+	 * it is needed for compliance testing
+	 */
+
+	/* Here we need to specify that encoder output settings
+	 * need to be calculated as for the set mode,
+	 * it will lead to querying dynamic link capabilities
+	 * which should be done before enable output
+	 */
+
+	if (dc_is_dp_signal(signal)) {
+		/* SST DP, eDP */
+		if (dc_is_dp_sst_signal(signal))
+			dp_disable_link_phy(link, signal);
+		else
+			dp_disable_link_phy_mst(link, signal);
+
+		if (dc_is_dp_sst_signal(signal) ||
+				link->mst_stream_alloc_table.stream_count == 0) {
+			dp_set_fec_enable(link, false);
+			dp_set_fec_ready(link, false);
+		}
+	} else {
+		if (signal != SIGNAL_TYPE_VIRTUAL)
+			link->link_enc->funcs->disable_output(link->link_enc, signal);
+	}
+
+	if (signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
+		/* MST disable link only when no stream use the link */
+		if (link->mst_stream_alloc_table.stream_count <= 0)
+			link->link_status.link_active = false;
+	} else {
+		link->link_status.link_active = false;
+	}
+}
+
 static void enable_link_hdmi(struct pipe_ctx *pipe_ctx)
 {
 	struct dc_stream_state *stream = pipe_ctx->stream;
@@ -2142,6 +2147,19 @@ static enum dc_status enable_link(
 		struct pipe_ctx *pipe_ctx)
 {
 	enum dc_status status = DC_ERROR_UNEXPECTED;
+	struct dc_stream_state *stream = pipe_ctx->stream;
+	struct dc_link *link = stream->link;
+
+	/* There's some scenarios where driver is unloaded with display
+	 * still enabled. When driver is reloaded, it may cause a display
+	 * to not light up if there is a mismatch between old and new
+	 * link settings. Need to call disable first before enabling at
+	 * new link settings.
+	 */
+	if (link->link_status.link_active) {
+		disable_link(link, pipe_ctx->stream->signal);
+	}
+
 	switch (pipe_ctx->stream->signal) {
 	case SIGNAL_TYPE_DISPLAY_PORT:
 		status = enable_link_dp(state, pipe_ctx);
@@ -2174,44 +2192,6 @@ static enum dc_status enable_link(
 		pipe_ctx->stream->link->link_status.link_active = true;
 
 	return status;
-}
-
-static void disable_link(struct dc_link *link, enum signal_type signal)
-{
-	/*
-	 * TODO: implement call for dp_set_hw_test_pattern
-	 * it is needed for compliance testing
-	 */
-
-	/* here we need to specify that encoder output settings
-	 * need to be calculated as for the set mode,
-	 * it will lead to querying dynamic link capabilities
-	 * which should be done before enable output */
-
-	if (dc_is_dp_signal(signal)) {
-		/* SST DP, eDP */
-		if (dc_is_dp_sst_signal(signal))
-			dp_disable_link_phy(link, signal);
-		else
-			dp_disable_link_phy_mst(link, signal);
-
-		if (dc_is_dp_sst_signal(signal) ||
-				link->mst_stream_alloc_table.stream_count == 0) {
-			dp_set_fec_enable(link, false);
-			dp_set_fec_ready(link, false);
-		}
-	} else {
-		if (signal != SIGNAL_TYPE_VIRTUAL)
-			link->link_enc->funcs->disable_output(link->link_enc, signal);
-	}
-
-	if (signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
-		/* MST disable link only when no stream use the link */
-		if (link->mst_stream_alloc_table.stream_count <= 0)
-			link->link_status.link_active = false;
-	} else {
-		link->link_status.link_active = false;
-	}
 }
 
 static uint32_t get_timing_pixel_clock_100hz(const struct dc_crtc_timing *timing)
@@ -2250,7 +2230,7 @@ static bool dp_active_dongle_validate_timing(
 		break;
 	}
 
-	if (dongle_caps->dongle_type != DISPLAY_DONGLE_DP_HDMI_CONVERTER ||
+	if (dpcd_caps->dongle_type != DISPLAY_DONGLE_DP_HDMI_CONVERTER ||
 		dongle_caps->extendedCapValid == false)
 		return true;
 
@@ -2350,9 +2330,9 @@ bool dc_link_set_backlight_level(const struct dc_link *link,
 		uint32_t backlight_pwm_u16_16,
 		uint32_t frame_ramp)
 {
-	struct dc  *core_dc = link->ctx->dc;
-	struct abm *abm = core_dc->res_pool->abm;
-	struct dmcu *dmcu = core_dc->res_pool->dmcu;
+	struct dc  *dc = link->ctx->dc;
+	struct abm *abm = dc->res_pool->abm;
+	struct dmcu *dmcu = dc->res_pool->dmcu;
 	unsigned int controller_id = 0;
 	bool use_smooth_brightness = true;
 	int i;
@@ -2370,22 +2350,22 @@ bool dc_link_set_backlight_level(const struct dc_link *link,
 
 	if (dc_is_embedded_signal(link->connector_signal)) {
 		for (i = 0; i < MAX_PIPES; i++) {
-			if (core_dc->current_state->res_ctx.pipe_ctx[i].stream) {
-				if (core_dc->current_state->res_ctx.
+			if (dc->current_state->res_ctx.pipe_ctx[i].stream) {
+				if (dc->current_state->res_ctx.
 						pipe_ctx[i].stream->link
 						== link) {
 					/* DMCU -1 for all controller id values,
 					 * therefore +1 here
 					 */
 					controller_id =
-						core_dc->current_state->
+						dc->current_state->
 						res_ctx.pipe_ctx[i].stream_res.tg->inst +
 						1;
 
 					/* Disable brightness ramping when the display is blanked
 					 * as it can hang the DMCU
 					 */
-					if (core_dc->current_state->res_ctx.pipe_ctx[i].plane_state == NULL)
+					if (dc->current_state->res_ctx.pipe_ctx[i].plane_state == NULL)
 						frame_ramp = 0;
 				}
 			}
@@ -2403,8 +2383,8 @@ bool dc_link_set_backlight_level(const struct dc_link *link,
 
 bool dc_link_set_abm_disable(const struct dc_link *link)
 {
-	struct dc  *core_dc = link->ctx->dc;
-	struct abm *abm = core_dc->res_pool->abm;
+	struct dc  *dc = link->ctx->dc;
+	struct abm *abm = dc->res_pool->abm;
 
 	if ((abm == NULL) || (abm->funcs->set_backlight_level_pwm == NULL))
 		return false;
@@ -2416,17 +2396,211 @@ bool dc_link_set_abm_disable(const struct dc_link *link)
 
 bool dc_link_set_psr_allow_active(struct dc_link *link, bool allow_active, bool wait)
 {
-	struct dc  *core_dc = link->ctx->dc;
-	struct dmcu *dmcu = core_dc->res_pool->dmcu;
+	struct dc  *dc = link->ctx->dc;
+	struct dmcu *dmcu = dc->res_pool->dmcu;
+	struct dmub_psr *psr = dc->res_pool->psr;
 
-
-
-	if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_feature_enabled)
+	if ((psr != NULL) && link->psr_feature_enabled)
+		psr->funcs->psr_enable(psr, allow_active);
+	else if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_feature_enabled)
 		dmcu->funcs->set_psr_enable(dmcu, allow_active, wait);
 
 	link->psr_allow_active = allow_active;
 
 	return true;
+}
+
+bool dc_link_get_psr_state(const struct dc_link *link, uint32_t *psr_state)
+{
+	struct dc  *dc = link->ctx->dc;
+	struct dmcu *dmcu = dc->res_pool->dmcu;
+	struct dmub_psr *psr = dc->res_pool->psr;
+
+	if (psr != NULL && link->psr_feature_enabled)
+		psr->funcs->psr_get_state(psr_state);
+	else if (dmcu != NULL && link->psr_feature_enabled)
+		dmcu->funcs->get_psr_state(dmcu, psr_state);
+
+	return true;
+}
+
+static inline enum physical_phy_id
+transmitter_to_phy_id(enum transmitter transmitter_value)
+{
+	switch (transmitter_value) {
+	case TRANSMITTER_UNIPHY_A:
+		return PHYLD_0;
+	case TRANSMITTER_UNIPHY_B:
+		return PHYLD_1;
+	case TRANSMITTER_UNIPHY_C:
+		return PHYLD_2;
+	case TRANSMITTER_UNIPHY_D:
+		return PHYLD_3;
+	case TRANSMITTER_UNIPHY_E:
+		return PHYLD_4;
+	case TRANSMITTER_UNIPHY_F:
+		return PHYLD_5;
+	case TRANSMITTER_NUTMEG_CRT:
+		return PHYLD_6;
+	case TRANSMITTER_TRAVIS_CRT:
+		return PHYLD_7;
+	case TRANSMITTER_TRAVIS_LCD:
+		return PHYLD_8;
+	case TRANSMITTER_UNIPHY_G:
+		return PHYLD_9;
+	case TRANSMITTER_COUNT:
+		return PHYLD_COUNT;
+	case TRANSMITTER_UNKNOWN:
+		return PHYLD_UNKNOWN;
+	default:
+		WARN_ONCE(1, "Unknown transmitter value %d\n",
+			  transmitter_value);
+		return PHYLD_UNKNOWN;
+	}
+}
+
+bool dc_link_setup_psr(struct dc_link *link,
+		const struct dc_stream_state *stream, struct psr_config *psr_config,
+		struct psr_context *psr_context)
+{
+	struct dc *dc;
+	struct dmcu *dmcu;
+	struct dmub_psr *psr;
+	int i;
+	/* updateSinkPsrDpcdConfig*/
+	union dpcd_psr_configuration psr_configuration;
+
+	psr_context->controllerId = CONTROLLER_ID_UNDEFINED;
+
+	if (!link)
+		return false;
+
+	dc = link->ctx->dc;
+	dmcu = dc->res_pool->dmcu;
+	psr = dc->res_pool->psr;
+
+	if (!dmcu && !psr)
+		return false;
+
+
+	memset(&psr_configuration, 0, sizeof(psr_configuration));
+
+	psr_configuration.bits.ENABLE                    = 1;
+	psr_configuration.bits.CRC_VERIFICATION          = 1;
+	psr_configuration.bits.FRAME_CAPTURE_INDICATION  =
+			psr_config->psr_frame_capture_indication_req;
+
+	/* Check for PSR v2*/
+	if (psr_config->psr_version == 0x2) {
+		/* For PSR v2 selective update.
+		 * Indicates whether sink should start capturing
+		 * immediately following active scan line,
+		 * or starting with the 2nd active scan line.
+		 */
+		psr_configuration.bits.LINE_CAPTURE_INDICATION = 0;
+		/*For PSR v2, determines whether Sink should generate
+		 * IRQ_HPD when CRC mismatch is detected.
+		 */
+		psr_configuration.bits.IRQ_HPD_WITH_CRC_ERROR    = 1;
+	}
+
+	dm_helpers_dp_write_dpcd(
+		link->ctx,
+		link,
+		368,
+		&psr_configuration.raw,
+		sizeof(psr_configuration.raw));
+
+	psr_context->channel = link->ddc->ddc_pin->hw_info.ddc_channel;
+	psr_context->transmitterId = link->link_enc->transmitter;
+	psr_context->engineId = link->link_enc->preferred_engine;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (dc->current_state->res_ctx.pipe_ctx[i].stream
+				== stream) {
+			/* dmcu -1 for all controller id values,
+			 * therefore +1 here
+			 */
+			psr_context->controllerId =
+				dc->current_state->res_ctx.
+				pipe_ctx[i].stream_res.tg->inst + 1;
+			break;
+		}
+	}
+
+	/* Hardcoded for now.  Can be Pcie or Uniphy (or Unknown)*/
+	psr_context->phyType = PHY_TYPE_UNIPHY;
+	/*PhyId is associated with the transmitter id*/
+	psr_context->smuPhyId =
+		transmitter_to_phy_id(link->link_enc->transmitter);
+
+	psr_context->crtcTimingVerticalTotal = stream->timing.v_total;
+	psr_context->vsync_rate_hz = div64_u64(div64_u64((stream->
+					timing.pix_clk_100hz * 100),
+					stream->timing.v_total),
+					stream->timing.h_total);
+
+	psr_context->psrSupportedDisplayConfig = true;
+	psr_context->psrExitLinkTrainingRequired =
+		psr_config->psr_exit_link_training_required;
+	psr_context->sdpTransmitLineNumDeadline =
+		psr_config->psr_sdp_transmit_line_num_deadline;
+	psr_context->psrFrameCaptureIndicationReq =
+		psr_config->psr_frame_capture_indication_req;
+
+	psr_context->skipPsrWaitForPllLock = 0; /* only = 1 in KV */
+
+	psr_context->numberOfControllers =
+			link->dc->res_pool->timing_generator_count;
+
+	psr_context->rfb_update_auto_en = true;
+
+	/* 2 frames before enter PSR. */
+	psr_context->timehyst_frames = 2;
+	/* half a frame
+	 * (units in 100 lines, i.e. a value of 1 represents 100 lines)
+	 */
+	psr_context->hyst_lines = stream->timing.v_total / 2 / 100;
+	psr_context->aux_repeats = 10;
+
+	psr_context->psr_level.u32all = 0;
+
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	/*skip power down the single pipe since it blocks the cstate*/
+	if (ASICREV_IS_RAVEN(link->ctx->asic_id.hw_internal_rev))
+		psr_context->psr_level.bits.SKIP_CRTC_DISABLE = true;
+#endif
+
+	/* SMU will perform additional powerdown sequence.
+	 * For unsupported ASICs, set psr_level flag to skip PSR
+	 *  static screen notification to SMU.
+	 *  (Always set for DAL2, did not check ASIC)
+	 */
+	psr_context->allow_smu_optimizations = psr_config->allow_smu_optimizations;
+
+	/* Complete PSR entry before aborting to prevent intermittent
+	 * freezes on certain eDPs
+	 */
+	psr_context->psr_level.bits.DISABLE_PSR_ENTRY_ABORT = 1;
+
+	/* Controls additional delay after remote frame capture before
+	 * continuing power down, default = 0
+	 */
+	psr_context->frame_delay = 0;
+
+	if (psr)
+		link->psr_feature_enabled = psr->funcs->psr_copy_settings(psr, link, psr_context);
+	else
+		link->psr_feature_enabled = dmcu->funcs->setup_psr(dmcu, link, psr_context);
+
+	/* psr_enabled == 0 indicates setup_psr did not succeed, but this
+	 * should not happen since firmware should be running at this point
+	 */
+	if (link->psr_feature_enabled == 0)
+		ASSERT(0);
+
+	return true;
+
 }
 
 const struct dc_link_status *dc_link_get_status(const struct dc_link *link)
@@ -2452,28 +2626,13 @@ static struct fixed31_32 get_pbn_per_slot(struct dc_stream_state *stream)
 	return dc_fixpt_div_int(mbytes_per_sec, 54);
 }
 
-static int get_color_depth(enum dc_color_depth color_depth)
-{
-	switch (color_depth) {
-	case COLOR_DEPTH_666: return 6;
-	case COLOR_DEPTH_888: return 8;
-	case COLOR_DEPTH_101010: return 10;
-	case COLOR_DEPTH_121212: return 12;
-	case COLOR_DEPTH_141414: return 14;
-	case COLOR_DEPTH_161616: return 16;
-	default: return 0;
-	}
-}
-
 static struct fixed31_32 get_pbn_from_timing(struct pipe_ctx *pipe_ctx)
 {
-	uint32_t bpc;
 	uint64_t kbps;
 	struct fixed31_32 peak_kbps;
 	uint32_t numerator;
 	uint32_t denominator;
 
-	bpc = get_color_depth(pipe_ctx->stream_res.pix_clk_params.color_depth);
 	kbps = dc_bandwidth_in_kbps_from_timing(&pipe_ctx->stream->timing);
 
 	/*
@@ -2707,6 +2866,52 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 
 	return DC_OK;
 }
+
+enum dc_status dc_link_reallocate_mst_payload(struct dc_link *link)
+{
+	int i;
+	struct pipe_ctx *pipe_ctx;
+
+	// Clear all of MST payload then reallocate
+	for (i = 0; i < MAX_PIPES; i++) {
+		pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
+
+		/* driver enable split pipe for external monitors
+		 * we have to check pipe_ctx is split pipe or not
+		 * If it's split pipe, driver using top pipe to
+		 * reaallocate.
+		 */
+		if (!pipe_ctx || pipe_ctx->top_pipe)
+			continue;
+
+		if (pipe_ctx->stream && pipe_ctx->stream->link == link &&
+				pipe_ctx->stream->dpms_off == false &&
+				pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
+			deallocate_mst_payload(pipe_ctx);
+		}
+	}
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
+
+		if (!pipe_ctx || pipe_ctx->top_pipe)
+			continue;
+
+		if (pipe_ctx->stream && pipe_ctx->stream->link == link &&
+				pipe_ctx->stream->dpms_off == false &&
+				pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
+			/* enable/disable PHY will clear connection between BE and FE
+			 * need to restore it.
+			 */
+			link->link_enc->funcs->connect_dig_be_to_fe(link->link_enc,
+									pipe_ctx->stream_res.stream_enc->id, true);
+			dc_link_allocate_mst_payload(pipe_ctx);
+		}
+	}
+
+	return DC_OK;
+}
+
 #if defined(CONFIG_DRM_AMD_DC_HDCP)
 static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 {
@@ -2730,12 +2935,12 @@ void core_link_enable_stream(
 		struct dc_state *state,
 		struct pipe_ctx *pipe_ctx)
 {
-	struct dc *core_dc = pipe_ctx->stream->ctx->dc;
+	struct dc *dc = pipe_ctx->stream->ctx->dc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	enum dc_status status;
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 
-	if (!IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment) &&
+	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment) &&
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
 		return;
 
@@ -2754,6 +2959,7 @@ void core_link_enable_stream(
 			pipe_ctx->stream_res.stream_enc,
 			&stream->timing,
 			stream->output_color_space,
+			stream->use_vsc_sdp_for_colorimetry,
 			stream->link->dpcd_caps.dprx_feature.bits.SST_SPLIT_SDP_CAP);
 
 	if (dc_is_hdmi_tmds_signal(pipe_ctx->stream->signal))
@@ -2777,14 +2983,14 @@ void core_link_enable_stream(
 			pipe_ctx->stream_res.stream_enc,
 			&stream->timing);
 
-	if (!IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment)) {
+	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
 		bool apply_edp_fast_boot_optimization =
 			pipe_ctx->stream->apply_edp_fast_boot_optimization;
 
 		pipe_ctx->stream->apply_edp_fast_boot_optimization = false;
 
 		resource_build_info_frame(pipe_ctx);
-		core_dc->hwss.update_info_frame(pipe_ctx);
+		dc->hwss.update_info_frame(pipe_ctx);
 
 		/* Do not touch link on seamless boot optimization. */
 		if (pipe_ctx->stream->apply_seamless_boot_optimization) {
@@ -2827,7 +3033,7 @@ void core_link_enable_stream(
 			}
 		}
 
-		core_dc->hwss.enable_audio_stream(pipe_ctx);
+		dc->hwss.enable_audio_stream(pipe_ctx);
 
 		/* turn off otg test pattern if enable */
 		if (pipe_ctx->stream_res.tg->funcs->set_test_pattern)
@@ -2840,7 +3046,7 @@ void core_link_enable_stream(
 					dc_is_virtual_signal(pipe_ctx->stream->signal))
 				dp_set_dsc_enable(pipe_ctx, true);
 		}
-		core_dc->hwss.enable_stream(pipe_ctx);
+		dc->hwss.enable_stream(pipe_ctx);
 
 		/* Set DPS PPS SDP (AKA "info frames") */
 		if (pipe_ctx->stream->timing.flags.DSC) {
@@ -2852,7 +3058,7 @@ void core_link_enable_stream(
 		if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)
 			dc_link_allocate_mst_payload(pipe_ctx);
 
-		core_dc->hwss.unblank_stream(pipe_ctx,
+		dc->hwss.unblank_stream(pipe_ctx,
 			&pipe_ctx->stream->link->cur_link_settings);
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
@@ -2860,8 +3066,7 @@ void core_link_enable_stream(
 #if defined(CONFIG_DRM_AMD_DC_HDCP)
 		update_psp_stream_config(pipe_ctx, false);
 #endif
-	}
-	else { // if (IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment))
+	} else { // if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment))
 		if (dc_is_dp_signal(pipe_ctx->stream->signal) ||
 				dc_is_virtual_signal(pipe_ctx->stream->signal))
 			dp_set_dsc_enable(pipe_ctx, true);
@@ -2871,11 +3076,11 @@ void core_link_enable_stream(
 
 void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 {
-	struct dc  *core_dc = pipe_ctx->stream->ctx->dc;
+	struct dc  *dc = pipe_ctx->stream->ctx->dc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->sink->link;
 
-	if (!IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment) &&
+	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment) &&
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
 		return;
 
@@ -2883,7 +3088,7 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 	update_psp_stream_config(pipe_ctx, true);
 #endif
 
-	core_dc->hwss.blank_stream(pipe_ctx);
+	dc->hwss.blank_stream(pipe_ctx);
 
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)
 		deallocate_mst_payload(pipe_ctx);
@@ -2912,7 +3117,7 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 			write_i2c_redriver_setting(pipe_ctx, false);
 		}
 	}
-	core_dc->hwss.disable_stream(pipe_ctx);
+	dc->hwss.disable_stream(pipe_ctx);
 
 	disable_link(pipe_ctx->stream->link, pipe_ctx->stream->signal);
 	if (pipe_ctx->stream->timing.flags.DSC) {
@@ -2923,12 +3128,12 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 
 void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable)
 {
-	struct dc  *core_dc = pipe_ctx->stream->ctx->dc;
+	struct dc  *dc = pipe_ctx->stream->ctx->dc;
 
 	if (!dc_is_hdmi_signal(pipe_ctx->stream->signal))
 		return;
 
-	core_dc->hwss.set_avmute(pipe_ctx, enable);
+	dc->hwss.set_avmute(pipe_ctx, enable);
 }
 
 /**
@@ -3143,6 +3348,7 @@ void dc_link_disable_hpd(const struct dc_link *link)
 
 void dc_link_set_test_pattern(struct dc_link *link,
 			      enum dp_test_pattern test_pattern,
+			      enum dp_test_pattern_color_space test_pattern_color_space,
 			      const struct link_training_settings *p_link_settings,
 			      const unsigned char *p_custom_pattern,
 			      unsigned int cust_pattern_size)
@@ -3151,6 +3357,7 @@ void dc_link_set_test_pattern(struct dc_link *link,
 		dc_link_dp_set_test_pattern(
 			link,
 			test_pattern,
+			test_pattern_color_space,
 			p_link_settings,
 			p_custom_pattern,
 			cust_pattern_size);
@@ -3203,3 +3410,10 @@ const struct dc_link_settings *dc_link_get_link_cap(
 		return &link->preferred_link_setting;
 	return &link->verified_link_cap;
 }
+
+void dc_link_overwrite_extended_receiver_cap(
+		struct dc_link *link)
+{
+	dp_overwrite_extended_receiver_cap(link);
+}
+

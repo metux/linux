@@ -1971,6 +1971,70 @@ void ib_dispatch_event_clients(struct ib_event *event)
 	up_read(&event->device->event_handler_rwsem);
 }
 
+static int iw_query_port(struct ib_device *device,
+			   u8 port_num,
+			   struct ib_port_attr *port_attr)
+{
+	struct in_device *inetdev;
+	struct net_device *netdev;
+
+	memset(port_attr, 0, sizeof(*port_attr));
+
+	netdev = ib_device_get_netdev(device, port_num);
+	if (!netdev)
+		return -ENODEV;
+
+	port_attr->max_mtu = IB_MTU_4096;
+	port_attr->active_mtu = ib_mtu_int_to_enum(netdev->mtu);
+
+	if (!netif_carrier_ok(netdev)) {
+		port_attr->state = IB_PORT_DOWN;
+		port_attr->phys_state = IB_PORT_PHYS_STATE_DISABLED;
+	} else {
+		rcu_read_lock();
+		inetdev = __in_dev_get_rcu(netdev);
+
+		if (inetdev && inetdev->ifa_list) {
+			port_attr->state = IB_PORT_ACTIVE;
+			port_attr->phys_state = IB_PORT_PHYS_STATE_LINK_UP;
+		} else {
+			port_attr->state = IB_PORT_INIT;
+			port_attr->phys_state =
+				IB_PORT_PHYS_STATE_PORT_CONFIGURATION_TRAINING;
+		}
+
+		rcu_read_unlock();
+	}
+
+	dev_put(netdev);
+	return device->ops.query_port(device, port_num, port_attr);
+}
+
+static int __ib_query_port(struct ib_device *device,
+			   u8 port_num,
+			   struct ib_port_attr *port_attr)
+{
+	union ib_gid gid = {};
+	int err;
+
+	memset(port_attr, 0, sizeof(*port_attr));
+
+	err = device->ops.query_port(device, port_num, port_attr);
+	if (err || port_attr->subnet_prefix)
+		return err;
+
+	if (rdma_port_get_link_layer(device, port_num) !=
+	    IB_LINK_LAYER_INFINIBAND)
+		return 0;
+
+	err = device->ops.query_gid(device, port_num, 0, &gid);
+	if (err)
+		return err;
+
+	port_attr->subnet_prefix = be64_to_cpu(gid.global.subnet_prefix);
+	return 0;
+}
+
 /**
  * ib_query_port - Query IB port attributes
  * @device:Device to query
@@ -1984,26 +2048,13 @@ int ib_query_port(struct ib_device *device,
 		  u8 port_num,
 		  struct ib_port_attr *port_attr)
 {
-	union ib_gid gid;
-	int err;
-
 	if (!rdma_is_port_valid(device, port_num))
 		return -EINVAL;
 
-	memset(port_attr, 0, sizeof(*port_attr));
-	err = device->ops.query_port(device, port_num, port_attr);
-	if (err || port_attr->subnet_prefix)
-		return err;
-
-	if (rdma_port_get_link_layer(device, port_num) != IB_LINK_LAYER_INFINIBAND)
-		return 0;
-
-	err = device->ops.query_gid(device, port_num, 0, &gid);
-	if (err)
-		return err;
-
-	port_attr->subnet_prefix = be64_to_cpu(gid.global.subnet_prefix);
-	return 0;
+	if (rdma_protocol_iwarp(device, port_num))
+		return iw_query_port(device, port_num, port_attr);
+	else
+		return __ib_query_port(device, port_num, port_attr);
 }
 EXPORT_SYMBOL(ib_query_port);
 
@@ -2663,6 +2714,8 @@ static int __init ib_core_init(void)
 		pr_warn("Couldn't create InfiniBand device class\n");
 		goto err_comp_unbound;
 	}
+
+	rdma_nl_init();
 
 	ret = addr_init();
 	if (ret) {

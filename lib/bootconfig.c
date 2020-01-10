@@ -6,13 +6,12 @@
 
 #define pr_fmt(fmt)    "bootconfig: " fmt
 
-#include <linux/bootconfig.h>
 #include <linux/bug.h>
 #include <linux/ctype.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
-#include <linux/memblock.h>
 #include <linux/printk.h>
+#include <linux/bootconfig.h>
 #include <linux/string.h>
 
 /*
@@ -24,7 +23,7 @@
  * node (for array).
  */
 
-static struct xbc_node *xbc_nodes __initdata;
+static struct xbc_node xbc_nodes[XBC_NODE_MAX] __initdata;
 static int xbc_node_num __initdata;
 static char *xbc_data __initdata;
 static size_t xbc_data_size __initdata;
@@ -374,8 +373,7 @@ static struct xbc_node * __init xbc_add_sibling(char *data, u32 flag)
 				sib->next = xbc_node_index(node);
 			}
 		}
-	} else
-		xbc_parse_error("Too many nodes", data);
+	}
 
 	return node;
 }
@@ -533,7 +531,7 @@ struct xbc_node *find_match_node(struct xbc_node *node, char *k)
 
 static int __init __xbc_add_key(char *k)
 {
-	struct xbc_node *node, *child;
+	struct xbc_node *node;
 
 	if (!xbc_valid_keyword(k))
 		return xbc_parse_error("Invalid keyword", k);
@@ -543,12 +541,8 @@ static int __init __xbc_add_key(char *k)
 
 	if (!last_parent)	/* the first level */
 		node = find_match_node(xbc_nodes, k);
-	else {
-		child = xbc_node_get_child(last_parent);
-		if (child && xbc_node_is_value(child))
-			return xbc_parse_error("Subkey is mixed with value", k);
-		node = find_match_node(child, k);
-	}
+	else
+		node = find_match_node(xbc_node_get_child(last_parent), k);
 
 	if (node)
 		last_parent = node;
@@ -578,10 +572,10 @@ static int __init __xbc_parse_keys(char *k)
 	return __xbc_add_key(k);
 }
 
-static int __init xbc_parse_kv(char **k, char *v, int op)
+static int __init xbc_parse_kv(char **k, char *v)
 {
 	struct xbc_node *prev_parent = last_parent;
-	struct xbc_node *child;
+	struct xbc_node *node;
 	char *next;
 	int c, ret;
 
@@ -589,19 +583,12 @@ static int __init xbc_parse_kv(char **k, char *v, int op)
 	if (ret)
 		return ret;
 
-	child = xbc_node_get_child(last_parent);
-	if (child) {
-		if (xbc_node_is_key(child))
-			return xbc_parse_error("Value is mixed with subkey", v);
-		else if (op == '=')
-			return xbc_parse_error("Value is redefined", v);
-	}
-
 	c = __xbc_parse_value(&v, &next);
 	if (c < 0)
 		return c;
 
-	if (!xbc_add_sibling(v, XBC_VALUE))
+	node = xbc_add_sibling(v, XBC_VALUE);
+	if (!node)
 		return -ENOMEM;
 
 	if (c == ',') {	/* Array */
@@ -670,10 +657,8 @@ static int __init xbc_verify_tree(void)
 	struct xbc_node *n, *m;
 
 	/* Empty tree */
-	if (xbc_node_num == 0) {
-		xbc_parse_error("Empty config", xbc_data);
+	if (xbc_node_num == 0)
 		return -ENOENT;
-	}
 
 	for (i = 0; i < xbc_node_num; i++) {
 		if (xbc_nodes[i].next > xbc_node_num) {
@@ -731,8 +716,7 @@ void __init xbc_destroy_all(void)
 	xbc_data = NULL;
 	xbc_data_size = 0;
 	xbc_node_num = 0;
-	memblock_free(__pa(xbc_nodes), sizeof(struct xbc_node) * XBC_NODE_MAX);
-	xbc_nodes = NULL;
+	memset(xbc_nodes, 0, sizeof(xbc_nodes));
 }
 
 /**
@@ -741,40 +725,27 @@ void __init xbc_destroy_all(void)
  *
  * This parses the boot config text in @buf. @buf must be a
  * null terminated string and smaller than XBC_DATA_MAX.
- * Return the number of stored nodes (>0) if succeeded, or -errno
- * if there is any error.
+ * Return 0 if succeeded, or -errno if there is any error.
  */
 int __init xbc_init(char *buf)
 {
 	char *p, *q;
 	int ret, c;
 
-	if (xbc_data) {
-		pr_err("Error: bootconfig is already initialized.\n");
+	if (xbc_data)
 		return -EBUSY;
-	}
 
 	ret = strlen(buf);
-	if (ret > XBC_DATA_MAX - 1 || ret == 0) {
-		pr_err("Error: Config data is %s.\n",
-			ret ? "too big" : "empty");
+	if (ret > XBC_DATA_MAX - 1 || ret == 0)
 		return -ERANGE;
-	}
 
-	xbc_nodes = memblock_alloc(sizeof(struct xbc_node) * XBC_NODE_MAX,
-				   SMP_CACHE_BYTES);
-	if (!xbc_nodes) {
-		pr_err("Failed to allocate memory for bootconfig nodes.\n");
-		return -ENOMEM;
-	}
-	memset(xbc_nodes, 0, sizeof(struct xbc_node) * XBC_NODE_MAX);
 	xbc_data = buf;
 	xbc_data_size = ret + 1;
 	last_parent = NULL;
 
 	p = buf;
 	do {
-		q = strpbrk(p, "{}=+;\n#");
+		q = strpbrk(p, "{}=;\n#");
 		if (!q) {
 			p = skip_spaces(p);
 			if (*p != '\0')
@@ -785,15 +756,8 @@ int __init xbc_init(char *buf)
 		c = *q;
 		*q++ = '\0';
 		switch (c) {
-		case '+':
-			if (*q++ != '=') {
-				ret = xbc_parse_error("Wrong '+' operator",
-							q - 2);
-				break;
-			}
-			/* Fall through */
 		case '=':
-			ret = xbc_parse_kv(&p, q, c);
+			ret = xbc_parse_kv(&p, q);
 			break;
 		case '{':
 			ret = xbc_open_brace(&p, q);
@@ -816,8 +780,6 @@ int __init xbc_init(char *buf)
 
 	if (ret < 0)
 		xbc_destroy_all();
-	else
-		ret = xbc_node_num;
 
 	return ret;
 }

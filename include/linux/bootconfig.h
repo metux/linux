@@ -10,9 +10,6 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
-#define BOOTCONFIG_MAGIC	"#BOOTCONFIG\n"
-#define BOOTCONFIG_MAGIC_LEN	12
-
 /* XBC tree node */
 struct xbc_node {
 	u16 next;

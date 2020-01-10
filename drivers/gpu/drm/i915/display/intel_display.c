@@ -15810,7 +15810,7 @@ intel_prepare_plane_fb(struct drm_plane *_plane,
 						      false, I915_FENCE_TIMEOUT,
 						      GFP_KERNEL);
 		if (ret < 0)
-			return ret;
+			goto unpin_fb;
 
 		fence = dma_resv_get_excl_rcu(obj->base.resv);
 		if (fence) {
@@ -15837,6 +15837,11 @@ intel_prepare_plane_fb(struct drm_plane *_plane,
 	}
 
 	return 0;
+
+unpin_fb:
+	intel_plane_unpin_fb(new_plane_state);
+
+	return ret;
 }
 
 /**

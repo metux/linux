@@ -418,10 +418,10 @@ int snd_soc_pcm_component_pointer(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
-	struct snd_soc_rtdcom_list *rtdcom;
+	int i;
 
 	/* FIXME: use 1st pointer */
-	for_each_rtd_components(rtd, rtdcom, component)
+	for_each_rtd_components(rtd, i, component)
 		if (component->driver->pointer)
 			return component->driver->pointer(component, substream);
 
@@ -433,10 +433,10 @@ int snd_soc_pcm_component_ioctl(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
-	struct snd_soc_rtdcom_list *rtdcom;
+	int i;
 
 	/* FIXME: use 1st ioctl */
-	for_each_rtd_components(rtd, rtdcom, component)
+	for_each_rtd_components(rtd, i, component)
 		if (component->driver->ioctl)
 			return component->driver->ioctl(component, substream,
 							cmd, arg);
@@ -444,16 +444,34 @@ int snd_soc_pcm_component_ioctl(struct snd_pcm_substream *substream,
 	return snd_pcm_lib_ioctl(substream, cmd, arg);
 }
 
+int snd_soc_pcm_component_sync_stop(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_component *component;
+	int i, ret;
+
+	for_each_rtd_components(rtd, i, component) {
+		if (component->driver->ioctl) {
+			ret = component->driver->sync_stop(component,
+							   substream);
+			if (ret < 0)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
 int snd_soc_pcm_component_copy_user(struct snd_pcm_substream *substream,
 				    int channel, unsigned long pos,
 				    void __user *buf, unsigned long bytes)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *component;
+	int i;
 
 	/* FIXME. it returns 1st copy now */
-	for_each_rtd_components(rtd, rtdcom, component)
+	for_each_rtd_components(rtd, i, component)
 		if (component->driver->copy_user)
 			return component->driver->copy_user(
 				component, substream, channel, pos, buf, bytes);
@@ -465,12 +483,12 @@ struct page *snd_soc_pcm_component_page(struct snd_pcm_substream *substream,
 					unsigned long offset)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *component;
 	struct page *page;
+	int i;
 
 	/* FIXME. it returns 1st page now */
-	for_each_rtd_components(rtd, rtdcom, component) {
+	for_each_rtd_components(rtd, i, component) {
 		if (component->driver->page) {
 			page = component->driver->page(component,
 						       substream, offset);
@@ -486,11 +504,11 @@ int snd_soc_pcm_component_mmap(struct snd_pcm_substream *substream,
 			       struct vm_area_struct *vma)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *component;
+	int i;
 
 	/* FIXME. it returns 1st mmap now */
-	for_each_rtd_components(rtd, rtdcom, component)
+	for_each_rtd_components(rtd, i, component)
 		if (component->driver->mmap)
 			return component->driver->mmap(component,
 						       substream, vma);
@@ -498,14 +516,13 @@ int snd_soc_pcm_component_mmap(struct snd_pcm_substream *substream,
 	return -EINVAL;
 }
 
-int snd_soc_pcm_component_new(struct snd_pcm *pcm)
+int snd_soc_pcm_component_new(struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_pcm_runtime *rtd = pcm->private_data;
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *component;
 	int ret;
+	int i;
 
-	for_each_rtd_components(rtd, rtdcom, component) {
+	for_each_rtd_components(rtd, i, component) {
 		if (component->driver->pcm_construct) {
 			ret = component->driver->pcm_construct(component, rtd);
 			if (ret < 0)
@@ -516,13 +533,15 @@ int snd_soc_pcm_component_new(struct snd_pcm *pcm)
 	return 0;
 }
 
-void snd_soc_pcm_component_free(struct snd_pcm *pcm)
+void snd_soc_pcm_component_free(struct snd_soc_pcm_runtime *rtd)
 {
-	struct snd_soc_pcm_runtime *rtd = pcm->private_data;
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *component;
+	int i;
 
-	for_each_rtd_components(rtd, rtdcom, component)
+	if (!rtd->pcm)
+		return;
+
+	for_each_rtd_components(rtd, i, component)
 		if (component->driver->pcm_destruct)
-			component->driver->pcm_destruct(component, pcm);
+			component->driver->pcm_destruct(component, rtd->pcm);
 }

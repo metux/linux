@@ -45,11 +45,6 @@
 
 #define NAME_SIZE	32
 
-#ifdef CONFIG_DEBUG_FS
-struct dentry *snd_soc_debugfs_root;
-EXPORT_SYMBOL_GPL(snd_soc_debugfs_root);
-#endif
-
 static DEFINE_MUTEX(client_mutex);
 static LIST_HEAD(component_list);
 static LIST_HEAD(unbind_card_list);
@@ -72,23 +67,6 @@ EXPORT_SYMBOL_GPL(null_dailink_component);
 static int pmdown_time = 5000;
 module_param(pmdown_time, int, 0);
 MODULE_PARM_DESC(pmdown_time, "DAPM stream powerdown time (msecs)");
-
-#ifdef CONFIG_DMI
-/*
- * If a DMI filed contain strings in this blacklist (e.g.
- * "Type2 - Board Manufacturer" or "Type1 - TBD by OEM"), it will be taken
- * as invalid and dropped when setting the card long name from DMI info.
- */
-static const char * const dmi_blacklist[] = {
-	"To be filled by OEM",
-	"TBD by OEM",
-	"Default String",
-	"Board Manufacturer",
-	"Board Vendor Name",
-	"Board Product Name",
-	NULL,	/* terminator */
-};
-#endif
 
 static ssize_t pmdown_time_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -150,6 +128,9 @@ static const struct attribute_group *soc_dev_attr_groups[] = {
 };
 
 #ifdef CONFIG_DEBUG_FS
+struct dentry *snd_soc_debugfs_root;
+EXPORT_SYMBOL_GPL(snd_soc_debugfs_root);
+
 static void soc_init_component_debugfs(struct snd_soc_component *component)
 {
 	if (!component->card->debugfs_card_root)
@@ -277,49 +258,21 @@ static inline void snd_soc_debugfs_exit(void)
 
 #endif
 
-/*
- * This is glue code between snd_pcm_lib_ioctl() and
- * snd_soc_component_driver :: ioctl
- */
-int snd_soc_pcm_lib_ioctl(struct snd_soc_component *component,
-			  struct snd_pcm_substream *substream,
-			  unsigned int cmd, void *arg)
-{
-	return snd_pcm_lib_ioctl(substream, cmd, arg);
-}
-EXPORT_SYMBOL_GPL(snd_soc_pcm_lib_ioctl);
-
 static int snd_soc_rtdcom_add(struct snd_soc_pcm_runtime *rtd,
 			      struct snd_soc_component *component)
 {
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *comp;
+	int i;
 
-	for_each_rtd_components(rtd, rtdcom, comp) {
+	for_each_rtd_components(rtd, i, comp) {
 		/* already connected */
 		if (comp == component)
 			return 0;
 	}
 
-	/*
-	 * created rtdcom here will be freed when rtd->dev was freed.
-	 * see
-	 *	soc_free_pcm_runtime() :: device_unregister(rtd->dev)
-	 */
-	rtdcom = devm_kzalloc(rtd->dev, sizeof(*rtdcom), GFP_KERNEL);
-	if (!rtdcom)
-		return -ENOMEM;
-
-	rtdcom->component = component;
-	INIT_LIST_HEAD(&rtdcom->list);
-
-	/*
-	 * When rtd was freed, created rtdcom here will be
-	 * also freed.
-	 * And we don't need to call list_del(&rtdcom->list)
-	 * when freed, because rtd is also freed.
-	 */
-	list_add_tail(&rtdcom->list, &rtd->component_list);
+	/* see for_each_rtd_components */
+	rtd->components[rtd->num_components] = component;
+	rtd->num_components++;
 
 	return 0;
 }
@@ -327,8 +280,8 @@ static int snd_soc_rtdcom_add(struct snd_soc_pcm_runtime *rtd,
 struct snd_soc_component *snd_soc_rtdcom_lookup(struct snd_soc_pcm_runtime *rtd,
 						const char *driver_name)
 {
-	struct snd_soc_rtdcom_list *rtdcom;
 	struct snd_soc_component *component;
+	int i;
 
 	if (!driver_name)
 		return NULL;
@@ -341,7 +294,7 @@ struct snd_soc_component *snd_soc_rtdcom_lookup(struct snd_soc_pcm_runtime *rtd,
 	 * But, if many components which have same driver name are connected
 	 * to 1 rtd, this function will return 1st found component.
 	 */
-	for_each_rtd_components(rtd, rtdcom, component) {
+	for_each_rtd_components(rtd, i, component) {
 		const char *component_name = component->driver->name;
 
 		if (!component_name)
@@ -349,7 +302,7 @@ struct snd_soc_component *snd_soc_rtdcom_lookup(struct snd_soc_pcm_runtime *rtd,
 
 		if ((component_name == driver_name) ||
 		    strcmp(component_name, driver_name) == 0)
-			return rtdcom->component;
+			return component;
 	}
 
 	return NULL;
@@ -449,6 +402,7 @@ static struct snd_soc_pcm_runtime *soc_new_pcm_runtime(
 	struct snd_soc_card *card, struct snd_soc_dai_link *dai_link)
 {
 	struct snd_soc_pcm_runtime *rtd;
+	struct snd_soc_component *component;
 	struct device *dev;
 	int ret;
 
@@ -474,13 +428,17 @@ static struct snd_soc_pcm_runtime *soc_new_pcm_runtime(
 	/*
 	 * for rtd
 	 */
-	rtd = devm_kzalloc(dev, sizeof(*rtd), GFP_KERNEL);
+	rtd = devm_kzalloc(dev,
+			   sizeof(*rtd) +
+			   sizeof(*component) * (dai_link->num_cpus +
+						 dai_link->num_codecs +
+						 dai_link->num_platforms),
+			   GFP_KERNEL);
 	if (!rtd)
 		goto free_rtd;
 
 	rtd->dev = dev;
 	INIT_LIST_HEAD(&rtd->list);
-	INIT_LIST_HEAD(&rtd->component_list);
 	INIT_LIST_HEAD(&rtd->dpcm[SNDRV_PCM_STREAM_PLAYBACK].be_clients);
 	INIT_LIST_HEAD(&rtd->dpcm[SNDRV_PCM_STREAM_CAPTURE].be_clients);
 	INIT_LIST_HEAD(&rtd->dpcm[SNDRV_PCM_STREAM_PLAYBACK].fe_clients);
@@ -1113,39 +1071,123 @@ _err_defer:
 }
 EXPORT_SYMBOL_GPL(snd_soc_add_pcm_runtime);
 
-static void soc_set_of_name_prefix(struct snd_soc_component *component)
+static int soc_dai_pcm_new(struct snd_soc_dai **dais, int num_dais,
+			   struct snd_soc_pcm_runtime *rtd)
 {
-	struct device_node *of_node = soc_component_to_node(component);
-	const char *str;
-	int ret;
+	int i, ret = 0;
 
-	ret = of_property_read_string(of_node, "sound-name-prefix", &str);
-	if (!ret)
-		component->name_prefix = str;
+	for (i = 0; i < num_dais; ++i) {
+		struct snd_soc_dai_driver *drv = dais[i]->driver;
+
+		if (drv->pcm_new)
+			ret = drv->pcm_new(rtd, dais[i]);
+		if (ret < 0) {
+			dev_err(dais[i]->dev,
+				"ASoC: Failed to bind %s with pcm device\n",
+				dais[i]->name);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int soc_init_pcm_runtime(struct snd_soc_card *card,
+				struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_dai_link *dai_link = rtd->dai_link;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_component *component;
+	int ret, num, i;
+
+	/* set default power off timeout */
+	rtd->pmdown_time = pmdown_time;
+
+	/* do machine specific initialization */
+	if (dai_link->init) {
+		ret = dai_link->init(rtd);
+		if (ret < 0) {
+			dev_err(card->dev, "ASoC: failed to init %s: %d\n",
+				dai_link->name, ret);
+			return ret;
+		}
+	}
+
+	if (dai_link->dai_fmt) {
+		ret = snd_soc_runtime_set_dai_fmt(rtd, dai_link->dai_fmt);
+		if (ret)
+			return ret;
+	}
+
+	/* add DPCM sysfs entries */
+	soc_dpcm_debugfs_add(rtd);
+
+	num = rtd->num;
+
+	/*
+	 * most drivers will register their PCMs using DAI link ordering but
+	 * topology based drivers can use the DAI link id field to set PCM
+	 * device number and then use rtd + a base offset of the BEs.
+	 */
+	for_each_rtd_components(rtd, i, component) {
+		if (!component->driver->use_dai_pcm_id)
+			continue;
+
+		if (rtd->dai_link->no_pcm)
+			num += component->driver->be_pcm_base;
+		else
+			num = rtd->dai_link->id;
+	}
+
+	/* create compress_device if possible */
+	ret = snd_soc_dai_compress_new(cpu_dai, rtd, num);
+	if (ret != -ENOTSUPP) {
+		if (ret < 0)
+			dev_err(card->dev, "ASoC: can't create compress %s\n",
+				dai_link->stream_name);
+		return ret;
+	}
+
+	/* create the pcm */
+	ret = soc_new_pcm(rtd, num);
+	if (ret < 0) {
+		dev_err(card->dev, "ASoC: can't create pcm %s :%d\n",
+			dai_link->stream_name, ret);
+		return ret;
+	}
+	ret = soc_dai_pcm_new(&cpu_dai, 1, rtd);
+	if (ret < 0)
+		return ret;
+	ret = soc_dai_pcm_new(rtd->codec_dais,
+			      rtd->num_codecs, rtd);
+	return ret;
 }
 
 static void soc_set_name_prefix(struct snd_soc_card *card,
 				struct snd_soc_component *component)
 {
-	int i;
+	struct device_node *of_node = soc_component_to_node(component);
+	const char *str;
+	int ret, i;
 
-	for (i = 0; i < card->num_configs && card->codec_conf; i++) {
+	for (i = 0; i < card->num_configs; i++) {
 		struct snd_soc_codec_conf *map = &card->codec_conf[i];
-		struct device_node *of_node = soc_component_to_node(component);
 
-		if (map->of_node && of_node != map->of_node)
-			continue;
-		if (map->dev_name && strcmp(component->name, map->dev_name))
-			continue;
-		component->name_prefix = map->name_prefix;
-		return;
+		if (snd_soc_is_matching_component(&map->dlc, component)) {
+			component->name_prefix = map->name_prefix;
+			return;
+		}
 	}
 
 	/*
 	 * If there is no configuration table or no match in the table,
 	 * check if a prefix is provided in the node
 	 */
-	soc_set_of_name_prefix(component);
+	ret = of_property_read_string(of_node, "sound-name-prefix", &str);
+	if (ret < 0)
+		return;
+
+	component->name_prefix = str;
 }
 
 static void soc_remove_component(struct snd_soc_component *component,
@@ -1352,12 +1394,11 @@ static void soc_remove_link_components(struct snd_soc_card *card)
 {
 	struct snd_soc_component *component;
 	struct snd_soc_pcm_runtime *rtd;
-	struct snd_soc_rtdcom_list *rtdcom;
-	int order;
+	int i, order;
 
 	for_each_comp_order(order) {
 		for_each_card_rtds(card, rtd) {
-			for_each_rtd_components(rtd, rtdcom, component) {
+			for_each_rtd_components(rtd, i, component) {
 				if (component->driver->remove_order != order)
 					continue;
 
@@ -1371,12 +1412,11 @@ static int soc_probe_link_components(struct snd_soc_card *card)
 {
 	struct snd_soc_component *component;
 	struct snd_soc_pcm_runtime *rtd;
-	struct snd_soc_rtdcom_list *rtdcom;
-	int ret, order;
+	int i, ret, order;
 
 	for_each_comp_order(order) {
 		for_each_card_rtds(card, rtd) {
-			for_each_rtd_components(rtd, rtdcom, component) {
+			for_each_rtd_components(rtd, i, component) {
 				if (component->driver->probe_order != order)
 					continue;
 
@@ -1388,99 +1428,6 @@ static int soc_probe_link_components(struct snd_soc_card *card)
 	}
 
 	return 0;
-}
-
-static int soc_link_dai_pcm_new(struct snd_soc_dai **dais, int num_dais,
-				struct snd_soc_pcm_runtime *rtd)
-{
-	int i, ret = 0;
-
-	for (i = 0; i < num_dais; ++i) {
-		struct snd_soc_dai_driver *drv = dais[i]->driver;
-
-		if (drv->pcm_new)
-			ret = drv->pcm_new(rtd, dais[i]);
-		if (ret < 0) {
-			dev_err(dais[i]->dev,
-				"ASoC: Failed to bind %s with pcm device\n",
-				dais[i]->name);
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-static int soc_link_init(struct snd_soc_card *card,
-			 struct snd_soc_pcm_runtime *rtd)
-{
-	struct snd_soc_dai_link *dai_link = rtd->dai_link;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_rtdcom_list *rtdcom;
-	struct snd_soc_component *component;
-	int ret, num;
-
-	/* set default power off timeout */
-	rtd->pmdown_time = pmdown_time;
-
-	/* do machine specific initialization */
-	if (dai_link->init) {
-		ret = dai_link->init(rtd);
-		if (ret < 0) {
-			dev_err(card->dev, "ASoC: failed to init %s: %d\n",
-				dai_link->name, ret);
-			return ret;
-		}
-	}
-
-	if (dai_link->dai_fmt) {
-		ret = snd_soc_runtime_set_dai_fmt(rtd, dai_link->dai_fmt);
-		if (ret)
-			return ret;
-	}
-
-	/* add DPCM sysfs entries */
-	soc_dpcm_debugfs_add(rtd);
-
-	num = rtd->num;
-
-	/*
-	 * most drivers will register their PCMs using DAI link ordering but
-	 * topology based drivers can use the DAI link id field to set PCM
-	 * device number and then use rtd + a base offset of the BEs.
-	 */
-	for_each_rtd_components(rtd, rtdcom, component) {
-		if (!component->driver->use_dai_pcm_id)
-			continue;
-
-		if (rtd->dai_link->no_pcm)
-			num += component->driver->be_pcm_base;
-		else
-			num = rtd->dai_link->id;
-	}
-
-	/* create compress_device if possible */
-	ret = snd_soc_dai_compress_new(cpu_dai, rtd, num);
-	if (ret != -ENOTSUPP) {
-		if (ret < 0)
-			dev_err(card->dev, "ASoC: can't create compress %s\n",
-					 dai_link->stream_name);
-		return ret;
-	}
-
-	/* create the pcm */
-	ret = soc_new_pcm(rtd, num);
-	if (ret < 0) {
-		dev_err(card->dev, "ASoC: can't create pcm %s :%d\n",
-			dai_link->stream_name, ret);
-		return ret;
-	}
-	ret = soc_link_dai_pcm_new(&cpu_dai, 1, rtd);
-	if (ret < 0)
-		return ret;
-	ret = soc_link_dai_pcm_new(rtd->codec_dais,
-				   rtd->num_codecs, rtd);
-	return ret;
 }
 
 static void soc_unbind_aux_dev(struct snd_soc_card *card)
@@ -1613,6 +1560,21 @@ int snd_soc_runtime_set_dai_fmt(struct snd_soc_pcm_runtime *rtd,
 EXPORT_SYMBOL_GPL(snd_soc_runtime_set_dai_fmt);
 
 #ifdef CONFIG_DMI
+/*
+ * If a DMI filed contain strings in this blacklist (e.g.
+ * "Type2 - Board Manufacturer" or "Type1 - TBD by OEM"), it will be taken
+ * as invalid and dropped when setting the card long name from DMI info.
+ */
+static const char * const dmi_blacklist[] = {
+	"To be filled by OEM",
+	"TBD by OEM",
+	"Default String",
+	"Board Manufacturer",
+	"Board Vendor Name",
+	"Board Product Name",
+	NULL,	/* terminator */
+};
+
 /*
  * Trim special characters, and replace '-' with '_' since '-' is used to
  * separate different DMI fields in the card long name. Only number and
@@ -1996,8 +1958,11 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 		goto probe_end;
 	}
 
-	for_each_card_rtds(card, rtd)
-		soc_link_init(card, rtd);
+	for_each_card_rtds(card, rtd) {
+		ret = soc_init_pcm_runtime(card, rtd);
+		if (ret < 0)
+			goto probe_end;
+	}
 
 	snd_soc_dapm_link_dai_widgets(card);
 	snd_soc_dapm_connect_dai_link_widgets(card);
@@ -2936,7 +2901,7 @@ void snd_soc_of_parse_node_prefix(struct device_node *np,
 		return;
 	}
 
-	codec_conf->of_node	= of_node;
+	codec_conf->dlc.of_node	= of_node;
 	codec_conf->name_prefix	= str;
 }
 EXPORT_SYMBOL_GPL(snd_soc_of_parse_node_prefix);

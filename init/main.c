@@ -64,7 +64,7 @@
 #include <linux/lockdep.h>
 #include <linux/kmemleak.h>
 #include <linux/pid_namespace.h>
-#include <linux/device/driver.h>
+#include <linux/device.h>
 #include <linux/kthread.h>
 #include <linux/sched.h>
 #include <linux/sched/init.h>
@@ -137,8 +137,6 @@ char __initdata boot_command_line[COMMAND_LINE_SIZE];
 char *saved_command_line;
 /* Command line for parameter parsing */
 static char *static_command_line;
-/* Command line for per-initcall parameter parsing */
-static char *initcall_command_line;
 
 static char *execute_command;
 static char *ramdisk_execute_command;
@@ -299,7 +297,8 @@ static void __init setup_boot_config(void)
 #endif
 
 /* Change NUL term back to "=", to make "param" the whole string. */
-static void __init repair_env_string(char *param, char *val)
+static int __init repair_env_string(char *param, char *val,
+				    const char *unused, void *arg)
 {
 	if (val) {
 		/* param=val or param="val"? */
@@ -308,9 +307,11 @@ static void __init repair_env_string(char *param, char *val)
 		else if (val == param+strlen(param)+2) {
 			val[-2] = '=';
 			memmove(val-1, val, strlen(val)+1);
+			val--;
 		} else
 			BUG();
 	}
+	return 0;
 }
 
 /* Anything after -- gets handed straight to init. */
@@ -322,7 +323,7 @@ static int __init set_init_arg(char *param, char *val,
 	if (panic_later)
 		return 0;
 
-	repair_env_string(param, val);
+	repair_env_string(param, val, unused, NULL);
 
 	for (i = 0; argv_init[i]; i++) {
 		if (i == MAX_INIT_ARGS) {
@@ -342,16 +343,14 @@ static int __init set_init_arg(char *param, char *val,
 static int __init unknown_bootoption(char *param, char *val,
 				     const char *unused, void *arg)
 {
-	size_t len = strlen(param);
-
-	repair_env_string(param, val);
+	repair_env_string(param, val, unused, NULL);
 
 	/* Handle obsolete-style parameters */
 	if (obsolete_checksetup(param))
 		return 0;
 
 	/* Unused module parameter. */
-	if (strnchr(param, len, '.'))
+	if (strchr(param, '.') && (!val || strchr(param, '.') < val))
 		return 0;
 
 	if (panic_later)
@@ -365,7 +364,7 @@ static int __init unknown_bootoption(char *param, char *val,
 				panic_later = "env";
 				panic_param = param;
 			}
-			if (!strncmp(param, envp_init[i], len+1))
+			if (!strncmp(param, envp_init[i], val - param))
 				break;
 		}
 		envp_init[i] = param;
@@ -430,10 +429,6 @@ static void __init setup_command_line(char *command_line)
 
 	saved_command_line = memblock_alloc(len, SMP_CACHE_BYTES);
 	if (!saved_command_line)
-		panic("%s: Failed to allocate %zu bytes\n", __func__, len);
-
-	initcall_command_line =	memblock_alloc(len, SMP_CACHE_BYTES);
-	if (!initcall_command_line)
 		panic("%s: Failed to allocate %zu bytes\n", __func__, len);
 
 	static_command_line = memblock_alloc(len, SMP_CACHE_BYTES);
@@ -605,7 +600,6 @@ static void __init mm_init(void)
 	 * bigger than MAX_ORDER unless SPARSEMEM.
 	 */
 	page_ext_init_flatmem();
-	init_debug_pagealloc();
 	report_meminit();
 	mem_init();
 	kmem_cache_init();
@@ -1044,22 +1038,15 @@ static const char *initcall_level_names[] __initdata = {
 	"late",
 };
 
-static int __init ignore_unknown_bootoption(char *param, char *val,
-			       const char *unused, void *arg)
-{
-	return 0;
-}
-
-static void __init do_initcall_level(int level)
+static void __init do_initcall_level(int level, char *command_line)
 {
 	initcall_entry_t *fn;
 
-	strcpy(initcall_command_line, saved_command_line);
 	parse_args(initcall_level_names[level],
-		   initcall_command_line, __start___param,
+		   command_line, __start___param,
 		   __stop___param - __start___param,
 		   level, level,
-		   NULL, ignore_unknown_bootoption);
+		   NULL, &repair_env_string);
 
 	trace_initcall_level(initcall_level_names[level]);
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
@@ -1069,9 +1056,20 @@ static void __init do_initcall_level(int level)
 static void __init do_initcalls(void)
 {
 	int level;
+	size_t len = strlen(saved_command_line) + 1;
+	char *command_line;
 
-	for (level = 0; level < ARRAY_SIZE(initcall_levels) - 1; level++)
-		do_initcall_level(level);
+	command_line = kzalloc(len, GFP_KERNEL);
+	if (!command_line)
+		panic("%s: Failed to allocate %zu bytes\n", __func__, len);
+
+	for (level = 0; level < ARRAY_SIZE(initcall_levels) - 1; level++) {
+		/* Parser modifies command_line, restore it each time */
+		strcpy(command_line, saved_command_line);
+		do_initcall_level(level, command_line);
+	}
+
+	kfree(command_line);
 }
 
 /*
@@ -1102,16 +1100,8 @@ static void __init do_pre_smp_initcalls(void)
 
 static int run_init_process(const char *init_filename)
 {
-	const char *const *p;
-
 	argv_init[0] = init_filename;
 	pr_info("Run %s as init process\n", init_filename);
-	pr_debug("  with arguments:\n");
-	for (p = argv_init; *p; p++)
-		pr_debug("    %s\n", *p);
-	pr_debug("  with environment:\n");
-	for (p = envp_init; *p; p++)
-		pr_debug("    %s\n", *p);
 	return do_execve(getname_kernel(init_filename),
 		(const char __user *const __user *)argv_init,
 		(const char __user *const __user *)envp_init);
@@ -1157,11 +1147,6 @@ static void mark_readonly(void)
 		rodata_test();
 	} else
 		pr_info("Kernel memory protection disabled.\n");
-}
-#elif defined(CONFIG_ARCH_HAS_STRICT_KERNEL_RWX)
-static inline void mark_readonly(void)
-{
-	pr_warn("Kernel memory protection not selected by kernel config.\n");
 }
 #else
 static inline void mark_readonly(void)

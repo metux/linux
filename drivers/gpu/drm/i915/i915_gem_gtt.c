@@ -3317,7 +3317,7 @@ void i915_ggtt_disable_guc(struct i915_ggtt *ggtt)
 
 static void ggtt_restore_mappings(struct i915_ggtt *ggtt)
 {
-	struct i915_vma *vma, *vn;
+	struct i915_vma *vma;
 	bool flush = false;
 
 	intel_gt_check_and_clear_faults(ggtt->vm.gt);
@@ -3329,16 +3329,13 @@ static void ggtt_restore_mappings(struct i915_ggtt *ggtt)
 	ggtt->vm.closed = true; /* skip rewriting PTE on VMA unbind */
 
 	/* clflush objects bound into the GGTT and rebind them. */
-	list_for_each_entry_safe(vma, vn, &ggtt->vm.bound_list, vm_link) {
+	list_for_each_entry(vma, &ggtt->vm.bound_list, vm_link) {
 		struct drm_i915_gem_object *obj = vma->obj;
 
 		if (!(vma->flags & I915_VMA_GLOBAL_BIND))
 			continue;
 
 		mutex_unlock(&ggtt->vm.mutex);
-
-		if (!i915_vma_unbind(vma))
-			goto lock;
 
 		WARN_ON(i915_vma_bind(vma,
 				      obj ? obj->cache_level : 0,

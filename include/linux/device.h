@@ -1173,6 +1173,13 @@ struct dev_links_info {
 };
 
 /**
+ * struct device_dma - The dma information embedded within struct device
+ */
+struct device_dma {
+	const struct dma_map_ops *dma_ops;
+};
+
+/**
  * struct device - The basic device structure
  * @parent:	The device's "parent" device, the device to which it is attached.
  * 		In most cases, a parent device is some sort of bus or host
@@ -1295,7 +1302,8 @@ struct device {
 	struct list_head	msi_list;
 #endif
 
-	const struct dma_map_ops *dma_ops;
+	struct device_dma device_dma;
+
 	u64		*dma_mask;	/* dma mask (if dma'able device) */
 	u64		coherent_dma_mask;/* Like dma_mask, but for
 					     alloc_coherent mappings as

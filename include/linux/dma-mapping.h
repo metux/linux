@@ -260,15 +260,15 @@ size_t dma_direct_max_mapping_size(struct device *dev);
 
 static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 {
-	if (dev->dma_ops)
-		return dev->dma_ops;
+	if (dev->device_dma.dma_ops)
+		return dev->device_dma.dma_ops;
 	return get_arch_dma_ops(dev->bus);
 }
 
 static inline void set_dma_ops(struct device *dev,
 			       const struct dma_map_ops *dma_ops)
 {
-	dev->dma_ops = dma_ops;
+	dev->device_dma.dma_ops = dma_ops;
 }
 
 static inline dma_addr_t dma_map_page_attrs(struct device *dev,

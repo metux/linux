@@ -341,8 +341,7 @@ static int __stmmac_test_loopback(struct stmmac_priv *priv,
 		goto cleanup;
 	}
 
-	skb_set_queue_mapping(skb, attr->queue_mapping);
-	ret = dev_queue_xmit(skb);
+	ret = dev_direct_xmit(skb, attr->queue_mapping);
 	if (ret)
 		goto cleanup;
 
@@ -932,8 +931,7 @@ static int __stmmac_test_vlanfilt(struct stmmac_priv *priv)
 			goto vlan_del;
 		}
 
-		skb_set_queue_mapping(skb, 0);
-		ret = dev_queue_xmit(skb);
+		ret = dev_direct_xmit(skb, 0);
 		if (ret)
 			goto vlan_del;
 
@@ -1027,8 +1025,7 @@ static int __stmmac_test_dvlanfilt(struct stmmac_priv *priv)
 			goto vlan_del;
 		}
 
-		skb_set_queue_mapping(skb, 0);
-		ret = dev_queue_xmit(skb);
+		ret = dev_direct_xmit(skb, 0);
 		if (ret)
 			goto vlan_del;
 
@@ -1298,8 +1295,7 @@ static int stmmac_test_vlanoff_common(struct stmmac_priv *priv, bool svlan)
 	__vlan_hwaccel_put_tag(skb, htons(proto), tpriv->vlan_id);
 	skb->protocol = htons(proto);
 
-	skb_set_queue_mapping(skb, 0);
-	ret = dev_queue_xmit(skb);
+	ret = dev_direct_xmit(skb, 0);
 	if (ret)
 		goto vlan_del;
 
@@ -1659,8 +1655,7 @@ static int stmmac_test_arpoffload(struct stmmac_priv *priv)
 	if (ret)
 		goto cleanup;
 
-	skb_set_queue_mapping(skb, 0);
-	ret = dev_queue_xmit(skb);
+	ret = dev_direct_xmit(skb, 0);
 	if (ret)
 		goto cleanup_promisc;
 
@@ -1889,7 +1884,6 @@ void stmmac_selftest_run(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int count = stmmac_selftest_get_count(priv);
-	int carrier = netif_carrier_ok(dev);
 	int i, ret;
 
 	memset(buf, 0, sizeof(*buf) * count);
@@ -1899,14 +1893,11 @@ void stmmac_selftest_run(struct net_device *dev,
 		netdev_err(priv->dev, "Only offline tests are supported\n");
 		etest->flags |= ETH_TEST_FL_FAILED;
 		return;
-	} else if (!carrier) {
+	} else if (!netif_carrier_ok(dev)) {
 		netdev_err(priv->dev, "You need valid Link to execute tests\n");
 		etest->flags |= ETH_TEST_FL_FAILED;
 		return;
 	}
-
-	/* We don't want extra traffic */
-	netif_carrier_off(dev);
 
 	/* Wait for queues drain */
 	msleep(200);
@@ -1962,10 +1953,6 @@ void stmmac_selftest_run(struct net_device *dev,
 			break;
 		}
 	}
-
-	/* Restart everything */
-	if (carrier)
-		netif_carrier_on(dev);
 }
 
 void stmmac_selftest_get_strings(struct stmmac_priv *priv, u8 *data)

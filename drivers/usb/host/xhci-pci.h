@@ -1,28 +1,18 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (C) 2019-2020 Linaro Limited */
+/* Copyright (C) 2008 Intel Corp. */
 
 #ifndef XHCI_PCI_H
 #define XHCI_PCI_H
 
-#if IS_ENABLED(CONFIG_USB_XHCI_PCI_RENESAS)
-int renesas_xhci_check_request_fw(struct pci_dev *dev,
-				  const struct pci_device_id *id);
-void renesas_xhci_pci_exit(struct pci_dev *dev);
+int xhci_pci_setup(struct usb_hcd *hcd);
 
-#else
-static int renesas_xhci_check_request_fw(struct pci_dev *dev,
-					 const struct pci_device_id *id)
-{
-	return 0;
-}
+int xhci_pci_probe(struct pci_dev *pdev,
+		   const struct pci_device_id *id);
 
-static void renesas_xhci_pci_exit(struct pci_dev *dev) { };
+void xhci_pci_remove(struct pci_dev *dev);
 
-#endif
+int xhci_pci_suspend(struct usb_hcd *hcd, bool do_wakeup);
 
-struct xhci_driver_data {
-	u64 quirks;
-	const char *firmware;
-};
+int xhci_pci_resume(struct usb_hcd *hcd, bool hibernated);
 
 #endif

@@ -12,7 +12,6 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/acpi.h>
-#include <linux/reset.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"
@@ -23,8 +22,6 @@
 #define SSIC_PORT_CFG2_OFFSET	0x30
 #define PROG_DONE		(1 << 30)
 #define SSIC_PORT_UNUSED	(1 << 31)
-#define SPARSE_DISABLE_BIT	17
-#define SPARSE_CNTL_ENABLE	0xC12C
 
 /* Device for a quirk */
 #define PCI_VENDOR_ID_FRESCO_LOGIC	0x1b73
@@ -70,8 +67,6 @@
 static const char hcd_name[] = "xhci_hcd";
 
 static struct hc_driver __read_mostly xhci_pci_hc_driver;
-
-static int xhci_pci_setup(struct usb_hcd *hcd);
 
 static const struct xhci_driver_overrides xhci_pci_overrides __initconst = {
 	.reset = xhci_pci_setup,
@@ -164,9 +159,6 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	if (pdev->vendor == PCI_VENDOR_ID_AMD &&
 	    (pdev->device == 0x15e0 || pdev->device == 0x15e1))
 		xhci->quirks |= XHCI_SNPS_BROKEN_SUSPEND;
-
-	if (pdev->vendor == PCI_VENDOR_ID_AMD && pdev->device == 0x15e5)
-		xhci->quirks |= XHCI_DISABLE_SPARSE;
 
 	if (pdev->vendor == PCI_VENDOR_ID_AMD)
 		xhci->quirks |= XHCI_TRUST_TX_LENGTH;
@@ -317,7 +309,7 @@ static void xhci_pme_acpi_rtd3_enable(struct pci_dev *dev) { }
 #endif /* CONFIG_ACPI */
 
 /* called during probe() after chip reset completes */
-static int xhci_pci_setup(struct usb_hcd *hcd)
+int xhci_pci_setup(struct usb_hcd *hcd)
 {
 	struct xhci_hcd		*xhci;
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
@@ -345,18 +337,18 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	/* Find any debug ports */
 	return xhci_pci_reinit(xhci, pdev);
 }
+EXPORT_SYMBOL_GPL(xhci_pci_setup);
 
 /*
  * We need to register our own PCI probe function (instead of the USB core's
  * function) in order to create a second roothub under xHCI.
  */
-static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
+int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	int retval;
 	struct xhci_hcd *xhci;
 	struct usb_hcd *hcd;
 	struct xhci_driver_data *driver_data;
-	struct reset_control *reset;
 
 	driver_data = (struct xhci_driver_data *)id->driver_data;
 	if (driver_data && driver_data->quirks & XHCI_RENESAS_FW_QUIRK) {
@@ -364,11 +356,6 @@ static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		if (retval)
 			return retval;
 	}
-
-	reset = devm_reset_control_get_optional_exclusive(&dev->dev, NULL);
-	if (IS_ERR(reset))
-		return PTR_ERR(reset);
-	reset_control_reset(reset);
 
 	/* Prevent runtime suspending between USB-2 and USB-3 initialization */
 	pm_runtime_get_noresume(&dev->dev);
@@ -387,7 +374,6 @@ static int xhci_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	/* USB 2.0 roothub is stored in the PCI device now. */
 	hcd = dev_get_drvdata(&dev->dev);
 	xhci = hcd_to_xhci(hcd);
-	xhci->reset = reset;
 	xhci->shared_hcd = usb_create_shared_hcd(&xhci_pci_hc_driver, &dev->dev,
 						 pci_name(dev), hcd);
 	if (!xhci->shared_hcd) {
@@ -425,8 +411,9 @@ put_runtime_pm:
 	pm_runtime_put_noidle(&dev->dev);
 	return retval;
 }
+EXPORT_SYMBOL_GPL(xhci_pci_probe);
 
-static void xhci_pci_remove(struct pci_dev *dev)
+void xhci_pci_remove(struct pci_dev *dev)
 {
 	struct xhci_hcd *xhci;
 
@@ -451,6 +438,7 @@ static void xhci_pci_remove(struct pci_dev *dev)
 
 	usb_hcd_pci_remove(dev);
 }
+EXPORT_SYMBOL_GPL(xhci_pci_remove);
 
 #ifdef CONFIG_PM
 /*
@@ -507,16 +495,7 @@ static void xhci_pme_quirk(struct usb_hcd *hcd)
 	readl(reg);
 }
 
-static void xhci_sparse_control_quirk(struct usb_hcd *hcd)
-{
-	u32 reg;
-
-	reg = readl(hcd->regs + SPARSE_CNTL_ENABLE);
-	reg &= ~BIT(SPARSE_DISABLE_BIT);
-	writel(reg, hcd->regs + SPARSE_CNTL_ENABLE);
-}
-
-static int xhci_pci_suspend(struct usb_hcd *hcd, bool do_wakeup)
+int xhci_pci_suspend(struct usb_hcd *hcd, bool do_wakeup)
 {
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
@@ -535,23 +514,19 @@ static int xhci_pci_suspend(struct usb_hcd *hcd, bool do_wakeup)
 	if (xhci->quirks & XHCI_SSIC_PORT_UNUSED)
 		xhci_ssic_port_unused_quirk(hcd, true);
 
-	if (xhci->quirks & XHCI_DISABLE_SPARSE)
-		xhci_sparse_control_quirk(hcd);
-
 	ret = xhci_suspend(xhci, do_wakeup);
 	if (ret && (xhci->quirks & XHCI_SSIC_PORT_UNUSED))
 		xhci_ssic_port_unused_quirk(hcd, false);
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(xhci_pci_suspend);
 
-static int xhci_pci_resume(struct usb_hcd *hcd, bool hibernated)
+int xhci_pci_resume(struct usb_hcd *hcd, bool hibernated)
 {
 	struct xhci_hcd		*xhci = hcd_to_xhci(hcd);
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
 	int			retval = 0;
-
-	reset_control_reset(xhci->reset);
 
 	/* The BIOS on systems with the Intel Panther Point chipset may or may
 	 * not support xHCI natively.  That means that during system resume, it
@@ -595,6 +570,7 @@ static void xhci_pci_shutdown(struct usb_hcd *hcd)
 	if (xhci->quirks & XHCI_SPURIOUS_WAKEUP)
 		pci_set_power_state(pdev, PCI_D3hot);
 }
+EXPORT_SYMBOL_GPL(xhci_pci_resume);
 #endif /* CONFIG_PM */
 
 /*-------------------------------------------------------------------------*/

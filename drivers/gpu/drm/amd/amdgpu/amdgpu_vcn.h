@@ -194,7 +194,7 @@ struct amdgpu_vcn {
 	uint32_t		 num_vcn_dec_sched;
 
 	int (*pause_dpg_mode)(struct amdgpu_device *adev,
-		struct dpg_pause_state *new_state);
+		int inst_idx, struct dpg_pause_state *new_state);
 };
 
 int amdgpu_vcn_sw_init(struct amdgpu_device *adev);

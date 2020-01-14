@@ -58,6 +58,7 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.disable_plane = dcn10_disable_plane,
 	.blank_pixel_data = dcn10_blank_pixel_data,
 	.pipe_control_lock = dcn10_pipe_control_lock,
+	.interdependent_update_lock = dcn10_lock_all_pipes,
 	.prepare_bandwidth = dcn10_prepare_bandwidth,
 	.optimize_bandwidth = dcn10_optimize_bandwidth,
 	.reset_hw_ctx_wrap = dcn10_reset_hw_ctx_wrap,

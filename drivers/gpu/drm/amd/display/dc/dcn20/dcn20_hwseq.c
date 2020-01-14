@@ -183,10 +183,10 @@ void dcn20_enable_power_gating_plane(
 	struct dce_hwseq *hws,
 	bool enable)
 {
-	bool force_on = 1; /* disable power gating */
+	bool force_on = true; /* disable power gating */
 
 	if (enable)
-		force_on = 0;
+		force_on = false;
 
 	/* DCHUBP0/1/2/3/4/5 */
 	REG_UPDATE(DOMAIN0_PG_CONFIG, DOMAIN0_POWER_FORCEON, force_on);
@@ -272,6 +272,7 @@ void dcn20_init_blank(
 		struct dc *dc,
 		struct timing_generator *tg)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	enum dc_color_space color_space;
 	struct tg_color black_color = {0};
 	struct output_pixel_processor *opp = NULL;
@@ -319,7 +320,7 @@ void dcn20_init_blank(
 				otg_active_height);
 	}
 
-	dc->hwss.wait_for_blank_complete(opp);
+	hws->funcs.wait_for_blank_complete(opp);
 }
 
 void dcn20_dsc_pg_control(
@@ -552,6 +553,7 @@ void dcn20_hubp_pg_control(
  */
 void dcn20_plane_atomic_disable(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	struct hubp *hubp = pipe_ctx->plane_res.hubp;
 	struct dpp *dpp = pipe_ctx->plane_res.dpp;
 
@@ -570,9 +572,8 @@ void dcn20_plane_atomic_disable(struct dc *dc, struct pipe_ctx *pipe_ctx)
 	dpp->funcs->dpp_dppclk_control(dpp, false, false);
 
 	hubp->power_gated = true;
-	dc->optimized_required = false; /* We're powering off, no need to optimize */
 
-	dc->hwss.plane_atomic_power_down(dc,
+	hws->funcs.plane_atomic_power_down(dc,
 			pipe_ctx->plane_res.dpp,
 			pipe_ctx->plane_res.hubp);
 
@@ -603,6 +604,7 @@ enum dc_status dcn20_enable_stream_timing(
 		struct dc_state *context,
 		struct dc *dc)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct drr_params params = {0};
 	unsigned int event_triggers = 0;
@@ -662,7 +664,7 @@ enum dc_status dcn20_enable_stream_timing(
 			pipe_ctx->stream_res.opp,
 			true);
 
-	dc->hwss.blank_pixel_data(dc, pipe_ctx, true);
+	hws->funcs.blank_pixel_data(dc, pipe_ctx, true);
 
 	/* VTG is  within DCHUB command block. DCFCLK is always on */
 	if (false == pipe_ctx->stream_res.tg->funcs->enable_crtc(pipe_ctx->stream_res.tg)) {
@@ -670,7 +672,7 @@ enum dc_status dcn20_enable_stream_timing(
 		return DC_ERROR_UNEXPECTED;
 	}
 
-	dc->hwss.wait_for_blank_complete(pipe_ctx->stream_res.opp);
+	hws->funcs.wait_for_blank_complete(pipe_ctx->stream_res.opp);
 
 	params.vertical_total_min = stream->adjust.v_total_min;
 	params.vertical_total_max = stream->adjust.v_total_max;
@@ -683,9 +685,13 @@ enum dc_status dcn20_enable_stream_timing(
 	// DRR should set trigger event to monitor surface update event
 	if (stream->adjust.v_total_min != 0 && stream->adjust.v_total_max != 0)
 		event_triggers = 0x80;
+	/* Event triggers and num frames initialized for DRR, but can be
+	 * later updated for PSR use. Note DRR trigger events are generated
+	 * regardless of whether num frames met.
+	 */
 	if (pipe_ctx->stream_res.tg->funcs->set_static_screen_control)
 		pipe_ctx->stream_res.tg->funcs->set_static_screen_control(
-				pipe_ctx->stream_res.tg, event_triggers);
+				pipe_ctx->stream_res.tg, event_triggers, 2);
 
 	/* TODO program crtc source select for non-virtual signal*/
 	/* TODO program FMT */
@@ -820,6 +826,7 @@ bool dcn20_set_input_transfer_func(struct dc *dc,
 				struct pipe_ctx *pipe_ctx,
 				const struct dc_plane_state *plane_state)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	struct dpp *dpp_base = pipe_ctx->plane_res.dpp;
 	const struct dc_transfer_func *tf = NULL;
 	bool result = true;
@@ -828,8 +835,8 @@ bool dcn20_set_input_transfer_func(struct dc *dc,
 	if (dpp_base == NULL || plane_state == NULL)
 		return false;
 
-	dc->hwss.set_shaper_3dlut(pipe_ctx, plane_state);
-	dc->hwss.set_blend_lut(pipe_ctx, plane_state);
+	hws->funcs.set_shaper_3dlut(pipe_ctx, plane_state);
+	hws->funcs.set_blend_lut(pipe_ctx, plane_state);
 
 	if (plane_state->in_transfer_func)
 		tf = plane_state->in_transfer_func;
@@ -874,6 +881,11 @@ bool dcn20_set_input_transfer_func(struct dc *dc,
 					IPP_DEGAMMA_MODE_BYPASS);
 			break;
 		case TRANSFER_FUNCTION_PQ:
+			dpp_base->funcs->dpp_set_degamma(dpp_base, IPP_DEGAMMA_MODE_USER_PWL);
+			cm_helper_translate_curve_to_degamma_hw_format(tf, &dpp_base->degamma_params);
+			dpp_base->funcs->dpp_program_degamma_pwl(dpp_base, &dpp_base->degamma_params);
+			result = true;
+			break;
 		default:
 			result = false;
 			break;
@@ -931,6 +943,9 @@ void dcn20_blank_pixel_data(
 
 	int width = stream->timing.h_addressable + stream->timing.h_border_left + stream->timing.h_border_right;
 	int height = stream->timing.v_addressable + stream->timing.v_border_bottom + stream->timing.v_border_top;
+
+	if (stream->link->test_pattern_enabled)
+		return;
 
 	/* get opp dpg blank color */
 	color_space_to_black_color(dc, color_space, &black_color);
@@ -1073,40 +1088,18 @@ void dcn20_enable_plane(
 //	}
 }
 
-
-void dcn20_pipe_control_lock_global(
-		struct dc *dc,
-		struct pipe_ctx *pipe,
-		bool lock)
-{
-	if (lock) {
-		pipe->stream_res.tg->funcs->lock_doublebuffer_enable(
-				pipe->stream_res.tg);
-		pipe->stream_res.tg->funcs->lock(pipe->stream_res.tg);
-	} else {
-		pipe->stream_res.tg->funcs->unlock(pipe->stream_res.tg);
-		pipe->stream_res.tg->funcs->wait_for_state(pipe->stream_res.tg,
-				CRTC_STATE_VACTIVE);
-		pipe->stream_res.tg->funcs->wait_for_state(pipe->stream_res.tg,
-				CRTC_STATE_VBLANK);
-		pipe->stream_res.tg->funcs->wait_for_state(pipe->stream_res.tg,
-				CRTC_STATE_VACTIVE);
-		pipe->stream_res.tg->funcs->lock_doublebuffer_disable(
-				pipe->stream_res.tg);
-	}
-}
-
 void dcn20_pipe_control_lock(
 	struct dc *dc,
 	struct pipe_ctx *pipe,
 	bool lock)
 {
 	bool flip_immediate = false;
+	bool dig_update_required = false;
 
 	/* use TG master update lock to lock everything on the TG
 	 * therefore only top pipe need to lock
 	 */
-	if (pipe->top_pipe)
+	if (!pipe || pipe->top_pipe)
 		return;
 
 	if (pipe->plane_state != NULL)
@@ -1139,6 +1132,19 @@ void dcn20_pipe_control_lock(
 		    (!flip_immediate && pipe->stream_res.gsl_group > 0))
 			dcn20_setup_gsl_group_as_lock(dc, pipe, flip_immediate);
 
+	if (pipe->stream && pipe->stream->update_flags.bits.dsc_changed)
+		dig_update_required = true;
+
+	/* Need double buffer lock mode in order to synchronize front end pipe
+	 * updates with dig updates.
+	 */
+	if (dig_update_required) {
+		if (lock) {
+			pipe->stream_res.tg->funcs->lock_doublebuffer_enable(
+					pipe->stream_res.tg);
+		}
+	}
+
 	if (pipe->plane_state != NULL && pipe->plane_state->triplebuffer_flips) {
 		if (lock)
 			pipe->stream_res.tg->funcs->triplebuffer_lock(pipe->stream_res.tg);
@@ -1149,6 +1155,19 @@ void dcn20_pipe_control_lock(
 			pipe->stream_res.tg->funcs->lock(pipe->stream_res.tg);
 		else
 			pipe->stream_res.tg->funcs->unlock(pipe->stream_res.tg);
+	}
+
+	if (dig_update_required) {
+		if (!lock) {
+			pipe->stream_res.tg->funcs->wait_for_state(pipe->stream_res.tg,
+					CRTC_STATE_VACTIVE);
+			pipe->stream_res.tg->funcs->wait_for_state(pipe->stream_res.tg,
+					CRTC_STATE_VBLANK);
+			pipe->stream_res.tg->funcs->wait_for_state(pipe->stream_res.tg,
+					CRTC_STATE_VACTIVE);
+			pipe->stream_res.tg->funcs->lock_doublebuffer_disable(
+					pipe->stream_res.tg);
+		}
 	}
 }
 
@@ -1292,9 +1311,11 @@ static void dcn20_update_dchubp_dpp(
 	struct pipe_ctx *pipe_ctx,
 	struct dc_state *context)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	struct hubp *hubp = pipe_ctx->plane_res.hubp;
 	struct dpp *dpp = pipe_ctx->plane_res.dpp;
 	struct dc_plane_state *plane_state = pipe_ctx->plane_state;
+	bool viewport_changed = false;
 
 	if (pipe_ctx->update_flags.bits.dppclk)
 		dpp->funcs->dpp_dppclk_control(dpp, false, true);
@@ -1344,19 +1365,19 @@ static void dcn20_update_dchubp_dpp(
 	if (pipe_ctx->update_flags.bits.mpcc
 			|| plane_state->update_flags.bits.global_alpha_change
 			|| plane_state->update_flags.bits.per_pixel_alpha_change) {
-		/* Need mpcc to be idle if changing opp */
-		if (pipe_ctx->update_flags.bits.opp_changed) {
-			struct pipe_ctx *old_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
-			int mpcc_inst;
+		// MPCC inst is equal to pipe index in practice
+		int mpcc_inst = hubp->inst;
+		int opp_inst;
+		int opp_count = dc->res_pool->pipe_count;
 
-			for (mpcc_inst = 0; mpcc_inst < MAX_PIPES; mpcc_inst++) {
-				if (!old_pipe_ctx->stream_res.opp->mpcc_disconnect_pending[mpcc_inst])
-					continue;
+		for (opp_inst = 0; opp_inst < opp_count; opp_inst++) {
+			if (dc->res_pool->opps[opp_inst]->mpcc_disconnect_pending[mpcc_inst]) {
 				dc->res_pool->mpc->funcs->wait_for_idle(dc->res_pool->mpc, mpcc_inst);
-				old_pipe_ctx->stream_res.opp->mpcc_disconnect_pending[mpcc_inst] = false;
+				dc->res_pool->opps[opp_inst]->mpcc_disconnect_pending[mpcc_inst] = false;
+				break;
 			}
 		}
-		dc->hwss.update_mpcc(dc, pipe_ctx);
+		hws->funcs.update_mpcc(dc, pipe_ctx);
 	}
 
 	if (pipe_ctx->update_flags.bits.scaler ||
@@ -1373,14 +1394,18 @@ static void dcn20_update_dchubp_dpp(
 
 	if (pipe_ctx->update_flags.bits.viewport ||
 			(context == dc->current_state && plane_state->update_flags.bits.scaling_change) ||
-			(context == dc->current_state && pipe_ctx->stream->update_flags.bits.scaling))
+			(context == dc->current_state && pipe_ctx->stream->update_flags.bits.scaling)) {
+
 		hubp->funcs->mem_program_viewport(
 			hubp,
 			&pipe_ctx->plane_res.scl_data.viewport,
 			&pipe_ctx->plane_res.scl_data.viewport_c);
+		viewport_changed = true;
+	}
 
 	/* Any updates are handled in dc interface, just need to apply existing for plane enable */
-	if ((pipe_ctx->update_flags.bits.enable || pipe_ctx->update_flags.bits.opp_changed)
+	if ((pipe_ctx->update_flags.bits.enable || pipe_ctx->update_flags.bits.opp_changed ||
+			pipe_ctx->update_flags.bits.scaler || pipe_ctx->update_flags.bits.viewport)
 			&& pipe_ctx->stream->cursor_attributes.address.quad_part != 0) {
 		dc->hwss.set_cursor_position(pipe_ctx);
 		dc->hwss.set_cursor_attribute(pipe_ctx);
@@ -1430,8 +1455,13 @@ static void dcn20_update_dchubp_dpp(
 		hubp->power_gated = false;
 	}
 
+	if (hubp->funcs->apply_PLAT_54186_wa && viewport_changed)
+		hubp->funcs->apply_PLAT_54186_wa(hubp, &plane_state->address);
+
 	if (pipe_ctx->update_flags.bits.enable || plane_state->update_flags.bits.addr_update)
-		dc->hwss.update_plane_addr(dc, pipe_ctx);
+		hws->funcs.update_plane_addr(dc, pipe_ctx);
+
+
 
 	if (pipe_ctx->update_flags.bits.enable)
 		hubp->funcs->set_blank(hubp, false);
@@ -1443,10 +1473,11 @@ static void dcn20_program_pipe(
 		struct pipe_ctx *pipe_ctx,
 		struct dc_state *context)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	/* Only need to unblank on top pipe */
 	if ((pipe_ctx->update_flags.bits.enable || pipe_ctx->stream->update_flags.bits.abm_level)
 			&& !pipe_ctx->top_pipe && !pipe_ctx->prev_odm_pipe)
-		dc->hwss.blank_pixel_data(dc, pipe_ctx, !pipe_ctx->plane_state->visible);
+		hws->funcs.blank_pixel_data(dc, pipe_ctx, !pipe_ctx->plane_state->visible);
 
 	if (pipe_ctx->update_flags.bits.global_sync) {
 		pipe_ctx->stream_res.tg->funcs->program_global_sync(
@@ -1459,12 +1490,12 @@ static void dcn20_program_pipe(
 		pipe_ctx->stream_res.tg->funcs->set_vtg_params(
 				pipe_ctx->stream_res.tg, &pipe_ctx->stream->timing);
 
-		if (dc->hwss.setup_vupdate_interrupt)
-			dc->hwss.setup_vupdate_interrupt(dc, pipe_ctx);
+		if (hws->funcs.setup_vupdate_interrupt)
+			hws->funcs.setup_vupdate_interrupt(dc, pipe_ctx);
 	}
 
 	if (pipe_ctx->update_flags.bits.odm)
-		dc->hwss.update_odm(dc, context, pipe_ctx);
+		hws->funcs.update_odm(dc, context, pipe_ctx);
 
 	if (pipe_ctx->update_flags.bits.enable)
 		dcn20_enable_plane(dc, pipe_ctx, context);
@@ -1474,19 +1505,19 @@ static void dcn20_program_pipe(
 
 	if (pipe_ctx->update_flags.bits.enable
 			|| pipe_ctx->plane_state->update_flags.bits.hdr_mult)
-		dc->hwss.set_hdr_multiplier(pipe_ctx);
+		hws->funcs.set_hdr_multiplier(pipe_ctx);
 
 	if (pipe_ctx->update_flags.bits.enable ||
 			pipe_ctx->plane_state->update_flags.bits.in_transfer_func_change ||
 			pipe_ctx->plane_state->update_flags.bits.gamma_change)
-		dc->hwss.set_input_transfer_func(dc, pipe_ctx, pipe_ctx->plane_state);
+		hws->funcs.set_input_transfer_func(dc, pipe_ctx, pipe_ctx->plane_state);
 
 	/* dcn10_translate_regamma_to_hw_format takes 750us to finish
 	 * only do gamma programming for powering on, internal memcmp to avoid
 	 * updating on slave planes
 	 */
 	if (pipe_ctx->update_flags.bits.enable || pipe_ctx->stream->update_flags.bits.out_tf)
-		dc->hwss.set_output_transfer_func(dc, pipe_ctx, pipe_ctx->stream);
+		hws->funcs.set_output_transfer_func(dc, pipe_ctx, pipe_ctx->stream);
 
 	/* If the pipe has been enabled or has a different opp, we
 	 * should reprogram the fmt. This deals with cases where
@@ -1509,24 +1540,27 @@ static void dcn20_program_pipe(
 	}
 }
 
-static bool does_pipe_need_lock(struct pipe_ctx *pipe)
-{
-	if ((pipe->plane_state && pipe->plane_state->update_flags.raw)
-			|| pipe->update_flags.raw)
-		return true;
-	if (pipe->bottom_pipe)
-		return does_pipe_need_lock(pipe->bottom_pipe);
-
-	return false;
-}
-
 void dcn20_program_front_end_for_ctx(
 		struct dc *dc,
 		struct dc_state *context)
 {
 	int i;
-	bool pipe_locked[MAX_PIPES] = {false};
+	struct dce_hwseq *hws = dc->hwseq;
 	DC_LOGGER_INIT(dc->ctx->logger);
+
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		if (!pipe_ctx->top_pipe && !pipe_ctx->prev_odm_pipe && pipe_ctx->plane_state) {
+			ASSERT(!pipe_ctx->plane_state->triplebuffer_flips);
+			if (dc->hwss.program_triplebuffer != NULL &&
+				!dc->debug.disable_tri_buf) {
+				/*turn off triple buffer for full update*/
+				dc->hwss.program_triplebuffer(
+					dc, pipe_ctx, pipe_ctx->plane_state->triplebuffer_flips);
+			}
+		}
+	}
 
 	/* Carry over GSL groups in case the context is changing. */
 	for (i = 0; i < dc->res_pool->pipe_count; i++)
@@ -1538,17 +1572,6 @@ void dcn20_program_front_end_for_ctx(
 	for (i = 0; i < dc->res_pool->pipe_count; i++)
 		dcn20_detect_pipe_changes(&dc->current_state->res_ctx.pipe_ctx[i],
 				&context->res_ctx.pipe_ctx[i]);
-	for (i = 0; i < dc->res_pool->pipe_count; i++)
-		if (!context->res_ctx.pipe_ctx[i].top_pipe &&
-				does_pipe_need_lock(&context->res_ctx.pipe_ctx[i])) {
-			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-
-			if (pipe_ctx->update_flags.bits.tg_changed || pipe_ctx->update_flags.bits.enable)
-				dc->hwss.pipe_control_lock(dc, pipe_ctx, true);
-			if (!pipe_ctx->update_flags.bits.enable)
-				dc->hwss.pipe_control_lock(dc, &dc->current_state->res_ctx.pipe_ctx[i], true);
-			pipe_locked[i] = true;
-		}
 
 	/* OTG blank before disabling all front ends */
 	for (i = 0; i < dc->res_pool->pipe_count; i++)
@@ -1556,13 +1579,13 @@ void dcn20_program_front_end_for_ctx(
 				&& !context->res_ctx.pipe_ctx[i].top_pipe
 				&& !context->res_ctx.pipe_ctx[i].prev_odm_pipe
 				&& context->res_ctx.pipe_ctx[i].stream)
-			dc->hwss.blank_pixel_data(dc, &context->res_ctx.pipe_ctx[i], true);
+			hws->funcs.blank_pixel_data(dc, &context->res_ctx.pipe_ctx[i], true);
 
 	/* Disconnect mpcc */
 	for (i = 0; i < dc->res_pool->pipe_count; i++)
 		if (context->res_ctx.pipe_ctx[i].update_flags.bits.disable
 				|| context->res_ctx.pipe_ctx[i].update_flags.bits.opp_changed) {
-			dc->hwss.plane_atomic_disconnect(dc, &dc->current_state->res_ctx.pipe_ctx[i]);
+			hws->funcs.plane_atomic_disconnect(dc, &dc->current_state->res_ctx.pipe_ctx[i]);
 			DC_LOG_DC("Reset mpcc for pipe %d\n", dc->current_state->res_ctx.pipe_ctx[i].pipe_idx);
 		}
 
@@ -1582,21 +1605,10 @@ void dcn20_program_front_end_for_ctx(
 			pipe = &context->res_ctx.pipe_ctx[i];
 			if (!pipe->prev_odm_pipe && pipe->stream->num_wb_info > 0
 					&& (pipe->update_flags.raw || pipe->plane_state->update_flags.raw || pipe->stream->update_flags.raw)
-					&& dc->hwss.program_all_writeback_pipes_in_tree)
-				dc->hwss.program_all_writeback_pipes_in_tree(dc, pipe->stream, context);
+					&& hws->funcs.program_all_writeback_pipes_in_tree)
+				hws->funcs.program_all_writeback_pipes_in_tree(dc, pipe->stream, context);
 		}
 	}
-
-	/* Unlock all locked pipes */
-	for (i = 0; i < dc->res_pool->pipe_count; i++)
-		if (pipe_locked[i]) {
-			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-
-			if (pipe_ctx->update_flags.bits.tg_changed || pipe_ctx->update_flags.bits.enable)
-				dc->hwss.pipe_control_lock(dc, pipe_ctx, false);
-			if (!pipe_ctx->update_flags.bits.enable)
-				dc->hwss.pipe_control_lock(dc, &dc->current_state->res_ctx.pipe_ctx[i], false);
-		}
 }
 
 void dcn20_post_unlock_program_front_end(
@@ -1625,9 +1637,9 @@ void dcn20_post_unlock_program_front_end(
 			struct hubp *hubp = pipe->plane_res.hubp;
 			int j = 0;
 
-			for (j = 0; j < TIMEOUT_FOR_PIPE_ENABLE_MS
+			for (j = 0; j < TIMEOUT_FOR_PIPE_ENABLE_MS*1000
 					&& hubp->funcs->hubp_is_flip_pending(hubp); j++)
-				msleep(1);
+				mdelay(1);
 		}
 	}
 
@@ -1635,7 +1647,6 @@ void dcn20_post_unlock_program_front_end(
 	if (dc->hwseq->wa.DEGVIDCN21)
 		dc->res_pool->hubbub->funcs->apply_DEDCN21_147_wa(dc->res_pool->hubbub);
 }
-
 
 void dcn20_prepare_bandwidth(
 		struct dc *dc,
@@ -1678,6 +1689,7 @@ bool dcn20_update_bandwidth(
 		struct dc_state *context)
 {
 	int i;
+	struct dce_hwseq *hws = dc->hwseq;
 
 	/* recalculate DML parameters */
 	if (!dc->res_pool->funcs->validate_bandwidth(dc, context, false))
@@ -1707,10 +1719,10 @@ bool dcn20_update_bandwidth(
 					pipe_ctx->stream_res.tg, &pipe_ctx->stream->timing);
 
 			if (pipe_ctx->prev_odm_pipe == NULL)
-				dc->hwss.blank_pixel_data(dc, pipe_ctx, blank);
+				hws->funcs.blank_pixel_data(dc, pipe_ctx, blank);
 
-			if (dc->hwss.setup_vupdate_interrupt)
-				dc->hwss.setup_vupdate_interrupt(dc, pipe_ctx);
+			if (hws->funcs.setup_vupdate_interrupt)
+				hws->funcs.setup_vupdate_interrupt(dc, pipe_ctx);
 		}
 
 		pipe_ctx->plane_res.hubp->funcs->hubp_setup(
@@ -1726,7 +1738,6 @@ bool dcn20_update_bandwidth(
 
 void dcn20_enable_writeback(
 		struct dc *dc,
-		const struct dc_stream_status *stream_status,
 		struct dc_writeback_info *wb_info,
 		struct dc_state *context)
 {
@@ -1740,8 +1751,7 @@ void dcn20_enable_writeback(
 	mcif_wb = dc->res_pool->mcif_wb[wb_info->dwb_pipe_inst];
 
 	/* set the OPTC source mux */
-	ASSERT(stream_status->primary_otg_inst < MAX_PIPES);
-	optc = dc->res_pool->timing_generators[stream_status->primary_otg_inst];
+	optc = dc->res_pool->timing_generators[dwb->otg_inst];
 	optc->funcs->set_dwb_source(optc, wb_info->dwb_pipe_inst);
 	/* set MCIF_WB buffer and arbitration configuration */
 	mcif_wb->funcs->config_mcif_buf(mcif_wb, &wb_info->mcif_buf_params, wb_info->dwb_params.dest_height);
@@ -1947,6 +1957,7 @@ void dcn20_unblank_stream(struct pipe_ctx *pipe_ctx,
 	struct encoder_unblank_param params = { { 0 } };
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->link;
+	struct dce_hwseq *hws = link->dc->hwseq;
 	struct pipe_ctx *odm_pipe;
 
 	params.opp_cnt = 1;
@@ -1967,7 +1978,7 @@ void dcn20_unblank_stream(struct pipe_ctx *pipe_ctx,
 	}
 
 	if (link->local_sink && link->local_sink->sink_signal == SIGNAL_TYPE_EDP) {
-		link->dc->hwss.edp_backlight_control(link, true);
+		hws->funcs.edp_backlight_control(link, true);
 	}
 }
 
@@ -1989,6 +2000,7 @@ static void dcn20_reset_back_end_for_pipe(
 		struct dc_state *context)
 {
 	int i;
+	struct dc_link *link;
 	DC_LOGGER_INIT(dc->ctx->logger);
 	if (pipe_ctx->stream_res.stream_enc == NULL) {
 		pipe_ctx->stream = NULL;
@@ -1996,8 +2008,14 @@ static void dcn20_reset_back_end_for_pipe(
 	}
 
 	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
-		/* DPMS may already disable */
-		if (!pipe_ctx->stream->dpms_off)
+		link = pipe_ctx->stream->link;
+		/* DPMS may already disable or */
+		/* dpms_off status is incorrect due to fastboot
+		 * feature. When system resume from S4 with second
+		 * screen only, the dpms_off would be true but
+		 * VBIOS lit up eDP, so check link status too.
+		 */
+		if (!pipe_ctx->stream->dpms_off || link->link_status.link_active)
 			core_link_disable_stream(pipe_ctx);
 		else if (pipe_ctx->stream_res.audio)
 			dc->hwss.disable_audio_stream(pipe_ctx);
@@ -2055,6 +2073,7 @@ void dcn20_reset_hw_ctx_wrap(
 		struct dc_state *context)
 {
 	int i;
+	struct dce_hwseq *hws = dc->hwseq;
 
 	/* Reset Back End*/
 	for (i = dc->res_pool->pipe_count - 1; i >= 0 ; i--) {
@@ -2073,8 +2092,8 @@ void dcn20_reset_hw_ctx_wrap(
 			struct clock_source *old_clk = pipe_ctx_old->clock_source;
 
 			dcn20_reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
-			if (dc->hwss.enable_stream_gating)
-				dc->hwss.enable_stream_gating(dc, pipe_ctx);
+			if (hws->funcs.enable_stream_gating)
+				hws->funcs.enable_stream_gating(dc, pipe_ctx);
 			if (old_clk)
 				old_clk->funcs->cs_power_down(old_clk);
 		}
@@ -2105,6 +2124,7 @@ void dcn20_get_mpctree_visual_confirm_color(
 
 void dcn20_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
+	struct dce_hwseq *hws = dc->hwseq;
 	struct hubp *hubp = pipe_ctx->plane_res.hubp;
 	struct mpcc_blnd_cfg blnd_cfg = { {0} };
 	bool per_pixel_alpha = pipe_ctx->plane_state->per_pixel_alpha;
@@ -2115,10 +2135,10 @@ void dcn20_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 
 	// input to MPCC is always RGB, by default leave black_color at 0
 	if (dc->debug.visual_confirm == VISUAL_CONFIRM_HDR) {
-		dc->hwss.get_hdr_visual_confirm_color(
+		hws->funcs.get_hdr_visual_confirm_color(
 				pipe_ctx, &blnd_cfg.black_color);
 	} else if (dc->debug.visual_confirm == VISUAL_CONFIRM_SURFACE) {
-		dc->hwss.get_surface_visual_confirm_color(
+		hws->funcs.get_surface_visual_confirm_color(
 				pipe_ctx, &blnd_cfg.black_color);
 	} else if (dc->debug.visual_confirm == VISUAL_CONFIRM_MPCTREE) {
 		dcn20_get_mpctree_visual_confirm_color(
@@ -2154,12 +2174,6 @@ void dcn20_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 	 * which causes a pstate hang for yet unknown reason.
 	 */
 	mpcc_id = hubp->inst;
-
-	/* If there is no full update, don't need to touch MPC tree*/
-	if (!pipe_ctx->plane_state->update_flags.bits.full_update) {
-		mpc->funcs->update_blending(mpc, &blnd_cfg, mpcc_id);
-		return;
-	}
 
 	/* check if this MPCC is already being used */
 	new_mpcc = mpc->funcs->get_mpcc_for_dpp(mpc_tree_params, mpcc_id);
@@ -2274,13 +2288,13 @@ void dcn20_fpga_init_hw(struct dc *dc)
 		res_pool->dccg->funcs->dccg_init(res_pool->dccg);
 
 	//Enable ability to power gate / don't force power on permanently
-	dc->hwss.enable_power_gating_plane(hws, true);
+	hws->funcs.enable_power_gating_plane(hws, true);
 
 	// Specific to FPGA dccg and registers
 	REG_WRITE(RBBMIF_TIMEOUT_DIS, 0xFFFFFFFF);
 	REG_WRITE(RBBMIF_TIMEOUT_DIS_2, 0xFFFFFFFF);
 
-	dc->hwss.dccg_init(hws);
+	hws->funcs.dccg_init(hws);
 
 	REG_UPDATE(DCHUBBUB_GLOBAL_TIMER_CNTL, DCHUBBUB_GLOBAL_TIMER_REFDIV, 2);
 	REG_UPDATE(DCHUBBUB_GLOBAL_TIMER_CNTL, DCHUBBUB_GLOBAL_TIMER_ENABLE, 1);
@@ -2344,7 +2358,7 @@ void dcn20_fpga_init_hw(struct dc *dc)
 		dc->res_pool->opps[i]->mpcc_disconnect_pending[pipe_ctx->plane_res.mpcc_inst] = true;
 		pipe_ctx->stream_res.opp = dc->res_pool->opps[i];
 		/*to do*/
-		dc->hwss.plane_atomic_disconnect(dc, pipe_ctx);
+		hws->funcs.plane_atomic_disconnect(dc, pipe_ctx);
 	}
 
 	/* initialize DWB pointer to MCIF_WB */

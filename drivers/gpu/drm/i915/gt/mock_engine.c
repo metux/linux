@@ -35,13 +35,13 @@
 
 static void mock_timeline_pin(struct intel_timeline *tl)
 {
-	tl->pin_count++;
+	atomic_inc(&tl->pin_count);
 }
 
 static void mock_timeline_unpin(struct intel_timeline *tl)
 {
-	GEM_BUG_ON(!tl->pin_count);
-	tl->pin_count--;
+	GEM_BUG_ON(!atomic_read(&tl->pin_count));
+	atomic_dec(&tl->pin_count);
 }
 
 static struct intel_ring *mock_ring(struct intel_engine_cs *engine)
@@ -59,10 +59,24 @@ static struct intel_ring *mock_ring(struct intel_engine_cs *engine)
 	ring->vaddr = (void *)(ring + 1);
 	atomic_set(&ring->pin_count, 1);
 
-	INIT_LIST_HEAD(&ring->request_list);
+	ring->vma = i915_vma_alloc();
+	if (!ring->vma) {
+		kfree(ring);
+		return NULL;
+	}
+	i915_active_init(&ring->vma->active, NULL, NULL);
+
 	intel_ring_update_space(ring);
 
 	return ring;
+}
+
+static void mock_ring_free(struct intel_ring *ring)
+{
+	i915_active_fini(&ring->vma->active);
+	i915_vma_free(ring->vma);
+
+	kfree(ring);
 }
 
 static struct i915_request *first_request(struct mock_engine *engine)
@@ -122,7 +136,7 @@ static void mock_context_destroy(struct kref *ref)
 	GEM_BUG_ON(intel_context_is_pinned(ce));
 
 	if (test_bit(CONTEXT_ALLOC_BIT, &ce->flags)) {
-		kfree(ce->ring);
+		mock_ring_free(ce->ring);
 		mock_timeline_unpin(ce->timeline);
 	}
 

@@ -56,13 +56,17 @@ static void watch_queue_pipe_buf_release(struct pipe_inode_info *pipe,
 	set_bit(bit, wqueue->notes_bitmap);
 }
 
-// No try_steal function => no stealing
-#define watch_queue_pipe_buf_try_steal NULL
+static int watch_queue_pipe_buf_steal(struct pipe_inode_info *pipe,
+				      struct pipe_buffer *buf)
+{
+	return -1; /* No. */
+}
 
 /* New data written to a pipe may be appended to a buffer with this type. */
 static const struct pipe_buf_operations watch_queue_pipe_buf_ops = {
+	.confirm	= generic_pipe_buf_confirm,
 	.release	= watch_queue_pipe_buf_release,
-	.try_steal	= watch_queue_pipe_buf_try_steal,
+	.steal		= watch_queue_pipe_buf_steal,
 	.get		= generic_pipe_buf_get,
 };
 
@@ -111,7 +115,7 @@ static bool post_one_notification(struct watch_queue *wqueue,
 	buf->ops = &watch_queue_pipe_buf_ops;
 	buf->offset = offset;
 	buf->len = len;
-	buf->flags = PIPE_BUF_FLAG_WHOLE;
+	buf->flags = 0;
 	pipe->head = head + 1;
 
 	if (!test_and_clear_bit(note, wqueue->notes_bitmap)) {
@@ -128,8 +132,6 @@ out:
 	return done;
 
 lost:
-	buf = &pipe->bufs[(head - 1) & mask];
-	buf->flags |= PIPE_BUF_FLAG_LOSS;
 	goto out;
 }
 

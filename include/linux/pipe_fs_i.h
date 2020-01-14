@@ -34,6 +34,7 @@ struct pipe_buffer {
  *	@head: The point of buffer production
  *	@tail: The point of buffer consumption
  *	@ring_size: total number of buffers (should be a power of 2)
+ *	@nr_accounted: The amount this pipe accounts for in user->pipe_bufs
  *	@tmp_page: cached released page
  *	@readers: number of current readers of this pipe
  *	@writers: number of current writers of this pipe
@@ -45,6 +46,7 @@ struct pipe_buffer {
  *	@fasync_writers: writer side fasync
  *	@bufs: the circular array of pipe buffers
  *	@user: the user who created this pipe
+ *	@watch_queue: If this pipe is a watch_queue, this is the stuff for that
  **/
 struct pipe_inode_info {
 	struct mutex mutex;
@@ -52,6 +54,7 @@ struct pipe_inode_info {
 	unsigned int head;
 	unsigned int tail;
 	unsigned int ring_size;
+	unsigned int nr_accounted;
 	unsigned int readers;
 	unsigned int writers;
 	unsigned int files;
@@ -63,6 +66,9 @@ struct pipe_inode_info {
 	struct fasync_struct *fasync_writers;
 	struct pipe_buffer *bufs;
 	struct user_struct *user;
+#ifdef CONFIG_WATCH_QUEUE
+	struct watch_queue *watch_queue;
+#endif
 };
 
 /*
@@ -236,9 +242,20 @@ void generic_pipe_buf_release(struct pipe_inode_info *, struct pipe_buffer *);
 
 extern const struct pipe_buf_operations nosteal_pipe_buf_ops;
 
+#ifdef CONFIG_WATCH_QUEUE
+unsigned long account_pipe_buffers(struct user_struct *user,
+				   unsigned long old, unsigned long new);
+bool too_many_pipe_buffers_soft(unsigned long user_bufs);
+bool too_many_pipe_buffers_hard(unsigned long user_bufs);
+bool pipe_is_unprivileged_user(void);
+#endif
+
 /* for F_SETPIPE_SZ and F_GETPIPE_SZ */
+#ifdef CONFIG_WATCH_QUEUE
+int pipe_resize_ring(struct pipe_inode_info *pipe, unsigned int nr_slots);
+#endif
 long pipe_fcntl(struct file *, unsigned int, unsigned long arg);
-struct pipe_inode_info *get_pipe_info(struct file *file);
+struct pipe_inode_info *get_pipe_info(struct file *file, bool for_splice);
 
 int create_pipe_files(struct file **, int);
 unsigned int round_pipe_size(unsigned long size);

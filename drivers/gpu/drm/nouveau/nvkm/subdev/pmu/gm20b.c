@@ -19,12 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-
-#include <engine/falcon.h>
-#include <core/msgqueue.h>
 #include "priv.h"
+#include <core/msgqueue.h>
+#include <engine/falcon.h>
 
-static void
+void
 gm20b_pmu_recv(struct nvkm_pmu *pmu)
 {
 	if (!pmu->queue) {
@@ -46,11 +45,5 @@ gm20b_pmu = {
 int
 gm20b_pmu_new(struct nvkm_device *device, int index, struct nvkm_pmu **ppmu)
 {
-	int ret;
-
-	ret = nvkm_pmu_new_(&gm20b_pmu, device, index, ppmu);
-	if (ret)
-		return ret;
-
-	return 0;
+	return nvkm_pmu_new_(&gm20b_pmu, device, index, ppmu);
 }

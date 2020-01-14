@@ -1,5 +1,7 @@
-# SPDX-License-Identifier: GPL-2.0-only
-userprogs := watch_test
-always-y := $(userprogs)
+# List of programs to build
+hostprogs := watch_test
 
-userccflags += -I usr/include
+# Tell kbuild to always build the programs
+always-y := $(hostprogs)
+
+HOSTCFLAGS_watch_test.o += -I$(objtree)/usr/include

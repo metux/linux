@@ -32,6 +32,7 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.init_pipes = dcn10_init_pipes,
 	.apply_ctx_to_hw = dce110_apply_ctx_to_hw,
 	.apply_ctx_for_surface = dcn10_apply_ctx_for_surface,
+	.post_unlock_program_front_end = dcn10_post_unlock_program_front_end,
 	.update_plane_addr = dcn10_update_plane_addr,
 	.plane_atomic_disconnect = dcn10_plane_atomic_disconnect,
 	.program_pipe = dcn10_program_pipe,

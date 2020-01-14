@@ -1524,7 +1524,6 @@ void dcn20_program_front_end_for_ctx(
 		struct dc *dc,
 		struct dc_state *context)
 {
-	const unsigned int TIMEOUT_FOR_PIPE_ENABLE_MS = 100;
 	int i;
 	bool pipe_locked[MAX_PIPES] = {false};
 	DC_LOGGER_INIT(dc->ctx->logger);
@@ -1598,6 +1597,16 @@ void dcn20_program_front_end_for_ctx(
 			if (!pipe_ctx->update_flags.bits.enable)
 				dc->hwss.pipe_control_lock(dc, &dc->current_state->res_ctx.pipe_ctx[i], false);
 		}
+}
+
+void dcn20_post_unlock_program_front_end(
+		struct dc *dc,
+		struct dc_state *context)
+{
+	int i;
+	const unsigned int TIMEOUT_FOR_PIPE_ENABLE_MS = 100;
+
+	DC_LOGGER_INIT(dc->ctx->logger);
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++)
 		if (context->res_ctx.pipe_ctx[i].update_flags.bits.disable)

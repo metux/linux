@@ -15105,15 +15105,17 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 	int i;
 
 	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+		enum pipe pipe = crtc->pipe;
+
 		if (!new_crtc_state->hw.active)
 			continue;
 
 		/* ignore allocations for crtc's that have been turned off. */
 		if (!needs_modeset(new_crtc_state)) {
-			entries[i] = old_crtc_state->wm.skl.ddb;
-			update_pipes |= BIT(crtc->pipe);
+			entries[pipe] = old_crtc_state->wm.skl.ddb;
+			update_pipes |= BIT(pipe);
 		} else {
-			modeset_pipes |= BIT(crtc->pipe);
+			modeset_pipes |= BIT(pipe);
 		}
 	}
 
@@ -15139,10 +15141,10 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 				continue;
 
 			if (skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
-							entries, num_pipes, i))
+							entries, num_pipes, pipe))
 				continue;
 
-			entries[i] = new_crtc_state->wm.skl.ddb;
+			entries[pipe] = new_crtc_state->wm.skl.ddb;
 			update_pipes &= ~BIT(pipe);
 
 			intel_update_crtc(crtc, state, old_crtc_state,
@@ -15177,9 +15179,9 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 			continue;
 
 		WARN_ON(skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
-						    entries, num_pipes, i));
+						    entries, num_pipes, pipe));
 
-		entries[i] = new_crtc_state->wm.skl.ddb;
+		entries[pipe] = new_crtc_state->wm.skl.ddb;
 		modeset_pipes &= ~BIT(pipe);
 
 		if (is_trans_port_sync_mode(new_crtc_state)) {
@@ -15212,9 +15214,9 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 			continue;
 
 		WARN_ON(skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
-						    entries, num_pipes, i));
+						    entries, num_pipes, pipe));
 
-		entries[i] = new_crtc_state->wm.skl.ddb;
+		entries[pipe] = new_crtc_state->wm.skl.ddb;
 		modeset_pipes &= ~BIT(pipe);
 
 		intel_update_crtc(crtc, state, old_crtc_state, new_crtc_state);

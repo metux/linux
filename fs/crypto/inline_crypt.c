@@ -45,8 +45,10 @@ bool fscrypt_should_use_inline_encryption(const struct fscrypt_info *ci)
 	return true;
 }
 
-/* Set a per-file inline encryption key (for passing to blk-crypto) */
-int fscrypt_set_inline_crypt_key(struct fscrypt_info *ci, const u8 *derived_key)
+int fscrypt_prepare_inline_crypt_key(struct fscrypt_prepared_key *prep_key,
+				     const u8 *raw_key,
+				     unsigned int raw_key_size,
+				     const struct fscrypt_info *ci)
 {
 	const struct fscrypt_mode *mode = ci->ci_mode;
 	const struct super_block *sb = ci->ci_inode->i_sb;
@@ -96,11 +98,24 @@ int fscrypt_setup_per_mode_inline_crypt_key(struct fscrypt_info *ci,
 	if (WARN_ON(mode_num > __FSCRYPT_MODE_MAX))
 		return -EINVAL;
 
-	/* pairs with smp_store_release() below */
-	raw_key = smp_load_acquire(&mk->mk_iv_ino_lblk_64_raw_keys[mode_num]);
-	if (raw_key) {
-		err = 0;
-		goto out;
+	blk_key = kzalloc(struct_size(blk_key, devs, num_devs), GFP_NOFS);
+	if (!blk_key)
+		return -ENOMEM;
+
+	blk_key->num_devs = num_devs;
+	if (num_devs == 1)
+		blk_key->devs[0] = bdev_get_queue(sb->s_bdev);
+	else
+		sb->s_cop->get_devices(sb, blk_key->devs);
+
+	BUILD_BUG_ON(FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE >
+		     BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE);
+
+	err = blk_crypto_init_key(&blk_key->base, raw_key, raw_key_size,
+				  crypto_mode, sb->s_blocksize);
+	if (err) {
+		fscrypt_err(inode, "error %d initializing blk-crypto key", err);
+		goto fail;
 	}
 
 	mutex_lock(&inline_crypt_setup_mutex);
@@ -192,6 +207,22 @@ void fscrypt_evict_inline_crypt_keys(struct fscrypt_master_key *mk)
 		}
 	}
 	bdput(bdev);
+}
+
+int fscrypt_derive_raw_secret(struct super_block *sb,
+			      const u8 *wrapped_key,
+			      unsigned int wrapped_key_size,
+			      u8 *raw_secret, unsigned int raw_secret_size)
+{
+	struct request_queue *q;
+
+	q = sb->s_bdev->bd_queue;
+	if (!q->ksm)
+		return -EOPNOTSUPP;
+
+	return keyslot_manager_derive_raw_secret(q->ksm,
+						 wrapped_key, wrapped_key_size,
+						 raw_secret, raw_secret_size);
 }
 
 /**

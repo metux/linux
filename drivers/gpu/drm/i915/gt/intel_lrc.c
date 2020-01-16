@@ -1594,10 +1594,16 @@ static void virtual_xfer_breadcrumbs(struct virtual_engine *ve,
 	spin_unlock(&old->breadcrumbs.irq_lock);
 }
 
-#define for_each_waiter(p__, rq__) \
-	list_for_each_entry_lockless(p__, \
-				     &(rq__)->sched.waiters_list, \
-				     wait_link)
+static struct i915_request *
+last_active(const struct intel_engine_execlists *execlists)
+{
+	struct i915_request * const *last = READ_ONCE(execlists->active);
+
+	while (*last && i915_request_completed(*last))
+		last++;
+
+	return *last;
+}
 
 static void defer_request(struct i915_request *rq, struct list_head * const pl)
 {
@@ -1616,7 +1622,7 @@ static void defer_request(struct i915_request *rq, struct list_head * const pl)
 		GEM_BUG_ON(i915_request_is_active(rq));
 		list_move_tail(&rq->sched.link, pl);
 
-		for_each_waiter(p, rq) {
+		list_for_each_entry(p, &rq->sched.waiters_list, wait_link) {
 			struct i915_request *w =
 				container_of(p->waiter, typeof(*w), sched);
 
@@ -1629,8 +1635,8 @@ static void defer_request(struct i915_request *rq, struct list_head * const pl)
 				   !i915_request_completed(rq));
 
 			GEM_BUG_ON(i915_request_is_active(w));
-			if (!i915_request_is_ready(w))
-				continue;
+			if (list_empty(&w->sched.link))
+				continue; /* Not yet submitted; unready */
 
 			if (rq_prio(w) < rq_prio(rq))
 				continue;
@@ -1713,9 +1719,11 @@ static void record_preemption(struct intel_engine_execlists *execlists)
 	(void)I915_SELFTEST_ONLY(execlists->preempt_hang.count++);
 }
 
-static unsigned long active_preempt_timeout(struct intel_engine_cs *engine,
-					    const struct i915_request *rq)
+static unsigned long active_preempt_timeout(struct intel_engine_cs *engine)
 {
+	struct i915_request *rq;
+
+	rq = last_active(&engine->execlists);
 	if (!rq)
 		return 0;
 
@@ -1726,14 +1734,13 @@ static unsigned long active_preempt_timeout(struct intel_engine_cs *engine,
 	return READ_ONCE(engine->props.preempt_timeout_ms);
 }
 
-static void set_preempt_timeout(struct intel_engine_cs *engine,
-				const struct i915_request *rq)
+static void set_preempt_timeout(struct intel_engine_cs *engine)
 {
 	if (!intel_engine_has_preempt_reset(engine))
 		return;
 
 	set_timer_ms(&engine->execlists.preempt,
-		     active_preempt_timeout(engine, rq));
+		     active_preempt_timeout(engine));
 }
 
 static inline void clear_ports(struct i915_request **ports, int count)
@@ -1746,7 +1753,6 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 	struct i915_request **port = execlists->pending;
 	struct i915_request ** const last_port = port + execlists->port_mask;
-	struct i915_request * const *active;
 	struct i915_request *last;
 	struct rb_node *rb;
 	bool submit = false;
@@ -1801,10 +1807,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 	 * i.e. we will retrigger preemption following the ack in case
 	 * of trouble.
 	 */
-	active = READ_ONCE(execlists->active);
-	while ((last = *active) && i915_request_completed(last))
-		active++;
-
+	last = last_active(execlists);
 	if (last) {
 		if (need_preempt(engine, last, rb)) {
 			ENGINE_TRACE(engine,
@@ -2097,7 +2100,7 @@ done:
 		 * Skip if we ended up with exactly the same set of requests,
 		 * e.g. trying to timeslice a pair of ordered contexts
 		 */
-		if (!memcmp(active, execlists->pending,
+		if (!memcmp(execlists->active, execlists->pending,
 			    (port - execlists->pending + 1) * sizeof(*port))) {
 			do
 				execlists_schedule_out(fetch_and_zero(port));
@@ -2108,7 +2111,7 @@ done:
 		clear_ports(port + 1, last_port - port);
 
 		execlists_submit_ports(engine);
-		set_preempt_timeout(engine, *active);
+		set_preempt_timeout(engine);
 	} else {
 skip_submit:
 		ring_set_paused(engine, 0);
@@ -2441,145 +2444,6 @@ static void __execlists_submission_tasklet(struct intel_engine_cs *const engine)
 	}
 }
 
-static void __execlists_hold(struct i915_request *rq)
-{
-	LIST_HEAD(list);
-
-	do {
-		struct i915_dependency *p;
-
-		if (i915_request_is_active(rq))
-			__i915_request_unsubmit(rq);
-
-		RQ_TRACE(rq, "on hold\n");
-		clear_bit(I915_FENCE_FLAG_PQUEUE, &rq->fence.flags);
-		list_move_tail(&rq->sched.link, &rq->engine->active.hold);
-		i915_request_set_hold(rq);
-
-		list_for_each_entry(p, &rq->sched.waiters_list, wait_link) {
-			struct i915_request *w =
-				container_of(p->waiter, typeof(*w), sched);
-
-			/* Leave semaphores spinning on the other engines */
-			if (w->engine != rq->engine)
-				continue;
-
-			if (!i915_request_is_ready(w))
-				continue;
-
-			if (i915_request_completed(w))
-				continue;
-
-			if (i915_request_on_hold(rq))
-				continue;
-
-			list_move_tail(&w->sched.link, &list);
-		}
-
-		rq = list_first_entry_or_null(&list, typeof(*rq), sched.link);
-	} while (rq);
-}
-
-__maybe_unused
-static void execlists_hold(struct intel_engine_cs *engine,
-			   struct i915_request *rq)
-{
-	spin_lock_irq(&engine->active.lock);
-
-	/*
-	 * Transfer this request onto the hold queue to prevent it
-	 * being resumbitted to HW (and potentially completed) before we have
-	 * released it. Since we may have already submitted following
-	 * requests, we need to remove those as well.
-	 */
-	GEM_BUG_ON(i915_request_on_hold(rq));
-	GEM_BUG_ON(rq->engine != engine);
-	__execlists_hold(rq);
-
-	spin_unlock_irq(&engine->active.lock);
-}
-
-static bool hold_request(const struct i915_request *rq)
-{
-	struct i915_dependency *p;
-
-	/*
-	 * If one of our ancestors is on hold, we must also be on hold,
-	 * otherwise we will bypass it and execute before it.
-	 */
-	list_for_each_entry(p, &rq->sched.signalers_list, signal_link) {
-		const struct i915_request *s =
-			container_of(p->signaler, typeof(*s), sched);
-
-		if (s->engine != rq->engine)
-			continue;
-
-		if (i915_request_on_hold(s))
-			return true;
-	}
-
-	return false;
-}
-
-static void __execlists_unhold(struct i915_request *rq)
-{
-	LIST_HEAD(list);
-
-	do {
-		struct i915_dependency *p;
-
-		GEM_BUG_ON(!i915_request_on_hold(rq));
-		GEM_BUG_ON(!i915_sw_fence_signaled(&rq->submit));
-
-		i915_request_clear_hold(rq);
-		list_move_tail(&rq->sched.link,
-			       i915_sched_lookup_priolist(rq->engine,
-							  rq_prio(rq)));
-		set_bit(I915_FENCE_FLAG_PQUEUE, &rq->fence.flags);
-		RQ_TRACE(rq, "hold release\n");
-
-		/* Also release any children on this engine that are ready */
-		list_for_each_entry(p, &rq->sched.waiters_list, wait_link) {
-			struct i915_request *w =
-				container_of(p->waiter, typeof(*w), sched);
-
-			if (w->engine != rq->engine)
-				continue;
-
-			if (!i915_request_on_hold(rq))
-				continue;
-
-			/* Check that no other parents are also on hold */
-			if (hold_request(rq))
-				continue;
-
-			list_move_tail(&w->sched.link, &list);
-		}
-
-		rq = list_first_entry_or_null(&list, typeof(*rq), sched.link);
-	} while (rq);
-}
-
-__maybe_unused
-static void execlists_unhold(struct intel_engine_cs *engine,
-			     struct i915_request *rq)
-{
-	spin_lock_irq(&engine->active.lock);
-
-	/*
-	 * Move this request back to the priority queue, and all of its
-	 * children and grandchildren that were suspended along with it.
-	 */
-	__execlists_unhold(rq);
-
-	if (rq_prio(rq) > engine->execlists.queue_priority_hint) {
-		engine->execlists.queue_priority_hint = rq_prio(rq);
-		tasklet_hi_schedule(&engine->execlists.tasklet);
-	}
-
-	spin_unlock_irq(&engine->active.lock);
-}
-
 static noinline void preempt_reset(struct intel_engine_cs *engine)
 {
 	const unsigned int bit = I915_RESET_ENGINE + engine->id;
@@ -2692,13 +2556,6 @@ static void submit_queue(struct intel_engine_cs *engine,
 	__submit_queue_imm(engine);
 }
 
-static bool ancestor_on_hold(const struct intel_engine_cs *engine,
-			     const struct i915_request *rq)
-{
-	GEM_BUG_ON(i915_request_on_hold(rq));
-	return !list_empty(&engine->active.hold) && hold_request(rq);
-}
-
 static void execlists_submit_request(struct i915_request *request)
 {
 	struct intel_engine_cs *engine = request->engine;
@@ -2707,17 +2564,12 @@ static void execlists_submit_request(struct i915_request *request)
 	/* Will be called from irq-context when using foreign fences. */
 	spin_lock_irqsave(&engine->active.lock, flags);
 
-	if (unlikely(ancestor_on_hold(engine, request))) {
-		list_add_tail(&request->sched.link, &engine->active.hold);
-		i915_request_set_hold(request);
-	} else {
-		queue_request(engine, request);
+	queue_request(engine, request);
 
-		GEM_BUG_ON(RB_EMPTY_ROOT(&engine->execlists.queue.rb_root));
-		GEM_BUG_ON(list_empty(&request->sched.link));
+	GEM_BUG_ON(RB_EMPTY_ROOT(&engine->execlists.queue.rb_root));
+	GEM_BUG_ON(list_empty(&request->sched.link));
 
-		submit_queue(engine, request);
-	}
+	submit_queue(engine, request);
 
 	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
@@ -3557,10 +3409,6 @@ static void execlists_reset_cancel(struct intel_engine_cs *engine)
 		rb_erase_cached(&p->node, &execlists->queue);
 		i915_priolist_free(p);
 	}
-
-	/* On-hold requests will be flushed to timeline upon their release */
-	list_for_each_entry(rq, &engine->active.hold, sched.link)
-		mark_eio(rq);
 
 	/* Cancel all attached virtual engines */
 	while ((rb = rb_first_cached(&execlists->virtual))) {

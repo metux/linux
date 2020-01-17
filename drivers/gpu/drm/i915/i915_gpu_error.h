@@ -60,15 +60,10 @@ struct intel_engine_coredump {
 	const struct intel_engine_cs *engine;
 
 	bool simulated;
-	int num_requests;
 	u32 reset_count;
 
 	/* position of active request inside the ring */
 	u32 rq_head, rq_post, rq_tail;
-
-	/* our own tracking of ring head and tail */
-	u32 cpu_ring_head;
-	u32 cpu_ring_tail;
 
 	/* Register state */
 	u32 ccid;
@@ -100,7 +95,7 @@ struct intel_engine_coredump {
 
 	struct i915_vma_coredump *vma;
 
-	struct i915_request_coredump *requests, execlist[EXECLIST_MAX_PORTS];
+	struct i915_request_coredump execlist[EXECLIST_MAX_PORTS];
 	unsigned int num_ports;
 
 	struct {
@@ -217,7 +212,7 @@ __printf(2, 3)
 void i915_error_printf(struct drm_i915_error_state_buf *e, const char *f, ...);
 
 struct i915_gpu_coredump *i915_gpu_coredump(struct drm_i915_private *i915);
-void i915_capture_error_state(struct drm_i915_private *dev_priv);
+void i915_capture_error_state(struct drm_i915_private *i915);
 
 struct i915_gpu_coredump *
 i915_gpu_coredump_alloc(struct drm_i915_private *i915, gfp_t gfp);
@@ -269,9 +264,7 @@ void i915_disable_error_state(struct drm_i915_private *i915, int err);
 
 #else
 
-static inline void i915_capture_error_state(struct drm_i915_private *dev_priv,
-					    u32 engine_mask,
-					    const char *error_msg)
+static inline void i915_capture_error_state(struct drm_i915_private *i915)
 {
 }
 
@@ -309,18 +302,19 @@ intel_engine_coredump_add_vma(struct intel_engine_coredump *ee,
 }
 
 static inline struct i915_vma_compress *
-i915_vma_compress_prepare(struct intel_gt_coredump *gt)
+i915_vma_capture_prepare(struct intel_gt_coredump *gt)
 {
 	return NULL;
 }
 
-void i915_vma_compress_prepare(struct i915_vma_compress *compress)
+static inline void
+i915_vma_capture_finish(struct intel_gt_coredump *gt,
+			struct i915_vma_compress *compress)
 {
 }
 
 static inline void
-i915_error_state_store(struct drm_i915_private *i915,
-		       struct i915_gpu_coredump *error)
+i915_error_state_store(struct i915_gpu_coredump *error)
 {
 }
 

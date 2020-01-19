@@ -39,7 +39,7 @@
 #include "inc/hw/dmcu.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.2.58"
+#define DC_VER "3.2.69"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -52,6 +52,10 @@
 struct dc_versions {
 	const char *dc_ver;
 	struct dmcu_version dmcu_version;
+};
+
+enum dp_protocol_version {
+	DP_VERSION_1_4,
 };
 
 enum dc_plane_type {
@@ -114,6 +118,7 @@ struct dc_caps {
 	bool extended_aux_timeout_support;
 	bool dmcub_support;
 	bool hw_3d_lut;
+	enum dp_protocol_version max_dp_protocol_version;
 	struct dc_plane_cap planes[MAX_PLANES];
 };
 
@@ -152,11 +157,14 @@ struct dc_surface_dcc_cap {
 	bool const_color_support;
 };
 
-struct dc_static_screen_events {
-	bool force_trigger;
-	bool cursor_update;
-	bool surface_update;
-	bool overlay_update;
+struct dc_static_screen_params {
+	struct {
+		bool force_trigger;
+		bool cursor_update;
+		bool surface_update;
+		bool overlay_update;
+	} triggers;
+	unsigned int num_frames;
 };
 
 
@@ -362,6 +370,8 @@ struct dc_debug_options {
 	bool disable_hubp_power_gate;
 	bool disable_dsc_power_gate;
 	int dsc_min_slice_height_override;
+	int dsc_bpp_increment_div;
+	bool native422_support;
 	bool disable_pplib_wm_range;
 	enum wm_report_mode pplib_wm_report_mode;
 	unsigned int min_disp_clk_khz;
@@ -401,9 +411,7 @@ struct dc_debug_options {
 	bool dmub_command_table; /* for testing only */
 	struct dc_bw_validation_profile bw_val_profile;
 	bool disable_fec;
-#ifdef CONFIG_DRM_AMD_DC_DCN2_1
 	bool disable_48mhz_pwrdwn;
-#endif
 	/* This forces a hard min on the DCFCLK requested to SMU/PP
 	 * watermarks are not affected.
 	 */
@@ -414,6 +422,10 @@ struct dc_debug_options {
 
 	bool nv12_iflip_vm_wa;
 	bool disable_dram_clock_change_vactive_support;
+	bool validate_dml_output;
+	bool enable_dmcub_surface_flip;
+	bool usbc_combo_phy_reset_wa;
+	bool disable_dsc;
 };
 
 struct dc_debug_data {
@@ -494,7 +506,7 @@ struct dc {
 	/* Inputs into BW and WM calculations. */
 	struct bw_calcs_dceip *bw_dceip;
 	struct bw_calcs_vbios *bw_vbios;
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
+#ifdef CONFIG_DRM_AMD_DC_DCN
 	struct dcn_soc_bounding_box *dcn_soc;
 	struct dcn_ip_params *dcn_ip;
 	struct display_mode_lib dml;
@@ -508,7 +520,7 @@ struct dc {
 	bool optimized_required;
 
 	/* Require to maintain clocks and bandwidth for UEFI enabled HW */
-	bool optimize_seamless_boot;
+	int optimize_seamless_boot_streams;
 
 	/* FBC compressor */
 	struct compressor *fbc_compressor;
@@ -669,8 +681,7 @@ union dc_3dlut_state {
 struct dc_3dlut {
 	struct kref refcount;
 	struct tetrahedral_params lut_3d;
-	uint32_t hdr_multiplier;
-	bool initialized; /*remove after diag fix*/
+	struct fixed31_32 hdr_multiplier;
 	union dc_3dlut_state state;
 	struct dc_context *ctx;
 };
@@ -696,7 +707,7 @@ union surface_update_flags {
 		uint32_t horizontal_mirror_change:1;
 		uint32_t per_pixel_alpha_change:1;
 		uint32_t global_alpha_change:1;
-		uint32_t sdr_white_level:1;
+		uint32_t hdr_mult:1;
 		uint32_t rotation_change:1;
 		uint32_t swizzle_change:1;
 		uint32_t scaling_change:1;
@@ -740,7 +751,7 @@ struct dc_plane_state {
 	struct dc_bias_and_scale *bias_and_scale;
 	struct dc_csc_transform input_csc_color_matrix;
 	struct fixed31_32 coeff_reduction_factor;
-	uint32_t sdr_white_level;
+	struct fixed31_32 hdr_mult;
 
 	// TODO: No longer used, remove
 	struct dc_hdr_static_metadata hdr_static_ctx;
@@ -785,7 +796,6 @@ struct dc_plane_info {
 	enum dc_rotation_angle rotation;
 	enum plane_stereo_format stereo_format;
 	enum dc_color_space color_space;
-	unsigned int sdr_white_level;
 	bool horizontal_mirror;
 	bool visible;
 	bool per_pixel_alpha;
@@ -809,7 +819,7 @@ struct dc_surface_update {
 	const struct dc_flip_addrs *flip_addr;
 	const struct dc_plane_info *plane_info;
 	const struct dc_scaling_info *scaling_info;
-
+	struct fixed31_32 hdr_mult;
 	/* following updates require alloc/sleep/spin that is not isr safe,
 	 * null means no updates
 	 */
@@ -904,6 +914,8 @@ void dc_resource_state_copy_construct_current(
 		struct dc_state *dst_ctx);
 
 void dc_resource_state_destruct(struct dc_state *context);
+
+bool dc_resource_is_dsc_encoding_supported(const struct dc *dc);
 
 /*
  * TODO update to make it about validation sets

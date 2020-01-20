@@ -177,6 +177,9 @@ extern bool fscrypt_match_name(const struct fscrypt_name *fname,
 extern u64 fscrypt_fname_siphash(const struct inode *dir,
 				 const struct qstr *name);
 
+extern u64 fscrypt_fname_siphash(const struct inode *dir,
+				 const struct qstr *name);
+
 /* bio.c */
 extern void fscrypt_decrypt_bio(struct bio *);
 extern int fscrypt_zeroout_range(const struct inode *, pgoff_t, sector_t,

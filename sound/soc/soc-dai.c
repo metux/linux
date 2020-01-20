@@ -252,3 +252,144 @@ int snd_soc_dai_digital_mute(struct snd_soc_dai *dai, int mute,
 		return -ENOTSUPP;
 }
 EXPORT_SYMBOL_GPL(snd_soc_dai_digital_mute);
+
+int snd_soc_dai_hw_params(struct snd_soc_dai *dai,
+			  struct snd_pcm_substream *substream,
+			  struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	int ret;
+
+	/* perform any topology hw_params fixups before DAI  */
+	if (rtd->dai_link->be_hw_params_fixup) {
+		ret = rtd->dai_link->be_hw_params_fixup(rtd, params);
+		if (ret < 0) {
+			dev_err(rtd->dev,
+				"ASoC: hw_params topology fixup failed %d\n",
+				ret);
+			return ret;
+		}
+	}
+
+	if (dai->driver->ops->hw_params) {
+		ret = dai->driver->ops->hw_params(substream, params, dai);
+		if (ret < 0) {
+			dev_err(dai->dev, "ASoC: can't set %s hw params: %d\n",
+				dai->name, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+void snd_soc_dai_hw_free(struct snd_soc_dai *dai,
+			 struct snd_pcm_substream *substream)
+{
+	if (dai->driver->ops->hw_free)
+		dai->driver->ops->hw_free(substream, dai);
+}
+
+int snd_soc_dai_startup(struct snd_soc_dai *dai,
+			struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+
+	if (dai->driver->ops->startup)
+		ret = dai->driver->ops->startup(substream, dai);
+
+	return ret;
+}
+
+void snd_soc_dai_shutdown(struct snd_soc_dai *dai,
+			 struct snd_pcm_substream *substream)
+{
+	if (dai->driver->ops->shutdown)
+		dai->driver->ops->shutdown(substream, dai);
+}
+
+int snd_soc_dai_prepare(struct snd_soc_dai *dai,
+			struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+
+	if (dai->driver->ops->prepare)
+		ret = dai->driver->ops->prepare(substream, dai);
+
+	return ret;
+}
+
+int snd_soc_dai_trigger(struct snd_soc_dai *dai,
+			struct snd_pcm_substream *substream,
+			int cmd)
+{
+	int ret = 0;
+
+	if (dai->driver->ops->trigger)
+		ret = dai->driver->ops->trigger(substream, cmd, dai);
+
+	return ret;
+}
+
+int snd_soc_dai_bespoke_trigger(struct snd_soc_dai *dai,
+				struct snd_pcm_substream *substream,
+				int cmd)
+{
+	int ret = 0;
+
+	if (dai->driver->ops->bespoke_trigger)
+		ret = dai->driver->ops->bespoke_trigger(substream, cmd, dai);
+
+	return ret;
+}
+
+snd_pcm_sframes_t snd_soc_dai_delay(struct snd_soc_dai *dai,
+				    struct snd_pcm_substream *substream)
+{
+	int delay = 0;
+
+	if (dai->driver->ops->delay)
+		delay = dai->driver->ops->delay(substream, dai);
+
+	return delay;
+}
+
+int snd_soc_dai_probe(struct snd_soc_dai *dai)
+{
+	if (dai->driver->probe)
+		return dai->driver->probe(dai);
+	return 0;
+}
+
+int snd_soc_dai_remove(struct snd_soc_dai *dai)
+{
+	if (dai->driver->remove)
+		return dai->driver->remove(dai);
+	return 0;
+}
+
+int snd_soc_dai_compress_new(struct snd_soc_dai *dai,
+			     struct snd_soc_pcm_runtime *rtd, int num)
+{
+	if (dai->driver->compress_new)
+		return dai->driver->compress_new(rtd, num);
+	return -ENOTSUPP;
+}
+
+/*
+ * snd_soc_dai_stream_valid() - check if a DAI supports the given stream
+ *
+ * Returns true if the DAI supports the indicated stream type.
+ */
+bool snd_soc_dai_stream_valid(struct snd_soc_dai *dai, int dir)
+{
+	struct snd_soc_pcm_stream *stream;
+
+	if (dir == SNDRV_PCM_STREAM_PLAYBACK)
+		stream = &dai->driver->playback;
+	else
+		stream = &dai->driver->capture;
+
+	/* If the codec specifies any channels at all, it supports the stream */
+	return stream->channels_min;
+}

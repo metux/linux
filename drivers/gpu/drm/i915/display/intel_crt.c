@@ -65,7 +65,7 @@ static struct intel_crt *intel_encoder_to_crt(struct intel_encoder *encoder)
 	return container_of(encoder, struct intel_crt, base);
 }
 
-static struct intel_crt *intel_attached_crt(struct drm_connector *connector)
+static struct intel_crt *intel_attached_crt(struct intel_connector *connector)
 {
 	return intel_encoder_to_crt(intel_attached_encoder(connector));
 }
@@ -241,6 +241,14 @@ static void hsw_post_disable_crt(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 
+	intel_crtc_vblank_off(old_crtc_state);
+
+	intel_disable_pipe(old_crtc_state);
+
+	intel_ddi_disable_transcoder_func(old_crtc_state);
+
+	ilk_pfit_disable(old_crtc_state);
+
 	intel_ddi_disable_pipe_clock(old_crtc_state);
 
 	pch_post_disable_crt(encoder, old_crtc_state, old_conn_state);
@@ -278,7 +286,7 @@ static void hsw_pre_enable_crt(struct intel_encoder *encoder,
 
 	intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, false);
 
-	dev_priv->display.fdi_link_train(crtc, crtc_state);
+	hsw_fdi_link_train(encoder, crtc_state);
 
 	intel_ddi_enable_pipe_clock(crtc_state);
 }
@@ -349,7 +357,7 @@ intel_crt_mode_valid(struct drm_connector *connector,
 
 	/* The FDI receiver on LPT only supports 8bpc and only has 2 lanes. */
 	if (HAS_PCH_LPT(dev_priv) &&
-	    (ironlake_get_lanes_required(mode->clock, 270000, 24) > 2))
+	    ilk_get_lanes_required(mode->clock, 270000, 24) > 2)
 		return MODE_CLOCK_HIGH;
 
 	/* HSW/BDW FDI limited to 4k */
@@ -425,10 +433,10 @@ static int hsw_crt_compute_config(struct intel_encoder *encoder,
 	return 0;
 }
 
-static bool intel_ironlake_crt_detect_hotplug(struct drm_connector *connector)
+static bool ilk_crt_detect_hotplug(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
-	struct intel_crt *crt = intel_attached_crt(connector);
+	struct intel_crt *crt = intel_attached_crt(to_intel_connector(connector));
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	u32 adpa;
 	bool ret;
@@ -438,7 +446,7 @@ static bool intel_ironlake_crt_detect_hotplug(struct drm_connector *connector)
 		bool turn_off_dac = HAS_PCH_SPLIT(dev_priv);
 		u32 save_adpa;
 
-		crt->force_hotplug_required = 0;
+		crt->force_hotplug_required = false;
 
 		save_adpa = adpa = intel_de_read(dev_priv, crt->adpa_reg);
 		DRM_DEBUG_KMS("trigger hotplug detect cycle: adpa=0x%x\n", adpa);
@@ -475,7 +483,7 @@ static bool intel_ironlake_crt_detect_hotplug(struct drm_connector *connector)
 static bool valleyview_crt_detect_hotplug(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
-	struct intel_crt *crt = intel_attached_crt(connector);
+	struct intel_crt *crt = intel_attached_crt(to_intel_connector(connector));
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	bool reenable_hpd;
 	u32 adpa;
@@ -535,7 +543,7 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 	int i, tries = 0;
 
 	if (HAS_PCH_SPLIT(dev_priv))
-		return intel_ironlake_crt_detect_hotplug(connector);
+		return ilk_crt_detect_hotplug(connector);
 
 	if (IS_VALLEYVIEW(dev_priv))
 		return valleyview_crt_detect_hotplug(connector);
@@ -610,7 +618,7 @@ static int intel_crt_ddc_get_modes(struct drm_connector *connector,
 
 static bool intel_crt_detect_ddc(struct drm_connector *connector)
 {
-	struct intel_crt *crt = intel_attached_crt(connector);
+	struct intel_crt *crt = intel_attached_crt(to_intel_connector(connector));
 	struct drm_i915_private *dev_priv = to_i915(crt->base.base.dev);
 	struct edid *edid;
 	struct i2c_adapter *i2c;
@@ -796,7 +804,7 @@ intel_crt_detect(struct drm_connector *connector,
 		 bool force)
 {
 	struct drm_i915_private *dev_priv = to_i915(connector->dev);
-	struct intel_crt *crt = intel_attached_crt(connector);
+	struct intel_crt *crt = intel_attached_crt(to_intel_connector(connector));
 	struct intel_encoder *intel_encoder = &crt->base;
 	intel_wakeref_t wakeref;
 	int status, ret;
@@ -853,7 +861,7 @@ load_detect:
 	}
 
 	/* for pre-945g platforms use load detect */
-	ret = intel_get_load_detect_pipe(connector, NULL, &tmp, ctx);
+	ret = intel_get_load_detect_pipe(connector, &tmp, ctx);
 	if (ret > 0) {
 		if (intel_crt_detect_ddc(connector))
 			status = connector_status_connected;
@@ -880,7 +888,7 @@ static int intel_crt_get_modes(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
-	struct intel_crt *crt = intel_attached_crt(connector);
+	struct intel_crt *crt = intel_attached_crt(to_intel_connector(connector));
 	struct intel_encoder *intel_encoder = &crt->base;
 	intel_wakeref_t wakeref;
 	struct i2c_adapter *i2c;
@@ -919,7 +927,7 @@ void intel_crt_reset(struct drm_encoder *encoder)
 		intel_de_posting_read(dev_priv, crt->adpa_reg);
 
 		DRM_DEBUG_KMS("crt adpa set to 0x%x\n", adpa);
-		crt->force_hotplug_required = 1;
+		crt->force_hotplug_required = true;
 	}
 
 }
@@ -1003,9 +1011,9 @@ void intel_crt_init(struct drm_i915_private *dev_priv)
 	crt->base.type = INTEL_OUTPUT_ANALOG;
 	crt->base.cloneable = (1 << INTEL_OUTPUT_DVO) | (1 << INTEL_OUTPUT_HDMI);
 	if (IS_I830(dev_priv))
-		crt->base.crtc_mask = (1 << 0);
+		crt->base.pipe_mask = BIT(PIPE_A);
 	else
-		crt->base.crtc_mask = (1 << 0) | (1 << 1) | (1 << 2);
+		crt->base.pipe_mask = ~0;
 
 	if (IS_GEN(dev_priv, 2))
 		connector->interlace_allowed = 0;
@@ -1021,6 +1029,8 @@ void intel_crt_init(struct drm_i915_private *dev_priv)
 	    !dmi_check_system(intel_spurious_crt_detect)) {
 		crt->base.hpd_pin = HPD_CRT;
 		crt->base.hotplug = intel_encoder_hotplug;
+	} else {
+		intel_connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 	}
 
 	if (HAS_DDI(dev_priv)) {
@@ -1050,14 +1060,6 @@ void intel_crt_init(struct drm_i915_private *dev_priv)
 	intel_connector->get_hw_state = intel_connector_get_hw_state;
 
 	drm_connector_helper_add(connector, &intel_crt_connector_helper_funcs);
-
-	if (!I915_HAS_HOTPLUG(dev_priv))
-		intel_connector->polled = DRM_CONNECTOR_POLL_CONNECT;
-
-	/*
-	 * Configure the automatic hotplug detection stuff
-	 */
-	crt->force_hotplug_required = 0;
 
 	/*
 	 * TODO: find a proper way to discover whether we need to set the the

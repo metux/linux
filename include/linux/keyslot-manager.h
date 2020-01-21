@@ -97,6 +97,11 @@ keyslot_manager_rq_crypto_mode_supported(struct request_queue *q,
 }
 #endif /* CONFIG_BLK_INLINE_ENCRYPTION */
 
+struct keyslot_manager *keyslot_manager_create_passthrough(
+	const struct keyslot_mgmt_ll_ops *ksm_ops,
+	const unsigned int crypto_mode_supported[BLK_ENCRYPTION_MODE_MAX],
+	void *ll_priv_data);
+
 int keyslot_manager_derive_raw_secret(struct keyslot_manager *ksm,
 				      const u8 *wrapped_key,
 				      unsigned int wrapped_key_size,

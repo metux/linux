@@ -45,6 +45,61 @@ static inline bool bio_has_crypt_ctx(struct bio *bio)
 	return bio->bi_crypt_context;
 }
 
+void bio_crypt_clone(struct bio *dst, struct bio *src, gfp_t gfp_mask);
+
+static inline void bio_crypt_set_ctx(struct bio *bio,
+				     const struct blk_crypto_key *key,
+				     u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
+				     gfp_t gfp_mask)
+{
+	struct bio_crypt_ctx *bc = bio_crypt_alloc_ctx(gfp_mask);
+
+	bc->bc_key = key;
+	memcpy(bc->bc_dun, dun, sizeof(bc->bc_dun));
+	bc->bc_ksm = NULL;
+	bc->bc_keyslot = -1;
+
+	bio->bi_crypt_context = bc;
+}
+
+void bio_crypt_ctx_release_keyslot(struct bio_crypt_ctx *bc);
+
+int bio_crypt_ctx_acquire_keyslot(struct bio_crypt_ctx *bc,
+				  struct keyslot_manager *ksm);
+
+struct request;
+bool bio_crypt_should_process(struct request *rq);
+
+static inline bool bio_crypt_dun_is_contiguous(const struct bio_crypt_ctx *bc,
+					       unsigned int bytes,
+					u64 next_dun[BLK_CRYPTO_DUN_ARRAY_SIZE])
+{
+	int i = 0;
+	unsigned int inc = bytes >> bc->bc_key->data_unit_size_bits;
+
+	while (i < BLK_CRYPTO_DUN_ARRAY_SIZE) {
+		if (bc->bc_dun[i] + inc != next_dun[i])
+			return false;
+		inc = ((bc->bc_dun[i] + inc)  < inc);
+		i++;
+	}
+
+	return true;
+}
+
+
+static inline void bio_crypt_dun_increment(u64 dun[BLK_CRYPTO_DUN_ARRAY_SIZE],
+					   unsigned int inc)
+{
+	int i = 0;
+
+	while (inc && i < BLK_CRYPTO_DUN_ARRAY_SIZE) {
+		dun[i] += inc;
+		inc = (dun[i] < inc);
+		i++;
+	}
+}
+
 static inline void bio_crypt_advance(struct bio *bio, unsigned int bytes)
 {
 	if (bio_has_crypt_ctx(bio)) {

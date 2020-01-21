@@ -43,6 +43,10 @@ EXPORT_SYMBOL(bio_crypt_free_ctx);
 
 int bio_crypt_clone(struct bio *dst, struct bio *src, gfp_t gfp_mask)
 {
+	const struct bio_crypt_ctx *src_bc = src->bi_crypt_context;
+
+	bio_clone_skip_dm_default_key(dst, src);
+
 	/*
 	 * If a bio is swhandled, then it will be decrypted when bio_endio
 	 * is called. As we only want the data to be decrypted once, copies

@@ -10,6 +10,12 @@
 #ifndef __LINUX_KEYSLOT_MANAGER_H
 #define __LINUX_KEYSLOT_MANAGER_H
 
+#include <linux/bio.h>
+
+#ifdef CONFIG_BLK_INLINE_ENCRYPTION
+
+struct keyslot_manager;
+
 /**
  * struct keyslot_mgmt_ll_ops - functions to manage keyslots in hardware
  * @keyslot_program:	Program the specified key and algorithm into the
@@ -102,10 +108,15 @@ struct keyslot_manager *keyslot_manager_create_passthrough(
 	const unsigned int crypto_mode_supported[BLK_ENCRYPTION_MODE_MAX],
 	void *ll_priv_data);
 
+void keyslot_manager_intersect_modes(struct keyslot_manager *parent,
+				     const struct keyslot_manager *child);
+
 int keyslot_manager_derive_raw_secret(struct keyslot_manager *ksm,
 				      const u8 *wrapped_key,
 				      unsigned int wrapped_key_size,
 				      u8 *secret, unsigned int secret_size);
+
+#endif /* CONFIG_BLK_INLINE_ENCRYPTION */
 
 #endif /* __LINUX_KEYSLOT_MANAGER_H */
 

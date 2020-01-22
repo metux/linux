@@ -39,6 +39,41 @@
  */
 static atomic_t kfd_locked = ATOMIC_INIT(0);
 
+#ifdef CONFIG_DRM_AMDGPU_CIK
+extern const struct kfd2kgd_calls gfx_v7_kfd2kgd;
+#endif
+extern const struct kfd2kgd_calls gfx_v8_kfd2kgd;
+extern const struct kfd2kgd_calls gfx_v9_kfd2kgd;
+extern const struct kfd2kgd_calls arcturus_kfd2kgd;
+extern const struct kfd2kgd_calls gfx_v10_kfd2kgd;
+
+static const struct kfd2kgd_calls *kfd2kgd_funcs[] = {
+#ifdef KFD_SUPPORT_IOMMU_V2
+#ifdef CONFIG_DRM_AMDGPU_CIK
+	[CHIP_KAVERI] = &gfx_v7_kfd2kgd,
+#endif
+	[CHIP_CARRIZO] = &gfx_v8_kfd2kgd,
+	[CHIP_RAVEN] = &gfx_v9_kfd2kgd,
+#endif
+#ifdef CONFIG_DRM_AMDGPU_CIK
+	[CHIP_HAWAII] = &gfx_v7_kfd2kgd,
+#endif
+	[CHIP_TONGA] = &gfx_v8_kfd2kgd,
+	[CHIP_FIJI] = &gfx_v8_kfd2kgd,
+	[CHIP_POLARIS10] = &gfx_v8_kfd2kgd,
+	[CHIP_POLARIS11] = &gfx_v8_kfd2kgd,
+	[CHIP_POLARIS12] = &gfx_v8_kfd2kgd,
+	[CHIP_VEGAM] = &gfx_v8_kfd2kgd,
+	[CHIP_VEGA10] = &gfx_v9_kfd2kgd,
+	[CHIP_VEGA12] = &gfx_v9_kfd2kgd,
+	[CHIP_VEGA20] = &gfx_v9_kfd2kgd,
+	[CHIP_RENOIR] = &gfx_v9_kfd2kgd,
+	[CHIP_ARCTURUS] = &arcturus_kfd2kgd,
+	[CHIP_NAVI10] = &gfx_v10_kfd2kgd,
+	[CHIP_NAVI12] = &gfx_v10_kfd2kgd,
+	[CHIP_NAVI14] = &gfx_v10_kfd2kgd,
+};
+
 #ifdef KFD_SUPPORT_IOMMU_V2
 static const struct kfd_device_info kaveri_device_info = {
 	.asic_family = CHIP_KAVERI,
@@ -351,6 +386,24 @@ static const struct kfd_device_info arcturus_device_info = {
 	.num_sdma_queues_per_engine = 8,
 };
 
+static const struct kfd_device_info renoir_device_info = {
+	.asic_family = CHIP_RENOIR,
+	.asic_name = "renoir",
+	.max_pasid_bits = 16,
+	.max_no_of_hqd  = 24,
+	.doorbell_size  = 8,
+	.ih_ring_entry_size = 8 * sizeof(uint32_t),
+	.event_interrupt_class = &event_interrupt_class_v9,
+	.num_of_watch_points = 4,
+	.mqd_size_aligned = MQD_SIZE_ALIGNED,
+	.supports_cwsr = true,
+	.needs_iommu_device = false,
+	.needs_pci_atomics = false,
+	.num_sdma_engines = 1,
+	.num_xgmi_sdma_engines = 0,
+	.num_sdma_queues_per_engine = 2,
+};
+
 static const struct kfd_device_info navi10_device_info = {
 	.asic_family = CHIP_NAVI10,
 	.asic_name = "navi10",
@@ -369,13 +422,52 @@ static const struct kfd_device_info navi10_device_info = {
 	.num_sdma_queues_per_engine = 8,
 };
 
+static const struct kfd_device_info navi12_device_info = {
+	.asic_family = CHIP_NAVI12,
+	.asic_name = "navi12",
+	.max_pasid_bits = 16,
+	.max_no_of_hqd  = 24,
+	.doorbell_size  = 8,
+	.ih_ring_entry_size = 8 * sizeof(uint32_t),
+	.event_interrupt_class = &event_interrupt_class_v9,
+	.num_of_watch_points = 4,
+	.mqd_size_aligned = MQD_SIZE_ALIGNED,
+	.needs_iommu_device = false,
+	.supports_cwsr = true,
+	.needs_pci_atomics = false,
+	.num_sdma_engines = 2,
+	.num_xgmi_sdma_engines = 0,
+	.num_sdma_queues_per_engine = 8,
+};
+
+static const struct kfd_device_info navi14_device_info = {
+	.asic_family = CHIP_NAVI14,
+	.asic_name = "navi14",
+	.max_pasid_bits = 16,
+	.max_no_of_hqd  = 24,
+	.doorbell_size  = 8,
+	.ih_ring_entry_size = 8 * sizeof(uint32_t),
+	.event_interrupt_class = &event_interrupt_class_v9,
+	.num_of_watch_points = 4,
+	.mqd_size_aligned = MQD_SIZE_ALIGNED,
+	.needs_iommu_device = false,
+	.supports_cwsr = true,
+	.needs_pci_atomics = false,
+	.num_sdma_engines = 2,
+	.num_xgmi_sdma_engines = 0,
+	.num_sdma_queues_per_engine = 8,
+};
+
 /* For each entry, [0] is regular and [1] is virtualisation device. */
 static const struct kfd_device_info *kfd_supported_devices[][2] = {
+#ifdef KFD_SUPPORT_IOMMU_V2
 	[CHIP_KAVERI] = {&kaveri_device_info, NULL},
+	[CHIP_CARRIZO] = {&carrizo_device_info, NULL},
+	[CHIP_RAVEN] = {&raven_device_info, NULL},
+#endif
 	[CHIP_HAWAII] = {&hawaii_device_info, NULL},
 	[CHIP_TONGA] = {&tonga_device_info, NULL},
 	[CHIP_FIJI] = {&fiji_device_info, &fiji_vf_device_info},
-	[CHIP_CARRIZO] = {&carrizo_device_info, NULL},
 	[CHIP_POLARIS10] = {&polaris10_device_info, &polaris10_vf_device_info},
 	[CHIP_POLARIS11] = {&polaris11_device_info, NULL},
 	[CHIP_POLARIS12] = {&polaris12_device_info, NULL},
@@ -383,9 +475,11 @@ static const struct kfd_device_info *kfd_supported_devices[][2] = {
 	[CHIP_VEGA10] = {&vega10_device_info, &vega10_vf_device_info},
 	[CHIP_VEGA12] = {&vega12_device_info, NULL},
 	[CHIP_VEGA20] = {&vega20_device_info, NULL},
-	[CHIP_RAVEN] = {&raven_device_info, NULL},
+	[CHIP_RENOIR] = {&renoir_device_info, NULL},
 	[CHIP_ARCTURUS] = {&arcturus_device_info, &arcturus_device_info},
 	[CHIP_NAVI10] = {&navi10_device_info, NULL},
+	[CHIP_NAVI12] = {&navi12_device_info, &navi12_device_info},
+	[CHIP_NAVI14] = {&navi14_device_info, NULL},
 };
 
 static int kfd_gtt_sa_init(struct kfd_dev *kfd, unsigned int buf_size,
@@ -395,20 +489,22 @@ static void kfd_gtt_sa_fini(struct kfd_dev *kfd);
 static int kfd_resume(struct kfd_dev *kfd);
 
 struct kfd_dev *kgd2kfd_probe(struct kgd_dev *kgd,
-	struct pci_dev *pdev, const struct kfd2kgd_calls *f2g,
-	unsigned int asic_type, bool vf)
+	struct pci_dev *pdev, unsigned int asic_type, bool vf)
 {
 	struct kfd_dev *kfd;
 	const struct kfd_device_info *device_info;
+	const struct kfd2kgd_calls *f2g;
 
-	if (asic_type >= sizeof(kfd_supported_devices) / (sizeof(void *) * 2)) {
+	if (asic_type >= sizeof(kfd_supported_devices) / (sizeof(void *) * 2)
+		|| asic_type >= sizeof(kfd2kgd_funcs) / sizeof(void *)) {
 		dev_err(kfd_device, "asic_type %d out of range\n", asic_type);
 		return NULL; /* asic_type out of range */
 	}
 
 	device_info = kfd_supported_devices[asic_type][vf];
+	f2g = kfd2kgd_funcs[asic_type];
 
-	if (!device_info) {
+	if (!device_info || !f2g) {
 		dev_err(kfd_device, "%s %s not supported in kfd\n",
 			amdgpu_asic_name[asic_type], vf ? "VF" : "");
 		return NULL;
@@ -474,10 +570,12 @@ static void kfd_cwsr_init(struct kfd_dev *kfd)
 }
 
 bool kgd2kfd_device_init(struct kfd_dev *kfd,
+			 struct drm_device *ddev,
 			 const struct kgd2kfd_shared_resources *gpu_resources)
 {
 	unsigned int size;
 
+	kfd->ddev = ddev;
 	kfd->mec_fw_version = amdgpu_amdkfd_get_fw_version(kfd->kgd,
 			KGD_ENGINE_MEC1);
 	kfd->sdma_fw_version = amdgpu_amdkfd_get_fw_version(kfd->kgd,
@@ -612,7 +710,7 @@ out:
 void kgd2kfd_device_exit(struct kfd_dev *kfd)
 {
 	if (kfd->init_complete) {
-		kgd2kfd_suspend(kfd);
+		kgd2kfd_suspend(kfd, false);
 		device_queue_manager_uninit(kfd->dqm);
 		kfd_interrupt_exit(kfd);
 		kfd_topology_remove_device(kfd);
@@ -630,7 +728,10 @@ int kgd2kfd_pre_reset(struct kfd_dev *kfd)
 {
 	if (!kfd->init_complete)
 		return 0;
-	kgd2kfd_suspend(kfd);
+
+	kfd->dqm->ops.pre_reset(kfd->dqm);
+
+	kgd2kfd_suspend(kfd, false);
 
 	kfd_signal_reset_event(kfd);
 	return 0;
@@ -644,7 +745,7 @@ int kgd2kfd_pre_reset(struct kfd_dev *kfd)
 
 int kgd2kfd_post_reset(struct kfd_dev *kfd)
 {
-	int ret, count;
+	int ret;
 
 	if (!kfd->init_complete)
 		return 0;
@@ -652,7 +753,7 @@ int kgd2kfd_post_reset(struct kfd_dev *kfd)
 	ret = kfd_resume(kfd);
 	if (ret)
 		return ret;
-	count = atomic_dec_return(&kfd_locked);
+	atomic_dec(&kfd_locked);
 
 	atomic_set(&kfd->sram_ecc_flag, 0);
 
@@ -664,21 +765,23 @@ bool kfd_is_locked(void)
 	return  (atomic_read(&kfd_locked) > 0);
 }
 
-void kgd2kfd_suspend(struct kfd_dev *kfd)
+void kgd2kfd_suspend(struct kfd_dev *kfd, bool run_pm)
 {
 	if (!kfd->init_complete)
 		return;
 
-	/* For first KFD device suspend all the KFD processes */
-	if (atomic_inc_return(&kfd_locked) == 1)
-		kfd_suspend_all_processes();
+	/* for runtime suspend, skip locking kfd */
+	if (!run_pm) {
+		/* For first KFD device suspend all the KFD processes */
+		if (atomic_inc_return(&kfd_locked) == 1)
+			kfd_suspend_all_processes();
+	}
 
 	kfd->dqm->ops.stop(kfd->dqm);
-
 	kfd_iommu_suspend(kfd);
 }
 
-int kgd2kfd_resume(struct kfd_dev *kfd)
+int kgd2kfd_resume(struct kfd_dev *kfd, bool run_pm)
 {
 	int ret, count;
 
@@ -689,10 +792,13 @@ int kgd2kfd_resume(struct kfd_dev *kfd)
 	if (ret)
 		return ret;
 
-	count = atomic_dec_return(&kfd_locked);
-	WARN_ONCE(count < 0, "KFD suspend / resume ref. error");
-	if (count == 0)
-		ret = kfd_resume_all_processes();
+	/* for runtime resume, skip unlocking kfd */
+	if (!run_pm) {
+		count = atomic_dec_return(&kfd_locked);
+		WARN_ONCE(count < 0, "KFD suspend / resume ref. error");
+		if (count == 0)
+			ret = kfd_resume_all_processes();
+	}
 
 	return ret;
 }
@@ -724,6 +830,21 @@ dqm_start_error:
 	return err;
 }
 
+static inline void kfd_queue_work(struct workqueue_struct *wq,
+				  struct work_struct *work)
+{
+	int cpu, new_cpu;
+
+	cpu = new_cpu = smp_processor_id();
+	do {
+		new_cpu = cpumask_next(new_cpu, cpu_online_mask) % nr_cpu_ids;
+		if (cpu_to_node(new_cpu) == numa_node_id())
+			break;
+	} while (cpu != new_cpu);
+
+	queue_work_on(new_cpu, wq, work);
+}
+
 /* This is called directly from KGD at ISR. */
 void kgd2kfd_interrupt(struct kfd_dev *kfd, const void *ih_ring_entry)
 {
@@ -746,7 +867,7 @@ void kgd2kfd_interrupt(struct kfd_dev *kfd, const void *ih_ring_entry)
 				   patched_ihre, &is_patched)
 	    && enqueue_ih_ring_entry(kfd,
 				     is_patched ? patched_ihre : ih_ring_entry))
-		queue_work(kfd->ih_wq, &kfd->interrupt_work);
+		kfd_queue_work(kfd->ih_wq, &kfd->interrupt_work);
 
 	spin_unlock_irqrestore(&kfd->interrupt_lock, flags);
 }

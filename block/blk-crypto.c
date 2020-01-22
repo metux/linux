@@ -701,7 +701,8 @@ out:
 	mutex_unlock(&tfms_lock[mode_num]);
 	return err;
 }
-EXPORT_SYMBOL(blk_crypto_start_using_mode);
+EXPORT_SYMBOL_GPL(blk_crypto_start_using_mode);
+EXPORT_SYMBOL_GPL(blk_crypto_init_key);
 
 /**
  * blk_crypto_evict_key() - Evict a key from any inline encryption hardware
@@ -796,3 +797,4 @@ out:
 	pr_warn("No memory for blk-crypto crypto API fallback.");
 	return err;
 }
+EXPORT_SYMBOL_GPL(blk_crypto_evict_key);

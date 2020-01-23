@@ -13,6 +13,7 @@
 
 #include <asm/io_bitmap.h>
 #include <asm/desc.h>
+#include <asm/syscalls.h>
 
 static atomic64_t io_bitmap_sequence;
 

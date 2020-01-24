@@ -410,8 +410,9 @@ static void dm_vupdate_high_irq(void *interrupt_params)
 	if (acrtc) {
 		acrtc_state = to_dm_crtc_state(acrtc->base.state);
 
-		DRM_DEBUG_DRIVER("crtc:%d, vupdate-vrr:%d\n", acrtc->crtc_id,
-				 amdgpu_dm_vrr_active(acrtc_state));
+		DRM_DEBUG_VBL("crtc:%d, vupdate-vrr:%d\n",
+			      acrtc->crtc_id,
+			      amdgpu_dm_vrr_active(acrtc_state));
 
 		/* Core vblank handling is done here after end of front-porch in
 		 * vrr mode, as vblank timestamping will give valid results
@@ -461,8 +462,9 @@ static void dm_crtc_high_irq(void *interrupt_params)
 	if (acrtc) {
 		acrtc_state = to_dm_crtc_state(acrtc->base.state);
 
-		DRM_DEBUG_DRIVER("crtc:%d, vupdate-vrr:%d\n", acrtc->crtc_id,
-				 amdgpu_dm_vrr_active(acrtc_state));
+		DRM_DEBUG_VBL("crtc:%d, vupdate-vrr:%d\n",
+			      acrtc->crtc_id,
+			      amdgpu_dm_vrr_active(acrtc_state));
 
 		/* Core vblank handling at start of front-porch is only possible
 		 * in non-vrr mode, as only there vblank timestamping will give
@@ -525,9 +527,8 @@ static void dm_dcn_crtc_high_irq(void *interrupt_params)
 
 	acrtc_state = to_dm_crtc_state(acrtc->base.state);
 
-	DRM_DEBUG_DRIVER("crtc:%d, vupdate-vrr:%d, planes:%d\n", acrtc->crtc_id,
-			 amdgpu_dm_vrr_active(acrtc_state),
-			 acrtc_state->active_planes);
+	DRM_DEBUG_VBL("crtc:%d, vupdate-vrr:%d\n", acrtc->crtc_id,
+		      amdgpu_dm_vrr_active(acrtc_state));
 
 	amdgpu_dm_crtc_handle_crc_irq(&acrtc->base);
 	drm_crtc_handle_vblank(&acrtc->base);
@@ -547,18 +548,7 @@ static void dm_dcn_crtc_high_irq(void *interrupt_params)
 			&acrtc_state->vrr_params.adjust);
 	}
 
-	/*
-	 * If there aren't any active_planes then DCH HUBP may be clock-gated.
-	 * In that case, pageflip completion interrupts won't fire and pageflip
-	 * completion events won't get delivered. Prevent this by sending
-	 * pending pageflip events from here if a flip is still pending.
-	 *
-	 * If any planes are enabled, use dm_pflip_high_irq() instead, to
-	 * avoid race conditions between flip programming and completion,
-	 * which could cause too early flip completion events.
-	 */
-	if (acrtc->pflip_status == AMDGPU_FLIP_SUBMITTED &&
-	    acrtc_state->active_planes == 0) {
+	if (acrtc->pflip_status == AMDGPU_FLIP_SUBMITTED) {
 		if (acrtc->event) {
 			drm_crtc_send_vblank_event(&acrtc->base, acrtc->event);
 			acrtc->event = NULL;
@@ -1724,7 +1714,7 @@ static int dm_resume(void *handle)
 	 */
 	amdgpu_dm_irq_resume_early(adev);
 
-	/* On resume we need to  rewrite the MSTM control bits to enable MST*/
+	/* On resume we need to rewrite the MSTM control bits to enable MST*/
 	s3_handle_mst(ddev, false);
 
 	/* Do detection*/
@@ -2617,7 +2607,8 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 
 	dc_resource_state_copy_construct_current(adev->dm.dc, state->context);
 
-	drm_atomic_private_obj_init(&adev->dm.atomic_obj,
+	drm_atomic_private_obj_init(adev->ddev,
+				    &adev->dm.atomic_obj,
 				    &state->base,
 				    &dm_atomic_state_funcs);
 
@@ -6544,8 +6535,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 	int planes_count = 0, vpos, hpos;
 	long r;
 	unsigned long flags;
-	u64 last_flip_vblank;
-	bool vrr_active = acrtc_state->freesync_config.state == VRR_STATE_ACTIVE_VARIABLE;
 	struct amdgpu_bo *abo;
 	uint64_t tiling_flags;
 	uint32_t target_vblank, last_flip_vblank;
@@ -6594,25 +6583,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		new_crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 		if (!new_crtc_state->active)
 			continue;
-
-		pflip_needed = old_plane_state->fb &&
-			old_plane_state->fb != new_plane_state->fb;
-
-		spin_lock_irqsave(&crtc->dev->event_lock, flags);
-
-		/* For variable refresh rate mode only:
-		 * Get vblank of last completed flip to avoid > 1 vrr flips per
-		 * video frame by use of throttling, but allow flip programming
-		 * anywhere in the possibly large variable vrr vblank interval
-		 * for fine-grained flip timing control and more opportunity to
-		 * avoid stutter on late submission of amdgpu_dm_do_flip() calls.
-		 */
-		last_flip_vblank = acrtc_attach->last_flip_vblank;
-
-		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
-
-		if (!pflip_needed || plane->type == DRM_PLANE_TYPE_OVERLAY) {
-			WARN_ON(!dm_new_plane_state->dc_state);
 
 		dc_plane = dm_new_plane_state->dc_state;
 

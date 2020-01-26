@@ -107,8 +107,6 @@ bool have_governor_per_policy(void)
 }
 EXPORT_SYMBOL_GPL(have_governor_per_policy);
 
-static struct kobject *cpufreq_global_kobject;
-
 struct kobject *get_governor_parent_kobj(struct cpufreq_policy *policy)
 {
 	if (have_governor_per_policy())
@@ -1085,17 +1083,9 @@ static int cpufreq_init_policy(struct cpufreq_policy *policy)
 			pol = policy->last_policy;
 		} else if (def_gov) {
 			pol = cpufreq_parse_policy(def_gov->name);
-			/*
-			 * In case the default governor is neiter "performance"
-			 * nor "powersave", fall back to the initial policy
-			 * value set by the driver.
-			 */
-			if (pol == CPUFREQ_POLICY_UNKNOWN)
-				pol = policy->policy;
-		}
-		if (pol != CPUFREQ_POLICY_PERFORMANCE &&
-		    pol != CPUFREQ_POLICY_POWERSAVE)
+		} else {
 			return -ENODATA;
+		}
 	}
 
 	return cpufreq_set_policy(policy, gov, pol);
@@ -2772,6 +2762,9 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
+
+struct kobject *cpufreq_global_kobject;
+EXPORT_SYMBOL(cpufreq_global_kobject);
 
 static int __init cpufreq_core_init(void)
 {

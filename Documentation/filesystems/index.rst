@@ -42,5 +42,6 @@ Documentation for filesystem implementations.
    :maxdepth: 2
 
    autofs
+   overlayfs
    virtiofs
    vfat

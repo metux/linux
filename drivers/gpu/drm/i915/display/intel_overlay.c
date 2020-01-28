@@ -248,7 +248,7 @@ static int intel_overlay_on(struct intel_overlay *overlay)
 	struct i915_request *rq;
 	u32 *cs;
 
-	WARN_ON(overlay->active);
+	drm_WARN_ON(&dev_priv->drm, overlay->active);
 
 	rq = alloc_request(overlay, NULL);
 	if (IS_ERR(rq))
@@ -280,7 +280,7 @@ static void intel_overlay_flip_prepare(struct intel_overlay *overlay,
 				       struct i915_vma *vma)
 {
 	enum pipe pipe = overlay->crtc->pipe;
-	struct intel_frontbuffer *from, *to;
+	struct intel_frontbuffer *from = NULL, *to = NULL;
 
 	WARN_ON(overlay->old_vma);
 
@@ -316,7 +316,7 @@ static int intel_overlay_continue(struct intel_overlay *overlay,
 	u32 flip_addr = overlay->flip_addr;
 	u32 tmp, *cs;
 
-	WARN_ON(!overlay->active);
+	drm_WARN_ON(&dev_priv->drm, !overlay->active);
 
 	if (load_polyphase_filter)
 		flip_addr |= OFC_UPDATE;
@@ -449,8 +449,6 @@ static int intel_overlay_release_old_vid(struct intel_overlay *overlay)
 	struct drm_i915_private *dev_priv = overlay->i915;
 	struct i915_request *rq;
 	u32 *cs;
-
-	lockdep_assert_held(&dev_priv->drm.struct_mutex);
 
 	/*
 	 * Only wait if there is actually an old frame to release to
@@ -680,8 +678,8 @@ static void update_colorkey(struct intel_overlay *overlay,
 	if (overlay->color_key_enabled)
 		flags |= DST_KEY_ENABLE;
 
-	if (state->base.visible)
-		format = state->base.fb->format->format;
+	if (state->uapi.visible)
+		format = state->hw.fb->format->format;
 
 	switch (format) {
 	case DRM_FORMAT_C8:
@@ -762,8 +760,8 @@ static int intel_overlay_do_put_image(struct intel_overlay *overlay,
 	struct i915_vma *vma;
 	int ret, tmp_width;
 
-	lockdep_assert_held(&dev_priv->drm.struct_mutex);
-	WARN_ON(!drm_modeset_is_locked(&dev_priv->drm.mode_config.connection_mutex));
+	drm_WARN_ON(&dev_priv->drm,
+		    !drm_modeset_is_locked(&dev_priv->drm.mode_config.connection_mutex));
 
 	ret = intel_overlay_release_old_vid(overlay);
 	if (ret != 0)
@@ -861,8 +859,8 @@ int intel_overlay_switch_off(struct intel_overlay *overlay)
 	struct drm_i915_private *dev_priv = overlay->i915;
 	int ret;
 
-	lockdep_assert_held(&dev_priv->drm.struct_mutex);
-	WARN_ON(!drm_modeset_is_locked(&dev_priv->drm.mode_config.connection_mutex));
+	drm_WARN_ON(&dev_priv->drm,
+		    !drm_modeset_is_locked(&dev_priv->drm.mode_config.connection_mutex));
 
 	ret = intel_overlay_recover_from_interrupt(overlay);
 	if (ret != 0)
@@ -1077,11 +1075,7 @@ int intel_overlay_put_image_ioctl(struct drm_device *dev, void *data,
 
 	if (!(params->flags & I915_OVERLAY_ENABLE)) {
 		drm_modeset_lock_all(dev);
-		mutex_lock(&dev->struct_mutex);
-
 		ret = intel_overlay_switch_off(overlay);
-
-		mutex_unlock(&dev->struct_mutex);
 		drm_modeset_unlock_all(dev);
 
 		return ret;
@@ -1097,7 +1091,6 @@ int intel_overlay_put_image_ioctl(struct drm_device *dev, void *data,
 		return -ENOENT;
 
 	drm_modeset_lock_all(dev);
-	mutex_lock(&dev->struct_mutex);
 
 	if (i915_gem_object_is_tiled(new_bo)) {
 		DRM_DEBUG_KMS("buffer used for overlay image can not be tiled\n");
@@ -1161,14 +1154,12 @@ int intel_overlay_put_image_ioctl(struct drm_device *dev, void *data,
 	if (ret != 0)
 		goto out_unlock;
 
-	mutex_unlock(&dev->struct_mutex);
 	drm_modeset_unlock_all(dev);
 	i915_gem_object_put(new_bo);
 
 	return 0;
 
 out_unlock:
-	mutex_unlock(&dev->struct_mutex);
 	drm_modeset_unlock_all(dev);
 	i915_gem_object_put(new_bo);
 
@@ -1242,7 +1233,6 @@ int intel_overlay_attrs_ioctl(struct drm_device *dev, void *data,
 	}
 
 	drm_modeset_lock_all(dev);
-	mutex_lock(&dev->struct_mutex);
 
 	ret = -EINVAL;
 	if (!(attrs->flags & I915_OVERLAY_UPDATE_ATTRS)) {
@@ -1299,7 +1289,6 @@ int intel_overlay_attrs_ioctl(struct drm_device *dev, void *data,
 
 	ret = 0;
 out_unlock:
-	mutex_unlock(&dev->struct_mutex);
 	drm_modeset_unlock_all(dev);
 
 	return ret;
@@ -1346,12 +1335,14 @@ err_put_bo:
 void intel_overlay_setup(struct drm_i915_private *dev_priv)
 {
 	struct intel_overlay *overlay;
+	struct intel_engine_cs *engine;
 	int ret;
 
 	if (!HAS_OVERLAY(dev_priv))
 		return;
 
-	if (!HAS_ENGINE(dev_priv, RCS0))
+	engine = dev_priv->engine[RCS0];
+	if (!engine || !engine->kernel_context)
 		return;
 
 	overlay = kzalloc(sizeof(*overlay), GFP_KERNEL);
@@ -1359,7 +1350,7 @@ void intel_overlay_setup(struct drm_i915_private *dev_priv)
 		return;
 
 	overlay->i915 = dev_priv;
-	overlay->context = dev_priv->engine[RCS0]->kernel_context;
+	overlay->context = engine->kernel_context;
 	GEM_BUG_ON(!overlay->context);
 
 	overlay->color_key = 0x0101fe;
@@ -1411,7 +1402,7 @@ void intel_overlay_cleanup(struct drm_i915_private *dev_priv)
 	 * Furthermore modesetting teardown happens beforehand so the
 	 * hardware should be off already.
 	 */
-	WARN_ON(overlay->active);
+	drm_WARN_ON(&dev_priv->drm, overlay->active);
 
 	i915_gem_object_put(overlay->reg_bo);
 	i915_active_fini(&overlay->last_flip);

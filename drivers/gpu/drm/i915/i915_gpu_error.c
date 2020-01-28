@@ -553,8 +553,6 @@ static void error_print_engine(struct drm_i915_error_state_buf *m,
 				   ee->vm_info.pp_dir_base);
 		}
 	}
-	err_printf(m, "  ring->head: 0x%08x\n", ee->cpu_ring_head);
-	err_printf(m, "  ring->tail: 0x%08x\n", ee->cpu_ring_tail);
 	err_printf(m, "  engine reset count: %u\n", ee->reset_count);
 
 	for (n = 0; n < ee->num_ports; n++) {
@@ -671,7 +669,7 @@ static void err_print_gt(struct drm_i915_error_state_buf *m,
 			 struct intel_gt_coredump *gt)
 {
 	const struct intel_engine_coredump *ee;
-	int i, j;
+	int i;
 
 	err_printf(m, "GT awake: %s\n", yesno(gt->awake));
 	err_printf(m, "EIR: 0x%08x\n", gt->eir);
@@ -717,17 +715,8 @@ static void err_print_gt(struct drm_i915_error_state_buf *m,
 		const struct i915_vma_coredump *vma;
 
 		error_print_engine(m, ee);
-
 		for (vma = ee->vma; vma; vma = vma->next)
 			print_error_vma(m, ee->engine, vma);
-
-		if (ee->num_requests) {
-			err_printf(m, "%s --- %d requests\n",
-				   ee->engine->name,
-				   ee->num_requests);
-			for (j = 0; j < ee->num_requests; j++)
-				error_print_request(m, " ", &ee->requests[j]);
-		}
 	}
 
 	if (gt->uc)
@@ -938,7 +927,6 @@ static void cleanup_gt(struct intel_gt_coredump *gt)
 		gt->engine = ee->next;
 
 		i915_vma_coredump_free(ee->vma);
-		kfree(ee->requests);
 		kfree(ee);
 	}
 
@@ -1205,7 +1193,7 @@ static void engine_record_registers(struct intel_engine_coredump *ee)
 static void record_request(const struct i915_request *request,
 			   struct i915_request_coredump *erq)
 {
-	const struct i915_gem_context *ctx = request->context->gem_context;
+	const struct i915_gem_context *ctx;
 
 	erq->flags = request->fence.flags;
 	erq->context = request->fence.context;
@@ -1214,55 +1202,13 @@ static void record_request(const struct i915_request *request,
 	erq->start = i915_ggtt_offset(request->ring->vma);
 	erq->head = request->head;
 	erq->tail = request->tail;
-	erq->pid = ctx && ctx->pid ? pid_nr(ctx->pid) : 0;
-}
 
-static void engine_record_requests(const struct intel_engine_cs *engine,
-				   struct i915_request *first,
-				   struct intel_engine_coredump *ee)
-{
-	struct i915_request *request;
-	int count;
-
-	count = 0;
-	request = first;
-	list_for_each_entry_from(request, &engine->active.requests, sched.link)
-		count++;
-	if (!count)
-		return;
-
-	ee->requests = kcalloc(count, sizeof(*ee->requests), ATOMIC_MAYFAIL);
-	if (!ee->requests)
-		return;
-
-	ee->num_requests = count;
-
-	count = 0;
-	request = first;
-	list_for_each_entry_from(request,
-				 &engine->active.requests, sched.link) {
-		if (count >= ee->num_requests) {
-			/*
-			 * If the ring request list was changed in
-			 * between the point where the error request
-			 * list was created and dimensioned and this
-			 * point then just exit early to avoid crashes.
-			 *
-			 * We don't need to communicate that the
-			 * request list changed state during error
-			 * state capture and that the error state is
-			 * slightly incorrect as a consequence since we
-			 * are typically only interested in the request
-			 * list state at the point of error state
-			 * capture, not in any changes happening during
-			 * the capture.
-			 */
-			break;
-		}
-
-		record_request(request, &ee->requests[count++]);
-	}
-	ee->num_requests = count;
+	erq->pid = 0;
+	rcu_read_lock();
+	ctx = rcu_dereference(request->context->gem_context);
+	if (ctx)
+		erq->pid = pid_nr(ctx->pid);
+	rcu_read_unlock();
 }
 
 static void engine_record_execlists(struct intel_engine_coredump *ee)
@@ -1280,28 +1226,34 @@ static void engine_record_execlists(struct intel_engine_coredump *ee)
 static bool record_context(struct i915_gem_context_coredump *e,
 			   const struct i915_request *rq)
 {
-	const struct i915_gem_context *ctx = rq->context->gem_context;
+	struct i915_gem_context *ctx;
+	struct task_struct *task;
+	bool simulated;
 
+	rcu_read_lock();
+	ctx = rcu_dereference(rq->context->gem_context);
+	if (ctx && !kref_get_unless_zero(&ctx->ref))
+		ctx = NULL;
+	rcu_read_unlock();
 	if (!ctx)
-		return false;
+		return true;
 
-	if (ctx->pid) {
-		struct task_struct *task;
-
-		rcu_read_lock();
-		task = pid_task(ctx->pid, PIDTYPE_PID);
-		if (task) {
-			strcpy(e->comm, task->comm);
-			e->pid = task->pid;
-		}
-		rcu_read_unlock();
+	rcu_read_lock();
+	task = pid_task(ctx->pid, PIDTYPE_PID);
+	if (task) {
+		strcpy(e->comm, task->comm);
+		e->pid = task->pid;
 	}
+	rcu_read_unlock();
 
 	e->sched_attr = ctx->sched;
 	e->guilty = atomic_read(&ctx->guilty_count);
 	e->active = atomic_read(&ctx->active_count);
 
-	return i915_gem_context_no_error_capture(ctx);
+	simulated = i915_gem_context_no_error_capture(ctx);
+
+	i915_gem_context_put(ctx);
+	return simulated;
 }
 
 struct intel_engine_capture_vma {
@@ -1416,11 +1368,6 @@ intel_engine_coredump_add_request(struct intel_engine_coredump *ee,
 	vma = capture_user(vma, rq, gfp);
 	vma = capture_vma(vma, rq->ring->vma, "ring", gfp);
 	vma = capture_vma(vma, rq->context->state, "HW context", gfp);
-	if (HAS_BROKEN_CS_TLB(rq->i915))
-		vma = capture_vma(vma, ee->engine->gt->scratch, "WA batch", gfp);
-
-	ee->cpu_ring_head = rq->ring->head;
-	ee->cpu_ring_tail = rq->ring->tail;
 
 	ee->rq_head = rq->head;
 	ee->rq_post = rq->postfix;
@@ -1475,7 +1422,7 @@ static struct intel_engine_coredump *
 capture_engine(struct intel_engine_cs *engine,
 	       struct i915_vma_compress *compress)
 {
-	struct intel_engine_capture_vma *capture;
+	struct intel_engine_capture_vma *capture = NULL;
 	struct intel_engine_coredump *ee;
 	struct i915_request *rq;
 	unsigned long flags;
@@ -1485,18 +1432,15 @@ capture_engine(struct intel_engine_cs *engine,
 		return NULL;
 
 	spin_lock_irqsave(&engine->active.lock, flags);
-
 	rq = intel_engine_find_active_request(engine);
-	if (!rq) {
-		spin_unlock_irqrestore(&engine->active.lock, flags);
+	if (rq)
+		capture = intel_engine_coredump_add_request(ee, rq,
+							    ATOMIC_MAYFAIL);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
+	if (!capture) {
 		kfree(ee);
 		return NULL;
 	}
-
-	capture = intel_engine_coredump_add_request(ee, rq, ATOMIC_MAYFAIL);
-	engine_record_requests(engine, rq, ee);
-
-	spin_unlock_irqrestore(&engine->active.lock, flags);
 
 	intel_engine_coredump_add_vma(ee, capture, compress);
 
@@ -1737,7 +1681,7 @@ static const char *error_msg(struct i915_gpu_coredump *error)
 			"GPU HANG: ecode %d:%x:%08x",
 			INTEL_GEN(error->i915), engines,
 			generate_ecode(first));
-	if (first) {
+	if (first && first->context.pid) {
 		/* Just show the first executing process, more is confusing */
 		len += scnprintf(error->error_msg + len,
 				 sizeof(error->error_msg) - len,
@@ -1908,7 +1852,8 @@ void i915_error_state_store(struct i915_gpu_coredump *error)
 	if (!xchg(&warned, true) &&
 	    ktime_get_real_seconds() - DRIVER_TIMESTAMP < DAY_AS_SECONDS(180)) {
 		pr_info("GPU hangs can indicate a bug anywhere in the entire gfx stack, including userspace.\n");
-		pr_info("Please file a _new_ bug report on bugs.freedesktop.org against DRI -> DRM/Intel\n");
+		pr_info("Please file a _new_ bug report at https://gitlab.freedesktop.org/drm/intel/issues/new.\n");
+		pr_info("Please see https://gitlab.freedesktop.org/drm/intel/-/wikis/How-to-file-i915-bugs for details.\n");
 		pr_info("drm/i915 developers can then reassign to the right component if it's not a kernel issue.\n");
 		pr_info("The GPU crash dump is required to analyze GPU hangs, so please always attach it.\n");
 		pr_info("GPU crash dump saved to /sys/class/drm/card%d/error\n",

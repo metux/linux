@@ -48,4 +48,7 @@ Documentation for filesystem implementations.
 
    autofs
    fuse
+   overlayfs
    virtiofs
+   vfat
+   nfs/index

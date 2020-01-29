@@ -20,6 +20,10 @@ algorithms work.
    path-lookup
    api-summary
    splice
+   locking
+   directory-locking
+
+   porting
 
 Filesystem support layers
 =========================
@@ -32,6 +36,7 @@ filesystem implementations.
 
    journalling
    fscrypt
+   fsverity
 
 Filesystems
 ===========
@@ -42,6 +47,5 @@ Documentation for filesystem implementations.
    :maxdepth: 2
 
    autofs
-   overlayfs
+   fuse
    virtiofs
-   vfat

@@ -941,9 +941,9 @@ int __kprobe_event_gen_cmd_start(struct dynevent_cmd *cmd, bool kretprobe,
 	if (ret)
 		return ret;
 
-	dynevent_arg_init(&arg, NULL, 0);
+	dynevent_arg_init(&arg, 0);
 	arg.str = loc;
-	ret = dynevent_arg_add(cmd, &arg);
+	ret = dynevent_arg_add(cmd, &arg, NULL);
 	if (ret)
 		return ret;
 
@@ -961,7 +961,7 @@ int __kprobe_event_gen_cmd_start(struct dynevent_cmd *cmd, bool kretprobe,
 		}
 
 		arg.str = field;
-		ret = dynevent_arg_add(cmd, &arg);
+		ret = dynevent_arg_add(cmd, &arg, NULL);
 		if (ret)
 			break;
 	}
@@ -996,7 +996,7 @@ int __kprobe_event_add_fields(struct dynevent_cmd *cmd, ...)
 	if (cmd->type != DYNEVENT_TYPE_KPROBE)
 		return -EINVAL;
 
-	dynevent_arg_init(&arg, NULL, 0);
+	dynevent_arg_init(&arg, 0);
 
 	va_start(args, cmd);
 	for (;;) {
@@ -1012,7 +1012,7 @@ int __kprobe_event_add_fields(struct dynevent_cmd *cmd, ...)
 		}
 
 		arg.str = field;
-		ret = dynevent_arg_add(cmd, &arg);
+		ret = dynevent_arg_add(cmd, &arg, NULL);
 		if (ret)
 			break;
 	}

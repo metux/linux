@@ -116,17 +116,17 @@ static void _wa_add(struct i915_wa_list *wal, const struct i915_wa *wa)
 		} else {
 			wa_ = &wal->list[mid];
 
-			if ((wa->mask & ~wa_->mask) == 0) {
-				DRM_ERROR("Discarding overwritten w/a for reg %04x (mask: %08x, value: %08x)\n",
+			if ((wa->clr | wa_->clr) && !(wa->clr & ~wa_->clr)) {
+				DRM_ERROR("Discarding overwritten w/a for reg %04x (clear: %08x, set: %08x)\n",
 					  i915_mmio_reg_offset(wa_->reg),
-					  wa_->mask, wa_->val);
+					  wa_->clr, wa_->set);
 
-				wa_->val &= ~wa->mask;
+				wa_->set &= ~wa->clr;
 			}
 
 			wal->wa_count++;
-			wa_->val |= wa->val;
-			wa_->mask |= wa->mask;
+			wa_->set |= wa->set;
+			wa_->clr |= wa->clr;
 			wa_->read |= wa->read;
 			return;
 		}
@@ -147,46 +147,57 @@ static void _wa_add(struct i915_wa_list *wal, const struct i915_wa *wa)
 	}
 }
 
-static void
-wa_write_masked_or(struct i915_wa_list *wal, i915_reg_t reg, u32 mask,
-		   u32 val)
+static void wa_add(struct i915_wa_list *wal, i915_reg_t reg,
+		   u32 clear, u32 set, u32 read_mask)
 {
 	struct i915_wa wa = {
 		.reg  = reg,
-		.mask = mask,
-		.val  = val,
-		.read = mask,
+		.clr  = clear,
+		.set  = set,
+		.read = read_mask,
 	};
 
 	_wa_add(wal, &wa);
 }
 
 static void
+wa_write_masked_or(struct i915_wa_list *wal, i915_reg_t reg, u32 clear, u32 set)
+{
+	wa_add(wal, reg, clear, set, clear);
+}
+
+static void
+wa_write(struct i915_wa_list *wal, i915_reg_t reg, u32 set)
+{
+	wa_write_masked_or(wal, reg, ~0, set);
+}
+
+static void
+wa_write_or(struct i915_wa_list *wal, i915_reg_t reg, u32 set)
+{
+	wa_write_masked_or(wal, reg, set, set);
+}
+
+static void
 wa_masked_en(struct i915_wa_list *wal, i915_reg_t reg, u32 val)
 {
-	wa_write_masked_or(wal, reg, val, _MASKED_BIT_ENABLE(val));
+	wa_add(wal, reg, 0, _MASKED_BIT_ENABLE(val), val);
 }
 
 static void
-wa_write(struct i915_wa_list *wal, i915_reg_t reg, u32 val)
+wa_masked_dis(struct i915_wa_list *wal, i915_reg_t reg, u32 val)
 {
-	wa_write_masked_or(wal, reg, ~0, val);
-}
-
-static void
-wa_write_or(struct i915_wa_list *wal, i915_reg_t reg, u32 val)
-{
-	wa_write_masked_or(wal, reg, val, val);
+	wa_add(wal, reg, 0, _MASKED_BIT_DISABLE(val), val);
 }
 
 #define WA_SET_BIT_MASKED(addr, mask) \
-	wa_write_masked_or(wal, (addr), (mask), _MASKED_BIT_ENABLE(mask))
+	wa_masked_en(wal, (addr), (mask))
 
 #define WA_CLR_BIT_MASKED(addr, mask) \
-	wa_write_masked_or(wal, (addr), (mask), _MASKED_BIT_DISABLE(mask))
+	wa_masked_dis(wal, (addr), (mask))
 
 #define WA_SET_FIELD_MASKED(addr, mask, value) \
-	wa_write_masked_or(wal, (addr), (mask), _MASKED_FIELD((mask), (value)))
+	wa_write_masked_or(wal, (addr), 0, _MASKED_FIELD((mask), (value)))
 
 static void gen8_ctx_workarounds_init(struct intel_engine_cs *engine,
 				      struct i915_wa_list *wal)
@@ -248,7 +259,7 @@ static void bdw_ctx_workarounds_init(struct intel_engine_cs *engine,
 
 	/* WaDisableDopClockGating:bdw
 	 *
-	 * Also see the related UCGTCL1 write in broadwell_init_clock_gating()
+	 * Also see the related UCGTCL1 write in bdw_init_clock_gating()
 	 * to disable EUTC clock gating.
 	 */
 	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2,
@@ -569,6 +580,19 @@ static void icl_ctx_workarounds_init(struct intel_engine_cs *engine,
 static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 				     struct i915_wa_list *wal)
 {
+	/* Wa_1409142259:tgl */
+	WA_SET_BIT_MASKED(GEN11_COMMON_SLICE_CHICKEN3,
+			  GEN12_DISABLE_CPS_AWARE_COLOR_PIPE);
+
+	/*
+	 * Wa_1604555607:gen12 and Wa_1608008084:gen12
+	 * FF_MODE2 register will return the wrong value when read. The default
+	 * value for this register is zero for all fields and there are no bit
+	 * masks. So instead of doing a RMW we should just write the TDS timer
+	 * value for Wa_1604555607.
+	 */
+	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK,
+	       FF_MODE2_TDS_TIMER_128, 0);
 }
 
 static void
@@ -638,7 +662,7 @@ int intel_engine_emit_ctx_wa(struct i915_request *rq)
 	*cs++ = MI_LOAD_REGISTER_IMM(wal->count);
 	for (i = 0, wa = wal->list; i < wal->count; i++, wa++) {
 		*cs++ = i915_mmio_reg_offset(wa->reg);
-		*cs++ = wa->val;
+		*cs++ = wa->set;
 	}
 	*cs++ = MI_NOOP;
 
@@ -891,11 +915,27 @@ icl_gt_workarounds_init(struct drm_i915_private *i915, struct i915_wa_list *wal)
 	wa_write_or(wal,
 		    GAMT_CHKN_BIT_REG,
 		    GAMT_CHKN_DISABLE_L3_COH_PIPE);
+
+	/* Wa_1607087056:icl */
+	wa_write_or(wal,
+		    SLICE_UNIT_LEVEL_CLKGATE,
+		    L3_CLKGATE_DIS | L3_CR2X_CLKGATE_DIS);
 }
 
 static void
 tgl_gt_workarounds_init(struct drm_i915_private *i915, struct i915_wa_list *wal)
 {
+	/* Wa_1409420604:tgl */
+	if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0))
+		wa_write_or(wal,
+			    SUBSLICE_UNIT_LEVEL_CLKGATE2,
+			    CPSSUNIT_CLKGATE_DIS);
+
+	/* Wa_1409180338:tgl */
+	if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0))
+		wa_write_or(wal,
+			    SLICE_UNIT_LEVEL_CLKGATE,
+			    L3_CLKGATE_DIS | L3_CR2X_CLKGATE_DIS);
 }
 
 static void
@@ -951,11 +991,10 @@ wal_get_fw_for_rmw(struct intel_uncore *uncore, const struct i915_wa_list *wal)
 static bool
 wa_verify(const struct i915_wa *wa, u32 cur, const char *name, const char *from)
 {
-	if ((cur ^ wa->val) & wa->read) {
-		DRM_ERROR("%s workaround lost on %s! (%x=%x/%x, expected %x, mask=%x)\n",
+	if ((cur ^ wa->set) & wa->read) {
+		DRM_ERROR("%s workaround lost on %s! (%x=%x/%x, expected %x)\n",
 			  name, from, i915_mmio_reg_offset(wa->reg),
-			  cur, cur & wa->read,
-			  wa->val, wa->mask);
+			  cur, cur & wa->read, wa->set);
 
 		return false;
 	}
@@ -980,7 +1019,10 @@ wa_list_apply(struct intel_uncore *uncore, const struct i915_wa_list *wal)
 	intel_uncore_forcewake_get__locked(uncore, fw);
 
 	for (i = 0, wa = wal->list; i < wal->count; i++, wa++) {
-		intel_uncore_rmw_fw(uncore, wa->reg, wa->mask, wa->val);
+		if (wa->clr)
+			intel_uncore_rmw_fw(uncore, wa->reg, wa->clr, wa->set);
+		else
+			intel_uncore_write_fw(uncore, wa->reg, wa->set);
 		if (IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM))
 			wa_verify(wa,
 				  intel_uncore_read_fw(uncore, wa->reg),
@@ -1198,6 +1240,26 @@ static void icl_whitelist_build(struct intel_engine_cs *engine)
 
 static void tgl_whitelist_build(struct intel_engine_cs *engine)
 {
+	struct i915_wa_list *w = &engine->whitelist;
+
+	switch (engine->class) {
+	case RENDER_CLASS:
+		/*
+		 * WaAllowPMDepthAndInvocationCountAccessFromUMD:tgl
+		 *
+		 * This covers 4 registers which are next to one another :
+		 *   - PS_INVOCATION_COUNT
+		 *   - PS_INVOCATION_COUNT_UDW
+		 *   - PS_DEPTH_COUNT
+		 *   - PS_DEPTH_COUNT_UDW
+		 */
+		whitelist_reg_ext(w, PS_INVOCATION_COUNT,
+				  RING_FORCE_TO_NONPRIV_ACCESS_RD |
+				  RING_FORCE_TO_NONPRIV_RANGE_4);
+		break;
+	default:
+		break;
+	}
 }
 
 void intel_engine_init_whitelist(struct intel_engine_cs *engine)
@@ -1258,6 +1320,34 @@ static void
 rcs_engine_wa_init(struct intel_engine_cs *engine, struct i915_wa_list *wal)
 {
 	struct drm_i915_private *i915 = engine->i915;
+
+	if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) {
+		/* Wa_1606700617:tgl */
+		wa_masked_en(wal,
+			     GEN9_CS_DEBUG_MODE1,
+			     FF_DOP_CLOCK_GATE_DISABLE);
+
+		/* Wa_1607138336:tgl */
+		wa_write_or(wal,
+			    GEN9_CTX_PREEMPT_REG,
+			    GEN12_DISABLE_POSH_BUSY_FF_DOP_CG);
+
+		/* Wa_1607030317:tgl */
+		/* Wa_1607186500:tgl */
+		/* Wa_1607297627:tgl */
+		wa_masked_en(wal,
+			     GEN6_RC_SLEEP_PSMI_CONTROL,
+			     GEN12_WAIT_FOR_EVENT_POWER_DOWN_DISABLE |
+			     GEN8_RC_SEMA_IDLE_MSG_DISABLE);
+
+		/*
+		 * Wa_1606679103:tgl
+		 * (see also Wa_1606682166:icl)
+		 */
+		wa_write_or(wal,
+			    GEN7_SARCHKMD,
+			    GEN7_DISABLE_SAMPLER_PREFETCH);
+	}
 
 	if (IS_GEN(i915, 11)) {
 		/* This is not an Wa. Enable for better image quality */
@@ -1446,15 +1536,34 @@ err_obj:
 	return ERR_PTR(err);
 }
 
+static const struct {
+	u32 start;
+	u32 end;
+} mcr_ranges_gen8[] = {
+	{ .start = 0x5500, .end = 0x55ff },
+	{ .start = 0x7000, .end = 0x7fff },
+	{ .start = 0x9400, .end = 0x97ff },
+	{ .start = 0xb000, .end = 0xb3ff },
+	{ .start = 0xe000, .end = 0xe7ff },
+	{},
+};
+
 static bool mcr_range(struct drm_i915_private *i915, u32 offset)
 {
+	int i;
+
+	if (INTEL_GEN(i915) < 8)
+		return false;
+
 	/*
-	 * Registers in this range are affected by the MCR selector
+	 * Registers in these ranges are affected by the MCR selector
 	 * which only controls CPU initiated MMIO. Routing does not
 	 * work for CS access so we cannot verify them on this path.
 	 */
-	if (INTEL_GEN(i915) >= 8 && (offset >= 0xb100 && offset <= 0xb3ff))
-		return true;
+	for (i = 0; mcr_ranges_gen8[i].start; i++)
+		if (offset >= mcr_ranges_gen8[i].start &&
+		    offset <= mcr_ranges_gen8[i].end)
+			return true;
 
 	return false;
 }
@@ -1538,16 +1647,17 @@ static int engine_wa_list_verify(struct intel_context *ce,
 	if (err)
 		goto err_vma;
 
+	i915_request_get(rq);
 	i915_request_add(rq);
 	if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 		err = -ETIME;
-		goto err_vma;
+		goto err_rq;
 	}
 
 	results = i915_gem_object_pin_map(vma->obj, I915_MAP_WB);
 	if (IS_ERR(results)) {
 		err = PTR_ERR(results);
-		goto err_vma;
+		goto err_rq;
 	}
 
 	err = 0;
@@ -1561,6 +1671,8 @@ static int engine_wa_list_verify(struct intel_context *ce,
 
 	i915_gem_object_unpin_map(vma->obj);
 
+err_rq:
+	i915_request_put(rq);
 err_vma:
 	i915_vma_unpin(vma);
 	i915_vma_put(vma);

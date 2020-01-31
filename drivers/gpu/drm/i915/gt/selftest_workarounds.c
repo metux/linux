@@ -597,6 +597,15 @@ static int check_dirty_whitelist(struct i915_gem_context *ctx,
 		if (err)
 			goto err_request;
 
+		i915_vma_lock(scratch);
+		err = i915_request_await_object(rq, scratch->obj, true);
+		if (err == 0)
+			err = i915_vma_move_to_active(scratch, rq,
+						      EXEC_OBJECT_WRITE);
+		i915_vma_unlock(scratch);
+		if (err)
+			goto err_request;
+
 		err = engine->emit_bb_start(rq,
 					    batch->node.start, PAGE_SIZE,
 					    0);

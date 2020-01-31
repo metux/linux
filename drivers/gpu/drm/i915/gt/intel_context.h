@@ -28,6 +28,9 @@ intel_context_create(struct i915_gem_context *ctx,
 
 void intel_context_free(struct intel_context *ce);
 
+int intel_context_reconfigure_sseu(struct intel_context *ce,
+				   const struct intel_sseu sseu);
+
 /**
  * intel_context_lock_pinned - Stablises the 'pinned' status of the HW context
  * @ce - the context

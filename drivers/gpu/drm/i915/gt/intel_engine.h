@@ -675,6 +675,8 @@ void intel_engines_cleanup(struct intel_gt *gt);
 int intel_engine_init_common(struct intel_engine_cs *engine);
 void intel_engine_cleanup_common(struct intel_engine_cs *engine);
 
+int intel_engine_resume(struct intel_engine_cs *engine);
+
 int intel_ring_submission_setup(struct intel_engine_cs *engine);
 int intel_ring_submission_init(struct intel_engine_cs *engine);
 

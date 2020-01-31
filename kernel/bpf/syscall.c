@@ -1981,7 +1981,6 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 	case BPF_PROG_TYPE_CGROUP_SOCK:
 		switch (expected_attach_type) {
 		case BPF_CGROUP_INET_SOCK_CREATE:
-		case BPF_CGROUP_INET_SOCK_RELEASE:
 		case BPF_CGROUP_INET4_POST_BIND:
 		case BPF_CGROUP_INET6_POST_BIND:
 			return 0;
@@ -2022,14 +2021,10 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 		default:
 			return -EINVAL;
 		}
-	case BPF_PROG_TYPE_SK_LOOKUP:
-		if (expected_attach_type == BPF_SK_LOOKUP)
-			return 0;
-		return -EINVAL;
 	case BPF_PROG_TYPE_EXT:
 		if (expected_attach_type)
 			return -EINVAL;
-		fallthrough;
+		/* fallthrough */
 	default:
 		return 0;
 	}
@@ -2634,7 +2629,7 @@ static int bpf_raw_tp_link_fill_link_info(const struct bpf_link *link,
 	u32 ulen = info->raw_tracepoint.tp_name_len;
 	size_t tp_len = strlen(tp_name);
 
-	if (!ulen ^ !ubuf)
+	if (ulen && !ubuf)
 		return -EINVAL;
 
 	info->raw_tracepoint.tp_name_len = tp_len + 1;
@@ -2760,7 +2755,6 @@ static int bpf_prog_attach_check_attach_type(const struct bpf_prog *prog,
 	case BPF_PROG_TYPE_CGROUP_SOCK:
 	case BPF_PROG_TYPE_CGROUP_SOCK_ADDR:
 	case BPF_PROG_TYPE_CGROUP_SOCKOPT:
-	case BPF_PROG_TYPE_SK_LOOKUP:
 		return attach_type == prog->expected_attach_type ? 0 : -EINVAL;
 	case BPF_PROG_TYPE_CGROUP_SKB:
 		if (!capable(CAP_NET_ADMIN))
@@ -2785,7 +2779,6 @@ attach_type_to_prog_type(enum bpf_attach_type attach_type)
 		return BPF_PROG_TYPE_CGROUP_SKB;
 		break;
 	case BPF_CGROUP_INET_SOCK_CREATE:
-	case BPF_CGROUP_INET_SOCK_RELEASE:
 	case BPF_CGROUP_INET4_POST_BIND:
 	case BPF_CGROUP_INET6_POST_BIND:
 		return BPF_PROG_TYPE_CGROUP_SOCK;
@@ -2822,10 +2815,6 @@ attach_type_to_prog_type(enum bpf_attach_type attach_type)
 		return BPF_PROG_TYPE_CGROUP_SOCKOPT;
 	case BPF_TRACE_ITER:
 		return BPF_PROG_TYPE_TRACING;
-	case BPF_SK_LOOKUP:
-		return BPF_PROG_TYPE_SK_LOOKUP;
-	case BPF_XDP:
-		return BPF_PROG_TYPE_XDP;
 	default:
 		return BPF_PROG_TYPE_UNSPEC;
 	}
@@ -2938,7 +2927,6 @@ static int bpf_prog_query(const union bpf_attr *attr,
 	case BPF_CGROUP_INET_INGRESS:
 	case BPF_CGROUP_INET_EGRESS:
 	case BPF_CGROUP_INET_SOCK_CREATE:
-	case BPF_CGROUP_INET_SOCK_RELEASE:
 	case BPF_CGROUP_INET4_BIND:
 	case BPF_CGROUP_INET6_BIND:
 	case BPF_CGROUP_INET4_POST_BIND:
@@ -2962,7 +2950,6 @@ static int bpf_prog_query(const union bpf_attr *attr,
 	case BPF_LIRC_MODE2:
 		return lirc_prog_query(attr, uattr);
 	case BPF_FLOW_DISSECTOR:
-	case BPF_SK_LOOKUP:
 		return netns_bpf_prog_query(attr, uattr);
 	default:
 		return -EINVAL;
@@ -3046,43 +3033,7 @@ again:
 	return map;
 }
 
-struct bpf_prog *bpf_prog_get_curr_or_next(u32 *id)
-{
-	struct bpf_prog *prog;
-
-	spin_lock_bh(&prog_idr_lock);
-again:
-	prog = idr_get_next(&prog_idr, id);
-	if (prog) {
-		prog = bpf_prog_inc_not_zero(prog);
-		if (IS_ERR(prog)) {
-			(*id)++;
-			goto again;
-		}
-	}
-	spin_unlock_bh(&prog_idr_lock);
-
-	return prog;
-}
-
 #define BPF_PROG_GET_FD_BY_ID_LAST_FIELD prog_id
-
-struct bpf_prog *bpf_prog_by_id(u32 id)
-{
-	struct bpf_prog *prog;
-
-	if (!id)
-		return ERR_PTR(-ENOENT);
-
-	spin_lock_bh(&prog_idr_lock);
-	prog = idr_find(&prog_idr, id);
-	if (prog)
-		prog = bpf_prog_inc_not_zero(prog);
-	else
-		prog = ERR_PTR(-ENOENT);
-	spin_unlock_bh(&prog_idr_lock);
-	return prog;
-}
 
 static int bpf_prog_get_fd_by_id(const union bpf_attr *attr)
 {
@@ -3096,7 +3047,14 @@ static int bpf_prog_get_fd_by_id(const union bpf_attr *attr)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	prog = bpf_prog_by_id(id);
+	spin_lock_bh(&prog_idr_lock);
+	prog = idr_find(&prog_idr, id);
+	if (prog)
+		prog = bpf_prog_inc_not_zero(prog);
+	else
+		prog = ERR_PTR(-ENOENT);
+	spin_unlock_bh(&prog_idr_lock);
+
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);
 
@@ -3883,7 +3841,7 @@ static int tracing_bpf_link_attach(const union bpf_attr *attr, struct bpf_prog *
 	return -EINVAL;
 }
 
-#define BPF_LINK_CREATE_LAST_FIELD link_create.iter_info_len
+#define BPF_LINK_CREATE_LAST_FIELD link_create.flags
 static int link_create(union bpf_attr *attr)
 {
 	enum bpf_prog_type ptype;
@@ -3920,14 +3878,8 @@ static int link_create(union bpf_attr *attr)
 		ret = tracing_bpf_link_attach(attr, prog);
 		break;
 	case BPF_PROG_TYPE_FLOW_DISSECTOR:
-	case BPF_PROG_TYPE_SK_LOOKUP:
 		ret = netns_bpf_link_create(attr, prog);
 		break;
-#ifdef CONFIG_NET
-	case BPF_PROG_TYPE_XDP:
-		ret = bpf_xdp_link_attach(attr, prog);
-		break;
-#endif
 	default:
 		ret = -EINVAL;
 	}
@@ -3987,29 +3939,6 @@ out_put_progs:
 	if (ret)
 		bpf_prog_put(new_prog);
 out_put_link:
-	bpf_link_put(link);
-	return ret;
-}
-
-#define BPF_LINK_DETACH_LAST_FIELD link_detach.link_fd
-
-static int link_detach(union bpf_attr *attr)
-{
-	struct bpf_link *link;
-	int ret;
-
-	if (CHECK_ATTR(BPF_LINK_DETACH))
-		return -EINVAL;
-
-	link = bpf_link_get_from_fd(attr->link_detach.link_fd);
-	if (IS_ERR(link))
-		return PTR_ERR(link);
-
-	if (link->ops->detach)
-		ret = link->ops->detach(link);
-	else
-		ret = -EOPNOTSUPP;
-
 	bpf_link_put(link);
 	return ret;
 }
@@ -4262,9 +4191,6 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 		break;
 	case BPF_ITER_CREATE:
 		err = bpf_iter_create(&attr);
-		break;
-	case BPF_LINK_DETACH:
-		err = link_detach(&attr);
 		break;
 	default:
 		err = -EINVAL;

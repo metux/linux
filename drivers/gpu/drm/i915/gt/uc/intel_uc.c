@@ -547,7 +547,7 @@ static void __uc_fini_hw(struct intel_uc *uc)
 {
 	struct intel_guc *guc = &uc->guc;
 
-	if (!intel_guc_is_running(guc))
+	if (!intel_guc_is_fw_running(guc))
 		return;
 
 	if (intel_uc_supports_guc_submission(uc))
@@ -569,7 +569,7 @@ void intel_uc_reset_prepare(struct intel_uc *uc)
 {
 	struct intel_guc *guc = &uc->guc;
 
-	if (!intel_guc_is_running(guc))
+	if (!intel_guc_is_ready(guc))
 		return;
 
 	guc_stop_communication(guc);
@@ -581,7 +581,7 @@ void intel_uc_runtime_suspend(struct intel_uc *uc)
 	struct intel_guc *guc = &uc->guc;
 	int err;
 
-	if (!intel_guc_is_running(guc))
+	if (!intel_guc_is_ready(guc))
 		return;
 
 	err = intel_guc_suspend(guc);
@@ -596,7 +596,7 @@ void intel_uc_suspend(struct intel_uc *uc)
 	struct intel_guc *guc = &uc->guc;
 	intel_wakeref_t wakeref;
 
-	if (!intel_guc_is_running(guc))
+	if (!intel_guc_is_ready(guc))
 		return;
 
 	with_intel_runtime_pm(uc_to_gt(uc)->uncore->rpm, wakeref)
@@ -608,7 +608,7 @@ static int __uc_resume(struct intel_uc *uc, bool enable_communication)
 	struct intel_guc *guc = &uc->guc;
 	int err;
 
-	if (!intel_guc_is_running(guc))
+	if (!intel_guc_is_fw_running(guc))
 		return 0;
 
 	/* Make sure we enable communication if and only if it's disabled */

@@ -134,12 +134,11 @@ extern bool backup_cred(struct cifs_sb_info *);
 extern bool is_size_safe_to_change(struct cifsInodeInfo *, __u64 eof);
 extern void cifs_update_eof(struct cifsInodeInfo *cifsi, loff_t offset,
 			    unsigned int bytes_written);
-extern struct cifsFileInfo *find_writable_file(struct cifsInodeInfo *, int);
+extern struct cifsFileInfo *find_writable_file(struct cifsInodeInfo *, bool);
 extern int cifs_get_writable_file(struct cifsInodeInfo *cifs_inode,
-				  int flags,
+				  bool fsuid_only,
 				  struct cifsFileInfo **ret_file);
 extern int cifs_get_writable_path(struct cifs_tcon *tcon, const char *name,
-				  int flags,
 				  struct cifsFileInfo **ret_file);
 extern struct cifsFileInfo *find_readable_file(struct cifsInodeInfo *, bool);
 extern int cifs_get_readable_path(struct cifs_tcon *tcon, const char *name,
@@ -615,7 +614,7 @@ static inline int get_dfs_path(const unsigned int xid, struct cifs_ses *ses,
 
 static inline int cifs_create_options(struct cifs_sb_info *cifs_sb, int options)
 {
-	if (cifs_sb && (backup_cred(cifs_sb)))
+	if (backup_cred(cifs_sb))
 		return options | CREATE_OPEN_BACKUP_INTENT;
 	else
 		return options;

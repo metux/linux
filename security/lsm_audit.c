@@ -27,7 +27,6 @@
 #include <linux/dccp.h>
 #include <linux/sctp.h>
 #include <linux/lsm_audit.h>
-#include <linux/security.h>
 
 /**
  * ipv4_skb_to_auditdata : fill auditdata from skb
@@ -241,7 +240,6 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 			audit_log_untrustedstring(ab, inode->i_sb->s_id);
 			audit_log_format(ab, " ino=%lu", inode->i_ino);
 		}
-		audit_getcwd();
 		break;
 	}
 	case LSM_AUDIT_DATA_FILE: {
@@ -255,7 +253,6 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 			audit_log_untrustedstring(ab, inode->i_sb->s_id);
 			audit_log_format(ab, " ino=%lu", inode->i_ino);
 		}
-		audit_getcwd();
 		break;
 	}
 	case LSM_AUDIT_DATA_IOCTL_OP: {
@@ -271,7 +268,6 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 		}
 
 		audit_log_format(ab, " ioctlcmd=0x%hx", a->u.op->cmd);
-		audit_getcwd();
 		break;
 	}
 	case LSM_AUDIT_DATA_DENTRY: {
@@ -286,7 +282,6 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 			audit_log_untrustedstring(ab, inode->i_sb->s_id);
 			audit_log_format(ab, " ino=%lu", inode->i_ino);
 		}
-		audit_getcwd();
 		break;
 	}
 	case LSM_AUDIT_DATA_INODE: {
@@ -304,7 +299,6 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 		audit_log_format(ab, " dev=");
 		audit_log_untrustedstring(ab, inode->i_sb->s_id);
 		audit_log_format(ab, " ino=%lu", inode->i_ino);
-		audit_getcwd();
 		break;
 	}
 	case LSM_AUDIT_DATA_TASK: {
@@ -430,10 +424,6 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 		audit_log_format(ab, " device=%s port_num=%u",
 				 a->u.ibendport->dev_name,
 				 a->u.ibendport->port);
-		break;
-	case LSM_AUDIT_DATA_LOCKDOWN:
-		audit_log_format(ab, " lockdown_reason=\"%s\"",
-				 lockdown_reasons[a->u.reason]);
 		break;
 	} /* switch (a->type) */
 }

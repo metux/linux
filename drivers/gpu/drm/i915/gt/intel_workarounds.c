@@ -580,19 +580,27 @@ static void icl_ctx_workarounds_init(struct intel_engine_cs *engine,
 static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 				     struct i915_wa_list *wal)
 {
+	u32 val;
+
 	/* Wa_1409142259:tgl */
 	WA_SET_BIT_MASKED(GEN11_COMMON_SLICE_CHICKEN3,
 			  GEN12_DISABLE_CPS_AWARE_COLOR_PIPE);
 
+	/* Wa_1604555607:tgl */
+	val = intel_uncore_read(engine->uncore, FF_MODE2);
+	val &= ~FF_MODE2_TDS_TIMER_MASK;
+	val |= FF_MODE2_TDS_TIMER_128;
 	/*
-	 * Wa_1604555607:gen12 and Wa_1608008084:gen12
-	 * FF_MODE2 register will return the wrong value when read. The default
-	 * value for this register is zero for all fields and there are no bit
-	 * masks. So instead of doing a RMW we should just write the TDS timer
-	 * value for Wa_1604555607.
+	 * FIXME: FF_MODE2 register is not readable till TGL B0. We can
+	 * enable verification of WA from the later steppings, which enables
+	 * the read of FF_MODE2.
 	 */
-	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK,
-	       FF_MODE2_TDS_TIMER_128, 0);
+	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK, val,
+	       IS_TGL_REVID(engine->i915, TGL_REVID_A0, TGL_REVID_A0) ? 0 :
+			    FF_MODE2_TDS_TIMER_MASK);
+
+	/* Wa_1606931601:tgl */
+	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2, GEN12_DISABLE_EARLY_READ);
 }
 
 static void
@@ -1587,34 +1595,15 @@ err_obj:
 	return ERR_PTR(err);
 }
 
-static const struct {
-	u32 start;
-	u32 end;
-} mcr_ranges_gen8[] = {
-	{ .start = 0x5500, .end = 0x55ff },
-	{ .start = 0x7000, .end = 0x7fff },
-	{ .start = 0x9400, .end = 0x97ff },
-	{ .start = 0xb000, .end = 0xb3ff },
-	{ .start = 0xe000, .end = 0xe7ff },
-	{},
-};
-
 static bool mcr_range(struct drm_i915_private *i915, u32 offset)
 {
-	int i;
-
-	if (INTEL_GEN(i915) < 8)
-		return false;
-
 	/*
-	 * Registers in these ranges are affected by the MCR selector
+	 * Registers in this range are affected by the MCR selector
 	 * which only controls CPU initiated MMIO. Routing does not
 	 * work for CS access so we cannot verify them on this path.
 	 */
-	for (i = 0; mcr_ranges_gen8[i].start; i++)
-		if (offset >= mcr_ranges_gen8[i].start &&
-		    offset <= mcr_ranges_gen8[i].end)
-			return true;
+	if (INTEL_GEN(i915) >= 8 && (offset >= 0xb000 && offset <= 0xb4ff))
+		return true;
 
 	return false;
 }

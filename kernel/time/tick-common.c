@@ -16,6 +16,7 @@
 #include <linux/profile.h>
 #include <linux/sched.h>
 #include <linux/module.h>
+#include <linux/sched/clock.h>
 #include <trace/events/power.h>
 
 #include <asm/irq_regs.h>
@@ -84,15 +85,42 @@ int tick_is_oneshot_available(void)
 static void tick_periodic(int cpu)
 {
 	if (tick_do_timer_cpu == cpu) {
-		raw_spin_lock(&jiffies_lock);
-		write_seqcount_begin(&jiffies_seq);
+		/*
+		 * Use running_clock() as reference to check for missing ticks.
+		 */
+		static ktime_t last_update;
+		ktime_t now;
+		int ticks = 1;
+
+		now = ns_to_ktime(running_clock());
+		write_seqlock(&jiffies_lock);
+
+		if (last_update) {
+			u64 delta = ktime_sub(now, last_update);
+
+			/*
+			 * Check for eventually missed ticks
+			 *
+			 * There is likely a persistent delta between
+			 * last_update and tick_next_period. So they are
+			 * updated separately.
+			 */
+			if (delta >= 2 * tick_period) {
+				s64 period = ktime_to_ns(tick_period);
+
+				ticks = ktime_divns(delta, period);
+			}
+			last_update = ktime_add(last_update,
+						ticks * tick_period);
+		} else {
+			last_update = now;
+		}
 
 		/* Keep track of the next tick event */
-		tick_next_period = ktime_add(tick_next_period, tick_period);
-
-		do_timer(1);
-		write_seqcount_end(&jiffies_seq);
-		raw_spin_unlock(&jiffies_lock);
+		tick_next_period = ktime_add(tick_next_period,
+					     ticks * tick_period);
+		do_timer(ticks);
+		write_sequnlock(&jiffies_lock);
 		update_wall_time();
 	}
 
@@ -164,9 +192,9 @@ void tick_setup_periodic(struct clock_event_device *dev, int broadcast)
 		ktime_t next;
 
 		do {
-			seq = read_seqcount_begin(&jiffies_seq);
+			seq = read_seqbegin(&jiffies_lock);
 			next = tick_next_period;
-		} while (read_seqcount_retry(&jiffies_seq, seq));
+		} while (read_seqretry(&jiffies_lock, seq));
 
 		clockevents_switch_state(dev, CLOCK_EVT_STATE_ONESHOT);
 

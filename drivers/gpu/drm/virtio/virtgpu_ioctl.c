@@ -33,17 +33,6 @@
 
 #include "virtgpu_drv.h"
 
-static void convert_to_hw_box(struct virtio_gpu_box *dst,
-			      const struct drm_virtgpu_3d_box *src)
-{
-	dst->x = cpu_to_le32(src->x);
-	dst->y = cpu_to_le32(src->y);
-	dst->z = cpu_to_le32(src->z);
-	dst->w = cpu_to_le32(src->w);
-	dst->h = cpu_to_le32(src->h);
-	dst->d = cpu_to_le32(src->d);
-}
-
 static int virtio_gpu_map_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv)
 {
@@ -137,22 +126,22 @@ static int virtio_gpu_execbuffer_ioctl(struct drm_device *dev, void *data,
 		bo_handles = NULL;
 	}
 
+	buf = vmemdup_user(u64_to_user_ptr(exbuf->command), exbuf->size);
+	if (IS_ERR(buf)) {
+		ret = PTR_ERR(buf);
+		goto out_unused_fd;
+	}
+
 	if (buflist) {
 		ret = virtio_gpu_array_lock_resv(buflist);
 		if (ret)
-			goto out_unused_fd;
-	}
-
-	buf = memdup_user(u64_to_user_ptr(exbuf->command), exbuf->size);
-	if (IS_ERR(buf)) {
-		ret = PTR_ERR(buf);
-		goto out_unresv;
+			goto out_memdup;
 	}
 
 	out_fence = virtio_gpu_fence_alloc(vgdev);
 	if(!out_fence) {
 		ret = -ENOMEM;
-		goto out_memdup;
+		goto out_unresv;
 	}
 
 	if (out_fence_fd >= 0) {
@@ -171,11 +160,11 @@ static int virtio_gpu_execbuffer_ioctl(struct drm_device *dev, void *data,
 			      vfpriv->ctx_id, buflist, out_fence);
 	return 0;
 
-out_memdup:
-	kfree(buf);
 out_unresv:
 	if (buflist)
 		virtio_gpu_array_unlock_resv(buflist);
+out_memdup:
+	kvfree(buf);
 out_unused_fd:
 	kvfree(bo_handles);
 	if (buflist)
@@ -256,10 +245,10 @@ static int virtio_gpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	fence = virtio_gpu_fence_alloc(vgdev);
 	if (!fence)
 		return -ENOMEM;
-	qobj = virtio_gpu_alloc_object(dev, &params, fence);
+	ret = virtio_gpu_object_create(vgdev, &params, &qobj, fence);
 	dma_fence_put(&fence->f);
-	if (IS_ERR(qobj))
-		return PTR_ERR(qobj);
+	if (ret < 0)
+		return ret;
 	obj = &qobj->base.base;
 
 	ret = drm_gem_handle_create(file_priv, obj, &handle);
@@ -304,7 +293,6 @@ static int virtio_gpu_transfer_from_host_ioctl(struct drm_device *dev,
 	struct virtio_gpu_fence *fence;
 	int ret;
 	u32 offset = args->offset;
-	struct virtio_gpu_box box;
 
 	if (vgdev->has_virgl_3d == false)
 		return -ENOSYS;
@@ -317,8 +305,6 @@ static int virtio_gpu_transfer_from_host_ioctl(struct drm_device *dev,
 	if (ret != 0)
 		goto err_put_free;
 
-	convert_to_hw_box(&box, &args->box);
-
 	fence = virtio_gpu_fence_alloc(vgdev);
 	if (!fence) {
 		ret = -ENOMEM;
@@ -326,7 +312,7 @@ static int virtio_gpu_transfer_from_host_ioctl(struct drm_device *dev,
 	}
 	virtio_gpu_cmd_transfer_from_host_3d
 		(vgdev, vfpriv->ctx_id, offset, args->level,
-		 &box, objs, fence);
+		 &args->box, objs, fence);
 	dma_fence_put(&fence->f);
 	return 0;
 
@@ -345,7 +331,6 @@ static int virtio_gpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 	struct drm_virtgpu_3d_transfer_to_host *args = data;
 	struct virtio_gpu_object_array *objs;
 	struct virtio_gpu_fence *fence;
-	struct virtio_gpu_box box;
 	int ret;
 	u32 offset = args->offset;
 
@@ -353,11 +338,10 @@ static int virtio_gpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 	if (objs == NULL)
 		return -ENOENT;
 
-	convert_to_hw_box(&box, &args->box);
 	if (!vgdev->has_virgl_3d) {
 		virtio_gpu_cmd_transfer_to_host_2d
 			(vgdev, offset,
-			 box.w, box.h, box.x, box.y,
+			 args->box.w, args->box.h, args->box.x, args->box.y,
 			 objs, NULL);
 	} else {
 		ret = virtio_gpu_array_lock_resv(objs);
@@ -372,7 +356,7 @@ static int virtio_gpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 		virtio_gpu_cmd_transfer_to_host_3d
 			(vgdev,
 			 vfpriv ? vfpriv->ctx_id : 0, offset,
-			 args->level, &box, objs, fence);
+			 args->level, &args->box, objs, fence);
 		dma_fence_put(&fence->f);
 	}
 	return 0;

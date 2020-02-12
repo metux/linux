@@ -47,7 +47,6 @@
 #include "dce120/hw_factory_dce120.h"
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 #include "dcn10/hw_factory_dcn10.h"
-#endif
 #include "dcn20/hw_factory_dcn20.h"
 #if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 #include "dcn21/hw_factory_dcn21.h"

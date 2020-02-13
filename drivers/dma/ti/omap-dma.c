@@ -120,7 +120,7 @@ struct omap_desc {
 	uint32_t csdp;		/* CSDP value */
 
 	unsigned sglen;
-	struct omap_sg sg[0];
+	struct omap_sg sg[];
 };
 
 enum {

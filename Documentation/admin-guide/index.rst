@@ -94,6 +94,7 @@ configure specific aspects of kernel behavior to your liking.
    cpu-load
    cputopology
    device-mapper/index
+   edid
    efi-stub
    gpio/index
    highuid

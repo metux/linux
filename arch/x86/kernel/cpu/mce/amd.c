@@ -1266,13 +1266,12 @@ recurse:
 	if (b)
 		kobject_uevent(&b->kobj, KOBJ_ADD);
 
-	return err;
+	return 0;
 
 out_free:
 	if (b) {
-		kobject_put(&b->kobj);
 		list_del(&b->miscj);
-		kfree(b);
+		kobject_put(&b->kobj);
 	}
 	return err;
 }
@@ -1338,6 +1337,7 @@ static int threshold_create_bank(unsigned int cpu, unsigned int bank)
 		goto out;
 	}
 
+	/* Associate the bank with the per-CPU MCE device */
 	b->kobj = kobject_create_and_add(name, &dev->kobj);
 	if (!b->kobj) {
 		err = -EINVAL;
@@ -1356,16 +1356,17 @@ static int threshold_create_bank(unsigned int cpu, unsigned int bank)
 
 	err = allocate_threshold_blocks(cpu, b, bank, 0, msr_ops.misc(bank));
 	if (err)
-		goto out_free;
+		goto out_kobj;
 
 	per_cpu(threshold_banks, cpu)[bank] = b;
 
 	return 0;
 
- out_free:
+out_kobj:
+	kobject_put(b->kobj);
+out_free:
 	kfree(b);
-
- out:
+out:
 	return err;
 }
 

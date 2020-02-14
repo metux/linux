@@ -145,17 +145,12 @@ static inline bool mlx5e_accel_tx_finish(struct mlx5e_priv *priv,
 	}
 #endif
 
+#if IS_ENABLED(CONFIG_GENEVE)
+	if (skb->encapsulation)
+		mlx5e_tx_tunnel_accel(skb, &wqe->eth);
+#endif
+
 	return true;
-}
-
-static inline int mlx5e_accel_sk_get_rxq(struct sock *sk)
-{
-	int rxq = sk_rx_queue_get(sk);
-
-	if (unlikely(rxq == -1))
-		rxq = 0;
-
-	return rxq;
 }
 
 static inline int mlx5e_accel_init_rx(struct mlx5e_priv *priv)

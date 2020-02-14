@@ -5,6 +5,7 @@
 #define __MLX5_EN_TXRX_H___
 
 #include "en.h"
+#include <linux/indirect_call_wrapper.h>
 
 #define INL_HDR_START_SZ (sizeof(((struct mlx5_wqe_eth_seg *)NULL)->inline_hdr.start))
 
@@ -14,8 +15,39 @@ enum mlx5e_icosq_wqe_type {
 #ifdef CONFIG_MLX5_EN_TLS
 	MLX5E_ICOSQ_WQE_UMR_TLS,
 	MLX5E_ICOSQ_WQE_SET_PSV_TLS,
+	MLX5E_ICOSQ_WQE_GET_PSV_TLS,
 #endif
 };
+
+/* General */
+static inline bool mlx5e_skb_is_multicast(struct sk_buff *skb)
+{
+	return skb->pkt_type == PACKET_MULTICAST || skb->pkt_type == PACKET_BROADCAST;
+}
+
+void mlx5e_trigger_irq(struct mlx5e_icosq *sq);
+void mlx5e_completion_event(struct mlx5_core_cq *mcq, struct mlx5_eqe *eqe);
+void mlx5e_cq_error_event(struct mlx5_core_cq *mcq, enum mlx5_event event);
+int mlx5e_napi_poll(struct napi_struct *napi, int budget);
+int mlx5e_poll_ico_cq(struct mlx5e_cq *cq);
+
+/* RX */
+void mlx5e_page_dma_unmap(struct mlx5e_rq *rq, struct mlx5e_dma_info *dma_info);
+void mlx5e_page_release_dynamic(struct mlx5e_rq *rq,
+				struct mlx5e_dma_info *dma_info,
+				bool recycle);
+INDIRECT_CALLABLE_DECLARE(bool mlx5e_post_rx_wqes(struct mlx5e_rq *rq));
+INDIRECT_CALLABLE_DECLARE(bool mlx5e_post_rx_mpwqes(struct mlx5e_rq *rq));
+int mlx5e_poll_rx_cq(struct mlx5e_cq *cq, int budget);
+void mlx5e_free_rx_descs(struct mlx5e_rq *rq);
+void mlx5e_free_rx_in_progress_descs(struct mlx5e_rq *rq);
+
+/* TX */
+u16 mlx5e_select_queue(struct net_device *dev, struct sk_buff *skb,
+		       struct net_device *sb_dev);
+netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev);
+bool mlx5e_poll_tx_cq(struct mlx5e_cq *cq, int napi_budget);
+void mlx5e_free_txqsq_descs(struct mlx5e_txqsq *sq);
 
 static inline bool
 mlx5e_wqc_has_room_for(struct mlx5_wq_cyc *wq, u16 cc, u16 pc, u16 n)
@@ -122,6 +154,9 @@ struct mlx5e_icosq_wqe_info {
 		struct {
 			struct mlx5e_ktls_offload_context_rx *priv_rx;
 		} tls_set_params;
+		struct {
+			struct mlx5e_ktls_rx_resync_buf *buf;
+		} tls_get_params;
 #endif
 	};
 };
@@ -157,23 +192,6 @@ static inline u16 mlx5e_icosq_get_next_pi(struct mlx5e_icosq *sq, u16 size)
 }
 
 static inline void
-mlx5e_fill_sq_frag_edge(struct mlx5e_txqsq *sq, struct mlx5_wq_cyc *wq,
-			u16 pi, u16 nnops)
-{
-	struct mlx5e_tx_wqe_info *edge_wi, *wi = &sq->db.wqe_info[pi];
-
-	edge_wi = wi + nnops;
-
-	/* fill sq frag edge with nops to avoid wqe wrapping two pages */
-	for (; wi < edge_wi; wi++) {
-		memset(wi, 0, sizeof(*wi));
-		wi->num_wqebbs = 1;
-		mlx5e_post_nop(wq, sq->sqn, &sq->pc);
-	}
-	sq->stats->nop += nnops;
-}
-
-static inline void
 mlx5e_notify_hw(struct mlx5_wq_cyc *wq, u16 pc, void __iomem *uar_map,
 		struct mlx5_wqe_ctrl_seg *ctrl)
 {
@@ -189,29 +207,6 @@ mlx5e_notify_hw(struct mlx5_wq_cyc *wq, u16 pc, void __iomem *uar_map,
 	wmb();
 
 	mlx5_write64((__be32 *)ctrl, uar_map);
-}
-
-static inline bool mlx5e_transport_inline_tx_wqe(struct mlx5_wqe_ctrl_seg *cseg)
-{
-	return cseg && !!cseg->tis_tir_num;
-}
-
-static inline u8
-mlx5e_tx_wqe_inline_mode(struct mlx5e_txqsq *sq, struct mlx5_wqe_ctrl_seg *cseg,
-			 struct sk_buff *skb)
-{
-	u8 mode;
-
-	if (mlx5e_transport_inline_tx_wqe(cseg))
-		return MLX5_INLINE_MODE_TCP_UDP;
-
-	mode = sq->min_inline_mode;
-
-	if (skb_vlan_tag_present(skb) &&
-	    test_bit(MLX5E_SQ_STATE_VLAN_NEED_L2_INLINE, &sq->state))
-		mode = max_t(u8, MLX5_INLINE_MODE_L2, mode);
-
-	return mode;
 }
 
 static inline void mlx5e_cq_arm(struct mlx5e_cq *cq)
@@ -254,6 +249,8 @@ mlx5e_tx_dma_unmap(struct device *pdev, struct mlx5e_sq_dma *dma)
 	}
 }
 
+void mlx5e_sq_xmit_simple(struct mlx5e_txqsq *sq, struct sk_buff *skb, bool xmit_more);
+
 static inline void mlx5e_rqwq_reset(struct mlx5e_rq *rq)
 {
 	if (rq->wq_type == MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ) {
@@ -264,7 +261,7 @@ static inline void mlx5e_rqwq_reset(struct mlx5e_rq *rq)
 	}
 }
 
-static inline void mlx5e_dump_error_cqe(struct mlx5e_cq *cq, u32 sqn,
+static inline void mlx5e_dump_error_cqe(struct mlx5e_cq *cq, u32 qn,
 					struct mlx5_err_cqe *err_cqe)
 {
 	struct mlx5_cqwq *wq = &cq->wq;
@@ -273,11 +270,51 @@ static inline void mlx5e_dump_error_cqe(struct mlx5e_cq *cq, u32 sqn,
 	ci = mlx5_cqwq_ctr2ix(wq, wq->cc - 1);
 
 	netdev_err(cq->channel->netdev,
-		   "Error cqe on cqn 0x%x, ci 0x%x, sqn 0x%x, opcode 0x%x, syndrome 0x%x, vendor syndrome 0x%x\n",
-		   cq->mcq.cqn, ci, sqn,
+		   "Error cqe on cqn 0x%x, ci 0x%x, qn 0x%x, opcode 0x%x, syndrome 0x%x, vendor syndrome 0x%x\n",
+		   cq->mcq.cqn, ci, qn,
 		   get_cqe_opcode((struct mlx5_cqe64 *)err_cqe),
 		   err_cqe->syndrome, err_cqe->vendor_err_synd);
 	mlx5_dump_err_cqe(cq->mdev, err_cqe);
+}
+
+static inline u32 mlx5e_rqwq_get_size(struct mlx5e_rq *rq)
+{
+	switch (rq->wq_type) {
+	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
+		return mlx5_wq_ll_get_size(&rq->mpwqe.wq);
+	default:
+		return mlx5_wq_cyc_get_size(&rq->wqe.wq);
+	}
+}
+
+static inline u32 mlx5e_rqwq_get_cur_sz(struct mlx5e_rq *rq)
+{
+	switch (rq->wq_type) {
+	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
+		return rq->mpwqe.wq.cur_sz;
+	default:
+		return rq->wqe.wq.cur_sz;
+	}
+}
+
+static inline u16 mlx5e_rqwq_get_head(struct mlx5e_rq *rq)
+{
+	switch (rq->wq_type) {
+	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
+		return mlx5_wq_ll_get_head(&rq->mpwqe.wq);
+	default:
+		return mlx5_wq_cyc_get_head(&rq->wqe.wq);
+	}
+}
+
+static inline u16 mlx5e_rqwq_get_wqe_counter(struct mlx5e_rq *rq)
+{
+	switch (rq->wq_type) {
+	case MLX5_WQ_TYPE_LINKED_LIST_STRIDING_RQ:
+		return mlx5_wq_ll_get_counter(&rq->mpwqe.wq);
+	default:
+		return mlx5_wq_cyc_get_counter(&rq->wqe.wq);
+	}
 }
 
 /* SW parser related functions */
@@ -316,7 +353,7 @@ mlx5e_set_eseg_swp(struct sk_buff *skb, struct mlx5_wqe_eth_seg *eseg,
 	switch (swp_spec->tun_l4_proto) {
 	case IPPROTO_UDP:
 		eseg->swp_flags |= MLX5_ETH_WQE_SWP_INNER_L4_UDP;
-		/* fall through */
+		fallthrough;
 	case IPPROTO_TCP:
 		eseg->swp_inner_l4_offset = skb_inner_transport_offset(skb) / 2;
 		break;

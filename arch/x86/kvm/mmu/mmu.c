@@ -3609,8 +3609,7 @@ static bool fast_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, int level,
 		 * write-protected for dirty-logging or access tracking.
 		 */
 		if ((error_code & PFERR_WRITE_MASK) &&
-		    spte_can_locklessly_be_made_writable(spte))
-		{
+		    spte_can_locklessly_be_made_writable(spte)) {
 			new_spte |= PT_WRITABLE_MASK;
 
 			/*

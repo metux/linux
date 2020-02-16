@@ -55,8 +55,6 @@
 
 #ifdef CONFIG_MLX5_ESWITCH
 
-#define ESW_OFFLOADS_DEFAULT_NUM_GROUPS 15
-
 #define MLX5_MAX_UC_PER_VPORT(dev) \
 	(1 << MLX5_CAP_GEN(dev, log_max_current_uc_list))
 
@@ -185,18 +183,15 @@ struct mlx5_eswitch_fdb {
 			int vlan_push_pop_refcount;
 
 			struct mlx5_esw_chains_priv *esw_chains_priv;
-			struct {
-				DECLARE_HASHTABLE(table, 8);
-				/* Protects vports.table */
-				struct mutex lock;
-			} vports;
-
 		} offloads;
 	};
 	u32 flags;
 };
 
 struct mlx5_esw_offload {
+	struct mlx5_flow_table *ft_offloads_restore;
+	struct mlx5_flow_group *restore_group;
+
 	struct mlx5_flow_table *ft_offloads;
 	struct mlx5_flow_group *vport_rx_group;
 	struct mlx5_eswitch_rep *vport_reps;
@@ -263,9 +258,6 @@ struct mlx5_eswitch {
 	u16                     manager_vport;
 	u16                     first_host_vport;
 	struct mlx5_esw_functions esw_funcs;
-	struct {
-		u32             large_group_num;
-	}  params;
 };
 
 void esw_offloads_disable(struct mlx5_eswitch *esw);
@@ -425,6 +417,7 @@ int mlx5_devlink_eswitch_mode_get(struct devlink *devlink, u16 *mode);
 int mlx5_devlink_eswitch_inline_mode_set(struct devlink *devlink, u8 mode,
 					 struct netlink_ext_ack *extack);
 int mlx5_devlink_eswitch_inline_mode_get(struct devlink *devlink, u8 *mode);
+int mlx5_eswitch_inline_mode_get(struct mlx5_eswitch *esw, u8 *mode);
 int mlx5_devlink_eswitch_encap_mode_set(struct devlink *devlink,
 					enum devlink_eswitch_encap_mode encap,
 					struct netlink_ext_ack *extack);
@@ -633,8 +626,10 @@ void
 esw_vport_destroy_offloads_acl_tables(struct mlx5_eswitch *esw,
 				      struct mlx5_vport *vport);
 
-int mlx5_esw_vport_tbl_get(struct mlx5_eswitch *esw);
-void mlx5_esw_vport_tbl_put(struct mlx5_eswitch *esw);
+struct mlx5_flow_handle *
+esw_add_restore_rule(struct mlx5_eswitch *esw, u32 tag);
+u32
+esw_get_max_restore_tag(struct mlx5_eswitch *esw);
 
 #else  /* CONFIG_MLX5_ESWITCH */
 /* eswitch API stubs */
@@ -650,6 +645,12 @@ static inline const u32 *mlx5_esw_query_functions(struct mlx5_core_dev *dev)
 }
 
 static inline void mlx5_eswitch_update_num_of_vfs(struct mlx5_eswitch *esw, const int num_vfs) {}
+
+static struct mlx5_flow_handle *
+esw_add_restore_rule(struct mlx5_eswitch *esw, u32 tag)
+{
+	return ERR_PTR(-EOPNOTSUPP);
+}
 
 #endif /* CONFIG_MLX5_ESWITCH */
 

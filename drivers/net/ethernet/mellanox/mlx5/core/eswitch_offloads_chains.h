@@ -25,5 +25,7 @@ mlx5_esw_chains_put_table(struct mlx5_eswitch *esw, u32 chain, u32 prio,
 int mlx5_esw_chains_create(struct mlx5_eswitch *esw);
 void mlx5_esw_chains_destroy(struct mlx5_eswitch *esw);
 
-#endif /* __ML5_ESW_CHAINS_H__ */
+int
+mlx5_eswitch_get_chain_for_tag(struct mlx5_eswitch *esw, u32 tag, u32 *chain);
 
+#endif /* __ML5_ESW_CHAINS_H__ */

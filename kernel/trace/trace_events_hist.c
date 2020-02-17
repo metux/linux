@@ -1831,6 +1831,8 @@ __synth_event_trace_start(struct trace_event_file *file,
 	int entry_size, fields_size = 0;
 	int ret = 0;
 
+	memset(trace_state, '\0', sizeof(*trace_state));
+
 	/*
 	 * Normal event tracing doesn't get called at all unless the
 	 * ENABLED bit is set (which attaches the probe thus allowing
@@ -2069,8 +2071,6 @@ int synth_event_trace_start(struct trace_event_file *file,
 
 	if (!trace_state)
 		return -EINVAL;
-
-	memset(trace_state, '\0', sizeof(*trace_state));
 
 	ret = __synth_event_trace_start(file, trace_state);
 	if (ret == -ENOENT)

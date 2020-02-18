@@ -1,25 +1,6 @@
+// SPDX-License-Identifier: MIT
 /*
- * Copyright © 2014-2017 Intel Corporation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * Copyright © 2014-2019 Intel Corporation
  */
 
 #include "gt/intel_gt.h"
@@ -226,7 +207,7 @@ static u32 guc_ctl_feature_flags(struct intel_guc *guc)
 {
 	u32 flags = 0;
 
-	if (!intel_uc_supports_guc_submission(&guc_to_gt(guc)->uc))
+	if (!intel_guc_submission_is_used(guc))
 		flags |= GUC_CTL_DISABLE_SCHEDULER;
 
 	return flags;
@@ -236,7 +217,7 @@ static u32 guc_ctl_ctxinfo_flags(struct intel_guc *guc)
 {
 	u32 flags = 0;
 
-	if (intel_uc_supports_guc_submission(&guc_to_gt(guc)->uc)) {
+	if (intel_guc_submission_is_used(guc)) {
 		u32 ctxnum, base;
 
 		base = intel_guc_ggtt_offset(guc, guc->stage_desc_pool);
@@ -367,7 +348,7 @@ int intel_guc_init(struct intel_guc *guc)
 	if (ret)
 		goto err_ads;
 
-	if (intel_uc_supports_guc_submission(&gt->uc)) {
+	if (intel_guc_submission_is_used(guc)) {
 		/*
 		 * This is stuff we need to have available at fw load time
 		 * if we are planning to enable submission later
@@ -395,6 +376,7 @@ err_fw:
 	intel_uc_fw_fini(&guc->fw);
 err_fetch:
 	intel_uc_fw_cleanup_fetch(&guc->fw);
+	DRM_DEV_DEBUG_DRIVER(gt->i915->drm.dev, "failed with %d\n", ret);
 	return ret;
 }
 
@@ -402,9 +384,12 @@ void intel_guc_fini(struct intel_guc *guc)
 {
 	struct intel_gt *gt = guc_to_gt(guc);
 
+	if (!intel_uc_fw_is_available(&guc->fw))
+		return;
+
 	i915_ggtt_disable_guc(gt->ggtt);
 
-	if (intel_uc_supports_guc_submission(&gt->uc))
+	if (intel_guc_submission_is_used(guc))
 		intel_guc_submission_fini(guc);
 
 	intel_guc_ct_fini(&guc->ct);
@@ -559,7 +544,7 @@ int intel_guc_suspend(struct intel_guc *guc)
 	 * If GuC communication is enabled but submission is not supported,
 	 * we do not need to suspend the GuC.
 	 */
-	if (!intel_guc_submission_is_enabled(guc))
+	if (!intel_guc_submission_is_used(guc) || !intel_guc_is_ready(guc))
 		return 0;
 
 	/*
@@ -624,7 +609,7 @@ int intel_guc_resume(struct intel_guc *guc)
 	 * we do not need to resume the GuC but we do need to enable the
 	 * GuC communication on resume (above).
 	 */
-	if (!intel_guc_submission_is_enabled(guc))
+	if (!intel_guc_submission_is_used(guc) || !intel_guc_is_ready(guc))
 		return 0;
 
 	return intel_guc_send(guc, action, ARRAY_SIZE(action));

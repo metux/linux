@@ -1256,6 +1256,9 @@ static void __io_req_aux_free(struct io_kiocb *req)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 
+	if (req->flags & REQ_F_NEED_CLEANUP)
+		io_cleanup_req(req);
+
 	kfree(req->io);
 	if (req->file) {
 		if (req->flags & REQ_F_FIXED_FILE)
@@ -1270,9 +1273,6 @@ static void __io_req_aux_free(struct io_kiocb *req)
 static void __io_free_req(struct io_kiocb *req)
 {
 	__io_req_aux_free(req);
-
-	if (req->flags & REQ_F_NEED_CLEANUP)
-		io_cleanup_req(req);
 
 	if (req->flags & REQ_F_INFLIGHT) {
 		struct io_ring_ctx *ctx = req->ctx;

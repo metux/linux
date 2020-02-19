@@ -37,15 +37,12 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/io.h>
-
-#if defined(CONFIG_EDAC)
-#include <linux/edac.h>
-#endif
+#include <linux/hardirq.h>
+#include <linux/atomic.h>
 
 #include <asm/stacktrace.h>
 #include <asm/processor.h>
 #include <asm/debugreg.h>
-#include <linux/atomic.h>
 #include <asm/text-patching.h>
 #include <asm/ftrace.h>
 #include <asm/traps.h>
@@ -60,6 +57,8 @@
 #include <asm/fpu/xstate.h>
 #include <asm/vm86.h>
 #include <asm/umip.h>
+#include <asm/insn.h>
+#include <asm/insn-eval.h>
 
 #ifdef CONFIG_X86_64
 #include <asm/x86_init.h>
@@ -83,41 +82,6 @@ static inline void cond_local_irq_disable(struct pt_regs *regs)
 {
 	if (regs->flags & X86_EFLAGS_IF)
 		local_irq_disable();
-}
-
-/*
- * In IST context, we explicitly disable preemption.  This serves two
- * purposes: it makes it much less likely that we would accidentally
- * schedule in IST context and it will force a warning if we somehow
- * manage to schedule by accident.
- */
-void ist_enter(struct pt_regs *regs)
-{
-	if (user_mode(regs)) {
-		RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
-	} else {
-		/*
-		 * We might have interrupted pretty much anything.  In
-		 * fact, if we're a machine check, we can even interrupt
-		 * NMI processing.  We don't want in_nmi() to return true,
-		 * but we need to notify RCU.
-		 */
-		rcu_nmi_enter();
-	}
-
-	preempt_disable();
-
-	/* This code is a bit fragile.  Test it. */
-	RCU_LOCKDEP_WARN(!rcu_is_watching(), "ist_enter didn't work");
-}
-NOKPROBE_SYMBOL(ist_enter);
-
-void ist_exit(struct pt_regs *regs)
-{
-	preempt_enable_no_resched();
-
-	if (!user_mode(regs))
-		rcu_nmi_exit();
 }
 
 int is_valid_bugaddr(unsigned long addr)
@@ -292,8 +256,23 @@ __visible void __noreturn handle_stack_overflow(const char *message,
 }
 #endif
 
-#ifdef CONFIG_X86_64
-/* Runs on IST stack */
+#if defined(CONFIG_X86_64) || defined(CONFIG_DOUBLEFAULT)
+/*
+ * Runs on an IST stack for x86_64 and on a special task stack for x86_32.
+ *
+ * On x86_64, this is more or less a normal kernel entry.  Notwithstanding the
+ * SDM's warnings about double faults being unrecoverable, returning works as
+ * expected.  Presumably what the SDM actually means is that the CPU may get
+ * the register state wrong on entry, so returning could be a bad idea.
+ *
+ * Various CPU engineers have promised that double faults due to an IRET fault
+ * while the stack is read-only are, in fact, recoverable.
+ *
+ * On x86_32, this is entered through a task gate, and regs are synthesized
+ * from the TSS.  Returning is, in principle, okay, but changes to regs will
+ * be lost.  If, for some reason, we need to return to a context with modified
+ * regs, the shim code could be adjusted to synchronize the registers.
+ */
 dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code, unsigned long cr2)
 {
 	static const char str[] = "double fault";
@@ -314,7 +293,7 @@ dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code, unsign
 	 * The net result is that our #GP handler will think that we
 	 * entered from usermode with the bad user context.
 	 *
-	 * No need for ist_enter here because we don't use RCU.
+	 * No need for nmi_enter() here because we don't use RCU.
 	 */
 	if (((long)regs->sp >> P4D_SHIFT) == ESPFIX_PGD_ENTRY &&
 		regs->cs == __KERNEL_CS &&
@@ -349,7 +328,7 @@ dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code, unsign
 	}
 #endif
 
-	ist_enter(regs);
+	nmi_enter();
 	notify_die(DIE_TRAP, str, regs, error_code, X86_TRAP_DF, SIGSEGV);
 
 	tsk->thread.error_code = error_code;
@@ -397,15 +376,9 @@ dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code, unsign
 		handle_stack_overflow("kernel stack overflow (double-fault)", regs, cr2);
 #endif
 
-#ifdef CONFIG_DOUBLEFAULT
-	df_debug(regs, error_code);
-#endif
-	/*
-	 * This is always a kernel trap and never fixable (and thus must
-	 * never return).
-	 */
-	for (;;)
-		die(str, regs, error_code);
+	pr_emerg("PANIC: double fault, error_code: 0x%lx\n", error_code);
+	die("double fault", regs, error_code);
+	panic("Machine halted.");
 }
 #endif
 
@@ -423,11 +396,57 @@ dotraplinkage void do_bounds(struct pt_regs *regs, long error_code)
 	do_trap(X86_TRAP_BR, SIGSEGV, "bounds", regs, error_code, 0, NULL);
 }
 
-dotraplinkage void
-do_general_protection(struct pt_regs *regs, long error_code)
+enum kernel_gp_hint {
+	GP_NO_HINT,
+	GP_NON_CANONICAL,
+	GP_CANONICAL
+};
+
+/*
+ * When an uncaught #GP occurs, try to determine the memory address accessed by
+ * the instruction and return that address to the caller. Also, try to figure
+ * out whether any part of the access to that address was non-canonical.
+ */
+static enum kernel_gp_hint get_kernel_gp_address(struct pt_regs *regs,
+						 unsigned long *addr)
 {
-	const char *desc = "general protection fault";
+	u8 insn_buf[MAX_INSN_SIZE];
+	struct insn insn;
+
+	if (probe_kernel_read(insn_buf, (void *)regs->ip, MAX_INSN_SIZE))
+		return GP_NO_HINT;
+
+	kernel_insn_init(&insn, insn_buf, MAX_INSN_SIZE);
+	insn_get_modrm(&insn);
+	insn_get_sib(&insn);
+
+	*addr = (unsigned long)insn_get_addr_ref(&insn, regs);
+	if (*addr == -1UL)
+		return GP_NO_HINT;
+
+#ifdef CONFIG_X86_64
+	/*
+	 * Check that:
+	 *  - the operand is not in the kernel half
+	 *  - the last byte of the operand is not in the user canonical half
+	 */
+	if (*addr < ~__VIRTUAL_MASK &&
+	    *addr + insn.opnd_bytes - 1 > __VIRTUAL_MASK)
+		return GP_NON_CANONICAL;
+#endif
+
+	return GP_CANONICAL;
+}
+
+#define GPFSTR "general protection fault"
+
+dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
+{
+	char desc[sizeof(GPFSTR) + 50 + 2*sizeof(unsigned long) + 1] = GPFSTR;
+	enum kernel_gp_hint hint = GP_NO_HINT;
 	struct task_struct *tsk;
+	unsigned long gp_addr;
+	int ret;
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
 	cond_local_irq_enable(regs);
@@ -444,65 +463,72 @@ do_general_protection(struct pt_regs *regs, long error_code)
 	}
 
 	tsk = current;
-	if (!user_mode(regs)) {
-		if (fixup_exception(regs, X86_TRAP_GP, error_code, 0))
-			return;
 
+	if (user_mode(regs)) {
 		tsk->thread.error_code = error_code;
 		tsk->thread.trap_nr = X86_TRAP_GP;
 
-		/*
-		 * To be potentially processing a kprobe fault and to
-		 * trust the result from kprobe_running(), we have to
-		 * be non-preemptible.
-		 */
-		if (!preemptible() && kprobe_running() &&
-		    kprobe_fault_handler(regs, X86_TRAP_GP))
-			return;
+		show_signal(tsk, SIGSEGV, "", desc, regs, error_code);
+		force_sig(SIGSEGV);
 
-		if (notify_die(DIE_GPF, desc, regs, error_code,
-			       X86_TRAP_GP, SIGSEGV) != NOTIFY_STOP)
-			die(desc, regs, error_code);
 		return;
 	}
+
+	if (fixup_exception(regs, X86_TRAP_GP, error_code, 0))
+		return;
 
 	tsk->thread.error_code = error_code;
 	tsk->thread.trap_nr = X86_TRAP_GP;
 
-	show_signal(tsk, SIGSEGV, "", desc, regs, error_code);
+	/*
+	 * To be potentially processing a kprobe fault and to trust the result
+	 * from kprobe_running(), we have to be non-preemptible.
+	 */
+	if (!preemptible() &&
+	    kprobe_running() &&
+	    kprobe_fault_handler(regs, X86_TRAP_GP))
+		return;
 
-	force_sig(SIGSEGV);
+	ret = notify_die(DIE_GPF, desc, regs, error_code, X86_TRAP_GP, SIGSEGV);
+	if (ret == NOTIFY_STOP)
+		return;
+
+	if (error_code)
+		snprintf(desc, sizeof(desc), "segment-related " GPFSTR);
+	else
+		hint = get_kernel_gp_address(regs, &gp_addr);
+
+	if (hint != GP_NO_HINT)
+		snprintf(desc, sizeof(desc), GPFSTR ", %s 0x%lx",
+			 (hint == GP_NON_CANONICAL) ? "probably for non-canonical address"
+						    : "maybe for address",
+			 gp_addr);
+
+	/*
+	 * KASAN is interested only in the non-canonical case, clear it
+	 * otherwise.
+	 */
+	if (hint != GP_NON_CANONICAL)
+		gp_addr = 0;
+
+	die_addr(desc, regs, error_code, gp_addr);
+
 }
 NOKPROBE_SYMBOL(do_general_protection);
 
 dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code)
 {
-#ifdef CONFIG_DYNAMIC_FTRACE
-	/*
-	 * ftrace must be first, everything else may cause a recursive crash.
-	 * See note by declaration of modifying_ftrace_code in ftrace.c
-	 */
-	if (unlikely(atomic_read(&modifying_ftrace_code)) &&
-	    ftrace_int3_handler(regs))
-		return;
-#endif
 	if (poke_int3_handler(regs))
 		return;
 
 	/*
-	 * Unlike any other non-IST entry, we can be called from a kprobe in
-	 * non-CONTEXT_KERNEL kernel mode or even during context tracking
-	 * state changes.  Make sure that we wake up RCU even if we're coming
-	 * from kernel code.
-	 *
-	 * This means that we can't schedule even if we came from a
-	 * preemptible kernel context.  That's okay.
+	 * Unlike any other non-IST entry, we can be called from pretty much
+	 * any location in the kernel through kprobes -- text_poke() will most
+	 * likely be handled by poke_int3_handler() above. This means this
+	 * handler is effectively NMI-like.
 	 */
-	if (!user_mode(regs)) {
-		rcu_nmi_enter();
-		preempt_disable();
-	}
-	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
+	if (!user_mode(regs))
+		nmi_enter();
 
 #ifdef CONFIG_KGDB_LOW_LEVEL_TRAP
 	if (kgdb_ll_trap(DIE_INT3, "int3", regs, error_code, X86_TRAP_BP,
@@ -524,10 +550,8 @@ dotraplinkage void notrace do_int3(struct pt_regs *regs, long error_code)
 	cond_local_irq_disable(regs);
 
 exit:
-	if (!user_mode(regs)) {
-		preempt_enable_no_resched();
-		rcu_nmi_exit();
-	}
+	if (!user_mode(regs))
+		nmi_exit();
 }
 NOKPROBE_SYMBOL(do_int3);
 
@@ -631,7 +655,7 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 	unsigned long dr6;
 	int si_code;
 
-	ist_enter(regs);
+	nmi_enter();
 
 	get_debugreg(dr6, 6);
 	/*
@@ -724,7 +748,7 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 	debug_stack_usage_dec();
 
 exit:
-	ist_exit(regs);
+	nmi_exit();
 }
 NOKPROBE_SYMBOL(do_debug);
 

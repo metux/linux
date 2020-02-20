@@ -215,3 +215,6 @@ LIBBPF_0.0.7 {
 		bpf_program__attach;
 		btf__align_of;
 } LIBBPF_0.0.6;
+
+LIBBPF_0.0.8 {
+} LIBBPF_0.0.7;

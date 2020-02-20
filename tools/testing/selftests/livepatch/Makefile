@@ -7,4 +7,6 @@ TEST_PROGS := \
 	test-shadow-vars.sh \
 	test-ftrace.sh
 
+TEST_FILES := settings
+
 include ../lib.mk

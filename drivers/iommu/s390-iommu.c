@@ -87,7 +87,7 @@ static int s390_iommu_attach_device(struct iommu_domain *domain,
 				    struct device *dev)
 {
 	struct s390_domain *s390_domain = to_s390_domain(domain);
-	struct zpci_dev *zdev = to_pci_dev(dev)->sysdata;
+	struct zpci_dev *zdev = to_zpci_dev(dev);
 	struct s390_domain_device *domain_device;
 	unsigned long flags;
 	int rc;
@@ -139,7 +139,7 @@ static void s390_iommu_detach_device(struct iommu_domain *domain,
 				     struct device *dev)
 {
 	struct s390_domain *s390_domain = to_s390_domain(domain);
-	struct zpci_dev *zdev = to_pci_dev(dev)->sysdata;
+	struct zpci_dev *zdev = to_zpci_dev(dev);
 	struct s390_domain_device *domain_device, *tmp;
 	unsigned long flags;
 	int found = 0;
@@ -166,16 +166,23 @@ static void s390_iommu_detach_device(struct iommu_domain *domain,
 	}
 }
 
-static struct iommu_device *s390_iommu_probe_device(struct device *dev)
+static int s390_iommu_add_device(struct device *dev)
 {
-	struct zpci_dev *zdev = to_pci_dev(dev)->sysdata;
+	struct iommu_group *group = iommu_group_get_for_dev(dev);
+	struct zpci_dev *zdev = to_zpci_dev(dev);
 
-	return &zdev->iommu_dev;
+	if (IS_ERR(group))
+		return PTR_ERR(group);
+
+	iommu_group_put(group);
+	iommu_device_link(&zdev->iommu_dev, dev);
+
+	return 0;
 }
 
-static void s390_iommu_release_device(struct device *dev)
+static void s390_iommu_remove_device(struct device *dev)
 {
-	struct zpci_dev *zdev = to_pci_dev(dev)->sysdata;
+	struct zpci_dev *zdev = to_zpci_dev(dev);
 	struct iommu_domain *domain;
 
 	/*
@@ -184,7 +191,7 @@ static void s390_iommu_release_device(struct device *dev)
 	 * to vfio-pci and completing the VFIO_SET_IOMMU ioctl (which triggers
 	 * the attach_dev), removing the device via
 	 * "echo 1 > /sys/bus/pci/devices/.../remove" won't trigger detach_dev,
-	 * only release_device will be called via the BUS_NOTIFY_REMOVED_DEVICE
+	 * only remove_device will be called via the BUS_NOTIFY_REMOVED_DEVICE
 	 * notifier.
 	 *
 	 * So let's call detach_dev from here if it hasn't been called before.
@@ -194,6 +201,9 @@ static void s390_iommu_release_device(struct device *dev)
 		if (domain)
 			s390_iommu_detach_device(domain, dev);
 	}
+
+	iommu_device_unlink(&zdev->iommu_dev, dev);
+	iommu_group_remove_device(dev);
 }
 
 static int s390_iommu_update_trans(struct s390_domain *s390_domain,
@@ -363,8 +373,8 @@ static const struct iommu_ops s390_iommu_ops = {
 	.map = s390_iommu_map,
 	.unmap = s390_iommu_unmap,
 	.iova_to_phys = s390_iommu_iova_to_phys,
-	.probe_device = s390_iommu_probe_device,
-	.release_device = s390_iommu_release_device,
+	.add_device = s390_iommu_add_device,
+	.remove_device = s390_iommu_remove_device,
 	.device_group = generic_device_group,
 	.pgsize_bitmap = S390_IOMMU_PGSIZES,
 };

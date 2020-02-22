@@ -1,68 +1,130 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _LINUX_ARCH_TOPOLOGY_H
+#define _LINUX_ARCH_TOPOLOGY_H
+
+#include <linux/cpumask.h>
+
 /*
- * include/linux/arch_topology.h - arch specific cpu topology information
+ * CPU topology related definitions. Architectures can implement
+ * their own versions of these functions in order to provide
+ * CPU topology information to the scheduler.
  */
-#ifndef _LINUX_ARCH_TOPOLOGY_H_
-#define _LINUX_ARCH_TOPOLOGY_H_
 
-#include <linux/types.h>
-#include <linux/percpu.h>
-
-void topology_normalize_cpu_scale(void);
-int topology_update_cpu_topology(void);
-
-struct device_node;
-bool topology_parse_cpu_capacity(struct device_node *cpu_node, int cpu);
-
-DECLARE_PER_CPU(unsigned long, cpu_scale);
-
-static inline unsigned long topology_get_cpu_scale(int cpu)
-{
-	return per_cpu(cpu_scale, cpu);
-}
-
-void topology_set_cpu_scale(unsigned int cpu, unsigned long capacity);
-
-DECLARE_PER_CPU(unsigned long, freq_scale);
-
-static inline unsigned long topology_get_freq_scale(int cpu)
-{
-	return per_cpu(freq_scale, cpu);
-}
-
-DECLARE_PER_CPU(unsigned long, max_freq_scale);
-
-static inline
-unsigned long topology_get_max_freq_scale(struct sched_domain *sd, int cpu)
-{
-	return per_cpu(max_freq_scale, cpu);
-}
+struct cpumask;
+struct sched_domain;
 
 struct cpu_topology {
 	int thread_id;
 	int core_id;
 	int package_id;
 	int llc_id;
-	cpumask_t thread_sibling;
-	cpumask_t core_sibling;
-	cpumask_t llc_sibling;
+	int numa_id;
+	int die_id;
 };
 
-#ifdef CONFIG_GENERIC_ARCH_TOPOLOGY
-extern struct cpu_topology cpu_topology[NR_CPUS];
+DECLARE_PER_CPU(int, cpu_number);
+DECLARE_PER_CPU(unsigned long, max_freq_scale);
+DECLARE_PER_CPU(unsigned long, thermal_pressure);
 
-#define topology_physical_package_id(cpu)	(cpu_topology[cpu].package_id)
-#define topology_core_id(cpu)		(cpu_topology[cpu].core_id)
-#define topology_core_cpumask(cpu)	(&cpu_topology[cpu].core_sibling)
-#define topology_sibling_cpumask(cpu)	(&cpu_topology[cpu].thread_sibling)
-#define topology_llc_cpumask(cpu)	(&cpu_topology[cpu].llc_sibling)
-void init_cpu_topology(void);
-void store_cpu_topology(unsigned int cpuid);
-const struct cpumask *cpu_coregroup_mask(int cpu);
-void update_siblings_masks(unsigned int cpu);
-void remove_cpu_topology(unsigned int cpuid);
-void reset_cpu_topology(void);
-int parse_acpi_topology(void);
-#endif
+struct cpu_topology *cpu_topology;
+cpumask_var_t cpu_active_mask;
+cpumask_var_t cpu_present_mask;
+cpumask_var_t cpu_online_mask;
+cpumask_var_t cpu_possible_mask;
+cpumask_var_t cpu_isolated_map;
+cpumask_var_t cpu_active_mask;
 
-#endif /* _LINUX_ARCH_TOPOLOGY_H_ */
+extern int topology_physical_package_id(int cpu);
+extern int topology_core_id(int cpu);
+extern int topology_core_cpumask(int cpu, struct cpumask *mask);
+extern int topology_thread_cpumask(int cpu, struct cpumask *mask);
+extern int topology_die_cpumask(int cpu, struct cpumask *mask);
+extern int topology_cluster_cpumask(int cpu, struct cpumask *mask);
+extern int topology_sibling_cpumask(int cpu, struct cpumask *mask);
+extern int topology_l3_cpumask(int cpu, struct cpumask *mask);
+extern int topology_package_cpumask(int cpu, struct cpumask *mask);
+extern int topology_cluster_cpumask(int cpu, struct cpumask *mask);
+
+static inline int topology_get_max_freq_scale(struct sched_domain *sd, int cpu)
+{
+	return per_cpu(max_freq_scale, cpu);
+}
+
+static inline unsigned long topology_get_thermal_pressure(int cpu)
+{
+	return per_cpu(thermal_pressure, cpu);
+}
+
+void arch_set_thermal_pressure(struct cpumask *cpus, unsigned long th_pressure);
+
+static inline unsigned long topology_get_max_freq_scale(struct sched_domain *sd, int cpu)
+{
+	return per_cpu(max_freq_scale, cpu);
+}
+
+static inline unsigned long topology_get_thermal_pressure(int cpu)
+{
+	return per_cpu(thermal_pressure, cpu);
+}
+
+void arch_set_thermal_pressure(struct cpumask *cpus, unsigned long th_pressure);
+
+static inline int topology_physical_package_id(int cpu)
+{
+	return 0;
+}
+
+static inline int topology_core_id(int cpu)
+{
+	return cpu;
+}
+
+static inline int topology_sibling_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_sibling_mask(cpu));
+	return 0;
+}
+
+static inline int topology_core_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_core_mask(cpu));
+	return 0;
+}
+
+static inline int topology_llc_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_llc_mask(cpu));
+	return 0;
+}
+
+static inline int topology_package_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_package_mask(cpu));
+	return 0;
+}
+
+static inline int topology_cluster_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_cluster_mask(cpu));
+	return 0;
+}
+
+static inline int topology_die_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_die_mask(cpu));
+	return 0;
+}
+
+static inline int topology_thread_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_thread_mask(cpu));
+	return 0;
+}
+
+static inline int topology_cluster_cpumask(int cpu, struct cpumask *mask)
+{
+	cpumask_copy(mask, cpu_cluster_mask(cpu));
+	return 0;
+}
+
+#endif /* _LINUX_ARCH_TOPOLOGY_H */

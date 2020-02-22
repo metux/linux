@@ -143,4 +143,6 @@ struct fwnode_operations {
 	} while (false)
 #define get_dev_from_fwnode(fwnode)	get_device((fwnode)->dev)
 
+extern u32 fw_devlink_get_flags(void);
+
 #endif

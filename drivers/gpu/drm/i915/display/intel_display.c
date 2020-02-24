@@ -15337,7 +15337,6 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 	struct intel_crtc *crtc;
 	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
 	struct skl_ddb_entry entries[I915_MAX_PIPES] = {};
-	const u8 num_pipes = INTEL_NUM_PIPES(dev_priv);
 	u8 update_pipes = 0, modeset_pipes = 0;
 	int i;
 
@@ -15374,7 +15373,7 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 				continue;
 
 			if (skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
-							entries, num_pipes, pipe))
+							entries, I915_MAX_PIPES, pipe))
 				continue;
 
 			entries[pipe] = new_crtc_state->wm.skl.ddb;
@@ -15412,7 +15411,7 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 			continue;
 
 		drm_WARN_ON(&dev_priv->drm, skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
-									entries, num_pipes, pipe));
+									entries, I915_MAX_PIPES, pipe));
 
 		entries[pipe] = new_crtc_state->wm.skl.ddb;
 		modeset_pipes &= ~BIT(pipe);
@@ -15447,7 +15446,7 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 			continue;
 
 		drm_WARN_ON(&dev_priv->drm, skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
-									entries, num_pipes, pipe));
+									entries, I915_MAX_PIPES, pipe));
 
 		entries[pipe] = new_crtc_state->wm.skl.ddb;
 		modeset_pipes &= ~BIT(pipe);

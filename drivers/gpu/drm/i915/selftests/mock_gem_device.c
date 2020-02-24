@@ -146,7 +146,6 @@ struct drm_i915_private *mock_gem_device(void)
 		goto put_device;
 	}
 	i915->drm.pdev = pdev;
-	i915->drm.dev_private = i915;
 
 	/* Using the global GTT may ask questions about KMS users, so prepare */
 	drm_mode_config_init(&i915->drm);

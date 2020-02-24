@@ -489,6 +489,7 @@ cifs_reconnect(struct TCP_Server_Info *server)
 		dfs_cache_free_tgts(&tgt_list);
 		cifs_put_tcp_super(sb);
 #endif
+		wake_up(&server->response_q);
 		return rc;
 	} else
 		server->tcpStatus = CifsNeedReconnect;
@@ -620,6 +621,7 @@ cifs_reconnect(struct TCP_Server_Info *server)
 	if (server->tcpStatus == CifsNeedNegotiate)
 		mod_delayed_work(cifsiod_wq, &server->echo, 0);
 
+	wake_up(&server->response_q);
 	return rc;
 }
 
@@ -714,7 +716,6 @@ server_unresponsive(struct TCP_Server_Info *server)
 		cifs_server_dbg(VFS, "has not responded in %lu seconds. Reconnecting...\n",
 			 (3 * server->echo_interval) / HZ);
 		cifs_reconnect(server);
-		wake_up(&server->response_q);
 		return true;
 	}
 
@@ -847,7 +848,6 @@ is_smb_response(struct TCP_Server_Info *server, unsigned char type)
 		 */
 		cifs_set_port((struct sockaddr *)&server->dstaddr, CIFS_PORT);
 		cifs_reconnect(server);
-		wake_up(&server->response_q);
 		break;
 	default:
 		cifs_server_dbg(VFS, "RFC 1002 unknown response type 0x%x\n", type);
@@ -1014,7 +1014,6 @@ standard_receive3(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 		server->vals->header_preamble_size) {
 		cifs_server_dbg(VFS, "SMB response too long (%u bytes)\n", pdu_length);
 		cifs_reconnect(server);
-		wake_up(&server->response_q);
 		return -ECONNABORTED;
 	}
 
@@ -1062,7 +1061,6 @@ cifs_handle_standard(struct TCP_Server_Info *server, struct mid_q_entry *mid)
 	if (server->ops->is_session_expired &&
 	    server->ops->is_session_expired(buf)) {
 		cifs_reconnect(server);
-		wake_up(&server->response_q);
 		return -1;
 	}
 
@@ -1156,7 +1154,6 @@ next_pdu:
 			cifs_server_dbg(VFS, "SMB response too short (%u bytes)\n",
 				 server->pdu_size);
 			cifs_reconnect(server);
-			wake_up(&server->response_q);
 			continue;
 		}
 

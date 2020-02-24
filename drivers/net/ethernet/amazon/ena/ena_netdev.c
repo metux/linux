@@ -49,12 +49,9 @@
 #include <linux/bpf_trace.h>
 #include "ena_pci_id_tbl.h"
 
-static char version[] = DEVICE_NAME " v" DRV_MODULE_VERSION "\n";
-
 MODULE_AUTHOR("Amazon.com, Inc. or its affiliates");
 MODULE_DESCRIPTION(DEVICE_NAME);
 MODULE_LICENSE("GPL");
-MODULE_VERSION(DRV_MODULE_VERSION);
 
 /* Time in jiffies before concluding the transmitter is hung. */
 #define TX_TIMEOUT  (5 * HZ)
@@ -1018,8 +1015,12 @@ static int ena_refill_rx_bufs(struct ena_ring *rx_ring, u32 num)
 		struct ena_rx_buffer *rx_info;
 
 		req_id = rx_ring->free_ids[next_to_use];
+		rc = validate_rx_req_id(rx_ring, req_id);
+		if (unlikely(rc < 0))
+			break;
 
 		rx_info = &rx_ring->rx_buffer_info[req_id];
+
 
 		rc = ena_alloc_rx_page(rx_ring, rx_info,
 				       GFP_ATOMIC | __GFP_COMP);
@@ -1375,15 +1376,9 @@ static struct sk_buff *ena_rx_skb(struct ena_ring *rx_ring,
 	struct ena_rx_buffer *rx_info;
 	u16 len, req_id, buf = 0;
 	void *va;
-	int rc;
 
 	len = ena_bufs[buf].len;
 	req_id = ena_bufs[buf].req_id;
-
-	rc = validate_rx_req_id(rx_ring, req_id);
-	if (unlikely(rc < 0))
-		return NULL;
-
 	rx_info = &rx_ring->rx_buffer_info[req_id];
 
 	if (unlikely(!rx_info->page)) {
@@ -1456,11 +1451,6 @@ static struct sk_buff *ena_rx_skb(struct ena_ring *rx_ring,
 		buf++;
 		len = ena_bufs[buf].len;
 		req_id = ena_bufs[buf].req_id;
-
-		rc = validate_rx_req_id(rx_ring, req_id);
-		if (unlikely(rc < 0))
-			return NULL;
-
 		rx_info = &rx_ring->rx_buffer_info[req_id];
 	} while (1);
 
@@ -1865,7 +1855,6 @@ static int ena_io_poll(struct napi_struct *napi, int budget)
 {
 	struct ena_napi *ena_napi = container_of(napi, struct ena_napi, napi);
 	struct ena_ring *tx_ring, *rx_ring;
-
 	int tx_work_done;
 	int rx_work_done = 0;
 	int tx_budget;
@@ -1976,7 +1965,7 @@ static int ena_enable_msix(struct ena_adapter *adapter)
 	}
 
 	/* Reserved the max msix vectors we might need */
-	msix_vecs = ENA_MAX_MSIX_VEC(adapter->max_num_io_queues);
+	msix_vecs = ENA_MAX_MSIX_VEC(adapter->num_io_queues);
 	netif_dbg(adapter, probe, adapter->netdev,
 		  "trying to enable MSI-X, vectors %d\n", msix_vecs);
 
@@ -2076,7 +2065,6 @@ static int ena_request_mgmnt_irq(struct ena_adapter *adapter)
 
 static int ena_request_io_irq(struct ena_adapter *adapter)
 {
-	u32 io_queue_count = adapter->num_io_queues + adapter->xdp_num_queues;
 	unsigned long flags = 0;
 	struct ena_irq *irq;
 	int rc = 0, i, k;
@@ -2087,7 +2075,7 @@ static int ena_request_io_irq(struct ena_adapter *adapter)
 		return -EINVAL;
 	}
 
-	for (i = ENA_IO_IRQ_FIRST_IDX; i < ENA_MAX_MSIX_VEC(io_queue_count); i++) {
+	for (i = ENA_IO_IRQ_FIRST_IDX; i < adapter->msix_vecs; i++) {
 		irq = &adapter->irq_tbl[i];
 		rc = request_irq(irq->vector, irq->handler, flags, irq->name,
 				 irq->data);
@@ -2128,7 +2116,6 @@ static void ena_free_mgmnt_irq(struct ena_adapter *adapter)
 
 static void ena_free_io_irq(struct ena_adapter *adapter)
 {
-	u32 io_queue_count = adapter->num_io_queues + adapter->xdp_num_queues;
 	struct ena_irq *irq;
 	int i;
 
@@ -2139,7 +2126,7 @@ static void ena_free_io_irq(struct ena_adapter *adapter)
 	}
 #endif /* CONFIG_RFS_ACCEL */
 
-	for (i = ENA_IO_IRQ_FIRST_IDX; i < ENA_MAX_MSIX_VEC(io_queue_count); i++) {
+	for (i = ENA_IO_IRQ_FIRST_IDX; i < adapter->msix_vecs; i++) {
 		irq = &adapter->irq_tbl[i];
 		irq_set_affinity_hint(irq->vector, NULL);
 		free_irq(irq->vector, irq->data);
@@ -2154,13 +2141,12 @@ static void ena_disable_msix(struct ena_adapter *adapter)
 
 static void ena_disable_io_intr_sync(struct ena_adapter *adapter)
 {
-	u32 io_queue_count = adapter->num_io_queues + adapter->xdp_num_queues;
 	int i;
 
 	if (!netif_running(adapter->netdev))
 		return;
 
-	for (i = ENA_IO_IRQ_FIRST_IDX; i < ENA_MAX_MSIX_VEC(io_queue_count); i++)
+	for (i = ENA_IO_IRQ_FIRST_IDX; i < adapter->msix_vecs; i++)
 		synchronize_irq(adapter->irq_tbl[i].vector);
 }
 
@@ -3104,11 +3090,7 @@ static void ena_config_host_info(struct ena_com_dev *ena_dev,
 	host_info->os_dist = 0;
 	strncpy(host_info->os_dist_str, utsname()->release,
 		sizeof(host_info->os_dist_str) - 1);
-	host_info->driver_version =
-		(DRV_MODULE_VER_MAJOR) |
-		(DRV_MODULE_VER_MINOR << ENA_ADMIN_HOST_INFO_MINOR_SHIFT) |
-		(DRV_MODULE_VER_SUBMINOR << ENA_ADMIN_HOST_INFO_SUB_MINOR_SHIFT) |
-		("K"[0] << ENA_ADMIN_HOST_INFO_MODULE_TYPE_SHIFT);
+	host_info->driver_version = LINUX_VERSION_CODE;
 	host_info->num_cpus = num_online_cpus();
 
 	host_info->driver_supported_features =
@@ -3487,10 +3469,7 @@ static int ena_restore_device(struct ena_adapter *adapter)
 		netif_carrier_on(adapter->netdev);
 
 	mod_timer(&adapter->timer_service, round_jiffies(jiffies + HZ));
-	adapter->last_keep_alive_jiffies = jiffies;
-	dev_err(&pdev->dev,
-		"Device reset completed successfully, Driver info: %s\n",
-		version);
+	dev_err(&pdev->dev, "Device reset completed successfully\n");
 
 	return rc;
 err_disable_msix:
@@ -4128,8 +4107,6 @@ static int ena_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	dev_dbg(&pdev->dev, "%s\n", __func__);
 
-	dev_info_once(&pdev->dev, "%s", version);
-
 	rc = pci_enable_device_mem(pdev);
 	if (rc) {
 		dev_err(&pdev->dev, "pci_enable_device_mem() failed!\n");
@@ -4337,15 +4314,13 @@ err_disable_device:
 
 /*****************************************************************************/
 
-/* __ena_shutoff - Helper used in both PCI remove/shutdown routines
+/* ena_remove - Device Removal Routine
  * @pdev: PCI device information struct
- * @shutdown: Is it a shutdown operation? If false, means it is a removal
  *
- * __ena_shutoff is a helper routine that does the real work on shutdown and
- * removal paths; the difference between those paths is with regards to whether
- * dettach or unregister the netdevice.
+ * ena_remove is called by the PCI subsystem to alert the driver
+ * that it should release a PCI device.
  */
-static void __ena_shutoff(struct pci_dev *pdev, bool shutdown)
+static void ena_remove(struct pci_dev *pdev)
 {
 	struct ena_adapter *adapter = pci_get_drvdata(pdev);
 	struct ena_com_dev *ena_dev;
@@ -4364,17 +4339,13 @@ static void __ena_shutoff(struct pci_dev *pdev, bool shutdown)
 
 	cancel_work_sync(&adapter->reset_task);
 
-	rtnl_lock(); /* lock released inside the below if-else block */
+	rtnl_lock();
 	ena_destroy_device(adapter, true);
-	if (shutdown) {
-		netif_device_detach(netdev);
-		dev_close(netdev);
-		rtnl_unlock();
-	} else {
-		rtnl_unlock();
-		unregister_netdev(netdev);
-		free_netdev(netdev);
-	}
+	rtnl_unlock();
+
+	unregister_netdev(netdev);
+
+	free_netdev(netdev);
 
 	ena_com_rss_destroy(ena_dev);
 
@@ -4387,30 +4358,6 @@ static void __ena_shutoff(struct pci_dev *pdev, bool shutdown)
 	pci_disable_device(pdev);
 
 	vfree(ena_dev);
-}
-
-/* ena_remove - Device Removal Routine
- * @pdev: PCI device information struct
- *
- * ena_remove is called by the PCI subsystem to alert the driver
- * that it should release a PCI device.
- */
-
-static void ena_remove(struct pci_dev *pdev)
-{
-	__ena_shutoff(pdev, false);
-}
-
-/* ena_shutdown - Device Shutdown Routine
- * @pdev: PCI device information struct
- *
- * ena_shutdown is called by the PCI subsystem to alert the driver that
- * a shutdown/reboot (or kexec) is happening and device must be disabled.
- */
-
-static void ena_shutdown(struct pci_dev *pdev)
-{
-	__ena_shutoff(pdev, true);
 }
 
 #ifdef CONFIG_PM
@@ -4462,7 +4409,6 @@ static struct pci_driver ena_pci_driver = {
 	.id_table	= ena_pci_tbl,
 	.probe		= ena_probe,
 	.remove		= ena_remove,
-	.shutdown	= ena_shutdown,
 #ifdef CONFIG_PM
 	.suspend    = ena_suspend,
 	.resume     = ena_resume,
@@ -4472,8 +4418,6 @@ static struct pci_driver ena_pci_driver = {
 
 static int __init ena_init(void)
 {
-	pr_info("%s", version);
-
 	ena_wq = create_singlethread_workqueue(DRV_MODULE_NAME);
 	if (!ena_wq) {
 		pr_err("Failed to create workqueue\n");

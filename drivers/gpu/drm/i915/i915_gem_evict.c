@@ -26,9 +26,6 @@
  *
  */
 
-#include <drm/i915_drm.h>
-
-#include "display/intel_display_types.h"
 #include "gem/i915_gem_context.h"
 #include "gt/intel_gt_requests.h"
 
@@ -58,9 +55,6 @@ mark_free(struct drm_mm_scan *scan,
 	  struct list_head *unwind)
 {
 	if (i915_vma_is_pinned(vma))
-		return false;
-
-	if (flags & PIN_NONFAULT && i915_vma_has_userfault(vma))
 		return false;
 
 	list_add(&vma->evict_link, unwind);
@@ -315,11 +309,6 @@ int i915_gem_evict_for_node(struct i915_address_space *vm,
 
 		if (flags & PIN_NONBLOCK &&
 		    (i915_vma_is_pinned(vma) || i915_vma_is_active(vma))) {
-			ret = -ENOSPC;
-			break;
-		}
-
-		if (flags & PIN_NONFAULT && i915_vma_has_userfault(vma)) {
 			ret = -ENOSPC;
 			break;
 		}

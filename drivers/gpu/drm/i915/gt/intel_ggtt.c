@@ -7,6 +7,8 @@
 
 #include <asm/set_memory.h>
 
+#include <drm/i915_drm.h>
+
 #include "intel_gt.h"
 #include "i915_drv.h"
 #include "i915_scatterlist.h"

@@ -1127,9 +1127,9 @@ restore_all_kernel:
 	jmp	.Lirq_return
 
 .section .fixup, "ax"
-SYM_CODE_START(iret_exc)
+SYM_CODE_START(asm_iret_error)
 	pushl	$0				# no error code
-	pushl	$do_iret_error
+	pushl	$iret_error
 
 #ifdef CONFIG_DEBUG_ENTRY
 	/*
@@ -1143,10 +1143,10 @@ SYM_CODE_START(iret_exc)
 	popl	%eax
 #endif
 
-	jmp	common_exception
-SYM_CODE_END(iret_exc)
+	jmp	handle_exception
+SYM_CODE_END(asm_iret_error)
 .previous
-	_ASM_EXTABLE(.Lirq_return, iret_exc)
+	_ASM_EXTABLE(.Lirq_return, asm_iret_error)
 SYM_FUNC_END(entry_INT80_32)
 
 .macro FIXUP_ESPFIX_STACK
@@ -1260,7 +1260,7 @@ SYM_FUNC_END(name)
 #ifdef CONFIG_PARAVIRT
 SYM_CODE_START(native_iret)
 	iret
-	_ASM_EXTABLE(native_iret, iret_exc)
+	_ASM_EXTABLE(native_iret, asm_iret_error)
 SYM_CODE_END(native_iret)
 #endif
 
@@ -1329,7 +1329,7 @@ SYM_FUNC_START(xen_failsafe_callback)
 	popl	%eax
 	lea	16(%esp), %esp
 	jz	5f
-	jmp	iret_exc
+	jmp	asm_iret_error
 5:	pushl	$-1				/* orig_ax = -1 => not a system call */
 	SAVE_ALL
 	ENCODE_FRAME_POINTER

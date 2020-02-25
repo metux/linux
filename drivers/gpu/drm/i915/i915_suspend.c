@@ -24,14 +24,13 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <drm/i915_drm.h>
-
-#include "display/intel_display_types.h"
 #include "display/intel_fbc.h"
 #include "display/intel_gmbus.h"
 #include "display/intel_vga.h"
 
+#include "i915_drv.h"
 #include "i915_reg.h"
+#include "i915_suspend.h"
 
 static void i915_save_display(struct drm_i915_private *dev_priv)
 {

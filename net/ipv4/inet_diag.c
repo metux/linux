@@ -23,6 +23,7 @@
 #include <net/inet_hashtables.h>
 #include <net/inet_timewait_sock.h>
 #include <net/inet6_hashtables.h>
+#include <net/bpf_sk_storage.h>
 #include <net/netlink.h>
 
 #include <linux/inet.h>
@@ -100,9 +101,13 @@ static size_t inet_sk_attr_size(struct sock *sk,
 		aux = handler->idiag_get_aux_size(sk, net_admin);
 
 	return	  nla_total_size(sizeof(struct tcp_info))
-		+ nla_total_size(sizeof(struct inet_diag_msg))
-		+ inet_diag_msg_attrs_size()
+		+ nla_total_size(1) /* INET_DIAG_SHUTDOWN */
+		+ nla_total_size(1) /* INET_DIAG_TOS */
+		+ nla_total_size(1) /* INET_DIAG_TCLASS */
+		+ nla_total_size(4) /* INET_DIAG_MARK */
+		+ nla_total_size(4) /* INET_DIAG_CLASS_ID */
 		+ nla_total_size(sizeof(struct inet_diag_meminfo))
+		+ nla_total_size(sizeof(struct inet_diag_msg))
 		+ nla_total_size(SK_MEMINFO_VARS * sizeof(u32))
 		+ nla_total_size(TCP_CA_NAME_MAX)
 		+ nla_total_size(sizeof(struct tcpvegas_info))
@@ -143,24 +148,6 @@ int inet_diag_msg_attrs_fill(struct sock *sk, struct sk_buff *skb,
 	if (net_admin && nla_put_u32(skb, INET_DIAG_MARK, sk->sk_mark))
 		goto errout;
 
-	if (ext & (1 << (INET_DIAG_CLASS_ID - 1)) ||
-	    ext & (1 << (INET_DIAG_TCLASS - 1))) {
-		u32 classid = 0;
-
-#ifdef CONFIG_SOCK_CGROUP_DATA
-		classid = sock_cgroup_classid(&sk->sk_cgrp_data);
-#endif
-		/* Fallback to socket priority if class id isn't set.
-		 * Classful qdiscs use it as direct reference to class.
-		 * For cgroup2 classid is always zero.
-		 */
-		if (!classid)
-			classid = sk->sk_priority;
-
-		if (nla_put_u32(skb, INET_DIAG_CLASS_ID, classid))
-			goto errout;
-	}
-
 	r->idiag_uid = from_kuid_munged(user_ns, sock_i_uid(sk));
 	r->idiag_inode = sock_i_ino(sk);
 
@@ -170,6 +157,8 @@ errout:
 }
 EXPORT_SYMBOL_GPL(inet_diag_msg_attrs_fill);
 
+#define MAX_DUMP_ALLOC_SIZE (KMALLOC_MAX_SIZE - SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
 int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 		      struct sk_buff *skb, struct netlink_callback *cb,
 		      const struct inet_diag_req_v2 *req,
@@ -177,12 +166,14 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 {
 	const struct tcp_congestion_ops *ca_ops;
 	const struct inet_diag_handler *handler;
+	struct inet_diag_dump_data *cb_data;
 	int ext = req->idiag_ext;
 	struct inet_diag_msg *r;
 	struct nlmsghdr  *nlh;
 	struct nlattr *attr;
 	void *info = NULL;
 
+	cb_data = cb->data;
 	handler = inet_diag_table[req->sdiag_protocol];
 	BUG_ON(!handler);
 
@@ -296,6 +287,66 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 		rcu_read_unlock();
 		if (sz && nla_put(skb, attr, sz, &info) < 0)
 			goto errout;
+	}
+
+	if (ext & (1 << (INET_DIAG_CLASS_ID - 1)) ||
+	    ext & (1 << (INET_DIAG_TCLASS - 1))) {
+		u32 classid = 0;
+
+#ifdef CONFIG_SOCK_CGROUP_DATA
+		classid = sock_cgroup_classid(&sk->sk_cgrp_data);
+#endif
+		/* Fallback to socket priority if class id isn't set.
+		 * Classful qdiscs use it as direct reference to class.
+		 * For cgroup2 classid is always zero.
+		 */
+		if (!classid)
+			classid = sk->sk_priority;
+
+		if (nla_put_u32(skb, INET_DIAG_CLASS_ID, classid))
+			goto errout;
+	}
+
+	/* Keep it at the end for potential retry with a larger skb,
+	 * or else do best-effort fitting, which is only done for the
+	 * first_nlmsg.
+	 */
+	if (cb_data->bpf_stg_diag) {
+		bool first_nlmsg = ((unsigned char *)nlh == skb->data);
+		unsigned int prev_min_dump_alloc;
+		unsigned int total_nla_size = 0;
+		unsigned int msg_len;
+		int err;
+
+		msg_len = skb_tail_pointer(skb) - (unsigned char *)nlh;
+		err = bpf_sk_storage_diag_put(cb_data->bpf_stg_diag, sk, skb,
+					      INET_DIAG_SK_BPF_STORAGES,
+					      &total_nla_size);
+
+		if (!err)
+			goto out;
+
+		total_nla_size += msg_len;
+		prev_min_dump_alloc = cb->min_dump_alloc;
+		if (total_nla_size > prev_min_dump_alloc)
+			cb->min_dump_alloc = min_t(u32, total_nla_size,
+						   MAX_DUMP_ALLOC_SIZE);
+
+		if (!first_nlmsg)
+			goto errout;
+
+		if (cb->min_dump_alloc > prev_min_dump_alloc)
+			/* Retry with pskb_expand_head() with
+			 * __GFP_DIRECT_RECLAIM
+			 */
+			goto errout;
+
+		WARN_ON_ONCE(total_nla_size <= prev_min_dump_alloc);
+
+		/* Send what we have for this sk
+		 * and move on to the next sk in the following
+		 * dump()
+		 */
 	}
 
 out:
@@ -1018,14 +1069,26 @@ static int __inet_diag_dump(struct sk_buff *skb, struct netlink_callback *cb,
 			    const struct inet_diag_req_v2 *r)
 {
 	const struct inet_diag_handler *handler;
+	u32 prev_min_dump_alloc;
 	int err = 0;
 
+again:
+	prev_min_dump_alloc = cb->min_dump_alloc;
 	handler = inet_diag_lock_handler(r->sdiag_protocol);
 	if (!IS_ERR(handler))
 		handler->dump(skb, cb, r);
 	else
 		err = PTR_ERR(handler);
 	inet_diag_unlock_handler(handler);
+
+	/* The skb is not large enough to fit one sk info and
+	 * inet_sk_diag_fill() has requested for a larger skb.
+	 */
+	if (!skb->len && cb->min_dump_alloc > prev_min_dump_alloc) {
+		err = pskb_expand_head(skb, 0, cb->min_dump_alloc, GFP_KERNEL);
+		if (!err)
+			goto again;
+	}
 
 	return err ? : skb->len;
 }
@@ -1064,6 +1127,18 @@ static int __inet_diag_dump_start(struct netlink_callback *cb, int hdrlen)
 		}
 	}
 
+	nla = cb_data->inet_diag_nla_bpf_stgs;
+	if (nla) {
+		struct bpf_sk_storage_diag *bpf_stg_diag;
+
+		bpf_stg_diag = bpf_sk_storage_diag_alloc(nla);
+		if (IS_ERR(bpf_stg_diag)) {
+			kfree(cb_data);
+			return PTR_ERR(bpf_stg_diag);
+		}
+		cb_data->bpf_stg_diag = bpf_stg_diag;
+	}
+
 	cb->data = cb_data;
 	return 0;
 }
@@ -1080,6 +1155,9 @@ static int inet_diag_dump_start_compat(struct netlink_callback *cb)
 
 static int inet_diag_dump_done(struct netlink_callback *cb)
 {
+	struct inet_diag_dump_data *cb_data = cb->data;
+
+	bpf_sk_storage_diag_free(cb_data->bpf_stg_diag);
 	kfree(cb->data);
 
 	return 0;

@@ -480,9 +480,11 @@ static void phylink_mac_link_up(struct phylink *pl,
 	struct net_device *ndev = pl->netdev;
 
 	pl->cur_interface = link_state.interface;
-	pl->ops->mac_link_up(pl->config, pl->cur_link_an_mode,
-			     pl->phy_state.interface,
-			     pl->phydev);
+	pl->ops->mac_link_up(pl->config, pl->phydev,
+			     pl->cur_link_an_mode, pl->cur_interface,
+			     link_state.speed, link_state.duplex,
+			     !!(link_state.pause & MLO_PAUSE_TX),
+			     !!(link_state.pause & MLO_PAUSE_RX));
 
 	if (ndev)
 		netif_carrier_on(ndev);
@@ -548,6 +550,8 @@ static void phylink_resolve(struct work_struct *w)
 				link_state.pause = pl->phy_state.pause;
 				phylink_apply_manual_flow(pl, &link_state);
 				phylink_mac_config(pl, &link_state);
+			} else {
+				phylink_apply_manual_flow(pl, &link_state);
 			}
 			break;
 		}
@@ -605,6 +609,9 @@ static int phylink_register_sfp(struct phylink *pl,
 {
 	struct sfp_bus *bus;
 	int ret;
+
+	if (!fwnode)
+		return 0;
 
 	bus = sfp_bus_find_fwnode(fwnode);
 	if (IS_ERR(bus)) {
@@ -790,14 +797,8 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 		config.interface = interface;
 
 	ret = phylink_validate(pl, supported, &config);
-	if (ret) {
-		phylink_warn(pl, "validation of %s with support %*pb and advertisement %*pb failed: %d\n",
-			     phy_modes(config.interface),
-			     __ETHTOOL_LINK_MODE_MASK_NBITS, phy->supported,
-			     __ETHTOOL_LINK_MODE_MASK_NBITS, config.advertising,
-			     ret);
+	if (ret)
 		return ret;
-	}
 
 	phy->phylink = pl;
 	phy->phy_link_change = phylink_phy_change;

@@ -80,6 +80,7 @@
 #include "i915_trace.h"
 #include "i915_vgpu.h"
 #include "intel_dram.h"
+#include "intel_gvt.h"
 #include "intel_memory_region.h"
 #include "intel_pm.h"
 #include "vlv_suspend.h"

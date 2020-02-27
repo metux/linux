@@ -520,6 +520,7 @@ static int etnaviv_bind(struct device *dev)
 	mutex_init(&priv->gem_lock);
 	INIT_LIST_HEAD(&priv->gem_list);
 	priv->num_gpus = 0;
+	priv->shm_gfp_mask = GFP_HIGHUSER | __GFP_RETRY_MAYFAIL | __GFP_NOWARN;
 
 	dev_set_drvdata(dev, drm);
 

@@ -65,18 +65,15 @@ err:
 	return -EFAULT;
 }
 
-static int hmm_pfns_bad(unsigned long addr,
-			unsigned long end,
-			struct mm_walk *walk)
+static int hmm_pfns_fill(unsigned long addr, unsigned long end,
+		struct hmm_range *range, enum hmm_pfn_value_e value)
 {
-	struct hmm_vma_walk *hmm_vma_walk = walk->private;
-	struct hmm_range *range = hmm_vma_walk->range;
 	uint64_t *pfns = range->pfns;
 	unsigned long i;
 
 	i = (addr - range->start) >> PAGE_SHIFT;
 	for (; addr < end; addr += PAGE_SIZE, i++)
-		pfns[i] = range->values[HMM_PFN_ERROR];
+		pfns[i] = range->values[value];
 
 	return 0;
 }
@@ -189,7 +186,7 @@ static void hmm_range_need_fault(const struct hmm_vma_walk *hmm_vma_walk,
 }
 
 static int hmm_vma_walk_hole(unsigned long addr, unsigned long end,
-			     struct mm_walk *walk)
+			     __always_unused int depth, struct mm_walk *walk)
 {
 	struct hmm_vma_walk *hmm_vma_walk = walk->private;
 	struct hmm_range *range = hmm_vma_walk->range;
@@ -328,6 +325,7 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 		}
 
 		/* Report error for everything else */
+		pte_unmap(ptep);
 		*pfn = range->values[HMM_PFN_ERROR];
 		return -EFAULT;
 	} else {
@@ -342,11 +340,20 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 	if (pte_devmap(pte)) {
 		hmm_vma_walk->pgmap = get_dev_pagemap(pte_pfn(pte),
 					      hmm_vma_walk->pgmap);
-		if (unlikely(!hmm_vma_walk->pgmap))
+		if (unlikely(!hmm_vma_walk->pgmap)) {
+			pte_unmap(ptep);
 			return -EBUSY;
+		}
 	} else if (IS_ENABLED(CONFIG_ARCH_HAS_PTE_SPECIAL) && pte_special(pte)) {
-		*pfn = range->values[HMM_PFN_SPECIAL];
-		return -EFAULT;
+		if (!is_zero_pfn(pte_pfn(pte))) {
+			pte_unmap(ptep);
+			*pfn = range->values[HMM_PFN_SPECIAL];
+			return -EFAULT;
+		}
+		/*
+		 * Since each architecture defines a struct page for the zero
+		 * page, just fall through and treat it like a normal page.
+		 */
 	}
 
 	*pfn = hmm_device_entry_from_pfn(range, pte_pfn(pte)) | cpu_flags;
@@ -377,7 +384,7 @@ static int hmm_vma_walk_pmd(pmd_t *pmdp,
 again:
 	pmd = READ_ONCE(*pmdp);
 	if (pmd_none(pmd))
-		return hmm_vma_walk_hole(start, end, walk);
+		return hmm_vma_walk_hole(start, end, -1, walk);
 
 	if (thp_migration_supported() && is_pmd_migration_entry(pmd)) {
 		bool fault, write_fault;
@@ -397,7 +404,7 @@ again:
 		}
 		return 0;
 	} else if (!pmd_present(pmd))
-		return hmm_pfns_bad(start, end, walk);
+		return hmm_pfns_fill(start, end, range, HMM_PFN_ERROR);
 
 	if (pmd_devmap(pmd) || pmd_trans_huge(pmd)) {
 		/*
@@ -425,7 +432,7 @@ again:
 	 * recover.
 	 */
 	if (pmd_bad(pmd))
-		return hmm_pfns_bad(start, end, walk);
+		return hmm_pfns_fill(start, end, range, HMM_PFN_ERROR);
 
 	ptep = pte_offset_map(pmdp, addr);
 	i = (addr - range->start) >> PAGE_SHIFT;
@@ -434,7 +441,7 @@ again:
 
 		r = hmm_vma_handle_pte(walk, addr, end, pmdp, ptep, &pfns[i]);
 		if (r) {
-			/* hmm_vma_handle_pte() did unmap pte directory */
+			/* hmm_vma_handle_pte() did pte_unmap() */
 			hmm_vma_walk->last = addr;
 			return r;
 		}
@@ -471,23 +478,32 @@ static int hmm_vma_walk_pud(pud_t *pudp, unsigned long start, unsigned long end,
 {
 	struct hmm_vma_walk *hmm_vma_walk = walk->private;
 	struct hmm_range *range = hmm_vma_walk->range;
-	unsigned long addr = start, next;
-	pmd_t *pmdp;
+	unsigned long addr = start;
 	pud_t pud;
-	int ret;
+	int ret = 0;
+	spinlock_t *ptl = pud_trans_huge_lock(pudp, walk->vma);
 
-again:
+	if (!ptl)
+		return 0;
+
+	/* Normally we don't want to split the huge page */
+	walk->action = ACTION_CONTINUE;
+
 	pud = READ_ONCE(*pudp);
-	if (pud_none(pud))
-		return hmm_vma_walk_hole(start, end, walk);
+	if (pud_none(pud)) {
+		ret = hmm_vma_walk_hole(start, end, -1, walk);
+		goto out_unlock;
+	}
 
 	if (pud_huge(pud) && pud_devmap(pud)) {
 		unsigned long i, npages, pfn;
 		uint64_t *pfns, cpu_flags;
 		bool fault, write_fault;
 
-		if (!pud_present(pud))
-			return hmm_vma_walk_hole(start, end, walk);
+		if (!pud_present(pud)) {
+			ret = hmm_vma_walk_hole(start, end, -1, walk);
+			goto out_unlock;
+		}
 
 		i = (addr - range->start) >> PAGE_SHIFT;
 		npages = (end - addr) >> PAGE_SHIFT;
@@ -496,16 +512,20 @@ again:
 		cpu_flags = pud_to_hmm_pfn_flags(range, pud);
 		hmm_range_need_fault(hmm_vma_walk, pfns, npages,
 				     cpu_flags, &fault, &write_fault);
-		if (fault || write_fault)
-			return hmm_vma_walk_hole_(addr, end, fault,
-						write_fault, walk);
+		if (fault || write_fault) {
+			ret = hmm_vma_walk_hole_(addr, end, fault,
+						 write_fault, walk);
+			goto out_unlock;
+		}
 
 		pfn = pud_pfn(pud) + ((addr & ~PUD_MASK) >> PAGE_SHIFT);
 		for (i = 0; i < npages; ++i, ++pfn) {
 			hmm_vma_walk->pgmap = get_dev_pagemap(pfn,
 					      hmm_vma_walk->pgmap);
-			if (unlikely(!hmm_vma_walk->pgmap))
-				return -EBUSY;
+			if (unlikely(!hmm_vma_walk->pgmap)) {
+				ret = -EBUSY;
+				goto out_unlock;
+			}
 			pfns[i] = hmm_device_entry_from_pfn(range, pfn) |
 				  cpu_flags;
 		}
@@ -514,22 +534,15 @@ again:
 			hmm_vma_walk->pgmap = NULL;
 		}
 		hmm_vma_walk->last = end;
-		return 0;
+		goto out_unlock;
 	}
 
-	split_huge_pud(walk->vma, pudp, addr);
-	if (pud_none(*pudp))
-		goto again;
+	/* Ask for the PUD to be split */
+	walk->action = ACTION_SUBTREE;
 
-	pmdp = pmd_offset(pudp, addr);
-	do {
-		next = pmd_addr_end(addr, end);
-		ret = hmm_vma_walk_pmd(pmdp, addr, next, walk);
-		if (ret)
-			return ret;
-	} while (pmdp++, addr = next, addr != end);
-
-	return 0;
+out_unlock:
+	spin_unlock(ptl);
+	return ret;
 }
 #else
 #define hmm_vma_walk_pud	NULL
@@ -583,13 +596,47 @@ unlock:
 #define hmm_vma_walk_hugetlb_entry NULL
 #endif /* CONFIG_HUGETLB_PAGE */
 
-static void hmm_pfns_clear(struct hmm_range *range,
-			   uint64_t *pfns,
-			   unsigned long addr,
-			   unsigned long end)
+static int hmm_vma_walk_test(unsigned long start, unsigned long end,
+			     struct mm_walk *walk)
 {
-	for (; addr < end; addr += PAGE_SIZE, pfns++)
-		*pfns = range->values[HMM_PFN_NONE];
+	struct hmm_vma_walk *hmm_vma_walk = walk->private;
+	struct hmm_range *range = hmm_vma_walk->range;
+	struct vm_area_struct *vma = walk->vma;
+
+	/*
+	 * Skip vma ranges that don't have struct page backing them or
+	 * map I/O devices directly.
+	 */
+	if (vma->vm_flags & (VM_IO | VM_PFNMAP | VM_MIXEDMAP))
+		return -EFAULT;
+
+	/*
+	 * If the vma does not allow read access, then assume that it does not
+	 * allow write access either. HMM does not support architectures
+	 * that allow write without read.
+	 */
+	if (!(vma->vm_flags & VM_READ)) {
+		bool fault, write_fault;
+
+		/*
+		 * Check to see if a fault is requested for any page in the
+		 * range.
+		 */
+		hmm_range_need_fault(hmm_vma_walk, range->pfns +
+					((start - range->start) >> PAGE_SHIFT),
+					(end - start) >> PAGE_SHIFT,
+					0, &fault, &write_fault);
+		if (fault || write_fault)
+			return -EFAULT;
+
+		hmm_pfns_fill(start, end, range, HMM_PFN_NONE);
+		hmm_vma_walk->last = end;
+
+		/* Skip this vma and continue processing the next vma. */
+		return 1;
+	}
+
+	return 0;
 }
 
 static const struct mm_walk_ops hmm_walk_ops = {
@@ -597,6 +644,7 @@ static const struct mm_walk_ops hmm_walk_ops = {
 	.pmd_entry	= hmm_vma_walk_pmd,
 	.pte_hole	= hmm_vma_walk_hole,
 	.hugetlb_entry	= hmm_vma_walk_hugetlb_entry,
+	.test_walk	= hmm_vma_walk_test,
 };
 
 /**
@@ -629,11 +677,12 @@ static const struct mm_walk_ops hmm_walk_ops = {
  */
 long hmm_range_fault(struct hmm_range *range, unsigned int flags)
 {
-	const unsigned long device_vma = VM_IO | VM_PFNMAP | VM_MIXEDMAP;
-	unsigned long start = range->start, end;
-	struct hmm_vma_walk hmm_vma_walk;
+	struct hmm_vma_walk hmm_vma_walk = {
+		.range = range,
+		.last = range->start,
+		.flags = flags,
+	};
 	struct mm_struct *mm = range->notifier->mm;
-	struct vm_area_struct *vma;
 	int ret;
 
 	lockdep_assert_held(&mm->mmap_sem);
@@ -643,200 +692,12 @@ long hmm_range_fault(struct hmm_range *range, unsigned int flags)
 		if (mmu_interval_check_retry(range->notifier,
 					     range->notifier_seq))
 			return -EBUSY;
+		ret = walk_page_range(mm, hmm_vma_walk.last, range->end,
+				      &hmm_walk_ops, &hmm_vma_walk);
+	} while (ret == -EBUSY);
 
-		vma = find_vma(mm, start);
-		if (vma == NULL || (vma->vm_flags & device_vma))
-			return -EFAULT;
-
-		if (!(vma->vm_flags & VM_READ)) {
-			/*
-			 * If vma do not allow read access, then assume that it
-			 * does not allow write access, either. HMM does not
-			 * support architecture that allow write without read.
-			 */
-			hmm_pfns_clear(range, range->pfns,
-				range->start, range->end);
-			return -EPERM;
-		}
-
-		hmm_vma_walk.pgmap = NULL;
-		hmm_vma_walk.last = start;
-		hmm_vma_walk.flags = flags;
-		hmm_vma_walk.range = range;
-		end = min(range->end, vma->vm_end);
-
-		walk_page_range(vma->vm_mm, start, end, &hmm_walk_ops,
-				&hmm_vma_walk);
-
-		do {
-			ret = walk_page_range(vma->vm_mm, start, end,
-					&hmm_walk_ops, &hmm_vma_walk);
-			start = hmm_vma_walk.last;
-
-			/* Keep trying while the range is valid. */
-		} while (ret == -EBUSY &&
-			 !mmu_interval_check_retry(range->notifier,
-						   range->notifier_seq));
-
-		if (ret) {
-			unsigned long i;
-
-			i = (hmm_vma_walk.last - range->start) >> PAGE_SHIFT;
-			hmm_pfns_clear(range, &range->pfns[i],
-				hmm_vma_walk.last, range->end);
-			return ret;
-		}
-		start = end;
-
-	} while (start < range->end);
-
+	if (ret)
+		return ret;
 	return (hmm_vma_walk.last - range->start) >> PAGE_SHIFT;
 }
 EXPORT_SYMBOL(hmm_range_fault);
-
-/**
- * hmm_range_dma_map - hmm_range_fault() and dma map page all in one.
- * @range:	range being faulted
- * @device:	device to map page to
- * @daddrs:	array of dma addresses for the mapped pages
- * @flags:	HMM_FAULT_*
- *
- * Return: the number of pages mapped on success (including zero), or any
- * status return from hmm_range_fault() otherwise.
- */
-long hmm_range_dma_map(struct hmm_range *range, struct device *device,
-		dma_addr_t *daddrs, unsigned int flags)
-{
-	unsigned long i, npages, mapped;
-	long ret;
-
-	ret = hmm_range_fault(range, flags);
-	if (ret <= 0)
-		return ret ? ret : -EBUSY;
-
-	npages = (range->end - range->start) >> PAGE_SHIFT;
-	for (i = 0, mapped = 0; i < npages; ++i) {
-		enum dma_data_direction dir = DMA_TO_DEVICE;
-		struct page *page;
-
-		/*
-		 * FIXME need to update DMA API to provide invalid DMA address
-		 * value instead of a function to test dma address value. This
-		 * would remove lot of dumb code duplicated accross many arch.
-		 *
-		 * For now setting it to 0 here is good enough as the pfns[]
-		 * value is what is use to check what is valid and what isn't.
-		 */
-		daddrs[i] = 0;
-
-		page = hmm_device_entry_to_page(range, range->pfns[i]);
-		if (page == NULL)
-			continue;
-
-		/* Check if range is being invalidated */
-		if (mmu_interval_check_retry(range->notifier,
-					     range->notifier_seq)) {
-			ret = -EBUSY;
-			goto unmap;
-		}
-
-		/* If it is read and write than map bi-directional. */
-		if (range->pfns[i] & range->flags[HMM_PFN_WRITE])
-			dir = DMA_BIDIRECTIONAL;
-
-		daddrs[i] = dma_map_page(device, page, 0, PAGE_SIZE, dir);
-		if (dma_mapping_error(device, daddrs[i])) {
-			ret = -EFAULT;
-			goto unmap;
-		}
-
-		mapped++;
-	}
-
-	return mapped;
-
-unmap:
-	for (npages = i, i = 0; (i < npages) && mapped; ++i) {
-		enum dma_data_direction dir = DMA_TO_DEVICE;
-		struct page *page;
-
-		page = hmm_device_entry_to_page(range, range->pfns[i]);
-		if (page == NULL)
-			continue;
-
-		if (dma_mapping_error(device, daddrs[i]))
-			continue;
-
-		/* If it is read and write than map bi-directional. */
-		if (range->pfns[i] & range->flags[HMM_PFN_WRITE])
-			dir = DMA_BIDIRECTIONAL;
-
-		dma_unmap_page(device, daddrs[i], PAGE_SIZE, dir);
-		mapped--;
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL(hmm_range_dma_map);
-
-/**
- * hmm_range_dma_unmap() - unmap range of that was map with hmm_range_dma_map()
- * @range: range being unmapped
- * @device: device against which dma map was done
- * @daddrs: dma address of mapped pages
- * @dirty: dirty page if it had the write flag set
- * Return: number of page unmapped on success, -EINVAL otherwise
- *
- * Note that caller MUST abide by mmu notifier or use HMM mirror and abide
- * to the sync_cpu_device_pagetables() callback so that it is safe here to
- * call set_page_dirty(). Caller must also take appropriate locks to avoid
- * concurrent mmu notifier or sync_cpu_device_pagetables() to make progress.
- */
-long hmm_range_dma_unmap(struct hmm_range *range,
-			 struct device *device,
-			 dma_addr_t *daddrs,
-			 bool dirty)
-{
-	unsigned long i, npages;
-	long cpages = 0;
-
-	/* Sanity check. */
-	if (range->end <= range->start)
-		return -EINVAL;
-	if (!daddrs)
-		return -EINVAL;
-	if (!range->pfns)
-		return -EINVAL;
-
-	npages = (range->end - range->start) >> PAGE_SHIFT;
-	for (i = 0; i < npages; ++i) {
-		enum dma_data_direction dir = DMA_TO_DEVICE;
-		struct page *page;
-
-		page = hmm_device_entry_to_page(range, range->pfns[i]);
-		if (page == NULL)
-			continue;
-
-		/* If it is read and write than map bi-directional. */
-		if (range->pfns[i] & range->flags[HMM_PFN_WRITE]) {
-			dir = DMA_BIDIRECTIONAL;
-
-			/*
-			 * See comments in function description on why it is
-			 * safe here to call set_page_dirty()
-			 */
-			if (dirty)
-				set_page_dirty(page);
-		}
-
-		/* Unmap and clear pfns/dma address */
-		dma_unmap_page(device, daddrs[i], PAGE_SIZE, dir);
-		range->pfns[i] = range->values[HMM_PFN_NONE];
-		/* FIXME see comments in hmm_vma_dma_map() */
-		daddrs[i] = 0;
-		cpages++;
-	}
-
-	return cpages;
-}
-EXPORT_SYMBOL(hmm_range_dma_unmap);

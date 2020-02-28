@@ -78,6 +78,8 @@
 #define KVM_REQ_HV_STIMER		KVM_ARCH_REQ(22)
 #define KVM_REQ_LOAD_EOI_EXITMAP	KVM_ARCH_REQ(23)
 #define KVM_REQ_GET_VMCS12_PAGES	KVM_ARCH_REQ(24)
+#define KVM_REQ_APICV_UPDATE \
+	KVM_ARCH_REQ_FLAGS(25, KVM_REQUEST_WAIT | KVM_REQUEST_NO_WAKEUP)
 
 #define CR0_RESERVED_BITS                                               \
 	(~(unsigned long)(X86_CR0_PE | X86_CR0_MP | X86_CR0_EM | X86_CR0_TS \
@@ -690,10 +692,9 @@ struct kvm_vcpu_arch {
 	bool pvclock_set_guest_stopped_request;
 
 	struct {
+		u8 preempted;
 		u64 msr_val;
 		u64 last_steal;
-		struct gfn_to_hva_cache stime;
-		struct kvm_steal_time steal;
 		struct gfn_to_pfn_cache cache;
 	} st;
 
@@ -780,9 +781,19 @@ struct kvm_vcpu_arch {
 	u64 msr_kvm_poll_control;
 
 	/*
-	 * Indicate whether the access faults on its page table in guest
-	 * which is set when fix page fault and used to detect unhandeable
-	 * instruction.
+	 * Indicates the guest is trying to write a gfn that contains one or
+	 * more of the PTEs used to translate the write itself, i.e. the access
+	 * is changing its own translation in the guest page tables.  KVM exits
+	 * to userspace if emulation of the faulting instruction fails and this
+	 * flag is set, as KVM cannot make forward progress.
+	 *
+	 * If emulation fails for a write to guest page tables, KVM unprotects
+	 * (zaps) the shadow page for the target gfn and resumes the guest to
+	 * retry the non-emulatable instruction (on hardware).  Unprotecting the
+	 * gfn doesn't allow forward progress for a self-changing access because
+	 * doing so also zaps the translation for the gfn, i.e. retrying the
+	 * instruction will hit a !PRESENT fault, which results in a new shadow
+	 * page and sends KVM back to square one.
 	 */
 	bool write_fault_to_shadow_pgtable;
 
@@ -870,6 +881,13 @@ enum kvm_irqchip_mode {
 	KVM_IRQCHIP_SPLIT,        /* created with KVM_CAP_SPLIT_IRQCHIP */
 };
 
+#define APICV_INHIBIT_REASON_DISABLE    0
+#define APICV_INHIBIT_REASON_HYPERV     1
+#define APICV_INHIBIT_REASON_NESTED     2
+#define APICV_INHIBIT_REASON_IRQWIN     3
+#define APICV_INHIBIT_REASON_PIT_REINJ  4
+#define APICV_INHIBIT_REASON_X2APIC	5
+
 struct kvm_arch {
 	unsigned long n_used_mmu_pages;
 	unsigned long n_requested_mmu_pages;
@@ -901,6 +919,7 @@ struct kvm_arch {
 	struct kvm_apic_map *apic_map;
 
 	bool apic_access_page_done;
+	unsigned long apicv_inhibit_reasons;
 
 	gpa_t wall_clock;
 
@@ -1099,6 +1118,7 @@ struct kvm_x86_ops {
 	int (*handle_exit)(struct kvm_vcpu *vcpu,
 		enum exit_fastpath_completion exit_fastpath);
 	int (*skip_emulated_instruction)(struct kvm_vcpu *vcpu);
+	void (*update_emulated_instruction)(struct kvm_vcpu *vcpu);
 	void (*set_interrupt_shadow)(struct kvm_vcpu *vcpu, int mask);
 	u32 (*get_interrupt_shadow)(struct kvm_vcpu *vcpu);
 	void (*patch_hypercall)(struct kvm_vcpu *vcpu,
@@ -1114,6 +1134,8 @@ struct kvm_x86_ops {
 	void (*enable_nmi_window)(struct kvm_vcpu *vcpu);
 	void (*enable_irq_window)(struct kvm_vcpu *vcpu);
 	void (*update_cr8_intercept)(struct kvm_vcpu *vcpu, int tpr, int irr);
+	bool (*check_apicv_inhibit_reasons)(ulong bit);
+	void (*pre_update_apicv_exec_ctrl)(struct kvm *kvm, bool activate);
 	void (*refresh_apicv_exec_ctrl)(struct kvm_vcpu *vcpu);
 	void (*hwapic_irr_update)(struct kvm_vcpu *vcpu, int max_irr);
 	void (*hwapic_isr_update)(struct kvm_vcpu *vcpu, int isr);
@@ -1121,7 +1143,7 @@ struct kvm_x86_ops {
 	void (*load_eoi_exitmap)(struct kvm_vcpu *vcpu, u64 *eoi_exit_bitmap);
 	void (*set_virtual_apic_mode)(struct kvm_vcpu *vcpu);
 	void (*set_apic_access_page_addr)(struct kvm_vcpu *vcpu, hpa_t hpa);
-	void (*deliver_posted_interrupt)(struct kvm_vcpu *vcpu, int vector);
+	int (*deliver_posted_interrupt)(struct kvm_vcpu *vcpu, int vector);
 	int (*sync_pir_to_irr)(struct kvm_vcpu *vcpu);
 	int (*set_tss_addr)(struct kvm *kvm, unsigned int addr);
 	int (*set_identity_map_addr)(struct kvm *kvm, u64 ident_addr);
@@ -1475,7 +1497,11 @@ gpa_t kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva,
 gpa_t kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva,
 				struct x86_exception *exception);
 
-void kvm_vcpu_deactivate_apicv(struct kvm_vcpu *vcpu);
+bool kvm_apicv_activated(struct kvm *kvm);
+void kvm_apicv_init(struct kvm *kvm, bool enable);
+void kvm_vcpu_update_apicv(struct kvm_vcpu *vcpu);
+void kvm_request_apicv_update(struct kvm *kvm, bool activate,
+			      unsigned long bit);
 
 int kvm_emulate_hypercall(struct kvm_vcpu *vcpu);
 

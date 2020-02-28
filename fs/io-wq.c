@@ -299,8 +299,6 @@ next:
 		}
 		if (test_bit(IO_WQ_BIT_CANCEL, &wq->state))
 			work->flags |= IO_WQ_WORK_CANCEL;
-		if (worker->mm)
-			work->flags |= IO_WQ_WORK_HAS_MM;
 
 		old_work = work;
 		work->func(&work);

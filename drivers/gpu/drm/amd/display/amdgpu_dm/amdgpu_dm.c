@@ -6540,7 +6540,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 	uint32_t target_vblank, last_flip_vblank;
 	bool vrr_active = amdgpu_dm_vrr_active(acrtc_state);
 	bool pflip_present = false;
-	bool swizzle = true;
 	struct {
 		struct dc_surface_update surface_updates[MAX_SURFACES];
 		struct dc_plane_info plane_infos[MAX_SURFACES];
@@ -6585,77 +6584,6 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			continue;
 
 		dc_plane = dm_new_plane_state->dc_state;
-
-		plane_needs_flip = old_plane_state->fb && new_plane_state->fb;
-
-		pflip_present = pflip_present || plane_needs_flip;
-
-		if (plane_needs_flip) {
-			/*
-			 * TODO This might fail and hence better not used, wait
-			 * explicitly on fences instead
-			 * and in general should be called for
-			 * blocking commit to as per framework helpers
-			 */
-			abo = gem_to_amdgpu_bo(fb->obj[0]);
-			r = amdgpu_bo_reserve(abo, true);
-			if (unlikely(r != 0))
-				DRM_ERROR("failed to reserve buffer before flip\n");
-
-			/*
-			 * Wait for all fences on this FB. Do limited wait to avoid
-			 * deadlock during GPU reset when this fence will not signal
-			 * but we hold reservation lock for the BO.
-			 */
-			r = reservation_object_wait_timeout_rcu(abo->tbo.resv,
-								true, false,
-								msecs_to_jiffies(5000));
-			if (unlikely(r == 0))
-				DRM_ERROR("Waiting for fences timed out.");
-
-
-
-			amdgpu_bo_get_tiling_flags(abo, &tiling_flags);
-
-			amdgpu_bo_unreserve(abo);
-
-			bundle->flip_addrs[planes_count].address.grph.addr.low_part = lower_32_bits(afb->address);
-			bundle->flip_addrs[planes_count].address.grph.addr.high_part = upper_32_bits(afb->address);
-
-			dcc_address = get_dcc_address(afb->address, tiling_flags);
-			bundle->flip_addrs[planes_count].address.grph.meta_addr.low_part = lower_32_bits(dcc_address);
-			bundle->flip_addrs[planes_count].address.grph.meta_addr.high_part = upper_32_bits(dcc_address);
-
-			bundle->flip_addrs[planes_count].flip_immediate =
-					(crtc->state->pageflip_flags & DRM_MODE_PAGE_FLIP_ASYNC) != 0;
-
-			timestamp_ns = ktime_get_ns();
-			bundle->flip_addrs[planes_count].flip_timestamp_in_us = div_u64(timestamp_ns, 1000);
-			bundle->surface_updates[planes_count].flip_addr = &bundle->flip_addrs[planes_count];
-			bundle->surface_updates[planes_count].surface = dc_plane;
-
-			if (!bundle->surface_updates[planes_count].surface) {
-				DRM_ERROR("No surface for CRTC: id=%d\n",
-						acrtc_attach->crtc_id);
-				continue;
-			}
-
-			if (plane == pcrtc->primary)
-				update_freesync_state_on_stream(
-					dm,
-					acrtc_state,
-					acrtc_state->stream,
-					dc_plane,
-					bundle->flip_addrs[planes_count].flip_timestamp_in_us);
-
-			DRM_DEBUG_DRIVER("%s Flipping to hi: 0x%x, low: 0x%x\n",
-					 __func__,
-					 bundle->flip_addrs[planes_count].address.grph.addr.high_part,
-					 bundle->flip_addrs[planes_count].address.grph.addr.low_part);
-		}
-
-		if (dc_plane && !dc_plane->tiling_info.gfx9.swizzle)
-			swizzle = false;
 
 		bundle->surface_updates[planes_count].surface = dc_plane;
 		if (new_pcrtc_state->color_mgmt_changed) {
@@ -6865,8 +6793,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			amdgpu_dm_link_setup_psr(acrtc_state->stream);
 		else if ((acrtc_state->update_type == UPDATE_TYPE_FAST) &&
 						acrtc_state->stream->link->psr_feature_enabled &&
-						!acrtc_state->stream->link->psr_allow_active &&
-						swizzle) {
+						!acrtc_state->stream->link->psr_allow_active) {
 			amdgpu_dm_psr_enable(acrtc_state->stream);
 		}
 

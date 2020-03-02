@@ -129,28 +129,70 @@ enum dspi_trans_mode {
 struct fsl_dspi_devtype_data {
 	enum dspi_trans_mode	trans_mode;
 	u8			max_clock_factor;
+	bool			ptp_sts_supported;
 	bool			xspi_mode;
 };
 
-static const struct fsl_dspi_devtype_data vf610_data = {
-	.trans_mode		= DSPI_DMA_MODE,
-	.max_clock_factor	= 2,
+enum {
+	LS1021A,
+	LS1012A,
+	LS1043A,
+	LS1046A,
+	LS2080A,
+	LS2085A,
+	LX2160A,
+	MCF5441X,
+	VF610,
 };
 
-static const struct fsl_dspi_devtype_data ls1021a_v1_data = {
-	.trans_mode		= DSPI_TCFQ_MODE,
-	.max_clock_factor	= 8,
-	.xspi_mode		= true,
-};
-
-static const struct fsl_dspi_devtype_data ls2085a_data = {
-	.trans_mode		= DSPI_TCFQ_MODE,
-	.max_clock_factor	= 8,
-};
-
-static const struct fsl_dspi_devtype_data coldfire_data = {
-	.trans_mode		= DSPI_EOQ_MODE,
-	.max_clock_factor	= 8,
+static const struct fsl_dspi_devtype_data devtype_data[] = {
+	[VF610] = {
+		.trans_mode		= DSPI_DMA_MODE,
+		.max_clock_factor	= 2,
+	},
+	[LS1021A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+		.xspi_mode		= true,
+	},
+	[LS1012A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+		.xspi_mode		= true,
+	},
+	[LS1043A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+		.xspi_mode		= true,
+	},
+	[LS1046A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+		.xspi_mode		= true,
+	},
+	[LS2080A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+	},
+	[LS2085A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+	},
+	[LX2160A] = {
+		.trans_mode		= DSPI_TCFQ_MODE,
+		.max_clock_factor	= 8,
+		.ptp_sts_supported	= true,
+	},
+	[MCF5441X] = {
+		.trans_mode		= DSPI_EOQ_MODE,
+		.max_clock_factor	= 8,
+	},
 };
 
 struct fsl_dspi_dma {
@@ -182,6 +224,7 @@ struct fsl_dspi {
 	struct spi_transfer			*cur_transfer;
 	struct spi_message			*cur_msg;
 	struct chip_data			*cur_chip;
+	size_t					progress;
 	size_t					len;
 	const void				*tx;
 	void					*rx;
@@ -392,17 +435,17 @@ static int dspi_request_dma(struct fsl_dspi *dspi, phys_addr_t phy_addr)
 	if (!dma)
 		return -ENOMEM;
 
-	dma->chan_rx = dma_request_slave_channel(dev, "rx");
-	if (!dma->chan_rx) {
+	dma->chan_rx = dma_request_chan(dev, "rx");
+	if (IS_ERR(dma->chan_rx)) {
 		dev_err(dev, "rx dma channel not available\n");
-		ret = -ENODEV;
+		ret = PTR_ERR(dma->chan_rx);
 		return ret;
 	}
 
-	dma->chan_tx = dma_request_slave_channel(dev, "tx");
-	if (!dma->chan_tx) {
+	dma->chan_tx = dma_request_chan(dev, "tx");
+	if (IS_ERR(dma->chan_tx)) {
 		dev_err(dev, "tx dma channel not available\n");
-		ret = -ENODEV;
+		ret = PTR_ERR(dma->chan_tx);
 		goto err_tx_channel;
 	}
 
@@ -583,21 +626,14 @@ static void dspi_tcfq_write(struct fsl_dspi *dspi)
 	dspi->tx_cmd |= SPI_PUSHR_CMD_CTCNT;
 
 	if (dspi->devtype_data->xspi_mode && dspi->bits_per_word > 16) {
-		/* Write two TX FIFO entries first, and then the corresponding
-		 * CMD FIFO entry.
+		/* Write the CMD FIFO entry first, and then the two
+		 * corresponding TX FIFO entries.
 		 */
 		u32 data = dspi_pop_tx(dspi);
 
-		if (dspi->cur_chip->ctar_val & SPI_CTAR_LSBFE) {
-			/* LSB */
-			tx_fifo_write(dspi, data & 0xFFFF);
-			tx_fifo_write(dspi, data >> 16);
-		} else {
-			/* MSB */
-			tx_fifo_write(dspi, data >> 16);
-			tx_fifo_write(dspi, data & 0xFFFF);
-		}
 		cmd_fifo_write(dspi);
+		tx_fifo_write(dspi, data & 0xFFFF);
+		tx_fifo_write(dspi, data >> 16);
 	} else {
 		/* Write one entry to both TX FIFO and CMD FIFO
 		 * simultaneously.
@@ -654,6 +690,9 @@ static int dspi_rxtx(struct fsl_dspi *dspi)
 	u16 spi_tcnt;
 	u32 spi_tcr;
 
+	spi_take_timestamp_post(dspi->ctlr, dspi->cur_transfer,
+				dspi->progress, !dspi->irq);
+
 	/* Get transfer counter (in number of SPI transfers). It was
 	 * reset to 0 when transfer(s) were started.
 	 */
@@ -661,6 +700,7 @@ static int dspi_rxtx(struct fsl_dspi *dspi)
 	spi_tcnt = SPI_TCR_GET_TCNT(spi_tcr);
 	/* Update total number of bytes that were transferred */
 	msg->actual_length += spi_tcnt * dspi->bytes_per_word;
+	dspi->progress += spi_tcnt;
 
 	trans_mode = dspi->devtype_data->trans_mode;
 	if (trans_mode == DSPI_EOQ_MODE)
@@ -671,6 +711,9 @@ static int dspi_rxtx(struct fsl_dspi *dspi)
 	if (!dspi->len)
 		/* Success! */
 		return 0;
+
+	spi_take_timestamp_pre(dspi->ctlr, dspi->cur_transfer,
+			       dspi->progress, !dspi->irq);
 
 	if (trans_mode == DSPI_EOQ_MODE)
 		dspi_eoq_write(dspi);
@@ -759,6 +802,7 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 		dspi->rx = transfer->rx_buf;
 		dspi->rx_end = dspi->rx + transfer->len;
 		dspi->len = transfer->len;
+		dspi->progress = 0;
 		/* Validated transfer specific frame size (defaults applied) */
 		dspi->bits_per_word = transfer->bits_per_word;
 		if (transfer->bits_per_word <= 8)
@@ -778,6 +822,9 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 			regmap_write(dspi->regmap, SPI_CTARE(0),
 				     SPI_FRAME_EBITS(transfer->bits_per_word) |
 				     SPI_CTARE_DTCP(1));
+
+		spi_take_timestamp_pre(dspi->ctlr, dspi->cur_transfer,
+				       dspi->progress, !dspi->irq);
 
 		trans_mode = dspi->devtype_data->trans_mode;
 		switch (trans_mode) {
@@ -815,8 +862,7 @@ static int dspi_transfer_one_message(struct spi_controller *ctlr,
 			dev_err(&dspi->pdev->dev,
 				"Waiting for transfer to complete failed!\n");
 
-		if (transfer->delay_usecs)
-			udelay(transfer->delay_usecs);
+		spi_transfer_delay_exec(transfer);
 	}
 
 out:
@@ -902,9 +948,31 @@ static void dspi_cleanup(struct spi_device *spi)
 }
 
 static const struct of_device_id fsl_dspi_dt_ids[] = {
-	{ .compatible = "fsl,vf610-dspi", .data = &vf610_data, },
-	{ .compatible = "fsl,ls1021a-v1.0-dspi", .data = &ls1021a_v1_data, },
-	{ .compatible = "fsl,ls2085a-dspi", .data = &ls2085a_data, },
+	{
+		.compatible = "fsl,vf610-dspi",
+		.data = &devtype_data[VF610],
+	}, {
+		.compatible = "fsl,ls1021a-v1.0-dspi",
+		.data = &devtype_data[LS1021A],
+	}, {
+		.compatible = "fsl,ls1012a-dspi",
+		.data = &devtype_data[LS1012A],
+	}, {
+		.compatible = "fsl,ls1043a-dspi",
+		.data = &devtype_data[LS1043A],
+	}, {
+		.compatible = "fsl,ls1046a-dspi",
+		.data = &devtype_data[LS1046A],
+	}, {
+		.compatible = "fsl,ls2080a-dspi",
+		.data = &devtype_data[LS2080A],
+	}, {
+		.compatible = "fsl,ls2085a-dspi",
+		.data = &devtype_data[LS2085A],
+	}, {
+		.compatible = "fsl,lx2160a-dspi",
+		.data = &devtype_data[LX2160A],
+	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, fsl_dspi_dt_ids);
@@ -1006,6 +1074,25 @@ static void dspi_init(struct fsl_dspi *dspi)
 			     SPI_CTARE_FMSZE(0) | SPI_CTARE_DTCP(1));
 }
 
+static int dspi_slave_abort(struct spi_master *master)
+{
+	struct fsl_dspi *dspi = spi_master_get_devdata(master);
+
+	/*
+	 * Terminate all pending DMA transactions for the SPI working
+	 * in SLAVE mode.
+	 */
+	dmaengine_terminate_sync(dspi->dma->chan_rx);
+	dmaengine_terminate_sync(dspi->dma->chan_tx);
+
+	/* Clear the internal DSPI RX and TX FIFO buffers */
+	regmap_update_bits(dspi->regmap, SPI_MCR,
+			   SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF,
+			   SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF);
+
+	return 0;
+}
+
 static int dspi_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1030,6 +1117,7 @@ static int dspi_probe(struct platform_device *pdev)
 	ctlr->dev.of_node = pdev->dev.of_node;
 
 	ctlr->cleanup = dspi_cleanup;
+	ctlr->slave_abort = dspi_slave_abort;
 	ctlr->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
 
 	pdata = dev_get_platdata(&pdev->dev);
@@ -1037,7 +1125,8 @@ static int dspi_probe(struct platform_device *pdev)
 		ctlr->num_chipselect = pdata->cs_num;
 		ctlr->bus_num = pdata->bus_num;
 
-		dspi->devtype_data = &coldfire_data;
+		/* Only Coldfire uses platform data */
+		dspi->devtype_data = &devtype_data[MCF5441X];
 	} else {
 
 		ret = of_property_read_u32(np, "spi-num-chipselects", &cs_num);
@@ -1135,6 +1224,7 @@ static int dspi_probe(struct platform_device *pdev)
 	init_waitqueue_head(&dspi->waitq);
 
 poll_mode:
+
 	if (dspi->devtype_data->trans_mode == DSPI_DMA_MODE) {
 		ret = dspi_request_dma(dspi, res->start);
 		if (ret < 0) {
@@ -1145,6 +1235,8 @@ poll_mode:
 
 	ctlr->max_speed_hz =
 		clk_get_rate(dspi->clk) / dspi->devtype_data->max_clock_factor;
+
+	ctlr->ptp_sts_supported = dspi->devtype_data->ptp_sts_supported;
 
 	platform_set_drvdata(pdev, ctlr);
 

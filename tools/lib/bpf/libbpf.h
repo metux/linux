@@ -77,7 +77,11 @@ struct bpf_object_open_opts {
 	const char *object_name;
 	/* parse map definitions non-strictly, allowing extra attributes/data */
 	bool relaxed_maps;
-	/* process CO-RE relocations non-strictly, allowing them to fail */
+	/* DEPRECATED: handle CO-RE relocations non-strictly, allowing failures.
+	 * Value is ignored. Relocations always are processed non-strictly.
+	 * Non-relocatable instructions are replaced with invalid ones to
+	 * prevent accidental errors.
+	 * */
 	bool relaxed_core_relocs;
 	/* maps that set the 'pinning' attribute in their definition will have
 	 * their pin_path attribute set to a file in this directory, and be
@@ -85,12 +89,12 @@ struct bpf_object_open_opts {
 	 */
 	const char *pin_root_path;
 	__u32 attach_prog_fd;
-	/* kernel config file path override (for CONFIG_ externs); can point
-	 * to either uncompressed text file or .gz file
+	/* Additional kernel config content that augments and overrides
+	 * system Kconfig for CONFIG_xxx externs.
 	 */
-	const char *kconfig_path;
+	const char *kconfig;
 };
-#define bpf_object_open_opts__last_field kconfig_path
+#define bpf_object_open_opts__last_field kconfig
 
 LIBBPF_API struct bpf_object *bpf_object__open(const char *path);
 LIBBPF_API struct bpf_object *
@@ -215,6 +219,12 @@ LIBBPF_API void bpf_program__unload(struct bpf_program *prog);
 
 struct bpf_link;
 
+LIBBPF_API struct bpf_link *bpf_link__open(const char *path);
+LIBBPF_API int bpf_link__fd(const struct bpf_link *link);
+LIBBPF_API const char *bpf_link__pin_path(const struct bpf_link *link);
+LIBBPF_API int bpf_link__pin(struct bpf_link *link, const char *path);
+LIBBPF_API int bpf_link__unpin(struct bpf_link *link);
+LIBBPF_API void bpf_link__disconnect(struct bpf_link *link);
 LIBBPF_API int bpf_link__destroy(struct bpf_link *link);
 
 LIBBPF_API struct bpf_link *
@@ -238,6 +248,8 @@ bpf_program__attach_raw_tracepoint(struct bpf_program *prog,
 
 LIBBPF_API struct bpf_link *
 bpf_program__attach_trace(struct bpf_program *prog);
+struct bpf_map;
+LIBBPF_API struct bpf_link *bpf_map__attach_struct_ops(struct bpf_map *map);
 struct bpf_insn;
 
 /*
@@ -314,6 +326,8 @@ LIBBPF_API int bpf_program__set_sched_act(struct bpf_program *prog);
 LIBBPF_API int bpf_program__set_xdp(struct bpf_program *prog);
 LIBBPF_API int bpf_program__set_perf_event(struct bpf_program *prog);
 LIBBPF_API int bpf_program__set_tracing(struct bpf_program *prog);
+LIBBPF_API int bpf_program__set_struct_ops(struct bpf_program *prog);
+LIBBPF_API int bpf_program__set_extension(struct bpf_program *prog);
 
 LIBBPF_API enum bpf_prog_type bpf_program__get_type(struct bpf_program *prog);
 LIBBPF_API void bpf_program__set_type(struct bpf_program *prog,
@@ -338,6 +352,8 @@ LIBBPF_API bool bpf_program__is_sched_act(const struct bpf_program *prog);
 LIBBPF_API bool bpf_program__is_xdp(const struct bpf_program *prog);
 LIBBPF_API bool bpf_program__is_perf_event(const struct bpf_program *prog);
 LIBBPF_API bool bpf_program__is_tracing(const struct bpf_program *prog);
+LIBBPF_API bool bpf_program__is_struct_ops(const struct bpf_program *prog);
+LIBBPF_API bool bpf_program__is_extension(const struct bpf_program *prog);
 
 /*
  * No need for __attribute__((packed)), all members of 'bpf_map_def'
@@ -357,7 +373,6 @@ struct bpf_map_def {
  * The 'struct bpf_map' in include/linux/bpf.h is internal to the kernel,
  * so no need to worry about a name clash.
  */
-struct bpf_map;
 LIBBPF_API struct bpf_map *
 bpf_object__find_map_by_name(const struct bpf_object *obj, const char *name);
 
@@ -524,6 +539,7 @@ LIBBPF_API bool bpf_probe_prog_type(enum bpf_prog_type prog_type,
 LIBBPF_API bool bpf_probe_map_type(enum bpf_map_type map_type, __u32 ifindex);
 LIBBPF_API bool bpf_probe_helper(enum bpf_func_id id,
 				 enum bpf_prog_type prog_type, __u32 ifindex);
+LIBBPF_API bool bpf_probe_large_insn_limit(__u32 ifindex);
 
 /*
  * Get bpf_prog_info in continuous memory
@@ -603,41 +619,6 @@ bpf_program__bpil_offs_to_addr(struct bpf_prog_info_linear *info_linear);
  *
  */
 LIBBPF_API int libbpf_num_possible_cpus(void);
-
-struct bpf_embed_data {
-	void *data;
-	size_t size;
-};
-
-#define BPF_EMBED_OBJ_DECLARE(NAME)					\
-extern struct bpf_embed_data NAME##_embed;				\
-extern char NAME##_data[];						\
-extern char NAME##_data_end[];
-
-#define __BPF_EMBED_OBJ(NAME, PATH, SZ, ASM_TYPE)			\
-asm (									\
-"	.pushsection \".rodata\", \"a\", @progbits		\n"	\
-"	.global "#NAME"_data					\n"	\
-#NAME"_data:							\n"	\
-"	.incbin \"" PATH "\"					\n"	\
-"	.global "#NAME"_data_end				\n"	\
-#NAME"_data_end:						\n"	\
-"	.global "#NAME"_embed					\n"	\
-"	.type "#NAME"_embed, @object				\n"	\
-"	.size "#NAME"_size, "#SZ"				\n"	\
-"	.align 8,						\n"	\
-#NAME"_embed:							\n"	\
-"	"ASM_TYPE" "#NAME"_data					\n"	\
-"	"ASM_TYPE" "#NAME"_data_end - "#NAME"_data 		\n"	\
-"	.popsection						\n"	\
-);									\
-BPF_EMBED_OBJ_DECLARE(NAME)
-
-#if __SIZEOF_POINTER__ == 4
-#define BPF_EMBED_OBJ(NAME, PATH) __BPF_EMBED_OBJ(NAME, PATH, 8, ".long")
-#else
-#define BPF_EMBED_OBJ(NAME, PATH) __BPF_EMBED_OBJ(NAME, PATH, 16, ".quad")
-#endif
 
 struct bpf_map_skeleton {
 	const char *name;

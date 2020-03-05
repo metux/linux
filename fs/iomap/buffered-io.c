@@ -471,7 +471,8 @@ EXPORT_SYMBOL_GPL(iomap_is_partially_uptodate);
 int
 iomap_releasepage(struct page *page, gfp_t gfp_mask)
 {
-	trace_iomap_releasepage(page->mapping->host, page, 0, 0);
+	trace_iomap_releasepage(page->mapping->host, page_offset(page),
+			PAGE_SIZE);
 
 	/*
 	 * mm accommodates an old ext3 case where clean pages might not have had
@@ -488,7 +489,7 @@ EXPORT_SYMBOL_GPL(iomap_releasepage);
 void
 iomap_invalidatepage(struct page *page, unsigned int offset, unsigned int len)
 {
-	trace_iomap_invalidatepage(page->mapping->host, page, offset, len);
+	trace_iomap_invalidatepage(page->mapping->host, offset, len);
 
 	/*
 	 * If we are invalidating the entire page, clear the dirty state from it
@@ -1503,7 +1504,7 @@ iomap_do_writepage(struct page *page, struct writeback_control *wbc, void *data)
 	u64 end_offset;
 	loff_t offset;
 
-	trace_iomap_writepage(inode, page, 0, 0);
+	trace_iomap_writepage(inode, page_offset(page), PAGE_SIZE);
 
 	/*
 	 * Refuse to write the page out if we are called from reclaim context.

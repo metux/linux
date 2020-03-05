@@ -3074,8 +3074,6 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
 				dput(dentry);
 				dentry = dget(file->f_path.dentry);
 			}
-			if (file->f_mode & FMODE_CREATED)
-				fsnotify_create(dir, dentry);
 		} else if (WARN_ON(file->f_path.dentry == DENTRY_NOT_SET)) {
 			error = -EIO;
 		} else {
@@ -3083,8 +3081,6 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
 				dput(dentry);
 				dentry = file->f_path.dentry;
 			}
-			if (file->f_mode & FMODE_CREATED)
-				fsnotify_create(dir, dentry);
 			if (unlikely(d_is_negative(dentry)))
 				error = -ENOENT;
 		}
@@ -3220,7 +3216,6 @@ no_open:
 						open_flag & O_EXCL);
 		if (error)
 			goto out_dput;
-		fsnotify_create(dir_inode, dentry);
 	}
 	if (unlikely(create_error) && !dentry->d_inode) {
 		error = create_error;
@@ -3299,6 +3294,8 @@ static const char *open_last_lookups(struct nameidata *nd,
 	else
 		inode_lock_shared(dir->d_inode);
 	dentry = lookup_open(nd, file, op, got_write);
+	if (!IS_ERR(dentry) && (file->f_mode & FMODE_CREATED))
+		fsnotify_create(dir->d_inode, dentry);
 	if (open_flag & O_CREAT)
 		inode_unlock(dir->d_inode);
 	else

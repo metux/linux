@@ -13,6 +13,8 @@
 struct cpumask;
 struct sched_domain;
 
+bool arch_freq_counters_available(struct cpumask *cpus);
+
 struct cpu_topology {
 	int thread_id;
 	int core_id;

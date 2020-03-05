@@ -460,7 +460,7 @@ __u32 omap_dm_timer_modify_idlect_mask(__u32 inputmask)
 
 int omap_dm_timer_trigger(struct omap_dm_timer *timer)
 {
-	if (unlikely(!timer || pm_runtime_suspended(&timer->pdev->dev))) {
+	if (unlikely(!timer || !atomic_read(&timer->enabled))) {
 		pr_err("%s: timer not available or enabled.\n", __func__);
 		return -EINVAL;
 	}
@@ -658,7 +658,7 @@ static unsigned int omap_dm_timer_read_status(struct omap_dm_timer *timer)
 {
 	unsigned int l;
 
-	if (unlikely(!timer || pm_runtime_suspended(&timer->pdev->dev))) {
+	if (unlikely(!timer || !atomic_read(&timer->enabled))) {
 		pr_err("%s: timer not available or enabled.\n", __func__);
 		return 0;
 	}
@@ -670,7 +670,7 @@ static unsigned int omap_dm_timer_read_status(struct omap_dm_timer *timer)
 
 static int omap_dm_timer_write_status(struct omap_dm_timer *timer, unsigned int value)
 {
-	if (unlikely(!timer || pm_runtime_suspended(&timer->pdev->dev)))
+	if (unlikely(!timer || !atomic_read(&timer->enabled)))
 		return -EINVAL;
 
 	__omap_dm_timer_write_status(timer, value);
@@ -680,7 +680,7 @@ static int omap_dm_timer_write_status(struct omap_dm_timer *timer, unsigned int 
 
 static unsigned int omap_dm_timer_read_counter(struct omap_dm_timer *timer)
 {
-	if (unlikely(!timer || pm_runtime_suspended(&timer->pdev->dev))) {
+	if (unlikely(!timer || !atomic_read(&timer->enabled))) {
 		pr_err("%s: timer not iavailable or enabled.\n", __func__);
 		return 0;
 	}
@@ -690,7 +690,7 @@ static unsigned int omap_dm_timer_read_counter(struct omap_dm_timer *timer)
 
 static int omap_dm_timer_write_counter(struct omap_dm_timer *timer, unsigned int value)
 {
-	if (unlikely(!timer || pm_runtime_suspended(&timer->pdev->dev))) {
+	if (unlikely(!timer || !atomic_read(&timer->enabled))) {
 		pr_err("%s: timer not available or enabled.\n", __func__);
 		return -EINVAL;
 	}
@@ -717,6 +717,29 @@ int omap_dm_timers_active(void)
 	}
 	return 0;
 }
+
+static int __maybe_unused omap_dm_timer_runtime_suspend(struct device *dev)
+{
+	struct omap_dm_timer *timer = dev_get_drvdata(dev);
+
+	atomic_set(&timer->enabled, 0);
+
+	return 0;
+}
+
+static int __maybe_unused omap_dm_timer_runtime_resume(struct device *dev)
+{
+	struct omap_dm_timer *timer = dev_get_drvdata(dev);
+
+	atomic_set(&timer->enabled, 1);
+
+	return 0;
+}
+
+static const struct dev_pm_ops omap_dm_timer_pm_ops = {
+	SET_RUNTIME_PM_OPS(omap_dm_timer_runtime_suspend,
+			   omap_dm_timer_runtime_resume, NULL)
+};
 
 static const struct of_device_id omap_timer_match[];
 
@@ -758,6 +781,8 @@ static int omap_dm_timer_probe(struct platform_device *pdev)
 	timer->io_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(timer->io_base))
 		return PTR_ERR(timer->io_base);
+
+	platform_set_drvdata(pdev, timer);
 
 	if (dev->of_node) {
 		if (of_find_property(dev->of_node, "ti,timer-alwon", NULL))
@@ -904,6 +929,7 @@ static struct platform_driver omap_dm_timer_driver = {
 	.driver = {
 		.name   = "omap_timer",
 		.of_match_table = of_match_ptr(omap_timer_match),
+		.pm = &omap_dm_timer_pm_ops,
 	},
 };
 

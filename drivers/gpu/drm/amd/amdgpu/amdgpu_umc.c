@@ -30,7 +30,6 @@ int amdgpu_umc_ras_late_init(struct amdgpu_device *adev, void *ras_ih_info)
 	struct ras_ih_if *ih_info = (struct ras_ih_if *)ras_ih_info;
 	struct ras_fs_if fs_info = {
 		.sysfs_name = "umc_err_count",
-		.debugfs_name = "umc_err_inject",
 	};
 
 	if (!ih_info)

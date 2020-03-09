@@ -30,6 +30,13 @@ struct intel_gt;
 #define CACHELINE_BYTES 64
 #define CACHELINE_DWORDS (CACHELINE_BYTES / sizeof(u32))
 
+#define ENGINE_TRACE(e, fmt, ...) do {					\
+	const struct intel_engine_cs *e__ __maybe_unused = (e);		\
+	GEM_TRACE("%s %s: " fmt,					\
+		  dev_name(e__->i915->drm.dev), e__->name,		\
+		  ##__VA_ARGS__);					\
+} while (0)
+
 /*
  * The register defines to be used with the following macros need to accept a
  * base param, e.g:
@@ -589,9 +596,20 @@ execlists_num_ports(const struct intel_engine_execlists * const execlists)
 static inline struct i915_request *
 execlists_active(const struct intel_engine_execlists *execlists)
 {
-	GEM_BUG_ON(execlists->active - execlists->inflight >
-		   execlists_num_ports(execlists));
-	return READ_ONCE(*execlists->active);
+	struct i915_request * const *cur, * const *old, *active;
+
+	cur = READ_ONCE(execlists->active);
+	smp_rmb(); /* pairs with overwrite protection in process_csb() */
+	do {
+		old = cur;
+
+		active = READ_ONCE(*cur);
+		cur = READ_ONCE(execlists->active);
+
+		smp_rmb(); /* and complete the seqlock retry */
+	} while (unlikely(cur != old));
+
+	return active;
 }
 
 static inline void
@@ -668,9 +686,10 @@ void intel_engine_stop(struct intel_engine_cs *engine);
 void intel_engine_cleanup(struct intel_engine_cs *engine);
 
 int intel_engines_init_mmio(struct intel_gt *gt);
-int intel_engines_setup(struct intel_gt *gt);
 int intel_engines_init(struct intel_gt *gt);
-void intel_engines_cleanup(struct intel_gt *gt);
+
+void intel_engines_release(struct intel_gt *gt);
+void intel_engines_free(struct intel_gt *gt);
 
 int intel_engine_init_common(struct intel_engine_cs *engine);
 void intel_engine_cleanup_common(struct intel_engine_cs *engine);
@@ -678,7 +697,6 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine);
 int intel_engine_resume(struct intel_engine_cs *engine);
 
 int intel_ring_submission_setup(struct intel_engine_cs *engine);
-int intel_ring_submission_init(struct intel_engine_cs *engine);
 
 int intel_engine_stop_cs(struct intel_engine_cs *engine);
 void intel_engine_cancel_stop_cs(struct intel_engine_cs *engine);
@@ -699,12 +717,10 @@ void intel_engine_fini_breadcrumbs(struct intel_engine_cs *engine);
 void intel_engine_disarm_breadcrumbs(struct intel_engine_cs *engine);
 
 static inline void
-intel_engine_queue_breadcrumbs(struct intel_engine_cs *engine)
+intel_engine_signal_breadcrumbs(struct intel_engine_cs *engine)
 {
 	irq_work_queue(&engine->breadcrumbs.irq_work);
 }
-
-void intel_engine_breadcrumbs_irq(struct intel_engine_cs *engine);
 
 void intel_engine_reset_breadcrumbs(struct intel_engine_cs *engine);
 void intel_engine_fini_breadcrumbs(struct intel_engine_cs *engine);
@@ -763,8 +779,8 @@ gen8_emit_ggtt_write(u32 *cs, u32 value, u32 gtt_offset, u32 flags)
 static inline void __intel_engine_reset(struct intel_engine_cs *engine,
 					bool stalled)
 {
-	if (engine->reset.reset)
-		engine->reset.reset(engine, stalled);
+	if (engine->reset.rewind)
+		engine->reset.rewind(engine, stalled);
 	engine->serial++; /* contexts lost */
 }
 
@@ -781,61 +797,6 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 		       struct drm_printer *m,
 		       const char *header, ...);
 
-static inline void intel_engine_context_in(struct intel_engine_cs *engine)
-{
-	unsigned long flags;
-
-	if (READ_ONCE(engine->stats.enabled) == 0)
-		return;
-
-	write_seqlock_irqsave(&engine->stats.lock, flags);
-
-	if (engine->stats.enabled > 0) {
-		if (engine->stats.active++ == 0)
-			engine->stats.start = ktime_get();
-		GEM_BUG_ON(engine->stats.active == 0);
-	}
-
-	write_sequnlock_irqrestore(&engine->stats.lock, flags);
-}
-
-static inline void intel_engine_context_out(struct intel_engine_cs *engine)
-{
-	unsigned long flags;
-
-	if (READ_ONCE(engine->stats.enabled) == 0)
-		return;
-
-	write_seqlock_irqsave(&engine->stats.lock, flags);
-
-	if (engine->stats.enabled > 0) {
-		ktime_t last;
-
-		if (engine->stats.active && --engine->stats.active == 0) {
-			/*
-			 * Decrement the active context count and in case GPU
-			 * is now idle add up to the running total.
-			 */
-			last = ktime_sub(ktime_get(), engine->stats.start);
-
-			engine->stats.total = ktime_add(engine->stats.total,
-							last);
-		} else if (engine->stats.active == 0) {
-			/*
-			 * After turning on engine stats, context out might be
-			 * the first event in which case we account from the
-			 * time stats gathering was turned on.
-			 */
-			last = ktime_sub(ktime_get(), engine->stats.enabled_at);
-
-			engine->stats.total = ktime_add(engine->stats.total,
-							last);
-		}
-	}
-
-	write_sequnlock_irqrestore(&engine->stats.lock, flags);
-}
-
 int intel_enable_engine_stats(struct intel_engine_cs *engine);
 void intel_disable_engine_stats(struct intel_engine_cs *engine);
 
@@ -844,7 +805,7 @@ ktime_t intel_engine_get_busy_time(struct intel_engine_cs *engine);
 struct i915_request *
 intel_engine_find_active_request(struct intel_engine_cs *engine);
 
-u32 intel_engine_context_size(struct drm_i915_private *i915, u8 class);
+u32 intel_engine_context_size(struct intel_gt *gt, u8 class);
 
 void intel_engine_init_active(struct intel_engine_cs *engine,
 			      unsigned int subclass);
@@ -855,10 +816,19 @@ void intel_engine_init_active(struct intel_engine_cs *engine,
 static inline bool
 intel_engine_has_preempt_reset(const struct intel_engine_cs *engine)
 {
-	if (!CONFIG_DRM_I915_PREEMPT_TIMEOUT)
-		return 0;
+	if (!IS_ACTIVE(CONFIG_DRM_I915_PREEMPT_TIMEOUT))
+		return false;
 
 	return intel_engine_has_preemption(engine);
+}
+
+static inline bool
+intel_engine_has_timeslices(const struct intel_engine_cs *engine)
+{
+	if (!IS_ACTIVE(CONFIG_DRM_I915_TIMESLICE_DURATION))
+		return false;
+
+	return intel_engine_has_semaphores(engine);
 }
 
 #endif /* _INTEL_RINGBUFFER_H_ */

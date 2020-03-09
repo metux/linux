@@ -46,7 +46,7 @@
  * @enabled_irqs:   Bitmap of currently enabled irqs.
  * @dual_edge_irqs: Bitmap of irqs that need sw emulated dual edge
  *                  detection.
- * @skip_wake_irqs: Skip IRQs that are handled by wakeup interrupt contrroller
+ * @skip_wake_irqs: Skip IRQs that are handled by wakeup interrupt controller
  * @soc;            Reference to soc_data of platform specific data.
  * @regs:           Base addresses for the TLMM tiles.
  */
@@ -819,10 +819,8 @@ static void msm_gpio_irq_disable(struct irq_data *d)
 	if (d->parent_data)
 		irq_chip_disable_parent(d);
 
-	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
-		return;
-
-	msm_gpio_irq_mask(d);
+	if (!test_bit(d->hwirq, pctrl->skip_wake_irqs))
+		msm_gpio_irq_mask(d);
 }
 
 static void msm_gpio_irq_unmask(struct irq_data *d)
@@ -963,15 +961,15 @@ static int msm_gpio_irq_set_wake(struct irq_data *d, unsigned int on)
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 
-	if (d->parent_data)
-		irq_chip_set_wake_parent(d, on);
-
 	/*
 	 * While they may not wake up when the TLMM is powered off,
 	 * some GPIOs would like to wakeup the system from suspend
 	 * when TLMM is powered on. To allow that, enable the GPIO
 	 * summary line to be wakeup capable at GIC.
 	 */
+	if (d->parent_data)
+		irq_chip_set_wake_parent(d, on);
+
 	irq_set_irq_wake(pctrl->irq, on);
 
 	return 0;
@@ -1082,9 +1080,10 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 {
 	struct gpio_chip *chip;
 	struct gpio_irq_chip *girq;
-	int ret;
-	unsigned ngpio = pctrl->soc->ngpios;
-	struct device_node *dn;
+	int i, ret;
+	unsigned gpio, ngpio = pctrl->soc->ngpios;
+	struct device_node *np;
+	bool skip;
 
 	if (WARN_ON(ngpio > MAX_NR_GPIO))
 		return -EINVAL;
@@ -1105,25 +1104,24 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	pctrl->irq_chip.irq_mask = msm_gpio_irq_mask;
 	pctrl->irq_chip.irq_unmask = msm_gpio_irq_unmask;
 	pctrl->irq_chip.irq_ack = msm_gpio_irq_ack;
-	pctrl->irq_chip.irq_eoi = irq_chip_eoi_parent;
 	pctrl->irq_chip.irq_set_type = msm_gpio_irq_set_type;
 	pctrl->irq_chip.irq_set_wake = msm_gpio_irq_set_wake;
 	pctrl->irq_chip.irq_request_resources = msm_gpio_irq_reqres;
 	pctrl->irq_chip.irq_release_resources = msm_gpio_irq_relres;
 
-	dn = of_parse_phandle(pctrl->dev->of_node, "wakeup-parent", 0);
-	if (dn) {
-		int i;
-		bool skip;
-		unsigned int gpio;
-
-		chip->irq.parent_domain = irq_find_matching_host(dn,
+	np = of_parse_phandle(pctrl->dev->of_node, "wakeup-parent", 0);
+	if (np) {
+		chip->irq.parent_domain = irq_find_matching_host(np,
 						 DOMAIN_BUS_WAKEUP);
-		of_node_put(dn);
+		of_node_put(np);
 		if (!chip->irq.parent_domain)
 			return -EPROBE_DEFER;
 		chip->irq.child_to_parent_hwirq = msm_gpio_wakeirq;
-
+		pctrl->irq_chip.irq_eoi = irq_chip_eoi_parent;
+		/*
+		 * Let's skip handling the GPIOs, if the parent irqchip
+		 * is handling the direct connect IRQ of the GPIO.
+		 */
 		skip = irq_domain_qcom_handle_wakeup(chip->irq.parent_domain);
 		for (i = 0; skip && i < pctrl->soc->nwakeirq_map; i++) {
 			gpio = pctrl->soc->wakeirq_map[i].gpio;

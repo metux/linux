@@ -452,9 +452,30 @@ struct iwl_cfg {
 	const struct iwl_fw_mon_regs mon_smem_regs;
 };
 
+#define IWL_CFG_ANY (~0)
+
+struct iwl_dev_info {
+	u16 device;
+	u16 subdevice;
+	const struct iwl_cfg *cfg;
+	const char *name;
+};
+
 /*
  * This list declares the config structures for all devices.
  */
+extern const struct iwl_cfg_trans_params iwl9000_trans_cfg;
+extern const char iwl9260_name[];
+extern const char iwl9270_name[];
+extern const char iwl9461_name[];
+extern const char iwl9462_name[];
+extern const char iwl9560_name[];
+extern const char iwl9260_160_name[];
+extern const char iwl9560_160_name[];
+extern const char iwl9260_killer_1550_name[];
+extern const char iwl9560_killer_1550i_name[];
+extern const char iwl9560_killer_1550s_name[];
+
 #if IS_ENABLED(CONFIG_IWLDVM)
 extern const struct iwl_cfg iwl5300_agn_cfg;
 extern const struct iwl_cfg iwl5100_agn_cfg;
@@ -586,6 +607,7 @@ extern const struct iwl_cfg iwlax210_2ax_cfg_so_hr_a0;
 extern const struct iwl_cfg iwlax211_2ax_cfg_so_gf_a0;
 extern const struct iwl_cfg iwlax210_2ax_cfg_ty_gf_a0;
 extern const struct iwl_cfg iwlax411_2ax_cfg_so_gf4_a0;
+extern const struct iwl_cfg iwlax411_2ax_cfg_sosnj_gf4_a0;
 #endif /* CPTCFG_IWLMVM || CPTCFG_IWLFMAC */
 
 #endif /* __IWL_CONFIG_H__ */

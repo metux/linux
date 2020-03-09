@@ -72,6 +72,9 @@ struct phylink {
 	bool mac_link_dropped;
 
 	struct sfp_bus *sfp_bus;
+	bool sfp_may_have_phy;
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(sfp_support);
+	u8 sfp_port;
 };
 
 #define phylink_printk(level, pl, fmt, ...) \
@@ -185,8 +188,8 @@ static int phylink_parse_fixedlink(struct phylink *pl,
 				  pl->link_config.lp_advertising);
 
 		if (ret == 0) {
-			desc = fwnode_get_named_gpiod(fixed_node, "link-gpios",
-						      0, GPIOD_IN, "?");
+			desc = fwnode_gpiod_get_index(fixed_node, "link", 0,
+						      GPIOD_IN, "?");
 
 			if (!IS_ERR(desc))
 				pl->link_gpio = desc;
@@ -282,6 +285,7 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 
 		switch (pl->link_config.interface) {
 		case PHY_INTERFACE_MODE_SGMII:
+		case PHY_INTERFACE_MODE_QSGMII:
 			phylink_set(pl->supported, 10baseT_Half);
 			phylink_set(pl->supported, 10baseT_Full);
 			phylink_set(pl->supported, 100baseT_Half);
@@ -298,7 +302,9 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 			phylink_set(pl->supported, 2500baseX_Full);
 			break;
 
+		case PHY_INTERFACE_MODE_USXGMII:
 		case PHY_INTERFACE_MODE_10GKR:
+		case PHY_INTERFACE_MODE_10GBASER:
 			phylink_set(pl->supported, 10baseT_Half);
 			phylink_set(pl->supported, 10baseT_Full);
 			phylink_set(pl->supported, 100baseT_Half);
@@ -306,7 +312,13 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 			phylink_set(pl->supported, 1000baseT_Half);
 			phylink_set(pl->supported, 1000baseT_Full);
 			phylink_set(pl->supported, 1000baseX_Full);
+			phylink_set(pl->supported, 1000baseKX_Full);
+			phylink_set(pl->supported, 2500baseT_Full);
+			phylink_set(pl->supported, 2500baseX_Full);
+			phylink_set(pl->supported, 5000baseT_Full);
+			phylink_set(pl->supported, 10000baseT_Full);
 			phylink_set(pl->supported, 10000baseKR_Full);
+			phylink_set(pl->supported, 10000baseKX4_Full);
 			phylink_set(pl->supported, 10000baseCR_Full);
 			phylink_set(pl->supported, 10000baseSR_Full);
 			phylink_set(pl->supported, 10000baseLR_Full);
@@ -757,6 +769,7 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 {
 	struct phylink_link_state config;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported);
+	char *irq_str;
 	int ret;
 
 	/*
@@ -771,7 +784,19 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 	memset(&config, 0, sizeof(config));
 	linkmode_copy(supported, phy->supported);
 	linkmode_copy(config.advertising, phy->advertising);
-	config.interface = interface;
+
+	/* Clause 45 PHYs switch their Serdes lane between several different
+	 * modes, normally 10GBASE-R, SGMII. Some use 2500BASE-X for 2.5G
+	 * speeds. We really need to know which interface modes the PHY and
+	 * MAC supports to properly work out which linkmodes can be supported.
+	 */
+	if (phy->is_c45 &&
+	    interface != PHY_INTERFACE_MODE_RXAUI &&
+	    interface != PHY_INTERFACE_MODE_XAUI &&
+	    interface != PHY_INTERFACE_MODE_USXGMII)
+		config.interface = PHY_INTERFACE_MODE_NA;
+	else
+		config.interface = interface;
 
 	ret = phylink_validate(pl, supported, &config);
 	if (ret)
@@ -780,9 +805,11 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 	phy->phylink = pl;
 	phy->phy_link_change = phylink_phy_change;
 
+	irq_str = phy_attached_info_irq(phy);
 	phylink_info(pl,
-		     "PHY [%s] driver [%s]\n", dev_name(&phy->mdio.dev),
-		     phy->drv->name);
+		     "PHY [%s] driver [%s] (irq=%s)\n",
+		     dev_name(&phy->mdio.dev), phy->drv->name, irq_str);
+	kfree(irq_str);
 
 	mutex_lock(&phy->lock);
 	mutex_lock(&pl->state_mutex);
@@ -898,13 +925,16 @@ int phylink_of_phy_connect(struct phylink *pl, struct device_node *dn,
 		return 0;
 	}
 
-	phy_dev = of_phy_attach(pl->netdev, phy_node, flags,
-				pl->link_interface);
+	phy_dev = of_phy_find_device(phy_node);
 	/* We're done with the phy_node handle */
 	of_node_put(phy_node);
-
 	if (!phy_dev)
 		return -ENODEV;
+
+	ret = phy_attach_direct(pl->netdev, phy_dev, flags,
+				pl->link_interface);
+	if (ret)
+		return ret;
 
 	ret = phylink_bringup_phy(pl, phy_dev, pl->link_config.interface);
 	if (ret)
@@ -1043,7 +1073,8 @@ void phylink_start(struct phylink *pl)
 		if (irq <= 0)
 			mod_timer(&pl->link_poll, jiffies + HZ);
 	}
-	if (pl->cfg_link_an_mode == MLO_AN_FIXED && pl->get_fixed_state)
+	if ((pl->cfg_link_an_mode == MLO_AN_FIXED && pl->get_fixed_state) ||
+	    pl->config->pcs_poll)
 		mod_timer(&pl->link_poll, jiffies + HZ);
 	if (pl->phydev)
 		phy_start(pl->phydev);
@@ -1264,44 +1295,66 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 		__set_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, config.advertising);
 	}
 
-	if (phylink_validate(pl, support, &config))
-		return -EINVAL;
-
-	/* If autonegotiation is enabled, we must have an advertisement */
-	if (config.an_enabled && phylink_is_empty_linkmode(config.advertising))
-		return -EINVAL;
-
-	our_kset = *kset;
-	linkmode_copy(our_kset.link_modes.advertising, config.advertising);
-	our_kset.base.speed = config.speed;
-	our_kset.base.duplex = config.duplex;
-
-	/* If we have a PHY, configure the phy */
 	if (pl->phydev) {
+		/* If we have a PHY, we process the kset change via phylib.
+		 * phylib will call our link state function if the PHY
+		 * parameters have changed, which will trigger a resolve
+		 * and update the MAC configuration.
+		 */
+		our_kset = *kset;
+		linkmode_copy(our_kset.link_modes.advertising,
+			      config.advertising);
+		our_kset.base.speed = config.speed;
+		our_kset.base.duplex = config.duplex;
+
 		ret = phy_ethtool_ksettings_set(pl->phydev, &our_kset);
 		if (ret)
 			return ret;
-	}
 
-	mutex_lock(&pl->state_mutex);
-	/* Configure the MAC to match the new settings */
-	linkmode_copy(pl->link_config.advertising, our_kset.link_modes.advertising);
-	pl->link_config.interface = config.interface;
-	pl->link_config.speed = our_kset.base.speed;
-	pl->link_config.duplex = our_kset.base.duplex;
-	pl->link_config.an_enabled = our_kset.base.autoneg != AUTONEG_DISABLE;
+		mutex_lock(&pl->state_mutex);
+		/* Save the new configuration */
+		linkmode_copy(pl->link_config.advertising,
+			      our_kset.link_modes.advertising);
+		pl->link_config.interface = config.interface;
+		pl->link_config.speed = our_kset.base.speed;
+		pl->link_config.duplex = our_kset.base.duplex;
+		pl->link_config.an_enabled = our_kset.base.autoneg !=
+					     AUTONEG_DISABLE;
+		mutex_unlock(&pl->state_mutex);
+	} else {
+		/* For a fixed link, this isn't able to change any parameters,
+		 * which just leaves inband mode.
+		 */
+		if (phylink_validate(pl, support, &config))
+			return -EINVAL;
 
-	/* If we have a PHY, phylib will call our link state function if the
-	 * mode has changed, which will trigger a resolve and update the MAC
-	 * configuration. For a fixed link, this isn't able to change any
-	 * parameters, which just leaves inband mode.
-	 */
-	if (pl->cur_link_an_mode == MLO_AN_INBAND &&
-	    !test_bit(PHYLINK_DISABLE_STOPPED, &pl->phylink_disable_state)) {
-		phylink_mac_config(pl, &pl->link_config);
-		phylink_mac_an_restart(pl);
+		/* If autonegotiation is enabled, we must have an advertisement */
+		if (config.an_enabled &&
+		    phylink_is_empty_linkmode(config.advertising))
+			return -EINVAL;
+
+		mutex_lock(&pl->state_mutex);
+		linkmode_copy(pl->link_config.advertising, config.advertising);
+		pl->link_config.interface = config.interface;
+		pl->link_config.speed = config.speed;
+		pl->link_config.duplex = config.duplex;
+		pl->link_config.an_enabled = kset->base.autoneg !=
+					     AUTONEG_DISABLE;
+
+		if (pl->cur_link_an_mode == MLO_AN_INBAND &&
+		    !test_bit(PHYLINK_DISABLE_STOPPED,
+			      &pl->phylink_disable_state)) {
+			/* If in 802.3z mode, this updates the advertisement.
+			 *
+			 * If we are in SGMII mode without a PHY, there is no
+			 * advertisement; the only thing we have is the pause
+			 * modes which can only come from a PHY.
+			 */
+			phylink_mac_config(pl, &pl->link_config);
+			phylink_mac_an_restart(pl);
+		}
+		mutex_unlock(&pl->state_mutex);
 	}
-	mutex_unlock(&pl->state_mutex);
 
 	return 0;
 }
@@ -1735,25 +1788,21 @@ static void phylink_sfp_detach(void *upstream, struct sfp_bus *bus)
 	pl->netdev->sfp_bus = NULL;
 }
 
-static int phylink_sfp_module_insert(void *upstream,
-				     const struct sfp_eeprom_id *id)
+static int phylink_sfp_config(struct phylink *pl, u8 mode,
+			      const unsigned long *supported,
+			      const unsigned long *advertising)
 {
-	struct phylink *pl = upstream;
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(support) = { 0, };
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(support1);
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(support);
 	struct phylink_link_state config;
 	phy_interface_t iface;
-	int ret = 0;
 	bool changed;
-	u8 port;
+	int ret;
 
-	ASSERT_RTNL();
-
-	sfp_parse_support(pl->sfp_bus, id, support);
-	port = sfp_parse_port(pl->sfp_bus, id, support);
+	linkmode_copy(support, supported);
 
 	memset(&config, 0, sizeof(config));
-	linkmode_copy(config.advertising, support);
+	linkmode_copy(config.advertising, advertising);
 	config.interface = PHY_INTERFACE_MODE_NA;
 	config.speed = SPEED_UNKNOWN;
 	config.duplex = DUPLEX_UNKNOWN;
@@ -1768,8 +1817,6 @@ static int phylink_sfp_module_insert(void *upstream,
 		return ret;
 	}
 
-	linkmode_copy(support1, support);
-
 	iface = sfp_select_interface(pl->sfp_bus, config.advertising);
 	if (iface == PHY_INTERFACE_MODE_NA) {
 		phylink_err(pl,
@@ -1779,18 +1826,18 @@ static int phylink_sfp_module_insert(void *upstream,
 	}
 
 	config.interface = iface;
+	linkmode_copy(support1, support);
 	ret = phylink_validate(pl, support1, &config);
 	if (ret) {
 		phylink_err(pl, "validation of %s/%s with support %*pb failed: %d\n",
-			    phylink_an_mode_str(MLO_AN_INBAND),
+			    phylink_an_mode_str(mode),
 			    phy_modes(config.interface),
 			    __ETHTOOL_LINK_MODE_MASK_NBITS, support, ret);
 		return ret;
 	}
 
 	phylink_dbg(pl, "requesting link mode %s/%s with support %*pb\n",
-		    phylink_an_mode_str(MLO_AN_INBAND),
-		    phy_modes(config.interface),
+		    phylink_an_mode_str(mode), phy_modes(config.interface),
 		    __ETHTOOL_LINK_MODE_MASK_NBITS, support);
 
 	if (phy_interface_mode_is_8023z(iface) && pl->phydev)
@@ -1802,19 +1849,19 @@ static int phylink_sfp_module_insert(void *upstream,
 		linkmode_copy(pl->link_config.advertising, config.advertising);
 	}
 
-	if (pl->cur_link_an_mode != MLO_AN_INBAND ||
+	if (pl->cur_link_an_mode != mode ||
 	    pl->link_config.interface != config.interface) {
 		pl->link_config.interface = config.interface;
-		pl->cur_link_an_mode = MLO_AN_INBAND;
+		pl->cur_link_an_mode = mode;
 
 		changed = true;
 
 		phylink_info(pl, "switched to %s/%s link mode\n",
-			     phylink_an_mode_str(MLO_AN_INBAND),
+			     phylink_an_mode_str(mode),
 			     phy_modes(config.interface));
 	}
 
-	pl->link_port = port;
+	pl->link_port = pl->sfp_port;
 
 	if (changed && !test_bit(PHYLINK_DISABLE_STOPPED,
 				 &pl->phylink_disable_state))
@@ -1823,15 +1870,44 @@ static int phylink_sfp_module_insert(void *upstream,
 	return ret;
 }
 
+static int phylink_sfp_module_insert(void *upstream,
+				     const struct sfp_eeprom_id *id)
+{
+	struct phylink *pl = upstream;
+	unsigned long *support = pl->sfp_support;
+
+	ASSERT_RTNL();
+
+	linkmode_zero(support);
+	sfp_parse_support(pl->sfp_bus, id, support);
+	pl->sfp_port = sfp_parse_port(pl->sfp_bus, id, support);
+
+	/* If this module may have a PHY connecting later, defer until later */
+	pl->sfp_may_have_phy = sfp_may_have_phy(pl->sfp_bus, id);
+	if (pl->sfp_may_have_phy)
+		return 0;
+
+	return phylink_sfp_config(pl, MLO_AN_INBAND, support, support);
+}
+
 static int phylink_sfp_module_start(void *upstream)
 {
 	struct phylink *pl = upstream;
 
 	/* If this SFP module has a PHY, start the PHY now. */
-	if (pl->phydev)
+	if (pl->phydev) {
 		phy_start(pl->phydev);
+		return 0;
+	}
 
-	return 0;
+	/* If the module may have a PHY but we didn't detect one we
+	 * need to configure the MAC here.
+	 */
+	if (!pl->sfp_may_have_phy)
+		return 0;
+
+	return phylink_sfp_config(pl, MLO_AN_INBAND,
+				  pl->sfp_support, pl->sfp_support);
 }
 
 static void phylink_sfp_module_stop(void *upstream)
@@ -1862,23 +1938,45 @@ static void phylink_sfp_link_up(void *upstream)
 	phylink_run_resolve(pl);
 }
 
+/* The Broadcom BCM84881 in the Methode DM7052 is unable to provide a SGMII
+ * or 802.3z control word, so inband will not work.
+ */
+static bool phylink_phy_no_inband(struct phy_device *phy)
+{
+	return phy->is_c45 &&
+		(phy->c45_ids.device_ids[1] & 0xfffffff0) == 0xae025150;
+}
+
 static int phylink_sfp_connect_phy(void *upstream, struct phy_device *phy)
 {
 	struct phylink *pl = upstream;
-	phy_interface_t interface = pl->link_config.interface;
+	phy_interface_t interface;
+	u8 mode;
 	int ret;
 
-	ret = phylink_attach_phy(pl, phy, pl->link_config.interface);
+	/*
+	 * This is the new way of dealing with flow control for PHYs,
+	 * as described by Timur Tabi in commit 529ed1275263 ("net: phy:
+	 * phy drivers should not set SUPPORTED_[Asym_]Pause") except
+	 * using our validate call to the MAC, we rely upon the MAC
+	 * clearing the bits from both supported and advertising fields.
+	 */
+	phy_support_asym_pause(phy);
+
+	if (phylink_phy_no_inband(phy))
+		mode = MLO_AN_PHY;
+	else
+		mode = MLO_AN_INBAND;
+
+	/* Do the initial configuration */
+	ret = phylink_sfp_config(pl, mode, phy->supported, phy->advertising);
 	if (ret < 0)
 		return ret;
 
-	/* Clause 45 PHYs switch their Serdes lane between several different
-	 * modes, normally 10GBASE-R, SGMII. Some use 2500BASE-X for 2.5G
-	 * speeds.  We really need to know which interface modes the PHY and
-	 * MAC supports to properly work out which linkmodes can be supported.
-	 */
-	if (phy->is_c45)
-		interface = PHY_INTERFACE_MODE_NA;
+	interface = pl->link_config.interface;
+	ret = phylink_attach_phy(pl, phy, interface);
+	if (ret < 0)
+		return ret;
 
 	ret = phylink_bringup_phy(pl, phy, interface);
 	if (ret)

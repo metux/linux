@@ -66,6 +66,7 @@ mlx5_eswitch_add_send_to_vport_rule(struct mlx5_eswitch *esw,
 enum devlink_eswitch_encap_mode
 mlx5_eswitch_get_encap_mode(const struct mlx5_core_dev *dev);
 
+bool mlx5_eswitch_reg_c1_loopback_enabled(const struct mlx5_eswitch *esw);
 bool mlx5_eswitch_vport_match_metadata_enabled(const struct mlx5_eswitch *esw);
 
 /* Reg C0 usage:
@@ -103,6 +104,12 @@ mlx5_eswitch_get_encap_mode(const struct mlx5_core_dev *dev)
 {
 	return DEVLINK_ESWITCH_ENCAP_MODE_NONE;
 }
+
+static inline bool
+mlx5_eswitch_reg_c1_loopback_enabled(const struct mlx5_eswitch *esw)
+{
+	return false;
+};
 
 static inline bool
 mlx5_eswitch_vport_match_metadata_enabled(const struct mlx5_eswitch *esw)

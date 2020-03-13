@@ -141,9 +141,11 @@ void efx_destroy_reset_workqueue(void)
  */
 void efx_mac_reconfigure(struct efx_nic *efx)
 {
-	down_read(&efx->filter_sem);
-	efx->type->reconfigure_mac(efx);
-	up_read(&efx->filter_sem);
+	if (efx->type->reconfigure_mac) {
+		down_read(&efx->filter_sem);
+		efx->type->reconfigure_mac(efx);
+		up_read(&efx->filter_sem);
+	}
 }
 
 /* Asynchronous work item for changing MAC promiscuity and multicast
@@ -195,6 +197,51 @@ void efx_link_status_changed(struct efx_nic *efx)
 		netif_info(efx, link, efx->net_dev, "link down\n");
 }
 
+unsigned int efx_xdp_max_mtu(struct efx_nic *efx)
+{
+	/* The maximum MTU that we can fit in a single page, allowing for
+	 * framing, overhead and XDP headroom + tailroom.
+	 */
+	int overhead = EFX_MAX_FRAME_LEN(0) + sizeof(struct efx_rx_page_state) +
+		       efx->rx_prefix_size + efx->type->rx_buffer_padding +
+		       efx->rx_ip_align + EFX_XDP_HEADROOM + EFX_XDP_TAILROOM;
+
+	return PAGE_SIZE - overhead;
+}
+
+/* Context: process, rtnl_lock() held. */
+int efx_change_mtu(struct net_device *net_dev, int new_mtu)
+{
+	struct efx_nic *efx = netdev_priv(net_dev);
+	int rc;
+
+	rc = efx_check_disabled(efx);
+	if (rc)
+		return rc;
+
+	if (rtnl_dereference(efx->xdp_prog) &&
+	    new_mtu > efx_xdp_max_mtu(efx)) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Requested MTU of %d too big for XDP (max: %d)\n",
+			  new_mtu, efx_xdp_max_mtu(efx));
+		return -EINVAL;
+	}
+
+	netif_dbg(efx, drv, efx->net_dev, "changing MTU to %d\n", new_mtu);
+
+	efx_device_detach_sync(efx);
+	efx_stop_all(efx);
+
+	mutex_lock(&efx->mac_lock);
+	net_dev->mtu = new_mtu;
+	efx_mac_reconfigure(efx);
+	mutex_unlock(&efx->mac_lock);
+
+	efx_start_all(efx);
+	efx_device_attach_if_not_resetting(efx);
+	return 0;
+}
+
 /**************************************************************************
  *
  * Hardware monitor
@@ -238,30 +285,6 @@ void efx_start_monitor(struct efx_nic *efx)
  *
  *************************************************************************/
 
-void efx_start_channels(struct efx_nic *efx)
-{
-	struct efx_tx_queue *tx_queue;
-	struct efx_rx_queue *rx_queue;
-	struct efx_channel *channel;
-
-	efx_for_each_channel(channel, efx) {
-		efx_for_each_channel_tx_queue(tx_queue, channel) {
-			efx_init_tx_queue(tx_queue);
-			atomic_inc(&efx->active_queues);
-		}
-
-		efx_for_each_channel_rx_queue(rx_queue, channel) {
-			efx_init_rx_queue(rx_queue);
-			atomic_inc(&efx->active_queues);
-			efx_stop_eventq(channel);
-			efx_fast_push_rx_descriptors(rx_queue, false);
-			efx_start_eventq(channel);
-		}
-
-		WARN_ON(channel->rx_pkt_n_frags);
-	}
-}
-
 /* Channels are shutdown and reinitialised whilst the NIC is running
  * to propagate configuration changes (mtu, checksum offload), or
  * to clear hardware error conditions
@@ -279,8 +302,9 @@ static void efx_start_datapath(struct efx_nic *efx)
 	efx->rx_dma_len = (efx->rx_prefix_size +
 			   EFX_MAX_FRAME_LEN(efx->net_dev->mtu) +
 			   efx->type->rx_buffer_padding);
-	rx_buf_len = (sizeof(struct efx_rx_page_state) + XDP_PACKET_HEADROOM +
-		      efx->rx_ip_align + efx->rx_dma_len);
+	rx_buf_len = (sizeof(struct efx_rx_page_state)   + EFX_XDP_HEADROOM +
+		      efx->rx_ip_align + efx->rx_dma_len + EFX_XDP_TAILROOM);
+
 	if (rx_buf_len <= PAGE_SIZE) {
 		efx->rx_scatter = efx->type->always_rx_scatter;
 		efx->rx_buffer_order = 0;
@@ -320,7 +344,8 @@ static void efx_start_datapath(struct efx_nic *efx)
 		netdev_features_change(efx->net_dev);
 
 	/* RX filters may also have scatter-enabled flags */
-	if (efx->rx_scatter != old_rx_scatter)
+	if ((efx->rx_scatter != old_rx_scatter) &&
+	    efx->type->filter_update_rx_scatter)
 		efx->type->filter_update_rx_scatter(efx);
 
 	/* We must keep at least one descriptor in a TX ring empty.
@@ -340,51 +365,6 @@ static void efx_start_datapath(struct efx_nic *efx)
 
 	if (netif_device_present(efx->net_dev))
 		netif_tx_wake_all_queues(efx->net_dev);
-}
-
-void efx_stop_channels(struct efx_nic *efx)
-{
-	struct efx_tx_queue *tx_queue;
-	struct efx_rx_queue *rx_queue;
-	struct efx_channel *channel;
-	int rc = 0;
-
-	/* Stop RX refill */
-	efx_for_each_channel(channel, efx) {
-		efx_for_each_channel_rx_queue(rx_queue, channel)
-			rx_queue->refill_enabled = false;
-	}
-
-	efx_for_each_channel(channel, efx) {
-		/* RX packet processing is pipelined, so wait for the
-		 * NAPI handler to complete.  At least event queue 0
-		 * might be kept active by non-data events, so don't
-		 * use napi_synchronize() but actually disable NAPI
-		 * temporarily.
-		 */
-		if (efx_channel_has_rx_queue(channel)) {
-			efx_stop_eventq(channel);
-			efx_start_eventq(channel);
-		}
-	}
-
-	if (efx->type->fini_dmaq)
-		rc = efx->type->fini_dmaq(efx);
-
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev, "failed to flush queues\n");
-	} else {
-		netif_dbg(efx, drv, efx->net_dev,
-			  "successfully flushed all queues\n");
-	}
-
-	efx_for_each_channel(channel, efx) {
-		efx_for_each_channel_rx_queue(rx_queue, channel)
-			efx_fini_rx_queue(rx_queue);
-		efx_for_each_possible_channel_tx_queue(tx_queue, channel)
-			efx_fini_tx_queue(tx_queue);
-	}
-	efx->xdp_rxq_info_failed = false;
 }
 
 static void efx_stop_datapath(struct efx_nic *efx)
@@ -474,11 +454,13 @@ void efx_start_all(struct efx_nic *efx)
 		efx_link_status_changed(efx);
 	mutex_unlock(&efx->mac_lock);
 
-	efx->type->start_stats(efx);
-	efx->type->pull_stats(efx);
-	spin_lock_bh(&efx->stats_lock);
-	efx->type->update_stats(efx, NULL, NULL);
-	spin_unlock_bh(&efx->stats_lock);
+	if (efx->type->start_stats) {
+		efx->type->start_stats(efx);
+		efx->type->pull_stats(efx);
+		spin_lock_bh(&efx->stats_lock);
+		efx->type->update_stats(efx, NULL, NULL);
+		spin_unlock_bh(&efx->stats_lock);
+	}
 }
 
 /* Quiesce the hardware and software data path, and regular activity
@@ -494,14 +476,17 @@ void efx_stop_all(struct efx_nic *efx)
 	if (!efx->port_enabled)
 		return;
 
-	/* update stats before we go down so we can accurately count
-	 * rx_nodesc_drops
-	 */
-	efx->type->pull_stats(efx);
-	spin_lock_bh(&efx->stats_lock);
-	efx->type->update_stats(efx, NULL, NULL);
-	spin_unlock_bh(&efx->stats_lock);
-	efx->type->stop_stats(efx);
+	if (efx->type->update_stats) {
+		/* update stats before we go down so we can accurately count
+		 * rx_nodesc_drops
+		 */
+		efx->type->pull_stats(efx);
+		spin_lock_bh(&efx->stats_lock);
+		efx->type->update_stats(efx, NULL, NULL);
+		spin_unlock_bh(&efx->stats_lock);
+		efx->type->stop_stats(efx);
+	}
+
 	efx_stop_port(efx);
 
 	/* Stop the kernel transmit interface.  This is only valid if
@@ -515,6 +500,16 @@ void efx_stop_all(struct efx_nic *efx)
 	efx_stop_datapath(efx);
 }
 
+/* Context: process, dev_base_lock or RTNL held, non-blocking. */
+void efx_net_stats(struct net_device *net_dev, struct rtnl_link_stats64 *stats)
+{
+	struct efx_nic *efx = netdev_priv(net_dev);
+
+	spin_lock_bh(&efx->stats_lock);
+	efx->type->update_stats(efx, NULL, stats);
+	spin_unlock_bh(&efx->stats_lock);
+}
+
 /* Push loopback/power/transmit disable settings to the PHY, and reconfigure
  * the MAC appropriately. All other PHY configuration changes are pushed
  * through phy_op->set_settings(), and pushed asynchronously to the MAC
@@ -525,7 +520,7 @@ void efx_stop_all(struct efx_nic *efx)
 int __efx_reconfigure_port(struct efx_nic *efx)
 {
 	enum efx_phy_mode phy_mode;
-	int rc;
+	int rc = 0;
 
 	WARN_ON(!mutex_is_locked(&efx->mac_lock));
 
@@ -536,7 +531,8 @@ int __efx_reconfigure_port(struct efx_nic *efx)
 	else
 		efx->phy_mode &= ~PHY_MODE_TX_DISABLED;
 
-	rc = efx->type->reconfigure_port(efx);
+	if (efx->type->reconfigure_port)
+		rc = efx->type->reconfigure_port(efx);
 
 	if (rc)
 		efx->phy_mode = phy_mode;
@@ -900,7 +896,7 @@ int efx_init_struct(struct efx_nic *efx,
 #endif
 	INIT_WORK(&efx->reset_work, efx_reset_work);
 	INIT_DELAYED_WORK(&efx->monitor_work, efx_monitor);
-	INIT_DELAYED_WORK(&efx->selftest_work, efx_selftest_async_work);
+	efx_selftest_async_init(efx);
 	efx->pci_dev = pci_dev;
 	efx->msg_enable = debug;
 	efx->state = STATE_UNINIT;
@@ -951,17 +947,6 @@ int efx_init_struct(struct efx_nic *efx,
 fail:
 	efx_fini_struct(efx);
 	return rc;
-}
-
-void efx_fini_channels(struct efx_nic *efx)
-{
-	unsigned int i;
-
-	for (i = 0; i < EFX_MAX_CHANNELS; i++)
-		if (efx->channel[i]) {
-			kfree(efx->channel[i]);
-			efx->channel[i] = NULL;
-		}
 }
 
 void efx_fini_struct(struct efx_nic *efx)
@@ -1077,3 +1062,42 @@ void efx_fini_io(struct efx_nic *efx, int bar)
 	if (!pci_vfs_assigned(efx->pci_dev))
 		pci_disable_device(efx->pci_dev);
 }
+
+#ifdef CONFIG_SFC_MCDI_LOGGING
+static ssize_t show_mcdi_log(struct device *dev, struct device_attribute *attr,
+			     char *buf)
+{
+	struct efx_nic *efx = dev_get_drvdata(dev);
+	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", mcdi->logging_enabled);
+}
+
+static ssize_t set_mcdi_log(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct efx_nic *efx = dev_get_drvdata(dev);
+	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
+	bool enable = count > 0 && *buf != '0';
+
+	mcdi->logging_enabled = enable;
+	return count;
+}
+
+static DEVICE_ATTR(mcdi_logging, 0644, show_mcdi_log, set_mcdi_log);
+
+void efx_init_mcdi_logging(struct efx_nic *efx)
+{
+	int rc = device_create_file(&efx->pci_dev->dev, &dev_attr_mcdi_logging);
+
+	if (rc) {
+		netif_warn(efx, drv, efx->net_dev,
+			   "failed to init net dev attributes\n");
+	}
+}
+
+void efx_fini_mcdi_logging(struct efx_nic *efx)
+{
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_mcdi_logging);
+}
+#endif

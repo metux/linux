@@ -9373,7 +9373,6 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->cpu_transcoder = (enum transcoder) crtc->pipe;
 	pipe_config->shared_dpll = NULL;
-	pipe_config->master_transcoder = INVALID_TRANSCODER;
 
 	ret = false;
 
@@ -10597,7 +10596,6 @@ static bool ilk_get_pipe_config(struct intel_crtc *crtc,
 
 	pipe_config->cpu_transcoder = (enum transcoder) crtc->pipe;
 	pipe_config->shared_dpll = NULL;
-	pipe_config->master_transcoder = INVALID_TRANSCODER;
 
 	ret = false;
 	tmp = intel_de_read(dev_priv, PIPECONF(crtc->pipe));

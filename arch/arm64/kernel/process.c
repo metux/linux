@@ -211,15 +211,6 @@ void machine_restart(char *cmd)
 	while (1);
 }
 
-#define bstr(suffix, str) [PSR_BTYPE_ ## suffix >> PSR_BTYPE_SHIFT] = str
-static const char *const btypes[] = {
-	bstr(NONE, "--"),
-	bstr(  JC, "jc"),
-	bstr(   C, "-c"),
-	bstr(  J , "j-")
-};
-#undef bstr
-
 static void print_pstate(struct pt_regs *regs)
 {
 	u64 pstate = regs->pstate;
@@ -238,10 +229,7 @@ static void print_pstate(struct pt_regs *regs)
 			pstate & PSR_AA32_I_BIT ? 'I' : 'i',
 			pstate & PSR_AA32_F_BIT ? 'F' : 'f');
 	} else {
-		const char *btype_str = btypes[(pstate & PSR_BTYPE_MASK) >>
-					       PSR_BTYPE_SHIFT];
-
-		printk("pstate: %08llx (%c%c%c%c %c%c%c%c %cPAN %cUAO BTYPE=%s)\n",
+		printk("pstate: %08llx (%c%c%c%c %c%c%c%c %cPAN %cUAO)\n",
 			pstate,
 			pstate & PSR_N_BIT ? 'N' : 'n',
 			pstate & PSR_Z_BIT ? 'Z' : 'z',
@@ -252,8 +240,7 @@ static void print_pstate(struct pt_regs *regs)
 			pstate & PSR_I_BIT ? 'I' : 'i',
 			pstate & PSR_F_BIT ? 'F' : 'f',
 			pstate & PSR_PAN_BIT ? '+' : '-',
-			pstate & PSR_UAO_BIT ? '+' : '-',
-			btype_str);
+			pstate & PSR_UAO_BIT ? '+' : '-');
 	}
 }
 
@@ -306,7 +293,7 @@ void __show_regs(struct pt_regs *regs)
 void show_regs(struct pt_regs * regs)
 {
 	__show_regs(regs);
-	dump_backtrace(regs, NULL, KERN_DEFAULT);
+	dump_backtrace(regs, NULL);
 }
 
 static void tls_thread_flush(void)
@@ -675,11 +662,6 @@ asmlinkage void __sched arm64_preempt_schedule_irq(void)
 int arch_elf_adjust_prot(int prot, const struct arch_elf_state *state,
 			 bool has_interp, bool is_interp)
 {
-	/*
-	 * For dynamically linked executables the interpreter is
-	 * responsible for setting PROT_BTI on everything except
-	 * itself.
-	 */
 	if (is_interp != has_interp)
 		return prot;
 

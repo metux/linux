@@ -302,6 +302,7 @@ int intel_gt_runtime_resume(struct intel_gt *gt)
 	GEM_TRACE("\n");
 
 	intel_gt_init_swizzling(gt);
+	intel_ggtt_restore_fences(gt->ggtt);
 
 	return intel_uc_runtime_resume(&gt->uc);
 }

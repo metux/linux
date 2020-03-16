@@ -232,6 +232,15 @@ HWCAP2_DGH
 
     Functionality implied by ID_AA64ISAR1_EL1.DGH == 0b0001.
 
+HWCAP2_RNG
+
+    Functionality implied by ID_AA64ISAR0_EL1.RNDR == 0b0001.
+
+HWCAP2_BTI
+
+    Functionality implied by ID_AA64PFR0_EL1.BT == 0b0001.
+
+
 4. Unused AT_HWCAP bits
 -----------------------
 

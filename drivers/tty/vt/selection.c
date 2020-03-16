@@ -219,7 +219,6 @@ int set_selection_kernel(struct tiocl_selection *v, struct tty_struct *tty)
 	if (ps > pe)	/* make vc_sel.start <= vc_sel.end */
 		swap(ps, pe);
 
-	mutex_lock(&vc_sel.lock);
 	if (vc_sel.cons != vc_cons[fg_console].d) {
 		clear_selection();
 		vc_sel.cons = vc_cons[fg_console].d;

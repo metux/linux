@@ -409,7 +409,7 @@ void schedule_mcck_handler(void)
 	pcpu_ec_call(pcpu_devices + smp_processor_id(), ec_mcck_pending);
 }
 
-bool notrace arch_vcpu_is_preempted(int cpu)
+bool arch_vcpu_is_preempted(int cpu)
 {
 	if (test_cpu_flag_of(CIF_ENABLED_WAIT, cpu))
 		return false;
@@ -419,7 +419,7 @@ bool notrace arch_vcpu_is_preempted(int cpu)
 }
 EXPORT_SYMBOL(arch_vcpu_is_preempted);
 
-void notrace smp_yield_cpu(int cpu)
+void smp_yield_cpu(int cpu)
 {
 	if (!MACHINE_HAS_DIAG9C)
 		return;

@@ -443,6 +443,8 @@ update_iova_region:
 
 static struct iommu_domain *mtk_iommu_domain_alloc(unsigned type)
 {
+	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
+	const struct mtk_iommu_iova_region *region;
 	struct mtk_iommu_domain *dom;
 
 	if (type != IOMMU_DOMAIN_DMA)
@@ -456,6 +458,15 @@ static struct iommu_domain *mtk_iommu_domain_alloc(unsigned type)
 		kfree(dom);
 		return NULL;
 	}
+
+	if (mtk_iommu_domain_finalise(dom))
+		goto  put_dma_cookie;
+
+	region = data->plat_data->iova_region + data->cur_domid;
+	dom->domain.geometry.aperture_start = region->iova_base;
+	dom->domain.geometry.aperture_end = region->iova_base +
+						region->size - 1;
+	dom->domain.geometry.force_aperture = true;
 
 	return &dom->domain;
 }
@@ -649,6 +660,7 @@ static struct iommu_group *mtk_iommu_device_group(struct device *dev)
 	} else {
 		iommu_group_ref_get(group);
 	}
+	data->cur_domid = domid;
 	return group;
 }
 

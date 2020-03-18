@@ -361,7 +361,7 @@ static void mtk_iommu_config(struct mtk_iommu_data *data, struct device *dev,
 			     bool enable, unsigned int domid)
 {
 	struct mtk_smi_larb_iommu    *larb_mmu;
-	unsigned int                 larbid, portid;
+	unsigned int                 larbid, portid, domid;
 	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
 	const struct mtk_iommu_iova_region *region;
 	int i;
@@ -369,8 +369,11 @@ static void mtk_iommu_config(struct mtk_iommu_data *data, struct device *dev,
 	for (i = 0; i < fwspec->num_ids; ++i) {
 		larbid = MTK_M4U_TO_LARB(fwspec->ids[i]);
 		portid = MTK_M4U_TO_PORT(fwspec->ids[i]);
+		domid = MTK_M4U_TO_DOM(fwspec->ids[i]);
 
 		larb_mmu = &data->larb_imu[larbid];
+		region = data->plat_data->iova_region + domid;
+		larb_mmu->bank[portid] = upper_32_bits(region->iova_base);
 
 		region = data->plat_data->iova_region + domid;
 		larb_mmu->bank[portid] = upper_32_bits(region->iova_base);

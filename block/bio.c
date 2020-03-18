@@ -17,7 +17,7 @@
 #include <linux/cgroup.h>
 #include <linux/blk-cgroup.h>
 #include <linux/highmem.h>
-#include <linux/blk-crypto.h>
+#include <linux/sched/sysctl.h>
 
 #include <trace/events/block.h>
 #include "blk.h"
@@ -245,7 +245,6 @@ static void bio_free(struct bio *bio)
 	struct bio_set *bs = bio->bi_pool;
 	void *p;
 
-	bio_crypt_free_ctx(bio);
 	bio_uninit(bio);
 
 	if (bs) {
@@ -666,15 +665,15 @@ struct bio *bio_clone_fast(struct bio *bio, gfp_t gfp_mask, struct bio_set *bs)
 
 	__bio_clone_fast(b, bio);
 
-	if (bio_crypt_clone(b, bio, gfp_mask) < 0) {
-		bio_put(b);
-		return NULL;
-	}
+	if (bio_integrity(bio)) {
+		int ret;
 
-	if (bio_integrity(bio) &&
-	    bio_integrity_clone(b, bio, gfp_mask) < 0) {
-		bio_put(b);
-		return NULL;
+		ret = bio_integrity_clone(b, bio, gfp_mask);
+
+		if (ret < 0) {
+			bio_put(b);
+			return NULL;
+		}
 	}
 
 	return b;
@@ -1028,12 +1027,21 @@ static void submit_bio_wait_endio(struct bio *bio)
 int submit_bio_wait(struct bio *bio)
 {
 	DECLARE_COMPLETION_ONSTACK_MAP(done, bio->bi_disk->lockdep_map);
+	unsigned long hang_check;
 
 	bio->bi_private = &done;
 	bio->bi_end_io = submit_bio_wait_endio;
 	bio->bi_opf |= REQ_SYNC;
 	submit_bio(bio);
-	wait_for_completion_io(&done);
+
+	/* Prevent hang_check timer from firing at us during very long I/O */
+	hang_check = sysctl_hung_task_timeout_secs;
+	if (hang_check)
+		while (!wait_for_completion_io_timeout(&done,
+					hang_check * (HZ/2)))
+			;
+	else
+		wait_for_completion_io(&done);
 
 	return blk_status_to_errno(bio->bi_status);
 }
@@ -1055,7 +1063,6 @@ void bio_advance(struct bio *bio, unsigned bytes)
 	if (bio_integrity(bio))
 		bio_integrity_advance(bio, bytes);
 
-	bio_crypt_advance(bio, bytes);
 	bio_advance_iter(bio, &bio->bi_iter, bytes);
 }
 EXPORT_SYMBOL(bio_advance);
@@ -1850,10 +1857,6 @@ void bio_endio(struct bio *bio)
 again:
 	if (!bio_remaining_done(bio))
 		return;
-
-	if (!blk_crypto_endio(bio))
-		return;
-
 	if (!bio_integrity_endio(bio))
 		return;
 

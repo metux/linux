@@ -508,11 +508,18 @@ static int mtk_iommu_map(struct iommu_domain *domain, unsigned long iova,
 			 phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
+	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
+	int ret;
 
 	/* The "4GB mode" M4U physically can not use the lower remap of Dram. */
 	if (dom->data->enable_4GB)
 		paddr |= BIT_ULL(32);
 
+	ret = pm_runtime_get_sync(data->dev);
+	if (ret < 0) {
+		dev_err(data->dev, "pm runtime get fail %d in map\n", ret);
+		return ret;
+	}
 	/* Synchronize with the tlb_lock */
 	return dom->iop->map(dom->iop, iova, paddr, size, prot, gfp);
 }
@@ -522,20 +529,40 @@ static size_t mtk_iommu_unmap(struct iommu_domain *domain,
 			      struct iommu_iotlb_gather *gather)
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
+	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
+	size_t sz;
+	int ret;
 	unsigned long end = iova + size - 1;
 
 	if (gather->start > iova)
 		gather->start = iova;
 	if (gather->end < end)
 		gather->end = end;
-	return dom->iop->unmap(dom->iop, iova, size, gather);
+
+	ret = pm_runtime_get_sync(data->dev);
+	if (ret < 0) {
+		dev_err(data->dev, "pm runtime get fail %d in unmap\n", ret);
+		return ret;
+	}
+
+	sz = dom->iop->unmap(dom->iop, iova, size, gather);
+	pm_runtime_put(data->dev);
+	return sz;
 }
 
 static void mtk_iommu_flush_iotlb_all(struct iommu_domain *domain)
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
+	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
+	int ret;
 
+	ret = pm_runtime_get_sync(data->dev);
+	if (ret < 0) {
+		dev_err(data->dev, "pm runtime get fail %d in tlb all\n", ret);
+		return;
+	}
 	mtk_iommu_tlb_flush_all(dom->data);
+	pm_runtime_put(data->dev);
 }
 
 static void mtk_iommu_iotlb_sync(struct iommu_domain *domain,
@@ -879,6 +906,10 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 	if (!smicomm_node)
 		return -EINVAL;
 
+	ret = pm_runtime_get_sync(dev);
+	if (ret)
+		return ret;
+
 	plarbdev = of_find_device_by_node(smicomm_node);
 	of_node_put(smicomm_node);
 	data->smicomm_dev = &plarbdev->dev;
@@ -919,6 +950,11 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 	ret = component_master_add_with_match(dev, &mtk_iommu_com_ops, match);
 	if (ret)
 		goto out_bus_set_null;
+	/*
+	 * PM put here to make sure the pm ref cnt.
+	 * the consumer will power get when iommu is needed.
+	 */
+	pm_runtime_put_sync(dev);
 	return ret;
 
 out_bus_set_null:
@@ -1030,6 +1066,7 @@ static const struct mtk_iommu_plat_data mt6873_data_mm = {
 	.has_sub_comm = true,
 	.has_wr_len = true,
 	.has_misc_ctrl = true,
+	.has_bclk     = true,
 	.inv_sel_reg = REG_MMU_INV_SEL_GEN2,
 };
 

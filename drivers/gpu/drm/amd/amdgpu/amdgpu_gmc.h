@@ -176,6 +176,8 @@ struct amdgpu_gmc {
 	} fault_hash[AMDGPU_GMC_FAULT_HASH_SIZE];
 	uint64_t		last_fault:AMDGPU_GMC_FAULT_RING_ORDER;
 
+	bool tmz_enabled;
+
 	const struct amdgpu_gmc_funcs	*gmc_funcs;
 
 	struct amdgpu_xgmi xgmi;
@@ -234,5 +236,7 @@ void amdgpu_gmc_agp_location(struct amdgpu_device *adev,
 			     struct amdgpu_gmc *mc);
 bool amdgpu_gmc_filter_faults(struct amdgpu_device *adev, uint64_t addr,
 			      uint16_t pasid, uint64_t timestamp);
+
+extern void amdgpu_gmc_tmz_set(struct amdgpu_device *adev);
 
 #endif

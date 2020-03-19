@@ -33,4 +33,7 @@ struct amdgpu_tmz {
 	bool	enabled;
 };
 
+
+extern bool amdgpu_is_tmz(struct amdgpu_device *adev);
+
 #endif

@@ -130,16 +130,13 @@ struct afs_server *afs_find_server_by_uuid(struct afs_net *net, const uuid_t *uu
 }
 
 /*
- * Install a server record in the namespace tree.  If there's a clash, we stick
- * it into a list anchored on whichever afs_server struct is actually in the
- * tree.
+ * Install a server record in the namespace tree
  */
-static struct afs_server *afs_install_server(struct afs_cell *cell,
+static struct afs_server *afs_install_server(struct afs_net *net,
 					     struct afs_server *candidate)
 {
 	const struct afs_addr_list *alist;
-	struct afs_server *server, *next;
-	struct afs_net *net = cell->net;
+	struct afs_server *server;
 	struct rb_node **pp, *p;
 	int diff;
 
@@ -155,30 +152,12 @@ static struct afs_server *afs_install_server(struct afs_cell *cell,
 		_debug("- consider %p", p);
 		server = rb_entry(p, struct afs_server, uuid_rb);
 		diff = memcmp(&candidate->uuid, &server->uuid, sizeof(uuid_t));
-		if (diff < 0) {
+		if (diff < 0)
 			pp = &(*pp)->rb_left;
-		} else if (diff > 0) {
+		else if (diff > 0)
 			pp = &(*pp)->rb_right;
-		} else {
-			if (server->cell == cell)
-				goto exists;
-
-			/* We have the same UUID representing servers in
-			 * different cells.  Append the new server to the list.
-			 */
-			for (;;) {
-				next = rcu_dereference_protected(
-					server->uuid_next,
-					lockdep_is_held(&net->fs_lock.lock));
-				if (!next)
-					break;
-				server = next;
-			}
-			rcu_assign_pointer(server->uuid_next, candidate);
-			candidate->uuid_prev = server;
-			server = candidate;
-			goto added_dup;
-		}
+		else
+			goto exists;
 	}
 
 	server = candidate;
@@ -186,7 +165,6 @@ static struct afs_server *afs_install_server(struct afs_cell *cell,
 	rb_insert_color(&server->uuid_rb, &net->fs_servers);
 	hlist_add_head_rcu(&server->proc_link, &net->fs_proc);
 
-added_dup:
 	write_seqlock(&net->fs_addr_lock);
 	alist = rcu_dereference_protected(server->addresses,
 					  lockdep_is_held(&net->fs_addr_lock.lock));
@@ -215,12 +193,11 @@ exists:
 /*
  * Allocate a new server record and mark it active.
  */
-static struct afs_server *afs_alloc_server(struct afs_cell *cell,
+static struct afs_server *afs_alloc_server(struct afs_net *net,
 					   const uuid_t *uuid,
 					   struct afs_addr_list *alist)
 {
 	struct afs_server *server;
-	struct afs_net *net = cell->net;
 
 	_enter("");
 
@@ -235,11 +212,11 @@ static struct afs_server *afs_alloc_server(struct afs_cell *cell,
 	server->addr_version = alist->version;
 	server->uuid = *uuid;
 	rwlock_init(&server->fs_lock);
+	server->cb_volumes = RB_ROOT;
+	seqlock_init(&server->cb_break_lock);
 	init_waitqueue_head(&server->probe_wq);
 	INIT_LIST_HEAD(&server->probe_link);
 	spin_lock_init(&server->probe_lock);
-	server->cell = cell;
-	server->rtt = UINT_MAX;
 
 	afs_inc_servers_outstanding(net);
 	trace_afs_server(server, 1, 1, afs_server_trace_alloc);
@@ -298,13 +275,13 @@ struct afs_server *afs_lookup_server(struct afs_cell *cell, struct key *key,
 	if (IS_ERR(alist))
 		return ERR_CAST(alist);
 
-	candidate = afs_alloc_server(cell, uuid, alist);
+	candidate = afs_alloc_server(cell->net, uuid, alist);
 	if (!candidate) {
 		afs_put_addrlist(alist);
 		return ERR_PTR(-ENOMEM);
 	}
 
-	server = afs_install_server(cell, candidate);
+	server = afs_install_server(cell->net, candidate);
 	if (server != candidate) {
 		afs_put_addrlist(alist);
 		kfree(candidate);
@@ -447,7 +424,10 @@ static void __afs_put_server(struct afs_net *net, struct afs_server *server)
 	afs_dec_servers_outstanding(net);
 }
 
-static void afs_give_up_callbacks(struct afs_net *net, struct afs_server *server)
+/*
+ * destroy a dead server
+ */
+static void afs_destroy_server(struct afs_net *net, struct afs_server *server)
 {
 	struct afs_addr_list *alist = rcu_access_pointer(server->addresses);
 	struct afs_addr_cursor ac = {
@@ -456,16 +436,8 @@ static void afs_give_up_callbacks(struct afs_net *net, struct afs_server *server
 		.error	= 0,
 	};
 
-	afs_fs_give_up_all_callbacks(net, server, &ac, NULL);
-}
-
-/*
- * destroy a dead server
- */
-static void afs_destroy_server(struct afs_net *net, struct afs_server *server)
-{
 	if (test_bit(AFS_SERVER_FL_MAY_HAVE_CB, &server->flags))
-		afs_give_up_callbacks(net, server);
+		afs_fs_give_up_all_callbacks(net, server, &ac, NULL);
 
 	afs_put_server(net, server, afs_server_trace_destroy);
 }
@@ -475,7 +447,7 @@ static void afs_destroy_server(struct afs_net *net, struct afs_server *server)
  */
 static void afs_gc_servers(struct afs_net *net, struct afs_server *gc_list)
 {
-	struct afs_server *server, *next, *prev;
+	struct afs_server *server;
 	int active;
 
 	while ((server = gc_list)) {
@@ -487,26 +459,7 @@ static void afs_gc_servers(struct afs_net *net, struct afs_server *gc_list)
 		if (active == 0) {
 			trace_afs_server(server, atomic_read(&server->ref),
 					 active, afs_server_trace_gc);
-			next = rcu_dereference_protected(
-				server->uuid_next, lockdep_is_held(&net->fs_lock.lock));
-			prev = server->uuid_prev;
-			if (!prev) {
-				/* The one at the front is in the tree */
-				if (!next) {
-					rb_erase(&server->uuid_rb, &net->fs_servers);
-				} else {
-					rb_replace_node_rcu(&server->uuid_rb,
-							    &next->uuid_rb,
-							    &net->fs_servers);
-					next->uuid_prev = NULL;
-				}
-			} else {
-				/* This server is not at the front */
-				rcu_assign_pointer(prev->uuid_next, next);
-				if (next)
-					next->uuid_prev = prev;
-			}
-
+			rb_erase(&server->uuid_rb, &net->fs_servers);
 			list_del(&server->probe_link);
 			hlist_del_rcu(&server->proc_link);
 			if (!hlist_unhashed(&server->addr4_link))
@@ -550,12 +503,7 @@ void afs_manage_servers(struct work_struct *work)
 
 		_debug("manage %pU %u", &server->uuid, active);
 
-		if (purging) {
-			trace_afs_server(server, atomic_read(&server->ref),
-					 active, afs_server_trace_purging);
-			if (active != 0)
-				pr_notice("Can't purge s=%08x\n", server->debug_id);
-		}
+		ASSERTIFCMP(purging, active, ==, 0);
 
 		if (active == 0) {
 			time64_t expire_at = server->unuse_time;
@@ -610,12 +558,11 @@ void afs_purge_servers(struct afs_net *net)
 	_enter("");
 
 	if (del_timer_sync(&net->fs_timer))
-		afs_dec_servers_outstanding(net);
+		atomic_dec(&net->servers_outstanding);
 
 	afs_queue_server_manager(net);
 
 	_debug("wait");
-	atomic_dec(&net->servers_outstanding);
 	wait_var_event(&net->servers_outstanding,
 		       !atomic_read(&net->servers_outstanding));
 	_leave("");
@@ -624,8 +571,7 @@ void afs_purge_servers(struct afs_net *net)
 /*
  * Get an update for a server's address list.
  */
-static noinline bool afs_update_server_record(struct afs_operation *op,
-					      struct afs_server *server)
+static noinline bool afs_update_server_record(struct afs_operation *fc, struct afs_server *server)
 {
 	struct afs_addr_list *alist, *discard;
 
@@ -634,17 +580,18 @@ static noinline bool afs_update_server_record(struct afs_operation *op,
 	trace_afs_server(server, atomic_read(&server->ref), atomic_read(&server->active),
 			 afs_server_trace_update);
 
-	alist = afs_vl_lookup_addrs(op->volume->cell, op->key, &server->uuid);
+	alist = afs_vl_lookup_addrs(fc->vnode->volume->cell, fc->key,
+				    &server->uuid);
 	if (IS_ERR(alist)) {
 		if ((PTR_ERR(alist) == -ERESTARTSYS ||
 		     PTR_ERR(alist) == -EINTR) &&
-		    (op->flags & AFS_OPERATION_UNINTR) &&
+		    !(fc->flags & AFS_OPERATION_INTR) &&
 		    server->addresses) {
 			_leave(" = t [intr]");
 			return true;
 		}
-		op->error = PTR_ERR(alist);
-		_leave(" = f [%d]", op->error);
+		fc->error = PTR_ERR(alist);
+		_leave(" = f [%d]", fc->error);
 		return false;
 	}
 
@@ -666,7 +613,7 @@ static noinline bool afs_update_server_record(struct afs_operation *op,
 /*
  * See if a server's address list needs updating.
  */
-bool afs_check_server_record(struct afs_operation *op, struct afs_server *server)
+bool afs_check_server_record(struct afs_operation *fc, struct afs_server *server)
 {
 	bool success;
 	int ret, retries = 0;
@@ -686,7 +633,7 @@ retry:
 update:
 	if (!test_and_set_bit_lock(AFS_SERVER_FL_UPDATING, &server->flags)) {
 		clear_bit(AFS_SERVER_FL_NEEDS_UPDATE, &server->flags);
-		success = afs_update_server_record(op, server);
+		success = afs_update_server_record(fc, server);
 		clear_bit_unlock(AFS_SERVER_FL_UPDATING, &server->flags);
 		wake_up_bit(&server->flags, AFS_SERVER_FL_UPDATING);
 		_leave(" = %d", success);
@@ -695,10 +642,10 @@ update:
 
 wait:
 	ret = wait_on_bit(&server->flags, AFS_SERVER_FL_UPDATING,
-			  (op->flags & AFS_OPERATION_UNINTR) ?
-			  TASK_UNINTERRUPTIBLE : TASK_INTERRUPTIBLE);
+			  (fc->flags & AFS_OPERATION_INTR) ?
+			  TASK_INTERRUPTIBLE : TASK_UNINTERRUPTIBLE);
 	if (ret == -ERESTARTSYS) {
-		op->error = ret;
+		fc->error = ret;
 		_leave(" = f [intr]");
 		return false;
 	}

@@ -35,25 +35,6 @@ ssize_t afs_listxattr(struct dentry *dentry, char *buffer, size_t size)
 }
 
 /*
- * Deal with the result of a successful fetch ACL operation.
- */
-static void afs_acl_success(struct afs_operation *op)
-{
-	afs_vnode_commit_status(op, &op->file[0]);
-}
-
-static void afs_acl_put(struct afs_operation *op)
-{
-	kfree(op->acl);
-}
-
-static const struct afs_operation_ops afs_fetch_acl_operation = {
-	.issue_afs_rpc	= afs_fs_fetch_acl,
-	.success	= afs_acl_success,
-	.put		= afs_acl_put,
-};
-
-/*
  * Get a file's ACL.
  */
 static int afs_xattr_get_acl(const struct xattr_handler *handler,
@@ -61,23 +42,37 @@ static int afs_xattr_get_acl(const struct xattr_handler *handler,
 			     struct inode *inode, const char *name,
 			     void *buffer, size_t size, int flags)
 {
-	struct afs_operation *op;
+	struct afs_operation fc;
+	struct afs_status_cb *scb;
 	struct afs_vnode *vnode = AFS_FS_I(inode);
 	struct afs_acl *acl = NULL;
-	int ret;
+	struct key *key;
+	int ret = -ENOMEM;
 
-	op = afs_alloc_operation(NULL, vnode->volume);
-	if (IS_ERR(op))
-		return -ENOMEM;
+	scb = kzalloc(sizeof(struct afs_status_cb), GFP_NOFS);
+	if (!scb)
+		goto error;
 
-	afs_op_set_vnode(op, 0, vnode);
-	op->ops = &afs_fetch_acl_operation;
+	key = afs_request_key(vnode->volume->cell);
+	if (IS_ERR(key)) {
+		ret = PTR_ERR(key);
+		goto error_scb;
+	}
 
-	afs_begin_vnode_operation(op);
-	afs_wait_for_operation(op);
-	acl = op->acl;
-	op->acl = NULL;
-	ret = afs_put_operation(op);
+	ret = -ERESTARTSYS;
+	if (afs_begin_vnode_operation(&fc, vnode, key, true)) {
+		afs_dataversion_t data_version = vnode->status.data_version;
+
+		while (afs_select_fileserver(&fc)) {
+			fc.cb_break = afs_calc_vnode_cb_break(vnode);
+			acl = afs_fs_fetch_acl(&fc, scb);
+		}
+
+		afs_check_for_remote_deletion(&fc, fc.vnode);
+		afs_vnode_commit_status(&fc, vnode, fc.cb_break,
+					&data_version, scb);
+		ret = afs_end_vnode_operation(&fc);
+	}
 
 	if (ret == 0) {
 		ret = acl->size;
@@ -85,36 +80,17 @@ static int afs_xattr_get_acl(const struct xattr_handler *handler,
 			if (acl->size <= size)
 				memcpy(buffer, acl->data, acl->size);
 			else
-				op->error = -ERANGE;
+				ret = -ERANGE;
 		}
+		kfree(acl);
 	}
 
-	kfree(acl);
+	key_put(key);
+error_scb:
+	kfree(scb);
+error:
 	return ret;
 }
-
-static bool afs_make_acl(struct afs_operation *op,
-			 const void *buffer, size_t size)
-{
-	struct afs_acl *acl;
-
-	acl = kmalloc(sizeof(*acl) + size, GFP_KERNEL);
-	if (!acl) {
-		afs_op_nomem(op);
-		return false;
-	}
-
-	acl->size = size;
-	memcpy(acl->data, buffer, size);
-	op->acl = acl;
-	return true;
-}
-
-static const struct afs_operation_ops afs_store_acl_operation = {
-	.issue_afs_rpc	= afs_fs_store_acl,
-	.success	= afs_acl_success,
-	.put		= afs_acl_put,
-};
 
 /*
  * Set a file's AFS3 ACL.
@@ -124,39 +100,61 @@ static int afs_xattr_set_acl(const struct xattr_handler *handler,
                              struct inode *inode, const char *name,
                              const void *buffer, size_t size, int flags)
 {
-	struct afs_operation *op;
+	struct afs_operation fc;
+	struct afs_status_cb *scb;
 	struct afs_vnode *vnode = AFS_FS_I(inode);
+	struct afs_acl *acl = NULL;
+	struct key *key;
+	int ret = -ENOMEM;
 
 	if (flags == XATTR_CREATE)
 		return -EINVAL;
 
-	op = afs_alloc_operation(NULL, vnode->volume);
-	if (IS_ERR(op))
-		return -ENOMEM;
+	scb = kzalloc(sizeof(struct afs_status_cb), GFP_NOFS);
+	if (!scb)
+		goto error;
 
-	afs_op_set_vnode(op, 0, vnode);
-	if (!afs_make_acl(op, buffer, size))
-		return afs_put_operation(op);
+	acl = kmalloc(sizeof(*acl) + size, GFP_KERNEL);
+	if (!acl)
+		goto error_scb;
 
-	op->ops = &afs_store_acl_operation;
-	return afs_do_sync_operation(op);
+	key = afs_request_key(vnode->volume->cell);
+	if (IS_ERR(key)) {
+		ret = PTR_ERR(key);
+		goto error_acl;
+	}
+
+	acl->size = size;
+	memcpy(acl->data, buffer, size);
+
+	ret = -ERESTARTSYS;
+	if (afs_begin_vnode_operation(&fc, vnode, key, true)) {
+		afs_dataversion_t data_version = vnode->status.data_version;
+
+		while (afs_select_fileserver(&fc)) {
+			fc.cb_break = afs_calc_vnode_cb_break(vnode);
+			afs_fs_store_acl(&fc, acl, scb);
+		}
+
+		afs_check_for_remote_deletion(&fc, fc.vnode);
+		afs_vnode_commit_status(&fc, vnode, fc.cb_break,
+					&data_version, scb);
+		ret = afs_end_vnode_operation(&fc);
+	}
+
+	key_put(key);
+error_acl:
+	kfree(acl);
+error_scb:
+	kfree(scb);
+error:
+	return ret;
 }
 
 static const struct xattr_handler afs_xattr_afs_acl_handler = {
 	.name   = "afs.acl",
 	.get    = afs_xattr_get_acl,
 	.set    = afs_xattr_set_acl,
-};
-
-static void yfs_acl_put(struct afs_operation *op)
-{
-	yfs_free_opaque_acl(op->yacl);
-}
-
-static const struct afs_operation_ops yfs_fetch_opaque_acl_operation = {
-	.issue_yfs_rpc	= yfs_fs_fetch_opaque_acl,
-	.success	= afs_acl_success,
-	/* Don't free op->yacl in .put here */
 };
 
 /*
@@ -167,9 +165,11 @@ static int afs_xattr_get_yfs(const struct xattr_handler *handler,
 			     struct inode *inode, const char *name,
 			     void *buffer, size_t size, int flags)
 {
-	struct afs_operation *op;
+	struct afs_operation fc;
+	struct afs_status_cb *scb;
 	struct afs_vnode *vnode = AFS_FS_I(inode);
 	struct yfs_acl *yacl = NULL;
+	struct key *key;
 	char buf[16], *data;
 	int which = 0, dsize, ret = -ENOMEM;
 
@@ -193,61 +193,74 @@ static int afs_xattr_get_yfs(const struct xattr_handler *handler,
 	else if (which == 3)
 		yacl->flags |= YFS_ACL_WANT_VOL_ACL;
 
-	op = afs_alloc_operation(NULL, vnode->volume);
-	if (IS_ERR(op))
+	scb = kzalloc(sizeof(struct afs_status_cb), GFP_NOFS);
+	if (!scb)
 		goto error_yacl;
 
-	afs_op_set_vnode(op, 0, vnode);
-	op->yacl = yacl;
-	op->ops = &yfs_fetch_opaque_acl_operation;
-
-	afs_begin_vnode_operation(op);
-	afs_wait_for_operation(op);
-	ret = afs_put_operation(op);
-
-	if (ret == 0) {
-		switch (which) {
-		case 0:
-			data = yacl->acl->data;
-			dsize = yacl->acl->size;
-			break;
-		case 1:
-			data = buf;
-			dsize = scnprintf(buf, sizeof(buf), "%u", yacl->inherit_flag);
-			break;
-		case 2:
-			data = buf;
-			dsize = scnprintf(buf, sizeof(buf), "%u", yacl->num_cleaned);
-			break;
-		case 3:
-			data = yacl->vol_acl->data;
-			dsize = yacl->vol_acl->size;
-			break;
-		default:
-			ret = -EOPNOTSUPP;
-			goto error_yacl;
-		}
-
-		ret = dsize;
-		if (size > 0) {
-			if (dsize <= size)
-				memcpy(buffer, data, dsize);
-			else
-				ret = -ERANGE;
-		}
+	key = afs_request_key(vnode->volume->cell);
+	if (IS_ERR(key)) {
+		ret = PTR_ERR(key);
+		goto error_scb;
 	}
 
+	ret = -ERESTARTSYS;
+	if (afs_begin_vnode_operation(&fc, vnode, key, true)) {
+		afs_dataversion_t data_version = vnode->status.data_version;
+
+		while (afs_select_fileserver(&fc)) {
+			fc.cb_break = afs_calc_vnode_cb_break(vnode);
+			yfs_fs_fetch_opaque_acl(&fc, yacl, scb);
+		}
+
+		afs_check_for_remote_deletion(&fc, fc.vnode);
+		afs_vnode_commit_status(&fc, vnode, fc.cb_break,
+					&data_version, scb);
+		ret = afs_end_vnode_operation(&fc);
+	}
+
+	if (ret < 0)
+		goto error_key;
+
+	switch (which) {
+	case 0:
+		data = yacl->acl->data;
+		dsize = yacl->acl->size;
+		break;
+	case 1:
+		data = buf;
+		dsize = scnprintf(buf, sizeof(buf), "%u", yacl->inherit_flag);
+		break;
+	case 2:
+		data = buf;
+		dsize = scnprintf(buf, sizeof(buf), "%u", yacl->num_cleaned);
+		break;
+	case 3:
+		data = yacl->vol_acl->data;
+		dsize = yacl->vol_acl->size;
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+		goto error_key;
+	}
+
+	ret = dsize;
+	if (size > 0) {
+		if (dsize > size) {
+			ret = -ERANGE;
+			goto error_key;
+		}
+		memcpy(buffer, data, dsize);
+	}
+
+error_key:
+	key_put(key);
+error_scb:
+	kfree(scb);
 error_yacl:
 	yfs_free_opaque_acl(yacl);
 error:
 	return ret;
 }
-
-static const struct afs_operation_ops yfs_store_opaque_acl2_operation = {
-	.issue_yfs_rpc	= yfs_fs_store_opaque_acl2,
-	.success	= afs_acl_success,
-	.put		= yfs_acl_put,
-};
 
 /*
  * Set a file's YFS ACL.
@@ -257,23 +270,56 @@ static int afs_xattr_set_yfs(const struct xattr_handler *handler,
                              struct inode *inode, const char *name,
                              const void *buffer, size_t size, int flags)
 {
-	struct afs_operation *op;
+	struct afs_operation fc;
+	struct afs_status_cb *scb;
 	struct afs_vnode *vnode = AFS_FS_I(inode);
+	struct afs_acl *acl = NULL;
+	struct key *key;
+	int ret = -ENOMEM;
 
 	if (flags == XATTR_CREATE ||
 	    strcmp(name, "acl") != 0)
 		return -EINVAL;
 
-	op = afs_alloc_operation(NULL, vnode->volume);
-	if (IS_ERR(op))
-		return -ENOMEM;
+	scb = kzalloc(sizeof(struct afs_status_cb), GFP_NOFS);
+	if (!scb)
+		goto error;
 
-	afs_op_set_vnode(op, 0, vnode);
-	if (!afs_make_acl(op, buffer, size))
-		return afs_put_operation(op);
+	acl = kmalloc(sizeof(*acl) + size, GFP_KERNEL);
+	if (!acl)
+		goto error_scb;
 
-	op->ops = &yfs_store_opaque_acl2_operation;
-	return afs_do_sync_operation(op);
+	acl->size = size;
+	memcpy(acl->data, buffer, size);
+
+	key = afs_request_key(vnode->volume->cell);
+	if (IS_ERR(key)) {
+		ret = PTR_ERR(key);
+		goto error_acl;
+	}
+
+	ret = -ERESTARTSYS;
+	if (afs_begin_vnode_operation(&fc, vnode, key, true)) {
+		afs_dataversion_t data_version = vnode->status.data_version;
+
+		while (afs_select_fileserver(&fc)) {
+			fc.cb_break = afs_calc_vnode_cb_break(vnode);
+			yfs_fs_store_opaque_acl2(&fc, acl, scb);
+		}
+
+		afs_check_for_remote_deletion(&fc, fc.vnode);
+		afs_vnode_commit_status(&fc, vnode, fc.cb_break,
+					&data_version, scb);
+		ret = afs_end_vnode_operation(&fc);
+	}
+
+error_acl:
+	kfree(acl);
+	key_put(key);
+error_scb:
+	kfree(scb);
+error:
+	return ret;
 }
 
 static const struct xattr_handler afs_xattr_yfs_handler = {

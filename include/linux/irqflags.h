@@ -35,16 +35,11 @@
 # define trace_softirq_context(p)	((p)->softirq_context)
 # define trace_hardirqs_enabled(p)	((p)->hardirqs_enabled)
 # define trace_softirqs_enabled(p)	((p)->softirqs_enabled)
-# define trace_hardirq_enter()			\
+# define lockdep_hardirq_enter()		\
 do {						\
-	if (!current->hardirq_context++)	\
-		current->hardirq_threaded = 0;	\
+	current->hardirq_context++;		\
 } while (0)
-# define trace_hardirq_threaded()		\
-do {						\
-	current->hardirq_threaded = 1;		\
-} while (0)
-# define trace_hardirq_exit()			\
+# define lockdep_hardirq_exit()			\
 do {						\
 	current->hardirq_context--;		\
 } while (0)
@@ -56,40 +51,6 @@ do {						\
 do {						\
 	current->softirq_context--;		\
 } while (0)
-
-# define lockdep_hrtimer_enter(__hrtimer)		\
-	  do {						\
-		  if (!__hrtimer->is_hard)		\
-			current->irq_config = 1;	\
-	  } while (0)
-
-# define lockdep_hrtimer_exit(__hrtimer)		\
-	  do {						\
-		  if (!__hrtimer->is_hard)		\
-			current->irq_config = 0;	\
-	  } while (0)
-
-# define lockdep_posixtimer_enter()				\
-	  do {							\
-		  current->irq_config = 1;			\
-	  } while (0)
-
-# define lockdep_posixtimer_exit()				\
-	  do {							\
-		  current->irq_config = 0;			\
-	  } while (0)
-
-# define lockdep_irq_work_enter(__work)					\
-	  do {								\
-		  if (!(atomic_read(&__work->flags) & IRQ_WORK_HARD_IRQ))\
-			current->irq_config = 1;			\
-	  } while (0)
-# define lockdep_irq_work_exit(__work)					\
-	  do {								\
-		  if (!(atomic_read(&__work->flags) & IRQ_WORK_HARD_IRQ))\
-			current->irq_config = 0;			\
-	  } while (0)
-
 #else
 # define trace_hardirqs_on()		do { } while (0)
 # define trace_hardirqs_off()		do { } while (0)
@@ -97,17 +58,10 @@ do {						\
 # define trace_softirq_context(p)	0
 # define trace_hardirqs_enabled(p)	0
 # define trace_softirqs_enabled(p)	0
-# define trace_hardirq_enter()		do { } while (0)
-# define trace_hardirq_threaded()	do { } while (0)
-# define trace_hardirq_exit()		do { } while (0)
+# define lockdep_hardirq_enter()	do { } while (0)
+# define lockdep_hardirq_exit()		do { } while (0)
 # define lockdep_softirq_enter()	do { } while (0)
 # define lockdep_softirq_exit()		do { } while (0)
-# define lockdep_hrtimer_enter(__hrtimer)		do { } while (0)
-# define lockdep_hrtimer_exit(__hrtimer)		do { } while (0)
-# define lockdep_posixtimer_enter()		do { } while (0)
-# define lockdep_posixtimer_exit()		do { } while (0)
-# define lockdep_irq_work_enter(__work)		do { } while (0)
-# define lockdep_irq_work_exit(__work)		do { } while (0)
 #endif
 
 #if defined(CONFIG_IRQSOFF_TRACER) || \

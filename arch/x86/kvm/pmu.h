@@ -85,7 +85,7 @@ static inline bool pmc_is_fixed(struct kvm_pmc *pmc)
 
 static inline bool pmc_is_enabled(struct kvm_pmc *pmc)
 {
-	return kvm_x86_ops->pmu_ops->pmc_is_enabled(pmc);
+	return kvm_x86_ops.pmu_ops->pmc_is_enabled(pmc);
 }
 
 /* returns general purpose PMC with the specified MSR. Note that it can be

@@ -1263,7 +1263,8 @@ static int oa_get_render_ctx_id(struct i915_perf_stream *stream)
 			 * dropped by GuC. They won't be part of the context
 			 * ID in the OA reports, so squash those lower bits.
 			 */
-			stream->specific_ctx_id = ce->lrc.lrca >> 12;
+			stream->specific_ctx_id =
+				lower_32_bits(ce->lrc_desc) >> 12;
 
 			/*
 			 * GuC uses the top bit to signal proxy submission, so
@@ -1280,10 +1281,11 @@ static int oa_get_render_ctx_id(struct i915_perf_stream *stream)
 			((1U << GEN11_SW_CTX_ID_WIDTH) - 1) << (GEN11_SW_CTX_ID_SHIFT - 32);
 		/*
 		 * Pick an unused context id
-		 * 0 - BITS_PER_LONG are used by other contexts
+		 * 0 - (NUM_CONTEXT_TAG - 1) are used by other contexts
 		 * GEN12_MAX_CONTEXT_HW_ID (0x7ff) is used by idle context
 		 */
 		stream->specific_ctx_id = (GEN12_MAX_CONTEXT_HW_ID - 1) << (GEN11_SW_CTX_ID_SHIFT - 32);
+		BUILD_BUG_ON((GEN12_MAX_CONTEXT_HW_ID - 1) < NUM_CONTEXT_TAG);
 		break;
 	}
 
@@ -2959,6 +2961,49 @@ void i915_oa_init_reg_state(const struct intel_context *ce,
 }
 
 /**
+ * i915_perf_read_locked - &i915_perf_stream_ops->read with error normalisation
+ * @stream: An i915 perf stream
+ * @file: An i915 perf stream file
+ * @buf: destination buffer given by userspace
+ * @count: the number of bytes userspace wants to read
+ * @ppos: (inout) file seek position (unused)
+ *
+ * Besides wrapping &i915_perf_stream_ops->read this provides a common place to
+ * ensure that if we've successfully copied any data then reporting that takes
+ * precedence over any internal error status, so the data isn't lost.
+ *
+ * For example ret will be -ENOSPC whenever there is more buffered data than
+ * can be copied to userspace, but that's only interesting if we weren't able
+ * to copy some data because it implies the userspace buffer is too small to
+ * receive a single record (and we never split records).
+ *
+ * Another case with ret == -EFAULT is more of a grey area since it would seem
+ * like bad form for userspace to ask us to overrun its buffer, but the user
+ * knows best:
+ *
+ *   http://yarchive.net/comp/linux/partial_reads_writes.html
+ *
+ * Returns: The number of bytes copied or a negative error code on failure.
+ */
+static ssize_t i915_perf_read_locked(struct i915_perf_stream *stream,
+				     struct file *file,
+				     char __user *buf,
+				     size_t count,
+				     loff_t *ppos)
+{
+	/* Note we keep the offset (aka bytes read) separate from any
+	 * error status so that the final check for whether we return
+	 * the bytes read with a higher precedence than any error (see
+	 * comment below) doesn't need to be handled/duplicated in
+	 * stream->ops->read() implementations.
+	 */
+	size_t offset = 0;
+	int ret = stream->ops->read(stream, buf, count, &offset);
+
+	return offset ?: (ret ?: -EAGAIN);
+}
+
+/**
  * i915_perf_read - handles read() FOP for i915 perf stream FDs
  * @file: An i915 perf stream file
  * @buf: destination buffer given by userspace
@@ -2983,8 +3028,7 @@ static ssize_t i915_perf_read(struct file *file,
 {
 	struct i915_perf_stream *stream = file->private_data;
 	struct i915_perf *perf = stream->perf;
-	size_t offset = 0;
-	int ret;
+	ssize_t ret;
 
 	/* To ensure it's handled consistently we simply treat all reads of a
 	 * disabled stream as an error. In particular it might otherwise lead
@@ -3007,12 +3051,13 @@ static ssize_t i915_perf_read(struct file *file,
 				return ret;
 
 			mutex_lock(&perf->lock);
-			ret = stream->ops->read(stream, buf, count, &offset);
+			ret = i915_perf_read_locked(stream, file,
+						    buf, count, ppos);
 			mutex_unlock(&perf->lock);
-		} while (!offset && !ret);
+		} while (ret == -EAGAIN);
 	} else {
 		mutex_lock(&perf->lock);
-		ret = stream->ops->read(stream, buf, count, &offset);
+		ret = i915_perf_read_locked(stream, file, buf, count, ppos);
 		mutex_unlock(&perf->lock);
 	}
 
@@ -3023,15 +3068,11 @@ static ssize_t i915_perf_read(struct file *file,
 	 * and read() returning -EAGAIN. Clearing the oa.pollin state here
 	 * effectively ensures we back off until the next hrtimer callback
 	 * before reporting another EPOLLIN event.
-	 * The exception to this is if ops->read() returned -ENOSPC which means
-	 * that more OA data is available than could fit in the user provided
-	 * buffer. In this case we want the next poll() call to not block.
 	 */
-	if (ret != -ENOSPC)
+	if (ret >= 0 || ret == -EAGAIN)
 		stream->pollin = false;
 
-	/* Possible values for ret are 0, -EFAULT, -ENOSPC, -EIO, ... */
-	return offset ?: (ret ?: -EAGAIN);
+	return ret;
 }
 
 static enum hrtimer_restart oa_poll_check_timer_cb(struct hrtimer *hrtimer)
@@ -3415,10 +3456,10 @@ i915_perf_open_ioctl_locked(struct i915_perf *perf,
 	/* Similar to perf's kernel.perf_paranoid_cpu sysctl option
 	 * we check a dev.i915.perf_stream_paranoid sysctl option
 	 * to determine if it's ok to access system wide OA counters
-	 * without CAP_PERFMON or CAP_SYS_ADMIN privileges.
+	 * without CAP_SYS_ADMIN privileges.
 	 */
 	if (privileged_op &&
-	    i915_perf_stream_paranoid && !perfmon_capable()) {
+	    i915_perf_stream_paranoid && !capable(CAP_SYS_ADMIN)) {
 		DRM_DEBUG("Insufficient privileges to open i915 perf stream\n");
 		ret = -EACCES;
 		goto err_ctx;
@@ -3612,8 +3653,9 @@ static int read_properties_unlocked(struct i915_perf *perf,
 			} else
 				oa_freq_hz = 0;
 
-			if (oa_freq_hz > i915_oa_max_sample_rate && !perfmon_capable()) {
-				DRM_DEBUG("OA exponent would exceed the max sampling frequency (sysctl dev.i915.oa_max_sample_rate) %uHz without CAP_PERFMON or CAP_SYS_ADMIN privileges\n",
+			if (oa_freq_hz > i915_oa_max_sample_rate &&
+			    !capable(CAP_SYS_ADMIN)) {
+				DRM_DEBUG("OA exponent would exceed the max sampling frequency (sysctl dev.i915.oa_max_sample_rate) %uHz without root privileges\n",
 					  i915_oa_max_sample_rate);
 				return -EACCES;
 			}
@@ -3996,7 +4038,7 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	if (i915_perf_stream_paranoid && !perfmon_capable()) {
+	if (i915_perf_stream_paranoid && !capable(CAP_SYS_ADMIN)) {
 		DRM_DEBUG("Insufficient privileges to add i915 OA config\n");
 		return -EACCES;
 	}
@@ -4143,7 +4185,7 @@ int i915_perf_remove_config_ioctl(struct drm_device *dev, void *data,
 		return -ENOTSUPP;
 	}
 
-	if (i915_perf_stream_paranoid && !perfmon_capable()) {
+	if (i915_perf_stream_paranoid && !capable(CAP_SYS_ADMIN)) {
 		DRM_DEBUG("Insufficient privileges to remove i915 OA config\n");
 		return -EACCES;
 	}

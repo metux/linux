@@ -65,11 +65,6 @@ static struct resource *get_pci_domain_busn_res(int domain_nr)
 	return &r->res;
 }
 
-static int find_anything(struct device *dev, const void *data)
-{
-	return 1;
-}
-
 /*
  * Some device drivers need know if PCI is initiated.
  * Basically, we think PCI is not initiated when there
@@ -80,7 +75,7 @@ int no_pci_devices(void)
 	struct device *dev;
 	int no_devices;
 
-	dev = bus_find_device(&pci_bus_type, NULL, NULL, find_anything);
+	dev = bus_find_next_device(&pci_bus_type, NULL);
 	no_devices = (dev == NULL);
 	put_device(dev);
 	return no_devices;
@@ -2588,35 +2583,17 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	/* Buffers for saving PCIe and PCI-X capabilities */
 	pci_allocate_cap_save_buffers(dev);
 
-	/* Power Management */
-	pci_pm_init(dev);
-
-	/* Vital Product Data */
-	pci_vpd_init(dev);
-
-	/* Alternative Routing-ID Forwarding */
-	pci_configure_ari(dev);
-
-	/* Single Root I/O Virtualization */
-	pci_iov_init(dev);
-
-	/* Address Translation Services */
-	pci_ats_init(dev);
-
-	/* Page Request Interface */
-	pci_pri_init(dev);
-
-	/* Process Address Space ID */
-	pci_pasid_init(dev);
-
-	/* Enable ACS P2P upstream forwarding */
-	pci_enable_acs(dev);
-
-	/* Precision Time Measurement */
-	pci_ptm_init(dev);
-
-	/* Advanced Error Reporting */
-	pci_aer_init(dev);
+	pci_pm_init(dev);		/* Power Management */
+	pci_vpd_init(dev);		/* Vital Product Data */
+	pci_configure_ari(dev);		/* Alternative Routing-ID Forwarding */
+	pci_iov_init(dev);		/* Single Root I/O Virtualization */
+	pci_ats_init(dev);		/* Address Translation Services */
+	pci_pri_init(dev);		/* Page Request Interface */
+	pci_pasid_init(dev);		/* Process Address Space ID */
+	pci_enable_acs(dev);		/* Enable ACS P2P upstream forwarding */
+	pci_ptm_init(dev);		/* Precision Time Measurement */
+	pci_aer_init(dev);		/* Advanced Error Reporting */
+	pci_dpc_init(dev);		/* Downstream Port Containment */
 
 	pcie_report_downtraining(dev);
 

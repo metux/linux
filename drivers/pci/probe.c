@@ -65,11 +65,6 @@ static struct resource *get_pci_domain_busn_res(int domain_nr)
 	return &r->res;
 }
 
-static int find_anything(struct device *dev, const void *data)
-{
-	return 1;
-}
-
 /*
  * Some device drivers need know if PCI is initiated.
  * Basically, we think PCI is not initiated when there
@@ -80,7 +75,7 @@ int no_pci_devices(void)
 	struct device *dev;
 	int no_devices;
 
-	dev = bus_find_device(&pci_bus_type, NULL, NULL, find_anything);
+	dev = bus_find_next_device(&pci_bus_type, NULL);
 	no_devices = (dev == NULL);
 	put_device(dev);
 	return no_devices;
@@ -578,6 +573,7 @@ static void devm_pci_release_host_bridge_dev(struct device *dev)
 		bridge->release_fn(bridge);
 
 	pci_free_resource_list(&bridge->windows);
+	pci_free_resource_list(&bridge->dma_ranges);
 }
 
 static void pci_release_host_bridge_dev(struct device *dev)
@@ -903,6 +899,9 @@ static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 	else
 		pr_info("PCI host bridge to bus %s\n", name);
 
+	if (nr_node_ids > 1 && pcibus_to_node(bus) == NUMA_NO_NODE)
+		dev_warn(&bus->dev, "Unknown NUMA node; performance will be reduced\n");
+
 	/* Add initial resources to the bus */
 	resource_list_for_each_entry_safe(window, n, &resources) {
 		list_move_tail(&window->node, &bridge->windows);
@@ -1095,14 +1094,15 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
  * @sec: updated with secondary bus number from EA
  * @sub: updated with subordinate bus number from EA
  *
- * If @dev is a bridge with EA capability, update @sec and @sub with
- * fixed bus numbers from the capability and return true.  Otherwise,
- * return false.
+ * If @dev is a bridge with EA capability that specifies valid secondary
+ * and subordinate bus numbers, return true with the bus numbers in @sec
+ * and @sub.  Otherwise return false.
  */
 static bool pci_ea_fixed_busnrs(struct pci_dev *dev, u8 *sec, u8 *sub)
 {
 	int ea, offset;
 	u32 dw;
+	u8 ea_sec, ea_sub;
 
 	if (dev->hdr_type != PCI_HEADER_TYPE_BRIDGE)
 		return false;
@@ -1114,8 +1114,13 @@ static bool pci_ea_fixed_busnrs(struct pci_dev *dev, u8 *sec, u8 *sub)
 
 	offset = ea + PCI_EA_FIRST_ENT;
 	pci_read_config_dword(dev, offset, &dw);
-	*sec =  dw & PCI_EA_SEC_BUS_MASK;
-	*sub = (dw & PCI_EA_SUB_BUS_MASK) >> PCI_EA_SUB_BUS_SHIFT;
+	ea_sec =  dw & PCI_EA_SEC_BUS_MASK;
+	ea_sub = (dw & PCI_EA_SUB_BUS_MASK) >> PCI_EA_SUB_BUS_SHIFT;
+	if (ea_sec  == 0 || ea_sub < ea_sec)
+		return false;
+
+	*sec = ea_sec;
+	*sub = ea_sub;
 	return true;
 }
 
@@ -2578,29 +2583,17 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	/* Buffers for saving PCIe and PCI-X capabilities */
 	pci_allocate_cap_save_buffers(dev);
 
-	/* Power Management */
-	pci_pm_init(dev);
-
-	/* Vital Product Data */
-	pci_vpd_init(dev);
-
-	/* Alternative Routing-ID Forwarding */
-	pci_configure_ari(dev);
-
-	/* Single Root I/O Virtualization */
-	pci_iov_init(dev);
-
-	/* Address Translation Services */
-	pci_ats_init(dev);
-
-	/* Enable ACS P2P upstream forwarding */
-	pci_enable_acs(dev);
-
-	/* Precision Time Measurement */
-	pci_ptm_init(dev);
-
-	/* Advanced Error Reporting */
-	pci_aer_init(dev);
+	pci_pm_init(dev);		/* Power Management */
+	pci_vpd_init(dev);		/* Vital Product Data */
+	pci_configure_ari(dev);		/* Alternative Routing-ID Forwarding */
+	pci_iov_init(dev);		/* Single Root I/O Virtualization */
+	pci_ats_init(dev);		/* Address Translation Services */
+	pci_pri_init(dev);		/* Page Request Interface */
+	pci_pasid_init(dev);		/* Process Address Space ID */
+	pci_enable_acs(dev);		/* Enable ACS P2P upstream forwarding */
+	pci_ptm_init(dev);		/* Precision Time Measurement */
+	pci_aer_init(dev);		/* Advanced Error Reporting */
+	pci_dpc_init(dev);		/* Downstream Port Containment */
 
 	pcie_report_downtraining(dev);
 

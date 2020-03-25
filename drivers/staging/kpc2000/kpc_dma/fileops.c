@@ -124,7 +124,7 @@ static int kpc_dma_transfer(struct dev_private_data *priv,
 		pcnt = count_parts_for_sge(sg);
 		for (p = 0 ; p < pcnt ; p++) {
 			// Fill out the descriptor
-			BUG_ON(desc == NULL);
+			BUG_ON(!desc);
 			clear_desc(desc);
 			if (p != pcnt-1) {
 				desc->DescByteCount = 0x80000;
@@ -201,11 +201,11 @@ void  transfer_complete_cb(struct aio_cb_data *acd, size_t xfr_count, u32 flags)
 {
 	unsigned int i;
 
-	BUG_ON(acd == NULL);
-	BUG_ON(acd->user_pages == NULL);
-	BUG_ON(acd->sgt.sgl == NULL);
-	BUG_ON(acd->ldev == NULL);
-	BUG_ON(acd->ldev->pldev == NULL);
+	BUG_ON(!acd);
+	BUG_ON(!acd->user_pages);
+	BUG_ON(!acd->sgt.sgl);
+	BUG_ON(!acd->ldev);
+	BUG_ON(!acd->ldev->pldev);
 
 	dma_unmap_sg(&acd->ldev->pldev->dev, acd->sgt.sgl, acd->sgt.nents, acd->ldev->dir);
 

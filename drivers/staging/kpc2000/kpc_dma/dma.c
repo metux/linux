@@ -238,7 +238,7 @@ int  count_descriptors_available(struct kpc_dma_device *eng)
 	u32 count = 0;
 	struct kpc_dma_descriptor *cur = eng->desc_next;
 	while (cur != eng->desc_completed) {
-		BUG_ON(cur == NULL);
+		BUG_ON(!cur);
 		count++;
 		cur = cur->Next;
 	}

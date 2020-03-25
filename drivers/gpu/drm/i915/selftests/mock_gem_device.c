@@ -41,36 +41,32 @@
 
 void mock_device_flush(struct drm_i915_private *i915)
 {
+	struct intel_gt *gt = &i915->gt;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 
 	do {
-		for_each_engine(engine, i915, id)
+		for_each_engine(engine, gt, id)
 			mock_engine_flush(engine);
-	} while (intel_gt_retire_requests_timeout(&i915->gt,
-						  MAX_SCHEDULE_TIMEOUT));
+	} while (intel_gt_retire_requests_timeout(gt, MAX_SCHEDULE_TIMEOUT));
 }
 
 static void mock_device_release(struct drm_device *dev)
 {
 	struct drm_i915_private *i915 = to_i915(dev);
-	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
 
 	mock_device_flush(i915);
+	intel_gt_driver_remove(&i915->gt);
 
-	i915_gem_drain_workqueue(i915);
-
-	for_each_engine(engine, i915, id)
-		mock_engine_free(engine);
 	i915_gem_driver_release__contexts(i915);
 
-	drain_workqueue(i915->wq);
+	i915_gem_drain_workqueue(i915);
 	i915_gem_drain_freed_objects(i915);
 
 	mock_fini_ggtt(&i915->ggtt);
 	destroy_workqueue(i915->wq);
 
+	intel_gt_driver_late_release(&i915->gt);
 	intel_memory_regions_driver_release(i915);
 
 	drm_mode_config_cleanup(&i915->drm);
@@ -178,31 +174,28 @@ struct drm_i915_private *mock_gem_device(void)
 	mock_init_contexts(i915);
 
 	mock_init_ggtt(i915, &i915->ggtt);
+	i915->gt.vm = i915_vm_get(&i915->ggtt.vm);
 
 	mkwrite_device_info(i915)->engine_mask = BIT(0);
 
-	i915->engine[RCS0] = mock_engine(i915, "mock", RCS0);
-	if (!i915->engine[RCS0])
+	i915->gt.engine[RCS0] = mock_engine(i915, "mock", RCS0);
+	if (!i915->gt.engine[RCS0])
 		goto err_unlock;
 
-	i915->kernel_context = mock_context(i915, NULL);
-	if (!i915->kernel_context)
-		goto err_engine;
-
-	if (mock_engine_init(i915->engine[RCS0]))
+	if (mock_engine_init(i915->gt.engine[RCS0]))
 		goto err_context;
 
+	__clear_bit(I915_WEDGED, &i915->gt.reset.flags);
 	intel_engines_driver_register(i915);
 
 	return i915;
 
 err_context:
-	i915_gem_driver_release__contexts(i915);
-err_engine:
-	mock_engine_free(i915->engine[RCS0]);
+	intel_gt_driver_remove(&i915->gt);
 err_unlock:
 	destroy_workqueue(i915->wq);
 err_drv:
+	intel_gt_driver_late_release(&i915->gt);
 	intel_memory_regions_driver_release(i915);
 	drm_mode_config_cleanup(&i915->drm);
 	drm_dev_fini(&i915->drm);

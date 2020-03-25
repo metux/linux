@@ -1929,7 +1929,7 @@ static int mock_context_barrier(void *arg)
 		goto out;
 	}
 
-	rq = igt_request_alloc(ctx, i915->engine[RCS0]);
+	rq = igt_request_alloc(ctx, i915->gt.engine[RCS0]);
 	if (IS_ERR(rq)) {
 		pr_err("Request allocation failed!\n");
 		goto out;

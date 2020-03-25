@@ -49,6 +49,8 @@
 #include <trace/events/block.h>
 #include <linux/fscrypt.h>
 
+#include "internal.h"
+
 static int fsync_buffers_list(spinlock_t *lock, struct list_head *list);
 static int submit_bh_wbc(int op, int op_flags, struct buffer_head *bh,
 			 enum rw_hint hint, struct writeback_control *wbc);
@@ -1423,15 +1425,15 @@ static bool has_bh_in_lru(int cpu, void *dummy)
 	
 	for (i = 0; i < BH_LRU_SIZE; i++) {
 		if (b->bhs[i])
-			return 1;
+			return true;
 	}
 
-	return 0;
+	return false;
 }
 
 void invalidate_bh_lrus(void)
 {
-	on_each_cpu_cond(has_bh_in_lru, invalidate_bh_lru, NULL, 1, GFP_KERNEL);
+	on_each_cpu_cond(has_bh_in_lru, invalidate_bh_lru, NULL, 1);
 }
 EXPORT_SYMBOL_GPL(invalidate_bh_lrus);
 
@@ -3015,72 +3017,6 @@ static void end_bio_bh_io_sync(struct bio *bio)
 
 	bh->b_end_io(bh, !bio->bi_status);
 	bio_put(bio);
-}
-
-/*
- * This allows us to do IO even on the odd last sectors
- * of a device, even if the block size is some multiple
- * of the physical sector size.
- *
- * We'll just truncate the bio to the size of the device,
- * and clear the end of the buffer head manually.
- *
- * Truly out-of-range accesses will turn into actual IO
- * errors, this only handles the "we need to be able to
- * do IO at the final sector" case.
- */
-void guard_bio_eod(struct bio *bio)
-{
-	sector_t maxsector;
-	struct bio_vec *bvec = bio_last_bvec_all(bio);
-	unsigned truncated_bytes;
-	struct hd_struct *part;
-
-	rcu_read_lock();
-	part = __disk_get_part(bio->bi_disk, bio->bi_partno);
-	if (part)
-		maxsector = part_nr_sects_read(part);
-	else
-		maxsector = get_capacity(bio->bi_disk);
-	rcu_read_unlock();
-
-	if (!maxsector)
-		return;
-
-	/*
-	 * If the *whole* IO is past the end of the device,
-	 * let it through, and the IO layer will turn it into
-	 * an EIO.
-	 */
-	if (unlikely(bio->bi_iter.bi_sector >= maxsector))
-		return;
-
-	maxsector -= bio->bi_iter.bi_sector;
-	if (likely((bio->bi_iter.bi_size >> 9) <= maxsector))
-		return;
-
-	/* Uhhuh. We've got a bio that straddles the device size! */
-	truncated_bytes = bio->bi_iter.bi_size - (maxsector << 9);
-
-	/*
-	 * The bio contains more than one segment which spans EOD, just return
-	 * and let IO layer turn it into an EIO
-	 */
-	if (truncated_bytes > bvec->bv_len)
-		return;
-
-	/* Truncate the bio.. */
-	bio->bi_iter.bi_size -= truncated_bytes;
-	bvec->bv_len -= truncated_bytes;
-
-	/* ..and clear the end of the buffer for reads */
-	if (op == REQ_OP_READ) {
-		struct bio_vec bv;
-
-		mp_bvec_last_segment(bvec, &bv);
-		zero_user(bv.bv_page, bv.bv_offset + bv.bv_len,
-				truncated_bytes);
-	}
 }
 
 static int submit_bh_wbc(int op, int op_flags, struct buffer_head *bh,

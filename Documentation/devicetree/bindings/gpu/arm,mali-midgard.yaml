@@ -73,6 +73,9 @@ properties:
   mali-supply:
     maxItems: 1
 
+  power-domains:
+    maxItems: 1
+
   resets:
     minItems: 1
     maxItems: 2

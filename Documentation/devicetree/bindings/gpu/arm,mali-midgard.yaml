@@ -96,6 +96,8 @@ required:
   - interrupt-names
   - clocks
 
+additionalProperties: false
+
 allOf:
   - if:
       properties:

@@ -695,7 +695,6 @@ intel_hdmi_compute_avi_infoframe(struct intel_encoder *encoder,
 		&crtc_state->hw.adjusted_mode;
 	struct drm_connector *connector = conn_state->connector;
 	struct intel_digital_port *intel_dig_port = enc_to_dig_port(encoder);
-	struct drm_i915_private *i915 = to_i915(intel_dig_port->base.base.dev);
 	u8 buffer[VIDEO_DIP_DATA_SIZE];
 	int ret;
 

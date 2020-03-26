@@ -79,6 +79,11 @@ struct intel_guc {
 	void (*notify)(struct intel_guc *guc);
 };
 
+static inline struct intel_guc *log_to_guc(struct intel_guc_log *log)
+{
+	return container_of(log, struct intel_guc, log);
+}
+
 static
 inline int intel_guc_send(struct intel_guc *guc, const u32 *action, u32 len)
 {

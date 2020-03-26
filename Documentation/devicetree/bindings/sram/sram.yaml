@@ -55,7 +55,7 @@ properties:
     type: boolean
 
 patternProperties:
-  "^([a-z]*-)?sram@[a-f0-9]+$":
+  "^([a-z]*-)?sram(-section)?@[a-f0-9]+$":
     type: object
     description:
       Each child of the sram node specifies a region of reserved memory.
@@ -64,9 +64,22 @@ patternProperties:
         description:
           Should contain a vendor specific string in the form
           <vendor>,[<device>-]<usage>
-        enum:
-          - samsung,exynos4210-sysram
-          - samsung,exynos4210-sysram-ns
+        contains:
+          enum:
+            - allwinner,sun4i-a10-sram-a3-a4
+            - allwinner,sun4i-a10-sram-c1
+            - allwinner,sun4i-a10-sram-d
+            - allwinner,sun9i-a80-smp-sram
+            - allwinner,sun50i-a64-sram-c
+            - amlogic,meson8-smp-sram
+            - amlogic,meson8b-smp-sram
+            - amlogic,meson-gxbb-scp-shmem
+            - amlogic,meson-axg-scp-shmem
+            - renesas,smp-sram
+            - rockchip,rk3066-smp-sram
+            - samsung,exynos4210-sysram
+            - samsung,exynos4210-sysram-ns
+            - socionext,milbeaut-smp-sram
 
       reg:
         description:
@@ -161,5 +174,91 @@ examples:
         smp-sram@53000 {
             compatible = "samsung,exynos4210-sysram-ns";
             reg = <0x53000 0x1000>;
+        };
+    };
+
+  - |
+    // Amlogic's SMP-capable SoCs use part of the sram for the bringup of the cores.
+    // Once the core gets powered up it executes the code that is residing at a
+    // specific location.
+    //
+    // Therefore a reserved section sub-node has to be added to the mmio-sram
+    // declaration.
+    sram@d9000000 {
+        compatible = "mmio-sram";
+        reg = <0xd9000000 0x20000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0 0xd9000000 0x20000>;
+
+        smp-sram@1ff80 {
+            compatible = "amlogic,meson8b-smp-sram";
+            reg = <0x1ff80 0x8>;
+        };
+    };
+
+  - |
+    sram@e63c0000 {
+        compatible = "mmio-sram";
+        reg = <0xe63c0000 0x1000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0 0xe63c0000 0x1000>;
+
+        smp-sram@0 {
+            compatible = "renesas,smp-sram";
+            reg = <0 0x10>;
+        };
+    };
+
+  - |
+    sram@10080000 {
+        compatible = "mmio-sram";
+        reg = <0x10080000 0x10000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        smp-sram@10080000 {
+            compatible = "rockchip,rk3066-smp-sram";
+            reg = <0x10080000 0x50>;
+        };
+    };
+
+  - |
+    // Allwinner's A80 SoC uses part of the secure sram for hotplugging of the
+    // primary core (cpu0). Once the core gets powered up it checks if a magic
+    // value is set at a specific location. If it is then the BROM will jump
+    // to the software entry address, instead of executing a standard boot.
+    //
+    // Also there are no "secure-only" properties. The implementation should
+    // check if this SRAM is usable first.
+    sram@20000 {
+        // 256 KiB secure SRAM at 0x20000
+        compatible = "mmio-sram";
+        reg = <0x00020000 0x40000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0 0x00020000 0x40000>;
+
+        smp-sram@1000 {
+            // This is checked by BROM to determine if
+            // cpu0 should jump to SMP entry vector
+            compatible = "allwinner,sun9i-a80-smp-sram";
+            reg = <0x1000 0x8>;
+        };
+    };
+
+  - |
+    sram@0 {
+        compatible = "mmio-sram";
+        reg = <0x0 0x10000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0 0x0 0x10000>;
+
+        smp-sram@f100 {
+            compatible = "socionext,milbeaut-smp-sram";
+            reg = <0xf100 0x20>;
         };
     };

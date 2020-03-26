@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+
 %YAML 1.2
 ---
 $id: http://devicetree.org/schemas/usb/qcom,dwc3.yaml#
@@ -15,7 +16,6 @@ properties:
       - enum:
           - qcom,msm8996-dwc3
           - qcom,msm8998-dwc3
-          - qcom,sc7180-dwc3
           - qcom,sdm845-dwc3
       - const: qcom,dwc3
 
@@ -28,8 +28,6 @@ properties:
 
   "#size-cells":
     enum: [ 1, 2 ]
-
-  ranges: true
 
   power-domains:
     description: specifies a phandle to PM domain provider node
@@ -63,19 +61,13 @@ properties:
       - description: Phandle and clock specifoer of MASTER_CLK.
 
   assigned-clock-rates:
+    maxItems: 2
     items:
       - description: Must be 19.2MHz (19200000).
       - description: Must be >= 60 MHz in HS mode, >= 125 MHz in SS mode.
+
   resets:
     maxItems: 1
-
-  interconnects:
-    maxItems: 2
-
-  interconnect-names:
-    items:
-      - const: usb-ddr
-      - const: apps-usb
 
   interrupts:
     items:
@@ -114,12 +106,9 @@ required:
   - reg
   - "#address-cells"
   - "#size-cells"
-  - ranges
   - power-domains
   - clocks
   - clock-names
-  - interrupts
-  - interrupt-names
 
 additionalProperties: false
 
@@ -128,49 +117,44 @@ examples:
     #include <dt-bindings/clock/qcom,gcc-sdm845.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
     #include <dt-bindings/interrupt-controller/irq.h>
-    soc {
+    usb@a6f8800 {
+        compatible = "qcom,sdm845-dwc3", "qcom,dwc3";
+        reg = <0 0x0a6f8800 0 0x400>;
+
         #address-cells = <2>;
         #size-cells = <2>;
 
-        usb@a6f8800 {
-            compatible = "qcom,sdm845-dwc3", "qcom,dwc3";
-            reg = <0 0x0a6f8800 0 0x400>;
-
-            #address-cells = <2>;
-            #size-cells = <2>;
-            ranges;
-            clocks = <&gcc GCC_CFG_NOC_USB3_PRIM_AXI_CLK>,
-                     <&gcc GCC_USB30_PRIM_MASTER_CLK>,
-                     <&gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>,
-                     <&gcc GCC_USB30_PRIM_MOCK_UTMI_CLK>,
-                     <&gcc GCC_USB30_PRIM_SLEEP_CLK>;
-            clock-names = "cfg_noc", "core", "iface", "mock_utmi",
+        clocks = <&gcc GCC_CFG_NOC_USB3_PRIM_AXI_CLK>,
+                 <&gcc GCC_USB30_PRIM_MASTER_CLK>,
+                 <&gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>,
+                 <&gcc GCC_USB30_PRIM_MOCK_UTMI_CLK>,
+                 <&gcc GCC_USB30_PRIM_SLEEP_CLK>;
+        clock-names = "cfg_noc", "core", "iface", "mock_utmi",
                       "sleep";
 
-            assigned-clocks = <&gcc GCC_USB30_PRIM_MOCK_UTMI_CLK>,
+        assigned-clocks = <&gcc GCC_USB30_PRIM_MOCK_UTMI_CLK>,
                           <&gcc GCC_USB30_PRIM_MASTER_CLK>;
-            assigned-clock-rates = <19200000>, <150000000>;
+        assigned-clock-rates = <19200000>, <150000000>;
 
-            interrupts = <GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
-                         <GIC_SPI 486 IRQ_TYPE_LEVEL_HIGH>,
-                         <GIC_SPI 488 IRQ_TYPE_LEVEL_HIGH>,
-                         <GIC_SPI 489 IRQ_TYPE_LEVEL_HIGH>;
-            interrupt-names = "hs_phy_irq", "ss_phy_irq",
+        interrupts = <GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 486 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 488 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 489 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-names = "hs_phy_irq", "ss_phy_irq",
                           "dm_hs_phy_irq", "dp_hs_phy_irq";
 
-            power-domains = <&gcc USB30_PRIM_GDSC>;
+        power-domains = <&gcc USB30_PRIM_GDSC>;
 
-            resets = <&gcc GCC_USB30_PRIM_BCR>;
+        resets = <&gcc GCC_USB30_PRIM_BCR>;
 
-            dwc3@a600000 {
-                compatible = "snps,dwc3";
-                reg = <0 0x0a600000 0 0xcd00>;
-                interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>;
-                iommus = <&apps_smmu 0x740 0>;
-                snps,dis_u2_susphy_quirk;
-                snps,dis_enblslpm_quirk;
-                phys = <&usb_1_hsphy>, <&usb_1_ssphy>;
-                phy-names = "usb2-phy", "usb3-phy";
-            };
+        dwc3@a600000 {
+            compatible = "snps,dwc3";
+            reg = <0 0x0a600000 0 0xcd00>;
+            interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>;
+            iommus = <&apps_smmu 0x740 0>;
+            snps,dis_u2_susphy_quirk;
+            snps,dis_enblslpm_quirk;
+            phys = <&usb_1_hsphy>, <&usb_1_ssphy>;
+            phy-names = "usb2-phy", "usb3-phy";
         };
     };

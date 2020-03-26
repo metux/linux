@@ -158,18 +158,16 @@ vma_create(struct drm_i915_gem_object *obj,
 
 	GEM_BUG_ON(!IS_ALIGNED(vma->size, I915_GTT_PAGE_SIZE));
 
-	spin_lock(&obj->vma.lock);
-
 	if (i915_is_ggtt(vm)) {
 		if (unlikely(overflows_type(vma->size, u32)))
-			goto err_unlock;
+			goto err_vma;
 
 		vma->fence_size = i915_gem_fence_size(vm->i915, vma->size,
 						      i915_gem_object_get_tiling(obj),
 						      i915_gem_object_get_stride(obj));
 		if (unlikely(vma->fence_size < vma->size || /* overflow */
 			     vma->fence_size > vm->total))
-			goto err_unlock;
+			goto err_vma;
 
 		GEM_BUG_ON(!IS_ALIGNED(vma->fence_size, I915_GTT_MIN_ALIGNMENT));
 
@@ -180,6 +178,8 @@ vma_create(struct drm_i915_gem_object *obj,
 
 		__set_bit(I915_VMA_GGTT_BIT, __i915_vma_flags(vma));
 	}
+
+	spin_lock(&obj->vma.lock);
 
 	rb = NULL;
 	p = &obj->vma.tree.rb_node;
@@ -225,8 +225,6 @@ vma_create(struct drm_i915_gem_object *obj,
 
 	return vma;
 
-err_unlock:
-	spin_unlock(&obj->vma.lock);
 err_vma:
 	i915_vma_free(vma);
 	return ERR_PTR(-E2BIG);
@@ -915,10 +913,29 @@ int i915_vma_pin(struct i915_vma *vma, u64 size, u64 alignment, u64 flags)
 	if (flags & PIN_GLOBAL)
 		wakeref = intel_runtime_pm_get(&vma->vm->i915->runtime_pm);
 
-	/* No more allocations allowed once we hold vm->mutex */
-	err = mutex_lock_interruptible(&vma->vm->mutex);
+	/*
+	 * Differentiate between user/kernel vma inside the aliasing-ppgtt.
+	 *
+	 * We conflate the Global GTT with the user's vma when using the
+	 * aliasing-ppgtt, but it is still vitally important to try and
+	 * keep the use cases distinct. For example, userptr objects are
+	 * not allowed inside the Global GTT as that will cause lock
+	 * inversions when we have to evict them the mmu_notifier callbacks -
+	 * but they are allowed to be part of the user ppGTT which can never
+	 * be mapped. As such we try to give the distinct users of the same
+	 * mutex, distinct lockclasses [equivalent to how we keep i915_ggtt
+	 * and i915_ppgtt separate].
+	 *
+	 * NB this may cause us to mask real lock inversions -- while the
+	 * code is safe today, lockdep may not be able to spot future
+	 * transgressions.
+	 */
+	err = mutex_lock_interruptible_nested(&vma->vm->mutex,
+					      !(flags & PIN_GLOBAL));
 	if (err)
 		goto err_fence;
+
+	/* No more allocations allowed now we hold vm->mutex */
 
 	if (unlikely(i915_vma_is_closed(vma))) {
 		err = -ENOENT;
@@ -1228,6 +1245,18 @@ int __i915_vma_unbind(struct i915_vma *vma)
 
 	lockdep_assert_held(&vma->vm->mutex);
 
+	/*
+	 * First wait upon any activity as retiring the request may
+	 * have side-effects such as unpinning or even unbinding this vma.
+	 *
+	 * XXX Actually waiting under the vm->mutex is a hinderance and
+	 * should be pipelined wherever possible. In cases where that is
+	 * unavoidable, we should lift the wait to before the mutex.
+	 */
+	ret = i915_vma_sync(vma);
+	if (ret)
+		return ret;
+
 	if (i915_vma_is_pinned(vma)) {
 		vma_print_allocator(vma, "is pinned");
 		return -EAGAIN;
@@ -1301,21 +1330,16 @@ int i915_vma_unbind(struct i915_vma *vma)
 	if (!drm_mm_node_allocated(&vma->node))
 		return 0;
 
+	if (i915_vma_is_bound(vma, I915_VMA_GLOBAL_BIND))
+		/* XXX not always required: nop_clear_range */
+		wakeref = intel_runtime_pm_get(&vm->i915->runtime_pm);
+
 	/* Optimistic wait before taking the mutex */
 	err = i915_vma_sync(vma);
 	if (err)
 		goto out_rpm;
 
-	if (i915_vma_is_pinned(vma)) {
-		vma_print_allocator(vma, "is pinned");
-		return -EAGAIN;
-	}
-
-	if (i915_vma_is_bound(vma, I915_VMA_GLOBAL_BIND))
-		/* XXX not always required: nop_clear_range */
-		wakeref = intel_runtime_pm_get(&vm->i915->runtime_pm);
-
-	err = mutex_lock_interruptible(&vm->mutex);
+	err = mutex_lock_interruptible_nested(&vma->vm->mutex, !wakeref);
 	if (err)
 		goto out_rpm;
 

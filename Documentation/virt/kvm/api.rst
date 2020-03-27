@@ -4663,6 +4663,12 @@ KVM_PV_ENABLE
   command has succeeded, any CPU added via hotplug will become
   protected during its creation as well.
 
+  Errors:
+
+  =====      =============================
+  EINTR      an unmasked signal is pending
+  =====      =============================
+
 KVM_PV_DISABLE
 
   Deregister the VM from the Ultravisor and reclaim the memory that

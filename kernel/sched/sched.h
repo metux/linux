@@ -870,9 +870,7 @@ struct rq {
 	atomic_t		nohz_flags;
 #endif /* CONFIG_NO_HZ_COMMON */
 
-#ifdef CONFIG_SMP
-	unsigned int		ttwu_pending;
-#endif
+	unsigned long		nr_load_updates;
 	u64			nr_switches;
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -928,7 +926,6 @@ struct rq {
 
 	struct callback_head	*balance_callback;
 
-	unsigned char		nohz_idle_balance;
 	unsigned char		idle_balance;
 
 	unsigned long		misfit_task_load;
@@ -994,6 +991,11 @@ struct rq {
 	/* try_to_wake_up() stats */
 	unsigned int		ttwu_count;
 	unsigned int		ttwu_local;
+#endif
+
+#ifdef CONFIG_SMP
+	call_single_data_t	wake_csd;
+	struct llist_head	wake_list;
 #endif
 
 #ifdef CONFIG_CPU_IDLE
@@ -1321,6 +1323,8 @@ queue_balance_callback(struct rq *rq,
 	rq->balance_callback = head;
 }
 
+extern void sched_ttwu_pending(void);
+
 #define rcu_dereference_check_sched_domain(p) \
 	rcu_dereference_check((p), \
 			      lockdep_is_held(&sched_domains_mutex))
@@ -1415,7 +1419,7 @@ struct sched_group {
 	 * by attaching extra space to the end of the structure,
 	 * depending on how many CPUs the kernel has booted up with)
 	 */
-	unsigned long		cpumask[];
+	unsigned long		cpumask[0];
 };
 
 static inline struct cpumask *sched_group_span(struct sched_group *sg)
@@ -1458,11 +1462,11 @@ static inline void unregister_sched_domain_sysctl(void)
 }
 #endif
 
-extern void flush_smp_call_function_from_idle(void);
+#else
 
-#else /* !CONFIG_SMP: */
-static inline void flush_smp_call_function_from_idle(void) { }
-#endif
+static inline void sched_ttwu_pending(void) { }
+
+#endif /* CONFIG_SMP */
 
 #include "stats.h"
 #include "autogroup.h"
@@ -1638,8 +1642,7 @@ static inline int task_on_rq_migrating(struct task_struct *p)
  */
 #define WF_SYNC			0x01		/* Waker goes to sleep after wakeup */
 #define WF_FORK			0x02		/* Child wakeup after fork */
-#define WF_MIGRATED		0x04		/* Internal use, task got migrated */
-#define WF_ON_CPU		0x08		/* Wakee is on_cpu */
+#define WF_MIGRATED		0x4		/* Internal use, task got migrated */
 
 /*
  * To aid in avoiding the subversion of "niceness" due to uneven distribution
@@ -1855,8 +1858,6 @@ extern void init_dl_rq_bw_ratio(struct dl_rq *dl_rq);
 #define BW_SHIFT		20
 #define BW_UNIT			(1 << BW_SHIFT)
 #define RATIO_SHIFT		8
-#define MAX_BW_BITS		(64 - BW_SHIFT)
-#define MAX_BW			((1ULL << MAX_BW_BITS) - 1)
 unsigned long to_ratio(u64 period, u64 runtime);
 
 extern void init_entity_runnable_average(struct sched_entity *se);

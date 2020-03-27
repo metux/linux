@@ -7,16 +7,22 @@
 #define _CHECK_H
 
 #include <stdbool.h>
+#include "elf.h"
 #include "cfi.h"
 #include "arch.h"
+#include "orc.h"
+#include <linux/hashtable.h>
 
 struct insn_state {
-	struct cfi_state cfi;
+	struct cfi_reg cfa;
+	struct cfi_reg regs[CFI_NUM_REGS];
+	int stack_size;
+	unsigned char type;
+	bool bp_scratch;
+	bool drap, end, uaccess, df;
 	unsigned int uaccess_stack;
-	bool uaccess;
-	bool df;
-	bool noinstr;
-	s8 instr;
+	int drap_reg, drap_offset;
+	struct cfi_reg vals[CFI_NUM_REGS];
 };
 
 struct instruction {
@@ -27,23 +33,28 @@ struct instruction {
 	unsigned int len;
 	enum insn_type type;
 	unsigned long immediate;
-	bool dead_end, ignore, ignore_alts;
-	bool hint;
+	bool alt_group, dead_end, ignore, hint, save, restore, ignore_alts;
 	bool retpoline_safe;
-	s8 instr;
 	u8 visited;
-	u8 ret_offset;
-	int alt_group;
 	struct symbol *call_dest;
 	struct instruction *jump_dest;
 	struct instruction *first_jump_src;
-	struct reloc *jump_table;
+	struct rela *jump_table;
 	struct list_head alts;
 	struct symbol *func;
 	struct list_head stack_ops;
-	struct cfi_state cfi;
+	struct insn_state state;
 	struct orc_entry orc;
 };
+
+struct objtool_file {
+	struct elf *elf;
+	struct list_head insn_list;
+	DECLARE_HASHTABLE(insn_hash, 20);
+	bool ignore_unreachables, c_file, hints, rodata;
+};
+
+int check(const char *objname, bool orc);
 
 struct instruction *find_insn(struct objtool_file *file,
 			      struct section *sec, unsigned long offset);

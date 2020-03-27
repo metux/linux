@@ -261,8 +261,8 @@ int cdns3_allocate_trb_pool(struct cdns3_endpoint *priv_ep)
 		 */
 		link_trb->control = 0;
 	} else {
-		link_trb->buffer = cpu_to_le32(TRB_BUFFER(priv_ep->trb_pool_dma));
-		link_trb->control = cpu_to_le32(TRB_CYCLE | TRB_TYPE(TRB_LINK) | TRB_TOGGLE);
+		link_trb->buffer = TRB_BUFFER(priv_ep->trb_pool_dma);
+		link_trb->control = TRB_CYCLE | TRB_TYPE(TRB_LINK) | TRB_TOGGLE;
 	}
 	return 0;
 }
@@ -296,8 +296,6 @@ static void cdns3_ep_stall_flush(struct cdns3_endpoint *priv_ep)
  */
 void cdns3_hw_reset_eps_config(struct cdns3_device *priv_dev)
 {
-	int i;
-
 	writel(USB_CONF_CFGRST, &priv_dev->regs->usb_conf);
 
 	cdns3_allow_enable_l1(priv_dev, 0);
@@ -306,10 +304,6 @@ void cdns3_hw_reset_eps_config(struct cdns3_device *priv_dev)
 	priv_dev->out_mem_is_allocated = 0;
 	priv_dev->wait_for_setup = 0;
 	priv_dev->using_streams = 0;
-
-	for (i = 0; i < CDNS3_ENDPOINTS_MAX_COUNT; i++)
-		if (priv_dev->eps[i])
-			priv_dev->eps[i]->flags &= ~EP_CONFIGURED;
 }
 
 /**
@@ -468,36 +462,6 @@ static int cdns3_start_all_request(struct cdns3_device *priv_dev,
 		(reg) |= EP_STS_EN_DESCMISEN; \
 	} } while (0)
 
-static void __cdns3_descmiss_copy_data(struct usb_request *request,
-	struct usb_request *descmiss_req)
-{
-	int length = request->actual + descmiss_req->actual;
-	struct scatterlist *s = request->sg;
-
-	if (!s) {
-		if (length <= request->length) {
-			memcpy(&((u8 *)request->buf)[request->actual],
-			       descmiss_req->buf,
-			       descmiss_req->actual);
-			request->actual = length;
-		} else {
-			/* It should never occures */
-			request->status = -ENOMEM;
-		}
-	} else {
-		if (length <= sg_dma_len(s)) {
-			void *p = phys_to_virt(sg_dma_address(s));
-
-			memcpy(&((u8 *)p)[request->actual],
-				descmiss_req->buf,
-				descmiss_req->actual);
-			request->actual = length;
-		} else {
-			request->status = -ENOMEM;
-		}
-	}
-}
-
 /**
  * cdns3_wa2_descmiss_copy_data copy data from internal requests to
  * request queued by class driver.
@@ -512,6 +476,7 @@ static void cdns3_wa2_descmiss_copy_data(struct cdns3_endpoint *priv_ep,
 
 	while (!list_empty(&priv_ep->wa2_descmiss_req_list)) {
 		int chunk_end;
+		int length;
 
 		descmiss_priv_req =
 			cdns3_next_priv_request(&priv_ep->wa2_descmiss_req_list);
@@ -522,9 +487,22 @@ static void cdns3_wa2_descmiss_copy_data(struct cdns3_endpoint *priv_ep,
 			break;
 
 		chunk_end = descmiss_priv_req->flags & REQUEST_INTERNAL_CH;
+		length = request->actual + descmiss_req->actual;
+
 		request->status = descmiss_req->status;
-		__cdns3_descmiss_copy_data(request, descmiss_req);
+
+		if (length <= request->length) {
+			memcpy(&((u8 *)request->buf)[request->actual],
+			       descmiss_req->buf,
+			       descmiss_req->actual);
+			request->actual = length;
+		} else {
+			/* It should never occures */
+			request->status = -ENOMEM;
+		}
+
 		list_del_init(&descmiss_priv_req->list);
+
 		kfree(descmiss_req->buf);
 		cdns3_gadget_ep_free_request(&priv_ep->endpoint, descmiss_req);
 		--priv_ep->wa2_counter;
@@ -839,8 +817,6 @@ void cdns3_gadget_giveback(struct cdns3_endpoint *priv_ep,
 		       request->length);
 
 	priv_req->flags &= ~(REQUEST_PENDING | REQUEST_UNALIGNED);
-	/* All TRBs have finished, clear the counter */
-	priv_req->finished_trb = 0;
 	trace_cdns3_gadget_giveback(priv_req);
 
 	if (priv_dev->dev_ver < DEV_VER_V2) {
@@ -871,10 +847,10 @@ static void cdns3_wa1_restore_cycle_bit(struct cdns3_endpoint *priv_ep)
 		priv_ep->wa1_trb_index = 0xFFFF;
 		if (priv_ep->wa1_cycle_bit) {
 			priv_ep->wa1_trb->control =
-				priv_ep->wa1_trb->control | cpu_to_le32(0x1);
+				priv_ep->wa1_trb->control | 0x1;
 		} else {
 			priv_ep->wa1_trb->control =
-				priv_ep->wa1_trb->control & cpu_to_le32(~0x1);
+				priv_ep->wa1_trb->control & ~0x1;
 		}
 	}
 }
@@ -1032,16 +1008,17 @@ static int cdns3_ep_run_stream_transfer(struct cdns3_endpoint *priv_ep,
 		  TRB_STREAM_ID(priv_req->request.stream_id) | TRB_ISP;
 
 	if (!request->num_sgs) {
-		trb->buffer = cpu_to_le32(TRB_BUFFER(trb_dma));
+		trb->buffer = TRB_BUFFER(trb_dma);
 		length = request->length;
 	} else {
-		trb->buffer = cpu_to_le32(TRB_BUFFER(request->sg[sg_idx].dma_address));
+		trb->buffer = TRB_BUFFER(request->sg[sg_idx].dma_address);
 		length = request->sg[sg_idx].length;
 	}
 
 	tdl = DIV_ROUND_UP(length, priv_ep->endpoint.maxpacket);
 
-	trb->length = cpu_to_le32(TRB_BURST_LEN(16) | TRB_LEN(length));
+	trb->length = TRB_BURST_LEN(16 /*priv_ep->trb_burst_size*/) |
+				  TRB_LEN(length);
 
 	/*
 	 * For DEV_VER_V2 controller version we have enabled
@@ -1050,11 +1027,11 @@ static int cdns3_ep_run_stream_transfer(struct cdns3_endpoint *priv_ep,
 	 */
 	if (priv_dev->dev_ver >= DEV_VER_V2) {
 		if (priv_dev->gadget.speed == USB_SPEED_SUPER)
-			trb->length |= cpu_to_le32(TRB_TDL_SS_SIZE(tdl));
+			trb->length |= TRB_TDL_SS_SIZE(tdl);
 	}
 	priv_req->flags |= REQUEST_PENDING;
 
-	trb->control = cpu_to_le32(control);
+	trb->control = control;
 
 	trace_cdns3_prepare_trb(priv_ep, priv_req->trb);
 
@@ -1114,7 +1091,6 @@ static int cdns3_ep_run_transfer(struct cdns3_endpoint *priv_ep,
 	struct cdns3_device *priv_dev = priv_ep->cdns3_dev;
 	struct cdns3_request *priv_req;
 	struct cdns3_trb *trb;
-	struct cdns3_trb *link_trb = NULL;
 	dma_addr_t trb_dma;
 	u32 togle_pcs = 1;
 	int sg_iter = 0;
@@ -1123,13 +1099,11 @@ static int cdns3_ep_run_transfer(struct cdns3_endpoint *priv_ep,
 	u32 control;
 	int pcs;
 	u16 total_tdl = 0;
-	struct scatterlist *s = NULL;
-	bool sg_supported = !!(request->num_mapped_sgs);
 
 	if (priv_ep->type == USB_ENDPOINT_XFER_ISOC)
 		num_trb = priv_ep->interval;
 	else
-		num_trb = sg_supported ? request->num_mapped_sgs : 1;
+		num_trb = request->num_sgs ? request->num_sgs : 1;
 
 	if (num_trb > priv_ep->free_trbs) {
 		priv_ep->flags |= EP_RING_FULL;
@@ -1155,6 +1129,7 @@ static int cdns3_ep_run_transfer(struct cdns3_endpoint *priv_ep,
 
 	/* prepare ring */
 	if ((priv_ep->enqueue + num_trb)  >= (priv_ep->num_trbs - 1)) {
+		struct cdns3_trb *link_trb;
 		int doorbell, dma_index;
 		u32 ch_bit = 0;
 
@@ -1181,49 +1156,44 @@ static int cdns3_ep_run_transfer(struct cdns3_endpoint *priv_ep,
 		    TRBS_PER_SEGMENT > 2)
 			ch_bit = TRB_CHAIN;
 
-		link_trb->control = cpu_to_le32(((priv_ep->pcs) ? TRB_CYCLE : 0) |
-				    TRB_TYPE(TRB_LINK) | TRB_TOGGLE | ch_bit);
+		link_trb->control = ((priv_ep->pcs) ? TRB_CYCLE : 0) |
+				    TRB_TYPE(TRB_LINK) | TRB_TOGGLE | ch_bit;
 	}
 
 	if (priv_dev->dev_ver <= DEV_VER_V2)
 		togle_pcs = cdns3_wa1_update_guard(priv_ep, trb);
 
-	if (sg_supported)
-		s = request->sg;
-
 	/* set incorrect Cycle Bit for first trb*/
 	control = priv_ep->pcs ? 0 : TRB_CYCLE;
-	trb->length = 0;
-	if (priv_dev->dev_ver >= DEV_VER_V2) {
-		u16 td_size;
-
-		td_size = DIV_ROUND_UP(request->length,
-				       priv_ep->endpoint.maxpacket);
-		if (priv_dev->gadget.speed == USB_SPEED_SUPER)
-			trb->length = TRB_TDL_SS_SIZE(td_size);
-		else
-			control |= TRB_TDL_HS_SIZE(td_size);
-	}
 
 	do {
 		u32 length;
+		u16 td_size = 0;
 
 		/* fill TRB */
 		control |= TRB_TYPE(TRB_NORMAL);
-		if (sg_supported) {
-			trb->buffer = cpu_to_le32(TRB_BUFFER(sg_dma_address(s)));
-			length = sg_dma_len(s);
-		} else {
-			trb->buffer = cpu_to_le32(TRB_BUFFER(trb_dma));
-			length = request->length;
-		}
+		trb->buffer = TRB_BUFFER(request->num_sgs == 0
+				? trb_dma : request->sg[sg_iter].dma_address);
 
-		if (priv_ep->flags & EP_TDLCHK_EN)
+		if (likely(!request->num_sgs))
+			length = request->length;
+		else
+			length = request->sg[sg_iter].length;
+
+		if (likely(priv_dev->dev_ver >= DEV_VER_V2))
+			td_size = DIV_ROUND_UP(length,
+					       priv_ep->endpoint.maxpacket);
+		else if (priv_ep->flags & EP_TDLCHK_EN)
 			total_tdl += DIV_ROUND_UP(length,
 					       priv_ep->endpoint.maxpacket);
 
-		trb->length |= cpu_to_le32(TRB_BURST_LEN(priv_ep->trb_burst_size) |
-					TRB_LEN(length));
+		trb->length = TRB_BURST_LEN(priv_ep->trb_burst_size) |
+					TRB_LEN(length);
+		if (priv_dev->gadget.speed == USB_SPEED_SUPER)
+			trb->length |= TRB_TDL_SS_SIZE(td_size);
+		else
+			control |= TRB_TDL_HS_SIZE(td_size);
+
 		pcs = priv_ep->pcs ? TRB_CYCLE : 0;
 
 		/*
@@ -1242,34 +1212,23 @@ static int cdns3_ep_run_transfer(struct cdns3_endpoint *priv_ep,
 		}
 
 		if (sg_iter)
-			trb->control = cpu_to_le32(control);
+			trb->control = control;
 		else
-			priv_req->trb->control = cpu_to_le32(control);
-
-		if (sg_supported) {
-			trb->control |= TRB_ISP;
-			/* Don't set chain bit for last TRB */
-			if (sg_iter < num_trb - 1)
-				trb->control |= TRB_CHAIN;
-
-			s = sg_next(s);
-		}
+			priv_req->trb->control = control;
 
 		control = 0;
 		++sg_iter;
 		priv_req->end_trb = priv_ep->enqueue;
 		cdns3_ep_inc_enq(priv_ep);
 		trb = priv_ep->trb_pool + priv_ep->enqueue;
-		trb->length = 0;
 	} while (sg_iter < num_trb);
 
 	trb = priv_req->trb;
 
 	priv_req->flags |= REQUEST_PENDING;
-	priv_req->num_of_trb = num_trb;
 
 	if (sg_iter == 1)
-		trb->control |= cpu_to_le32(TRB_IOC | TRB_ISP);
+		trb->control |= TRB_IOC | TRB_ISP;
 
 	if (priv_dev->dev_ver < DEV_VER_V2 &&
 	    (priv_ep->flags & EP_TDLCHK_EN)) {
@@ -1295,27 +1254,12 @@ static int cdns3_ep_run_transfer(struct cdns3_endpoint *priv_ep,
 
 	/* give the TD to the consumer*/
 	if (togle_pcs)
-		trb->control = trb->control ^ cpu_to_le32(1);
+		trb->control =  trb->control ^ 1;
 
 	if (priv_dev->dev_ver <= DEV_VER_V2)
 		cdns3_wa1_tray_restore_cycle_bit(priv_dev, priv_ep);
 
-	if (num_trb > 1) {
-		int i = 0;
-
-		while (i < num_trb) {
-			trace_cdns3_prepare_trb(priv_ep, trb + i);
-			if (trb + i == link_trb) {
-				trb = priv_ep->trb_pool;
-				num_trb = num_trb - i;
-				i = 0;
-			} else {
-				i++;
-			}
-		}
-	} else {
-		trace_cdns3_prepare_trb(priv_ep, priv_req->trb);
-	}
+	trace_cdns3_prepare_trb(priv_ep, priv_req->trb);
 
 	/*
 	 * Memory barrier - Cycle Bit must be set before trb->length  and
@@ -1366,6 +1310,7 @@ void cdns3_set_hw_configuration(struct cdns3_device *priv_dev)
 {
 	struct cdns3_endpoint *priv_ep;
 	struct usb_ep *ep;
+	int val;
 
 	if (priv_dev->hw_configured_flag)
 		return;
@@ -1374,6 +1319,10 @@ void cdns3_set_hw_configuration(struct cdns3_device *priv_dev)
 
 	cdns3_set_register_bit(&priv_dev->regs->usb_conf,
 			       USB_CONF_U1EN | USB_CONF_U2EN);
+
+	/* wait until configuration set */
+	readl_poll_timeout_atomic(&priv_dev->regs->usb_sts, val,
+				  val & USB_STS_CFGSTS_MASK, 1, 100);
 
 	priv_dev->hw_configured_flag = 1;
 
@@ -1388,7 +1337,7 @@ void cdns3_set_hw_configuration(struct cdns3_device *priv_dev)
 }
 
 /**
- * cdns3_trb_handled - check whether trb has been handled by DMA
+ * cdns3_request_handled - check whether request has been handled by DMA
  *
  * @priv_ep: extended endpoint object.
  * @priv_req: request object for checking
@@ -1405,28 +1354,32 @@ void cdns3_set_hw_configuration(struct cdns3_device *priv_dev)
  * ET = priv_req->end_trb - index of last TRB in transfer ring
  * CI = current_index - index of processed TRB by DMA.
  *
- * As first step, we check if the TRB between the ST and ET.
- * Then, we check if cycle bit for index priv_ep->dequeue
- * is correct.
+ * As first step, function checks if cycle bit for priv_req->start_trb is
+ * correct.
  *
  * some rules:
- * 1. priv_ep->dequeue never equals to current_index.
+ * 1. priv_ep->dequeue never exceed current_index.
  * 2  priv_ep->enqueue never exceed priv_ep->dequeue
  * 3. exception: priv_ep->enqueue == priv_ep->dequeue
  *    and priv_ep->free_trbs is zero.
  *    This case indicate that TR is full.
  *
- * At below two cases, the request have been handled.
+ * Then We can split recognition into two parts:
  * Case 1 - priv_ep->dequeue < current_index
  *      SR ... EQ ... DQ ... CI ... ER
  *      SR ... DQ ... CI ... EQ ... ER
  *
+ *      Request has been handled by DMA if ST and ET is between DQ and CI.
+ *
  * Case 2 - priv_ep->dequeue > current_index
- * This situation takes place when CI go through the LINK TRB at the end of
+ * This situation take place when CI go through the LINK TRB at the end of
  * transfer ring.
  *      SR ... CI ... EQ ... DQ ... ER
+ *
+ *      Request has been handled by DMA if ET is less then CI or
+ *      ET is greater or equal DQ.
  */
-static bool cdns3_trb_handled(struct cdns3_endpoint *priv_ep,
+static bool cdns3_request_handled(struct cdns3_endpoint *priv_ep,
 				  struct cdns3_request *priv_req)
 {
 	struct cdns3_device *priv_dev = priv_ep->cdns3_dev;
@@ -1438,27 +1391,9 @@ static bool cdns3_trb_handled(struct cdns3_endpoint *priv_ep,
 	current_index = cdns3_get_dma_pos(priv_dev, priv_ep);
 	doorbell = !!(readl(&priv_dev->regs->ep_cmd) & EP_CMD_DRDY);
 
-	/* current trb doesn't belong to this request */
-	if (priv_req->start_trb < priv_req->end_trb) {
-		if (priv_ep->dequeue > priv_req->end_trb)
-			goto finish;
+	trb = &priv_ep->trb_pool[priv_req->start_trb];
 
-		if (priv_ep->dequeue < priv_req->start_trb)
-			goto finish;
-	}
-
-	if ((priv_req->start_trb > priv_req->end_trb) &&
-		(priv_ep->dequeue > priv_req->end_trb) &&
-		(priv_ep->dequeue < priv_req->start_trb))
-		goto finish;
-
-	if ((priv_req->start_trb == priv_req->end_trb) &&
-		(priv_ep->dequeue != priv_req->end_trb))
-		goto finish;
-
-	trb = &priv_ep->trb_pool[priv_ep->dequeue];
-
-	if ((le32_to_cpu(trb->control) & TRB_CYCLE) != priv_ep->ccs)
+	if ((trb->control  & TRB_CYCLE) != priv_ep->ccs)
 		goto finish;
 
 	if (doorbell == 1 && current_index == priv_ep->dequeue)
@@ -1478,8 +1413,12 @@ static bool cdns3_trb_handled(struct cdns3_endpoint *priv_ep,
 		    !priv_ep->dequeue)
 			goto finish;
 
-		handled = 1;
+		if (priv_req->end_trb >= priv_ep->dequeue &&
+		    priv_req->end_trb < current_index)
+			handled = 1;
 	} else if (priv_ep->dequeue  > current_index) {
+		if (priv_req->end_trb  < current_index ||
+		    priv_req->end_trb >= priv_ep->dequeue)
 			handled = 1;
 	}
 
@@ -1495,8 +1434,6 @@ static void cdns3_transfer_completed(struct cdns3_device *priv_dev,
 	struct cdns3_request *priv_req;
 	struct usb_request *request;
 	struct cdns3_trb *trb;
-	bool request_handled = false;
-	bool transfer_end = false;
 
 	while (!list_empty(&priv_ep->pending_req_list)) {
 		request = cdns3_next_request(&priv_ep->pending_req_list);
@@ -1505,7 +1442,7 @@ static void cdns3_transfer_completed(struct cdns3_device *priv_dev,
 		trb = priv_ep->trb_pool + priv_ep->dequeue;
 
 		/* Request was dequeued and TRB was changed to TRB_LINK. */
-		if (TRB_FIELD_TO_TYPE(le32_to_cpu(trb->control)) == TRB_LINK) {
+		if (TRB_FIELD_TO_TYPE(trb->control) == TRB_LINK) {
 			trace_cdns3_complete_trb(priv_ep, trb);
 			cdns3_move_deq_to_next_trb(priv_req);
 		}
@@ -1516,32 +1453,20 @@ static void cdns3_transfer_completed(struct cdns3_device *priv_dev,
 			 */
 			cdns3_select_ep(priv_dev, priv_ep->endpoint.address);
 
-			while (cdns3_trb_handled(priv_ep, priv_req)) {
-				priv_req->finished_trb++;
-				if (priv_req->finished_trb >= priv_req->num_of_trb)
-					request_handled = true;
-
-				trb = priv_ep->trb_pool + priv_ep->dequeue;
-				trace_cdns3_complete_trb(priv_ep, trb);
-
-				if (!transfer_end)
-					request->actual +=
-						TRB_LEN(le32_to_cpu(trb->length));
-
-				if (priv_req->num_of_trb > 1 &&
-					le32_to_cpu(trb->control) & TRB_SMM)
-					transfer_end = true;
-
-				cdns3_ep_inc_deq(priv_ep);
-			}
-
-			if (request_handled) {
-				cdns3_gadget_giveback(priv_ep, priv_req, 0);
-				request_handled = false;
-				transfer_end = false;
-			} else {
+			if (!cdns3_request_handled(priv_ep, priv_req))
 				goto prepare_next_td;
-			}
+
+			trb = priv_ep->trb_pool + priv_ep->dequeue;
+			trace_cdns3_complete_trb(priv_ep, trb);
+
+			if (trb != priv_req->trb)
+				dev_warn(priv_dev->dev,
+					 "request_trb=0x%p, queue_trb=0x%p\n",
+					 priv_req->trb, trb);
+
+			request->actual = TRB_LEN(le32_to_cpu(trb->length));
+			cdns3_move_deq_to_next_trb(priv_req);
+			cdns3_gadget_giveback(priv_ep, priv_req, 0);
 
 			if (priv_ep->type != USB_ENDPOINT_XFER_ISOC &&
 			    TRBS_PER_SEGMENT == 2)
@@ -1649,7 +1574,7 @@ static int cdns3_check_ep_interrupt_proceed(struct cdns3_endpoint *priv_ep)
 		 * that host ignore the ERDY packet and driver has to send it
 		 * again.
 		 */
-		if (tdl && (dbusy || !EP_STS_BUFFEMPTY(ep_sts_reg) ||
+		if (tdl && (dbusy | !EP_STS_BUFFEMPTY(ep_sts_reg) |
 		    EP_STS_HOSTPP(ep_sts_reg))) {
 			writel(EP_CMD_ERDY |
 			       EP_CMD_ERDY_SID(priv_ep->last_stream_id),
@@ -1753,8 +1678,11 @@ static int cdns3_check_ep_interrupt_proceed(struct cdns3_endpoint *priv_ep)
 
 static void cdns3_disconnect_gadget(struct cdns3_device *priv_dev)
 {
-	if (priv_dev->gadget_driver && priv_dev->gadget_driver->disconnect)
+	if (priv_dev->gadget_driver && priv_dev->gadget_driver->disconnect) {
+		spin_unlock(&priv_dev->lock);
 		priv_dev->gadget_driver->disconnect(&priv_dev->gadget);
+		spin_lock(&priv_dev->lock);
+	}
 }
 
 /**
@@ -1765,7 +1693,6 @@ static void cdns3_disconnect_gadget(struct cdns3_device *priv_dev)
  */
 static void cdns3_check_usb_interrupt_proceed(struct cdns3_device *priv_dev,
 					      u32 usb_ists)
-__must_hold(&priv_dev->lock)
 {
 	int speed = 0;
 
@@ -1790,9 +1717,7 @@ __must_hold(&priv_dev->lock)
 
 	/* Disconnection detected */
 	if (usb_ists & (USB_ISTS_DIS2I | USB_ISTS_DISI)) {
-		spin_unlock(&priv_dev->lock);
 		cdns3_disconnect_gadget(priv_dev);
-		spin_lock(&priv_dev->lock);
 		priv_dev->gadget.speed = USB_SPEED_UNKNOWN;
 		usb_gadget_set_state(&priv_dev->gadget, USB_STATE_NOTATTACHED);
 		cdns3_hw_reset_eps_config(priv_dev);
@@ -1844,12 +1769,8 @@ __must_hold(&priv_dev->lock)
 static irqreturn_t cdns3_device_irq_handler(int irq, void *data)
 {
 	struct cdns3_device *priv_dev = data;
-	struct cdns3 *cdns = dev_get_drvdata(priv_dev->dev);
 	irqreturn_t ret = IRQ_NONE;
 	u32 reg;
-
-	if (cdns->in_lpm)
-		return ret;
 
 	/* check USB device interrupt */
 	reg = readl(&priv_dev->regs->usb_ists);
@@ -1986,6 +1907,27 @@ static int cdns3_ep_onchip_buffer_reserve(struct cdns3_device *priv_dev,
 	return 0;
 }
 
+static void cdns3_stream_ep_reconfig(struct cdns3_device *priv_dev,
+				     struct cdns3_endpoint *priv_ep)
+{
+	if (!priv_ep->use_streams || priv_dev->gadget.speed < USB_SPEED_SUPER)
+		return;
+
+	if (priv_dev->dev_ver >= DEV_VER_V3) {
+		u32 mask = BIT(priv_ep->num + (priv_ep->dir ? 16 : 0));
+
+		/*
+		 * Stream capable endpoints are handled by using ep_tdl
+		 * register. Other endpoints use TDL from TRB feature.
+		 */
+		cdns3_clear_register_bit(&priv_dev->regs->tdl_from_trb, mask);
+	}
+
+	/*  Enable Stream Bit TDL chk and SID chk */
+	cdns3_set_register_bit(&priv_dev->regs->ep_cfg, EP_CFG_STREAM_EN |
+			       EP_CFG_TDL_CHK | EP_CFG_SID_CHK);
+}
+
 static void cdns3_configure_dmult(struct cdns3_device *priv_dev,
 				  struct cdns3_endpoint *priv_ep)
 {
@@ -2023,9 +1965,8 @@ static void cdns3_configure_dmult(struct cdns3_device *priv_dev,
 /**
  * cdns3_ep_config Configure hardware endpoint
  * @priv_ep: extended endpoint object
- * @enable: set EP_CFG_ENABLE bit in ep_cfg register.
  */
-int cdns3_ep_config(struct cdns3_endpoint *priv_ep, bool enable)
+void cdns3_ep_config(struct cdns3_endpoint *priv_ep)
 {
 	bool is_iso_ep = (priv_ep->type == USB_ENDPOINT_XFER_ISOC);
 	struct cdns3_device *priv_dev = priv_ep->cdns3_dev;
@@ -2086,7 +2027,7 @@ int cdns3_ep_config(struct cdns3_endpoint *priv_ep, bool enable)
 		break;
 	default:
 		/* all other speed are not supported */
-		return -EINVAL;
+		return;
 	}
 
 	if (max_packet_size == 1024)
@@ -2096,33 +2037,11 @@ int cdns3_ep_config(struct cdns3_endpoint *priv_ep, bool enable)
 	else
 		priv_ep->trb_burst_size = 16;
 
-	/* onchip buffer is only allocated before configuration */
-	if (!priv_dev->hw_configured_flag) {
-		ret = cdns3_ep_onchip_buffer_reserve(priv_dev, buffering + 1,
-						     !!priv_ep->dir);
-		if (ret) {
-			dev_err(priv_dev->dev, "onchip mem is full, ep is invalid\n");
-			return ret;
-		}
-	}
-
-	if (enable)
-		ep_cfg |= EP_CFG_ENABLE;
-
-	if (priv_ep->use_streams && priv_dev->gadget.speed >= USB_SPEED_SUPER) {
-		if (priv_dev->dev_ver >= DEV_VER_V3) {
-			u32 mask = BIT(priv_ep->num + (priv_ep->dir ? 16 : 0));
-
-			/*
-			 * Stream capable endpoints are handled by using ep_tdl
-			 * register. Other endpoints use TDL from TRB feature.
-			 */
-			cdns3_clear_register_bit(&priv_dev->regs->tdl_from_trb,
-						 mask);
-		}
-
-		/*  Enable Stream Bit TDL chk and SID chk */
-		ep_cfg |=  EP_CFG_STREAM_EN | EP_CFG_TDL_CHK | EP_CFG_SID_CHK;
+	ret = cdns3_ep_onchip_buffer_reserve(priv_dev, buffering + 1,
+					     !!priv_ep->dir);
+	if (ret) {
+		dev_err(priv_dev->dev, "onchip mem is full, ep is invalid\n");
+		return;
 	}
 
 	ep_cfg |= EP_CFG_MAXPKTSIZE(max_packet_size) |
@@ -2132,12 +2051,9 @@ int cdns3_ep_config(struct cdns3_endpoint *priv_ep, bool enable)
 
 	cdns3_select_ep(priv_dev, bEndpointAddress);
 	writel(ep_cfg, &priv_dev->regs->ep_cfg);
-	priv_ep->flags |= EP_CONFIGURED;
 
 	dev_dbg(priv_dev->dev, "Configure %s: with val %08x\n",
 		priv_ep->name, ep_cfg);
-
-	return 0;
 }
 
 /* Find correct direction for HW endpoint according to description */
@@ -2278,7 +2194,7 @@ static int cdns3_gadget_ep_enable(struct usb_ep *ep,
 	u32 bEndpointAddress;
 	unsigned long flags;
 	int enable = 1;
-	int ret = 0;
+	int ret;
 	int val;
 
 	priv_ep = ep_to_cdns3_ep(ep);
@@ -2317,17 +2233,6 @@ static int cdns3_gadget_ep_enable(struct usb_ep *ep,
 	bEndpointAddress = priv_ep->num | priv_ep->dir;
 	cdns3_select_ep(priv_dev, bEndpointAddress);
 
-	/*
-	 * For some versions of controller at some point during ISO OUT traffic
-	 * DMA reads Transfer Ring for the EP which has never got doorbell.
-	 * This issue was detected only on simulation, but to avoid this issue
-	 * driver add protection against it. To fix it driver enable ISO OUT
-	 * endpoint before setting DRBL. This special treatment of ISO OUT
-	 * endpoints are recommended by controller specification.
-	 */
-	if (priv_ep->type == USB_ENDPOINT_XFER_ISOC  && !priv_ep->dir)
-		enable = 0;
-
 	if (usb_ss_max_streams(comp_desc) && usb_endpoint_xfer_bulk(desc)) {
 		/*
 		 * Enable stream support (SS mode) related interrupts
@@ -2338,17 +2243,13 @@ static int cdns3_gadget_ep_enable(struct usb_ep *ep,
 				EP_STS_EN_SIDERREN | EP_STS_EN_MD_EXITEN |
 				EP_STS_EN_STREAMREN;
 			priv_ep->use_streams = true;
-			ret = cdns3_ep_config(priv_ep, enable);
+			cdns3_stream_ep_reconfig(priv_dev, priv_ep);
 			priv_dev->using_streams |= true;
 		}
-	} else {
-		ret = cdns3_ep_config(priv_ep, enable);
 	}
 
-	if (ret)
-		goto exit;
-
 	ret = cdns3_allocate_trb_pool(priv_ep);
+
 	if (ret)
 		goto exit;
 
@@ -2377,6 +2278,20 @@ static int cdns3_gadget_ep_enable(struct usb_ep *ep,
 		cdns3_wa2_enable_detection(priv_dev, priv_ep, reg);
 
 	writel(reg, &priv_dev->regs->ep_sts_en);
+
+	/*
+	 * For some versions of controller at some point during ISO OUT traffic
+	 * DMA reads Transfer Ring for the EP which has never got doorbell.
+	 * This issue was detected only on simulation, but to avoid this issue
+	 * driver add protection against it. To fix it driver enable ISO OUT
+	 * endpoint before setting DRBL. This special treatment of ISO OUT
+	 * endpoints are recommended by controller specification.
+	 */
+	if (priv_ep->type == USB_ENDPOINT_XFER_ISOC  && !priv_ep->dir)
+		enable = 0;
+
+	if (enable)
+		cdns3_set_register_bit(&priv_dev->regs->ep_cfg, EP_CFG_ENABLE);
 
 	ep->desc = desc;
 	priv_ep->flags &= ~(EP_PENDING_REQUEST | EP_STALLED | EP_STALL_PENDING |
@@ -2636,11 +2551,11 @@ found:
 	link_trb = priv_req->trb;
 
 	/* Update ring only if removed request is on pending_req_list list */
-	if (req_on_hw_ring && link_trb) {
-		link_trb->buffer = cpu_to_le32(TRB_BUFFER(priv_ep->trb_pool_dma +
-			((priv_req->end_trb + 1) * TRB_SIZE)));
-		link_trb->control = cpu_to_le32((le32_to_cpu(link_trb->control) & TRB_CYCLE) |
-				    TRB_TYPE(TRB_LINK) | TRB_CHAIN);
+	if (req_on_hw_ring) {
+		link_trb->buffer = TRB_BUFFER(priv_ep->trb_pool_dma +
+			((priv_req->end_trb + 1) * TRB_SIZE));
+		link_trb->control = (link_trb->control & TRB_CYCLE) |
+				    TRB_TYPE(TRB_LINK) | TRB_CHAIN;
 
 		if (priv_ep->wa1_trb == priv_req->trb)
 			cdns3_wa1_restore_cycle_bit(priv_ep);
@@ -2695,7 +2610,7 @@ int __cdns3_gadget_ep_clear_halt(struct cdns3_endpoint *priv_ep)
 		priv_req = to_cdns3_request(request);
 		trb = priv_req->trb;
 		if (trb)
-			trb->control = trb->control ^ cpu_to_le32(TRB_CYCLE);
+			trb->control = trb->control ^ TRB_CYCLE;
 	}
 
 	writel(EP_CMD_CSTALL | EP_CMD_EPRST, &priv_dev->regs->ep_cmd);
@@ -2710,8 +2625,7 @@ int __cdns3_gadget_ep_clear_halt(struct cdns3_endpoint *priv_ep)
 
 	if (request) {
 		if (trb)
-			trb->control = trb->control ^ cpu_to_le32(TRB_CYCLE);
-
+			trb->control = trb->control ^ TRB_CYCLE;
 		cdns3_rearm_transfer(priv_ep, 1);
 	}
 
@@ -2821,13 +2735,10 @@ static int cdns3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {
 	struct cdns3_device *priv_dev = gadget_to_cdns3_device(gadget);
 
-	if (is_on) {
+	if (is_on)
 		writel(USB_CONF_DEVEN, &priv_dev->regs->usb_conf);
-	} else {
-		writel(~0, &priv_dev->regs->ep_ists);
-		writel(~0, &priv_dev->regs->usb_ists);
+	else
 		writel(USB_CONF_DEVDS, &priv_dev->regs->usb_conf);
-	}
 
 	return 0;
 }
@@ -2868,8 +2779,6 @@ static void cdns3_gadget_config(struct cdns3_device *priv_dev)
 	/* enable generic interrupt*/
 	writel(USB_IEN_INIT, &regs->usb_ien);
 	writel(USB_CONF_CLK2OFFDS | USB_CONF_L1DS, &regs->usb_conf);
-	/*  keep Fast Access bit */
-	writel(PUSB_PWR_FST_REG_ACCESS, &priv_dev->regs->usb_pwr);
 
 	cdns3_configure_dmult(priv_dev, NULL);
 }
@@ -2953,7 +2862,6 @@ static int cdns3_gadget_udc_stop(struct usb_gadget *gadget)
 
 	/* disable interrupt for device */
 	writel(0, &priv_dev->regs->usb_ien);
-	writel(0, &priv_dev->regs->usb_pwr);
 	writel(USB_CONF_DEVDS, &priv_dev->regs->usb_conf);
 
 	return 0;
@@ -3060,7 +2968,7 @@ static int cdns3_init_eps(struct cdns3_device *priv_dev)
 
 		priv_ep->flags = 0;
 
-		dev_dbg(priv_dev->dev, "Initialized  %s support: %s %s\n",
+		dev_info(priv_dev->dev, "Initialized  %s support: %s %s\n",
 			 priv_ep->name,
 			 priv_ep->endpoint.caps.type_bulk ? "BULK, INT" : "",
 			 priv_ep->endpoint.caps.type_iso ? "ISO" : "");
@@ -3076,26 +2984,18 @@ err:
 	return -ENOMEM;
 }
 
-static void cdns3_gadget_release(struct device *dev)
-{
-	struct cdns3_device *priv_dev = container_of(dev,
-			struct cdns3_device, gadget.dev);
-
-	kfree(priv_dev);
-}
-
 void cdns3_gadget_exit(struct cdns3 *cdns)
 {
 	struct cdns3_device *priv_dev;
 
 	priv_dev = cdns->gadget_dev;
 
+	devm_free_irq(cdns->dev, cdns->dev_irq, priv_dev);
 
 	pm_runtime_mark_last_busy(cdns->dev);
 	pm_runtime_put_autosuspend(cdns->dev);
 
-	usb_del_gadget(&priv_dev->gadget);
-	devm_free_irq(cdns->dev, cdns->dev_irq, priv_dev);
+	usb_del_gadget_udc(&priv_dev->gadget);
 
 	cdns3_free_all_eps(priv_dev);
 
@@ -3115,7 +3015,7 @@ void cdns3_gadget_exit(struct cdns3 *cdns)
 			  priv_dev->setup_dma);
 
 	kfree(priv_dev->zlp_buf);
-	usb_put_gadget(&priv_dev->gadget);
+	kfree(priv_dev);
 	cdns->gadget_dev = NULL;
 	cdns3_drd_gadget_off(cdns);
 }
@@ -3130,8 +3030,6 @@ static int cdns3_gadget_start(struct cdns3 *cdns)
 	if (!priv_dev)
 		return -ENOMEM;
 
-	usb_initialize_gadget(cdns->dev, &priv_dev->gadget,
-			cdns3_gadget_release);
 	cdns->gadget_dev = priv_dev;
 	priv_dev->sysdev = cdns->dev;
 	priv_dev->dev = cdns->dev;
@@ -3172,6 +3070,7 @@ static int cdns3_gadget_start(struct cdns3 *cdns)
 	priv_dev->gadget.speed = USB_SPEED_UNKNOWN;
 	priv_dev->gadget.ops = &cdns3_gadget_ops;
 	priv_dev->gadget.name = "usb-ss-gadget";
+	priv_dev->gadget.sg_supported = 1;
 	priv_dev->gadget.quirk_avoids_skb_reserve = 1;
 	priv_dev->gadget.irq = cdns->dev_irq;
 
@@ -3210,8 +3109,6 @@ static int cdns3_gadget_start(struct cdns3 *cdns)
 		readl(&priv_dev->regs->usb_cap2));
 
 	priv_dev->dev_ver = GET_DEV_BASE_VERSION(priv_dev->dev_ver);
-	if (priv_dev->dev_ver >= DEV_VER_V2)
-		priv_dev->gadget.sg_supported = 1;
 
 	priv_dev->zlp_buf = kzalloc(CDNS3_EP_ZLP_BUF_SIZE, GFP_KERNEL);
 	if (!priv_dev->zlp_buf) {
@@ -3220,9 +3117,10 @@ static int cdns3_gadget_start(struct cdns3 *cdns)
 	}
 
 	/* add USB gadget device */
-	ret = usb_add_gadget(&priv_dev->gadget);
+	ret = usb_add_gadget_udc(priv_dev->dev, &priv_dev->gadget);
 	if (ret < 0) {
-		dev_err(priv_dev->dev, "Failed to add gadget\n");
+		dev_err(priv_dev->dev,
+			"Failed to register USB device controller\n");
 		goto err4;
 	}
 
@@ -3235,7 +3133,6 @@ err3:
 err2:
 	cdns3_free_all_eps(priv_dev);
 err1:
-	usb_put_gadget(&priv_dev->gadget);
 	cdns->gadget_dev = NULL;
 	return ret;
 }
@@ -3278,13 +3175,10 @@ err0:
 }
 
 static int cdns3_gadget_suspend(struct cdns3 *cdns, bool do_wakeup)
-__must_hold(&cdns->lock)
 {
 	struct cdns3_device *priv_dev = cdns->gadget_dev;
 
-	spin_unlock(&cdns->lock);
 	cdns3_disconnect_gadget(priv_dev);
-	spin_lock(&cdns->lock);
 
 	priv_dev->gadget.speed = USB_SPEED_UNKNOWN;
 	usb_gadget_set_state(&priv_dev->gadget, USB_STATE_NOTATTACHED);

@@ -29,8 +29,7 @@ endif
 # The following programs are only built on demand
 hostprogs += unifdef
 
-# The module linker script is preprocessed on demand
-targets += module.lds
+extra-$(CONFIG_LTO_CLANG)   += module-lto.lds
 
 subdir-$(CONFIG_GCC_PLUGINS) += gcc-plugins
 subdir-$(CONFIG_MODVERSIONS) += genksyms

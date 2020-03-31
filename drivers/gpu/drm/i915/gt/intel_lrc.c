@@ -3707,6 +3707,7 @@ static void execlists_reset_prepare(struct intel_engine_cs *engine)
 	 *
 	 * FIXME: Wa for more modern gens needs to be validated
 	 */
+	ring_set_paused(engine, 1);
 	intel_engine_stop_cs(engine);
 }
 

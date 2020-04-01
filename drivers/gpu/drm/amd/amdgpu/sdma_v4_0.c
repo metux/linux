@@ -1858,7 +1858,8 @@ static int sdma_v4_0_sw_init(void *handle)
 
 		sprintf(ring->name, "sdma%d", i);
 		r = amdgpu_ring_init(adev, ring, 1024, &adev->sdma.trap_irq,
-				     AMDGPU_SDMA_IRQ_INSTANCE0 + i);
+				     AMDGPU_SDMA_IRQ_INSTANCE0 + i,
+				     AMDGPU_RING_PRIO_DEFAULT);
 		if (r)
 			return r;
 
@@ -1876,7 +1877,8 @@ static int sdma_v4_0_sw_init(void *handle)
 			sprintf(ring->name, "page%d", i);
 			r = amdgpu_ring_init(adev, ring, 1024,
 					     &adev->sdma.trap_irq,
-					     AMDGPU_SDMA_IRQ_INSTANCE0 + i);
+					     AMDGPU_SDMA_IRQ_INSTANCE0 + i,
+					     AMDGPU_RING_PRIO_DEFAULT);
 			if (r)
 				return r;
 		}

@@ -888,8 +888,8 @@ create_event_attributes(struct i915_pmu *pmu)
 		const char *name;
 		const char *unit;
 	} events[] = {
-		__event(I915_PMU_ACTUAL_FREQUENCY, "actual-frequency", "MHz"),
-		__event(I915_PMU_REQUESTED_FREQUENCY, "requested-frequency", "MHz"),
+		__event(I915_PMU_ACTUAL_FREQUENCY, "actual-frequency", "M"),
+		__event(I915_PMU_REQUESTED_FREQUENCY, "requested-frequency", "M"),
 		__event(I915_PMU_INTERRUPTS, "interrupts", NULL),
 		__event(I915_PMU_RC6_RESIDENCY, "rc6-residency", "ns"),
 	};
@@ -1115,7 +1115,7 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	int ret = -ENOMEM;
 
 	if (INTEL_GEN(i915) <= 2) {
-		DRM_INFO("PMU not supported for this GPU.");
+		drm_info(&i915->drm, "PMU not supported for this GPU.");
 		return;
 	}
 
@@ -1178,7 +1178,7 @@ err_name:
 	if (!is_igp(i915))
 		kfree(pmu->name);
 err:
-	dev_notice(i915->drm.dev, "Failed to register PMU!\n");
+	drm_notice(&i915->drm, "Failed to register PMU!\n");
 }
 
 void i915_pmu_unregister(struct drm_i915_private *i915)

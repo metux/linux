@@ -57,7 +57,8 @@ static struct ramoops_platform_data chromeos_ramoops_data = {
 	.record_size	= 0x40000,
 	.console_size	= 0x20000,
 	.ftrace_size	= 0x20000,
-	.max_reason	= KMSG_DUMP_OOPS,
+	.pmsg_size	= 0x20000,
+	.dump_oops	= 1,
 };
 
 static struct platform_device chromeos_ramoops = {

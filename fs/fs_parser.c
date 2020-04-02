@@ -359,8 +359,6 @@ bool fs_validate_description(const char *name,
 	const struct fs_parameter_spec *param, *p2;
 	bool good = true;
 
-	pr_notice("*** VALIDATE %s ***\n", name);
-
 	for (param = desc; param->name; param++) {
 		enum fs_parameter_type t = param->type;
 

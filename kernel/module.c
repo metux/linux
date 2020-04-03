@@ -4,9 +4,6 @@
    Copyright (C) 2001 Rusty Russell, 2002, 2010 Rusty Russell IBM.
 
 */
-
-#define INCLUDE_VERMAGIC
-
 #include <linux/export.h>
 #include <linux/extable.h>
 #include <linux/moduleloader.h>
@@ -2016,7 +2013,20 @@ static void frob_writable_data(const struct module_layout *layout,
 		   (layout->size - layout->ro_after_init_size) >> PAGE_SHIFT);
 }
 
-static void module_enable_ro(const struct module *mod, bool after_init)
+/* livepatching wants to disable read-only so it can frob module. */
+void module_disable_ro(const struct module *mod)
+{
+	if (!rodata_enabled)
+		return;
+
+	frob_text(&mod->core_layout, set_memory_rw);
+	frob_rodata(&mod->core_layout, set_memory_rw);
+	frob_ro_after_init(&mod->core_layout, set_memory_rw);
+	frob_text(&mod->init_layout, set_memory_rw);
+	frob_rodata(&mod->init_layout, set_memory_rw);
+}
+
+void module_enable_ro(const struct module *mod, bool after_init)
 {
 	if (!rodata_enabled)
 		return;
@@ -2042,10 +2052,28 @@ static void module_enable_nx(const struct module *mod)
 	frob_writable_data(&mod->init_layout, set_memory_nx);
 }
 
+static int module_enforce_rwx_sections(Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
+				       char *secstrings, struct module *mod)
+{
+	const unsigned long shf_wx = SHF_WRITE|SHF_EXECINSTR;
+	int i;
+
+	for (i = 0; i < hdr->e_shnum; i++) {
+		if ((sechdrs[i].sh_flags & shf_wx) == shf_wx)
+			return -ENOEXEC;
+	}
+
+	return 0;
+}
+
 #else /* !CONFIG_STRICT_MODULE_RWX */
 /* module_{enable,disable}_ro() stubs are in module.h */
 static void module_enable_nx(const struct module *mod) { }
-static void module_enable_ro(const struct module *mod, bool after_init) {}
+static int module_enforce_rwx_sections(Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
+				       char *secstrings, struct module *mod)
+{
+	return 0;
+}
 #endif /*  CONFIG_STRICT_MODULE_RWX */
 
 #ifdef CONFIG_LIVEPATCH
@@ -2141,8 +2169,6 @@ void __weak module_arch_freeing_init(struct module *mod)
 {
 }
 
-static void cfi_cleanup(struct module *mod);
-
 /* Free a module, remove from lists, etc. */
 static void free_module(struct module *mod)
 {
@@ -2181,9 +2207,6 @@ static void free_module(struct module *mod)
 	/* Wait for RCU-sched synchronizing before releasing mod->list and buglist. */
 	synchronize_rcu();
 	mutex_unlock(&module_mutex);
-
-	/* Clean up CFI for the module. */
-	cfi_cleanup(mod);
 
 	/* This may be empty, but that's OK */
 	module_arch_freeing_init(mod);
@@ -2337,13 +2360,11 @@ static int apply_relocations(struct module *mod, const struct load_info *info)
 		if (!(info->sechdrs[infosec].sh_flags & SHF_ALLOC))
 			continue;
 
+		/* Livepatch relocation sections are applied by livepatch */
 		if (info->sechdrs[i].sh_flags & SHF_RELA_LIVEPATCH)
-			err = klp_apply_section_relocs(mod, info->sechdrs,
-						       info->secstrings,
-						       info->strtab,
-						       info->index.sym, i,
-						       NULL);
-		else if (info->sechdrs[i].sh_type == SHT_REL)
+			continue;
+
+		if (info->sechdrs[i].sh_type == SHT_REL)
 			err = apply_relocate(info->sechdrs, info->strtab,
 					     info->index.sym, i, mod);
 		else if (info->sechdrs[i].sh_type == SHT_RELA)
@@ -2405,7 +2426,7 @@ static void layout_sections(struct module *mod, struct load_info *info)
 			if ((s->sh_flags & masks[m][0]) != masks[m][0]
 			    || (s->sh_flags & masks[m][1])
 			    || s->sh_entsize != ~0UL
-			    || module_init_section(sname))
+			    || strstarts(sname, ".init"))
 				continue;
 			s->sh_entsize = get_offset(mod, &mod->core_layout.size, s, i);
 			pr_debug("\t%s\n", sname);
@@ -2438,7 +2459,7 @@ static void layout_sections(struct module *mod, struct load_info *info)
 			if ((s->sh_flags & masks[m][0]) != masks[m][0]
 			    || (s->sh_flags & masks[m][1])
 			    || s->sh_entsize != ~0UL
-			    || !module_init_section(sname))
+			    || !strstarts(sname, ".init"))
 				continue;
 			s->sh_entsize = (get_offset(mod, &mod->init_layout.size, s, i)
 					 | INIT_OFFSET_MASK);
@@ -2773,11 +2794,6 @@ void * __weak module_alloc(unsigned long size)
 	return vmalloc_exec(size);
 }
 
-bool __weak module_init_section(const char *name)
-{
-	return strstarts(name, ".init");
-}
-
 bool __weak module_exit_section(const char *name)
 {
 	return strstarts(name, ".exit");
@@ -2956,7 +2972,8 @@ static int copy_module_from_user(const void __user *umod, unsigned long len,
 		return err;
 
 	/* Suck in entire file: we'll want most of it. */
-	info->hdr = __vmalloc(info->len, GFP_KERNEL | __GFP_NOWARN);
+	info->hdr = __vmalloc(info->len,
+			GFP_KERNEL | __GFP_NOWARN, PAGE_KERNEL);
 	if (!info->hdr)
 		return -ENOMEM;
 
@@ -3159,9 +3176,6 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 	}
 #endif
 
-	mod->noinstr_text_start = section_objs(info, ".noinstr.text", 1,
-						&mod->noinstr_text_size);
-
 #ifdef CONFIG_TRACEPOINTS
 	mod->tracepoints_ptrs = section_objs(info, "__tracepoints_ptrs",
 					     sizeof(*mod->tracepoints_ptrs),
@@ -3205,13 +3219,6 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 	mod->ei_funcs = section_objs(info, "_error_injection_whitelist",
 					    sizeof(*mod->ei_funcs),
 					    &mod->num_ei_funcs);
-#endif
-#ifdef CONFIG_KPROBES
-	mod->kprobes_text_start = section_objs(info, ".kprobes.text", 1,
-						&mod->kprobes_text_size);
-	mod->kprobe_blacklist = section_objs(info, "_kprobe_blacklist",
-						sizeof(unsigned long),
-						&mod->num_kprobe_blacklist);
 #endif
 	mod->extable = section_objs(info, "__ex_table",
 				    sizeof(*mod->extable), &mod->num_exentries);
@@ -3397,6 +3404,11 @@ static struct module *layout_and_allocate(struct load_info *info, int flags)
 	if (err < 0)
 		return ERR_PTR(err);
 
+	err = module_enforce_rwx_sections(info->hdr, info->sechdrs,
+					  info->secstrings, info->mod);
+	if (err < 0)
+		return ERR_PTR(err);
+
 	/* We will do a special allocation for per-cpu sections later. */
 	info->sechdrs[info->index.pcpu].sh_flags &= ~(unsigned long)SHF_ALLOC;
 
@@ -3451,8 +3463,6 @@ int __weak module_finalize(const Elf_Ehdr *hdr,
 	return 0;
 }
 
-static void cfi_init(struct module *mod);
-
 static int post_relocation(struct module *mod, const struct load_info *info)
 {
 	/* Sort exception table now relocations are done. */
@@ -3464,9 +3474,6 @@ static int post_relocation(struct module *mod, const struct load_info *info)
 
 	/* Setup kallsyms-specific fields. */
 	add_kallsyms(mod, info);
-
-	/* Setup CFI for the module. */
-	cfi_init(mod);
 
 	/* Arch-specific module finalizing. */
 	return module_finalize(info->hdr, info->sechdrs, mod);
@@ -4270,24 +4277,6 @@ int module_kallsyms_on_each_symbol(int (*fn)(void *, const char *,
 	return 0;
 }
 #endif /* CONFIG_KALLSYMS */
-
-static void cfi_init(struct module *mod)
-{
-#ifdef CONFIG_CFI_CLANG
-	rcu_read_lock();
-	mod->cfi_check = (cfi_check_fn)find_kallsyms_symbol_value(mod,
-						CFI_CHECK_FN_NAME);
-	rcu_read_unlock();
-	cfi_module_add(mod, module_addr_min, module_addr_max);
-#endif
-}
-
-static void cfi_cleanup(struct module *mod)
-{
-#ifdef CONFIG_CFI_CLANG
-	cfi_module_remove(mod, module_addr_min, module_addr_max);
-#endif
-}
 
 /* Maximum number of characters written by module_flags() */
 #define MODULE_FLAGS_BUF_SIZE (TAINT_FLAGS_COUNT + 4)

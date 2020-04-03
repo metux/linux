@@ -615,10 +615,8 @@ struct io_kiocb {
 	struct list_head	list;
 	unsigned int		flags;
 	refcount_t		refs;
-	union {
-		struct task_struct	*task;
-		unsigned long		fsize;
-	};
+	struct task_struct	*task;
+	unsigned long		fsize;
 	u64			user_data;
 	u32			result;
 	u32			sequence;
@@ -1332,6 +1330,7 @@ got_it:
 	req->flags = 0;
 	/* one is dropped after submission, the other at completion */
 	refcount_set(&req->refs, 2);
+	req->task = NULL;
 	req->result = 0;
 	INIT_IO_WORK(&req->work, io_wq_submit_work);
 	return req;
@@ -1368,6 +1367,8 @@ static void __io_req_aux_free(struct io_kiocb *req)
 	kfree(req->io);
 	if (req->file)
 		io_put_file(req, req->file, (req->flags & REQ_F_FIXED_FILE));
+	if (req->task)
+		put_task_struct(req->task);
 
 	io_req_work_drop_env(req);
 }
@@ -4251,10 +4252,7 @@ static bool io_arm_poll_handler(struct io_kiocb *req)
 	req->flags |= REQ_F_POLLED;
 	memcpy(&apoll->work, &req->work, sizeof(req->work));
 
-	/*
-	 * Don't need a reference here, as we're adding it to the task
-	 * task_works list. If the task exits, the list is pruned.
-	 */
+	get_task_struct(current);
 	req->task = current;
 	req->apoll = apoll;
 	INIT_HLIST_NODE(&req->hash_node);
@@ -4477,10 +4475,7 @@ static int io_poll_add_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe
 	events = READ_ONCE(sqe->poll_events);
 	poll->events = demangle_poll(events) | EPOLLERR | EPOLLHUP;
 
-	/*
-	 * Don't need a reference here, as we're adding it to the task
-	 * task_works list. If the task exits, the list is pruned.
-	 */
+	get_task_struct(current);
 	req->task = current;
 	return 0;
 }

@@ -1063,17 +1063,12 @@ static int renoir_read_sensor(struct smu_context *smu,
 
 static bool renoir_is_dpm_running(struct smu_context *smu)
 {
-	struct amdgpu_device *adev = smu->adev;
-
 	/*
 	 * Until now, the pmfw hasn't exported the interface of SMU
 	 * feature mask to APU SKU so just force on all the feature
 	 * at early initial stage.
 	 */
-	if (adev->in_suspend)
-		return false;
-	else
-		return true;
+	return true;
 
 }
 

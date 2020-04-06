@@ -625,6 +625,8 @@ static int vnt_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 	priv->op_mode = vif->type;
 
+	vnt_set_bss_mode(priv);
+
 	/* LED blink on TX */
 	vnt_mac_set_led(priv, LEDSTS_STS, LEDSTS_INTER);
 
@@ -683,15 +685,8 @@ static int vnt_config(struct ieee80211_hw *hw, u32 changed)
 			priv->bb_type = BB_TYPE_11G;
 	}
 
-	if (changed & IEEE80211_CONF_CHANGE_POWER) {
-		if (priv->bb_type == BB_TYPE_11B)
-			priv->current_rate = RATE_1M;
-		else
-			priv->current_rate = RATE_54M;
-
-		vnt_rf_setpower(priv, priv->current_rate,
-				conf->chandef.chan->hw_value);
-	}
+	if (changed & IEEE80211_CONF_CHANGE_POWER)
+		vnt_rf_setpower(priv, conf->chandef.chan);
 
 	return 0;
 }
@@ -711,6 +706,7 @@ static void vnt_bss_info_changed(struct ieee80211_hw *hw,
 		priv->basic_rates = conf->basic_rates;
 
 		vnt_update_top_rates(priv);
+		vnt_set_bss_mode(priv);
 
 		dev_dbg(&priv->usb->dev, "basic rates %x\n", conf->basic_rates);
 	}
@@ -739,17 +735,13 @@ static void vnt_bss_info_changed(struct ieee80211_hw *hw,
 			priv->short_slot_time = false;
 
 		vnt_set_short_slot_time(priv);
+		vnt_update_ifs(priv);
 		vnt_set_vga_gain_offset(priv, priv->bb_vga[0]);
 		vnt_update_pre_ed_threshold(priv, false);
 	}
 
-	if (changed & (BSS_CHANGED_BASIC_RATES | BSS_CHANGED_ERP_PREAMBLE |
-		       BSS_CHANGED_ERP_SLOT))
-		vnt_set_bss_mode(priv);
-
-	if (changed & BSS_CHANGED_TXPOWER)
-		vnt_rf_setpower(priv, priv->current_rate,
-				conf->chandef.chan->hw_value);
+	if (changed & (BSS_CHANGED_TXPOWER | BSS_CHANGED_BANDWIDTH))
+		vnt_rf_setpower(priv, conf->chandef.chan);
 
 	if (changed & BSS_CHANGED_BEACON_ENABLED) {
 		dev_dbg(&priv->usb->dev,
@@ -770,15 +762,12 @@ static void vnt_bss_info_changed(struct ieee80211_hw *hw,
 			vnt_mac_reg_bits_on(priv, MAC_REG_TFTCTL,
 					    TFTCTL_TSFCNTREN);
 
-			vnt_mac_set_beacon_interval(priv, conf->beacon_int);
-
-			vnt_reset_next_tbtt(priv, conf->beacon_int);
-
 			vnt_adjust_tsf(priv, conf->beacon_rate->hw_value,
 				       conf->sync_tsf, priv->current_tsf);
 
-			vnt_update_next_tbtt(priv,
-					     conf->sync_tsf, conf->beacon_int);
+			vnt_mac_set_beacon_interval(priv, conf->beacon_int);
+
+			vnt_reset_next_tbtt(priv, conf->beacon_int);
 		} else {
 			vnt_clear_current_tsf(priv);
 
@@ -812,11 +801,15 @@ static void vnt_configure(struct ieee80211_hw *hw,
 {
 	struct vnt_private *priv = hw->priv;
 	u8 rx_mode = 0;
+	int rc;
 
 	*total_flags &= FIF_ALLMULTI | FIF_OTHER_BSS | FIF_BCN_PRBRESP_PROMISC;
 
-	vnt_control_in(priv, MESSAGE_TYPE_READ, MAC_REG_RCR,
-		       MESSAGE_REQUEST_MACREG, sizeof(u8), &rx_mode);
+	rc = vnt_control_in(priv, MESSAGE_TYPE_READ, MAC_REG_RCR,
+			    MESSAGE_REQUEST_MACREG, sizeof(u8), &rx_mode);
+
+	if (!rc)
+		rx_mode = RCR_MULTICAST | RCR_BROADCAST;
 
 	dev_dbg(&priv->usb->dev, "rx mode in = %x\n", rx_mode);
 
@@ -855,12 +848,8 @@ static int vnt_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	case SET_KEY:
 		return vnt_set_keys(hw, sta, vif, key);
 	case DISABLE_KEY:
-		if (test_bit(key->hw_key_idx, &priv->key_entry_inuse)) {
+		if (test_bit(key->hw_key_idx, &priv->key_entry_inuse))
 			clear_bit(key->hw_key_idx, &priv->key_entry_inuse);
-
-			vnt_mac_disable_keyentry(priv, key->hw_key_idx);
-		}
-
 	default:
 		break;
 	}

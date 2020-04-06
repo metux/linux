@@ -162,12 +162,6 @@ __weak void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
 }
 EXPORT_SYMBOL_GPL(arch_set_freq_scale);
 
-__weak void arch_set_max_freq_scale(struct cpumask *cpus,
-				    unsigned long policy_max_freq)
-{
-}
-EXPORT_SYMBOL_GPL(arch_set_max_freq_scale);
-
 /*
  * This is a generic cpufreq init() routine which can be used by cpufreq
  * drivers of SMP systems. It will do following:
@@ -2444,8 +2438,6 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	policy->min = new_data.min;
 	policy->max = new_data.max;
 	trace_cpu_frequency_limits(policy);
-
-	arch_set_max_freq_scale(policy->cpus, policy->max);
 
 	policy->cached_target_freq = UINT_MAX;
 

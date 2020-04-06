@@ -16,9 +16,7 @@ bool topology_parse_cpu_capacity(struct device_node *cpu_node, int cpu);
 
 DECLARE_PER_CPU(unsigned long, cpu_scale);
 
-struct sched_domain;
-static inline
-unsigned long topology_get_cpu_scale(int cpu)
+static inline unsigned long topology_get_cpu_scale(int cpu)
 {
 	return per_cpu(cpu_scale, cpu);
 }
@@ -27,19 +25,22 @@ void topology_set_cpu_scale(unsigned int cpu, unsigned long capacity);
 
 DECLARE_PER_CPU(unsigned long, freq_scale);
 
-static inline
-unsigned long topology_get_freq_scale(int cpu)
+static inline unsigned long topology_get_freq_scale(int cpu)
 {
 	return per_cpu(freq_scale, cpu);
 }
 
-DECLARE_PER_CPU(unsigned long, max_freq_scale);
+bool arch_freq_counters_available(struct cpumask *cpus);
 
-static inline
-unsigned long topology_get_max_freq_scale(struct sched_domain *sd, int cpu)
+DECLARE_PER_CPU(unsigned long, thermal_pressure);
+
+static inline unsigned long topology_get_thermal_pressure(int cpu)
 {
-	return per_cpu(max_freq_scale, cpu);
+	return per_cpu(thermal_pressure, cpu);
 }
+
+void arch_set_thermal_pressure(struct cpumask *cpus,
+			       unsigned long th_pressure);
 
 struct cpu_topology {
 	int thread_id;
@@ -65,6 +66,7 @@ const struct cpumask *cpu_coregroup_mask(int cpu);
 void update_siblings_masks(unsigned int cpu);
 void remove_cpu_topology(unsigned int cpuid);
 void reset_cpu_topology(void);
+int parse_acpi_topology(void);
 #endif
 
 #endif /* _LINUX_ARCH_TOPOLOGY_H_ */

@@ -851,7 +851,7 @@ static int prp_enum_mbus_code(struct v4l2_subdev *sd,
 		return -EINVAL;
 
 	return imx_media_enum_ipu_format(&code->code, code->index,
-					 CS_SEL_YUV_RGB);
+					 PIXFMT_SEL_YUV_RGB);
 }
 
 static int prp_get_fmt(struct v4l2_subdev *sd,
@@ -886,12 +886,14 @@ static void prp_try_fmt(struct prp_priv *priv,
 {
 	struct v4l2_mbus_framefmt *infmt;
 
-	*cc = imx_media_find_ipu_format(sdformat->format.code, CS_SEL_YUV_RGB);
+	*cc = imx_media_find_ipu_format(sdformat->format.code,
+					PIXFMT_SEL_YUV_RGB);
 	if (!*cc) {
 		u32 code;
 
-		imx_media_enum_ipu_format(&code, 0, CS_SEL_YUV_RGB);
-		*cc = imx_media_find_ipu_format(code, CS_SEL_YUV_RGB);
+		imx_media_enum_ipu_format(&code, 0, PIXFMT_SEL_YUV_RGB);
+		*cc = imx_media_find_ipu_format(code, PIXFMT_SEL_YUV_RGB);
+
 		sdformat->format.code = (*cc)->codes[0];
 	}
 
@@ -1241,9 +1243,6 @@ static int prp_s_frame_interval(struct v4l2_subdev *sd,
 	return 0;
 }
 
-/*
- * retrieve our pads parsed from the OF graph by the media device
- */
 static int prp_registered(struct v4l2_subdev *sd)
 {
 	struct prp_priv *priv = sd_to_priv(sd);
@@ -1251,12 +1250,9 @@ static int prp_registered(struct v4l2_subdev *sd)
 	int i, ret;
 	u32 code;
 
+	/* set a default mbus format  */
+	imx_media_enum_ipu_format(&code, 0, PIXFMT_SEL_YUV);
 	for (i = 0; i < PRPENCVF_NUM_PADS; i++) {
-		priv->pad[i].flags = (i == PRPENCVF_SINK_PAD) ?
-			MEDIA_PAD_FL_SINK : MEDIA_PAD_FL_SOURCE;
-
-		/* set a default mbus format  */
-		imx_media_enum_ipu_format(&code, 0, CS_SEL_YUV);
 		ret = imx_media_init_mbus_fmt(&priv->format_mbus[i],
 					      640, 480, code, V4L2_FIELD_NONE,
 					      &priv->cc[i]);
@@ -1267,11 +1263,6 @@ static int prp_registered(struct v4l2_subdev *sd)
 	/* init default frame interval */
 	priv->frame_interval.numerator = 1;
 	priv->frame_interval.denominator = 30;
-
-	ret = media_entity_pads_init(&sd->entity, PRPENCVF_NUM_PADS,
-				     priv->pad);
-	if (ret)
-		return ret;
 
 	priv->vdev = imx_media_capture_device_init(ic_priv->ipu_dev,
 						   &ic_priv->sd,
@@ -1338,6 +1329,7 @@ static const struct v4l2_subdev_internal_ops prp_internal_ops = {
 static int prp_init(struct imx_ic_priv *ic_priv)
 {
 	struct prp_priv *priv;
+	int i, ret;
 
 	priv = devm_kzalloc(ic_priv->ipu_dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1351,7 +1343,17 @@ static int prp_init(struct imx_ic_priv *ic_priv)
 
 	mutex_init(&priv->lock);
 
-	return 0;
+	for (i = 0; i < PRPENCVF_NUM_PADS; i++) {
+		priv->pad[i].flags = (i == PRPENCVF_SINK_PAD) ?
+			MEDIA_PAD_FL_SINK : MEDIA_PAD_FL_SOURCE;
+	}
+
+	ret = media_entity_pads_init(&ic_priv->sd.entity, PRPENCVF_NUM_PADS,
+				     priv->pad);
+	if (ret)
+		mutex_destroy(&priv->lock);
+
+	return ret;
 }
 
 static void prp_remove(struct imx_ic_priv *ic_priv)

@@ -3366,7 +3366,7 @@ retry:
 			goto overflow;
 
 		/*
-		 * If required width exeeds current VA block, move
+		 * If required width exceeds current VA block, move
 		 * base downwards and then recheck.
 		 */
 		if (base + end > va->va_end) {

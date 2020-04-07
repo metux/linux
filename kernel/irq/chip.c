@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/irqdomain.h>
+#include <linux/wakeup_reason.h>
 
 #include <trace/events/irq.h>
 
@@ -507,8 +508,22 @@ static bool irq_may_run(struct irq_desc *desc)
 	 * If the interrupt is not in progress and is not an armed
 	 * wakeup interrupt, proceed.
 	 */
-	if (!irqd_has_set(&desc->irq_data, mask))
+	if (!irqd_has_set(&desc->irq_data, mask)) {
+#ifdef CONFIG_PM_SLEEP
+		if (unlikely(desc->no_suspend_depth &&
+			     irqd_is_wakeup_set(&desc->irq_data))) {
+			unsigned int irq = irq_desc_get_irq(desc);
+			const char *name = "(unnamed)";
+
+			if (desc->action && desc->action->name)
+				name = desc->action->name;
+
+			log_abnormal_wakeup_reason("misconfigured IRQ %u %s",
+						   irq, name);
+		}
+#endif
 		return true;
+	}
 
 	/*
 	 * If the interrupt is an armed wakeup source, mark it pending
@@ -942,33 +957,6 @@ void handle_percpu_devid_irq(struct irq_desc *desc)
 
 	if (chip->irq_eoi)
 		chip->irq_eoi(&desc->irq_data);
-}
-
-/**
- * handle_percpu_devid_fasteoi_ipi - Per CPU local IPI handler with per cpu
- *				     dev ids
- * @desc:	the interrupt description structure for this irq
- *
- * The biggest difference with the IRQ version is that the interrupt is
- * EOIed early, as the IPI could result in a context switch, and we need to
- * make sure the IPI can fire again. We also assume that the arch code has
- * registered an action. If not, we are positively doomed.
- */
-void handle_percpu_devid_fasteoi_ipi(struct irq_desc *desc)
-{
-	struct irq_chip *chip = irq_desc_get_chip(desc);
-	struct irqaction *action = desc->action;
-	unsigned int irq = irq_desc_get_irq(desc);
-	irqreturn_t res;
-
-	__kstat_incr_irqs_this_cpu(desc);
-
-	if (chip->irq_eoi)
-		chip->irq_eoi(&desc->irq_data);
-
-	trace_irq_handler_entry(irq, action);
-	res = action->handler(irq, raw_cpu_ptr(action->percpu_dev_id));
-	trace_irq_handler_exit(irq, action, res);
 }
 
 /**
@@ -1568,17 +1556,18 @@ EXPORT_SYMBOL_GPL(irq_chip_release_resources_parent);
  */
 int irq_chip_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 {
-	struct irq_data *pos;
+	struct irq_data *pos = NULL;
 
-	for (pos = NULL; !pos && data; data = irqd_get_parent_data(data)) {
+#ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
+	for (; data; data = data->parent_data)
+#endif
 		if (data->chip && data->chip->irq_compose_msi_msg)
 			pos = data;
-	}
-
 	if (!pos)
 		return -ENOSYS;
 
 	pos->chip->irq_compose_msi_msg(pos, msg);
+
 	return 0;
 }
 

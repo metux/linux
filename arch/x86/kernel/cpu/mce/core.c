@@ -42,9 +42,6 @@
 #include <linux/export.h>
 #include <linux/jump_label.h>
 #include <linux/set_memory.h>
-#include <linux/sync_core.h>
-#include <linux/task_work.h>
-#include <linux/hardirq.h>
 
 #include <asm/intel-family.h>
 #include <asm/processor.h>
@@ -131,7 +128,7 @@ static void (*quirk_no_way_out)(int bank, struct mce *m, struct pt_regs *regs);
 BLOCKING_NOTIFIER_HEAD(x86_mce_decoder_chain);
 
 /* Do initial initialization of a struct mce */
-noinstr void mce_setup(struct mce *m)
+void mce_setup(struct mce *m)
 {
 	memset(m, 0, sizeof(struct mce));
 	m->cpu = m->extcpu = smp_processor_id();
@@ -141,12 +138,12 @@ noinstr void mce_setup(struct mce *m)
 	m->cpuid = cpuid_eax(1);
 	m->socketid = cpu_data(m->extcpu).phys_proc_id;
 	m->apicid = cpu_data(m->extcpu).initial_apicid;
-	m->mcgcap = __rdmsr(MSR_IA32_MCG_CAP);
+	rdmsrl(MSR_IA32_MCG_CAP, m->mcgcap);
 
 	if (this_cpu_has(X86_FEATURE_INTEL_PPIN))
-		m->ppin = __rdmsr(MSR_PPIN);
+		rdmsrl(MSR_PPIN, m->ppin);
 	else if (this_cpu_has(X86_FEATURE_AMD_PPIN))
-		m->ppin = __rdmsr(MSR_AMD_PPIN);
+		rdmsrl(MSR_AMD_PPIN, m->ppin);
 
 	m->microcode = boot_cpu_data.microcode;
 }
@@ -245,8 +242,6 @@ static void __print_mce(struct mce *m)
 		pr_cont("ADDR %llx ", m->addr);
 	if (m->misc)
 		pr_cont("MISC %llx ", m->misc);
-	if (m->ppin)
-		pr_cont("PPIN %llx ", m->ppin);
 
 	if (mce_flags.smca) {
 		if (m->synd)
@@ -523,14 +518,6 @@ bool mce_is_memory_error(struct mce *m)
 }
 EXPORT_SYMBOL_GPL(mce_is_memory_error);
 
-static bool whole_page(struct mce *m)
-{
-	if (!mca_cfg.ser || !(m->status & MCI_STATUS_MISCV))
-		return true;
-
-	return MCI_MISC_ADDR_LSB(m->misc) >= PAGE_SHIFT;
-}
-
 bool mce_is_correctable(struct mce *m)
 {
 	if (m->cpuvendor == X86_VENDOR_AMD && m->status & MCI_STATUS_DEFERRED)
@@ -584,7 +571,7 @@ static int uc_decode_notifier(struct notifier_block *nb, unsigned long val,
 
 	pfn = mce->addr >> PAGE_SHIFT;
 	if (!memory_failure(pfn, 0)) {
-		set_mce_nospec(pfn, whole_page(mce));
+		set_mce_nospec(pfn);
 		mce->kflags |= MCE_HANDLED_UC;
 	}
 
@@ -1070,6 +1057,23 @@ static void mce_clear_state(unsigned long *toclear)
 	}
 }
 
+static int do_memory_failure(struct mce *m)
+{
+	int flags = MF_ACTION_REQUIRED;
+	int ret;
+
+	pr_err("Uncorrected hardware memory error in user-access at %llx", m->addr);
+	if (!(m->mcgstatus & MCG_STATUS_RIPV))
+		flags |= MF_MUST_KILL;
+	ret = memory_failure(m->addr >> PAGE_SHIFT, flags);
+	if (ret)
+		pr_err("Memory error not recovered");
+	else
+		set_mce_nospec(m->addr >> PAGE_SHIFT);
+	return ret;
+}
+
+
 /*
  * Cases where we avoid rendezvous handler timeout:
  * 1) If this CPU is offline.
@@ -1082,15 +1086,13 @@ static void mce_clear_state(unsigned long *toclear)
  * kdump kernel establishing a new #MC handler where a broadcasted MCE
  * might not get handled properly.
  */
-static noinstr bool mce_check_crashing_cpu(void)
+static bool __mc_check_crashing_cpu(int cpu)
 {
-	unsigned int cpu = smp_processor_id();
-
-	if (arch_cpu_is_offline(cpu) ||
+	if (cpu_is_offline(cpu) ||
 	    (crashing_cpu != -1 && crashing_cpu != cpu)) {
 		u64 mcgstatus;
 
-		mcgstatus = __rdmsr(MSR_IA32_MCG_STATUS);
+		mcgstatus = mce_rdmsrl(MSR_IA32_MCG_STATUS);
 
 		if (boot_cpu_data.x86_vendor == X86_VENDOR_ZHAOXIN) {
 			if (mcgstatus & MCG_STATUS_LMCES)
@@ -1098,7 +1100,7 @@ static noinstr bool mce_check_crashing_cpu(void)
 		}
 
 		if (mcgstatus & MCG_STATUS_RIPV) {
-			__wrmsr(MSR_IA32_MCG_STATUS, 0, 0);
+			mce_wrmsrl(MSR_IA32_MCG_STATUS, 0);
 			return true;
 		}
 	}
@@ -1173,30 +1175,6 @@ static void __mc_scan_banks(struct mce *m, struct mce *final,
 	*m = *final;
 }
 
-static void kill_me_now(struct callback_head *ch)
-{
-	force_sig(SIGBUS);
-}
-
-static void kill_me_maybe(struct callback_head *cb)
-{
-	struct task_struct *p = container_of(cb, struct task_struct, mce_kill_me);
-	int flags = MF_ACTION_REQUIRED;
-
-	pr_err("Uncorrected hardware memory error in user-access at %llx", p->mce_addr);
-
-	if (!p->mce_ripv)
-		flags |= MF_MUST_KILL;
-
-	if (!memory_failure(p->mce_addr >> PAGE_SHIFT, flags)) {
-		set_mce_nospec(p->mce_addr >> PAGE_SHIFT, p->mce_whole_page);
-		return;
-	}
-
-	pr_err("Memory error not recovered");
-	kill_me_now(cb);
-}
-
 /*
  * The actual machine check handler. This only handles real
  * exceptions when something got corrupted coming in through int 18.
@@ -1215,11 +1193,12 @@ static void kill_me_maybe(struct callback_head *cb)
  * backing the user stack, tracing that reads the user stack will cause
  * potentially infinite recursion.
  */
-noinstr void do_machine_check(struct pt_regs *regs)
+void notrace do_machine_check(struct pt_regs *regs, long error_code)
 {
 	DECLARE_BITMAP(valid_banks, MAX_NR_BANKS);
 	DECLARE_BITMAP(toclear, MAX_NR_BANKS);
 	struct mca_config *cfg = &mca_cfg;
+	int cpu = smp_processor_id();
 	struct mce m, *final;
 	char *msg = NULL;
 	int worst = 0;
@@ -1247,6 +1226,11 @@ noinstr void do_machine_check(struct pt_regs *regs)
 	 * on Intel.
 	 */
 	int lmce = 1;
+
+	if (__mc_check_crashing_cpu(cpu))
+		return;
+
+	ist_enter(regs);
 
 	this_cpu_inc(mce_exception_count);
 
@@ -1335,20 +1319,17 @@ noinstr void do_machine_check(struct pt_regs *regs)
 	sync_core();
 
 	if (worst != MCE_AR_SEVERITY && !kill_it)
-		return;
+		goto out_ist;
 
 	/* Fault was in user mode and we need to take some action */
 	if ((m.cs & 3) == 3) {
-		/* If this triggers there is no way to recover. Die hard. */
-		BUG_ON(!on_thread_stack() || !user_mode(regs));
+		ist_begin_non_atomic(regs);
+		local_irq_enable();
 
-		current->mce_addr = m.addr;
-		current->mce_ripv = !!(m.mcgstatus & MCG_STATUS_RIPV);
-		current->mce_whole_page = whole_page(&m);
-		current->mce_kill_me.func = kill_me_maybe;
-		if (kill_it)
-			current->mce_kill_me.func = kill_me_now;
-		task_work_add(current, &current->mce_kill_me, true);
+		if (kill_it || do_memory_failure(&m))
+			force_sig(SIGBUS);
+		local_irq_disable();
+		ist_end_non_atomic();
 	} else {
 		/*
 		 * Handle an MCE which has happened in kernel space but from
@@ -1360,12 +1341,16 @@ noinstr void do_machine_check(struct pt_regs *regs)
 		 * proper one.
 		 */
 		if (m.kflags & MCE_IN_KERNEL_RECOV) {
-			if (!fixup_exception(regs, X86_TRAP_MC, 0, 0))
+			if (!fixup_exception(regs, X86_TRAP_MC, error_code, 0))
 				mce_panic("Failed kernel mode recovery", &m, msg);
 		}
 	}
+
+out_ist:
+	ist_exit(regs);
 }
 EXPORT_SYMBOL_GPL(do_machine_check);
+NOKPROBE_SYMBOL(do_machine_check);
 
 #ifndef CONFIG_MEMORY_FAILURE
 int memory_failure(unsigned long pfn, int flags)
@@ -1891,88 +1876,21 @@ bool filter_mce(struct mce *m)
 }
 
 /* Handle unconfigured int18 (should never happen) */
-static noinstr void unexpected_machine_check(struct pt_regs *regs)
+static void unexpected_machine_check(struct pt_regs *regs, long error_code)
 {
-	instrumentation_begin();
 	pr_err("CPU#%d: Unexpected int18 (Machine Check)\n",
 	       smp_processor_id());
-	instrumentation_end();
 }
 
 /* Call the installed machine check handler for this CPU setup. */
-void (*machine_check_vector)(struct pt_regs *) = unexpected_machine_check;
+void (*machine_check_vector)(struct pt_regs *, long error_code) =
+						unexpected_machine_check;
 
-static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
+dotraplinkage notrace void do_mce(struct pt_regs *regs, long error_code)
 {
-	bool irq_state;
-
-	WARN_ON_ONCE(user_mode(regs));
-
-	/*
-	 * Only required when from kernel mode. See
-	 * mce_check_crashing_cpu() for details.
-	 */
-	if (machine_check_vector == do_machine_check &&
-	    mce_check_crashing_cpu())
-		return;
-
-	irq_state = idtentry_enter_nmi(regs);
-	/*
-	 * The call targets are marked noinstr, but objtool can't figure
-	 * that out because it's an indirect call. Annotate it.
-	 */
-	instrumentation_begin();
-	trace_hardirqs_off_finish();
-	machine_check_vector(regs);
-	if (regs->flags & X86_EFLAGS_IF)
-		trace_hardirqs_on_prepare();
-	instrumentation_end();
-	idtentry_exit_nmi(regs, irq_state);
+	machine_check_vector(regs, error_code);
 }
-
-static __always_inline void exc_machine_check_user(struct pt_regs *regs)
-{
-	irqentry_enter_from_user_mode(regs);
-	instrumentation_begin();
-	machine_check_vector(regs);
-	instrumentation_end();
-	irqentry_exit_to_user_mode(regs);
-}
-
-#ifdef CONFIG_X86_64
-/* MCE hit kernel mode */
-DEFINE_IDTENTRY_MCE(exc_machine_check)
-{
-	unsigned long dr7;
-
-	dr7 = local_db_save();
-	exc_machine_check_kernel(regs);
-	local_db_restore(dr7);
-}
-
-/* The user mode variant. */
-DEFINE_IDTENTRY_MCE_USER(exc_machine_check)
-{
-	unsigned long dr7;
-
-	dr7 = local_db_save();
-	exc_machine_check_user(regs);
-	local_db_restore(dr7);
-}
-#else
-/* 32bit unified entry point */
-DEFINE_IDTENTRY_RAW(exc_machine_check)
-{
-	unsigned long dr7;
-
-	dr7 = local_db_save();
-	if (user_mode(regs))
-		exc_machine_check_user(regs);
-	else
-		exc_machine_check_kernel(regs);
-	local_db_restore(dr7);
-}
-#endif
+NOKPROBE_SYMBOL(do_mce);
 
 /*
  * Called for each booted CPU to set up machine checks.

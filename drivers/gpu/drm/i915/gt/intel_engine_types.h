@@ -24,7 +24,6 @@
 #include "i915_selftest.h"
 #include "intel_sseu.h"
 #include "intel_timeline_types.h"
-#include "intel_uncore.h"
 #include "intel_wakeref.h"
 #include "intel_workarounds_types.h"
 
@@ -157,11 +156,6 @@ struct intel_engine_execlists {
 	struct i915_priolist default_priolist;
 
 	/**
-	 * @ccid: identifier for contexts submitted to this engine
-	 */
-	u32 ccid;
-
-	/**
 	 * @yield: CCID at the time of the last semaphore-wait interrupt.
 	 *
 	 * Instead of leaving a semaphore busy-spinning on an engine, we would
@@ -177,12 +171,8 @@ struct intel_engine_execlists {
 	 * the first error interrupt, record the EIR and schedule the tasklet.
 	 * In the tasklet, we process the pending CS events to ensure we have
 	 * the guilty request, and then reset the engine.
-	 *
-	 * Low 16b are used by HW, with the upper 16b used as the enabling mask.
-	 * Reserve the upper 16b for tracking internal errors.
 	 */
 	u32 error_interrupt;
-#define ERROR_CSB BIT(31)
 
 	/**
 	 * @reset_ccid: Active CCID [EXECLISTS_STATUS_HI] at the time of reset
@@ -318,17 +308,8 @@ struct intel_engine_cs {
 	u32 context_size;
 	u32 mmio_base;
 
-	/*
-	 * Some w/a require forcewake to be held (which prevents RC6) while
-	 * a particular engine is active. If so, we set fw_domain to which
-	 * domains need to be held for the duration of request activity,
-	 * and 0 if none. We try to limit the duration of the hold as much
-	 * as possible.
-	 */
-	enum forcewake_domains fw_domain;
-	atomic_t fw_active;
-
-	unsigned long context_tag;
+	unsigned int context_tag;
+#define NUM_CONTEXT_TAG roundup_pow_of_two(2 * EXECLIST_MAX_PORTS)
 
 	struct rb_node uabi_node;
 
@@ -352,7 +333,6 @@ struct intel_engine_cs {
 	struct {
 		struct delayed_work work;
 		struct i915_request *systole;
-		unsigned long blocked;
 	} heartbeat;
 
 	unsigned long serial;
@@ -514,11 +494,10 @@ struct intel_engine_cs {
 #define I915_ENGINE_SUPPORTS_STATS   BIT(1)
 #define I915_ENGINE_HAS_PREEMPTION   BIT(2)
 #define I915_ENGINE_HAS_SEMAPHORES   BIT(3)
-#define I915_ENGINE_HAS_TIMESLICES   BIT(4)
-#define I915_ENGINE_NEEDS_BREADCRUMB_TASKLET BIT(5)
-#define I915_ENGINE_IS_VIRTUAL       BIT(6)
-#define I915_ENGINE_HAS_RELATIVE_MMIO BIT(7)
-#define I915_ENGINE_REQUIRES_CMD_PARSER BIT(8)
+#define I915_ENGINE_NEEDS_BREADCRUMB_TASKLET BIT(4)
+#define I915_ENGINE_IS_VIRTUAL       BIT(5)
+#define I915_ENGINE_HAS_RELATIVE_MMIO BIT(6)
+#define I915_ENGINE_REQUIRES_CMD_PARSER BIT(7)
 	unsigned int flags;
 
 	/*
@@ -614,15 +593,6 @@ static inline bool
 intel_engine_has_semaphores(const struct intel_engine_cs *engine)
 {
 	return engine->flags & I915_ENGINE_HAS_SEMAPHORES;
-}
-
-static inline bool
-intel_engine_has_timeslices(const struct intel_engine_cs *engine)
-{
-	if (!IS_ACTIVE(CONFIG_DRM_I915_TIMESLICE_DURATION))
-		return false;
-
-	return engine->flags & I915_ENGINE_HAS_TIMESLICES;
 }
 
 static inline bool

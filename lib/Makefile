@@ -91,6 +91,7 @@ CFLAGS_test_stackinit.o += $(call cc-disable-warning, switch-unreachable)
 obj-$(CONFIG_TEST_STACKINIT) += test_stackinit.o
 obj-$(CONFIG_TEST_BLACKHOLE_DEV) += test_blackhole_dev.o
 obj-$(CONFIG_TEST_MEMINIT) += test_meminit.o
+obj-$(CONFIG_TEST_LOCKUP) += test_lockup.o
 
 obj-$(CONFIG_TEST_LIVEPATCH) += livepatch/
 

@@ -157,11 +157,6 @@ struct intel_engine_execlists {
 	struct i915_priolist default_priolist;
 
 	/**
-	 * @ccid: identifier for contexts submitted to this engine
-	 */
-	u32 ccid;
-
-	/**
 	 * @yield: CCID at the time of the last semaphore-wait interrupt.
 	 *
 	 * Instead of leaving a semaphore busy-spinning on an engine, we would
@@ -309,7 +304,8 @@ struct intel_engine_cs {
 	u32 context_size;
 	u32 mmio_base;
 
-	unsigned long context_tag;
+	unsigned int context_tag;
+#define NUM_CONTEXT_TAG roundup_pow_of_two(2 * EXECLIST_MAX_PORTS)
 
 	struct rb_node uabi_node;
 
@@ -499,11 +495,10 @@ struct intel_engine_cs {
 #define I915_ENGINE_SUPPORTS_STATS   BIT(1)
 #define I915_ENGINE_HAS_PREEMPTION   BIT(2)
 #define I915_ENGINE_HAS_SEMAPHORES   BIT(3)
-#define I915_ENGINE_HAS_TIMESLICES   BIT(4)
-#define I915_ENGINE_NEEDS_BREADCRUMB_TASKLET BIT(5)
-#define I915_ENGINE_IS_VIRTUAL       BIT(6)
-#define I915_ENGINE_HAS_RELATIVE_MMIO BIT(7)
-#define I915_ENGINE_REQUIRES_CMD_PARSER BIT(8)
+#define I915_ENGINE_NEEDS_BREADCRUMB_TASKLET BIT(4)
+#define I915_ENGINE_IS_VIRTUAL       BIT(5)
+#define I915_ENGINE_HAS_RELATIVE_MMIO BIT(6)
+#define I915_ENGINE_REQUIRES_CMD_PARSER BIT(7)
 	unsigned int flags;
 
 	/*
@@ -599,15 +594,6 @@ static inline bool
 intel_engine_has_semaphores(const struct intel_engine_cs *engine)
 {
 	return engine->flags & I915_ENGINE_HAS_SEMAPHORES;
-}
-
-static inline bool
-intel_engine_has_timeslices(const struct intel_engine_cs *engine)
-{
-	if (!IS_ACTIVE(CONFIG_DRM_I915_TIMESLICE_DURATION))
-		return false;
-
-	return engine->flags & I915_ENGINE_HAS_TIMESLICES;
 }
 
 static inline bool

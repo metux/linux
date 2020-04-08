@@ -186,10 +186,6 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 	}
 	mdev->cursor.pixels_current = NULL;
 
-	r = drm_fbdev_generic_setup(mdev->dev, 0);
-	if (r)
-		goto err_modeset;
-
 	return 0;
 
 err_modeset:

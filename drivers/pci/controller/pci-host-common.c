@@ -8,9 +8,7 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/of_address.h>
-#include <linux/of_device.h>
 #include <linux/of_pci.h>
 #include <linux/pci-ecam.h>
 #include <linux/platform_device.h>
@@ -56,18 +54,14 @@ err_out:
 	return ERR_PTR(err);
 }
 
-int pci_host_common_probe(struct platform_device *pdev)
+int pci_host_common_probe(struct platform_device *pdev,
+			  const struct pci_ecam_ops *ops)
 {
 	struct device *dev = &pdev->dev;
 	struct pci_host_bridge *bridge;
 	struct pci_config_window *cfg;
 	struct list_head resources;
-	const struct pci_ecam_ops *ops;
 	int ret;
-
-	ops = of_device_get_match_data(&pdev->dev);
-	if (!ops)
-		return -ENODEV;
 
 	bridge = devm_pci_alloc_host_bridge(dev, 0);
 	if (!bridge)
@@ -101,7 +95,6 @@ int pci_host_common_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, bridge->bus);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(pci_host_common_probe);
 
 int pci_host_common_remove(struct platform_device *pdev)
 {
@@ -114,6 +107,3 @@ int pci_host_common_remove(struct platform_device *pdev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(pci_host_common_remove);
-
-MODULE_LICENSE("GPL v2");

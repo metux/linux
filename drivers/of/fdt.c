@@ -1133,7 +1133,7 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 		}
 	}
 
-	pr_debug("Command line is: %s\n", (char*)data);
+	pr_debug("Command line is: %s\n", (char *)data);
 
 	/* break now */
 	return 1;

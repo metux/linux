@@ -28,19 +28,19 @@
 #if defined(CONFIG_CPU_V6) || defined(CONFIG_CPU_V6K) || defined(CONFIG_CPU_V7)
 		.macro	loadsp, rb, tmp1, tmp2
 		.endm
-		.macro	writeb, ch, rb, tmp
+		.macro	writeb, ch, rb
 		mcr	p14, 0, \ch, c0, c5, 0
 		.endm
 #elif defined(CONFIG_CPU_XSCALE)
 		.macro	loadsp, rb, tmp1, tmp2
 		.endm
-		.macro	writeb, ch, rb, tmp
+		.macro	writeb, ch, rb
 		mcr	p14, 0, \ch, c8, c0, 0
 		.endm
 #else
 		.macro	loadsp, rb, tmp1, tmp2
 		.endm
-		.macro	writeb, ch, rb, tmp
+		.macro	writeb, ch, rb
 		mcr	p14, 0, \ch, c1, c0, 0
 		.endm
 #endif
@@ -49,13 +49,8 @@
 
 #include CONFIG_DEBUG_LL_INCLUDE
 
-		.macro	writeb,	ch, rb, tmp
-#ifdef CONFIG_DEBUG_UART_FLOW_CONTROL
-		waituartcts \tmp, \rb
-#endif
-		waituarttxrdy \tmp, \rb
+		.macro	writeb,	ch, rb
 		senduart \ch, \rb
-		busyuart \tmp, \rb
 		.endm
 
 #if defined(CONFIG_ARCH_SA1100)
@@ -86,11 +81,42 @@
 		bl	phex
 		.endm
 
+		.macro	debug_reloc_start
+#ifdef DEBUG
+		kputc	#'\n'
+		kphex	r6, 8		/* processor id */
+		kputc	#':'
+		kphex	r7, 8		/* architecture id */
+#ifdef CONFIG_CPU_CP15
+		kputc	#':'
+		mrc	p15, 0, r0, c1, c0
+		kphex	r0, 8		/* control reg */
+#endif
+		kputc	#'\n'
+		kphex	r5, 8		/* decompressed kernel start */
+		kputc	#'-'
+		kphex	r9, 8		/* decompressed kernel end  */
+		kputc	#'>'
+		kphex	r4, 8		/* kernel execution address */
+		kputc	#'\n'
+#endif
+		.endm
+
+		.macro	debug_reloc_end
+#ifdef DEBUG
+		kphex	r5, 8		/* end of kernel */
+		kputc	#'\n'
+		mov	r0, r4
+		bl	memdump		/* dump 256 bytes at start of kernel */
+#endif
+		.endm
+
 		/*
 		 * Debug kernel copy by printing the memory addresses involved
 		 */
 		.macro dbgkc, begin, end, cbegin, cend
 #ifdef DEBUG
+		kputc   #'\n'
 		kputc   #'C'
 		kputc   #':'
 		kputc   #'0'
@@ -110,28 +136,7 @@
 		kputc	#'x'
 		kphex	\cend, 8	/* End of kernel copy */
 		kputc	#'\n'
-#endif
-		.endm
-
-		/*
-		 * Debug print of the final appended DTB location
-		 */
-		.macro dbgadtb, begin, end
-#ifdef DEBUG
-		kputc   #'D'
-		kputc   #'T'
-		kputc   #'B'
-		kputc   #':'
-		kputc   #'0'
-		kputc   #'x'
-		kphex   \begin, 8	/* Start of appended DTB */
-		kputc	#' '
-		kputc	#'('
-		kputc	#'0'
-		kputc	#'x'
-		kphex	\end, 8		/* End of appended DTB */
-		kputc	#')'
-		kputc	#'\n'
+		kputc	#'\r'
 #endif
 		.endm
 
@@ -298,7 +303,7 @@ restart:	adr	r0, LC1
 
 #ifndef CONFIG_ZBOOT_ROM
 		/* malloc space is above the relocated stack (64k max) */
-		add	r10, sp, #MALLOC_SIZE
+		add	r10, sp, #0x10000
 #else
 		/*
 		 * With ZBOOT_ROM the bss/stack is non relocatable,
@@ -352,7 +357,6 @@ restart:	adr	r0, LC1
 		mov	r5, r5, ror #8
 		eor	r5, r5, r1, lsr #8
 #endif
-		dbgadtb	r6, r5
 		/* 50% DTB growth should be good enough */
 		add	r5, r5, r5, lsr #1
 		/* preserve 64-bit alignment */
@@ -610,7 +614,7 @@ not_relocated:	mov	r0, #0
  */
 		mov	r0, r4
 		mov	r1, sp			@ malloc space above stack
-		add	r2, sp, #MALLOC_SIZE	@ 64k max
+		add	r2, sp, #0x10000	@ 64k max
 		mov	r3, r7
 		bl	decompress_kernel
 
@@ -1352,7 +1356,7 @@ puts:		loadsp	r3, r2, r1
 1:		ldrb	r2, [r0], #1
 		teq	r2, #0
 		moveq	pc, lr
-2:		writeb	r2, r3, r1
+2:		writeb	r2, r3
 		mov	r1, #0x00020000
 3:		subs	r1, r1, #1
 		bne	3b
@@ -1406,11 +1410,7 @@ memdump:	mov	r12, r0
 __hyp_reentry_vectors:
 		W(b)	.			@ reset
 		W(b)	.			@ undef
-#ifdef CONFIG_EFI_STUB
-		W(b)	__enter_kernel_from_hyp	@ hvc from HYP
-#else
 		W(b)	.			@ svc
-#endif
 		W(b)	.			@ pabort
 		W(b)	.			@ dabort
 		W(b)	__enter_kernel		@ hyp
@@ -1429,75 +1429,14 @@ __enter_kernel:
 reloc_code_end:
 
 #ifdef CONFIG_EFI_STUB
-__enter_kernel_from_hyp:
-		mrc	p15, 4, r0, c1, c0, 0	@ read HSCTLR
-		bic	r0, r0, #0x5		@ disable MMU and caches
-		mcr	p15, 4, r0, c1, c0, 0	@ write HSCTLR
-		isb
-		b	__enter_kernel
-
 ENTRY(efi_enter_kernel)
 		mov	r4, r0			@ preserve image base
 		mov	r8, r1			@ preserve DT pointer
 
- ARM(		adrl	r0, call_cache_fn	)
- THUMB(		adr	r0, call_cache_fn	)
-		adr	r1, 0f			@ clean the region of code we
-		bl	cache_clean_flush	@ may run with the MMU off
-
-#ifdef CONFIG_ARM_VIRT_EXT
-		@
-		@ The EFI spec does not support booting on ARM in HYP mode,
-		@ since it mandates that the MMU and caches are on, with all
-		@ 32-bit addressable DRAM mapped 1:1 using short descriptors.
-		@
-		@ While the EDK2 reference implementation adheres to this,
-		@ U-Boot might decide to enter the EFI stub in HYP mode
-		@ anyway, with the MMU and caches either on or off.
-		@
-		mrs	r0, cpsr		@ get the current mode
-		msr	spsr_cxsf, r0		@ record boot mode
-		and	r0, r0, #MODE_MASK	@ are we running in HYP mode?
-		cmp	r0, #HYP_MODE
-		bne	.Lefi_svc
-
-		mrc	p15, 4, r1, c1, c0, 0	@ read HSCTLR
-		tst	r1, #0x1		@ MMU enabled at HYP?
-		beq	1f
-
-		@
-		@ When running in HYP mode with the caches on, we're better
-		@ off just carrying on using the cached 1:1 mapping that the
-		@ firmware provided. Set up the HYP vectors so HVC instructions
-		@ issued from HYP mode take us to the correct handler code. We
-		@ will disable the MMU before jumping to the kernel proper.
-		@
- ARM(		bic	r1, r1, #(1 << 30)	) @ clear HSCTLR.TE
- THUMB(		orr	r1, r1, #(1 << 30)	) @ set HSCTLR.TE
-		mcr	p15, 4, r1, c1, c0, 0
-		adr	r0, __hyp_reentry_vectors
-		mcr	p15, 4, r0, c12, c0, 0	@ set HYP vector base (HVBAR)
-		isb
-		b	.Lefi_hyp
-
-		@
-		@ When running in HYP mode with the caches off, we need to drop
-		@ into SVC mode now, and let the decompressor set up its cached
-		@ 1:1 mapping as usual.
-		@
-1:		mov	r9, r4			@ preserve image base
-		bl	__hyp_stub_install	@ install HYP stub vectors
-		safe_svcmode_maskall	r1	@ drop to SVC mode
-		msr	spsr_cxsf, r0		@ record boot mode
-		orr	r4, r9, #1		@ restore image base and set LSB
-		b	.Lefi_hyp
-.Lefi_svc:
-#endif
 		mrc	p15, 0, r0, c1, c0, 0	@ read SCTLR
 		tst	r0, #0x1		@ MMU enabled?
 		orreq	r4, r4, #1		@ set LSB if not
 
-.Lefi_hyp:
 		mov	r0, r8			@ DT start
 		add	r1, r8, r2		@ DT end
 		bl	cache_clean_flush

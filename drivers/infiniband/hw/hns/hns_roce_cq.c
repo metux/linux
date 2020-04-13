@@ -39,51 +39,8 @@
 #include <rdma/hns-abi.h>
 #include "hns_roce_common.h"
 
-static void hns_roce_ib_cq_comp(struct hns_roce_cq *hr_cq)
-{
-	struct ib_cq *ibcq = &hr_cq->ib_cq;
-
-	ibcq->comp_handler(ibcq, ibcq->cq_context);
-}
-
-static void hns_roce_ib_cq_event(struct hns_roce_cq *hr_cq,
-				 enum hns_roce_event event_type)
-{
-	struct hns_roce_dev *hr_dev;
-	struct ib_event event;
-	struct ib_cq *ibcq;
-
-	ibcq = &hr_cq->ib_cq;
-	hr_dev = to_hr_dev(ibcq->device);
-
-	if (event_type != HNS_ROCE_EVENT_TYPE_CQ_ID_INVALID &&
-	    event_type != HNS_ROCE_EVENT_TYPE_CQ_ACCESS_ERROR &&
-	    event_type != HNS_ROCE_EVENT_TYPE_CQ_OVERFLOW) {
-		dev_err(hr_dev->dev,
-			"hns_roce_ib: Unexpected event type 0x%x on CQ %06lx\n",
-			event_type, hr_cq->cqn);
-		return;
-	}
-
-	if (ibcq->event_handler) {
-		event.device = ibcq->device;
-		event.event = IB_EVENT_CQ_ERR;
-		event.element.cq = ibcq;
-		ibcq->event_handler(&event, ibcq->cq_context);
-	}
-}
-
-static int hns_roce_hw_create_cq(struct hns_roce_dev *dev,
-				 struct hns_roce_cmd_mailbox *mailbox,
-				 unsigned long cq_num)
-{
-	return hns_roce_cmd_mbox(dev, mailbox->dma, 0, cq_num, 0,
-				 HNS_ROCE_CMD_CREATE_CQ,
-				 HNS_ROCE_CMD_TIMEOUT_MSECS);
-}
-
-static int hns_roce_cq_alloc(struct hns_roce_dev *hr_dev,
-			     struct hns_roce_cq *hr_cq)
+static int hns_roce_alloc_cqc(struct hns_roce_dev *hr_dev,
+			      struct hns_roce_cq *hr_cq)
 {
 	struct hns_roce_cmd_mailbox *mailbox;
 	struct hns_roce_hem_table *mtt_table;
@@ -140,7 +97,8 @@ static int hns_roce_cq_alloc(struct hns_roce_dev *hr_dev,
 	hr_dev->hw->write_cqc(hr_dev, hr_cq, mailbox->buf, mtts, dma_handle);
 
 	/* Send mailbox to hw */
-	ret = hns_roce_hw_create_cq(hr_dev, mailbox, hr_cq->cqn);
+	ret = hns_roce_cmd_mbox(hr_dev, mailbox->dma, 0, hr_cq->cqn, 0,
+			HNS_ROCE_CMD_CREATE_CQC, HNS_ROCE_CMD_TIMEOUT_MSECS);
 	hns_roce_free_cmd_mailbox(hr_dev, mailbox);
 	if (ret) {
 		dev_err(dev,
@@ -168,22 +126,15 @@ err_out:
 	return ret;
 }
 
-static int hns_roce_hw_destroy_cq(struct hns_roce_dev *dev,
-				  struct hns_roce_cmd_mailbox *mailbox,
-				  unsigned long cq_num)
-{
-	return hns_roce_cmd_mbox(dev, 0, mailbox ? mailbox->dma : 0, cq_num,
-				 mailbox ? 0 : 1, HNS_ROCE_CMD_DESTROY_CQ,
-				 HNS_ROCE_CMD_TIMEOUT_MSECS);
-}
-
-void hns_roce_free_cq(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
+void hns_roce_free_cqc(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 {
 	struct hns_roce_cq_table *cq_table = &hr_dev->cq_table;
 	struct device *dev = hr_dev->dev;
 	int ret;
 
-	ret = hns_roce_hw_destroy_cq(hr_dev, NULL, hr_cq->cqn);
+	ret = hns_roce_cmd_mbox(hr_dev, 0, 0, hr_cq->cqn, 1,
+				HNS_ROCE_CMD_DESTROY_CQC,
+				HNS_ROCE_CMD_TIMEOUT_MSECS);
 	if (ret)
 		dev_err(dev, "DESTROY_CQ failed (%d) for CQN %06lx\n", ret,
 			hr_cq->cqn);
@@ -202,18 +153,16 @@ void hns_roce_free_cq(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 	hns_roce_bitmap_free(&cq_table->bitmap, hr_cq->cqn, BITMAP_NO_RR);
 }
 
-static int hns_roce_ib_get_cq_umem(struct hns_roce_dev *hr_dev,
-				   struct hns_roce_cq *hr_cq,
-				   struct hns_roce_ib_create_cq ucmd,
-				   struct ib_udata *udata)
+static int get_cq_umem(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,
+		       struct hns_roce_ib_create_cq ucmd,
+		       struct ib_udata *udata)
 {
-	struct hns_roce_buf *buf = &hr_cq->buf;
 	struct hns_roce_mtt *mtt = &hr_cq->mtt;
 	struct ib_umem **umem = &hr_cq->umem;
 	u32 npages;
 	int ret;
 
-	*umem = ib_umem_get(udata, ucmd.buf_addr, buf->size,
+	*umem = ib_umem_get(&hr_dev->ib_dev, ucmd.buf_addr, hr_cq->buf_size,
 			    IB_ACCESS_LOCAL_WRITE);
 	if (IS_ERR(*umem))
 		return PTR_ERR(*umem);
@@ -225,7 +174,7 @@ static int hns_roce_ib_get_cq_umem(struct hns_roce_dev *hr_dev,
 
 	npages = DIV_ROUND_UP(ib_umem_page_count(*umem),
 			      1 << hr_dev->caps.cqe_buf_pg_sz);
-	ret = hns_roce_mtt_init(hr_dev, npages, buf->page_shift, mtt);
+	ret = hns_roce_mtt_init(hr_dev, npages, hr_cq->page_shift, mtt);
 	if (ret)
 		goto err_buf;
 
@@ -243,15 +192,15 @@ err_buf:
 	return ret;
 }
 
-static int hns_roce_ib_alloc_cq_buf(struct hns_roce_dev *hr_dev,
-				    struct hns_roce_cq *hr_cq)
+static int alloc_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 {
 	struct hns_roce_buf *buf = &hr_cq->buf;
 	struct hns_roce_mtt *mtt = &hr_cq->mtt;
 	int ret;
 
-	ret = hns_roce_buf_alloc(hr_dev, buf->size, (1 << buf->page_shift) * 2,
-				 buf, buf->page_shift);
+	ret = hns_roce_buf_alloc(hr_dev, hr_cq->buf_size,
+				 (1 << hr_cq->page_shift) * 2,
+				 buf, hr_cq->page_shift);
 	if (ret)
 		goto out;
 
@@ -274,16 +223,15 @@ err_mtt:
 	hns_roce_mtt_cleanup(hr_dev, mtt);
 
 err_buf:
-	hns_roce_buf_free(hr_dev, buf->size, buf);
+	hns_roce_buf_free(hr_dev, buf);
 
 out:
 	return ret;
 }
 
-static void hns_roce_ib_free_cq_buf(struct hns_roce_dev *hr_dev,
-				    struct hns_roce_cq *hr_cq)
+static void free_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 {
-	hns_roce_buf_free(hr_dev, hr_cq->buf.size, &hr_cq->buf);
+	hns_roce_buf_free(hr_dev, &hr_cq->buf);
 }
 
 static int create_user_cq(struct hns_roce_dev *hr_dev,
@@ -303,7 +251,7 @@ static int create_user_cq(struct hns_roce_dev *hr_dev,
 	}
 
 	/* Get user space address, write it into mtt table */
-	ret = hns_roce_ib_get_cq_umem(hr_dev, hr_cq, ucmd, udata);
+	ret = get_cq_umem(hr_dev, hr_cq, ucmd, udata);
 	if (ret) {
 		dev_err(dev, "Failed to get_cq_umem.\n");
 		return ret;
@@ -347,7 +295,7 @@ static int create_kernel_cq(struct hns_roce_dev *hr_dev,
 	}
 
 	/* Init mtt table and write buff address to mtt table */
-	ret = hns_roce_ib_alloc_cq_buf(hr_dev, hr_cq);
+	ret = alloc_cq_buf(hr_dev, hr_cq);
 	if (ret) {
 		dev_err(dev, "Failed to alloc_cq_buf.\n");
 		goto err_db;
@@ -385,15 +333,14 @@ static void destroy_kernel_cq(struct hns_roce_dev *hr_dev,
 			      struct hns_roce_cq *hr_cq)
 {
 	hns_roce_mtt_cleanup(hr_dev, &hr_cq->mtt);
-	hns_roce_ib_free_cq_buf(hr_dev, hr_cq);
+	free_cq_buf(hr_dev, hr_cq);
 
 	if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_RECORD_DB)
 		hns_roce_free_db(hr_dev, &hr_cq->db);
 }
 
-int hns_roce_ib_create_cq(struct ib_cq *ib_cq,
-			  const struct ib_cq_init_attr *attr,
-			  struct ib_udata *udata)
+int hns_roce_create_cq(struct ib_cq *ib_cq, const struct ib_cq_init_attr *attr,
+		       struct ib_udata *udata)
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(ib_cq->device);
 	struct hns_roce_ib_create_cq_resp resp = {};
@@ -420,9 +367,11 @@ int hns_roce_ib_create_cq(struct ib_cq *ib_cq,
 	hr_cq->ib_cq.cqe = cq_entries - 1; /* used as cqe index */
 	hr_cq->cq_depth = cq_entries;
 	hr_cq->vector = vector;
-	hr_cq->buf.size = hr_cq->cq_depth * hr_dev->caps.cq_entry_sz;
-	hr_cq->buf.page_shift = PAGE_SHIFT + hr_dev->caps.cqe_buf_pg_sz;
+	hr_cq->buf_size = hr_cq->cq_depth * hr_dev->caps.cq_entry_sz;
+	hr_cq->page_shift = PAGE_SHIFT + hr_dev->caps.cqe_buf_pg_sz;
 	spin_lock_init(&hr_cq->lock);
+	INIT_LIST_HEAD(&hr_cq->sq_list);
+	INIT_LIST_HEAD(&hr_cq->rq_list);
 
 	if (udata) {
 		ret = create_user_cq(hr_dev, hr_cq, udata, &resp);
@@ -438,8 +387,7 @@ int hns_roce_ib_create_cq(struct ib_cq *ib_cq,
 		}
 	}
 
-	/* Allocate cq index, fill cq_context */
-	ret = hns_roce_cq_alloc(hr_dev,	hr_cq);
+	ret = hns_roce_alloc_cqc(hr_dev, hr_cq);
 	if (ret) {
 		dev_err(dev, "Alloc CQ failed(%d).\n", ret);
 		goto err_dbmap;
@@ -454,10 +402,6 @@ int hns_roce_ib_create_cq(struct ib_cq *ib_cq,
 	if (!udata && hr_cq->tptr_addr)
 		*hr_cq->tptr_addr = 0;
 
-	/* Get created cq handler and carry out event */
-	hr_cq->comp = hns_roce_ib_cq_comp;
-	hr_cq->event = hns_roce_ib_cq_event;
-
 	if (udata) {
 		resp.cqn = hr_cq->cqn;
 		ret = ib_copy_to_udata(udata, &resp, sizeof(resp));
@@ -468,7 +412,7 @@ int hns_roce_ib_create_cq(struct ib_cq *ib_cq,
 	return 0;
 
 err_cqc:
-	hns_roce_free_cq(hr_dev, hr_cq);
+	hns_roce_free_cqc(hr_dev, hr_cq);
 
 err_dbmap:
 	if (udata)
@@ -480,7 +424,7 @@ err_cq:
 	return ret;
 }
 
-void hns_roce_ib_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
+void hns_roce_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(ib_cq->device);
 	struct hns_roce_cq *hr_cq = to_hr_cq(ib_cq);
@@ -490,7 +434,7 @@ void hns_roce_ib_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 		return;
 	}
 
-	hns_roce_free_cq(hr_dev, hr_cq);
+	hns_roce_free_cqc(hr_dev, hr_cq);
 	hns_roce_mtt_cleanup(hr_dev, &hr_cq->mtt);
 
 	ib_umem_release(hr_cq->umem);
@@ -503,7 +447,7 @@ void hns_roce_ib_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 					       &hr_cq->db);
 	} else {
 		/* Free the buff of stored cq */
-		hns_roce_ib_free_cq_buf(hr_dev, hr_cq);
+		free_cq_buf(hr_dev, hr_cq);
 		if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_RECORD_DB)
 			hns_roce_free_db(hr_dev, &hr_cq->db);
 	}
@@ -511,38 +455,57 @@ void hns_roce_ib_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 
 void hns_roce_cq_completion(struct hns_roce_dev *hr_dev, u32 cqn)
 {
-	struct device *dev = hr_dev->dev;
-	struct hns_roce_cq *cq;
+	struct hns_roce_cq *hr_cq;
+	struct ib_cq *ibcq;
 
-	cq = xa_load(&hr_dev->cq_table.array, cqn & (hr_dev->caps.num_cqs - 1));
-	if (!cq) {
-		dev_warn(dev, "Completion event for bogus CQ 0x%08x\n", cqn);
+	hr_cq = xa_load(&hr_dev->cq_table.array,
+			cqn & (hr_dev->caps.num_cqs - 1));
+	if (!hr_cq) {
+		dev_warn(hr_dev->dev, "Completion event for bogus CQ 0x%06x\n",
+			 cqn);
 		return;
 	}
 
-	++cq->arm_sn;
-	cq->comp(cq);
+	++hr_cq->arm_sn;
+	ibcq = &hr_cq->ib_cq;
+	if (ibcq->comp_handler)
+		ibcq->comp_handler(ibcq, ibcq->cq_context);
 }
 
 void hns_roce_cq_event(struct hns_roce_dev *hr_dev, u32 cqn, int event_type)
 {
-	struct hns_roce_cq_table *cq_table = &hr_dev->cq_table;
 	struct device *dev = hr_dev->dev;
-	struct hns_roce_cq *cq;
+	struct hns_roce_cq *hr_cq;
+	struct ib_event event;
+	struct ib_cq *ibcq;
 
-	cq = xa_load(&cq_table->array, cqn & (hr_dev->caps.num_cqs - 1));
-	if (cq)
-		atomic_inc(&cq->refcount);
-
-	if (!cq) {
-		dev_warn(dev, "Async event for bogus CQ %08x\n", cqn);
+	hr_cq = xa_load(&hr_dev->cq_table.array,
+			cqn & (hr_dev->caps.num_cqs - 1));
+	if (!hr_cq) {
+		dev_warn(dev, "Async event for bogus CQ 0x%06x\n", cqn);
 		return;
 	}
 
-	cq->event(cq, (enum hns_roce_event)event_type);
+	if (event_type != HNS_ROCE_EVENT_TYPE_CQ_ID_INVALID &&
+	    event_type != HNS_ROCE_EVENT_TYPE_CQ_ACCESS_ERROR &&
+	    event_type != HNS_ROCE_EVENT_TYPE_CQ_OVERFLOW) {
+		dev_err(dev, "Unexpected event type 0x%x on CQ 0x%06x\n",
+			event_type, cqn);
+		return;
+	}
 
-	if (atomic_dec_and_test(&cq->refcount))
-		complete(&cq->free);
+	atomic_inc(&hr_cq->refcount);
+
+	ibcq = &hr_cq->ib_cq;
+	if (ibcq->event_handler) {
+		event.device = ibcq->device;
+		event.element.cq = ibcq;
+		event.event = IB_EVENT_CQ_ERR;
+		ibcq->event_handler(&event, ibcq->cq_context);
+	}
+
+	if (atomic_dec_and_test(&hr_cq->refcount))
+		complete(&hr_cq->free);
 }
 
 int hns_roce_init_cq_table(struct hns_roce_dev *hr_dev)

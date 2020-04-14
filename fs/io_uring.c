@@ -988,9 +988,13 @@ static struct io_kiocb *io_get_timeout_req(struct io_ring_ctx *ctx)
 	struct io_kiocb *req;
 
 	req = list_first_entry_or_null(&ctx->timeout_list, struct io_kiocb, list);
-	if (req && !__req_need_defer(req)) {
-		list_del_init(&req->list);
-		return req;
+	if (req) {
+		if (req->flags & REQ_F_TIMEOUT_NOSEQ)
+			return NULL;
+		if (!__req_need_defer(req)) {
+			list_del_init(&req->list);
+			return req;
+		}
 	}
 
 	return NULL;
@@ -2090,6 +2094,7 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 
 		kiocb->ki_flags |= IOCB_HIPRI;
 		kiocb->ki_complete = io_complete_rw_iopoll;
+		req->result = 0;
 	} else {
 		if (kiocb->ki_flags & IOCB_HIPRI)
 			return -EINVAL;
@@ -2208,7 +2213,7 @@ static ssize_t io_import_fixed(struct io_kiocb *req, int rw,
 		}
 	}
 
-	return 0;
+	return len;
 }
 
 static void io_ring_submit_unlock(struct io_ring_ctx *ctx, bool needs_lock)
@@ -4709,21 +4714,25 @@ static int io_timeout(struct io_kiocb *req)
 	struct io_timeout_data *data;
 	struct list_head *entry;
 	unsigned span = 0;
+	u32 seq = req->sequence;
 
 	data = &req->io->timeout;
 
 	/*
 	 * sqe->off holds how many events that need to occur for this
-	 * timeout event to be satisfied.
+	 * timeout event to be satisfied. If it isn't set, then this is
+	 * a pure timeout request, sequence isn't used.
 	 */
 	count = req->timeout.count;
-	if (!count)
-		count = 1;
+	if (!count) {
+		req->flags |= REQ_F_TIMEOUT_NOSEQ;
+		spin_lock_irq(&ctx->completion_lock);
+		entry = ctx->timeout_list.prev;
+		goto add;
+	}
 
-	req->sequence = ctx->cached_sq_head + count - 1;
-	/* reuse it to store the count */
+	req->sequence = seq + count;
 	data->seq_offset = count;
-	req->flags |= REQ_F_TIMEOUT;
 
 	/*
 	 * Insertion sort, ensuring the first entry in the list is always
@@ -4732,23 +4741,26 @@ static int io_timeout(struct io_kiocb *req)
 	spin_lock_irq(&ctx->completion_lock);
 	list_for_each_prev(entry, &ctx->timeout_list) {
 		struct io_kiocb *nxt = list_entry(entry, struct io_kiocb, list);
-		unsigned nxt_sq_head;
+		unsigned nxt_seq;
 		long long tmp, tmp_nxt;
 		u32 nxt_offset = nxt->io->timeout.seq_offset;
 
+		if (nxt->flags & REQ_F_TIMEOUT_NOSEQ)
+			continue;
+
 		/*
-		 * Since cached_sq_head + count - 1 can overflow, use type long
+		 * Since seq + count can overflow, use type long
 		 * long to store it.
 		 */
-		tmp = (long long)ctx->cached_sq_head + count - 1;
-		nxt_sq_head = nxt->sequence - nxt_offset + 1;
-		tmp_nxt = (long long)nxt_sq_head + nxt_offset - 1;
+		tmp = (long long)seq + count;
+		nxt_seq = nxt->sequence - nxt_offset;
+		tmp_nxt = (long long)nxt_seq + nxt_offset;
 
 		/*
 		 * cached_sq_head may overflow, and it will never overflow twice
 		 * once there is some timeout req still be valid.
 		 */
-		if (ctx->cached_sq_head < nxt_sq_head)
+		if (seq < nxt_seq)
 			tmp += UINT_MAX;
 
 		if (tmp > tmp_nxt)
@@ -4762,6 +4774,7 @@ static int io_timeout(struct io_kiocb *req)
 		nxt->sequence++;
 	}
 	req->sequence -= span;
+add:
 	list_add(&req->list, entry);
 	data->timer.function = io_timeout_fn;
 	hrtimer_start(&data->timer, timespec64_to_ktime(data->ts), data->mode);

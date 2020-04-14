@@ -1645,7 +1645,6 @@ int blk_rq_prep_clone(struct request *rq, struct request *rq_src,
 	}
 	rq->nr_phys_segments = rq_src->nr_phys_segments;
 	rq->ioprio = rq_src->ioprio;
-	rq->extra_len = rq_src->extra_len;
 
 	if (rq->bio)
 		blk_crypto_rq_bio_prep(rq, rq->bio, gfp_mask);

@@ -288,12 +288,6 @@ static void hd_struct_free_work(struct work_struct *work)
 static void hd_struct_free(struct percpu_ref *ref)
 {
 	struct hd_struct *part = container_of(ref, struct hd_struct, ref);
-	struct gendisk *disk = part_to_disk(part);
-	struct disk_part_tbl *ptbl =
-		rcu_dereference_protected(disk->part_tbl, 1);
-
-	rcu_assign_pointer(ptbl->last_lookup, NULL);
-	put_device(disk_to_dev(disk));
 
 	INIT_RCU_WORK(&part->rcu_work, hd_struct_free_work);
 	queue_rcu_work(system_wq, &part->rcu_work);
@@ -315,12 +309,8 @@ void delete_partition(struct gendisk *disk, struct hd_struct *part)
 	struct disk_part_tbl *ptbl =
 		rcu_dereference_protected(disk->part_tbl, 1);
 
-	/*
-	 * ->part_tbl is referenced in this part's release handler, so
-	 *  we have to hold the disk device
-	 */
-	get_device(disk_to_dev(part_to_disk(part)));
 	rcu_assign_pointer(ptbl->part[part->partno], NULL);
+	rcu_assign_pointer(ptbl->last_lookup, NULL);
 	kobject_put(part->holder_dir);
 	device_del(part_to_dev(part));
 
@@ -387,13 +377,12 @@ static struct hd_struct *add_partition(struct gendisk *disk, int partno,
 	if (!p)
 		return ERR_PTR(-EBUSY);
 
-	p->dkstats = alloc_percpu(struct disk_stats);
-	if (!p->dkstats) {
+	if (!init_part_stats(p)) {
 		err = -ENOMEM;
 		goto out_free;
 	}
 
-	hd_sects_seq_init(p);
+	seqcount_init(&p->nr_sects_seq);
 	pdev = part_to_dev(p);
 
 	p->start_sect = start;
@@ -469,7 +458,7 @@ static struct hd_struct *add_partition(struct gendisk *disk, int partno,
 out_free_info:
 	kfree(p->info);
 out_free_stats:
-	free_percpu(p->dkstats);
+	free_part_stats(p);
 out_free:
 	kfree(p);
 	return ERR_PTR(err);
@@ -542,7 +531,7 @@ int bdev_del_partition(struct block_device *bdev, int partno)
 	if (bdevp->bd_openers)
 		goto out_unlock;
 
-	sync_blockdev(bdevp);
+	fsync_bdev(bdevp);
 	invalidate_bdev(bdevp);
 
 	mutex_lock_nested(&bdev->bd_mutex, 1);
@@ -618,14 +607,15 @@ int blk_drop_partitions(struct block_device *bdev)
 {
 	struct disk_part_iter piter;
 	struct hd_struct *part;
+	int res;
 
 	if (!disk_part_scan_enabled(bdev->bd_disk))
 		return 0;
 	if (bdev->bd_part_count)
 		return -EBUSY;
-
-	sync_blockdev(bdev);
-	invalidate_bdev(bdev);
+	res = invalidate_partition(bdev->bd_disk, 0);
+	if (res)
+		return res;
 
 	disk_part_iter_init(&piter, bdev->bd_disk, DISK_PITER_INCL_EMPTY);
 	while ((part = disk_part_iter_next(&piter)))
@@ -634,10 +624,6 @@ int blk_drop_partitions(struct block_device *bdev)
 
 	return 0;
 }
-#ifdef CONFIG_S390
-/* for historic reasons in the DASD driver */
-EXPORT_SYMBOL_GPL(blk_drop_partitions);
-#endif
 
 static bool blk_add_partition(struct gendisk *disk, struct block_device *bdev,
 		struct parsed_partitions *state, int p)

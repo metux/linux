@@ -320,7 +320,6 @@ static struct request *blk_mq_rq_ctx_init(struct blk_mq_alloc_data *data,
 #endif
 	blk_crypto_rq_set_defaults(rq);
 	/* tag was already set */
-	rq->extra_len = 0;
 	WRITE_ONCE(rq->deadline, 0);
 
 	rq->timeout = 0;

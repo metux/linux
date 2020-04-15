@@ -1088,6 +1088,8 @@ patternProperties:
     description: Waveshare Electronics
   "^wd,.*":
     description: Western Digital Corp.
+  "^we,.*":
+    description: Würth Elektronik GmbH.
   "^wetek,.*":
     description: WeTek Electronics, limited.
   "^wexler,.*":

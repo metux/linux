@@ -172,6 +172,7 @@
 	.engine_mask = BIT(RCS0), \
 	.has_snoop = true, \
 	.has_coherent_ggtt = false, \
+	.dma_mask_size = 32, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	I9XX_COLORS, \
@@ -191,6 +192,7 @@
 	.engine_mask = BIT(RCS0), \
 	.has_snoop = true, \
 	.has_coherent_ggtt = false, \
+	.dma_mask_size = 32, \
 	I845_PIPE_OFFSETS, \
 	I845_CURSOR_OFFSETS, \
 	I9XX_COLORS, \
@@ -227,6 +229,7 @@ static const struct intel_device_info i865g_info = {
 	.engine_mask = BIT(RCS0), \
 	.has_snoop = true, \
 	.has_coherent_ggtt = true, \
+	.dma_mask_size = 32, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	I9XX_COLORS, \
@@ -287,6 +290,7 @@ static const struct intel_device_info g33_info = {
 	PLATFORM(INTEL_G33),
 	.display.has_hotplug = 1,
 	.display.has_overlay = 1,
+	.dma_mask_size = 36,
 };
 
 static const struct intel_device_info pnv_g_info = {
@@ -294,6 +298,7 @@ static const struct intel_device_info pnv_g_info = {
 	PLATFORM(INTEL_PINEVIEW),
 	.display.has_hotplug = 1,
 	.display.has_overlay = 1,
+	.dma_mask_size = 36,
 };
 
 static const struct intel_device_info pnv_m_info = {
@@ -302,6 +307,7 @@ static const struct intel_device_info pnv_m_info = {
 	.is_mobile = 1,
 	.display.has_hotplug = 1,
 	.display.has_overlay = 1,
+	.dma_mask_size = 36,
 };
 
 #define GEN4_FEATURES \
@@ -314,6 +320,7 @@ static const struct intel_device_info pnv_m_info = {
 	.engine_mask = BIT(RCS0), \
 	.has_snoop = true, \
 	.has_coherent_ggtt = true, \
+	.dma_mask_size = 36, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	I965_COLORS, \
@@ -366,6 +373,7 @@ static const struct intel_device_info gm45_info = {
 	.has_coherent_ggtt = true, \
 	/* ilk does support rc6, but we do not implement [power] contexts */ \
 	.has_rc6 = 0, \
+	.dma_mask_size = 36, \
 	I9XX_PIPE_OFFSETS, \
 	I9XX_CURSOR_OFFSETS, \
 	ILK_COLORS, \
@@ -396,6 +404,7 @@ static const struct intel_device_info ilk_m_info = {
 	.has_rc6 = 1, \
 	.has_rc6p = 1, \
 	.has_rps = true, \
+	.dma_mask_size = 40, \
 	.ppgtt_type = INTEL_PPGTT_ALIASING, \
 	.ppgtt_size = 31, \
 	I9XX_PIPE_OFFSETS, \
@@ -446,6 +455,7 @@ static const struct intel_device_info snb_m_gt2_info = {
 	.has_rc6 = 1, \
 	.has_rc6p = 1, \
 	.has_rps = true, \
+	.dma_mask_size = 40, \
 	.ppgtt_type = INTEL_PPGTT_ALIASING, \
 	.ppgtt_size = 31, \
 	IVB_PIPE_OFFSETS, \
@@ -505,6 +515,7 @@ static const struct intel_device_info vlv_info = {
 	.has_rps = true,
 	.display.has_gmch = 1,
 	.display.has_hotplug = 1,
+	.dma_mask_size = 40,
 	.ppgtt_type = INTEL_PPGTT_ALIASING,
 	.ppgtt_size = 31,
 	.has_snoop = true,
@@ -555,6 +566,7 @@ static const struct intel_device_info hsw_gt3_info = {
 	G75_FEATURES, \
 	GEN(8), \
 	.has_logical_ring_contexts = 1, \
+	.dma_mask_size = 39, \
 	.ppgtt_type = INTEL_PPGTT_FULL, \
 	.ppgtt_size = 48, \
 	.has_64bit_reloc = 1, \
@@ -603,6 +615,7 @@ static const struct intel_device_info chv_info = {
 	.has_rps = true,
 	.has_logical_ring_contexts = 1,
 	.display.has_gmch = 1,
+	.dma_mask_size = 39,
 	.ppgtt_type = INTEL_PPGTT_ALIASING,
 	.ppgtt_size = 32,
 	.has_reset_engine = 1,
@@ -686,6 +699,7 @@ static const struct intel_device_info skl_gt4_info = {
 	.has_logical_ring_contexts = 1, \
 	.has_logical_ring_preemption = 1, \
 	.has_gt_uc = 1, \
+	.dma_mask_size = 39, \
 	.ppgtt_type = INTEL_PPGTT_FULL, \
 	.ppgtt_size = 48, \
 	.has_reset_engine = 1, \

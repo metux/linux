@@ -19,6 +19,7 @@
 
 struct sidtab_entry_leaf {
 	u32 sid;
+	u32 hash;
 	struct context context;
 	struct hlist_node list;
 };

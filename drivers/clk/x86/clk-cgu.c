@@ -534,7 +534,7 @@ lgm_clk_ddiv_round_rate(struct clk_hw *hw, unsigned long rate,
 	struct lgm_clk_ddiv *ddiv = to_lgm_clk_ddiv(hw);
 	u32 div, ddiv1, ddiv2;
 	unsigned long flags;
-	u64 rate64;
+	u64 rate64 = rate;
 
 	div = DIV_ROUND_CLOSEST_ULL((u64)*prate, rate);
 

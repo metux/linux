@@ -44,17 +44,10 @@ struct proc_ops {
 } __randomize_layout;
 
 /* definitions for hide_pid field */
-enum proc_hidepid {
+enum {
 	HIDEPID_OFF	  = 0,
 	HIDEPID_NO_ACCESS = 1,
 	HIDEPID_INVISIBLE = 2,
-	HIDEPID_NOT_PTRACEABLE = 4, /* Limit pids to only ptraceable pids */
-};
-
-/* definitions for proc mount option pidonly */
-enum proc_pidonly {
-	PROC_PIDONLY_OFF = 0,
-	PROC_PIDONLY_ON  = 1,
 };
 
 struct proc_fs_info {
@@ -62,8 +55,7 @@ struct proc_fs_info {
 	struct dentry *proc_self;        /* For /proc/self */
 	struct dentry *proc_thread_self; /* For /proc/thread-self */
 	kgid_t pid_gid;
-	enum proc_hidepid hide_pid;
-	enum proc_pidonly pidonly;
+	int hide_pid;
 };
 
 static inline struct proc_fs_info *proc_sb_info(struct super_block *sb)
@@ -207,9 +199,9 @@ int open_related_ns(struct ns_common *ns,
 		   struct ns_common *(*get_ns)(struct ns_common *ns));
 
 /* get the associated pid namespace for a file in procfs */
-static inline struct pid_namespace *proc_pid_ns(struct super_block *sb)
+static inline struct pid_namespace *proc_pid_ns(const struct inode *inode)
 {
-	return proc_sb_info(sb)->pid_ns;
+	return proc_sb_info(inode->i_sb)->pid_ns;
 }
 
 bool proc_ns_file(const struct file *file);

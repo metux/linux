@@ -24,7 +24,6 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/mount.h>
-#include <linux/bug.h>
 
 #include <linux/uaccess.h>
 
@@ -166,18 +165,6 @@ void proc_invalidate_siblings_dcache(struct hlist_head *inodes, spinlock_t *lock
 		deactivate_super(old_sb);
 }
 
-static inline const char *hidepid2str(enum proc_hidepid v)
-{
-	switch (v) {
-		case HIDEPID_OFF: return "off";
-		case HIDEPID_NO_ACCESS: return "noaccess";
-		case HIDEPID_INVISIBLE: return "invisible";
-		case HIDEPID_NOT_PTRACEABLE: return "ptraceable";
-	}
-	WARN_ONCE(1, "bad hide_pid value: %d\n", v);
-	return "unknown";
-}
-
 static int proc_show_options(struct seq_file *seq, struct dentry *root)
 {
 	struct proc_fs_info *fs_info = proc_sb_info(root->d_sb);
@@ -185,9 +172,7 @@ static int proc_show_options(struct seq_file *seq, struct dentry *root)
 	if (!gid_eq(fs_info->pid_gid, GLOBAL_ROOT_GID))
 		seq_printf(seq, ",gid=%u", from_kgid_munged(&init_user_ns, fs_info->pid_gid));
 	if (fs_info->hide_pid != HIDEPID_OFF)
-		seq_printf(seq, ",hidepid=%s", hidepid2str(fs_info->hide_pid));
-	if (fs_info->pidonly != PROC_PIDONLY_OFF)
-		seq_printf(seq, ",subset=pid");
+		seq_printf(seq, ",hidepid=%u", fs_info->hide_pid);
 
 	return 0;
 }
@@ -478,7 +463,6 @@ proc_reg_get_unmapped_area(struct file *file, unsigned long orig_addr,
 
 static int proc_reg_open(struct inode *inode, struct file *file)
 {
-	struct proc_fs_info *fs_info = proc_sb_info(inode->i_sb);
 	struct proc_dir_entry *pde = PDE(inode);
 	int rv = 0;
 	typeof_member(struct proc_ops, proc_open) open;
@@ -491,9 +475,6 @@ static int proc_reg_open(struct inode *inode, struct file *file)
 			rv = open(inode, file);
 		return rv;
 	}
-
-	if (fs_info->pidonly == PROC_PIDONLY_ON)
-		return -ENOENT;
 
 	/*
 	 * Ensure that
@@ -617,7 +598,7 @@ const struct inode_operations proc_link_inode_operations = {
 
 struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 {
-	struct inode *inode = new_inode(sb);
+	struct inode *inode = new_inode_pseudo(sb);
 
 	if (inode) {
 		inode->i_ino = de->low_ino;

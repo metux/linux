@@ -190,6 +190,13 @@ int i915_gem_object_set_cache_level(struct drm_i915_gem_object *obj,
 	if (obj->cache_level == cache_level)
 		return 0;
 
+	ret = i915_gem_object_wait(obj,
+				   I915_WAIT_INTERRUPTIBLE |
+				   I915_WAIT_ALL,
+				   MAX_SCHEDULE_TIMEOUT);
+	if (ret)
+		return ret;
+
 	ret = i915_gem_object_lock_interruptible(obj);
 	if (ret)
 		return ret;
@@ -203,7 +210,9 @@ int i915_gem_object_set_cache_level(struct drm_i915_gem_object *obj,
 	i915_gem_object_unlock(obj);
 
 	/* The cache-level will be applied when each vma is rebound. */
-	return i915_gem_object_unbind(obj, I915_GEM_OBJECT_UNBIND_ACTIVE);
+	return i915_gem_object_unbind(obj,
+				      I915_GEM_OBJECT_UNBIND_ACTIVE |
+				      I915_GEM_OBJECT_UNBIND_BARRIER);
 }
 
 int i915_gem_get_caching_ioctl(struct drm_device *dev, void *data,
@@ -359,9 +368,11 @@ static void i915_gem_object_bump_inactive_ggtt(struct drm_i915_gem_object *obj)
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 	struct i915_vma *vma;
 
-	GEM_BUG_ON(!i915_gem_object_has_pinned_pages(obj));
+	if (!atomic_read(&obj->bind_count))
+		return;
 
 	mutex_lock(&i915->ggtt.vm.mutex);
+	spin_lock(&obj->vma.lock);
 	for_each_ggtt_vma(vma, obj) {
 		if (!drm_mm_node_allocated(&vma->node))
 			continue;
@@ -369,6 +380,7 @@ static void i915_gem_object_bump_inactive_ggtt(struct drm_i915_gem_object *obj)
 		GEM_BUG_ON(vma->vm != &i915->ggtt.vm);
 		list_move_tail(&vma->vm_link, &vma->vm->bound_list);
 	}
+	spin_unlock(&obj->vma.lock);
 	mutex_unlock(&i915->ggtt.vm.mutex);
 
 	if (i915_gem_object_is_shrinkable(obj)) {
@@ -387,12 +399,8 @@ static void i915_gem_object_bump_inactive_ggtt(struct drm_i915_gem_object *obj)
 void
 i915_gem_object_unpin_from_display_plane(struct i915_vma *vma)
 {
-	struct drm_i915_gem_object *obj = vma->obj;
-
-	assert_object_held(obj);
-
 	/* Bump the LRU to try and avoid premature eviction whilst flipping  */
-	i915_gem_object_bump_inactive_ggtt(obj);
+	i915_gem_object_bump_inactive_ggtt(vma->obj);
 
 	i915_vma_unpin(vma);
 }

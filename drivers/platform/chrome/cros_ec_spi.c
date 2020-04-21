@@ -148,10 +148,6 @@ static int terminate_request(struct cros_ec_device *ec_dev)
  * receive_n_bytes - receive n bytes from the EC.
  *
  * Assumes buf is a pointer into the ec_dev->din buffer
- *
- * @ec_dev: ChromeOS EC device.
- * @buf: Pointer to the buffer receiving the data.
- * @n: Number of bytes received.
  */
 static int receive_n_bytes(struct cros_ec_device *ec_dev, u8 *buf, int n)
 {
@@ -729,9 +725,10 @@ static int cros_ec_spi_devm_high_pri_alloc(struct device *dev,
 	if (err)
 		return err;
 
-	sched_set_fifo(ec_spi->high_pri_worker->task);
-
-	return 0;
+	err = sched_set_fifo(ec_spi->high_pri_worker->task);
+	if (err)
+		dev_err(dev, "Can't set cros_ec high pri priority: %d\n", err);
+	return err;
 }
 
 static int cros_ec_spi_probe(struct spi_device *spi)

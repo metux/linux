@@ -778,17 +778,6 @@ static void spi_set_cs(struct spi_device *spi, bool enable)
 {
 	bool enable1 = enable;
 
-	/*
-	 * Avoid calling into the driver (or doing delays) if the chip select
-	 * isn't actually changing from the last time this was called.
-	 */
-	if ((spi->controller->last_cs_enable == enable) &&
-	    (spi->controller->last_cs_mode_high == (spi->mode & SPI_CS_HIGH)))
-		return;
-
-	spi->controller->last_cs_enable = enable;
-	spi->controller->last_cs_mode_high = spi->mode & SPI_CS_HIGH;
-
 	if (!spi->controller->set_cs_timing) {
 		if (enable1)
 			spi_delay_exec(&spi->controller->cs_setup, NULL);
@@ -992,8 +981,6 @@ static int __spi_unmap_msg(struct spi_controller *ctlr, struct spi_message *msg)
 		spi_unmap_buf(ctlr, rx_dev, &xfer->rx_sg, DMA_FROM_DEVICE);
 		spi_unmap_buf(ctlr, tx_dev, &xfer->tx_sg, DMA_TO_DEVICE);
 	}
-
-	ctlr->cur_msg_mapped = false;
 
 	return 0;
 }
@@ -1247,17 +1234,8 @@ static int spi_transfer_one_message(struct spi_controller *ctlr,
 		if (xfer->tx_buf || xfer->rx_buf) {
 			reinit_completion(&ctlr->xfer_completion);
 
-fallback_pio:
 			ret = ctlr->transfer_one(ctlr, msg->spi, xfer);
 			if (ret < 0) {
-				if (ctlr->cur_msg_mapped &&
-				   (xfer->error & SPI_TRANS_FAIL_NO_START)) {
-					__spi_unmap_msg(ctlr, msg);
-					ctlr->fallback = true;
-					xfer->error &= ~SPI_TRANS_FAIL_NO_START;
-					goto fallback_pio;
-				}
-
 				SPI_STATISTICS_INCREMENT_FIELD(statm,
 							       errors);
 				SPI_STATISTICS_INCREMENT_FIELD(stats,
@@ -1336,14 +1314,6 @@ void spi_finalize_current_transfer(struct spi_controller *ctlr)
 }
 EXPORT_SYMBOL_GPL(spi_finalize_current_transfer);
 
-static void spi_idle_runtime_pm(struct spi_controller *ctlr)
-{
-	if (ctlr->auto_runtime_pm) {
-		pm_runtime_mark_last_busy(ctlr->dev.parent);
-		pm_runtime_put_autosuspend(ctlr->dev.parent);
-	}
-}
-
 /**
  * __spi_pump_messages - function which processes spi message queue
  * @ctlr: controller to process queue for
@@ -1376,7 +1346,7 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 
 	/* If another context is idling the device then defer */
 	if (ctlr->idling) {
-		kthread_queue_work(ctlr->kworker, &ctlr->pump_messages);
+		kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
 		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 		return;
 	}
@@ -1388,17 +1358,10 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 			return;
 		}
 
-		/* Defer any non-atomic teardown to the thread */
+		/* Only do teardown in the thread */
 		if (!in_kthread) {
-			if (!ctlr->dummy_rx && !ctlr->dummy_tx &&
-			    !ctlr->unprepare_transfer_hardware) {
-				spi_idle_runtime_pm(ctlr);
-				ctlr->busy = false;
-				trace_spi_controller_idle(ctlr);
-			} else {
-				kthread_queue_work(ctlr->kworker,
-						   &ctlr->pump_messages);
-			}
+			kthread_queue_work(&ctlr->kworker,
+					   &ctlr->pump_messages);
 			spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 			return;
 		}
@@ -1415,7 +1378,10 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 		    ctlr->unprepare_transfer_hardware(ctlr))
 			dev_err(&ctlr->dev,
 				"failed to unprepare transfer hardware\n");
-		spi_idle_runtime_pm(ctlr);
+		if (ctlr->auto_runtime_pm) {
+			pm_runtime_mark_last_busy(ctlr->dev.parent);
+			pm_runtime_put_autosuspend(ctlr->dev.parent);
+		}
 		trace_spi_controller_idle(ctlr);
 
 		spin_lock_irqsave(&ctlr->queue_lock, flags);
@@ -1626,11 +1592,9 @@ EXPORT_SYMBOL_GPL(spi_take_timestamp_post);
  */
 static void spi_set_thread_rt(struct spi_controller *ctlr)
 {
-	struct sched_param param = { .sched_priority = MAX_RT_PRIO / 2 };
-
 	dev_info(&ctlr->dev,
 		"will run message pump with realtime priority\n");
-	sched_setscheduler(ctlr->kworker->task, SCHED_FIFO, &param);
+	sched_set_fifo(ctlr->kworker_task);
 }
 
 static int spi_init_queue(struct spi_controller *ctlr)
@@ -1638,12 +1602,13 @@ static int spi_init_queue(struct spi_controller *ctlr)
 	ctlr->running = false;
 	ctlr->busy = false;
 
-	ctlr->kworker = kthread_create_worker(0, dev_name(&ctlr->dev));
-	if (IS_ERR(ctlr->kworker)) {
-		dev_err(&ctlr->dev, "failed to create message pump kworker\n");
-		return PTR_ERR(ctlr->kworker);
+	kthread_init_worker(&ctlr->kworker);
+	ctlr->kworker_task = kthread_run(kthread_worker_fn, &ctlr->kworker,
+					 "%s", dev_name(&ctlr->dev));
+	if (IS_ERR(ctlr->kworker_task)) {
+		dev_err(&ctlr->dev, "failed to create message pump task\n");
+		return PTR_ERR(ctlr->kworker_task);
 	}
-
 	kthread_init_work(&ctlr->pump_messages, spi_pump_messages);
 
 	/*
@@ -1726,8 +1691,7 @@ void spi_finalize_current_message(struct spi_controller *ctlr)
 	spin_lock_irqsave(&ctlr->queue_lock, flags);
 	ctlr->cur_msg = NULL;
 	ctlr->cur_msg_prepared = false;
-	ctlr->fallback = false;
-	kthread_queue_work(ctlr->kworker, &ctlr->pump_messages);
+	kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
 	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
 	trace_spi_message_done(mesg);
@@ -1753,7 +1717,7 @@ static int spi_start_queue(struct spi_controller *ctlr)
 	ctlr->cur_msg = NULL;
 	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
-	kthread_queue_work(ctlr->kworker, &ctlr->pump_messages);
+	kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
 
 	return 0;
 }
@@ -1809,7 +1773,8 @@ static int spi_destroy_queue(struct spi_controller *ctlr)
 		return ret;
 	}
 
-	kthread_destroy_worker(ctlr->kworker);
+	kthread_flush_worker(&ctlr->kworker);
+	kthread_stop(ctlr->kworker_task);
 
 	return 0;
 }
@@ -1832,7 +1797,7 @@ static int __spi_queued_transfer(struct spi_device *spi,
 
 	list_add_tail(&msg->queue, &ctlr->queue);
 	if (!ctlr->busy && need_pump)
-		kthread_queue_work(ctlr->kworker, &ctlr->pump_messages);
+		kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
 
 	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 	return 0;

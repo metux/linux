@@ -26,7 +26,7 @@
 #include <linux/slab.h>
 
 #include "dm_services.h"
-#include "atomfirmware.h"
+#include "atom.h"
 #include "dm_helpers.h"
 #include "dc.h"
 #include "grph_object_id.h"
@@ -46,7 +46,7 @@
 #include "dmcu.h"
 #include "hw/clk_mgr.h"
 #include "dce/dmub_psr.h"
-#include "dmub/dmub_srv.h"
+#include "dmub/inc/dmub_cmd_dal.h"
 #include "inc/hw/panel_cntl.h"
 
 #define DC_LOGGER_INIT(logger)
@@ -521,11 +521,11 @@ static void link_disconnect_remap(struct dc_sink *prev_sink, struct dc_link *lin
 }
 
 #if defined(CONFIG_DRM_AMD_DC_HDCP)
-bool dc_link_is_hdcp14(struct dc_link *link, enum signal_type signal)
+bool dc_link_is_hdcp14(struct dc_link *link)
 {
 	bool ret = false;
 
-	switch (signal)	{
+	switch (link->connector_signal)	{
 	case SIGNAL_TYPE_DISPLAY_PORT:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
 		ret = link->hdcp_caps.bcaps.bits.HDCP_CAPABLE;
@@ -545,11 +545,11 @@ bool dc_link_is_hdcp14(struct dc_link *link, enum signal_type signal)
 	return ret;
 }
 
-bool dc_link_is_hdcp22(struct dc_link *link, enum signal_type signal)
+bool dc_link_is_hdcp22(struct dc_link *link)
 {
 	bool ret = false;
 
-	switch (signal)	{
+	switch (link->connector_signal)	{
 	case SIGNAL_TYPE_DISPLAY_PORT:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
 		ret = (link->hdcp_caps.bcaps.bits.HDCP_CAPABLE &&
@@ -690,8 +690,12 @@ static bool detect_dp(struct dc_link *link,
 
 	if (sink_caps->transaction_type == DDC_TRANSACTION_TYPE_I2C_OVER_AUX) {
 		sink_caps->signal = SIGNAL_TYPE_DISPLAY_PORT;
+
+		dpcd_set_source_specific_data(link);
+
 		if (!detect_dp_sink_caps(link))
 			return false;
+
 		if (is_mst_supported(link)) {
 			sink_caps->signal = SIGNAL_TYPE_DISPLAY_PORT_MST;
 			link->type = dc_connection_mst_branch;
@@ -763,7 +767,6 @@ static bool detect_dp(struct dc_link *link,
 		sink_caps->signal = dp_passive_dongle_detection(link->ddc,
 								sink_caps,
 								audio_support);
-		link->dpcd_caps.dongle_type = sink_caps->dongle_type;
 	}
 
 	return true;
@@ -855,7 +858,6 @@ static bool dc_link_detect_helper(struct dc_link *link,
 	bool same_dpcd = true;
 	enum dc_connection_type new_connection_type = dc_connection_none;
 	bool perform_dp_seamless_boot = false;
-	const uint32_t post_oui_delay = 30; // 30ms
 
 	DC_LOGGER_INIT(link->ctx->logger);
 
@@ -868,7 +870,6 @@ static bool dc_link_detect_helper(struct dc_link *link,
 		// need to re-write OUI and brightness in resume case
 		if (link->connector_signal == SIGNAL_TYPE_EDP) {
 			dpcd_set_source_specific_data(link);
-			msleep(post_oui_delay);
 			dc_link_set_default_brightness_aux(link);
 			//TODO: use cached
 		}
@@ -923,6 +924,8 @@ static bool dc_link_detect_helper(struct dc_link *link,
 
 		case SIGNAL_TYPE_EDP: {
 			read_current_link_settings_on_detect(link);
+
+			dpcd_set_source_specific_data(link);
 
 			detect_edp_sink_caps(link);
 			read_current_link_settings_on_detect(link);
@@ -1541,9 +1544,6 @@ static bool dc_link_construct(struct dc_link *link,
 		}
 	}
 
-	if (bios->funcs->get_atom_dc_golden_table)
-		bios->funcs->get_atom_dc_golden_table(bios);
-
 	/*
 	 * TODO check if GPIO programmed correctly
 	 *
@@ -1552,7 +1552,7 @@ static bool dc_link_construct(struct dc_link *link,
 	 */
 	program_hpd_filter(link);
 
-	link->psr_settings.psr_version = DC_PSR_VERSION_UNSUPPORTED;
+	link->psr_settings.psr_version = PSR_VERSION_UNSUPPORTED;
 
 	return true;
 device_tag_fail:
@@ -1636,7 +1636,6 @@ static enum dc_status enable_link_dp(struct dc_state *state,
 	int i;
 	bool apply_seamless_boot_optimization = false;
 	uint32_t bl_oled_enable_delay = 50; // in ms
-	const uint32_t post_oui_delay = 30; // 30ms
 
 	// check for seamless boot
 	for (i = 0; i < state->stream_count; i++) {
@@ -1663,8 +1662,6 @@ static enum dc_status enable_link_dp(struct dc_state *state,
 
 	// during mode switch we do DP_SET_POWER off then on, and OUI is lost
 	dpcd_set_source_specific_data(link);
-	if (link->dpcd_sink_ext_caps.raw != 0)
-		msleep(post_oui_delay);
 
 	skip_video_pattern = true;
 
@@ -2507,54 +2504,57 @@ int dc_link_get_target_backlight_pwm(const struct dc_link *link)
 	return (int) abm->funcs->get_target_backlight(abm);
 }
 
-static struct pipe_ctx *get_pipe_from_link(const struct dc_link *link)
-{
-	int i;
-	struct dc *dc = link->ctx->dc;
-	struct pipe_ctx *pipe_ctx = NULL;
-
-	for (i = 0; i < MAX_PIPES; i++) {
-		if (dc->current_state->res_ctx.pipe_ctx[i].stream) {
-			if (dc->current_state->res_ctx.pipe_ctx[i].stream->link == link) {
-				pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
-				break;
-			}
-		}
-	}
-
-	return pipe_ctx;
-}
-
 bool dc_link_set_backlight_level(const struct dc_link *link,
 		uint32_t backlight_pwm_u16_16,
 		uint32_t frame_ramp)
 {
 	struct dc  *dc = link->ctx->dc;
+	int i;
 
 	DC_LOGGER_INIT(link->ctx->logger);
 	DC_LOG_BACKLIGHT("New Backlight level: %d (0x%X)\n",
 			backlight_pwm_u16_16, backlight_pwm_u16_16);
 
 	if (dc_is_embedded_signal(link->connector_signal)) {
-		struct pipe_ctx *pipe_ctx = get_pipe_from_link(link);
+		struct pipe_ctx *pipe_ctx = NULL;
 
-		if (pipe_ctx) {
-			/* Disable brightness ramping when the display is blanked
-			 * as it can hang the DMCU
-			 */
-			if (pipe_ctx->plane_state == NULL)
-				frame_ramp = 0;
-		} else {
-			ASSERT(false);
-			return false;
+		for (i = 0; i < MAX_PIPES; i++) {
+			if (dc->current_state->res_ctx.pipe_ctx[i].stream) {
+				if (dc->current_state->res_ctx.
+						pipe_ctx[i].stream->link
+						== link) {
+					pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
+
+					/* Disable brightness ramping when the display is blanked
+					 * as it can hang the DMCU
+					 */
+					if (dc->current_state->res_ctx.pipe_ctx[i].plane_state == NULL)
+						frame_ramp = 0;
+				}
+			}
 		}
+
+		if (pipe_ctx == NULL)
+			ASSERT(false);
 
 		dc->hwss.set_backlight_level(
 				pipe_ctx,
 				backlight_pwm_u16_16,
 				frame_ramp);
 	}
+
 	return true;
+}
+
+bool dc_link_set_abm_disable(const struct dc_link *link)
+{
+	struct abm *abm = get_abm_from_stream_res(link);
+	bool success = false;
+
+	if (abm)
+		success = abm->funcs->set_abm_immediate_disable(abm, link->panel_cntl->inst);
+
+	return success;
 }
 
 bool dc_link_set_psr_allow_active(struct dc_link *link, bool allow_active, bool wait)
@@ -2563,14 +2563,12 @@ bool dc_link_set_psr_allow_active(struct dc_link *link, bool allow_active, bool 
 	struct dmcu *dmcu = dc->res_pool->dmcu;
 	struct dmub_psr *psr = dc->res_pool->psr;
 
-	link->psr_settings.psr_allow_active = allow_active;
-
 	if (psr != NULL && link->psr_settings.psr_feature_enabled)
 		psr->funcs->psr_enable(psr, allow_active, wait);
 	else if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_settings.psr_feature_enabled)
 		dmcu->funcs->set_psr_enable(dmcu, allow_active, wait);
-	else
-		return false;
+
+	link->psr_settings.psr_allow_active = allow_active;
 
 	return true;
 }
@@ -3106,9 +3104,6 @@ void core_link_enable_stream(
 	struct dc *dc = pipe_ctx->stream->ctx->dc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	enum dc_status status;
-#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
-	enum otg_out_mux_dest otg_out_dest = OUT_MUX_DIO;
-#endif
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 
 	if (!IS_DIAG_DC(dc->ctx->dce_environment) &&
@@ -3141,11 +3136,6 @@ void core_link_enable_stream(
 			pipe_ctx->stream_res.audio != NULL);
 
 	pipe_ctx->stream->link->link_state_valid = true;
-
-#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
-	if (pipe_ctx->stream_res.tg->funcs->set_out_mux)
-		pipe_ctx->stream_res.tg->funcs->set_out_mux(pipe_ctx->stream_res.tg, otg_out_dest);
-#endif
 
 	if (dc_is_dvi_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_res.stream_enc->funcs->dvi_set_stream_attribute(
@@ -3229,15 +3219,6 @@ void core_link_enable_stream(
 					CONTROLLER_DP_TEST_PATTERN_VIDEOMODE,
 					COLOR_DEPTH_UNDEFINED);
 
-		/* This second call is needed to reconfigure the DIG
-		 * as a workaround for the incorrect value being applied
-		 * from transmitter control.
-		 */
-		if (!dc_is_virtual_signal(pipe_ctx->stream->signal))
-			stream->link->link_enc->funcs->setup(
-				stream->link->link_enc,
-				pipe_ctx->stream->signal);
-
 		dc->hwss.enable_stream(pipe_ctx);
 
 		/* Set DPS PPS SDP (AKA "info frames") */
@@ -3267,10 +3248,6 @@ void core_link_enable_stream(
 			dp_set_dsc_enable(pipe_ctx, true);
 
 	}
-
-	if (pipe_ctx->stream->signal == SIGNAL_TYPE_HDMI_TYPE_A) {
-		core_link_set_avmute(pipe_ctx, false);
-	}
 }
 
 void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
@@ -3283,13 +3260,10 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
 		return;
 
-	if (dc_is_hdmi_signal(pipe_ctx->stream->signal)) {
-		core_link_set_avmute(pipe_ctx, true);
-	}
-
 #if defined(CONFIG_DRM_AMD_DC_HDCP)
 	update_psp_stream_config(pipe_ctx, true);
 #endif
+
 	dc->hwss.blank_stream(pipe_ctx);
 
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)
@@ -3319,11 +3293,9 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 			write_i2c_redriver_setting(pipe_ctx, false);
 		}
 	}
-
-	disable_link(pipe_ctx->stream->link, pipe_ctx->stream->signal);
-
 	dc->hwss.disable_stream(pipe_ctx);
 
+	disable_link(pipe_ctx->stream->link, pipe_ctx->stream->signal);
 	if (pipe_ctx->stream->timing.flags.DSC) {
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
 			dp_set_dsc_enable(pipe_ctx, false);

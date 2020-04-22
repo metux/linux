@@ -110,97 +110,6 @@ static int is_skl_dsp_widget_type(struct snd_soc_dapm_widget *w,
 	}
 }
 
-/*
- * Each pipelines needs memory to be allocated. Check if we have free memory
- * from available pool.
- */
-static bool skl_is_pipe_mem_avail(struct skl_dev *skl,
-				struct skl_module_cfg *mconfig)
-{
-	if (skl->resource.mem + mconfig->pipe->memory_pages >
-				skl->resource.max_mem) {
-		dev_err(skl->dev,
-				"%s: module_id %d instance %d\n", __func__,
-				mconfig->id.module_id,
-				mconfig->id.instance_id);
-		dev_err(skl->dev,
-				"exceeds ppl memory available %d mem %d\n",
-				skl->resource.max_mem, skl->resource.mem);
-		return false;
-	} else {
-		return true;
-	}
-}
-
-/*
- * Add the mem to the mem pool. This is freed when pipe is deleted.
- * Note: DSP does actual memory management we only keep track for complete
- * pool
- */
-static void skl_tplg_alloc_pipe_mem(struct skl_dev *skl,
-				struct skl_module_cfg *mconfig)
-{
-	skl->resource.mem += mconfig->pipe->memory_pages;
-}
-
-/*
- * Pipeline needs needs DSP CPU resources for computation, this is
- * quantified in MCPS (Million Clocks Per Second) required for module/pipe
- *
- * Each pipelines needs mcps to be allocated. Check if we have mcps for this
- * pipe.
- */
-
-static bool skl_is_pipe_mcps_avail(struct skl_dev *skl,
-				struct skl_module_cfg *mconfig)
-{
-	u8 res_idx = mconfig->res_idx;
-	struct skl_module_res *res = &mconfig->module->resources[res_idx];
-
-	if (skl->resource.mcps + res->cps > skl->resource.max_mcps) {
-		dev_err(skl->dev,
-			"%s: module_id %d instance %d\n", __func__,
-			mconfig->id.module_id, mconfig->id.instance_id);
-		dev_err(skl->dev,
-			"exceeds ppl mcps available %d > mem %d\n",
-			skl->resource.max_mcps, skl->resource.mcps);
-		return false;
-	} else {
-		return true;
-	}
-}
-
-static void skl_tplg_alloc_pipe_mcps(struct skl_dev *skl,
-				struct skl_module_cfg *mconfig)
-{
-	u8 res_idx = mconfig->res_idx;
-	struct skl_module_res *res = &mconfig->module->resources[res_idx];
-
-	skl->resource.mcps += res->cps;
-}
-
-/*
- * Free the mcps when tearing down
- */
-static void
-skl_tplg_free_pipe_mcps(struct skl_dev *skl, struct skl_module_cfg *mconfig)
-{
-	u8 res_idx = mconfig->res_idx;
-	struct skl_module_res *res = &mconfig->module->resources[res_idx];
-
-	skl->resource.mcps -= res->cps;
-}
-
-/*
- * Free the memory when tearing down
- */
-static void
-skl_tplg_free_pipe_mem(struct skl_dev *skl, struct skl_module_cfg *mconfig)
-{
-	skl->resource.mem -= mconfig->pipe->memory_pages;
-}
-
-
 static void skl_dump_mconfig(struct skl_dev *skl, struct skl_module_cfg *mcfg)
 {
 	struct skl_module_iface *iface = &mcfg->module->formats[0];
@@ -583,10 +492,6 @@ skl_tplg_init_pipe_modules(struct skl_dev *skl, struct skl_pipe *pipe)
 		mconfig->fmt_idx = mconfig->mod_cfg[cfg_idx].fmt_idx;
 		mconfig->res_idx = mconfig->mod_cfg[cfg_idx].res_idx;
 
-		/* check resource available */
-		if (!skl_is_pipe_mcps_avail(skl, mconfig))
-			return -ENOMEM;
-
 		if (mconfig->module->loadable && skl->dsp->fw_ops.load_mod) {
 			ret = skl->dsp->fw_ops.load_mod(skl->dsp,
 				mconfig->id.module_id, mconfig->guid);
@@ -628,7 +533,7 @@ skl_tplg_init_pipe_modules(struct skl_dev *skl, struct skl_pipe *pipe)
 			skl_put_pvt_id(skl, uuid_mod, &mconfig->id.pvt_id);
 			goto err;
 		}
-		skl_tplg_alloc_pipe_mcps(skl, mconfig);
+
 		ret = skl_tplg_set_module_params(w, skl);
 		if (ret < 0)
 			goto err;
@@ -734,7 +639,6 @@ skl_tplg_get_pipe_config(struct skl_dev *skl, struct skl_module_cfg *mconfig)
 /*
  * Mixer module represents a pipeline. So in the Pre-PMU event of mixer we
  * need create the pipeline. So we do following:
- *   - check the resources
  *   - Create the pipeline
  *   - Initialize the modules in pipeline
  *   - finally bind all modules together
@@ -753,13 +657,6 @@ static int skl_tplg_mixer_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 	if (ret < 0)
 		return ret;
 
-	/* check resource available */
-	if (!skl_is_pipe_mcps_avail(skl, mconfig))
-		return -EBUSY;
-
-	if (!skl_is_pipe_mem_avail(skl, mconfig))
-		return -ENOMEM;
-
 	/*
 	 * Create a list of modules for pipe.
 	 * This list contains modules from source to sink
@@ -767,9 +664,6 @@ static int skl_tplg_mixer_dapm_pre_pmu_event(struct snd_soc_dapm_widget *w,
 	ret = skl_create_pipeline(skl, mconfig->pipe);
 	if (ret < 0)
 		return ret;
-
-	skl_tplg_alloc_pipe_mem(skl, mconfig);
-	skl_tplg_alloc_pipe_mcps(skl, mconfig);
 
 	/* Init all pipe modules from source to sink */
 	ret = skl_tplg_init_pipe_modules(skl, s_pipe);
@@ -1265,8 +1159,6 @@ static int skl_tplg_mixer_dapm_pre_pmd_event(struct snd_soc_dapm_widget *w,
 
 /*
  * in the Post-PMD event of mixer we need to do following:
- *   - Free the mcps used
- *   - Free the mem used
  *   - Unbind the modules within the pipeline
  *   - Delete the pipeline (modules are not required to be explicitly
  *     deleted, pipeline delete is enough here
@@ -1282,9 +1174,6 @@ static int skl_tplg_mixer_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 
 	if (s_pipe->state == SKL_PIPE_INVALID)
 		return -EINVAL;
-
-	skl_tplg_free_pipe_mcps(skl, mconfig);
-	skl_tplg_free_pipe_mem(skl, mconfig);
 
 	list_for_each_entry(w_module, &s_pipe->w_list, node) {
 		if (list_empty(&skl->bind_list))
@@ -1318,8 +1207,6 @@ static int skl_tplg_mixer_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 	list_for_each_entry(w_module, &s_pipe->w_list, node) {
 		dst_module = w_module->w->priv;
 
-		if (mconfig->m_state >= SKL_MODULE_INIT_DONE)
-			skl_tplg_free_pipe_mcps(skl, dst_module);
 		if (src_module == NULL) {
 			src_module = dst_module;
 			continue;
@@ -1341,7 +1228,6 @@ static int skl_tplg_mixer_dapm_post_pmd_event(struct snd_soc_dapm_widget *w,
 
 /*
  * in the Post-PMD event of PGA we need to do following:
- *   - Free the mcps used
  *   - Stop the pipeline
  *   - In source pipe is connected, unbind with source pipelines
  */
@@ -2103,7 +1989,7 @@ static int skl_tplg_get_uuid(struct device *dev, guid_t *guid,
 	      struct snd_soc_tplg_vendor_uuid_elem *uuid_tkn)
 {
 	if (uuid_tkn->token == SKL_TKN_UUID) {
-		guid_copy(guid, (guid_t *)&uuid_tkn->uuid);
+		import_guid(guid, uuid_tkn->uuid);
 		return 0;
 	}
 
@@ -2320,10 +2206,6 @@ static int skl_tplg_fill_res_tkn(struct device *dev,
 		return -EINVAL;
 
 	switch (tkn_elem->token) {
-	case SKL_TKN_MM_U32_CPS:
-		res->cps = tkn_elem->value;
-		break;
-
 	case SKL_TKN_MM_U32_DMA_SIZE:
 		res->dma_buffer_size = tkn_elem->value;
 		break;
@@ -2344,16 +2226,17 @@ static int skl_tplg_fill_res_tkn(struct device *dev,
 		res->ibs = tkn_elem->value;
 		break;
 
-	case SKL_TKN_U32_MAX_MCPS:
-		res->cps = tkn_elem->value;
-		break;
-
 	case SKL_TKN_MM_U32_RES_PIN_ID:
 	case SKL_TKN_MM_U32_PIN_BUF:
 		ret = skl_tplg_manifest_pin_res_tkn(dev, tkn_elem, res,
 						    pin_idx, dir);
 		if (ret < 0)
 			return ret;
+		break;
+
+	case SKL_TKN_MM_U32_CPS:
+	case SKL_TKN_U32_MAX_MCPS:
+		/* ignore unused tokens */
 		break;
 
 	default:
@@ -2808,7 +2691,7 @@ static int skl_tplg_get_pvt_data_v4(struct snd_soc_tplg_dapm_widget *tplg_w,
 		return ret;
 	mconfig->id.module_id = -1;
 	mconfig->id.instance_id = dfw->instance_id;
-	mconfig->module->resources[0].cps = dfw->max_mcps;
+	mconfig->module->resources[0].cpc = dfw->max_mcps / 1000;
 	mconfig->module->resources[0].ibs = dfw->ibs;
 	mconfig->module->resources[0].obs = dfw->obs;
 	mconfig->core_id = dfw->core_id;
@@ -2983,9 +2866,6 @@ void skl_cleanup_resources(struct skl_dev *skl)
 	card = soc_component->card;
 	if (!card || !card->instantiated)
 		return;
-
-	skl->resource.mem = 0;
-	skl->resource.mcps = 0;
 
 	list_for_each_entry(w, &card->widgets, list) {
 		if (is_skl_dsp_widget_type(w, skl->dev) && w->priv != NULL)
@@ -3454,25 +3334,6 @@ static int skl_tplg_get_int_tkn(struct device *dev,
 	return tkn_count;
 }
 
-static int skl_tplg_get_manifest_uuid(struct device *dev,
-				struct skl_dev *skl,
-				struct snd_soc_tplg_vendor_uuid_elem *uuid_tkn)
-{
-	static int ref_count;
-	struct skl_module *mod;
-
-	if (uuid_tkn->token == SKL_TKN_UUID) {
-		mod = skl->modules[ref_count];
-		guid_copy(&mod->uuid, (guid_t *)&uuid_tkn->uuid);
-		ref_count++;
-	} else {
-		dev_err(dev, "Not an UUID token tkn %d\n", uuid_tkn->token);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 /*
  * Fill the manifest structure by parsing the tokens based on the
  * type.
@@ -3483,6 +3344,7 @@ static int skl_tplg_get_manifest_tkn(struct device *dev,
 {
 	int tkn_count = 0, ret;
 	int off = 0, tuple_size = 0;
+	u8 uuid_index = 0;
 	struct snd_soc_tplg_vendor_array *array;
 	struct snd_soc_tplg_vendor_value_elem *tkn_elem;
 
@@ -3505,9 +3367,17 @@ static int skl_tplg_get_manifest_tkn(struct device *dev,
 			continue;
 
 		case SND_SOC_TPLG_TUPLE_TYPE_UUID:
-			ret = skl_tplg_get_manifest_uuid(dev, skl, array->uuid);
-			if (ret < 0)
-				return ret;
+			if (array->uuid->token != SKL_TKN_UUID) {
+				dev_err(dev, "Not an UUID token: %d\n",
+					array->uuid->token);
+				return -EINVAL;
+			}
+			if (uuid_index >= skl->nr_modules) {
+				dev_err(dev, "Too many UUID tokens\n");
+				return -EINVAL;
+			}
+			import_guid(&skl->modules[uuid_index++]->uuid,
+				    array->uuid->uuid);
 
 			tuple_size += sizeof(*array->uuid);
 			continue;
@@ -3683,10 +3553,6 @@ static void skl_tplg_set_pipe_type(struct skl_dev *skl, struct skl_pipe *pipe)
 		pipe->passthru = false;
 }
 
-/* This will be read from topology manifest, currently defined here */
-#define SKL_MAX_MCPS 30000000
-#define SKL_FW_MAX_MEM 1000000
-
 /*
  * SKL topology init routine
  */
@@ -3713,26 +3579,25 @@ int skl_tplg_init(struct snd_soc_component *component, struct hdac_bus *bus)
 	 * The complete tplg for SKL is loaded as index 0, we don't use
 	 * any other index
 	 */
-	ret = snd_soc_tplg_component_load(component,
-					&skl_tplg_ops, fw, 0);
+	ret = snd_soc_tplg_component_load(component, &skl_tplg_ops, fw, 0);
 	if (ret < 0) {
 		dev_err(bus->dev, "tplg component load failed%d\n", ret);
-		release_firmware(fw);
-		return -EINVAL;
+		goto err;
 	}
 
-	skl->resource.max_mcps = SKL_MAX_MCPS;
-	skl->resource.max_mem = SKL_FW_MAX_MEM;
-
-	skl->tplg = fw;
 	ret = skl_tplg_create_pipe_widget_list(component);
-	if (ret < 0)
-		return ret;
+	if (ret < 0) {
+		dev_err(bus->dev, "tplg create pipe widget list failed%d\n",
+				ret);
+		goto err;
+	}
 
 	list_for_each_entry(ppl, &skl->ppl_list, node)
 		skl_tplg_set_pipe_type(skl, ppl->pipe);
 
-	return 0;
+err:
+	release_firmware(fw);
+	return ret;
 }
 
 void skl_tplg_exit(struct snd_soc_component *component, struct hdac_bus *bus)
@@ -3746,6 +3611,4 @@ void skl_tplg_exit(struct snd_soc_component *component, struct hdac_bus *bus)
 
 	/* clean up topology */
 	snd_soc_tplg_component_remove(component, SND_SOC_TPLG_INDEX_ALL);
-
-	release_firmware(skl->tplg);
 }

@@ -31,7 +31,6 @@
 static const struct hw_sequencer_funcs dcn21_funcs = {
 	.program_gamut_remap = dcn10_program_gamut_remap,
 	.init_hw = dcn10_init_hw,
-	.power_down_on_boot = dcn10_power_down_on_boot,
 	.apply_ctx_to_hw = dce110_apply_ctx_to_hw,
 	.apply_ctx_for_surface = NULL,
 	.program_front_end_for_ctx = dcn20_program_front_end_for_ctx,
@@ -91,13 +90,13 @@ static const struct hw_sequencer_funcs dcn21_funcs = {
 	.exit_optimized_pwr_state = dcn21_exit_optimized_pwr_state,
 	.get_vupdate_offset_from_vsync = dcn10_get_vupdate_offset_from_vsync,
 	.calc_vupdate_position = dcn10_calc_vupdate_position,
+	.set_cursor_position = dcn10_set_cursor_position,
+	.set_cursor_attribute = dcn10_set_cursor_attribute,
+	.set_cursor_sdr_white_level = dcn10_set_cursor_sdr_white_level,
+	.optimize_pwr_state = dcn21_optimize_pwr_state,
+	.exit_optimized_pwr_state = dcn21_exit_optimized_pwr_state,
 	.power_down = dce110_power_down,
-	.set_backlight_level = dcn21_set_backlight_level,
-	.set_abm_immediate_disable = dcn21_set_abm_immediate_disable,
-	.set_pipe = dcn21_set_pipe,
-#ifndef TRIM_FSFT
-	.optimize_timing_for_fsft = dcn20_optimize_timing_for_fsft,
-#endif
+	.set_backlight_level = dce110_set_backlight_level,
 };
 
 static const struct hwseq_private_funcs dcn21_private_funcs = {

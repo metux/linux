@@ -103,6 +103,7 @@ int intel_execlists_submission_init(struct intel_engine_cs *engine);
 #define LRC_PPHWSP_SZ	(1)
 /* Finally we have the logical state for the context */
 #define LRC_STATE_PN	(LRC_PPHWSP_PN + LRC_PPHWSP_SZ)
+#define LRC_STATE_OFFSET (LRC_STATE_PN * PAGE_SIZE)
 
 /*
  * Currently we include the PPHWSP in __intel_engine_context_size() so

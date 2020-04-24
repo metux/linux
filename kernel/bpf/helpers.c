@@ -151,19 +151,7 @@ BPF_CALL_0(bpf_ktime_get_ns)
 
 const struct bpf_func_proto bpf_ktime_get_ns_proto = {
 	.func		= bpf_ktime_get_ns,
-	.gpl_only	= false,
-	.ret_type	= RET_INTEGER,
-};
-
-BPF_CALL_0(bpf_ktime_get_boot_ns)
-{
-	/* NMI safe access to clock boottime */
-	return ktime_get_boot_fast_ns();
-}
-
-const struct bpf_func_proto bpf_ktime_get_boot_ns_proto = {
-	.func		= bpf_ktime_get_boot_ns,
-	.gpl_only	= false,
+	.gpl_only	= true,
 	.ret_type	= RET_INTEGER,
 };
 
@@ -601,62 +589,6 @@ const struct bpf_func_proto bpf_event_output_data_proto =  {
 	.arg5_type      = ARG_CONST_SIZE_OR_ZERO,
 };
 
-BPF_CALL_3(bpf_copy_from_user, void *, dst, u32, size,
-	   const void __user *, user_ptr)
-{
-	int ret = copy_from_user(dst, user_ptr, size);
-
-	if (unlikely(ret)) {
-		memset(dst, 0, size);
-		ret = -EFAULT;
-	}
-
-	return ret;
-}
-
-const struct bpf_func_proto bpf_copy_from_user_proto = {
-	.func		= bpf_copy_from_user,
-	.gpl_only	= false,
-	.ret_type	= RET_INTEGER,
-	.arg1_type	= ARG_PTR_TO_UNINIT_MEM,
-	.arg2_type	= ARG_CONST_SIZE_OR_ZERO,
-	.arg3_type	= ARG_ANYTHING,
-};
-
-BPF_CALL_2(bpf_per_cpu_ptr, const void *, ptr, u32, cpu)
-{
-	if (cpu >= nr_cpu_ids)
-		return (unsigned long)NULL;
-
-	return (unsigned long)per_cpu_ptr((const void __percpu *)ptr, cpu);
-}
-
-const struct bpf_func_proto bpf_per_cpu_ptr_proto = {
-	.func		= bpf_per_cpu_ptr,
-	.gpl_only	= false,
-	.ret_type	= RET_PTR_TO_MEM_OR_BTF_ID_OR_NULL,
-	.arg1_type	= ARG_PTR_TO_PERCPU_BTF_ID,
-	.arg2_type	= ARG_ANYTHING,
-};
-
-BPF_CALL_1(bpf_this_cpu_ptr, const void *, percpu_ptr)
-{
-	return (unsigned long)this_cpu_ptr((const void __percpu *)percpu_ptr);
-}
-
-const struct bpf_func_proto bpf_this_cpu_ptr_proto = {
-	.func		= bpf_this_cpu_ptr,
-	.gpl_only	= false,
-	.ret_type	= RET_PTR_TO_MEM_OR_BTF_ID,
-	.arg1_type	= ARG_PTR_TO_PERCPU_BTF_ID,
-};
-
-const struct bpf_func_proto bpf_get_current_task_proto __weak;
-const struct bpf_func_proto bpf_probe_read_user_proto __weak;
-const struct bpf_func_proto bpf_probe_read_user_str_proto __weak;
-const struct bpf_func_proto bpf_probe_read_kernel_proto __weak;
-const struct bpf_func_proto bpf_probe_read_kernel_str_proto __weak;
-
 const struct bpf_func_proto *
 bpf_base_func_proto(enum bpf_func_id func_id)
 {
@@ -683,23 +615,11 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 		return &bpf_tail_call_proto;
 	case BPF_FUNC_ktime_get_ns:
 		return &bpf_ktime_get_ns_proto;
-	case BPF_FUNC_ktime_get_boot_ns:
-		return &bpf_ktime_get_boot_ns_proto;
-	case BPF_FUNC_ringbuf_output:
-		return &bpf_ringbuf_output_proto;
-	case BPF_FUNC_ringbuf_reserve:
-		return &bpf_ringbuf_reserve_proto;
-	case BPF_FUNC_ringbuf_submit:
-		return &bpf_ringbuf_submit_proto;
-	case BPF_FUNC_ringbuf_discard:
-		return &bpf_ringbuf_discard_proto;
-	case BPF_FUNC_ringbuf_query:
-		return &bpf_ringbuf_query_proto;
 	default:
 		break;
 	}
 
-	if (!bpf_capable())
+	if (!capable(CAP_SYS_ADMIN))
 		return NULL;
 
 	switch (func_id) {
@@ -708,37 +628,9 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 	case BPF_FUNC_spin_unlock:
 		return &bpf_spin_unlock_proto;
 	case BPF_FUNC_trace_printk:
-		if (!perfmon_capable())
-			return NULL;
 		return bpf_get_trace_printk_proto();
-	case BPF_FUNC_snprintf_btf:
-		if (!perfmon_capable())
-			return NULL;
-		return &bpf_snprintf_btf_proto;
 	case BPF_FUNC_jiffies64:
 		return &bpf_jiffies64_proto;
-	case BPF_FUNC_per_cpu_ptr:
-		return &bpf_per_cpu_ptr_proto;
-	case BPF_FUNC_this_cpu_ptr:
-		return &bpf_this_cpu_ptr_proto;
-	default:
-		break;
-	}
-
-	if (!perfmon_capable())
-		return NULL;
-
-	switch (func_id) {
-	case BPF_FUNC_get_current_task:
-		return &bpf_get_current_task_proto;
-	case BPF_FUNC_probe_read_user:
-		return &bpf_probe_read_user_proto;
-	case BPF_FUNC_probe_read_kernel:
-		return &bpf_probe_read_kernel_proto;
-	case BPF_FUNC_probe_read_user_str:
-		return &bpf_probe_read_user_str_proto;
-	case BPF_FUNC_probe_read_kernel_str:
-		return &bpf_probe_read_kernel_str_proto;
 	default:
 		return NULL;
 	}

@@ -315,7 +315,6 @@ static void init_inode_smack(struct inode *inode, struct smack_known *skp)
 
 	isp->smk_inode = skp;
 	isp->smk_flags = 0;
-	mutex_init(&isp->smk_lock);
 }
 
 /**
@@ -3265,13 +3264,12 @@ static void smack_d_instantiate(struct dentry *opt_dentry, struct inode *inode)
 
 	isp = smack_inode(inode);
 
-	mutex_lock(&isp->smk_lock);
 	/*
 	 * If the inode is already instantiated
 	 * take the quick way out
 	 */
 	if (isp->smk_flags & SMK_INODE_INSTANT)
-		goto unlockandout;
+		return;
 
 	sbp = inode->i_sb;
 	sbsp = sbp->s_security;
@@ -3322,7 +3320,7 @@ static void smack_d_instantiate(struct dentry *opt_dentry, struct inode *inode)
 			break;
 		}
 		isp->smk_flags |= SMK_INODE_INSTANT;
-		goto unlockandout;
+		return;
 	}
 
 	/*
@@ -3457,8 +3455,6 @@ static void smack_d_instantiate(struct dentry *opt_dentry, struct inode *inode)
 
 	isp->smk_flags |= (SMK_INODE_INSTANT | transflag);
 
-unlockandout:
-	mutex_unlock(&isp->smk_lock);
 	return;
 }
 

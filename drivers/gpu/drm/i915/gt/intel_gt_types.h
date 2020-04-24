@@ -17,6 +17,7 @@
 
 #include "i915_vma.h"
 #include "intel_engine_types.h"
+#include "intel_llc_types.h"
 #include "intel_reset_types.h"
 #include "intel_rc6_types.h"
 #include "intel_rps_types.h"
@@ -60,6 +61,7 @@ struct intel_gt {
 	struct list_head closed_vma;
 	spinlock_t closed_lock; /* guards the list of closed_vma */
 
+	ktime_t last_init_time;
 	struct intel_reset reset;
 
 	/**
@@ -71,14 +73,11 @@ struct intel_gt {
 	 */
 	intel_wakeref_t awake;
 
+	u32 clock_frequency;
+
+	struct intel_llc llc;
 	struct intel_rc6 rc6;
 	struct intel_rps rps;
-
-	struct blocking_notifier_head pm_notifications;
-
-	ktime_t last_init_time;
-
-	struct i915_vma *scratch;
 
 	spinlock_t irq_lock;
 	u32 gt_imr;
@@ -90,6 +89,15 @@ struct intel_gt {
 	struct intel_engine_cs *engine[I915_NUM_ENGINES];
 	struct intel_engine_cs *engine_class[MAX_ENGINE_CLASS + 1]
 					    [MAX_ENGINE_INSTANCE + 1];
+
+	/*
+	 * Default address space (either GGTT or ppGTT depending on arch).
+	 *
+	 * Reserved for exclusive use by the kernel.
+	 */
+	struct i915_address_space *vm;
+
+	struct i915_vma *scratch;
 };
 
 enum intel_gt_scratch_field {
@@ -97,14 +105,16 @@ enum intel_gt_scratch_field {
 	INTEL_GT_SCRATCH_FIELD_DEFAULT = 0,
 
 	/* 8 bytes */
-	INTEL_GT_SCRATCH_FIELD_CLEAR_SLM_WA = 128,
-
-	/* 8 bytes */
 	INTEL_GT_SCRATCH_FIELD_RENDER_FLUSH = 128,
 
 	/* 8 bytes */
 	INTEL_GT_SCRATCH_FIELD_COHERENTL3_WA = 256,
 
+	/* 6 * 8 bytes */
+	INTEL_GT_SCRATCH_FIELD_PERF_CS_GPR = 2048,
+
+	/* 4 bytes */
+	INTEL_GT_SCRATCH_FIELD_PERF_PREDICATE_RESULT_1 = 2096,
 };
 
 #endif /* __INTEL_GT_TYPES_H__ */

@@ -42,9 +42,12 @@
 #include <linux/mlx5/vport.h>
 #include <linux/mlx5/fs.h>
 #include "lib/mpfs.h"
+#include "lib/fs_chains.h"
 #include "en/tc_ct.h"
 
 #ifdef CONFIG_MLX5_ESWITCH
+
+#define ESW_OFFLOADS_DEFAULT_NUM_GROUPS 15
 
 #define MLX5_MAX_UC_PER_VPORT(dev) \
 	(1 << MLX5_CAP_GEN(dev, log_max_current_uc_list))
@@ -59,6 +62,9 @@
 
 #define mlx5_esw_has_fwd_fdb(dev) \
 	MLX5_CAP_ESW_FLOWTABLE(dev, fdb_multi_path_to_table)
+
+#define esw_chains(esw) \
+	((esw)->fdb_table.offloads.esw_chains_priv)
 
 struct vport_ingress {
 	struct mlx5_flow_table *acl;
@@ -152,12 +158,6 @@ struct mlx5_vport {
 	enum mlx5_eswitch_vport_event enabled_events;
 };
 
-enum offloads_fdb_flags {
-	ESW_FDB_CHAINS_AND_PRIOS_SUPPORTED = BIT(0),
-};
-
-struct mlx5_esw_chains_priv;
-
 struct mlx5_eswitch_fdb {
 	union {
 		struct legacy_fdb {
@@ -181,7 +181,13 @@ struct mlx5_eswitch_fdb {
 			struct mlx5_flow_handle *miss_rule_multi;
 			int vlan_push_pop_refcount;
 
-			struct mlx5_esw_chains_priv *esw_chains_priv;
+			struct mlx5_fs_chains *esw_chains_priv;
+			struct {
+				DECLARE_HASHTABLE(table, 8);
+				/* Protects vports.table */
+				struct mutex lock;
+			} vports;
+
 		} offloads;
 	};
 	u32 flags;
@@ -267,6 +273,9 @@ struct mlx5_eswitch {
 	u16                     manager_vport;
 	u16                     first_host_vport;
 	struct mlx5_esw_functions esw_funcs;
+	struct {
+		u32             large_group_num;
+	}  params;
 };
 
 void esw_offloads_disable(struct mlx5_eswitch *esw);
@@ -424,7 +433,6 @@ int mlx5_devlink_eswitch_mode_get(struct devlink *devlink, u16 *mode);
 int mlx5_devlink_eswitch_inline_mode_set(struct devlink *devlink, u8 mode,
 					 struct netlink_ext_ack *extack);
 int mlx5_devlink_eswitch_inline_mode_get(struct devlink *devlink, u8 *mode);
-int mlx5_eswitch_inline_mode_get(struct mlx5_eswitch *esw, u8 *mode);
 int mlx5_devlink_eswitch_encap_mode_set(struct devlink *devlink,
 					enum devlink_eswitch_encap_mode encap,
 					struct netlink_ext_ack *extack);
@@ -648,6 +656,9 @@ esw_vport_create_offloads_acl_tables(struct mlx5_eswitch *esw,
 void
 esw_vport_destroy_offloads_acl_tables(struct mlx5_eswitch *esw,
 				      struct mlx5_vport *vport);
+
+int mlx5_esw_vport_tbl_get(struct mlx5_eswitch *esw);
+void mlx5_esw_vport_tbl_put(struct mlx5_eswitch *esw);
 
 struct mlx5_flow_handle *
 esw_add_restore_rule(struct mlx5_eswitch *esw, u32 tag);

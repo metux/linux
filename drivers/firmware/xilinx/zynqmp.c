@@ -2,7 +2,7 @@
 /*
  * Xilinx Zynq MPSoC Firmware layer
  *
- *  Copyright (C) 2014-2020 Xilinx, Inc.
+ *  Copyright (C) 2014-2018 Xilinx, Inc.
  *
  *  Michal Simek <michal.simek@xilinx.com>
  *  Davorin Mista <davorin.mista@aggios.com>
@@ -20,28 +20,14 @@
 #include <linux/of_platform.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/hashtable.h>
 
 #include <linux/firmware/xlnx-zynqmp.h>
 #include "zynqmp-debug.h"
 
-/* Max HashMap Order for PM API feature check (1<<7 = 128) */
-#define PM_API_FEATURE_CHECK_MAX_ORDER  7
+static const struct zynqmp_eemi_ops *eemi_ops_tbl;
 
 static bool feature_check_enabled;
-static DEFINE_HASHTABLE(pm_api_features_map, PM_API_FEATURE_CHECK_MAX_ORDER);
-
-/**
- * struct pm_api_feature_data - PM API Feature data
- * @pm_api_id:		PM API Id, used as key to index into hashmap
- * @feature_status:	status of PM API feature: valid, invalid
- * @hentry:		hlist_node that hooks this entry into hashtable
- */
-struct pm_api_feature_data {
-	u32 pm_api_id;
-	int feature_status;
-	struct hlist_node hentry;
-};
+static u32 zynqmp_pm_features[PM_API_MAX];
 
 static const struct mfd_cell firmware_devs[] = {
 	{
@@ -158,37 +144,26 @@ static int zynqmp_pm_feature(u32 api_id)
 	int ret;
 	u32 ret_payload[PAYLOAD_ARG_CNT];
 	u64 smc_arg[2];
-	struct pm_api_feature_data *feature_data;
 
 	if (!feature_check_enabled)
 		return 0;
 
-	/* Check for existing entry in hash table for given api */
-	hash_for_each_possible(pm_api_features_map, feature_data, hentry,
-			       api_id) {
-		if (feature_data->pm_api_id == api_id)
-			return feature_data->feature_status;
-	}
+	/* Return value if feature is already checked */
+	if (zynqmp_pm_features[api_id] != PM_FEATURE_UNCHECKED)
+		return zynqmp_pm_features[api_id];
 
-	/* Add new entry if not present */
-	feature_data = kmalloc(sizeof(*feature_data), GFP_KERNEL);
-	if (!feature_data)
-		return -ENOMEM;
-
-	feature_data->pm_api_id = api_id;
 	smc_arg[0] = PM_SIP_SVC | PM_FEATURE_CHECK;
 	smc_arg[1] = api_id;
 
 	ret = do_fw_call(smc_arg[0], smc_arg[1], 0, ret_payload);
-	if (ret)
-		ret = -EOPNOTSUPP;
-	else
-		ret = ret_payload[1];
+	if (ret) {
+		zynqmp_pm_features[api_id] = PM_FEATURE_INVALID;
+		return PM_FEATURE_INVALID;
+	}
 
-	feature_data->feature_status = ret;
-	hash_add(pm_api_features_map, &feature_data->hentry, api_id);
+	zynqmp_pm_features[api_id] = ret_payload[1];
 
-	return ret;
+	return zynqmp_pm_features[api_id];
 }
 
 /**
@@ -224,12 +199,9 @@ int zynqmp_pm_invoke_fn(u32 pm_api_id, u32 arg0, u32 arg1,
 	 * Make sure to stay in x0 register
 	 */
 	u64 smc_arg[4];
-	int ret;
 
-	/* Check if feature is supported or not */
-	ret = zynqmp_pm_feature(pm_api_id);
-	if (ret < 0)
-		return ret;
+	if (zynqmp_pm_feature(pm_api_id) == PM_FEATURE_INVALID)
+		return -ENOTSUPP;
 
 	smc_arg[0] = PM_SIP_SVC | pm_api_id;
 	smc_arg[1] = ((u64)arg1 << 32) | arg0;
@@ -642,91 +614,10 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_set_sd_tapdelay);
  */
 int zynqmp_pm_sd_dll_reset(u32 node_id, u32 type)
 {
-	return zynqmp_pm_invoke_fn(PM_IOCTL, node_id, IOCTL_SD_DLL_RESET,
+	return zynqmp_pm_invoke_fn(PM_IOCTL, node_id, IOCTL_SET_SD_TAPDELAY,
 				   type, 0, NULL);
 }
 EXPORT_SYMBOL_GPL(zynqmp_pm_sd_dll_reset);
-
-/**
- * zynqmp_pm_write_ggs() - PM API for writing global general storage (ggs)
- * @index	GGS register index
- * @value	Register value to be written
- *
- * This function writes value to GGS register.
- *
- * @return      Returns status, either success or error+reason
- */
-int zynqmp_pm_write_ggs(u32 index, u32 value)
-{
-	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_WRITE_GGS,
-				   index, value, NULL);
-}
-EXPORT_SYMBOL_GPL(zynqmp_pm_write_ggs);
-
-/**
- * zynqmp_pm_write_ggs() - PM API for reading global general storage (ggs)
- * @index	GGS register index
- * @value	Register value to be written
- *
- * This function returns GGS register value.
- *
- * @return      Returns status, either success or error+reason
- */
-int zynqmp_pm_read_ggs(u32 index, u32 *value)
-{
-	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_READ_GGS,
-				   index, 0, value);
-}
-EXPORT_SYMBOL_GPL(zynqmp_pm_read_ggs);
-
-/**
- * zynqmp_pm_write_pggs() - PM API for writing persistent global general
- *			     storage (pggs)
- * @index	PGGS register index
- * @value	Register value to be written
- *
- * This function writes value to PGGS register.
- *
- * @return      Returns status, either success or error+reason
- */
-int zynqmp_pm_write_pggs(u32 index, u32 value)
-{
-	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_WRITE_PGGS, index, value,
-				   NULL);
-}
-EXPORT_SYMBOL_GPL(zynqmp_pm_write_pggs);
-
-/**
- * zynqmp_pm_write_pggs() - PM API for reading persistent global general
- *			     storage (pggs)
- * @index	PGGS register index
- * @value	Register value to be written
- *
- * This function returns PGGS register value.
- *
- * @return      Returns status, either success or error+reason
- */
-int zynqmp_pm_read_pggs(u32 index, u32 *value)
-{
-	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_READ_PGGS, index, 0,
-				   value);
-}
-EXPORT_SYMBOL_GPL(zynqmp_pm_read_pggs);
-
-/**
- * zynqmp_pm_set_boot_health_status() - PM API for setting healthy boot status
- * @value	Status value to be written
- *
- * This function sets healthy bit value to indicate boot health status
- * to firmware.
- *
- * @return      Returns status, either success or error+reason
- */
-int zynqmp_pm_set_boot_health_status(u32 value)
-{
-	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_SET_BOOT_HEALTH_STATUS,
-				   value, 0, NULL);
-}
 
 /**
  * zynqmp_pm_reset_assert - Request setting of reset (1 - assert, 0 - release)
@@ -736,13 +627,12 @@ int zynqmp_pm_set_boot_health_status(u32 value)
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_reset_assert(const enum zynqmp_pm_reset reset,
-			   const enum zynqmp_pm_reset_action assert_flag)
+static int zynqmp_pm_reset_assert(const enum zynqmp_pm_reset reset,
+				  const enum zynqmp_pm_reset_action assert_flag)
 {
 	return zynqmp_pm_invoke_fn(PM_RESET_ASSERT, reset, assert_flag,
 				   0, 0, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_reset_assert);
 
 /**
  * zynqmp_pm_reset_get_status - Get status of the reset
@@ -751,7 +641,8 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_reset_assert);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_reset_get_status(const enum zynqmp_pm_reset reset, u32 *status)
+static int zynqmp_pm_reset_get_status(const enum zynqmp_pm_reset reset,
+				      u32 *status)
 {
 	u32 ret_payload[PAYLOAD_ARG_CNT];
 	int ret;
@@ -765,7 +656,6 @@ int zynqmp_pm_reset_get_status(const enum zynqmp_pm_reset reset, u32 *status)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_reset_get_status);
 
 /**
  * zynqmp_pm_fpga_load - Perform the fpga load
@@ -780,12 +670,12 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_reset_get_status);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_fpga_load(const u64 address, const u32 size, const u32 flags)
+static int zynqmp_pm_fpga_load(const u64 address, const u32 size,
+			       const u32 flags)
 {
 	return zynqmp_pm_invoke_fn(PM_FPGA_LOAD, lower_32_bits(address),
 				   upper_32_bits(address), size, flags, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_fpga_load);
 
 /**
  * zynqmp_pm_fpga_get_status - Read value from PCAP status register
@@ -796,7 +686,7 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_fpga_load);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_fpga_get_status(u32 *value)
+static int zynqmp_pm_fpga_get_status(u32 *value)
 {
 	u32 ret_payload[PAYLOAD_ARG_CNT];
 	int ret;
@@ -809,7 +699,6 @@ int zynqmp_pm_fpga_get_status(u32 *value)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_fpga_get_status);
 
 /**
  * zynqmp_pm_init_finalize() - PM call to inform firmware that the caller
@@ -820,11 +709,10 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_fpga_get_status);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_init_finalize(void)
+static int zynqmp_pm_init_finalize(void)
 {
 	return zynqmp_pm_invoke_fn(PM_PM_INIT_FINALIZE, 0, 0, 0, 0, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_init_finalize);
 
 /**
  * zynqmp_pm_set_suspend_mode()	- Set system suspend mode
@@ -834,11 +722,10 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_init_finalize);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_set_suspend_mode(u32 mode)
+static int zynqmp_pm_set_suspend_mode(u32 mode)
 {
 	return zynqmp_pm_invoke_fn(PM_SET_SUSPEND_MODE, mode, 0, 0, 0, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_set_suspend_mode);
 
 /**
  * zynqmp_pm_request_node() - Request a node with specific capabilities
@@ -852,13 +739,13 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_set_suspend_mode);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_request_node(const u32 node, const u32 capabilities,
-			   const u32 qos, const enum zynqmp_pm_request_ack ack)
+static int zynqmp_pm_request_node(const u32 node, const u32 capabilities,
+				  const u32 qos,
+				  const enum zynqmp_pm_request_ack ack)
 {
 	return zynqmp_pm_invoke_fn(PM_REQUEST_NODE, node, capabilities,
 				   qos, ack, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_request_node);
 
 /**
  * zynqmp_pm_release_node() - Release a node
@@ -870,11 +757,10 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_request_node);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_release_node(const u32 node)
+static int zynqmp_pm_release_node(const u32 node)
 {
 	return zynqmp_pm_invoke_fn(PM_RELEASE_NODE, node, 0, 0, 0, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_release_node);
 
 /**
  * zynqmp_pm_set_requirement() - PM call to set requirement for PM slaves
@@ -888,14 +774,13 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_release_node);
  *
  * Return: Returns status, either success or error+reason
  */
-int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
-			      const u32 qos,
-			      const enum zynqmp_pm_request_ack ack)
+static int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
+				     const u32 qos,
+				     const enum zynqmp_pm_request_ack ack)
 {
 	return zynqmp_pm_invoke_fn(PM_SET_REQUIREMENT, node, capabilities,
 				   qos, ack, NULL);
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_set_requirement);
 
 /**
  * zynqmp_pm_aes - Access AES hardware to encrypt/decrypt the data using
@@ -905,7 +790,7 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_set_requirement);
  *
  * Return:	Returns status, either success or error code.
  */
-int zynqmp_pm_aes_engine(const u64 address, u32 *out)
+static int zynqmp_pm_aes_engine(const u64 address, u32 *out)
 {
 	u32 ret_payload[PAYLOAD_ARG_CNT];
 	int ret;
@@ -920,304 +805,34 @@ int zynqmp_pm_aes_engine(const u64 address, u32 *out)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(zynqmp_pm_aes_engine);
 
-/**
- * zynqmp_pm_system_shutdown - PM call to request a system shutdown or restart
- * @type:	Shutdown or restart? 0 for shutdown, 1 for restart
- * @subtype:	Specifies which system should be restarted or shut down
- *
- * Return:	Returns status, either success or error+reason
- */
-int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype)
-{
-	return zynqmp_pm_invoke_fn(PM_SYSTEM_SHUTDOWN, type, subtype,
-				   0, 0, NULL);
-}
-
-/**
- * struct zynqmp_pm_shutdown_scope - Struct for shutdown scope
- * @subtype:	Shutdown subtype
- * @name:	Matching string for scope argument
- *
- * This struct encapsulates mapping between shutdown scope ID and string.
- */
-struct zynqmp_pm_shutdown_scope {
-	const enum zynqmp_pm_shutdown_subtype subtype;
-	const char *name;
+static const struct zynqmp_eemi_ops eemi_ops = {
+	.reset_assert = zynqmp_pm_reset_assert,
+	.reset_get_status = zynqmp_pm_reset_get_status,
+	.init_finalize = zynqmp_pm_init_finalize,
+	.set_suspend_mode = zynqmp_pm_set_suspend_mode,
+	.request_node = zynqmp_pm_request_node,
+	.release_node = zynqmp_pm_release_node,
+	.set_requirement = zynqmp_pm_set_requirement,
+	.fpga_load = zynqmp_pm_fpga_load,
+	.fpga_get_status = zynqmp_pm_fpga_get_status,
+	.aes = zynqmp_pm_aes_engine,
 };
 
-static struct zynqmp_pm_shutdown_scope shutdown_scopes[] = {
-	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM] = {
-		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM,
-		.name = "subsystem",
-	},
-	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY] = {
-		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY,
-		.name = "ps_only",
-	},
-	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM] = {
-		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM,
-		.name = "system",
-	},
-};
-
-static struct zynqmp_pm_shutdown_scope *selected_scope =
-		&shutdown_scopes[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM];
-
 /**
- * zynqmp_pm_is_shutdown_scope_valid - Check if shutdown scope string is valid
- * @scope_string:	Shutdown scope string
+ * zynqmp_pm_get_eemi_ops - Get eemi ops functions
  *
- * Return:		Return pointer to matching shutdown scope struct from
- *			array of available options in system if string is valid,
- *			otherwise returns NULL.
+ * Return: Pointer of eemi_ops structure
  */
-static struct zynqmp_pm_shutdown_scope*
-		zynqmp_pm_is_shutdown_scope_valid(const char *scope_string)
+const struct zynqmp_eemi_ops *zynqmp_pm_get_eemi_ops(void)
 {
-	int count;
+	if (eemi_ops_tbl)
+		return eemi_ops_tbl;
+	else
+		return ERR_PTR(-EPROBE_DEFER);
 
-	for (count = 0; count < ARRAY_SIZE(shutdown_scopes); count++)
-		if (sysfs_streq(scope_string, shutdown_scopes[count].name))
-			return &shutdown_scopes[count];
-
-	return NULL;
 }
-
-static ssize_t shutdown_scope_show(struct device *device,
-				   struct device_attribute *attr,
-				   char *buf)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(shutdown_scopes); i++) {
-		if (&shutdown_scopes[i] == selected_scope) {
-			strcat(buf, "[");
-			strcat(buf, shutdown_scopes[i].name);
-			strcat(buf, "]");
-		} else {
-			strcat(buf, shutdown_scopes[i].name);
-		}
-		strcat(buf, " ");
-	}
-	strcat(buf, "\n");
-
-	return strlen(buf);
-}
-
-static ssize_t shutdown_scope_store(struct device *device,
-				    struct device_attribute *attr,
-				    const char *buf, size_t count)
-{
-	int ret;
-	struct zynqmp_pm_shutdown_scope *scope;
-
-	scope = zynqmp_pm_is_shutdown_scope_valid(buf);
-	if (!scope)
-		return -EINVAL;
-
-	ret = zynqmp_pm_system_shutdown(ZYNQMP_PM_SHUTDOWN_TYPE_SETSCOPE_ONLY,
-					scope->subtype);
-	if (ret) {
-		pr_err("unable to set shutdown scope %s\n", buf);
-		return ret;
-	}
-
-	selected_scope = scope;
-
-	return count;
-}
-
-static DEVICE_ATTR_RW(shutdown_scope);
-
-static ssize_t health_status_store(struct device *device,
-				   struct device_attribute *attr,
-				   const char *buf, size_t count)
-{
-	int ret;
-	unsigned int value;
-
-	ret = kstrtouint(buf, 10, &value);
-	if (ret)
-		return ret;
-
-	ret = zynqmp_pm_set_boot_health_status(value);
-	if (ret) {
-		dev_err(device, "unable to set healthy bit value to %u\n",
-			value);
-		return ret;
-	}
-
-	return count;
-}
-
-static DEVICE_ATTR_WO(health_status);
-
-static ssize_t ggs_show(struct device *device,
-			struct device_attribute *attr,
-			char *buf,
-			u32 reg)
-{
-	int ret;
-	u32 ret_payload[PAYLOAD_ARG_CNT];
-
-	ret = zynqmp_pm_read_ggs(reg, ret_payload);
-	if (ret)
-		return ret;
-
-	return sprintf(buf, "0x%x\n", ret_payload[1]);
-}
-
-static ssize_t ggs_store(struct device *device,
-			 struct device_attribute *attr,
-			 const char *buf, size_t count,
-			 u32 reg)
-{
-	long value;
-	int ret;
-
-	if (reg >= GSS_NUM_REGS)
-		return -EINVAL;
-
-	ret = kstrtol(buf, 16, &value);
-	if (ret) {
-		count = -EFAULT;
-		goto err;
-	}
-
-	ret = zynqmp_pm_write_ggs(reg, value);
-	if (ret)
-		count = -EFAULT;
-err:
-	return count;
-}
-
-/* GGS register show functions */
-#define GGS0_SHOW(N)						\
-	ssize_t ggs##N##_show(struct device *device,		\
-			      struct device_attribute *attr,	\
-			      char *buf)			\
-	{							\
-		return ggs_show(device, attr, buf, N);		\
-	}
-
-static GGS0_SHOW(0);
-static GGS0_SHOW(1);
-static GGS0_SHOW(2);
-static GGS0_SHOW(3);
-
-/* GGS register store function */
-#define GGS0_STORE(N)						\
-	ssize_t ggs##N##_store(struct device *device,		\
-			       struct device_attribute *attr,	\
-			       const char *buf,			\
-			       size_t count)			\
-	{							\
-		return ggs_store(device, attr, buf, count, N);	\
-	}
-
-static GGS0_STORE(0);
-static GGS0_STORE(1);
-static GGS0_STORE(2);
-static GGS0_STORE(3);
-
-static ssize_t pggs_show(struct device *device,
-			 struct device_attribute *attr,
-			 char *buf,
-			 u32 reg)
-{
-	int ret;
-	u32 ret_payload[PAYLOAD_ARG_CNT];
-
-	ret = zynqmp_pm_read_pggs(reg, ret_payload);
-	if (ret)
-		return ret;
-
-	return sprintf(buf, "0x%x\n", ret_payload[1]);
-}
-
-static ssize_t pggs_store(struct device *device,
-			  struct device_attribute *attr,
-			  const char *buf, size_t count,
-			  u32 reg)
-{
-	long value;
-	int ret;
-
-	if (reg >= GSS_NUM_REGS)
-		return -EINVAL;
-
-	ret = kstrtol(buf, 16, &value);
-	if (ret) {
-		count = -EFAULT;
-		goto err;
-	}
-
-	ret = zynqmp_pm_write_pggs(reg, value);
-	if (ret)
-		count = -EFAULT;
-
-err:
-	return count;
-}
-
-#define PGGS0_SHOW(N)						\
-	ssize_t pggs##N##_show(struct device *device,		\
-			       struct device_attribute *attr,	\
-			       char *buf)			\
-	{							\
-		return pggs_show(device, attr, buf, N);		\
-	}
-
-#define PGGS0_STORE(N)						\
-	ssize_t pggs##N##_store(struct device *device,		\
-				struct device_attribute *attr,	\
-				const char *buf,		\
-				size_t count)			\
-	{							\
-		return pggs_store(device, attr, buf, count, N);	\
-	}
-
-/* PGGS register show functions */
-static PGGS0_SHOW(0);
-static PGGS0_SHOW(1);
-static PGGS0_SHOW(2);
-static PGGS0_SHOW(3);
-
-/* PGGS register store functions */
-static PGGS0_STORE(0);
-static PGGS0_STORE(1);
-static PGGS0_STORE(2);
-static PGGS0_STORE(3);
-
-/* GGS register attributes */
-static DEVICE_ATTR_RW(ggs0);
-static DEVICE_ATTR_RW(ggs1);
-static DEVICE_ATTR_RW(ggs2);
-static DEVICE_ATTR_RW(ggs3);
-
-/* PGGS register attributes */
-static DEVICE_ATTR_RW(pggs0);
-static DEVICE_ATTR_RW(pggs1);
-static DEVICE_ATTR_RW(pggs2);
-static DEVICE_ATTR_RW(pggs3);
-
-static struct attribute *zynqmp_firmware_attrs[] = {
-	&dev_attr_ggs0.attr,
-	&dev_attr_ggs1.attr,
-	&dev_attr_ggs2.attr,
-	&dev_attr_ggs3.attr,
-	&dev_attr_pggs0.attr,
-	&dev_attr_pggs1.attr,
-	&dev_attr_pggs2.attr,
-	&dev_attr_pggs3.attr,
-	&dev_attr_shutdown_scope.attr,
-	&dev_attr_health_status.attr,
-	NULL,
-};
-
-ATTRIBUTE_GROUPS(zynqmp_firmware);
+EXPORT_SYMBOL_GPL(zynqmp_pm_get_eemi_ops);
 
 static int zynqmp_firmware_probe(struct platform_device *pdev)
 {
@@ -1265,6 +880,11 @@ static int zynqmp_firmware_probe(struct platform_device *pdev)
 	pr_info("%s Trustzone version v%d.%d\n", __func__,
 		pm_tz_version >> 16, pm_tz_version & 0xFFFF);
 
+	/* Assign eemi_ops_table */
+	eemi_ops_tbl = &eemi_ops;
+
+	zynqmp_pm_api_debugfs_init();
+
 	ret = mfd_add_devices(&pdev->dev, PLATFORM_DEVID_NONE, firmware_devs,
 			      ARRAY_SIZE(firmware_devs), NULL, 0, NULL);
 	if (ret) {
@@ -1272,23 +892,13 @@ static int zynqmp_firmware_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	zynqmp_pm_api_debugfs_init();
-
 	return of_platform_populate(dev->of_node, NULL, NULL, dev);
 }
 
 static int zynqmp_firmware_remove(struct platform_device *pdev)
 {
-	struct pm_api_feature_data *feature_data;
-	int i;
-
 	mfd_remove_devices(&pdev->dev);
 	zynqmp_pm_api_debugfs_exit();
-
-	hash_for_each(pm_api_features_map, i, feature_data, hentry) {
-		hash_del(&feature_data->hentry);
-		kfree(feature_data);
-	}
 
 	return 0;
 }
@@ -1304,7 +914,6 @@ static struct platform_driver zynqmp_firmware_driver = {
 	.driver = {
 		.name = "zynqmp_firmware",
 		.of_match_table = zynqmp_firmware_of_match,
-		.dev_groups = zynqmp_firmware_groups,
 	},
 	.probe = zynqmp_firmware_probe,
 	.remove = zynqmp_firmware_remove,

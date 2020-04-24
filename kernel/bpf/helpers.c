@@ -151,19 +151,7 @@ BPF_CALL_0(bpf_ktime_get_ns)
 
 const struct bpf_func_proto bpf_ktime_get_ns_proto = {
 	.func		= bpf_ktime_get_ns,
-	.gpl_only	= false,
-	.ret_type	= RET_INTEGER,
-};
-
-BPF_CALL_0(bpf_ktime_get_boot_ns)
-{
-	/* NMI safe access to clock boottime */
-	return ktime_get_boot_fast_ns();
-}
-
-const struct bpf_func_proto bpf_ktime_get_boot_ns_proto = {
-	.func		= bpf_ktime_get_boot_ns,
-	.gpl_only	= false,
+	.gpl_only	= true,
 	.ret_type	= RET_INTEGER,
 };
 
@@ -601,12 +589,6 @@ const struct bpf_func_proto bpf_event_output_data_proto =  {
 	.arg5_type      = ARG_CONST_SIZE_OR_ZERO,
 };
 
-const struct bpf_func_proto bpf_get_current_task_proto __weak;
-const struct bpf_func_proto bpf_probe_read_user_proto __weak;
-const struct bpf_func_proto bpf_probe_read_user_str_proto __weak;
-const struct bpf_func_proto bpf_probe_read_kernel_proto __weak;
-const struct bpf_func_proto bpf_probe_read_kernel_str_proto __weak;
-
 const struct bpf_func_proto *
 bpf_base_func_proto(enum bpf_func_id func_id)
 {
@@ -633,23 +615,11 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 		return &bpf_tail_call_proto;
 	case BPF_FUNC_ktime_get_ns:
 		return &bpf_ktime_get_ns_proto;
-	case BPF_FUNC_ktime_get_boot_ns:
-		return &bpf_ktime_get_boot_ns_proto;
-	case BPF_FUNC_ringbuf_output:
-		return &bpf_ringbuf_output_proto;
-	case BPF_FUNC_ringbuf_reserve:
-		return &bpf_ringbuf_reserve_proto;
-	case BPF_FUNC_ringbuf_submit:
-		return &bpf_ringbuf_submit_proto;
-	case BPF_FUNC_ringbuf_discard:
-		return &bpf_ringbuf_discard_proto;
-	case BPF_FUNC_ringbuf_query:
-		return &bpf_ringbuf_query_proto;
 	default:
 		break;
 	}
 
-	if (!bpf_capable())
+	if (!capable(CAP_SYS_ADMIN))
 		return NULL;
 
 	switch (func_id) {
@@ -658,29 +628,9 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 	case BPF_FUNC_spin_unlock:
 		return &bpf_spin_unlock_proto;
 	case BPF_FUNC_trace_printk:
-		if (!perfmon_capable())
-			return NULL;
 		return bpf_get_trace_printk_proto();
 	case BPF_FUNC_jiffies64:
 		return &bpf_jiffies64_proto;
-	default:
-		break;
-	}
-
-	if (!perfmon_capable())
-		return NULL;
-
-	switch (func_id) {
-	case BPF_FUNC_get_current_task:
-		return &bpf_get_current_task_proto;
-	case BPF_FUNC_probe_read_user:
-		return &bpf_probe_read_user_proto;
-	case BPF_FUNC_probe_read_kernel:
-		return &bpf_probe_read_kernel_proto;
-	case BPF_FUNC_probe_read_user_str:
-		return &bpf_probe_read_user_str_proto;
-	case BPF_FUNC_probe_read_kernel_str:
-		return &bpf_probe_read_kernel_str_proto;
 	default:
 		return NULL;
 	}

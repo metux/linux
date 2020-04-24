@@ -57,7 +57,6 @@
 #include "en/rep/neigh.h"
 #include "en_tc.h"
 #include "eswitch.h"
-#include "esw/chains.h"
 #include "fs_core.h"
 #include "en/port.h"
 #include "en/tc_tun.h"
@@ -66,6 +65,7 @@
 #include "en/mod_hdr.h"
 #include "lib/devcom.h"
 #include "lib/geneve.h"
+#include "lib/fs_chains.h"
 #include "diag/en_tc_tracepoint.h"
 
 #define MLX5_MH_ACT_SZ MLX5_UN_SZ_BYTES(set_add_copy_action_in_auto)
@@ -180,17 +180,17 @@ struct mlx5e_tc_attr_to_reg_mapping mlx5e_tc_attr_to_reg_mappings[] = {
 	},
 	[TUNNEL_TO_REG] = {
 		.mfield = MLX5_ACTION_IN_FIELD_METADATA_REG_C_1,
-		.moffset = 3,
-		.mlen = 1,
+		.moffset = 1,
+		.mlen = 3,
 		.soffset = MLX5_BYTE_OFF(fte_match_param,
 					 misc_parameters_2.metadata_reg_c_1),
 	},
 	[ZONE_TO_REG] = zone_to_reg_ct,
+	[ZONE_RESTORE_TO_REG] = zone_restore_to_reg_ct,
 	[CTSTATE_TO_REG] = ctstate_to_reg_ct,
 	[MARK_TO_REG] = mark_to_reg_ct,
 	[LABELS_TO_REG] = labels_to_reg_ct,
 	[FTEID_TO_REG] = fteid_to_reg_ct,
-	[TUPLEID_TO_REG] = tupleid_to_reg_ct,
 };
 
 static void mlx5e_put_flow_tunnel_id(struct mlx5e_tc_flow *flow);
@@ -1180,7 +1180,7 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 	int err = 0;
 	int out_index;
 
-	if (!mlx5_esw_chains_prios_supported(esw) && attr->prio != 1) {
+	if (!mlx5_chains_prios_supported(esw_chains(esw)) && attr->prio != 1) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "E-switch priorities unsupported, upgrade FW");
 		return -EOPNOTSUPP;
@@ -1191,14 +1191,14 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 	 * FDB_FT_CHAIN which is outside tc range.
 	 * See mlx5e_rep_setup_ft_cb().
 	 */
-	max_chain = mlx5_esw_chains_get_chain_range(esw);
+	max_chain = mlx5_chains_get_chain_range(esw_chains(esw));
 	if (!mlx5e_is_ft_flow(flow) && attr->chain > max_chain) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Requested chain is out of supported range");
 		return -EOPNOTSUPP;
 	}
 
-	max_prio = mlx5_esw_chains_get_prio_range(esw);
+	max_prio = mlx5_chains_get_prio_range(esw_chains(esw));
 	if (attr->prio > max_prio) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Requested priority is out of supported range");
@@ -1290,11 +1290,8 @@ static void mlx5e_tc_del_fdb_flow(struct mlx5e_priv *priv,
 
 	mlx5e_put_flow_tunnel_id(flow);
 
-	if (flow_flag_test(flow, NOT_READY)) {
+	if (flow_flag_test(flow, NOT_READY))
 		remove_unready_flow(flow);
-		kvfree(attr->parse_attr);
-		return;
-	}
 
 	if (mlx5e_is_offloaded_flow(flow)) {
 		if (flow_flag_test(flow, SLOW))
@@ -1314,6 +1311,8 @@ static void mlx5e_tc_del_fdb_flow(struct mlx5e_priv *priv,
 			kfree(attr->parse_attr->tun_info[out_index]);
 		}
 	kvfree(attr->parse_attr);
+
+	mlx5_tc_ct_match_del(priv, &flow->esw_attr->ct_attr);
 
 	if (attr->action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR)
 		mlx5e_detach_mod_hdr(priv, flow);
@@ -2626,6 +2625,22 @@ static struct mlx5_fields fields[] = {
 	OFFLOAD(UDP_DPORT, 16, U16_MAX, udp.dest,   0, udp_dport),
 };
 
+static unsigned long mask_to_le(unsigned long mask, int size)
+{
+	__be32 mask_be32;
+	__be16 mask_be16;
+
+	if (size == 32) {
+		mask_be32 = (__force __be32)(mask);
+		mask = (__force unsigned long)cpu_to_le32(be32_to_cpu(mask_be32));
+	} else if (size == 16) {
+		mask_be32 = (__force __be32)(mask);
+		mask_be16 = *(__be16 *)&mask_be32;
+		mask = (__force unsigned long)cpu_to_le16(be16_to_cpu(mask_be16));
+	}
+
+	return mask;
+}
 static int offload_pedit_fields(struct mlx5e_priv *priv,
 				int namespace,
 				struct pedit_headers_action *hdrs,
@@ -2639,9 +2654,7 @@ static int offload_pedit_fields(struct mlx5e_priv *priv,
 	u32 *s_masks_p, *a_masks_p, s_mask, a_mask;
 	struct mlx5e_tc_mod_hdr_acts *mod_acts;
 	struct mlx5_fields *f;
-	unsigned long mask;
-	__be32 mask_be32;
-	__be16 mask_be16;
+	unsigned long mask, field_mask;
 	int err;
 	u8 cmd;
 
@@ -2707,14 +2720,7 @@ static int offload_pedit_fields(struct mlx5e_priv *priv,
 		if (skip)
 			continue;
 
-		if (f->field_bsize == 32) {
-			mask_be32 = (__force __be32)(mask);
-			mask = (__force unsigned long)cpu_to_le32(be32_to_cpu(mask_be32));
-		} else if (f->field_bsize == 16) {
-			mask_be32 = (__force __be32)(mask);
-			mask_be16 = *(__be16 *)&mask_be32;
-			mask = (__force unsigned long)cpu_to_le16(be16_to_cpu(mask_be16));
-		}
+		mask = mask_to_le(mask, f->field_bsize);
 
 		first = find_first_bit(&mask, f->field_bsize);
 		next_z = find_next_zero_bit(&mask, f->field_bsize, first);
@@ -2745,9 +2751,10 @@ static int offload_pedit_fields(struct mlx5e_priv *priv,
 		if (cmd == MLX5_ACTION_TYPE_SET) {
 			int start;
 
+			field_mask = mask_to_le(f->field_mask, f->field_bsize);
+
 			/* if field is bit sized it can start not from first bit */
-			start = find_first_bit((unsigned long *)&f->field_mask,
-					       f->field_bsize);
+			start = find_first_bit(&field_mask, f->field_bsize);
 
 			MLX5_SET(set_action_in, action, offset, first - start);
 			/* length is num of bits to be written, zero means length of 32 */
@@ -3838,7 +3845,7 @@ static int mlx5_validate_goto_chain(struct mlx5_eswitch *esw,
 				    u32 actions,
 				    struct netlink_ext_ack *extack)
 {
-	u32 max_chain = mlx5_esw_chains_get_chain_range(esw);
+	u32 max_chain = mlx5_chains_get_chain_range(esw_chains(esw));
 	struct mlx5_esw_flow_attr *attr = flow->esw_attr;
 	bool ft_flow = mlx5e_is_ft_flow(flow);
 	u32 dest_chain = act->chain_index;
@@ -3848,7 +3855,7 @@ static int mlx5_validate_goto_chain(struct mlx5_eswitch *esw,
 		return -EOPNOTSUPP;
 	}
 
-	if (!mlx5_esw_chains_backwards_supported(esw) &&
+	if (!mlx5_chains_backwards_supported(esw_chains(esw)) &&
 	    dest_chain <= attr->chain) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Goto lower numbered chain isn't supported");
@@ -4413,7 +4420,8 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 		goto err_free;
 
 	/* actions validation depends on parsing the ct matches first */
-	err = mlx5_tc_ct_parse_match(priv, &parse_attr->spec, f, extack);
+	err = mlx5_tc_ct_match_add(priv, &parse_attr->spec, f,
+				   &flow->esw_attr->ct_attr, extack);
 	if (err)
 		goto err_free;
 

@@ -30,7 +30,6 @@
 #include <linux/completion.h>
 #include <linux/of.h>
 #include <linux/irq_work.h>
-#include <linux/kernel_stat.h>
 #include <linux/kexec.h>
 #include <linux/kvm_host.h>
 
@@ -53,8 +52,6 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
-#undef CREATE_TRACE_POINTS
-#include <trace/hooks/debug.h>
 
 DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
 EXPORT_PER_CPU_SYMBOL(cpu_number);
@@ -75,8 +72,7 @@ enum ipi_msg_type {
 	IPI_CPU_CRASH_STOP,
 	IPI_TIMER,
 	IPI_IRQ_WORK,
-	IPI_WAKEUP,
-	NR_IPI
+	IPI_WAKEUP
 };
 
 static int ipi_irq_base __read_mostly;
@@ -84,9 +80,9 @@ static int nr_ipi __read_mostly = NR_IPI;
 static struct irq_desc *ipi_desc[NR_IPI] __read_mostly;
 
 static void ipi_setup(int cpu);
+static void ipi_teardown(int cpu);
 
 #ifdef CONFIG_HOTPLUG_CPU
-static void ipi_teardown(int cpu);
 static int op_cpu_kill(unsigned int cpu);
 #else
 static inline int op_cpu_kill(unsigned int cpu)
@@ -789,6 +785,13 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	}
 }
 
+void (*__smp_cross_call)(const struct cpumask *, unsigned int);
+
+void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
+{
+	__smp_cross_call = fn;
+}
+
 static const char *ipi_types[NR_IPI] __tracepoint_string = {
 #define S(x,s)	[x] = s
 	S(IPI_RESCHEDULE, "Rescheduling interrupts"),
@@ -800,25 +803,35 @@ static const char *ipi_types[NR_IPI] __tracepoint_string = {
 	S(IPI_WAKEUP, "CPU wake-up interrupts"),
 };
 
-static void smp_cross_call(const struct cpumask *target, unsigned int ipinr);
+static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
+{
+	trace_ipi_raise(target, ipi_types[ipinr]);
+	__smp_cross_call(target, ipinr);
+}
 
-unsigned long irq_err_count;
-
-int arch_show_interrupts(struct seq_file *p, int prec)
+void show_ipi_list(struct seq_file *p, int prec)
 {
 	unsigned int cpu, i;
 
 	for (i = 0; i < NR_IPI; i++) {
-		unsigned int irq = irq_desc_get_irq(ipi_desc[i]);
 		seq_printf(p, "%*s%u:%s", prec - 1, "IPI", i,
 			   prec >= 4 ? " " : "");
 		for_each_online_cpu(cpu)
-			seq_printf(p, "%10u ", kstat_irqs_cpu(irq, cpu));
+			seq_printf(p, "%10u ",
+				   __get_irq_stat(cpu, ipi_irqs[i]));
 		seq_printf(p, "      %s\n", ipi_types[i]);
 	}
+}
 
-	seq_printf(p, "%*s: %10lu\n", prec, "Err", irq_err_count);
-	return 0;
+u64 smp_irq_stat_cpu(unsigned int cpu)
+{
+	u64 sum = 0;
+	int i;
+
+	for (i = 0; i < NR_IPI; i++)
+		sum += __get_irq_stat(cpu, ipi_irqs[i]);
+
+	return sum;
 }
 
 void arch_send_call_function_ipi_mask(const struct cpumask *mask)
@@ -841,7 +854,8 @@ void arch_send_wakeup_ipi_mask(const struct cpumask *mask)
 #ifdef CONFIG_IRQ_WORK
 void arch_irq_work_raise(void)
 {
-	smp_cross_call(cpumask_of(smp_processor_id()), IPI_IRQ_WORK);
+	if (__smp_cross_call)
+		smp_cross_call(cpumask_of(smp_processor_id()), IPI_IRQ_WORK);
 }
 #endif
 
@@ -893,8 +907,10 @@ static void do_handle_IPI(int ipinr)
 {
 	unsigned int cpu = smp_processor_id();
 
-	if ((unsigned)ipinr < NR_IPI)
+	if ((unsigned)ipinr < NR_IPI) {
 		trace_ipi_entry_rcuidle(ipi_types[ipinr]);
+		__inc_irq_stat(cpu, ipi_irqs[ipinr]);
+	}
 
 	switch (ipinr) {
 	case IPI_RESCHEDULE:
@@ -906,7 +922,6 @@ static void do_handle_IPI(int ipinr)
 		break;
 
 	case IPI_CPU_STOP:
-		trace_android_vh_ipi_stop(get_irq_regs());
 		local_cpu_stop();
 		break;
 
@@ -947,41 +962,50 @@ static void do_handle_IPI(int ipinr)
 		trace_ipi_exit_rcuidle(ipi_types[ipinr]);
 }
 
+/* Legacy version, should go away once all irqchips have been converted */
+void handle_IPI(int ipinr, struct pt_regs *regs)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	irq_enter();
+	do_handle_IPI(ipinr);
+	irq_exit();
+
+	set_irq_regs(old_regs);
+}
+
 static irqreturn_t ipi_handler(int irq, void *data)
 {
 	do_handle_IPI(irq - ipi_irq_base);
 	return IRQ_HANDLED;
 }
 
-static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
+static void ipi_send(const struct cpumask *target, unsigned int ipi)
 {
-	trace_ipi_raise(target, ipi_types[ipinr]);
-	__ipi_send_mask(ipi_desc[ipinr], target);
+	__ipi_send_mask(ipi_desc[ipi], target);
 }
 
 static void ipi_setup(int cpu)
 {
 	int i;
 
-	if (WARN_ON_ONCE(!ipi_irq_base))
+	if (!ipi_irq_base)
 		return;
 
 	for (i = 0; i < nr_ipi; i++)
 		enable_percpu_irq(ipi_irq_base + i, 0);
 }
 
-#ifdef CONFIG_HOTPLUG_CPU
 static void ipi_teardown(int cpu)
 {
 	int i;
 
-	if (WARN_ON_ONCE(!ipi_irq_base))
+	if (!ipi_irq_base)
 		return;
 
 	for (i = 0; i < nr_ipi; i++)
 		disable_percpu_irq(ipi_irq_base + i);
 }
-#endif
 
 void __init set_smp_ipi_range(int ipi_base, int n)
 {
@@ -994,7 +1018,7 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 		int err;
 
 		err = request_percpu_irq(ipi_base + i, ipi_handler,
-					 "IPI", &cpu_number);
+					 "IPI", &irq_stat);
 		WARN_ON(err);
 
 		ipi_desc[i] = irq_to_desc(ipi_base + i);
@@ -1002,6 +1026,7 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 	}
 
 	ipi_irq_base = ipi_base;
+	__smp_cross_call = ipi_send;
 
 	/* Setup the boot CPU immediately */
 	ipi_setup(smp_processor_id());

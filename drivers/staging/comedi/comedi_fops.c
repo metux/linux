@@ -2873,16 +2873,6 @@ struct comedi32_insnlist_struct {
 	compat_uptr_t insns;	/* 32-bit 'struct comedi_insn *' */
 };
 
-/* Handle translated ioctl. */
-static int translated_ioctl(struct file *file, unsigned int cmd,
-			    unsigned long arg)
-{
-	if (file->f_op->unlocked_ioctl)
-		return file->f_op->unlocked_ioctl(file, cmd, arg);
-
-	return -ENOTTY;
-}
-
 /* Handle 32-bit COMEDI_CHANINFO ioctl. */
 static int compat_chaninfo(struct file *file, unsigned long arg)
 {
@@ -2914,7 +2904,7 @@ static int compat_chaninfo(struct file *file, unsigned long arg)
 	if (err)
 		return -EFAULT;
 
-	return translated_ioctl(file, COMEDI_CHANINFO, (unsigned long)chaninfo);
+	return comedi_unlocked_ioctl(file, COMEDI_CHANINFO, (unsigned long)chaninfo);
 }
 
 /* Handle 32-bit COMEDI_RANGEINFO ioctl. */
@@ -2944,7 +2934,7 @@ static int compat_rangeinfo(struct file *file, unsigned long arg)
 	if (err)
 		return -EFAULT;
 
-	return translated_ioctl(file, COMEDI_RANGEINFO,
+	return comedi_unlocked_ioctl(file, COMEDI_RANGEINFO,
 				(unsigned long)rangeinfo);
 }
 
@@ -3065,7 +3055,7 @@ static int compat_cmd(struct file *file, unsigned long arg)
 	if (rc)
 		return rc;
 
-	rc = translated_ioctl(file, COMEDI_CMD, (unsigned long)cmd);
+	rc = comedi_unlocked_ioctl(file, COMEDI_CMD, (unsigned long)cmd);
 	if (rc == -EAGAIN) {
 		/* Special case: copy cmd back to user. */
 		err = put_compat_cmd(cmd32, cmd);
@@ -3090,7 +3080,7 @@ static int compat_cmdtest(struct file *file, unsigned long arg)
 	if (rc)
 		return rc;
 
-	rc = translated_ioctl(file, COMEDI_CMDTEST, (unsigned long)cmd);
+	rc = comedi_unlocked_ioctl(file, COMEDI_CMDTEST, (unsigned long)cmd);
 	if (rc < 0)
 		return rc;
 
@@ -3176,7 +3166,7 @@ static int compat_insnlist(struct file *file, unsigned long arg)
 			return rc;
 	}
 
-	return translated_ioctl(file, COMEDI_INSNLIST,
+	return comedi_unlocked_ioctl(file, COMEDI_INSNLIST,
 				(unsigned long)&s->insnlist);
 }
 
@@ -3194,7 +3184,7 @@ static int compat_insn(struct file *file, unsigned long arg)
 	if (rc)
 		return rc;
 
-	return translated_ioctl(file, COMEDI_INSN, (unsigned long)insn);
+	return comedi_unlocked_ioctl(file, COMEDI_INSN, (unsigned long)insn);
 }
 
 /*
@@ -3214,7 +3204,7 @@ static long comedi_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
 	case COMEDI_BUFINFO:
 		/* Just need to translate the pointer argument. */
 		arg = (unsigned long)compat_ptr(arg);
-		rc = translated_ioctl(file, cmd, arg);
+		rc = comedi_unlocked_ioctl(file, cmd, arg);
 		break;
 	case COMEDI_LOCK:
 	case COMEDI_UNLOCK:
@@ -3223,7 +3213,7 @@ static long comedi_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
 	case COMEDI_SETRSUBD:
 	case COMEDI_SETWSUBD:
 		/* No translation needed. */
-		rc = translated_ioctl(file, cmd, arg);
+		rc = comedi_unlocked_ioctl(file, cmd, arg);
 		break;
 	case COMEDI32_CHANINFO:
 		rc = compat_chaninfo(file, arg);

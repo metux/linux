@@ -326,6 +326,7 @@ static void hinic_enable_rss(struct hinic_dev *nic_dev)
 	int i, node, err = 0;
 	u16 num_cpus = 0;
 
+	nic_dev->max_qps = hinic_hwdev_max_num_qps(hwdev);
 	if (nic_dev->max_qps <= 1) {
 		nic_dev->flags &= ~HINIC_RSS_ENABLE;
 		nic_dev->rss_limit = nic_dev->max_qps;
@@ -371,15 +372,14 @@ static void hinic_enable_rss(struct hinic_dev *nic_dev)
 		netif_err(nic_dev, drv, netdev, "Failed to init rss\n");
 }
 
-int hinic_open(struct net_device *netdev)
+static int hinic_open(struct net_device *netdev)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
 	enum hinic_port_link_state link_state;
 	int err, ret;
 
 	if (!(nic_dev->flags & HINIC_INTF_UP)) {
-		err = hinic_hwdev_ifup(nic_dev->hwdev, nic_dev->sq_depth,
-				       nic_dev->rq_depth);
+		err = hinic_hwdev_ifup(nic_dev->hwdev);
 		if (err) {
 			netif_err(nic_dev, drv, netdev,
 				  "Failed - HW interface up\n");
@@ -426,6 +426,10 @@ int hinic_open(struct net_device *netdev)
 			  "Failed to set func port state\n");
 		goto err_func_port_state;
 	}
+
+	if (!HINIC_IS_VF(nic_dev->hwdev->hwif))
+		/* Wait up to 3 sec between port enable to link state */
+		msleep(3000);
 
 	down(&nic_dev->mgmt_lock);
 
@@ -483,10 +487,11 @@ err_create_txqs:
 	return err;
 }
 
-int hinic_close(struct net_device *netdev)
+static int hinic_close(struct net_device *netdev)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
 	unsigned int flags;
+	int err;
 
 	down(&nic_dev->mgmt_lock);
 
@@ -503,9 +508,20 @@ int hinic_close(struct net_device *netdev)
 	if (!HINIC_IS_VF(nic_dev->hwdev->hwif))
 		hinic_notify_all_vfs_link_changed(nic_dev->hwdev, 0);
 
-	hinic_port_set_state(nic_dev, HINIC_PORT_DISABLE);
+	err = hinic_port_set_func_state(nic_dev, HINIC_FUNC_PORT_DISABLE);
+	if (err) {
+		netif_err(nic_dev, drv, netdev,
+			  "Failed to set func port state\n");
+		nic_dev->flags |= (flags & HINIC_INTF_UP);
+		return err;
+	}
 
-	hinic_port_set_func_state(nic_dev, HINIC_FUNC_PORT_DISABLE);
+	err = hinic_port_set_state(nic_dev, HINIC_PORT_DISABLE);
+	if (err) {
+		netif_err(nic_dev, drv, netdev, "Failed to set port state\n");
+		nic_dev->flags |= (flags & HINIC_INTF_UP);
+		return err;
+	}
 
 	if (nic_dev->flags & HINIC_RSS_ENABLE) {
 		hinic_rss_deinit(nic_dev);
@@ -750,12 +766,10 @@ static void hinic_set_rx_mode(struct net_device *netdev)
 		  HINIC_RX_MODE_MC |
 		  HINIC_RX_MODE_BC;
 
-	if (netdev->flags & IFF_PROMISC) {
-		if (!HINIC_IS_VF(nic_dev->hwdev->hwif))
-			rx_mode |= HINIC_RX_MODE_PROMISC;
-	} else if (netdev->flags & IFF_ALLMULTI) {
+	if (netdev->flags & IFF_PROMISC)
+		rx_mode |= HINIC_RX_MODE_PROMISC;
+	else if (netdev->flags & IFF_ALLMULTI)
 		rx_mode |= HINIC_RX_MODE_MC_ALL;
-	}
 
 	rx_mode_work->rx_mode = rx_mode;
 
@@ -765,26 +779,8 @@ static void hinic_set_rx_mode(struct net_device *netdev)
 static void hinic_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
-	u16 sw_pi, hw_ci, sw_ci;
-	struct hinic_sq *sq;
-	u16 num_sqs, q_id;
-
-	num_sqs = hinic_hwdev_num_qps(nic_dev->hwdev);
 
 	netif_err(nic_dev, drv, netdev, "Tx timeout\n");
-
-	for (q_id = 0; q_id < num_sqs; q_id++) {
-		if (!netif_xmit_stopped(netdev_get_tx_queue(netdev, q_id)))
-			continue;
-
-		sq = hinic_hwdev_get_sq(nic_dev->hwdev, q_id);
-		sw_pi = atomic_read(&sq->wq->prod_idx) & sq->wq->mask;
-		hw_ci = be16_to_cpu(*(u16 *)(sq->hw_ci_addr)) & sq->wq->mask;
-		sw_ci = atomic_read(&sq->wq->cons_idx) & sq->wq->mask;
-		netif_err(nic_dev, drv, netdev, "Txq%d: sw_pi: %d, hw_ci: %d, sw_ci: %d, napi->state: 0x%lx\n",
-			  q_id, sw_pi, hw_ci, sw_ci,
-			  nic_dev->txqs[q_id].napi.state);
-	}
 }
 
 static void hinic_get_stats64(struct net_device *netdev,
@@ -837,29 +833,6 @@ static netdev_features_t hinic_fix_features(struct net_device *netdev,
 }
 
 static const struct net_device_ops hinic_netdev_ops = {
-	.ndo_open = hinic_open,
-	.ndo_stop = hinic_close,
-	.ndo_change_mtu = hinic_change_mtu,
-	.ndo_set_mac_address = hinic_set_mac_addr,
-	.ndo_validate_addr = eth_validate_addr,
-	.ndo_vlan_rx_add_vid = hinic_vlan_rx_add_vid,
-	.ndo_vlan_rx_kill_vid = hinic_vlan_rx_kill_vid,
-	.ndo_set_rx_mode = hinic_set_rx_mode,
-	.ndo_start_xmit = hinic_xmit_frame,
-	.ndo_tx_timeout = hinic_tx_timeout,
-	.ndo_get_stats64 = hinic_get_stats64,
-	.ndo_fix_features = hinic_fix_features,
-	.ndo_set_features = hinic_set_features,
-	.ndo_set_vf_mac	= hinic_ndo_set_vf_mac,
-	.ndo_set_vf_vlan = hinic_ndo_set_vf_vlan,
-	.ndo_get_vf_config = hinic_ndo_get_vf_config,
-	.ndo_set_vf_trust = hinic_ndo_set_vf_trust,
-	.ndo_set_vf_rate = hinic_ndo_set_vf_bw,
-	.ndo_set_vf_spoofchk = hinic_ndo_set_vf_spoofchk,
-	.ndo_set_vf_link_state = hinic_ndo_set_vf_link_state,
-};
-
-static const struct net_device_ops hinicvf_netdev_ops = {
 	.ndo_open = hinic_open,
 	.ndo_stop = hinic_close,
 	.ndo_change_mtu = hinic_change_mtu,
@@ -1010,10 +983,7 @@ static int nic_dev_init(struct pci_dev *pdev)
 
 	hinic_set_ethtool_ops(netdev);
 
-	if (!HINIC_IS_VF(hwdev->hwif))
-		netdev->netdev_ops = &hinic_netdev_ops;
-	else
-		netdev->netdev_ops = &hinicvf_netdev_ops;
+	netdev->netdev_ops = &hinic_netdev_ops;
 
 	netdev->max_mtu = ETH_MAX_MTU;
 
@@ -1026,11 +996,8 @@ static int nic_dev_init(struct pci_dev *pdev)
 	nic_dev->rxqs = NULL;
 	nic_dev->tx_weight = tx_weight;
 	nic_dev->rx_weight = rx_weight;
-	nic_dev->sq_depth = HINIC_SQ_DEPTH;
-	nic_dev->rq_depth = HINIC_RQ_DEPTH;
 	nic_dev->sriov_info.hwdev = hwdev;
 	nic_dev->sriov_info.pdev = pdev;
-	nic_dev->max_qps = num_qps;
 
 	sema_init(&nic_dev->mgmt_lock, 1);
 
@@ -1223,8 +1190,6 @@ static void hinic_remove(struct pci_dev *pdev)
 	}
 
 	unregister_netdev(netdev);
-
-	hinic_port_del_mac(nic_dev, netdev->dev_addr, 0);
 
 	hinic_hwdev_cb_unregister(nic_dev->hwdev,
 				  HINIC_MGMT_MSG_CMD_LINK_STATUS);

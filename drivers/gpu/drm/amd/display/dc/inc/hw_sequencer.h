@@ -201,6 +201,10 @@ struct hw_sequencer_funcs {
 			uint32_t backlight_pwm_u16_16,
 			uint32_t frame_ramp);
 
+	void (*set_abm_immediate_disable)(struct pipe_ctx *pipe_ctx);
+
+	void (*set_pipe)(struct pipe_ctx *pipe_ctx);
+
 
 };
 

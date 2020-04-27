@@ -66,10 +66,6 @@ struct hw_sequencer_funcs {
 			int num_planes, struct dc_state *context);
 	void (*program_front_end_for_ctx)(struct dc *dc,
 			struct dc_state *context);
-	bool (*disconnect_pipes)(struct dc *dc,
-			struct dc_state *context);
-	void (*wait_for_pending_cleared)(struct dc *dc,
-			struct dc_state *context);
 	void (*post_unlock_program_front_end)(struct dc *dc,
 			struct dc_state *context);
 	void (*update_plane_addr)(const struct dc *dc,
@@ -204,6 +200,10 @@ struct hw_sequencer_funcs {
 	bool (*set_backlight_level)(struct pipe_ctx *pipe_ctx,
 			uint32_t backlight_pwm_u16_16,
 			uint32_t frame_ramp);
+
+	void (*set_abm_immediate_disable)(struct pipe_ctx *pipe_ctx);
+
+	void (*set_pipe)(struct pipe_ctx *pipe_ctx);
 
 
 };

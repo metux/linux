@@ -91,8 +91,9 @@ static const struct hw_sequencer_funcs dcn21_funcs = {
 	.set_cursor_attribute = dcn10_set_cursor_attribute,
 	.set_cursor_sdr_white_level = dcn10_set_cursor_sdr_white_level,
 	.power_down = dce110_power_down,
-	.set_backlight_level = dce110_set_backlight_level,
-	.set_abm_immediate_disable = dce110_set_abm_immediate_disable,
+	.set_backlight_level = dcn21_set_backlight_level,
+	.set_abm_immediate_disable = dcn21_set_abm_immediate_disable,
+	.set_pipe = dcn21_set_pipe,
 };
 
 static const struct hwseq_private_funcs dcn21_private_funcs = {

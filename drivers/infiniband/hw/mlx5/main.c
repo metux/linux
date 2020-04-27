@@ -3698,13 +3698,12 @@ static struct mlx5_ib_flow_handler *_create_flow_rule(struct mlx5_ib_dev *dev,
 		if (!dest_num)
 			rule_dst = NULL;
 	} else {
-		if (flow_attr->flags & IB_FLOW_ATTR_FLAGS_DONT_TRAP)
-			flow_act.action |=
-				MLX5_FLOW_CONTEXT_ACTION_FWD_NEXT_PRIO;
 		if (is_egress)
 			flow_act.action |= MLX5_FLOW_CONTEXT_ACTION_ALLOW;
-		else if (dest_num)
-			flow_act.action |= MLX5_FLOW_CONTEXT_ACTION_FWD_DEST;
+		else
+			flow_act.action |=
+				dest_num ?  MLX5_FLOW_CONTEXT_ACTION_FWD_DEST :
+					MLX5_FLOW_CONTEXT_ACTION_FWD_NEXT_PRIO;
 	}
 
 	if ((spec->flow_context.flags & FLOW_CONTEXT_HAS_TAG)  &&
@@ -3748,6 +3747,30 @@ static struct mlx5_ib_flow_handler *create_flow_rule(struct mlx5_ib_dev *dev,
 	return _create_flow_rule(dev, ft_prio, flow_attr, dst, 0, NULL);
 }
 
+static struct mlx5_ib_flow_handler *create_dont_trap_rule(struct mlx5_ib_dev *dev,
+							  struct mlx5_ib_flow_prio *ft_prio,
+							  struct ib_flow_attr *flow_attr,
+							  struct mlx5_flow_destination *dst)
+{
+	struct mlx5_ib_flow_handler *handler_dst = NULL;
+	struct mlx5_ib_flow_handler *handler = NULL;
+
+	handler = create_flow_rule(dev, ft_prio, flow_attr, NULL);
+	if (!IS_ERR(handler)) {
+		handler_dst = create_flow_rule(dev, ft_prio,
+					       flow_attr, dst);
+		if (IS_ERR(handler_dst)) {
+			mlx5_del_flow_rules(handler->rule);
+			ft_prio->refcount--;
+			kfree(handler);
+			handler = handler_dst;
+		} else {
+			list_add(&handler_dst->list, &handler->list);
+		}
+	}
+
+	return handler;
+}
 enum {
 	LEFTOVERS_MC,
 	LEFTOVERS_UC,
@@ -3944,18 +3967,22 @@ static struct ib_flow *mlx5_ib_create_flow(struct ib_qp *qp,
 		dst->type = MLX5_FLOW_DESTINATION_TYPE_PORT;
 	} else {
 		dst->type = MLX5_FLOW_DESTINATION_TYPE_TIR;
-		if (mqp->flags & MLX5_IB_QP_RSS)
+		if (mqp->is_rss)
 			dst->tir_num = mqp->rss_qp.tirn;
 		else
 			dst->tir_num = mqp->raw_packet_qp.rq.tirn;
 	}
 
 	if (flow_attr->type == IB_FLOW_ATTR_NORMAL) {
-		underlay_qpn = (mqp->flags & IB_QP_CREATE_SOURCE_QPN) ?
-				       mqp->underlay_qpn :
-				       0;
-		handler = _create_flow_rule(dev, ft_prio, flow_attr, dst,
-					    underlay_qpn, ucmd);
+		if (flow_attr->flags & IB_FLOW_ATTR_FLAGS_DONT_TRAP)  {
+			handler = create_dont_trap_rule(dev, ft_prio,
+							flow_attr, dst);
+		} else {
+			underlay_qpn = (mqp->flags & IB_QP_CREATE_SOURCE_QPN) ?
+					mqp->underlay_qpn : 0;
+			handler = _create_flow_rule(dev, ft_prio, flow_attr,
+						    dst, underlay_qpn, ucmd);
+		}
 	} else if (flow_attr->type == IB_FLOW_ATTR_ALL_DEFAULT ||
 		   flow_attr->type == IB_FLOW_ATTR_MC_DEFAULT) {
 		handler = create_leftovers_rule(dev, ft_prio, flow_attr,
@@ -4420,7 +4447,7 @@ static int mlx5_ib_mcg_attach(struct ib_qp *ibqp, union ib_gid *gid, u16 lid)
 	uid = ibqp->pd ?
 		to_mpd(ibqp->pd)->uid : 0;
 
-	if (mqp->flags & MLX5_IB_QP_UNDERLAY) {
+	if (mqp->flags & IB_QP_CREATE_SOURCE_QPN) {
 		mlx5_ib_dbg(dev, "Attaching a multi cast group to underlay QP is not supported\n");
 		return -EOPNOTSUPP;
 	}

@@ -77,6 +77,9 @@ struct mlx5_flow_attr {
 	};
 };
 
+#define MLX5E_TC_TABLE_CHAIN_TAG_BITS 16
+#define MLX5E_TC_TABLE_CHAIN_TAG_MASK GENMASK(MLX5E_TC_TABLE_CHAIN_TAG_BITS - 1, 0)
+
 #if IS_ENABLED(CONFIG_MLX5_CLS_ACT)
 
 struct tunnel_match_key {
@@ -101,9 +104,9 @@ struct tunnel_match_enc_opts {
  * Upper TUNNEL_INFO_BITS for general tunnel info.
  * Lower ENC_OPTS_BITS bits for enc_opts.
  */
-#define TUNNEL_INFO_BITS 6
+#define TUNNEL_INFO_BITS 12
 #define TUNNEL_INFO_BITS_MASK GENMASK(TUNNEL_INFO_BITS - 1, 0)
-#define ENC_OPTS_BITS 2
+#define ENC_OPTS_BITS 12
 #define ENC_OPTS_BITS_MASK GENMASK(ENC_OPTS_BITS - 1, 0)
 #define TUNNEL_ID_BITS (TUNNEL_INFO_BITS + ENC_OPTS_BITS)
 #define TUNNEL_ID_MASK GENMASK(TUNNEL_ID_BITS - 1, 0)
@@ -160,10 +163,11 @@ enum mlx5e_tc_attr_to_reg {
 	TUNNEL_TO_REG,
 	CTSTATE_TO_REG,
 	ZONE_TO_REG,
+	ZONE_RESTORE_TO_REG,
 	MARK_TO_REG,
 	LABELS_TO_REG,
 	FTEID_TO_REG,
-	TUPLEID_TO_REG,
+	NIC_CHAIN_TO_REG,
 };
 
 struct mlx5e_tc_attr_to_reg_mapping {
@@ -217,13 +221,16 @@ mlx5e_add_offloaded_nic_rule(struct mlx5e_priv *priv,
 			     struct mlx5_flow_spec *spec,
 			     struct mlx5_flow_attr *attr);
 void mlx5e_del_offloaded_nic_rule(struct mlx5e_priv *priv,
-				  struct mlx5_flow_handle *rule);
+				  struct mlx5_flow_handle *rule,
+				  struct mlx5_flow_attr *attr);
+
 #else /* CONFIG_MLX5_CLS_ACT */
 static inline int  mlx5e_tc_nic_init(struct mlx5e_priv *priv) { return 0; }
 static inline void mlx5e_tc_nic_cleanup(struct mlx5e_priv *priv) {}
 static inline int
 mlx5e_setup_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
 { return -EOPNOTSUPP; }
+
 #endif /* CONFIG_MLX5_CLS_ACT */
 
 struct mlx5_flow_attr *mlx5_alloc_flow_attr(enum mlx5_flow_namespace_type type);
@@ -240,6 +247,31 @@ static inline int  mlx5e_tc_num_filters(struct mlx5e_priv *priv,
 static inline int
 mlx5e_setup_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv)
 { return -EOPNOTSUPP; }
+#endif
+
+#if IS_ENABLED(CONFIG_MLX5_CLS_ACT)
+static inline bool mlx5e_cqe_regb_chain(struct mlx5_cqe64 *cqe)
+{
+#if IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
+	u32 chain, reg_b;
+
+	reg_b = be32_to_cpu(cqe->ft_metadata);
+
+	chain = reg_b & MLX5E_TC_TABLE_CHAIN_TAG_MASK;
+	if (chain)
+		return true;
+#endif
+
+	return false;
+}
+
+bool mlx5e_tc_update_skb(struct mlx5_cqe64 *cqe, struct sk_buff *skb);
+#else /* CONFIG_MLX5_CLS_ACT */
+static inline bool mlx5e_cqe_regb_chain(struct mlx5_cqe64 *cqe)
+{ return false; }
+static inline bool
+mlx5e_tc_update_skb(struct mlx5_cqe64 *cqe, struct sk_buff *skb)
+{ return true; }
 #endif
 
 #endif /* __MLX5_EN_TC_H__ */

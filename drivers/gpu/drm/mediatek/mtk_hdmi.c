@@ -1253,7 +1253,7 @@ static int mtk_hdmi_conn_mode_valid(struct drm_connector *conn,
 	struct mtk_hdmi *hdmi = hdmi_ctx_from_conn(conn);
 
 	dev_dbg(hdmi->dev, "xres=%d, yres=%d, refresh=%d, intl=%d clock=%d\n",
-		mode->hdisplay, mode->vdisplay, mode->vrefresh,
+		mode->hdisplay, mode->vdisplay, drm_mode_vrefresh(mode),
 		!!(mode->flags & DRM_MODE_FLAG_INTERLACE), mode->clock * 1000);
 
 	if (hdmi->bridge.next) {

@@ -330,7 +330,6 @@ static const struct drm_display_mode default_mode = {
 	.vsync_start = 2048 + 95,
 	.vsync_end = 2048 + 95 + 2,
 	.vtotal = 2048 + 95 + 2 + 23,
-	.vrefresh = 60,
 };
 
 static int kingdisplay_panel_get_modes(struct drm_panel *panel)
@@ -341,7 +340,7 @@ static int kingdisplay_panel_get_modes(struct drm_panel *panel)
 	if (!mode) {
 		DRM_DEV_ERROR(panel->drm->dev, "failed to add mode %ux%ux@%u\n",
 			      default_mode.hdisplay, default_mode.vdisplay,
-			      default_mode.vrefresh);
+			      drm_mode_vrefresh(&default_mode));
 		return -ENOMEM;
 	}
 

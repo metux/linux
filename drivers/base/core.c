@@ -9,6 +9,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/cpufreq.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/fwnode.h>
@@ -364,7 +365,6 @@ struct device_link *device_link_add(struct device *consumer,
 				link->flags |= DL_FLAG_STATELESS;
 				goto reorder;
 			} else {
-				link->flags |= DL_FLAG_STATELESS;
 				goto out;
 			}
 		}
@@ -433,16 +433,12 @@ struct device_link *device_link_add(struct device *consumer,
 	    flags & DL_FLAG_PM_RUNTIME)
 		pm_runtime_resume(supplier);
 
-	list_add_tail_rcu(&link->s_node, &supplier->links.consumers);
-	list_add_tail_rcu(&link->c_node, &consumer->links.suppliers);
-
 	if (flags & DL_FLAG_SYNC_STATE_ONLY) {
 		dev_dbg(consumer,
 			"Linked as a sync state only consumer to %s\n",
 			dev_name(supplier));
 		goto out;
 	}
-
 reorder:
 	/*
 	 * Move the consumer and all of the devices depending on it to the end
@@ -453,9 +449,12 @@ reorder:
 	 */
 	device_reorder_to_tail(consumer, NULL);
 
+	list_add_tail_rcu(&link->s_node, &supplier->links.consumers);
+	list_add_tail_rcu(&link->c_node, &consumer->links.suppliers);
+
 	dev_dbg(consumer, "Linked as a consumer to %s\n", dev_name(supplier));
 
-out:
+ out:
 	device_pm_unlock();
 	device_links_write_unlock();
 
@@ -830,13 +829,6 @@ static void __device_links_supplier_defer_sync(struct device *sup)
 		list_add_tail(&sup->links.defer_sync, &deferred_sync);
 }
 
-static void device_link_drop_managed(struct device_link *link)
-{
-	link->flags &= ~DL_FLAG_MANAGED;
-	WRITE_ONCE(link->status, DL_STATE_NONE);
-	kref_put(&link->kref, __device_link_del);
-}
-
 /**
  * device_links_driver_bound - Update device links after probing its driver.
  * @dev: Device to update the links for.
@@ -850,7 +842,7 @@ static void device_link_drop_managed(struct device_link *link)
  */
 void device_links_driver_bound(struct device *dev)
 {
-	struct device_link *link, *ln;
+	struct device_link *link;
 	LIST_HEAD(sync_list);
 
 	/*
@@ -890,35 +882,18 @@ void device_links_driver_bound(struct device *dev)
 	else
 		__device_links_queue_sync_state(dev, &sync_list);
 
-	list_for_each_entry_safe(link, ln, &dev->links.suppliers, c_node) {
-		struct device *supplier;
-
+	list_for_each_entry(link, &dev->links.suppliers, c_node) {
 		if (!(link->flags & DL_FLAG_MANAGED))
 			continue;
 
-		supplier = link->supplier;
-		if (link->flags & DL_FLAG_SYNC_STATE_ONLY) {
-			/*
-			 * When DL_FLAG_SYNC_STATE_ONLY is set, it means no
-			 * other DL_MANAGED_LINK_FLAGS have been set. So, it's
-			 * save to drop the managed link completely.
-			 */
-			device_link_drop_managed(link);
-		} else {
-			WARN_ON(link->status != DL_STATE_CONSUMER_PROBE);
-			WRITE_ONCE(link->status, DL_STATE_ACTIVE);
-		}
+		WARN_ON(link->status != DL_STATE_CONSUMER_PROBE);
+		WRITE_ONCE(link->status, DL_STATE_ACTIVE);
 
-		/*
-		 * This needs to be done even for the deleted
-		 * DL_FLAG_SYNC_STATE_ONLY device link in case it was the last
-		 * device link that was preventing the supplier from getting a
-		 * sync_state() call.
-		 */
 		if (defer_sync_state_count)
-			__device_links_supplier_defer_sync(supplier);
+			__device_links_supplier_defer_sync(link->supplier);
 		else
-			__device_links_queue_sync_state(supplier, &sync_list);
+			__device_links_queue_sync_state(link->supplier,
+							&sync_list);
 	}
 
 	dev->links.status = DL_DEV_DRIVER_BOUND;
@@ -926,6 +901,13 @@ void device_links_driver_bound(struct device *dev)
 	device_links_write_unlock();
 
 	device_links_flush_sync_list(&sync_list, dev);
+}
+
+static void device_link_drop_managed(struct device_link *link)
+{
+	link->flags &= ~DL_FLAG_MANAGED;
+	WRITE_ONCE(link->status, DL_STATE_NONE);
+	kref_put(&link->kref, __device_link_del);
 }
 
 /**
@@ -1392,7 +1374,7 @@ static void device_release(struct kobject *kobj)
 	else if (dev->class && dev->class->dev_release)
 		dev->class->dev_release(dev);
 	else
-		WARN(1, KERN_ERR "Device '%s' does not have a release() function, it is broken and must be fixed. See Documentation/core-api/kobject.rst.\n",
+		WARN(1, KERN_ERR "Device '%s' does not have a release() function, it is broken and must be fixed. See Documentation/kobject.txt.\n",
 			dev_name(dev));
 	kfree(p);
 }
@@ -2363,7 +2345,7 @@ static int device_private_init(struct device *dev)
 	return 0;
 }
 
-static u32 fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER;
+static u32 fw_devlink_flags = DL_FLAG_SYNC_STATE_ONLY;
 static int __init fw_devlink_setup(char *arg)
 {
 	if (!arg)
@@ -2386,11 +2368,6 @@ early_param("fw_devlink", fw_devlink_setup);
 u32 fw_devlink_get_flags(void)
 {
 	return fw_devlink_flags;
-}
-
-static bool fw_devlink_is_permissive(void)
-{
-	return fw_devlink_flags == DL_FLAG_SYNC_STATE_ONLY;
 }
 
 /**
@@ -2547,7 +2524,7 @@ int device_add(struct device *dev)
 	if (fw_devlink_flags && is_fwnode_dev &&
 	    fwnode_has_op(dev->fwnode, add_links)) {
 		fw_ret = fwnode_call_int_op(dev->fwnode, add_links, dev);
-		if (fw_ret == -ENODEV && !fw_devlink_is_permissive())
+		if (fw_ret == -ENODEV)
 			device_link_wait_for_mandatory_supplier(dev);
 		else if (fw_ret)
 			device_link_wait_for_optional_supplier(dev);
@@ -3212,6 +3189,40 @@ error:
 }
 
 /**
+ * device_create_vargs - creates a device and registers it with sysfs
+ * @class: pointer to the struct class that this device should be registered to
+ * @parent: pointer to the parent struct device of this new device, if any
+ * @devt: the dev_t for the char device to be added
+ * @drvdata: the data to be added to the device for callbacks
+ * @fmt: string for the device's name
+ * @args: va_list for the device's name
+ *
+ * This function can be used by char device classes.  A struct device
+ * will be created in sysfs, registered to the specified class.
+ *
+ * A "dev" file will be created, showing the dev_t for the device, if
+ * the dev_t is not 0,0.
+ * If a pointer to a parent struct device is passed in, the newly created
+ * struct device will be a child of that device in sysfs.
+ * The pointer to the struct device will be returned from the call.
+ * Any further sysfs files that might be required can be created using this
+ * pointer.
+ *
+ * Returns &struct device pointer on success, or ERR_PTR() on error.
+ *
+ * Note: the struct class passed to this function must have previously
+ * been created with a call to class_create().
+ */
+struct device *device_create_vargs(struct class *class, struct device *parent,
+				   dev_t devt, void *drvdata, const char *fmt,
+				   va_list args)
+{
+	return device_create_groups_vargs(class, parent, devt, drvdata, NULL,
+					  fmt, args);
+}
+EXPORT_SYMBOL_GPL(device_create_vargs);
+
+/**
  * device_create - creates a device and registers it with sysfs
  * @class: pointer to the struct class that this device should be registered to
  * @parent: pointer to the parent struct device of this new device, if any
@@ -3242,8 +3253,7 @@ struct device *device_create(struct class *class, struct device *parent,
 	struct device *dev;
 
 	va_start(vargs, fmt);
-	dev = device_create_groups_vargs(class, parent, devt, drvdata, NULL,
-					  fmt, vargs);
+	dev = device_create_vargs(class, parent, devt, drvdata, fmt, vargs);
 	va_end(vargs);
 	return dev;
 }
@@ -3624,6 +3634,8 @@ void device_shutdown(void)
 	wait_for_device_probe();
 	device_block_probing();
 
+	cpufreq_suspend();
+
 	spin_lock(&devices_kset->list_lock);
 	/*
 	 * Walk the devices list backward, shutting down each in turn.
@@ -3879,7 +3891,6 @@ void set_secondary_fwnode(struct device *dev, struct fwnode_handle *fwnode)
 	else
 		dev->fwnode = fwnode;
 }
-EXPORT_SYMBOL_GPL(set_secondary_fwnode);
 
 /**
  * device_set_of_node_from_dev - reuse device-tree node of another device

@@ -422,6 +422,7 @@ struct intel_fbc {
 
 		unsigned int fence_y_offset;
 		u16 gen9_wa_cfb_stride;
+		u16 interval;
 		s8 fence_id;
 	} state_cache;
 
@@ -446,6 +447,7 @@ struct intel_fbc {
 		int cfb_size;
 		unsigned int fence_y_offset;
 		u16 gen9_wa_cfb_stride;
+		u16 interval;
 		s8 fence_id;
 		bool plane_visible;
 	} params;
@@ -1264,6 +1266,11 @@ static inline struct drm_i915_private *pdev_to_i915(struct pci_dev *pdev)
 	     (engine__); \
 	     (engine__) = rb_to_uabi_engine(rb_next(&(engine__)->uabi_node)))
 
+#define for_each_uabi_class_engine(engine__, class__, i915__) \
+	for ((engine__) = intel_engine_lookup_user((i915__), (class__), 0); \
+	     (engine__) && (engine__)->uabi_class == (class__); \
+	     (engine__) = rb_to_uabi_engine(rb_next(&(engine__)->uabi_node)))
+
 #define I915_GTT_OFFSET_NONE ((u32)-1)
 
 /*
@@ -1641,6 +1648,8 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define HAS_DDI(dev_priv)		 (INTEL_INFO(dev_priv)->display.has_ddi)
 #define HAS_FPGA_DBG_UNCLAIMED(dev_priv) (INTEL_INFO(dev_priv)->has_fpga_dbg)
 #define HAS_PSR(dev_priv)		 (INTEL_INFO(dev_priv)->display.has_psr)
+#define HAS_PSR_HW_TRACKING(dev_priv) \
+	(INTEL_INFO(dev_priv)->display.has_psr_hw_tracking)
 #define HAS_TRANSCODER(dev_priv, trans)	 ((INTEL_INFO(dev_priv)->cpu_transcoder_mask & BIT(trans)) != 0)
 
 #define HAS_RC6(dev_priv)		 (INTEL_INFO(dev_priv)->has_rc6)

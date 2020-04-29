@@ -2333,7 +2333,7 @@ int repair_io_failure(struct btrfs_fs_info *fs_info, u64 ino, u64 start,
 	return 0;
 }
 
-int btrfs_repair_eb_io_failure(struct extent_buffer *eb, int mirror_num)
+int btrfs_repair_eb_io_failure(const struct extent_buffer *eb, int mirror_num)
 {
 	struct btrfs_fs_info *fs_info = eb->fs_info;
 	u64 start = eb->start;
@@ -4907,7 +4907,7 @@ static void __free_extent_buffer(struct extent_buffer *eb)
 	kmem_cache_free(extent_buffer_cache, eb);
 }
 
-int extent_buffer_under_io(struct extent_buffer *eb)
+int extent_buffer_under_io(const struct extent_buffer *eb)
 {
 	return (atomic_read(&eb->io_pages) ||
 		test_bit(EXTENT_BUFFER_WRITEBACK, &eb->bflags) ||
@@ -5012,7 +5012,7 @@ __alloc_extent_buffer(struct btrfs_fs_info *fs_info, u64 start,
 	return eb;
 }
 
-struct extent_buffer *btrfs_clone_extent_buffer(struct extent_buffer *src)
+struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 {
 	int i;
 	struct page *p;
@@ -5418,7 +5418,7 @@ void free_extent_buffer_stale(struct extent_buffer *eb)
 	release_extent_buffer(eb);
 }
 
-void clear_extent_buffer_dirty(struct extent_buffer *eb)
+void clear_extent_buffer_dirty(const struct extent_buffer *eb)
 {
 	int i;
 	int num_pages;
@@ -5714,7 +5714,7 @@ int memcmp_extent_buffer(const struct extent_buffer *eb, const void *ptrv,
 	return ret;
 }
 
-void write_extent_buffer_chunk_tree_uuid(struct extent_buffer *eb,
+void write_extent_buffer_chunk_tree_uuid(const struct extent_buffer *eb,
 		const void *srcv)
 {
 	char *kaddr;
@@ -5725,7 +5725,7 @@ void write_extent_buffer_chunk_tree_uuid(struct extent_buffer *eb,
 			BTRFS_FSID_SIZE);
 }
 
-void write_extent_buffer_fsid(struct extent_buffer *eb, const void *srcv)
+void write_extent_buffer_fsid(const struct extent_buffer *eb, const void *srcv)
 {
 	char *kaddr;
 
@@ -5735,7 +5735,7 @@ void write_extent_buffer_fsid(struct extent_buffer *eb, const void *srcv)
 			BTRFS_FSID_SIZE);
 }
 
-void write_extent_buffer(struct extent_buffer *eb, const void *srcv,
+void write_extent_buffer(const struct extent_buffer *eb, const void *srcv,
 			 unsigned long start, unsigned long len)
 {
 	size_t cur;
@@ -5766,7 +5766,7 @@ void write_extent_buffer(struct extent_buffer *eb, const void *srcv,
 	}
 }
 
-void memzero_extent_buffer(struct extent_buffer *eb, unsigned long start,
+void memzero_extent_buffer(const struct extent_buffer *eb, unsigned long start,
 		unsigned long len)
 {
 	size_t cur;
@@ -5795,8 +5795,8 @@ void memzero_extent_buffer(struct extent_buffer *eb, unsigned long start,
 	}
 }
 
-void copy_extent_buffer_full(struct extent_buffer *dst,
-			     struct extent_buffer *src)
+void copy_extent_buffer_full(const struct extent_buffer *dst,
+			     const struct extent_buffer *src)
 {
 	int i;
 	int num_pages;
@@ -5809,7 +5809,8 @@ void copy_extent_buffer_full(struct extent_buffer *dst,
 				page_address(src->pages[i]));
 }
 
-void copy_extent_buffer(struct extent_buffer *dst, struct extent_buffer *src,
+void copy_extent_buffer(const struct extent_buffer *dst,
+			const struct extent_buffer *src,
 			unsigned long dst_offset, unsigned long src_offset,
 			unsigned long len)
 {
@@ -5854,7 +5855,7 @@ void copy_extent_buffer(struct extent_buffer *dst, struct extent_buffer *src,
  * This helper hides the ugliness of finding the byte in an extent buffer which
  * contains a given bit.
  */
-static inline void eb_bitmap_offset(struct extent_buffer *eb,
+static inline void eb_bitmap_offset(const struct extent_buffer *eb,
 				    unsigned long start, unsigned long nr,
 				    unsigned long *page_index,
 				    size_t *page_offset)
@@ -5880,7 +5881,7 @@ static inline void eb_bitmap_offset(struct extent_buffer *eb,
  * @start: offset of the bitmap item in the extent buffer
  * @nr: bit number to test
  */
-int extent_buffer_test_bit(struct extent_buffer *eb, unsigned long start,
+int extent_buffer_test_bit(const struct extent_buffer *eb, unsigned long start,
 			   unsigned long nr)
 {
 	u8 *kaddr;
@@ -5902,7 +5903,7 @@ int extent_buffer_test_bit(struct extent_buffer *eb, unsigned long start,
  * @pos: bit number of the first bit
  * @len: number of bits to set
  */
-void extent_buffer_bitmap_set(struct extent_buffer *eb, unsigned long start,
+void extent_buffer_bitmap_set(const struct extent_buffer *eb, unsigned long start,
 			      unsigned long pos, unsigned long len)
 {
 	u8 *kaddr;
@@ -5944,8 +5945,9 @@ void extent_buffer_bitmap_set(struct extent_buffer *eb, unsigned long start,
  * @pos: bit number of the first bit
  * @len: number of bits to clear
  */
-void extent_buffer_bitmap_clear(struct extent_buffer *eb, unsigned long start,
-				unsigned long pos, unsigned long len)
+void extent_buffer_bitmap_clear(const struct extent_buffer *eb,
+				unsigned long start, unsigned long pos,
+				unsigned long len)
 {
 	u8 *kaddr;
 	struct page *page;
@@ -6006,8 +6008,9 @@ static void copy_pages(struct page *dst_page, struct page *src_page,
 		memcpy(dst_kaddr + dst_off, src_kaddr + src_off, len);
 }
 
-void memcpy_extent_buffer(struct extent_buffer *dst, unsigned long dst_offset,
-			   unsigned long src_offset, unsigned long len)
+void memcpy_extent_buffer(const struct extent_buffer *dst,
+			  unsigned long dst_offset, unsigned long src_offset,
+			  unsigned long len)
 {
 	struct btrfs_fs_info *fs_info = dst->fs_info;
 	size_t cur;
@@ -6051,8 +6054,9 @@ void memcpy_extent_buffer(struct extent_buffer *dst, unsigned long dst_offset,
 	}
 }
 
-void memmove_extent_buffer(struct extent_buffer *dst, unsigned long dst_offset,
-			   unsigned long src_offset, unsigned long len)
+void memmove_extent_buffer(const struct extent_buffer *dst,
+			   unsigned long dst_offset, unsigned long src_offset,
+			   unsigned long len)
 {
 	struct btrfs_fs_info *fs_info = dst->fs_info;
 	size_t cur;

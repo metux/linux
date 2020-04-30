@@ -166,6 +166,7 @@ xfs_fs_show_options(
 	{ XFS_MOUNT_DAX_ALWAYS,		",dax=always" },
 	{ XFS_MOUNT_DAX_NEVER,		",dax=never" },
 	{ 0, NULL }
+};
 	};
 	struct xfs_mount	*mp = XFS_M(root->d_sb);
 	struct proc_xfs_info	*xfs_infop;
@@ -1295,7 +1296,7 @@ xfs_fc_parse_param(
 		return 0;
 	case Opt_dax_enum:
 		xfs_mount_set_dax_mode(mp, result.uint_32);
-	return 0;
+		return 0;
 #endif
 	default:
 		xfs_warn(mp, "unknown mount option [%s].", param->key);
@@ -1505,6 +1506,8 @@ xfs_fc_fill_super(
 =======
 mp->m_flags &= ~XFS_MOUNT_DAX_ALWAYS;
 >>>>>>> fd58c62b6562 (fs/xfs: Change XFS_MOUNT_DAX to XFS_MOUNT_DAX_ALWAYS)
+=======
+>>>>>>> 02beb2686ff9 (fs/xfs: Make DAX mount option a tri-state)
 		}
 		if (xfs_sb_version_hasreflink(&mp->m_sb)) {
 			xfs_alert(mp,

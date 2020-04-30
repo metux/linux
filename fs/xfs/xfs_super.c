@@ -162,10 +162,10 @@ xfs_fs_show_options(
 		{ XFS_MOUNT_FILESTREAMS,	",filestreams" },
 		{ XFS_MOUNT_GRPID,		",grpid" },
 		{ XFS_MOUNT_DISCARD,		",discard" },
-		{ XFS_MOUNT_LARGEIO,		",largeio" },
-		{ XFS_MOUNT_DAX_ALWAYS,		",dax=always" },
-		{ XFS_MOUNT_DAX_NEVER,		",dax=never" },
-		{ 0, NULL }
+{ XFS_MOUNT_LARGEIO,		",largeio" },
+	{ XFS_MOUNT_DAX_ALWAYS,		",dax=always" },
+	{ XFS_MOUNT_DAX_NEVER,		",dax=never" },
+	{ 0, NULL }
 	};
 	struct xfs_mount	*mp = XFS_M(root->d_sb);
 	struct proc_xfs_info	*xfs_infop;
@@ -1295,7 +1295,7 @@ xfs_fc_parse_param(
 		return 0;
 	case Opt_dax_enum:
 		xfs_mount_set_dax_mode(mp, result.uint_32);
-		return 0;
+	return 0;
 #endif
 	default:
 		xfs_warn(mp, "unknown mount option [%s].", param->key);
@@ -1502,6 +1502,9 @@ xfs_fc_fill_super(
 			xfs_alert(mp,
 			"DAX unsupported by block device. Turning off DAX.");
 			xfs_mount_set_dax_mode(mp, XFS_DAX_NEVER);
+=======
+mp->m_flags &= ~XFS_MOUNT_DAX_ALWAYS;
+>>>>>>> fd58c62b6562 (fs/xfs: Change XFS_MOUNT_DAX to XFS_MOUNT_DAX_ALWAYS)
 		}
 		if (xfs_sb_version_hasreflink(&mp->m_sb)) {
 			xfs_alert(mp,

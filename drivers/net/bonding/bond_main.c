@@ -287,7 +287,7 @@ const char *bond_mode_name(int mode)
  * @skb: hw accel VLAN tagged skb to transmit
  * @slave_dev: slave that is supposed to xmit this skbuff
  */
-netdev_tx_t bond_dev_queue_xmit(struct bonding *bond, struct sk_buff *skb,
+void bond_dev_queue_xmit(struct bonding *bond, struct sk_buff *skb,
 			struct net_device *slave_dev)
 {
 	skb->dev = slave_dev;
@@ -297,9 +297,9 @@ netdev_tx_t bond_dev_queue_xmit(struct bonding *bond, struct sk_buff *skb,
 	skb_set_queue_mapping(skb, qdisc_skb_cb(skb)->slave_dev_queue_mapping);
 
 	if (unlikely(netpoll_tx_running(bond->dev)))
-		return bond_netpoll_send_skb(bond_get_slave_by_dev(bond, slave_dev), skb);
-
-	return dev_queue_xmit(skb);
+		bond_netpoll_send_skb(bond_get_slave_by_dev(bond, slave_dev), skb);
+	else
+		dev_queue_xmit(skb);
 }
 
 /* In the following 2 functions, bond_vlan_rx_add_vid and bond_vlan_rx_kill_vid,
@@ -3932,7 +3932,7 @@ unwind:
  * it fails, it tries to find the first available slave for transmission.
  * The skb is consumed in all cases, thus the function is void.
  */
-static netdev_tx_t bond_xmit_slave_id(struct bonding *bond, struct sk_buff *skb, int slave_id)
+static void bond_xmit_slave_id(struct bonding *bond, struct sk_buff *skb, int slave_id)
 {
 	struct list_head *iter;
 	struct slave *slave;
@@ -3941,8 +3941,10 @@ static netdev_tx_t bond_xmit_slave_id(struct bonding *bond, struct sk_buff *skb,
 	/* Here we start from the slave with slave_id */
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (--i < 0) {
-			if (bond_slave_can_tx(slave))
-				return bond_dev_queue_xmit(bond, skb, slave->dev);
+			if (bond_slave_can_tx(slave)) {
+				bond_dev_queue_xmit(bond, skb, slave->dev);
+				return;
+			}
 		}
 	}
 
@@ -3951,11 +3953,13 @@ static netdev_tx_t bond_xmit_slave_id(struct bonding *bond, struct sk_buff *skb,
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (--i < 0)
 			break;
-		if (bond_slave_can_tx(slave))
-			return bond_dev_queue_xmit(bond, skb, slave->dev);
+		if (bond_slave_can_tx(slave)) {
+			bond_dev_queue_xmit(bond, skb, slave->dev);
+			return;
+		}
 	}
 	/* no slave that can tx has been found */
-	return bond_tx_drop(bond->dev, skb);
+	bond_tx_drop(bond->dev, skb);
 }
 
 /**
@@ -4016,8 +4020,10 @@ static netdev_tx_t bond_xmit_roundrobin(struct sk_buff *skb,
 		if (iph->protocol == IPPROTO_IGMP) {
 			slave = rcu_dereference(bond->curr_active_slave);
 			if (slave)
-				return bond_dev_queue_xmit(bond, skb, slave->dev);
-			return bond_xmit_slave_id(bond, skb, 0);
+				bond_dev_queue_xmit(bond, skb, slave->dev);
+			else
+				bond_xmit_slave_id(bond, skb, 0);
+			return NETDEV_TX_OK;
 		}
 	}
 
@@ -4025,9 +4031,11 @@ non_igmp:
 	slave_cnt = READ_ONCE(bond->slave_cnt);
 	if (likely(slave_cnt)) {
 		slave_id = bond_rr_gen_slave_id(bond);
-		return bond_xmit_slave_id(bond, skb, slave_id % slave_cnt);
+		bond_xmit_slave_id(bond, skb, slave_id % slave_cnt);
+	} else {
+		bond_tx_drop(bond_dev, skb);
 	}
-	return bond_tx_drop(bond_dev, skb);
+	return NETDEV_TX_OK;
 }
 
 /* In active-backup mode, we know that bond->curr_active_slave is always valid if
@@ -4041,9 +4049,11 @@ static netdev_tx_t bond_xmit_activebackup(struct sk_buff *skb,
 
 	slave = rcu_dereference(bond->curr_active_slave);
 	if (slave)
-		return bond_dev_queue_xmit(bond, skb, slave->dev);
+		bond_dev_queue_xmit(bond, skb, slave->dev);
+	else
+		bond_tx_drop(bond_dev, skb);
 
-	return bond_tx_drop(bond_dev, skb);
+	return NETDEV_TX_OK;
 }
 
 /* Use this to update slave_array when (a) it's not appropriate to update
@@ -4175,6 +4185,23 @@ out:
 	return ret;
 }
 
+static struct slave *bond_xmit_3ad_xor_slave_get(struct bonding *bond,
+						 struct sk_buff *skb,
+						 struct bond_up_slave *slaves)
+{
+	struct slave *slave;
+	unsigned int count;
+	u32 hash;
+
+	hash = bond_xmit_hash(bond, skb);
+	count = slaves ? READ_ONCE(slaves->count) : 0;
+	if (unlikely(!count))
+		return NULL;
+
+	slave = slaves->arr[hash % count];
+	return slave;
+}
+
 /* Use this Xmit function for 3AD as well as XOR modes. The current
  * usable slave array is formed in the control path. The xmit function
  * just calculates hash and sends the packet out.
@@ -4183,17 +4210,17 @@ static netdev_tx_t bond_3ad_xor_xmit(struct sk_buff *skb,
 				     struct net_device *dev)
 {
 	struct bonding *bond = netdev_priv(dev);
-	struct slave *slave;
 	struct bond_up_slave *slaves;
-	unsigned int count;
+	struct slave *slave;
 
 	slaves = rcu_dereference(bond->usable_slaves);
-	count = slaves ? READ_ONCE(slaves->count) : 0;
-	if (likely(count)) {
-		slave = slaves->arr[bond_xmit_hash(bond, skb) % count];
-		return bond_dev_queue_xmit(bond, skb, slave->dev);
-	}
-	return bond_tx_drop(dev, skb);
+	slave = bond_xmit_3ad_xor_slave_get(bond, skb, slaves);
+	if (likely(slave))
+		bond_dev_queue_xmit(bond, skb, slave->dev);
+	else
+		bond_tx_drop(dev, skb);
+
+	return NETDEV_TX_OK;
 }
 
 /* in broadcast mode, we send everything to all usable interfaces. */
@@ -4219,9 +4246,11 @@ static netdev_tx_t bond_xmit_broadcast(struct sk_buff *skb,
 		}
 	}
 	if (slave && bond_slave_is_up(slave) && slave->link == BOND_LINK_UP)
-		return bond_dev_queue_xmit(bond, skb, slave->dev);
+		bond_dev_queue_xmit(bond, skb, slave->dev);
+	else
+		bond_tx_drop(bond_dev, skb);
 
-	return bond_tx_drop(bond_dev, skb);
+	return NETDEV_TX_OK;
 }
 
 /*------------------------- Device initialization ---------------------------*/
@@ -4300,7 +4329,8 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 		/* Should never happen, mode already checked */
 		netdev_err(dev, "Unknown bonding mode %d\n", BOND_MODE(bond));
 		WARN_ON_ONCE(1);
-		return bond_tx_drop(dev, skb);
+		bond_tx_drop(dev, skb);
+		return NETDEV_TX_OK;
 	}
 }
 
@@ -4319,7 +4349,7 @@ static netdev_tx_t bond_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (bond_has_slaves(bond))
 		ret = __bond_start_xmit(skb, dev);
 	else
-		ret = bond_tx_drop(dev, skb);
+		bond_tx_drop(dev, skb);
 	rcu_read_unlock();
 
 	return ret;
@@ -4480,6 +4510,7 @@ static void bond_uninit(struct net_device *bond_dev)
 
 	list_del(&bond->bond_list);
 
+	lockdep_unregister_key(&bond->stats_lock_key);
 	bond_debug_unregister(bond);
 }
 
@@ -4884,7 +4915,8 @@ static int bond_init(struct net_device *bond_dev)
 		return -ENOMEM;
 
 	spin_lock_init(&bond->stats_lock);
-	netdev_lockdep_set_classes(bond_dev);
+	lockdep_register_key(&bond->stats_lock_key);
+	lockdep_set_class(&bond->stats_lock, &bond->stats_lock_key);
 
 	list_add_tail(&bond->bond_list, &bn->dev_list);
 

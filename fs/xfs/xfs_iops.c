@@ -25,14 +25,13 @@
 #include <linux/posix_acl.h>
 #include <linux/security.h>
 #include <linux/iversion.h>
-#include <linux/fiemap.h>
 
 /*
- * Directories have different lock order w.r.t. mmap_lock compared to regular
+ * Directories have different lock order w.r.t. mmap_sem compared to regular
  * files. This is due to readdir potentially triggering page faults on a user
  * buffer inside filldir(), and this happens with the ilock on the directory
  * held. For regular files, the lock order is the other way around - the
- * mmap_lock is taken during the page fault, and then we lock the ilock to do
+ * mmap_sem is taken during the page fault, and then we lock the ilock to do
  * block mapping. Hence we need a different class for the directory ilock so
  * that lockdep can tell them apart.
  */
@@ -739,7 +738,12 @@ xfs_setattr_nonsize(
 			if (error)	/* out of quota */
 				goto out_cancel;
 		}
+	}
 
+	/*
+	 * Change file ownership.  Must be the owner or privileged.
+	 */
+	if (mask & (ATTR_UID|ATTR_GID)) {
 		/*
 		 * CAP_FSETID overrides the following restrictions:
 		 *
@@ -873,7 +877,7 @@ xfs_setattr_size(
 	/*
 	 * Short circuit the truncate case for zero length files.
 	 */
-	if (newsize == 0 && oldsize == 0 && ip->i_df.if_nextents == 0) {
+	if (newsize == 0 && oldsize == 0 && ip->i_d.di_nextents == 0) {
 		if (!(iattr->ia_valid & (ATTR_CTIME|ATTR_MTIME)))
 			return 0;
 
@@ -1249,12 +1253,13 @@ xfs_inode_supports_dax(
 {
 	struct xfs_mount	*mp = ip->i_mount;
 
-	/* Only supported on regular files. */
-	if (!S_ISREG(VFS_I(ip)->i_mode))
+	/* Only supported on non-reflinked files. */
+	if (!S_ISREG(VFS_I(ip)->i_mode) || xfs_is_reflink_inode(ip))
 		return false;
 
-	/* Only supported on non-reflinked files. */
-	if (xfs_is_reflink_inode(ip))
+	/* DAX mount option or DAX iflag must be set. */
+	if (!(mp->m_flags & XFS_MOUNT_DAX_ALWAYS) &&
+	    !(ip->i_d.di_flags2 & XFS_DIFLAG2_DAX))
 		return false;
 
 	/* Block size must match page size */
@@ -1265,51 +1270,26 @@ xfs_inode_supports_dax(
 	return xfs_inode_buftarg(ip)->bt_daxdev != NULL;
 }
 
-static bool
-xfs_inode_should_enable_dax(
-	struct xfs_inode *ip)
-{
-	if (!IS_ENABLED(CONFIG_FS_DAX))
-		return false;
-	if (ip->i_mount->m_flags & XFS_MOUNT_DAX_NEVER)
-		return false;
-	if (!xfs_inode_supports_dax(ip))
-		return false;
-	if (ip->i_mount->m_flags & XFS_MOUNT_DAX_ALWAYS)
-		return true;
-	if (ip->i_d.di_flags2 & XFS_DIFLAG2_DAX)
-		return true;
-	return false;
-}
-
-void
+STATIC void
 xfs_diflags_to_iflags(
-	struct xfs_inode	*ip,
-	bool init)
+	struct inode		*inode,
+	struct xfs_inode	*ip)
 {
-	struct inode            *inode = VFS_I(ip);
-	unsigned int            xflags = xfs_ip2xflags(ip);
-	unsigned int            flags = 0;
+	uint16_t		flags = ip->i_d.di_flags;
 
-	ASSERT(!(IS_DAX(inode) && init));
+	inode->i_flags &= ~(S_IMMUTABLE | S_APPEND | S_SYNC |
+			    S_NOATIME | S_DAX);
 
-	if (xflags & FS_XFLAG_IMMUTABLE)
-		flags |= S_IMMUTABLE;
-	if (xflags & FS_XFLAG_APPEND)
-		flags |= S_APPEND;
-	if (xflags & FS_XFLAG_SYNC)
-		flags |= S_SYNC;
-	if (xflags & FS_XFLAG_NOATIME)
-		flags |= S_NOATIME;
-	if (init && xfs_inode_should_enable_dax(ip))
-		flags |= S_DAX;
-
-	/*
-	 * S_DAX can only be set during inode initialization and is never set by
-	 * the VFS, so we cannot mask off S_DAX in i_flags.
-	 */
-	inode->i_flags &= ~(S_IMMUTABLE | S_APPEND | S_SYNC | S_NOATIME);
-	inode->i_flags |= flags;
+	if (flags & XFS_DIFLAG_IMMUTABLE)
+		inode->i_flags |= S_IMMUTABLE;
+	if (flags & XFS_DIFLAG_APPEND)
+		inode->i_flags |= S_APPEND;
+	if (flags & XFS_DIFLAG_SYNC)
+		inode->i_flags |= S_SYNC;
+	if (flags & XFS_DIFLAG_NOATIME)
+		inode->i_flags |= S_NOATIME;
+	if (xfs_inode_supports_dax(ip))
+		inode->i_flags |= S_DAX;
 }
 
 /*
@@ -1335,7 +1315,7 @@ xfs_setup_inode(
 	inode_fake_hash(inode);
 
 	i_size_write(inode, ip->i_d.di_size);
-	xfs_diflags_to_iflags(ip, true);
+	xfs_diflags_to_iflags(inode, ip);
 
 	if (S_ISDIR(inode->i_mode)) {
 		/*

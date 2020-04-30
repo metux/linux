@@ -20,11 +20,11 @@ Contents:
    ieee802154
    j1939
    kapi
+   z8530book
    msg_zerocopy
    failover
    net_dim
    net_failover
-   page_pool
    phy
    sfp-phylink
    alias
@@ -38,28 +38,36 @@ Contents:
    nfc
    6lowpan
    6pack
+   altera_tse
    arcnet-hardware
    arcnet
    atm
    ax25
+   baycom
    bonding
    cdc_mbim
+   cops
+   cxacru
    dccp
    dctcp
    decnet
+   defza
    dns_resolver
    driver
    eql
    fib_trie
    filter
+   fore200e
    framerelay
    generic-hdlc
    generic_netlink
    gen_stats
    gtp
+   hinic
    ila
    ipddp
    ip_dynaddr
+   iphase
    ipsec
    ip-sysctl
    ipv6
@@ -68,48 +76,8 @@ Contents:
    kcm
    l2tp
    lapb-module
+   ltpc
    mac80211-injection
-   mpls-sysctl
-   multiqueue
-   netconsole
-   netdev-features
-   netdevices
-   netfilter-sysctl
-   netif-msg
-   nf_conntrack-sysctl
-   nf_flowtable
-   openvswitch
-   operstates
-   packet_mmap
-   phonet
-   pktgen
-   plip
-   ppp_generic
-   proc_net_tcp
-   radiotap-headers
-   rds
-   regulatory
-   rxrpc
-   sctp
-   secid
-   seg6-sysctl
-   strparser
-   switchdev
-   tc-actions-env-rules
-   tcp-thin
-   team
-   timestamping
-   tproxy
-   tuntap
-   udplite
-   vrf
-   vxlan
-   x25-iface
-   x25
-   xfrm_device
-   xfrm_proc
-   xfrm_sync
-   xfrm_sysctl
 
 .. only::  subproject and html
 

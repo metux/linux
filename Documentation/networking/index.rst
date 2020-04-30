@@ -25,7 +25,6 @@ Contents:
    failover
    net_dim
    net_failover
-   page_pool
    phy
    sfp-phylink
    alias
@@ -79,50 +78,6 @@ Contents:
    lapb-module
    ltpc
    mac80211-injection
-   mpls-sysctl
-   multiqueue
-   netconsole
-   netdev-features
-   netdevices
-   netfilter-sysctl
-   netif-msg
-   nf_conntrack-sysctl
-   nf_flowtable
-   openvswitch
-   operstates
-   packet_mmap
-   phonet
-   pktgen
-   plip
-   ppp_generic
-   proc_net_tcp
-   radiotap-headers
-   ray_cs
-   rds
-   regulatory
-   rxrpc
-   sctp
-   secid
-   seg6-sysctl
-   skfp
-   strparser
-   switchdev
-   tc-actions-env-rules
-   tcp-thin
-   team
-   timestamping
-   tproxy
-   tuntap
-   udplite
-   vrf
-   vxlan
-   x25-iface
-   x25
-   xfrm_device
-   xfrm_proc
-   xfrm_sync
-   xfrm_sysctl
-   z8530drv
 
 .. only::  subproject and html
 

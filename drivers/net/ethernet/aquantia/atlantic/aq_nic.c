@@ -80,7 +80,7 @@ void aq_nic_cfg_start(struct aq_nic_s *self)
 	cfg->is_rss = AQ_CFG_IS_RSS_DEF;
 	cfg->num_rss_queues = AQ_CFG_NUM_RSS_QUEUES_DEF;
 	cfg->aq_rss.base_cpu_number = AQ_CFG_RSS_BASE_CPU_NUM_DEF;
-	cfg->flow_control = AQ_CFG_FC_MODE;
+	cfg->fc.req = AQ_CFG_FC_MODE;
 	cfg->wol = AQ_CFG_WOL_MODES;
 
 	cfg->mtu = AQ_CFG_MTU_DEF;
@@ -144,6 +144,10 @@ static int aq_nic_update_link_status(struct aq_nic_s *self)
 	if (err)
 		return err;
 
+	if (self->aq_fw_ops->get_flow_control)
+		self->aq_fw_ops->get_flow_control(self->aq_hw, &fc);
+	self->aq_nic_cfg.fc.cur = fc;
+
 	if (self->link_status.mbps != self->aq_hw->aq_link_status.mbps) {
 		netdev_info(self->ndev, "%s: link change old %d new %d\n",
 			    AQ_CFG_DRV_NAME, self->link_status.mbps,
@@ -161,8 +165,6 @@ static int aq_nic_update_link_status(struct aq_nic_s *self)
 		 * on any link event.
 		 * We should query FW whether it negotiated FC.
 		 */
-		if (self->aq_fw_ops->get_flow_control)
-			self->aq_fw_ops->get_flow_control(self->aq_hw, &fc);
 		if (self->aq_hw_ops->hw_set_fc)
 			self->aq_hw_ops->hw_set_fc(self->aq_hw, fc, 0);
 	}
@@ -322,6 +324,7 @@ void aq_nic_ndev_init(struct aq_nic_s *self)
 	self->ndev->vlan_features |= NETIF_F_HW_CSUM | NETIF_F_RXCSUM |
 				     NETIF_F_RXHASH | NETIF_F_SG |
 				     NETIF_F_LRO | NETIF_F_TSO;
+	self->ndev->gso_partial_features = NETIF_F_GSO_UDP_L4;
 	self->ndev->priv_flags = aq_hw_caps->hw_priv_flags;
 	self->ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 
@@ -415,6 +418,8 @@ int aq_nic_start(struct aq_nic_s *self)
 	if (err < 0)
 		goto err_exit;
 
+	aq_nic_set_loopback(self);
+
 	err = self->aq_hw_ops->hw_start(self->aq_hw);
 	if (err < 0)
 		goto err_exit;
@@ -424,8 +429,6 @@ int aq_nic_start(struct aq_nic_s *self)
 		goto err_exit;
 
 	INIT_WORK(&self->service_task, aq_nic_service_task);
-
-	aq_nic_set_loopback(self);
 
 	timer_setup(&self->service_timer, aq_nic_service_timer_cb, 0);
 	aq_nic_service_timer_cb(&self->service_timer);
@@ -485,11 +488,18 @@ unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
 {
 	unsigned int nr_frags = skb_shinfo(skb)->nr_frags;
 	struct aq_ring_buff_s *first = NULL;
+	u8 ipver = ip_hdr(skb)->version;
 	struct aq_ring_buff_s *dx_buff;
 	bool need_context_tag = false;
 	unsigned int frag_count = 0U;
 	unsigned int ret = 0U;
 	unsigned int dx;
+	u8 l4proto = 0;
+
+	if (ipver == 4)
+		l4proto = ip_hdr(skb)->protocol;
+	else if (ipver == 6)
+		l4proto = ipv6_hdr(skb)->nexthdr;
 
 	dx = ring->sw_tail;
 	dx_buff = &ring->buff_ring[dx];
@@ -497,14 +507,24 @@ unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
 
 	if (unlikely(skb_is_gso(skb))) {
 		dx_buff->mss = skb_shinfo(skb)->gso_size;
-		dx_buff->is_gso = 1U;
+		if (l4proto == IPPROTO_TCP) {
+			dx_buff->is_gso_tcp = 1U;
+			dx_buff->len_l4 = tcp_hdrlen(skb);
+		} else if (l4proto == IPPROTO_UDP) {
+			dx_buff->is_gso_udp = 1U;
+			dx_buff->len_l4 = sizeof(struct udphdr);
+			/* UDP GSO Hardware does not replace packet length. */
+			udp_hdr(skb)->len = htons(dx_buff->mss +
+						  dx_buff->len_l4);
+		} else {
+			WARN_ONCE(true, "Bad GSO mode");
+			goto exit;
+		}
 		dx_buff->len_pkt = skb->len;
 		dx_buff->len_l2 = ETH_HLEN;
-		dx_buff->len_l3 = ip_hdrlen(skb);
-		dx_buff->len_l4 = tcp_hdrlen(skb);
+		dx_buff->len_l3 = skb_network_header_len(skb);
 		dx_buff->eop_index = 0xffffU;
-		dx_buff->is_ipv6 =
-			(ip_hdr(skb)->version == 6) ? 1U : 0U;
+		dx_buff->is_ipv6 = (ipver == 6);
 		need_context_tag = true;
 	}
 
@@ -528,8 +548,10 @@ unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
 				     dx_buff->len,
 				     DMA_TO_DEVICE);
 
-	if (unlikely(dma_mapping_error(aq_nic_get_dev(self), dx_buff->pa)))
+	if (unlikely(dma_mapping_error(aq_nic_get_dev(self), dx_buff->pa))) {
+		ret = 0;
 		goto exit;
+	}
 
 	first = dx_buff;
 	dx_buff->len_pkt = skb->len;
@@ -538,24 +560,9 @@ unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
 	++ret;
 
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
-		dx_buff->is_ip_cso = (htons(ETH_P_IP) == skb->protocol) ?
-			1U : 0U;
-
-		if (ip_hdr(skb)->version == 4) {
-			dx_buff->is_tcp_cso =
-				(ip_hdr(skb)->protocol == IPPROTO_TCP) ?
-					1U : 0U;
-			dx_buff->is_udp_cso =
-				(ip_hdr(skb)->protocol == IPPROTO_UDP) ?
-					1U : 0U;
-		} else if (ip_hdr(skb)->version == 6) {
-			dx_buff->is_tcp_cso =
-				(ipv6_hdr(skb)->nexthdr == NEXTHDR_TCP) ?
-					1U : 0U;
-			dx_buff->is_udp_cso =
-				(ipv6_hdr(skb)->nexthdr == NEXTHDR_UDP) ?
-					1U : 0U;
-		}
+		dx_buff->is_ip_cso = (htons(ETH_P_IP) == skb->protocol);
+		dx_buff->is_tcp_cso = (l4proto == IPPROTO_TCP);
+		dx_buff->is_udp_cso = (l4proto == IPPROTO_UDP);
 	}
 
 	for (; nr_frags--; ++frag_count) {
@@ -610,7 +617,8 @@ mapping_error:
 	     --ret, dx = aq_ring_next_dx(ring, dx)) {
 		dx_buff = &ring->buff_ring[dx];
 
-		if (!dx_buff->is_gso && !dx_buff->is_vlan && dx_buff->pa) {
+		if (!(dx_buff->is_gso_tcp || dx_buff->is_gso_udp) &&
+		    !dx_buff->is_vlan && dx_buff->pa) {
 			if (unlikely(dx_buff->is_sop)) {
 				dma_unmap_single(aq_nic_get_dev(self),
 						 dx_buff->pa,
@@ -664,10 +672,6 @@ int aq_nic_xmit(struct aq_nic_s *self, struct sk_buff *skb)
 	if (likely(frags)) {
 		err = self->aq_hw_ops->hw_ring_tx_xmit(self->aq_hw,
 						       ring, frags);
-		if (err >= 0) {
-			++ring->stats.tx.packets;
-			ring->stats.tx.bytes += skb->len;
-		}
 	} else {
 		err = NETDEV_TX_BUSY;
 	}
@@ -880,9 +884,16 @@ void aq_nic_get_link_ksettings(struct aq_nic_s *self,
 		ethtool_link_ksettings_add_link_mode(cmd, supported,
 						     100baseT_Full);
 
-	if (self->aq_nic_cfg.aq_hw_caps->flow_control)
+	if (self->aq_nic_cfg.aq_hw_caps->link_speed_msk & AQ_NIC_RATE_10M)
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     10baseT_Full);
+
+	if (self->aq_nic_cfg.aq_hw_caps->flow_control) {
 		ethtool_link_ksettings_add_link_mode(cmd, supported,
 						     Pause);
+		ethtool_link_ksettings_add_link_mode(cmd, supported,
+						     Asym_Pause);
+	}
 
 	ethtool_link_ksettings_add_link_mode(cmd, supported, Autoneg);
 
@@ -916,13 +927,17 @@ void aq_nic_get_link_ksettings(struct aq_nic_s *self,
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     100baseT_Full);
 
-	if (self->aq_nic_cfg.flow_control & AQ_NIC_FC_RX)
+	if (self->aq_nic_cfg.link_speed_msk  & AQ_NIC_RATE_10M)
+		ethtool_link_ksettings_add_link_mode(cmd, advertising,
+						     10baseT_Full);
+
+	if (self->aq_nic_cfg.fc.cur & AQ_NIC_FC_RX)
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     Pause);
 
 	/* Asym is when either RX or TX, but not both */
-	if (!!(self->aq_nic_cfg.flow_control & AQ_NIC_FC_TX) ^
-	    !!(self->aq_nic_cfg.flow_control & AQ_NIC_FC_RX))
+	if (!!(self->aq_nic_cfg.fc.cur & AQ_NIC_FC_TX) ^
+	    !!(self->aq_nic_cfg.fc.cur & AQ_NIC_FC_RX))
 		ethtool_link_ksettings_add_link_mode(cmd, advertising,
 						     Asym_Pause);
 
@@ -946,6 +961,10 @@ int aq_nic_set_link_ksettings(struct aq_nic_s *self,
 		speed = cmd->base.speed;
 
 		switch (speed) {
+		case SPEED_10:
+			rate = AQ_NIC_RATE_10M;
+			break;
+
 		case SPEED_100:
 			rate = AQ_NIC_RATE_100M;
 			break;

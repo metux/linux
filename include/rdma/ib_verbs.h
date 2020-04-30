@@ -876,6 +876,7 @@ __attribute_const__ enum ib_rate mult_to_ib_rate(int mult);
 struct rdma_ah_init_attr {
 	struct rdma_ah_attr *ah_attr;
 	u32 flags;
+	struct net_device *xmit_slave;
 };
 
 enum rdma_ah_attr_type {
@@ -1265,6 +1266,7 @@ struct ib_qp_attr {
 	u8			alt_port_num;
 	u8			alt_timeout;
 	u32			rate_limit;
+	struct net_device	*xmit_slave;
 };
 
 enum ib_wr_opcode {

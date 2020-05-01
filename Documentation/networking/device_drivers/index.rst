@@ -31,6 +31,7 @@ Contents:
    amazon/ena
    aquantia/atlantic
    chelsio/cxgb
+   cirrus/cs89x0
 
 .. only::  subproject and html
 

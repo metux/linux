@@ -36,6 +36,7 @@ Contents:
    dec/de4x5
    dec/dmfe
    dlink/dl2k
+   freescale/dpaa
 
 .. only::  subproject and html
 

@@ -29,6 +29,7 @@ Contents:
    3com/3c509
    3com/vortex
    amazon/ena
+   aquantia/atlantic
 
 .. only::  subproject and html
 

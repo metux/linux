@@ -177,11 +177,6 @@ static struct mlx5_profile profile[] = {
 #define FW_PRE_INIT_TIMEOUT_MILI	120000
 #define FW_INIT_WARN_MESSAGE_INTERVAL	20000
 
-static int fw_initializing(struct mlx5_core_dev *dev)
-{
-	return ioread32be(&dev->iseg->initializing) >> 31;
-}
-
 static int wait_fw_init(struct mlx5_core_dev *dev, u32 max_wait_mili,
 			u32 warn_time_mili)
 {
@@ -680,6 +675,26 @@ int mlx5_core_disable_hca(struct mlx5_core_dev *dev, u16 func_id)
 	return mlx5_cmd_exec_in(dev, disable_hca, in);
 }
 
+u64 mlx5_read_internal_timer(struct mlx5_core_dev *dev,
+			     struct ptp_system_timestamp *sts)
+{
+	u32 timer_h, timer_h1, timer_l;
+
+	timer_h = ioread32be(&dev->iseg->internal_timer_h);
+	ptp_read_system_prets(sts);
+	timer_l = ioread32be(&dev->iseg->internal_timer_l);
+	ptp_read_system_postts(sts);
+	timer_h1 = ioread32be(&dev->iseg->internal_timer_h);
+	if (timer_h != timer_h1) {
+		/* wrap around */
+		ptp_read_system_prets(sts);
+		timer_l = ioread32be(&dev->iseg->internal_timer_l);
+		ptp_read_system_postts(sts);
+	}
+
+	return (u64)timer_l | (u64)timer_h1 << 32;
+}
+
 static int mlx5_core_set_issi(struct mlx5_core_dev *dev)
 {
 	u32 query_out[MLX5_ST_SZ_DW(query_issi_out)] = {};
@@ -788,11 +803,6 @@ err_disable:
 
 static void mlx5_pci_close(struct mlx5_core_dev *dev)
 {
-	/* health work might still be active, and it needs pci bar in
-	 * order to know the NIC state. Therefore, drain the health WQ
-	 * before removing the pci bars
-	 */
-	mlx5_drain_health_wq(dev);
 	iounmap(dev->iseg);
 	pci_clear_master(dev->pdev);
 	release_bar(dev->pdev);
@@ -1197,22 +1207,23 @@ int mlx5_load_one(struct mlx5_core_dev *dev, bool boot)
 	if (err)
 		goto err_load;
 
-	set_bit(MLX5_INTERFACE_STATE_UP, &dev->intf_state);
-
 	if (boot) {
 		err = mlx5_devlink_register(priv_to_devlink(dev), dev->device);
 		if (err)
 			goto err_devlink_reg;
-		mlx5_register_device(dev);
-	} else {
-		mlx5_attach_device(dev);
 	}
+
+	if (mlx5_device_registered(dev))
+		mlx5_attach_device(dev);
+	else
+		mlx5_register_device(dev);
+
+	set_bit(MLX5_INTERFACE_STATE_UP, &dev->intf_state);
 
 	mutex_unlock(&dev->intf_state_mutex);
 	return 0;
 
 err_devlink_reg:
-	clear_bit(MLX5_INTERFACE_STATE_UP, &dev->intf_state);
 	mlx5_unload(dev);
 err_load:
 	if (boot)
@@ -1228,15 +1239,12 @@ out:
 
 void mlx5_unload_one(struct mlx5_core_dev *dev, bool cleanup)
 {
-	mutex_lock(&dev->intf_state_mutex);
-
 	if (cleanup) {
 		mlx5_unregister_device(dev);
-		mlx5_devlink_unregister(priv_to_devlink(dev));
-	} else {
-		mlx5_detach_device(dev);
+		mlx5_drain_health_wq(dev);
 	}
 
+	mutex_lock(&dev->intf_state_mutex);
 	if (!test_bit(MLX5_INTERFACE_STATE_UP, &dev->intf_state)) {
 		mlx5_core_warn(dev, "%s: interface is down, NOP\n",
 			       __func__);
@@ -1246,6 +1254,9 @@ void mlx5_unload_one(struct mlx5_core_dev *dev, bool cleanup)
 	}
 
 	clear_bit(MLX5_INTERFACE_STATE_UP, &dev->intf_state);
+
+	if (mlx5_device_registered(dev))
+		mlx5_detach_device(dev);
 
 	mlx5_unload(dev);
 
@@ -1279,6 +1290,11 @@ static int mlx5_mdev_init(struct mlx5_core_dev *dev, int profile_idx)
 
 	priv->dbg_root = debugfs_create_dir(dev_name(dev->device),
 					    mlx5_debugfs_root);
+	if (!priv->dbg_root) {
+		dev_err(dev->device, "mlx5_core: error, Cannot create debugfs dir, aborting\n");
+		return -ENOMEM;
+	}
+
 	err = mlx5_health_init(dev);
 	if (err)
 		goto err_health_init;
@@ -1293,26 +1309,15 @@ err_pagealloc_init:
 	mlx5_health_cleanup(dev);
 err_health_init:
 	debugfs_remove(dev->priv.dbg_root);
-	mutex_destroy(&priv->pgdir_mutex);
-	mutex_destroy(&priv->alloc_mutex);
-	mutex_destroy(&priv->bfregs.wc_head.lock);
-	mutex_destroy(&priv->bfregs.reg_head.lock);
-	mutex_destroy(&dev->intf_state_mutex);
+
 	return err;
 }
 
 static void mlx5_mdev_uninit(struct mlx5_core_dev *dev)
 {
-	struct mlx5_priv *priv = &dev->priv;
-
 	mlx5_pagealloc_cleanup(dev);
 	mlx5_health_cleanup(dev);
 	debugfs_remove_recursive(dev->priv.dbg_root);
-	mutex_destroy(&priv->pgdir_mutex);
-	mutex_destroy(&priv->alloc_mutex);
-	mutex_destroy(&priv->bfregs.wc_head.lock);
-	mutex_destroy(&priv->bfregs.reg_head.lock);
-	mutex_destroy(&dev->intf_state_mutex);
 }
 
 #define MLX5_IB_MOD "mlx5_ib"
@@ -1360,7 +1365,6 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		dev_err(&pdev->dev, "mlx5_crdump_enable failed with error code %d\n", err);
 
 	pci_save_state(pdev);
-	devlink_reload_enable(devlink);
 	return 0;
 
 err_load_one:
@@ -1378,9 +1382,9 @@ static void remove_one(struct pci_dev *pdev)
 	struct mlx5_core_dev *dev  = pci_get_drvdata(pdev);
 	struct devlink *devlink = priv_to_devlink(dev);
 
-	devlink_reload_disable(devlink);
 	mlx5_crdump_disable(dev);
-	mlx5_drain_health_wq(dev);
+	mlx5_devlink_unregister(devlink);
+
 	mlx5_unload_one(dev, true);
 	mlx5_pci_close(dev);
 	mlx5_mdev_uninit(dev);

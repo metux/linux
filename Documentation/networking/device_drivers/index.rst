@@ -45,6 +45,7 @@ Contents:
    neterion/vxge
    qualcomm/rmnet
    sb1000
+   smsc/smc9
 
 .. only::  subproject and html
 

@@ -44,6 +44,7 @@ Contents:
    neterion/s2io
    neterion/vxge
    qualcomm/rmnet
+   sb1000
 
 .. only::  subproject and html
 

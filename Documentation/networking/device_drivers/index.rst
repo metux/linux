@@ -30,6 +30,7 @@ Contents:
    3com/vortex
    amazon/ena
    aquantia/atlantic
+   chelsio/cxgb
 
 .. only::  subproject and html
 

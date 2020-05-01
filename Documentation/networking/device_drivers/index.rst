@@ -49,6 +49,7 @@ Contents:
    ti/cpsw_switchdev
    ti/cpsw
    ti/tlan
+   toshiba/spider_net
 
 .. only::  subproject and html
 

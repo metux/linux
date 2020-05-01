@@ -43,6 +43,7 @@ Contents:
    microsoft/netvsc
    neterion/s2io
    neterion/vxge
+   qualcomm/rmnet
 
 .. only::  subproject and html
 

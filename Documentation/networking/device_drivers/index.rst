@@ -32,6 +32,7 @@ Contents:
    aquantia/atlantic
    chelsio/cxgb
    cirrus/cs89x0
+   davicom/dm9000
 
 .. only::  subproject and html
 

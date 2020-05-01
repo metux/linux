@@ -46,6 +46,7 @@ Contents:
    qualcomm/rmnet
    sb1000
    smsc/smc9
+   ti/cpsw_switchdev
 
 .. only::  subproject and html
 

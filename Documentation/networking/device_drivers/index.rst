@@ -28,6 +28,7 @@ Contents:
    stmicro/stmmac
    3com/3c509
    3com/vortex
+   amazon/ena
 
 .. only::  subproject and html
 

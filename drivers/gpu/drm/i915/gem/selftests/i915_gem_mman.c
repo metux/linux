@@ -9,6 +9,7 @@
 #include "gt/intel_engine_pm.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
+#include "gem/i915_gem_region.h"
 #include "huge_gem_object.h"
 #include "i915_selftest.h"
 #include "selftests/i915_random.h"
@@ -163,7 +164,7 @@ static int check_partial_mapping(struct drm_i915_gem_object *obj,
 	kunmap(p);
 
 out:
-	i915_vma_destroy(vma);
+	__i915_vma_put(vma);
 	return err;
 }
 
@@ -257,7 +258,7 @@ static int check_partial_mappings(struct drm_i915_gem_object *obj,
 		if (err)
 			return err;
 
-		i915_vma_destroy(vma);
+		__i915_vma_put(vma);
 
 		if (igt_timeout(end_time,
 				"%s: timed out after tiling=%d stride=%d\n",
@@ -569,7 +570,7 @@ static bool assert_mmap_offset(struct drm_i915_private *i915,
 
 	obj = i915_gem_object_create_internal(i915, size);
 	if (IS_ERR(obj))
-		return PTR_ERR(obj);
+		return false;
 
 	mmo = mmap_offset_attach(obj, I915_MMAP_OFFSET_GTT, NULL);
 	i915_gem_object_put(obj);
@@ -725,114 +726,482 @@ err_obj:
 	goto out;
 }
 
-#define expand32(x) (((x) << 0) | ((x) << 8) | ((x) << 16) | ((x) << 24))
-static int igt_mmap(void *arg, enum i915_mmap_type type)
+static int gtt_set(struct drm_i915_gem_object *obj)
 {
-	struct drm_i915_private *i915 = arg;
-	struct drm_i915_gem_object *obj;
-	struct i915_mmap_offset *mmo;
-	struct vm_area_struct *area;
-	unsigned long addr;
-	void *vaddr;
-	int err = 0, i;
+	struct i915_vma *vma;
+	void __iomem *map;
+	int err = 0;
 
-	if (!i915_ggtt_has_aperture(&i915->ggtt))
-		return 0;
+	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0, PIN_MAPPABLE);
+	if (IS_ERR(vma))
+		return PTR_ERR(vma);
 
-	obj = i915_gem_object_create_internal(i915, PAGE_SIZE);
-	if (IS_ERR(obj))
-		return PTR_ERR(obj);
-
-	vaddr = i915_gem_object_pin_map(obj, I915_MAP_WB);
-	if (IS_ERR(vaddr)) {
-		err = PTR_ERR(vaddr);
+	intel_gt_pm_get(vma->vm->gt);
+	map = i915_vma_pin_iomap(vma);
+	i915_vma_unpin(vma);
+	if (IS_ERR(map)) {
+		err = PTR_ERR(map);
 		goto out;
 	}
-	memset(vaddr, POISON_INUSE, PAGE_SIZE);
+
+	memset_io(map, POISON_INUSE, obj->base.size);
+	i915_vma_unpin_iomap(vma);
+
+out:
+	intel_gt_pm_put(vma->vm->gt);
+	return err;
+}
+
+static int gtt_check(struct drm_i915_gem_object *obj)
+{
+	struct i915_vma *vma;
+	void __iomem *map;
+	int err = 0;
+
+	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0, PIN_MAPPABLE);
+	if (IS_ERR(vma))
+		return PTR_ERR(vma);
+
+	intel_gt_pm_get(vma->vm->gt);
+	map = i915_vma_pin_iomap(vma);
+	i915_vma_unpin(vma);
+	if (IS_ERR(map)) {
+		err = PTR_ERR(map);
+		goto out;
+	}
+
+	if (memchr_inv((void __force *)map, POISON_FREE, obj->base.size)) {
+		pr_err("%s: Write via mmap did not land in backing store (GTT)\n",
+		       obj->mm.region->name);
+		err = -EINVAL;
+	}
+	i915_vma_unpin_iomap(vma);
+
+out:
+	intel_gt_pm_put(vma->vm->gt);
+	return err;
+}
+
+static int wc_set(struct drm_i915_gem_object *obj)
+{
+	void *vaddr;
+
+	vaddr = i915_gem_object_pin_map(obj, I915_MAP_WC);
+	if (IS_ERR(vaddr))
+		return PTR_ERR(vaddr);
+
+	memset(vaddr, POISON_INUSE, obj->base.size);
 	i915_gem_object_flush_map(obj);
 	i915_gem_object_unpin_map(obj);
 
-	mmo = mmap_offset_attach(obj, type, NULL);
-	if (IS_ERR(mmo)) {
-		err = PTR_ERR(mmo);
-		goto out;
+	return 0;
+}
+
+static int wc_check(struct drm_i915_gem_object *obj)
+{
+	void *vaddr;
+	int err = 0;
+
+	vaddr = i915_gem_object_pin_map(obj, I915_MAP_WC);
+	if (IS_ERR(vaddr))
+		return PTR_ERR(vaddr);
+
+	if (memchr_inv(vaddr, POISON_FREE, obj->base.size)) {
+		pr_err("%s: Write via mmap did not land in backing store (WC)\n",
+		       obj->mm.region->name);
+		err = -EINVAL;
 	}
+	i915_gem_object_unpin_map(obj);
+
+	return err;
+}
+
+static bool can_mmap(struct drm_i915_gem_object *obj, enum i915_mmap_type type)
+{
+	if (type == I915_MMAP_TYPE_GTT &&
+	    !i915_ggtt_has_aperture(&to_i915(obj->base.dev)->ggtt))
+		return false;
+
+	if (type != I915_MMAP_TYPE_GTT &&
+	    !i915_gem_object_type_has(obj,
+				      I915_GEM_OBJECT_HAS_STRUCT_PAGE |
+				      I915_GEM_OBJECT_HAS_IOMEM))
+		return false;
+
+	return true;
+}
+
+#define expand32(x) (((x) << 0) | ((x) << 8) | ((x) << 16) | ((x) << 24))
+static int __igt_mmap(struct drm_i915_private *i915,
+		      struct drm_i915_gem_object *obj,
+		      enum i915_mmap_type type)
+{
+	struct i915_mmap_offset *mmo;
+	struct vm_area_struct *area;
+	unsigned long addr;
+	int err, i;
+
+	if (!can_mmap(obj, type))
+		return 0;
+
+	err = wc_set(obj);
+	if (err == -ENXIO)
+		err = gtt_set(obj);
+	if (err)
+		return err;
+
+	mmo = mmap_offset_attach(obj, type, NULL);
+	if (IS_ERR(mmo))
+		return PTR_ERR(mmo);
 
 	addr = igt_mmap_node(i915, &mmo->vma_node, 0, PROT_WRITE, MAP_SHARED);
-	if (IS_ERR_VALUE(addr)) {
-		err = addr;
-		goto out;
-	}
+	if (IS_ERR_VALUE(addr))
+		return addr;
 
-	pr_debug("igt_mmap() @ %lx\n", addr);
+	pr_debug("igt_mmap(%s, %d) @ %lx\n", obj->mm.region->name, type, addr);
 
 	area = find_vma(current->mm, addr);
 	if (!area) {
-		pr_err("Did not create a vm_area_struct for the mmap\n");
+		pr_err("%s: Did not create a vm_area_struct for the mmap\n",
+		       obj->mm.region->name);
 		err = -EINVAL;
 		goto out_unmap;
 	}
 
 	if (area->vm_private_data != mmo) {
-		pr_err("vm_area_struct did not point back to our mmap_offset object!\n");
+		pr_err("%s: vm_area_struct did not point back to our mmap_offset object!\n",
+		       obj->mm.region->name);
 		err = -EINVAL;
 		goto out_unmap;
 	}
 
-	for (i = 0; i < PAGE_SIZE / sizeof(u32); i++) {
+	for (i = 0; i < obj->base.size / sizeof(u32); i++) {
 		u32 __user *ux = u64_to_user_ptr((u64)(addr + i * sizeof(*ux)));
 		u32 x;
 
 		if (get_user(x, ux)) {
-			pr_err("Unable to read from mmap, offset:%zd\n",
-			       i * sizeof(x));
+			pr_err("%s: Unable to read from mmap, offset:%zd\n",
+			       obj->mm.region->name, i * sizeof(x));
 			err = -EFAULT;
-			break;
+			goto out_unmap;
 		}
 
 		if (x != expand32(POISON_INUSE)) {
-			pr_err("Read incorrect value from mmap, offset:%zd, found:%x, expected:%x\n",
+			pr_err("%s: Read incorrect value from mmap, offset:%zd, found:%x, expected:%x\n",
+			       obj->mm.region->name,
 			       i * sizeof(x), x, expand32(POISON_INUSE));
 			err = -EINVAL;
-			break;
+			goto out_unmap;
 		}
 
 		x = expand32(POISON_FREE);
 		if (put_user(x, ux)) {
-			pr_err("Unable to write to mmap, offset:%zd\n",
-			       i * sizeof(x));
+			pr_err("%s: Unable to write to mmap, offset:%zd\n",
+			       obj->mm.region->name, i * sizeof(x));
 			err = -EFAULT;
-			break;
+			goto out_unmap;
 		}
 	}
 
+	if (type == I915_MMAP_TYPE_GTT)
+		intel_gt_flush_ggtt_writes(&i915->gt);
+
+	err = wc_check(obj);
+	if (err == -ENXIO)
+		err = gtt_check(obj);
 out_unmap:
-	vm_munmap(addr, PAGE_SIZE);
-
-	vaddr = i915_gem_object_pin_map(obj, I915_MAP_FORCE_WC);
-	if (IS_ERR(vaddr)) {
-		err = PTR_ERR(vaddr);
-		goto out;
-	}
-	if (err == 0 && memchr_inv(vaddr, POISON_FREE, PAGE_SIZE)) {
-		pr_err("Write via mmap did not land in backing store\n");
-		err = -EINVAL;
-	}
-	i915_gem_object_unpin_map(obj);
-
-out:
-	i915_gem_object_put(obj);
+	vm_munmap(addr, obj->base.size);
 	return err;
 }
 
-static int igt_mmap_gtt(void *arg)
+static int igt_mmap(void *arg)
 {
-	return igt_mmap(arg, I915_MMAP_TYPE_GTT);
+	struct drm_i915_private *i915 = arg;
+	struct intel_memory_region *mr;
+	enum intel_region_id id;
+
+	for_each_memory_region(mr, i915, id) {
+		unsigned long sizes[] = {
+			PAGE_SIZE,
+			mr->min_page_size,
+			SZ_4M,
+		};
+		int i;
+
+		for (i = 0; i < ARRAY_SIZE(sizes); i++) {
+			struct drm_i915_gem_object *obj;
+			int err;
+
+			obj = i915_gem_object_create_region(mr, sizes[i], 0);
+			if (obj == ERR_PTR(-ENODEV))
+				continue;
+
+			if (IS_ERR(obj))
+				return PTR_ERR(obj);
+
+			err = __igt_mmap(i915, obj, I915_MMAP_TYPE_GTT);
+			if (err == 0)
+				err = __igt_mmap(i915, obj, I915_MMAP_TYPE_WC);
+
+			i915_gem_object_put(obj);
+			if (err)
+				return err;
+		}
+	}
+
+	return 0;
 }
 
-static int igt_mmap_cpu(void *arg)
+static const char *repr_mmap_type(enum i915_mmap_type type)
 {
-	return igt_mmap(arg, I915_MMAP_TYPE_WC);
+	switch (type) {
+	case I915_MMAP_TYPE_GTT: return "gtt";
+	case I915_MMAP_TYPE_WB: return "wb";
+	case I915_MMAP_TYPE_WC: return "wc";
+	case I915_MMAP_TYPE_UC: return "uc";
+	default: return "unknown";
+	}
+}
+
+static bool can_access(const struct drm_i915_gem_object *obj)
+{
+	unsigned int flags =
+		I915_GEM_OBJECT_HAS_STRUCT_PAGE | I915_GEM_OBJECT_HAS_IOMEM;
+
+	return i915_gem_object_type_has(obj, flags);
+}
+
+static int __igt_mmap_access(struct drm_i915_private *i915,
+			     struct drm_i915_gem_object *obj,
+			     enum i915_mmap_type type)
+{
+	struct i915_mmap_offset *mmo;
+	unsigned long __user *ptr;
+	unsigned long A, B;
+	unsigned long x, y;
+	unsigned long addr;
+	int err;
+
+	memset(&A, 0xAA, sizeof(A));
+	memset(&B, 0xBB, sizeof(B));
+
+	if (!can_mmap(obj, type) || !can_access(obj))
+		return 0;
+
+	mmo = mmap_offset_attach(obj, type, NULL);
+	if (IS_ERR(mmo))
+		return PTR_ERR(mmo);
+
+	addr = igt_mmap_node(i915, &mmo->vma_node, 0, PROT_WRITE, MAP_SHARED);
+	if (IS_ERR_VALUE(addr))
+		return addr;
+	ptr = (unsigned long __user *)addr;
+
+	err = __put_user(A, ptr);
+	if (err) {
+		pr_err("%s(%s): failed to write into user mmap\n",
+		       obj->mm.region->name, repr_mmap_type(type));
+		goto out_unmap;
+	}
+
+	intel_gt_flush_ggtt_writes(&i915->gt);
+
+	err = access_process_vm(current, addr, &x, sizeof(x), 0);
+	if (err != sizeof(x)) {
+		pr_err("%s(%s): access_process_vm() read failed\n",
+		       obj->mm.region->name, repr_mmap_type(type));
+		goto out_unmap;
+	}
+
+	err = access_process_vm(current, addr, &B, sizeof(B), FOLL_WRITE);
+	if (err != sizeof(B)) {
+		pr_err("%s(%s): access_process_vm() write failed\n",
+		       obj->mm.region->name, repr_mmap_type(type));
+		goto out_unmap;
+	}
+
+	intel_gt_flush_ggtt_writes(&i915->gt);
+
+	err = __get_user(y, ptr);
+	if (err) {
+		pr_err("%s(%s): failed to read from user mmap\n",
+		       obj->mm.region->name, repr_mmap_type(type));
+		goto out_unmap;
+	}
+
+	if (x != A || y != B) {
+		pr_err("%s(%s): failed to read/write values, found (%lx, %lx)\n",
+		       obj->mm.region->name, repr_mmap_type(type),
+		       x, y);
+		err = -EINVAL;
+		goto out_unmap;
+	}
+
+out_unmap:
+	vm_munmap(addr, obj->base.size);
+	return err;
+}
+
+static int igt_mmap_access(void *arg)
+{
+	struct drm_i915_private *i915 = arg;
+	struct intel_memory_region *mr;
+	enum intel_region_id id;
+
+	for_each_memory_region(mr, i915, id) {
+		struct drm_i915_gem_object *obj;
+		int err;
+
+		obj = i915_gem_object_create_region(mr, PAGE_SIZE, 0);
+		if (obj == ERR_PTR(-ENODEV))
+			continue;
+
+		if (IS_ERR(obj))
+			return PTR_ERR(obj);
+
+		err = __igt_mmap_access(i915, obj, I915_MMAP_TYPE_GTT);
+		if (err == 0)
+			err = __igt_mmap_access(i915, obj, I915_MMAP_TYPE_WB);
+		if (err == 0)
+			err = __igt_mmap_access(i915, obj, I915_MMAP_TYPE_WC);
+		if (err == 0)
+			err = __igt_mmap_access(i915, obj, I915_MMAP_TYPE_UC);
+
+		i915_gem_object_put(obj);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int __igt_mmap_gpu(struct drm_i915_private *i915,
+			  struct drm_i915_gem_object *obj,
+			  enum i915_mmap_type type)
+{
+	struct intel_engine_cs *engine;
+	struct i915_mmap_offset *mmo;
+	unsigned long addr;
+	u32 __user *ux;
+	u32 bbe;
+	int err;
+
+	/*
+	 * Verify that the mmap access into the backing store aligns with
+	 * that of the GPU, i.e. that mmap is indeed writing into the same
+	 * page as being read by the GPU.
+	 */
+
+	if (!can_mmap(obj, type))
+		return 0;
+
+	err = wc_set(obj);
+	if (err == -ENXIO)
+		err = gtt_set(obj);
+	if (err)
+		return err;
+
+	mmo = mmap_offset_attach(obj, type, NULL);
+	if (IS_ERR(mmo))
+		return PTR_ERR(mmo);
+
+	addr = igt_mmap_node(i915, &mmo->vma_node, 0, PROT_WRITE, MAP_SHARED);
+	if (IS_ERR_VALUE(addr))
+		return addr;
+
+	ux = u64_to_user_ptr((u64)addr);
+	bbe = MI_BATCH_BUFFER_END;
+	if (put_user(bbe, ux)) {
+		pr_err("%s: Unable to write to mmap\n", obj->mm.region->name);
+		err = -EFAULT;
+		goto out_unmap;
+	}
+
+	if (type == I915_MMAP_TYPE_GTT)
+		intel_gt_flush_ggtt_writes(&i915->gt);
+
+	for_each_uabi_engine(engine, i915) {
+		struct i915_request *rq;
+		struct i915_vma *vma;
+
+		vma = i915_vma_instance(obj, engine->kernel_context->vm, NULL);
+		if (IS_ERR(vma)) {
+			err = PTR_ERR(vma);
+			goto out_unmap;
+		}
+
+		err = i915_vma_pin(vma, 0, 0, PIN_USER);
+		if (err)
+			goto out_unmap;
+
+		rq = i915_request_create(engine->kernel_context);
+		if (IS_ERR(rq)) {
+			err = PTR_ERR(rq);
+			goto out_unpin;
+		}
+
+		i915_vma_lock(vma);
+		err = i915_request_await_object(rq, vma->obj, false);
+		if (err == 0)
+			err = i915_vma_move_to_active(vma, rq, 0);
+		i915_vma_unlock(vma);
+
+		err = engine->emit_bb_start(rq, vma->node.start, 0, 0);
+		i915_request_get(rq);
+		i915_request_add(rq);
+
+		if (i915_request_wait(rq, 0, HZ / 5) < 0) {
+			struct drm_printer p =
+				drm_info_printer(engine->i915->drm.dev);
+
+			pr_err("%s(%s, %s): Failed to execute batch\n",
+			       __func__, engine->name, obj->mm.region->name);
+			intel_engine_dump(engine, &p,
+					  "%s\n", engine->name);
+
+			intel_gt_set_wedged(engine->gt);
+			err = -EIO;
+		}
+		i915_request_put(rq);
+
+out_unpin:
+		i915_vma_unpin(vma);
+		if (err)
+			goto out_unmap;
+	}
+
+out_unmap:
+	vm_munmap(addr, obj->base.size);
+	return err;
+}
+
+static int igt_mmap_gpu(void *arg)
+{
+	struct drm_i915_private *i915 = arg;
+	struct intel_memory_region *mr;
+	enum intel_region_id id;
+
+	for_each_memory_region(mr, i915, id) {
+		struct drm_i915_gem_object *obj;
+		int err;
+
+		obj = i915_gem_object_create_region(mr, PAGE_SIZE, 0);
+		if (obj == ERR_PTR(-ENODEV))
+			continue;
+
+		if (IS_ERR(obj))
+			return PTR_ERR(obj);
+
+		err = __igt_mmap_gpu(i915, obj, I915_MMAP_TYPE_GTT);
+		if (err == 0)
+			err = __igt_mmap_gpu(i915, obj, I915_MMAP_TYPE_WC);
+
+		i915_gem_object_put(obj);
+		if (err)
+			return err;
+	}
+
+	return 0;
 }
 
 static int check_present_pte(pte_t *pte, unsigned long addr, void *data)
@@ -887,40 +1256,34 @@ static int prefault_range(u64 start, u64 len)
 	return __get_user(c, end - 1);
 }
 
-static int igt_mmap_revoke(void *arg, enum i915_mmap_type type)
+static int __igt_mmap_revoke(struct drm_i915_private *i915,
+			     struct drm_i915_gem_object *obj,
+			     enum i915_mmap_type type)
 {
-	struct drm_i915_private *i915 = arg;
-	struct drm_i915_gem_object *obj;
 	struct i915_mmap_offset *mmo;
 	unsigned long addr;
 	int err;
 
-	if (!i915_ggtt_has_aperture(&i915->ggtt))
+	if (!can_mmap(obj, type))
 		return 0;
 
-	obj = i915_gem_object_create_internal(i915, SZ_4M);
-	if (IS_ERR(obj))
-		return PTR_ERR(obj);
-
 	mmo = mmap_offset_attach(obj, type, NULL);
-	if (IS_ERR(mmo)) {
-		err = PTR_ERR(mmo);
-		goto out;
-	}
+	if (IS_ERR(mmo))
+		return PTR_ERR(mmo);
 
 	addr = igt_mmap_node(i915, &mmo->vma_node, 0, PROT_WRITE, MAP_SHARED);
-	if (IS_ERR_VALUE(addr)) {
-		err = addr;
-		goto out;
-	}
+	if (IS_ERR_VALUE(addr))
+		return addr;
 
 	err = prefault_range(addr, obj->base.size);
 	if (err)
 		goto out_unmap;
 
 	err = check_present(addr, obj->base.size);
-	if (err)
+	if (err) {
+		pr_err("%s: was not present\n", obj->mm.region->name);
 		goto out_unmap;
+	}
 
 	/*
 	 * After unbinding the object from the GGTT, its address may be reused
@@ -943,24 +1306,43 @@ static int igt_mmap_revoke(void *arg, enum i915_mmap_type type)
 	}
 
 	err = check_absent(addr, obj->base.size);
-	if (err)
+	if (err) {
+		pr_err("%s: was not absent\n", obj->mm.region->name);
 		goto out_unmap;
+	}
 
 out_unmap:
 	vm_munmap(addr, obj->base.size);
-out:
-	i915_gem_object_put(obj);
 	return err;
 }
 
-static int igt_mmap_gtt_revoke(void *arg)
+static int igt_mmap_revoke(void *arg)
 {
-	return igt_mmap_revoke(arg, I915_MMAP_TYPE_GTT);
-}
+	struct drm_i915_private *i915 = arg;
+	struct intel_memory_region *mr;
+	enum intel_region_id id;
 
-static int igt_mmap_cpu_revoke(void *arg)
-{
-	return igt_mmap_revoke(arg, I915_MMAP_TYPE_WC);
+	for_each_memory_region(mr, i915, id) {
+		struct drm_i915_gem_object *obj;
+		int err;
+
+		obj = i915_gem_object_create_region(mr, PAGE_SIZE, 0);
+		if (obj == ERR_PTR(-ENODEV))
+			continue;
+
+		if (IS_ERR(obj))
+			return PTR_ERR(obj);
+
+		err = __igt_mmap_revoke(i915, obj, I915_MMAP_TYPE_GTT);
+		if (err == 0)
+			err = __igt_mmap_revoke(i915, obj, I915_MMAP_TYPE_WC);
+
+		i915_gem_object_put(obj);
+		if (err)
+			return err;
+	}
+
+	return 0;
 }
 
 int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
@@ -969,10 +1351,10 @@ int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
 		SUBTEST(igt_partial_tiling),
 		SUBTEST(igt_smoke_tiling),
 		SUBTEST(igt_mmap_offset_exhaustion),
-		SUBTEST(igt_mmap_gtt),
-		SUBTEST(igt_mmap_cpu),
-		SUBTEST(igt_mmap_gtt_revoke),
-		SUBTEST(igt_mmap_cpu_revoke),
+		SUBTEST(igt_mmap),
+		SUBTEST(igt_mmap_access),
+		SUBTEST(igt_mmap_revoke),
+		SUBTEST(igt_mmap_gpu),
 	};
 
 	return i915_subtests(tests, i915);

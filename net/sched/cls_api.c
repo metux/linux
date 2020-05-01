@@ -39,6 +39,7 @@
 #include <net/tc_act/tc_skbedit.h>
 #include <net/tc_act/tc_ct.h>
 #include <net/tc_act/tc_mpls.h>
+#include <net/tc_act/tc_gate.h>
 #include <net/flow_offload.h>
 
 extern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];
@@ -2073,7 +2074,6 @@ replay:
 		err = PTR_ERR(block);
 		goto errout;
 	}
-	block->classid = parent;
 
 	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
@@ -2616,10 +2616,12 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 			return skb->len;
 
 		parent = tcm->tcm_parent;
-		if (!parent)
+		if (!parent) {
 			q = dev->qdisc;
-		else
+			parent = q->handle;
+		} else {
 			q = qdisc_lookup(dev, TC_H_MAJ(tcm->tcm_parent));
+		}
 		if (!q)
 			goto out;
 		cops = q->ops->cl_ops;
@@ -2635,7 +2637,6 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 		block = cops->tcf_block(q, cl, NULL);
 		if (!block)
 			goto out;
-		parent = block->classid;
 		if (tcf_block_shared(block))
 			q = NULL;
 	}
@@ -3526,14 +3527,25 @@ static void tcf_sample_get_group(struct flow_action_entry *entry,
 #endif
 }
 
-static enum flow_action_hw_stats tc_act_hw_stats(u8 hw_stats)
+static void tcf_gate_entry_destructor(void *priv)
 {
-	if (WARN_ON_ONCE(hw_stats > TCA_ACT_HW_STATS_ANY))
-		return FLOW_ACTION_HW_STATS_DONT_CARE;
-	else if (!hw_stats)
-		return FLOW_ACTION_HW_STATS_DISABLED;
+	struct action_gate_entry *oe = priv;
 
-	return hw_stats;
+	kfree(oe);
+}
+
+static int tcf_gate_get_entries(struct flow_action_entry *entry,
+				const struct tc_action *act)
+{
+	entry->gate.entries = tcf_gate_get_list(act);
+
+	if (!entry->gate.entries)
+		return -EINVAL;
+
+	entry->destructor = tcf_gate_entry_destructor;
+	entry->destructor_priv = entry->gate.entries;
+
+	return 0;
 }
 
 int tc_setup_flow_action(struct flow_action *flow_action,
@@ -3559,7 +3571,7 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 		if (err)
 			goto err_out_locked;
 
-		entry->hw_stats = tc_act_hw_stats(act->hw_stats);
+		entry->hw_stats = act->hw_stats;
 
 		if (is_tcf_gact_ok(act)) {
 			entry->id = FLOW_ACTION_ACCEPT;
@@ -3627,7 +3639,7 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 				entry->mangle.mask = tcf_pedit_mask(act, k);
 				entry->mangle.val = tcf_pedit_val(act, k);
 				entry->mangle.offset = tcf_pedit_offset(act, k);
-				entry->hw_stats = tc_act_hw_stats(act->hw_stats);
+				entry->hw_stats = act->hw_stats;
 				entry = &flow_action->entries[++j];
 			}
 		} else if (is_tcf_csum(act)) {
@@ -3682,6 +3694,17 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 		} else if (is_tcf_skbedit_priority(act)) {
 			entry->id = FLOW_ACTION_PRIORITY;
 			entry->priority = tcf_skbedit_priority(act);
+		} else if (is_tcf_gate(act)) {
+			entry->id = FLOW_ACTION_GATE;
+			entry->gate.index = tcf_gate_index(act);
+			entry->gate.prio = tcf_gate_prio(act);
+			entry->gate.basetime = tcf_gate_basetime(act);
+			entry->gate.cycletime = tcf_gate_cycletime(act);
+			entry->gate.cycletimeext = tcf_gate_cycletimeext(act);
+			entry->gate.num_entries = tcf_gate_num_entries(act);
+			err = tcf_gate_get_entries(entry, act);
+			if (err)
+				goto err_out;
 		} else {
 			err = -EOPNOTSUPP;
 			goto err_out_locked;

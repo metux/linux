@@ -38,6 +38,7 @@ Contents:
    dlink/dl2k
    freescale/dpaa
    freescale/gianfar
+   intel/ipw2100
 
 .. only::  subproject and html
 

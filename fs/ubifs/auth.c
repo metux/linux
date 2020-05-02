@@ -31,16 +31,9 @@ int __ubifs_node_calc_hash(const struct ubifs_info *c, const void *node,
 			    u8 *hash)
 {
 	const struct ubifs_ch *ch = node;
-	SHASH_DESC_ON_STACK(shash, c->hash_tfm);
-	int err;
 
-	shash->tfm = c->hash_tfm;
-	shash->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
-
-	err = crypto_shash_digest(shash, node, le32_to_cpu(ch->len), hash);
-	if (err < 0)
-		return err;
-	return 0;
+	return crypto_shash_tfm_digest(c->hash_tfm, node, le32_to_cpu(ch->len),
+				       hash);
 }
 
 /**
@@ -54,16 +47,7 @@ int __ubifs_node_calc_hash(const struct ubifs_info *c, const void *node,
 static int ubifs_hash_calc_hmac(const struct ubifs_info *c, const u8 *hash,
 				 u8 *hmac)
 {
-	SHASH_DESC_ON_STACK(shash, c->hmac_tfm);
-	int err;
-
-	shash->tfm = c->hmac_tfm;
-	shash->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
-
-	err = crypto_shash_digest(shash, hash, c->hash_len, hmac);
-	if (err < 0)
-		return err;
-	return 0;
+	return crypto_shash_tfm_digest(c->hmac_tfm, hash, c->hash_len, hmac);
 }
 
 /**
@@ -81,28 +65,36 @@ int ubifs_prepare_auth_node(struct ubifs_info *c, void *node,
 			     struct shash_desc *inhash)
 {
 	struct ubifs_auth_node *auth = node;
-	u8 hash[UBIFS_HASH_ARR_SZ];
+	u8 *hash;
 	int err;
+
+	hash = kmalloc(crypto_shash_descsize(c->hash_tfm), GFP_NOFS);
+	if (!hash)
+		return -ENOMEM;
 
 	{
 		SHASH_DESC_ON_STACK(hash_desc, c->hash_tfm);
 
 		hash_desc->tfm = c->hash_tfm;
-		hash_desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 		ubifs_shash_copy_state(c, inhash, hash_desc);
 
 		err = crypto_shash_final(hash_desc, hash);
 		if (err)
-			return err;
+			goto out;
 	}
 
 	err = ubifs_hash_calc_hmac(c, hash, auth->hmac);
 	if (err)
-		return err;
+		goto out;
 
 	auth->ch.node_type = UBIFS_AUTH_NODE;
 	ubifs_prepare_node(c, auth, ubifs_auth_node_sz(c), 0);
-	return 0;
+
+	err = 0;
+out:
+	kfree(hash);
+
+	return err;
 }
 
 static struct shash_desc *ubifs_get_desc(const struct ubifs_info *c,
@@ -119,7 +111,6 @@ static struct shash_desc *ubifs_get_desc(const struct ubifs_info *c,
 		return ERR_PTR(-ENOMEM);
 
 	desc->tfm = tfm;
-	desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	err = crypto_shash_init(desc);
 	if (err) {
@@ -413,7 +404,6 @@ static int ubifs_node_calc_hmac(const struct ubifs_info *c, const void *node,
 	ubifs_assert(c, ofs_hmac + hmac_len < len);
 
 	shash->tfm = c->hmac_tfm;
-	shash->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	err = crypto_shash_init(shash);
 	if (err)
@@ -534,7 +524,6 @@ int ubifs_hmac_wkm(struct ubifs_info *c, u8 *hmac)
 		return 0;
 
 	shash->tfm = c->hmac_tfm;
-	shash->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	err = crypto_shash_init(shash);
 	if (err)

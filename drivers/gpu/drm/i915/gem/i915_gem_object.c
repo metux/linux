@@ -166,9 +166,7 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 				    struct llist_node *freed)
 {
 	struct drm_i915_gem_object *obj, *on;
-	intel_wakeref_t wakeref;
 
-	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 	llist_for_each_entry_safe(obj, on, freed, freed) {
 		struct i915_mmap_offset *mmo, *mn;
 
@@ -225,7 +223,6 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 		/* But keep the pointer alive for RCU-protected lookups */
 		call_rcu(&obj->rcu, __i915_gem_free_object_rcu);
 	}
-	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
 void i915_gem_flush_free_objects(struct drm_i915_private *i915)

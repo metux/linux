@@ -115,6 +115,9 @@ track_intel_runtime_pm_wakeref(struct intel_runtime_pm *rpm)
 static void untrack_intel_runtime_pm_wakeref(struct intel_runtime_pm *rpm,
 					     depot_stack_handle_t stack)
 {
+	struct drm_i915_private *i915 = container_of(rpm,
+						     struct drm_i915_private,
+						     runtime_pm);
 	unsigned long flags, n;
 	bool found = false;
 
@@ -133,9 +136,9 @@ static void untrack_intel_runtime_pm_wakeref(struct intel_runtime_pm *rpm,
 	}
 	spin_unlock_irqrestore(&rpm->debug.lock, flags);
 
-	if (WARN(!found,
-		 "Unmatched wakeref (tracking %lu), count %u\n",
-		 rpm->debug.count, atomic_read(&rpm->wakeref_count))) {
+	if (drm_WARN(&i915->drm, !found,
+		     "Unmatched wakeref (tracking %lu), count %u\n",
+		     rpm->debug.count, atomic_read(&rpm->wakeref_count))) {
 		char *buf;
 
 		buf = kmalloc(PAGE_SIZE, GFP_NOWAIT | __GFP_NOWARN);
@@ -354,10 +357,14 @@ intel_runtime_pm_release(struct intel_runtime_pm *rpm, int wakelock)
 static intel_wakeref_t __intel_runtime_pm_get(struct intel_runtime_pm *rpm,
 					      bool wakelock)
 {
+	struct drm_i915_private *i915 = container_of(rpm,
+						     struct drm_i915_private,
+						     runtime_pm);
 	int ret;
 
 	ret = pm_runtime_get_sync(rpm->kdev);
-	WARN_ONCE(ret < 0, "pm_runtime_get_sync() failed: %d\n", ret);
+	drm_WARN_ONCE(&i915->drm, ret < 0,
+		      "pm_runtime_get_sync() failed: %d\n", ret);
 
 	intel_runtime_pm_acquire(rpm, wakelock);
 
@@ -538,6 +545,9 @@ void intel_runtime_pm_put(struct intel_runtime_pm *rpm, intel_wakeref_t wref)
  */
 void intel_runtime_pm_enable(struct intel_runtime_pm *rpm)
 {
+	struct drm_i915_private *i915 = container_of(rpm,
+						     struct drm_i915_private,
+						     runtime_pm);
 	struct device *kdev = rpm->kdev;
 
 	/*
@@ -564,7 +574,8 @@ void intel_runtime_pm_enable(struct intel_runtime_pm *rpm)
 
 		pm_runtime_dont_use_autosuspend(kdev);
 		ret = pm_runtime_get_sync(kdev);
-		WARN(ret < 0, "pm_runtime_get_sync() failed: %d\n", ret);
+		drm_WARN(&i915->drm, ret < 0,
+			 "pm_runtime_get_sync() failed: %d\n", ret);
 	} else {
 		pm_runtime_use_autosuspend(kdev);
 	}
@@ -579,11 +590,14 @@ void intel_runtime_pm_enable(struct intel_runtime_pm *rpm)
 
 void intel_runtime_pm_disable(struct intel_runtime_pm *rpm)
 {
+	struct drm_i915_private *i915 = container_of(rpm,
+						     struct drm_i915_private,
+						     runtime_pm);
 	struct device *kdev = rpm->kdev;
 
 	/* Transfer rpm ownership back to core */
-	WARN(pm_runtime_get_sync(kdev) < 0,
-	     "Failed to pass rpm ownership back to core\n");
+	drm_WARN(&i915->drm, pm_runtime_get_sync(kdev) < 0,
+		 "Failed to pass rpm ownership back to core\n");
 
 	pm_runtime_dont_use_autosuspend(kdev);
 
@@ -593,12 +607,15 @@ void intel_runtime_pm_disable(struct intel_runtime_pm *rpm)
 
 void intel_runtime_pm_driver_release(struct intel_runtime_pm *rpm)
 {
+	struct drm_i915_private *i915 = container_of(rpm,
+						     struct drm_i915_private,
+						     runtime_pm);
 	int count = atomic_read(&rpm->wakeref_count);
 
-	WARN(count,
-	     "i915 raw-wakerefs=%d wakelocks=%d on cleanup\n",
-	     intel_rpm_raw_wakeref_count(count),
-	     intel_rpm_wakelock_count(count));
+	drm_WARN(&i915->drm, count,
+		 "i915 raw-wakerefs=%d wakelocks=%d on cleanup\n",
+		 intel_rpm_raw_wakeref_count(count),
+		 intel_rpm_wakelock_count(count));
 
 	untrack_all_intel_runtime_pm_wakerefs(rpm);
 }

@@ -43,7 +43,7 @@ static struct {
 };
 
 /* Setup test checking loop. */
-static __no_kcsan inline void
+static __no_kcsan_or_inline void
 begin_test_checks(void (*func1)(void), void (*func2)(void))
 {
 	kcsan_disable_current();
@@ -60,7 +60,7 @@ begin_test_checks(void (*func1)(void), void (*func2)(void))
 }
 
 /* End test checking loop. */
-static __no_kcsan inline bool
+static __no_kcsan_or_inline bool
 end_test_checks(bool stop)
 {
 	if (!stop && time_before(jiffies, end_time)) {
@@ -364,11 +364,6 @@ static noinline void test_kernel_write_struct_part(void)
 static noinline void test_kernel_read_struct_zero_size(void)
 {
 	kcsan_check_read(&test_struct.val[3], 0);
-}
-
-static noinline void test_kernel_jiffies_reader(void)
-{
-	sink_value((long)jiffies);
 }
 
 static noinline void test_kernel_seqlock_reader(void)
@@ -822,23 +817,6 @@ static void test_assert_exclusive_access_scoped(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, match_expect_inscope);
 }
 
-/*
- * jiffies is special (declared to be volatile) and its accesses are typically
- * not marked; this test ensures that the compiler nor KCSAN gets confused about
- * jiffies's declaration on different architectures.
- */
-__no_kcsan
-static void test_jiffies_noreport(struct kunit *test)
-{
-	bool match_never = false;
-
-	begin_test_checks(test_kernel_jiffies_reader, test_kernel_jiffies_reader);
-	do {
-		match_never = report_available();
-	} while (!end_test_checks(match_never));
-	KUNIT_EXPECT_FALSE(test, match_never);
-}
-
 /* Test that racing accesses in seqlock critical sections are not reported. */
 __no_kcsan
 static void test_seqlock_noreport(struct kunit *test)
@@ -889,7 +867,6 @@ static struct kunit_case kcsan_test_cases[] = {
 	KCSAN_KUNIT_CASE(test_assert_exclusive_bits_nochange),
 	KCSAN_KUNIT_CASE(test_assert_exclusive_writer_scoped),
 	KCSAN_KUNIT_CASE(test_assert_exclusive_access_scoped),
-	KCSAN_KUNIT_CASE(test_jiffies_noreport),
 	KCSAN_KUNIT_CASE(test_seqlock_noreport),
 	{},
 };

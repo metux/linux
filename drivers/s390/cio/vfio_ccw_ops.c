@@ -178,10 +178,6 @@ static int vfio_ccw_mdev_open(struct mdev_device *mdev)
 	if (ret)
 		goto out_unregister;
 
-	ret = vfio_ccw_register_crw_dev_regions(private);
-	if (ret)
-		goto out_unregister;
-
 	return ret;
 
 out_unregister:
@@ -391,22 +387,17 @@ static int vfio_ccw_mdev_get_region_info(struct vfio_region_info *info,
 
 static int vfio_ccw_mdev_get_irq_info(struct vfio_irq_info *info)
 {
-	switch (info->index) {
-	case VFIO_CCW_IO_IRQ_INDEX:
-	case VFIO_CCW_CRW_IRQ_INDEX:
-		info->count = 1;
-		info->flags = VFIO_IRQ_INFO_EVENTFD;
-		break;
-	default:
+	if (info->index != VFIO_CCW_IO_IRQ_INDEX)
 		return -EINVAL;
-	}
+
+	info->count = 1;
+	info->flags = VFIO_IRQ_INFO_EVENTFD;
 
 	return 0;
 }
 
 static int vfio_ccw_mdev_set_irqs(struct mdev_device *mdev,
 				  uint32_t flags,
-				  uint32_t index,
 				  void __user *data)
 {
 	struct vfio_ccw_private *private;
@@ -416,17 +407,7 @@ static int vfio_ccw_mdev_set_irqs(struct mdev_device *mdev,
 		return -EINVAL;
 
 	private = dev_get_drvdata(mdev_parent_dev(mdev));
-
-	switch (index) {
-	case VFIO_CCW_IO_IRQ_INDEX:
-		ctx = &private->io_trigger;
-		break;
-	case VFIO_CCW_CRW_IRQ_INDEX:
-		ctx = &private->crw_trigger;
-		break;
-	default:
-		return -EINVAL;
-	}
+	ctx = &private->io_trigger;
 
 	switch (flags & VFIO_IRQ_SET_DATA_TYPE_MASK) {
 	case VFIO_IRQ_SET_DATA_NONE:
@@ -598,7 +579,7 @@ static ssize_t vfio_ccw_mdev_ioctl(struct mdev_device *mdev,
 			return ret;
 
 		data = (void __user *)(arg + minsz);
-		return vfio_ccw_mdev_set_irqs(mdev, hdr.flags, hdr.index, data);
+		return vfio_ccw_mdev_set_irqs(mdev, hdr.flags, data);
 	}
 	case VFIO_DEVICE_RESET:
 		return vfio_ccw_mdev_reset(mdev);

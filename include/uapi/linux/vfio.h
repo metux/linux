@@ -392,7 +392,6 @@ struct vfio_region_gfx_edid {
 /* sub-types for VFIO_REGION_TYPE_CCW */
 #define VFIO_REGION_SUBTYPE_CCW_ASYNC_CMD	(1)
 #define VFIO_REGION_SUBTYPE_CCW_SCHIB		(2)
-#define VFIO_REGION_SUBTYPE_CCW_CRW		(3)
 
 /* sub-types for VFIO_REGION_TYPE_MIGRATION */
 #define VFIO_REGION_SUBTYPE_MIGRATION           (1)
@@ -819,7 +818,6 @@ enum {
 
 enum {
 	VFIO_CCW_IO_IRQ_INDEX,
-	VFIO_CCW_CRW_IRQ_INDEX,
 	VFIO_CCW_NUM_IRQS
 };
 
@@ -1042,7 +1040,7 @@ struct vfio_iommu_type1_info_cap_iova_range {
  * size in bytes that can be used by user applications when getting the dirty
  * bitmap.
  */
-#define VFIO_IOMMU_TYPE1_INFO_CAP_MIGRATION  2
+#define VFIO_IOMMU_TYPE1_INFO_CAP_MIGRATION  1
 
 struct vfio_iommu_type1_info_cap_migration {
 	struct	vfio_info_cap_header header;

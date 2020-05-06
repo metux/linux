@@ -2931,7 +2931,6 @@ static int ib_uverbs_ex_create_wq(struct uverbs_attr_bundle *attrs)
 	wq_init_attr.cq = cq;
 	wq_init_attr.max_sge = cmd.max_sge;
 	wq_init_attr.max_wr = cmd.max_wr;
-	wq_init_attr.wq_context = attrs->ufile;
 	wq_init_attr.wq_type = cmd.wq_type;
 	wq_init_attr.event_handler = ib_uverbs_wq_event_handler;
 	wq_init_attr.create_flags = cmd.create_flags;
@@ -2950,7 +2949,6 @@ static int ib_uverbs_ex_create_wq(struct uverbs_attr_bundle *attrs)
 	wq->cq = cq;
 	wq->pd = pd;
 	wq->device = pd->device;
-	wq->wq_context = wq_init_attr.wq_context;
 	atomic_set(&wq->usecnt, 0);
 	atomic_inc(&pd->usecnt);
 	atomic_inc(&cq->usecnt);
@@ -3409,7 +3407,6 @@ static int __uverbs_create_xsrq(struct uverbs_attr_bundle *attrs,
 	}
 
 	attr.event_handler  = ib_uverbs_srq_event_handler;
-	attr.srq_context    = attrs->ufile;
 	attr.srq_type       = cmd->srq_type;
 	attr.attr.max_wr    = cmd->max_wr;
 	attr.attr.max_sge   = cmd->max_sge;
@@ -3429,7 +3426,6 @@ static int __uverbs_create_xsrq(struct uverbs_attr_bundle *attrs,
 	srq->srq_type	   = cmd->srq_type;
 	srq->uobject       = &obj->uevent.uobject;
 	srq->event_handler = attr.event_handler;
-	srq->srq_context   = attr.srq_context;
 
 	ret = pd->device->ops.create_srq(srq, &attr, udata);
 	if (ret)

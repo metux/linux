@@ -496,11 +496,8 @@ static void intel_mst_enable_dp(struct intel_encoder *encoder,
 
 	intel_ddi_enable_transcoder_func(encoder, pipe_config);
 
-	intel_enable_pipe(pipe_config);
-
-	intel_crtc_vblank_on(pipe_config);
-
-	DRM_DEBUG_KMS("active links %d\n", intel_dp->active_mst_links);
+	drm_dbg_kms(&dev_priv->drm, "active links %d\n",
+		    intel_dp->active_mst_links);
 
 	if (intel_de_wait_for_set(dev_priv, intel_dp->regs.dp_tp_status,
 				  DP_TP_STATUS_ACT_SENT, 1))
@@ -509,6 +506,11 @@ static void intel_mst_enable_dp(struct intel_encoder *encoder,
 	drm_dp_check_act_status(&intel_dp->mst_mgr);
 
 	drm_dp_update_payload_part2(&intel_dp->mst_mgr);
+
+	intel_enable_pipe(pipe_config);
+
+	intel_crtc_vblank_on(pipe_config);
+
 	if (pipe_config->has_audio)
 		intel_audio_codec_enable(encoder, pipe_config, conn_state);
 }

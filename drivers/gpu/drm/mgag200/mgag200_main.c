@@ -91,7 +91,7 @@ static int mga_vram_init(struct mga_device *mdev)
 static int mgag200_device_init(struct drm_device *dev,
 			       uint32_t flags)
 {
-	struct mga_device *mdev = dev->dev_private;
+	struct mga_device *mdev = to_mga_device(dev);
 	int ret, option;
 
 	mdev->type = flags;
@@ -199,7 +199,7 @@ err_mm:
 
 void mgag200_driver_unload(struct drm_device *dev)
 {
-	struct mga_device *mdev = dev->dev_private;
+	struct mga_device *mdev = to_mga_device(dev);
 
 	if (mdev == NULL)
 		return;

@@ -11,7 +11,7 @@ maintainers:
 
 description: |
   The Texas Instruments SN65DSI86 bridge takes MIPI DSI in and outputs eDP.
-  https://www.ti.com/general/docs/lit/getliterature.tsp?genericPartNumber=sn65dsi86&fileType=pdf
+  http://www.ti.com/general/docs/lit/getliterature.tsp?genericPartNumber=sn65dsi86&fileType=pdf
 
 properties:
   compatible:
@@ -27,12 +27,6 @@ properties:
   suspend-gpios:
     maxItems: 1
     description: GPIO specifier for GPIO1 pin on bridge (active low).
-
-  no-hpd:
-    type: boolean
-    description:
-      Set if the HPD line on the bridge isn't hooked up to anything or is
-      otherwise unusable.
 
   vccio-supply:
     description: A 1.8V supply that powers the digital IOs.
@@ -218,8 +212,6 @@ examples:
 
         clocks = <&rpmhcc RPMH_LN_BB_CLK2>;
         clock-names = "refclk";
-
-        no-hpd;
 
         ports {
           #address-cells = <1>;

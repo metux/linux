@@ -9,10 +9,11 @@
  */
 
 #include <linux/delay.h>
+#include <linux/pci.h>
 
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fourcc.h>
-#include <drm/drm_pci.h>
+#include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
@@ -1414,8 +1415,8 @@ static void mga_crtc_disable(struct drm_crtc *crtc)
 
 /* These provide the minimum set of functions required to handle a CRTC */
 static const struct drm_crtc_funcs mga_crtc_funcs = {
-	.cursor_set = mga_crtc_cursor_set,
-	.cursor_move = mga_crtc_cursor_move,
+	.cursor_set = mgag200_crtc_cursor_set,
+	.cursor_move = mgag200_crtc_cursor_move,
 	.gamma_set = mga_crtc_gamma_set,
 	.set_config = drm_crtc_helper_set_config,
 	.destroy = mga_crtc_destroy,
@@ -1561,23 +1562,13 @@ static enum drm_mode_status mga_vga_mode_valid(struct drm_connector *connector,
 			bpp = connector->cmdline_mode.bpp;
 	}
 
-	if ((mode->hdisplay * mode->vdisplay * (bpp/8)) > mdev->mc.vram_size) {
+	if ((mode->hdisplay * mode->vdisplay * (bpp/8)) > mdev->vram_fb_available) {
 		if (connector->cmdline_mode.specified)
 			connector->cmdline_mode.specified = false;
 		return MODE_BAD;
 	}
 
 	return MODE_OK;
-}
-
-static struct drm_encoder *mga_connector_best_encoder(struct drm_connector
-						  *connector)
-{
-	int enc_id = connector->encoder_ids[0];
-	/* pick the encoder ids */
-	if (enc_id)
-		return drm_encoder_find(connector->dev, NULL, enc_id);
-	return NULL;
 }
 
 static void mga_connector_destroy(struct drm_connector *connector)
@@ -1591,7 +1582,6 @@ static void mga_connector_destroy(struct drm_connector *connector)
 static const struct drm_connector_helper_funcs mga_vga_connector_helper_funcs = {
 	.get_modes = mga_vga_get_modes,
 	.mode_valid = mga_vga_mode_valid,
-	.best_encoder = mga_connector_best_encoder,
 };
 
 static const struct drm_connector_funcs mga_vga_connector_funcs = {
@@ -1625,6 +1615,17 @@ static struct drm_connector *mga_vga_init(struct drm_device *dev)
 	return connector;
 }
 
+static const struct drm_mode_config_funcs mgag200_mode_config_funcs = {
+	.fb_create = drm_gem_fb_create
+};
+
+static unsigned int mgag200_preferred_depth(struct mga_device *mdev)
+{
+	if (IS_G200_SE(mdev) && mdev->vram_fb_available < (2048*1024))
+		return 16;
+	else
+		return 32;
+}
 
 int mgag200_modeset_init(struct mga_device *mdev)
 {
@@ -1633,12 +1634,29 @@ int mgag200_modeset_init(struct mga_device *mdev)
 	struct drm_connector *connector;
 	int ret;
 
+	mdev->bpp_shifts[0] = 0;
+	mdev->bpp_shifts[1] = 1;
+	mdev->bpp_shifts[2] = 0;
+	mdev->bpp_shifts[3] = 2;
+
+	ret = drmm_mode_config_init(dev);
+	if (ret) {
+		drm_err(dev, "drmm_mode_config_init() failed, error %d\n",
+			ret);
+		return ret;
+	}
+
 	mdev->mode_info.mode_config_initialized = true;
 
 	dev->mode_config.max_width = MGAG200_MAX_FB_WIDTH;
 	dev->mode_config.max_height = MGAG200_MAX_FB_HEIGHT;
 
+	dev->mode_config.preferred_depth = mgag200_preferred_depth(mdev);
+	dev->mode_config.prefer_shadow = 1;
+
 	dev->mode_config.fb_base = mdev->mc.vram_base;
+
+	dev->mode_config.funcs = &mgag200_mode_config_funcs;
 
 	mga_crtc_init(mdev);
 
@@ -1660,9 +1678,4 @@ int mgag200_modeset_init(struct mga_device *mdev)
 	drm_connector_attach_encoder(connector, encoder);
 
 	return 0;
-}
-
-void mgag200_modeset_fini(struct mga_device *mdev)
-{
-
 }

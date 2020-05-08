@@ -16,7 +16,6 @@
 #include <linux/export.h>
 #include <linux/irq_work.h>
 #include <linux/extable.h>
-#include <linux/ftrace.h>
 
 #include <asm/machdep.h>
 #include <asm/mce.h>
@@ -588,14 +587,10 @@ EXPORT_SYMBOL_GPL(machine_check_print_event_info);
  *
  * regs->nip and regs->msr contains srr0 and ssr1.
  */
-long notrace machine_check_early(struct pt_regs *regs)
+long machine_check_early(struct pt_regs *regs)
 {
 	long handled = 0;
 	bool nested = in_nmi();
-	u8 ftrace_enabled = this_cpu_get_ftrace_enabled();
-
-	this_cpu_set_ftrace_enabled(0);
-
 	if (!nested)
 		nmi_enter();
 
@@ -609,8 +604,6 @@ long notrace machine_check_early(struct pt_regs *regs)
 
 	if (!nested)
 		nmi_exit();
-
-	this_cpu_set_ftrace_enabled(ftrace_enabled);
 
 	return handled;
 }

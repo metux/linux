@@ -56,15 +56,15 @@ static inline void set_cpu_logical_map(int cpu, u64 hwid)
 struct seq_file;
 
 /*
+ * generate IPI list text
+ */
+extern void show_ipi_list(struct seq_file *p, int prec);
+
+/*
  * Discover the set of possible CPUs and determine their
  * SMP operations.
  */
 extern void smp_init_cpus(void);
-
-/*
- * Register IPI interrupts with the arch SMP code
- */
-extern void set_smp_ipi_range(int ipi_base, int nr_ipi);
 
 /*
  * Register IPI interrupts with the arch SMP code

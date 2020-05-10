@@ -749,6 +749,10 @@ out_sem:
 				return ret;
 		}
 	}
+
+	if (retval < 0)
+		ext_debug("failed for inode %lu with err %d\n",
+			  inode->i_ino, retval);
 	return retval;
 }
 

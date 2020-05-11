@@ -29,6 +29,8 @@ void __iomem *ioremap(phys_addr_t offset, unsigned long size);
 void iounmap(volatile void __iomem *addr);
 #else
 #define pgprot_noncached(x)	(x)
+#define pgprot_writecombine(x)	(x)
+#define pgprot_device(x)	(x)
 #endif /* CONFIG_MMU */
 
 /* Generic IO read/write.  These perform native-endian accesses. */

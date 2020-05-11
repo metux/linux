@@ -524,7 +524,7 @@ void *initial_boot_params;
 static u32 of_fdt_crc32;
 
 /**
- * res_mem_reserve_reg() - reserve all memory described in 'reg' property
+ * __reserved_mem_reserve_reg() - reserve all memory described in 'reg' property
  */
 static int __init __reserved_mem_reserve_reg(unsigned long node,
 					     const char *uname)

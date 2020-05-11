@@ -108,22 +108,21 @@ static inline void fscrypt_handle_d_move(struct dentry *dentry)
 }
 
 /* crypto.c */
-extern void fscrypt_enqueue_decrypt_work(struct work_struct *);
+void fscrypt_enqueue_decrypt_work(struct work_struct *);
 
-extern struct page *fscrypt_encrypt_pagecache_blocks(struct page *page,
-						     unsigned int len,
-						     unsigned int offs,
-						     gfp_t gfp_flags);
-extern int fscrypt_encrypt_block_inplace(const struct inode *inode,
-					 struct page *page, unsigned int len,
-					 unsigned int offs, u64 lblk_num,
-					 gfp_t gfp_flags);
+struct page *fscrypt_encrypt_pagecache_blocks(struct page *page,
+					      unsigned int len,
+					      unsigned int offs,
+					      gfp_t gfp_flags);
+int fscrypt_encrypt_block_inplace(const struct inode *inode, struct page *page,
+				  unsigned int len, unsigned int offs,
+				  u64 lblk_num, gfp_t gfp_flags);
 
-extern int fscrypt_decrypt_pagecache_blocks(struct page *page, unsigned int len,
-					    unsigned int offs);
-extern int fscrypt_decrypt_block_inplace(const struct inode *inode,
-					 struct page *page, unsigned int len,
-					 unsigned int offs, u64 lblk_num);
+int fscrypt_decrypt_pagecache_blocks(struct page *page, unsigned int len,
+				     unsigned int offs);
+int fscrypt_decrypt_block_inplace(const struct inode *inode, struct page *page,
+				  unsigned int len, unsigned int offs,
+				  u64 lblk_num);
 
 static inline bool fscrypt_is_bounce_page(struct page *page)
 {
@@ -135,82 +134,74 @@ static inline struct page *fscrypt_pagecache_page(struct page *bounce_page)
 	return (struct page *)page_private(bounce_page);
 }
 
-extern void fscrypt_free_bounce_page(struct page *bounce_page);
-extern int fscrypt_d_revalidate(struct dentry *dentry, unsigned int flags);
+void fscrypt_free_bounce_page(struct page *bounce_page);
 
 /* policy.c */
-extern int fscrypt_ioctl_set_policy(struct file *filp, const void __user *arg);
-extern int fscrypt_ioctl_get_policy(struct file *filp, void __user *arg);
-extern int fscrypt_ioctl_get_policy_ex(struct file *filp, void __user *arg);
-extern int fscrypt_ioctl_get_nonce(struct file *filp, void __user *arg);
-extern int fscrypt_has_permitted_context(struct inode *parent,
-					 struct inode *child);
-extern int fscrypt_inherit_context(struct inode *parent, struct inode *child,
-				   void *fs_data, bool preload);
+int fscrypt_ioctl_set_policy(struct file *filp, const void __user *arg);
+int fscrypt_ioctl_get_policy(struct file *filp, void __user *arg);
+int fscrypt_ioctl_get_policy_ex(struct file *filp, void __user *arg);
+int fscrypt_ioctl_get_nonce(struct file *filp, void __user *arg);
+int fscrypt_has_permitted_context(struct inode *parent, struct inode *child);
+int fscrypt_inherit_context(struct inode *parent, struct inode *child,
+			    void *fs_data, bool preload);
 
 /* keyring.c */
-extern void fscrypt_sb_free(struct super_block *sb);
-extern int fscrypt_ioctl_add_key(struct file *filp, void __user *arg);
-extern int fscrypt_ioctl_remove_key(struct file *filp, void __user *arg);
-extern int fscrypt_ioctl_remove_key_all_users(struct file *filp,
-					      void __user *arg);
-extern int fscrypt_ioctl_get_key_status(struct file *filp, void __user *arg);
+void fscrypt_sb_free(struct super_block *sb);
+int fscrypt_ioctl_add_key(struct file *filp, void __user *arg);
+int fscrypt_ioctl_remove_key(struct file *filp, void __user *arg);
+int fscrypt_ioctl_remove_key_all_users(struct file *filp, void __user *arg);
+int fscrypt_ioctl_get_key_status(struct file *filp, void __user *arg);
 
 /* keysetup.c */
-extern int fscrypt_get_encryption_info(struct inode *inode);
-extern void fscrypt_put_encryption_info(struct inode *inode);
-extern void fscrypt_free_inode(struct inode *inode);
-extern int fscrypt_drop_inode(struct inode *inode);
+int fscrypt_get_encryption_info(struct inode *inode);
+void fscrypt_put_encryption_info(struct inode *inode);
+void fscrypt_free_inode(struct inode *inode);
+int fscrypt_drop_inode(struct inode *inode);
 
 /* fname.c */
-extern int fscrypt_setup_filename(struct inode *inode, const struct qstr *iname,
-				  int lookup, struct fscrypt_name *fname);
+int fscrypt_setup_filename(struct inode *inode, const struct qstr *iname,
+			   int lookup, struct fscrypt_name *fname);
 
 static inline void fscrypt_free_filename(struct fscrypt_name *fname)
 {
 	kfree(fname->crypto_buf.name);
 }
 
-extern int fscrypt_fname_alloc_buffer(const struct inode *inode,
-				      u32 max_encrypted_len,
-				      struct fscrypt_str *crypto_str);
-extern void fscrypt_fname_free_buffer(struct fscrypt_str *crypto_str);
-extern int fscrypt_fname_disk_to_usr(const struct inode *inode,
-				     u32 hash, u32 minor_hash,
-				     const struct fscrypt_str *iname,
-				     struct fscrypt_str *oname);
-extern bool fscrypt_match_name(const struct fscrypt_name *fname,
-			       const u8 *de_name, u32 de_name_len);
-extern u64 fscrypt_fname_siphash(const struct inode *dir,
-				 const struct qstr *name);
+int fscrypt_fname_alloc_buffer(const struct inode *inode, u32 max_encrypted_len,
+			       struct fscrypt_str *crypto_str);
+void fscrypt_fname_free_buffer(struct fscrypt_str *crypto_str);
+int fscrypt_fname_disk_to_usr(const struct inode *inode,
+			      u32 hash, u32 minor_hash,
+			      const struct fscrypt_str *iname,
+			      struct fscrypt_str *oname);
+bool fscrypt_match_name(const struct fscrypt_name *fname,
+			const u8 *de_name, u32 de_name_len);
+u64 fscrypt_fname_siphash(const struct inode *dir, const struct qstr *name);
 
 /* bio.c */
-extern void fscrypt_decrypt_bio(struct bio *bio);
-extern int fscrypt_zeroout_range(const struct inode *inode, pgoff_t lblk,
-				 sector_t pblk, unsigned int len);
+void fscrypt_decrypt_bio(struct bio *bio);
+int fscrypt_zeroout_range(const struct inode *inode, pgoff_t lblk,
+			  sector_t pblk, unsigned int len);
 
 /* hooks.c */
-extern int fscrypt_file_open(struct inode *inode, struct file *filp);
-extern int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
-				  struct dentry *dentry);
-extern int __fscrypt_prepare_rename(struct inode *old_dir,
-				    struct dentry *old_dentry,
-				    struct inode *new_dir,
-				    struct dentry *new_dentry,
-				    unsigned int flags);
-extern int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry,
-				    struct fscrypt_name *fname);
-extern int fscrypt_prepare_setflags(struct inode *inode,
-				    unsigned int oldflags, unsigned int flags);
-extern int __fscrypt_prepare_symlink(struct inode *dir, unsigned int len,
-				     unsigned int max_len,
-				     struct fscrypt_str *disk_link);
-extern int __fscrypt_encrypt_symlink(struct inode *inode, const char *target,
-				     unsigned int len,
-				     struct fscrypt_str *disk_link);
-extern const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
-				       unsigned int max_size,
-				       struct delayed_call *done);
+int fscrypt_file_open(struct inode *inode, struct file *filp);
+int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
+			   struct dentry *dentry);
+int __fscrypt_prepare_rename(struct inode *old_dir, struct dentry *old_dentry,
+			     struct inode *new_dir, struct dentry *new_dentry,
+			     unsigned int flags);
+int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry,
+			     struct fscrypt_name *fname);
+int fscrypt_prepare_setflags(struct inode *inode,
+			     unsigned int oldflags, unsigned int flags);
+int __fscrypt_prepare_symlink(struct inode *dir, unsigned int len,
+			      unsigned int max_len,
+			      struct fscrypt_str *disk_link);
+int __fscrypt_encrypt_symlink(struct inode *inode, const char *target,
+			      unsigned int len, struct fscrypt_str *disk_link);
+const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
+				unsigned int max_size,
+				struct delayed_call *done);
 static inline void fscrypt_set_ops(struct super_block *sb,
 				   const struct fscrypt_operations *s_cop)
 {
@@ -509,93 +500,6 @@ static inline void fscrypt_set_ops(struct super_block *sb,
 
 #endif	/* !CONFIG_FS_ENCRYPTION */
 
-/* inline_crypt.c */
-#ifdef CONFIG_FS_ENCRYPTION_INLINE_CRYPT
-extern bool fscrypt_inode_uses_inline_crypto(const struct inode *inode);
-
-extern bool fscrypt_inode_uses_fs_layer_crypto(const struct inode *inode);
-
-extern void fscrypt_set_bio_crypt_ctx(struct bio *bio,
-				      const struct inode *inode,
-				      u64 first_lblk, gfp_t gfp_mask);
-
-extern void fscrypt_set_bio_crypt_ctx_bh(struct bio *bio,
-					 const struct buffer_head *first_bh,
-					 gfp_t gfp_mask);
-
-extern bool fscrypt_mergeable_bio(struct bio *bio, const struct inode *inode,
-				  u64 next_lblk);
-
-extern bool fscrypt_mergeable_bio_bh(struct bio *bio,
-				     const struct buffer_head *next_bh);
-
-bool fscrypt_dio_supported(struct kiocb *iocb, struct iov_iter *iter);
-
-int fscrypt_limit_dio_pages(const struct inode *inode, loff_t pos,
-			    int nr_pages);
-
-#else /* CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
-static inline bool fscrypt_inode_uses_inline_crypto(const struct inode *inode)
-{
-	return false;
-}
-
-static inline bool fscrypt_inode_uses_fs_layer_crypto(const struct inode *inode)
-{
-	return IS_ENCRYPTED(inode) && S_ISREG(inode->i_mode);
-}
-
-static inline void fscrypt_set_bio_crypt_ctx(struct bio *bio,
-					     const struct inode *inode,
-					     u64 first_lblk, gfp_t gfp_mask) { }
-
-static inline void fscrypt_set_bio_crypt_ctx_bh(
-					 struct bio *bio,
-					 const struct buffer_head *first_bh,
-					 gfp_t gfp_mask) { }
-
-static inline bool fscrypt_mergeable_bio(struct bio *bio,
-					 const struct inode *inode,
-					 u64 next_lblk)
-{
-	return true;
-}
-
-static inline bool fscrypt_mergeable_bio_bh(struct bio *bio,
-					    const struct buffer_head *next_bh)
-{
-	return true;
-}
-
-static inline bool fscrypt_dio_supported(struct kiocb *iocb,
-					 struct iov_iter *iter)
-{
-	const struct inode *inode = file_inode(iocb->ki_filp);
-
-	return !fscrypt_needs_contents_encryption(inode);
-}
-
-static inline int fscrypt_limit_dio_pages(const struct inode *inode, loff_t pos,
-					  int nr_pages)
-{
-	return nr_pages;
-}
-#endif /* !CONFIG_FS_ENCRYPTION_INLINE_CRYPT */
-
-#if IS_ENABLED(CONFIG_FS_ENCRYPTION) && IS_ENABLED(CONFIG_DM_DEFAULT_KEY)
-static inline bool
-fscrypt_inode_should_skip_dm_default_key(const struct inode *inode)
-{
-	return IS_ENCRYPTED(inode) && S_ISREG(inode->i_mode);
-}
-#else
-static inline bool
-fscrypt_inode_should_skip_dm_default_key(const struct inode *inode)
-{
-	return false;
-}
-#endif
-
 /**
  * fscrypt_require_key() - require an inode's encryption key
  * @inode: the inode we need the key for
@@ -697,9 +601,8 @@ static inline int fscrypt_prepare_rename(struct inode *old_dir,
  * filenames are presented in encrypted form.  Therefore, we'll try to set up
  * the directory's encryption key, but even without it the lookup can continue.
  *
- * After calling this function, a filesystem should ensure that it's dentry
- * operations contain fscrypt_d_revalidate if DCACHE_ENCRYPTED_NAME was set,
- * so that the dentry can be invalidated if the key is later added.
+ * This also installs a custom ->d_revalidate() method which will invalidate the
+ * dentry if it was created without the key and the key is later added.
  *
  * Return: 0 on success; -ENOENT if key is unavailable but the filename isn't a
  * correctly formed encoded ciphertext name, so a negative dentry should be

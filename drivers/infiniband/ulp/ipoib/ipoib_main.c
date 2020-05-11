@@ -1898,6 +1898,7 @@ static int ipoib_ndo_init(struct net_device *ndev)
 {
 	struct ipoib_dev_priv *priv = ipoib_priv(ndev);
 	int rc;
+	struct rdma_netdev *rn = netdev_priv(ndev);
 
 	if (priv->parent) {
 		ipoib_child_init(ndev);
@@ -1910,6 +1911,7 @@ static int ipoib_ndo_init(struct net_device *ndev)
 	/* MTU will be reset when mcast join happens */
 	ndev->mtu = IPOIB_UD_MTU(priv->max_ib_mtu);
 	priv->mcast_mtu = priv->admin_mtu = ndev->mtu;
+	rn->mtu = priv->mcast_mtu;
 	ndev->max_mtu = IPOIB_CM_MTU;
 
 	ndev->neigh_priv_len = sizeof(struct ipoib_neigh);

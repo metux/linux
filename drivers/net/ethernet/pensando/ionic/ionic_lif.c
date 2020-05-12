@@ -987,18 +987,18 @@ static void ionic_lif_rx_mode(struct ionic_lif *lif, unsigned int rx_mode)
 	int i;
 #define REMAIN(__x) (sizeof(buf) - (__x))
 
-	i = snprintf(buf, sizeof(buf), "rx_mode 0x%04x -> 0x%04x:",
-		     lif->rx_mode, rx_mode);
+	i = scnprintf(buf, sizeof(buf), "rx_mode 0x%04x -> 0x%04x:",
+		      lif->rx_mode, rx_mode);
 	if (rx_mode & IONIC_RX_MODE_F_UNICAST)
-		i += snprintf(&buf[i], REMAIN(i), " RX_MODE_F_UNICAST");
+		i += scnprintf(&buf[i], REMAIN(i), " RX_MODE_F_UNICAST");
 	if (rx_mode & IONIC_RX_MODE_F_MULTICAST)
-		i += snprintf(&buf[i], REMAIN(i), " RX_MODE_F_MULTICAST");
+		i += scnprintf(&buf[i], REMAIN(i), " RX_MODE_F_MULTICAST");
 	if (rx_mode & IONIC_RX_MODE_F_BROADCAST)
-		i += snprintf(&buf[i], REMAIN(i), " RX_MODE_F_BROADCAST");
+		i += scnprintf(&buf[i], REMAIN(i), " RX_MODE_F_BROADCAST");
 	if (rx_mode & IONIC_RX_MODE_F_PROMISC)
-		i += snprintf(&buf[i], REMAIN(i), " RX_MODE_F_PROMISC");
+		i += scnprintf(&buf[i], REMAIN(i), " RX_MODE_F_PROMISC");
 	if (rx_mode & IONIC_RX_MODE_F_ALLMULTI)
-		i += snprintf(&buf[i], REMAIN(i), " RX_MODE_F_ALLMULTI");
+		i += scnprintf(&buf[i], REMAIN(i), " RX_MODE_F_ALLMULTI");
 	netdev_dbg(lif->netdev, "lif%d %s\n", lif->index, buf);
 
 	err = ionic_adminq_post_wait(lif, &ctx);
@@ -1707,7 +1707,7 @@ int ionic_stop(struct net_device *netdev)
 {
 	struct ionic_lif *lif = netdev_priv(netdev);
 
-	if (test_bit(IONIC_LIF_F_FW_RESET, lif->state))
+	if (!netif_device_present(netdev))
 		return 0;
 
 	ionic_stop_queues(lif);
@@ -1723,6 +1723,9 @@ static int ionic_get_vf_config(struct net_device *netdev,
 	struct ionic_lif *lif = netdev_priv(netdev);
 	struct ionic *ionic = lif->ionic;
 	int ret = 0;
+
+	if (!netif_device_present(netdev))
+		return -EBUSY;
 
 	down_read(&ionic->vf_op_lock);
 
@@ -1750,6 +1753,9 @@ static int ionic_get_vf_stats(struct net_device *netdev, int vf,
 	struct ionic *ionic = lif->ionic;
 	struct ionic_lif_stats *vs;
 	int ret = 0;
+
+	if (!netif_device_present(netdev))
+		return -EBUSY;
 
 	down_read(&ionic->vf_op_lock);
 
@@ -1786,7 +1792,10 @@ static int ionic_set_vf_mac(struct net_device *netdev, int vf, u8 *mac)
 	if (!(is_zero_ether_addr(mac) || is_valid_ether_addr(mac)))
 		return -EINVAL;
 
-	down_read(&ionic->vf_op_lock);
+	if (!netif_device_present(netdev))
+		return -EBUSY;
+
+	down_write(&ionic->vf_op_lock);
 
 	if (vf >= pci_num_vf(ionic->pdev) || !ionic->vfs) {
 		ret = -EINVAL;
@@ -1796,7 +1805,7 @@ static int ionic_set_vf_mac(struct net_device *netdev, int vf, u8 *mac)
 			ether_addr_copy(ionic->vfs[vf].macaddr, mac);
 	}
 
-	up_read(&ionic->vf_op_lock);
+	up_write(&ionic->vf_op_lock);
 	return ret;
 }
 
@@ -1817,7 +1826,10 @@ static int ionic_set_vf_vlan(struct net_device *netdev, int vf, u16 vlan,
 	if (proto != htons(ETH_P_8021Q))
 		return -EPROTONOSUPPORT;
 
-	down_read(&ionic->vf_op_lock);
+	if (!netif_device_present(netdev))
+		return -EBUSY;
+
+	down_write(&ionic->vf_op_lock);
 
 	if (vf >= pci_num_vf(ionic->pdev) || !ionic->vfs) {
 		ret = -EINVAL;
@@ -1828,7 +1840,7 @@ static int ionic_set_vf_vlan(struct net_device *netdev, int vf, u16 vlan,
 			ionic->vfs[vf].vlanid = vlan;
 	}
 
-	up_read(&ionic->vf_op_lock);
+	up_write(&ionic->vf_op_lock);
 	return ret;
 }
 
@@ -1842,6 +1854,9 @@ static int ionic_set_vf_rate(struct net_device *netdev, int vf,
 	/* setting the min just seems silly */
 	if (tx_min)
 		return -EINVAL;
+
+	if (!netif_device_present(netdev))
+		return -EBUSY;
 
 	down_write(&ionic->vf_op_lock);
 
@@ -1865,6 +1880,9 @@ static int ionic_set_vf_spoofchk(struct net_device *netdev, int vf, bool set)
 	u8 data = set;  /* convert to u8 for config */
 	int ret;
 
+	if (!netif_device_present(netdev))
+		return -EBUSY;
+
 	down_write(&ionic->vf_op_lock);
 
 	if (vf >= pci_num_vf(ionic->pdev) || !ionic->vfs) {
@@ -1886,6 +1904,9 @@ static int ionic_set_vf_trust(struct net_device *netdev, int vf, bool set)
 	struct ionic *ionic = lif->ionic;
 	u8 data = set;  /* convert to u8 for config */
 	int ret;
+
+	if (!netif_device_present(netdev))
+		return -EBUSY;
 
 	down_write(&ionic->vf_op_lock);
 
@@ -1922,6 +1943,9 @@ static int ionic_set_vf_link_state(struct net_device *netdev, int vf, int set)
 	default:
 		return -EINVAL;
 	}
+
+	if (!netif_device_present(netdev))
+		return -EBUSY;
 
 	down_write(&ionic->vf_op_lock);
 

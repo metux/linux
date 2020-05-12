@@ -41,8 +41,6 @@
 #include "lib/port_tun.h"
 
 #ifdef CONFIG_MLX5_ESWITCH
-extern const struct mlx5e_rx_handlers mlx5e_rx_handlers_rep;
-
 struct mlx5e_neigh_update_table {
 	struct rhashtable       neigh_ht;
 	/* Save the neigh hash entries in a list in addition to the hash table
@@ -135,6 +133,12 @@ struct mlx5e_neigh_hash_entry {
 	/* encap list sharing the same neigh */
 	struct list_head encap_list;
 
+	/* valid only when the neigh reference is taken during
+	 * neigh_update_work workqueue callback.
+	 */
+	struct neighbour *n;
+	struct work_struct neigh_update_work;
+
 	/* neigh hash entry can be deleted only when the refcount is zero.
 	 * refcount is needed to avoid neigh hash entry removal by TC, while
 	 * it's used by the neigh notification call.
@@ -219,6 +223,10 @@ bool mlx5e_is_uplink_rep(struct mlx5e_priv *priv);
 int mlx5e_add_sqs_fwd_rules(struct mlx5e_priv *priv);
 void mlx5e_remove_sqs_fwd_rules(struct mlx5e_priv *priv);
 
+void mlx5e_handle_rx_cqe_rep(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe);
+void mlx5e_handle_rx_cqe_mpwrq_rep(struct mlx5e_rq *rq,
+				   struct mlx5_cqe64 *cqe);
+
 void mlx5e_rep_queue_neigh_stats_work(struct mlx5e_priv *priv);
 
 bool mlx5e_eswitch_vf_rep(struct net_device *netdev);
@@ -228,6 +236,14 @@ static inline bool mlx5e_eswitch_rep(struct net_device *netdev)
 	return mlx5e_eswitch_vf_rep(netdev) ||
 	       mlx5e_eswitch_uplink_rep(netdev);
 }
+
+struct mlx5e_neigh_hash_entry *
+mlx5e_rep_neigh_entry_lookup(struct mlx5e_priv *priv,
+			     struct mlx5e_neigh *m_neigh);
+int mlx5e_rep_neigh_entry_create(struct mlx5e_priv *priv,
+				 struct mlx5e_encap_entry *e,
+				 struct mlx5e_neigh_hash_entry **nhe);
+void mlx5e_rep_neigh_entry_release(struct mlx5e_neigh_hash_entry *nhe);
 
 #else /* CONFIG_MLX5_ESWITCH */
 static inline bool mlx5e_is_uplink_rep(struct mlx5e_priv *priv) { return false; }

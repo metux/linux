@@ -130,13 +130,6 @@ static const struct argp_option opts[] = {
 	{},
 };
 
-extern struct argp bench_ringbufs_argp;
-
-static const struct argp_child bench_parsers[] = {
-	{ &bench_ringbufs_argp, 0, "Ring buffers benchmark", 0 },
-	{},
-};
-
 static error_t parse_arg(int key, char *arg, struct argp_state *state)
 {
 	static int pos_args;
@@ -215,7 +208,6 @@ static void parse_cmdline_args(int argc, char **argv)
 		.options = opts,
 		.parser = parse_arg,
 		.doc = argp_program_doc,
-		.children = bench_parsers,
 	};
 	if (argp_parse(&argp, argc, argv, 0, NULL, NULL))
 		exit(1);
@@ -250,7 +242,7 @@ static void setup_timer()
 	last_time_ns = get_time_ns();
 	err = sigaction(SIGALRM, &sigalarm_action, NULL);
 	if (err < 0) {
-		fprintf(stderr, "failed to install SIGALRM handler: %d\n", -errno);
+		fprintf(stderr, "failed to install SIGALARM handler: %d\n", -errno);
 		exit(1);
 	}
 	timer_settings.it_interval.tv_sec = 1;
@@ -311,17 +303,7 @@ extern const struct bench bench_rename_kretprobe;
 extern const struct bench bench_rename_rawtp;
 extern const struct bench bench_rename_fentry;
 extern const struct bench bench_rename_fexit;
-extern const struct bench bench_trig_base;
-extern const struct bench bench_trig_tp;
-extern const struct bench bench_trig_rawtp;
-extern const struct bench bench_trig_kprobe;
-extern const struct bench bench_trig_fentry;
-extern const struct bench bench_trig_fentry_sleep;
-extern const struct bench bench_trig_fmodret;
-extern const struct bench bench_rb_libbpf;
-extern const struct bench bench_rb_custom;
-extern const struct bench bench_pb_libbpf;
-extern const struct bench bench_pb_custom;
+extern const struct bench bench_rename_fmodret;
 
 static const struct bench *benchs[] = {
 	&bench_count_global,
@@ -332,17 +314,7 @@ static const struct bench *benchs[] = {
 	&bench_rename_rawtp,
 	&bench_rename_fentry,
 	&bench_rename_fexit,
-	&bench_trig_base,
-	&bench_trig_tp,
-	&bench_trig_rawtp,
-	&bench_trig_kprobe,
-	&bench_trig_fentry,
-	&bench_trig_fentry_sleep,
-	&bench_trig_fmodret,
-	&bench_rb_libbpf,
-	&bench_rb_custom,
-	&bench_pb_libbpf,
-	&bench_pb_custom,
+	&bench_rename_fmodret,
 };
 
 static void setup_benchmark()
@@ -462,3 +434,4 @@ int main(int argc, char **argv)
 
 	return 0;
 }
+

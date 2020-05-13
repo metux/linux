@@ -95,7 +95,7 @@ accommodates that API in some cases, and made some design choices to
 ensure that it stayed compatible.
 
 For more information on the Async TX API, please look the relevant
-documentation file in Documentation/crypto/async-tx-api.rst.
+documentation file in Documentation/crypto/async-tx-api.txt.
 
 DMAEngine APIs
 ==============
@@ -239,26 +239,21 @@ Currently, the types available are:
     want to transfer a portion of uncompressed data directly to the
     display to print it
 
-- DMA_REPEAT
+- DMA_COMPLETION_NO_ORDER
 
-  - The device supports repeated transfers. A repeated transfer, indicated by
-    the DMA_PREP_REPEAT transfer flag, is similar to a cyclic transfer in that
-    it gets automatically repeated when it ends, but can additionally be
-    replaced by the client.
+  - The device does not support in order completion.
 
-  - This feature is limited to interleaved transfers, this flag should thus not
-    be set if the DMA_INTERLEAVE flag isn't set. This limitation is based on
-    the current needs of DMA clients, support for additional transfer types
-    should be added in the future if and when the need arises.
+  - The driver should return DMA_OUT_OF_ORDER for device_tx_status if
+    the device is setting this capability.
 
-- DMA_LOAD_EOT
+  - All cookie tracking and checking API should be treated as invalid if
+    the device exports this capability.
 
-  - The device supports replacing repeated transfers at end of transfer (EOT)
-    by queuing a new transfer with the DMA_PREP_LOAD_EOT flag set.
+  - At this point, this is incompatible with polling option for dmatest.
 
-  - Support for replacing a currently running transfer at another point (such
-    as end of burst instead of end of transfer) will be added in the future
-    based on DMA clients needs, if and when the need arises.
+  - If this cap is set, the user is recommended to provide an unique
+    identifier for each descriptor sent to the DMA device in order to
+    properly track the completion.
 
 These various types will also affect how the source and destination
 addresses change over time.
@@ -420,6 +415,9 @@ supported.
   - In the case of a cyclic transfer, it should only take into
     account the current period.
 
+  - Should return DMA_OUT_OF_ORDER if the device does not support in order
+    completion and is completing the operation out of order.
+
   - This function can be called in an interrupt context.
 
 - device_config
@@ -551,34 +549,6 @@ DMA_CTRL_REUSE
     used for issuing commands to other peripherals/register reads/register
     writes for which the descriptor should be in different format from
     normal data descriptors.
-
-- DMA_PREP_REPEAT
-
-  - If set, the transfer will be automatically repeated when it ends until a
-    new transfer is queued on the same channel with the DMA_PREP_LOAD_EOT flag.
-    If the next transfer to be queued on the channel does not have the
-    DMA_PREP_LOAD_EOT flag set, the current transfer will be repeated until the
-    client terminates all transfers.
-
-  - This flag is only supported if the channel reports the DMA_REPEAT
-    capability.
-
-- DMA_PREP_LOAD_EOT
-
-  - If set, the transfer will replace the transfer currently being executed at
-    the end of the transfer.
-
-  - This is the default behaviour for non-repeated transfers, specifying
-    DMA_PREP_LOAD_EOT for non-repeated transfers will thus make no difference.
-
-  - When using repeated transfers, DMA clients will usually need to set the
-    DMA_PREP_LOAD_EOT flag on all transfers, otherwise the channel will keep
-    repeating the last repeated transfer and ignore the new transfers being
-    queued. Failure to set DMA_PREP_LOAD_EOT will appear as if the channel was
-    stuck on the previous transfer.
-
-  - This flag is only supported if the channel reports the DMA_LOAD_EOT
-    capability.
 
 General Design Notes
 ====================

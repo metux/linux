@@ -88,10 +88,8 @@ properties:
   phy-names:
     const: usb
 
-  companion:
-    $ref: /schemas/types.yaml#/definitions/phandle
-    description:
-     Phandle of a companion.
+  iommus:
+    maxItems: 1
 
 required:
   - compatible

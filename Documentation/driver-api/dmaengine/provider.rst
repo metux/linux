@@ -239,6 +239,7 @@ Currently, the types available are:
     want to transfer a portion of uncompressed data directly to the
     display to print it
 
+<<<<<<< HEAD
 - DMA_REPEAT
 
   - The device supports repeated transfers. A repeated transfer, indicated by
@@ -259,6 +260,24 @@ Currently, the types available are:
   - Support for replacing a currently running transfer at another point (such
     as end of burst instead of end of transfer) will be added in the future
     based on DMA clients needs, if and when the need arises.
+
+- DMA_COMPLETION_NO_ORDER
+
+  - The device does not support in order completion.
+
+  - The driver should return DMA_OUT_OF_ORDER for device_tx_status if
+    the device is setting this capability.
+
+  - All cookie tracking and checking API should be treated as invalid if
+    the device exports this capability.
+
+  - At this point, this is incompatible with polling option for dmatest.
+
+  - If this cap is set, the user is recommended to provide an unique
+    identifier for each descriptor sent to the DMA device in order to
+    properly track the completion.
+=======
+>>>>>>> 47ec7f09bc107 (dmaengine: cookie bypass for out of order completion)
 
 These various types will also affect how the source and destination
 addresses change over time.
@@ -419,6 +438,9 @@ supported.
 
   - In the case of a cyclic transfer, it should only take into
     account the current period.
+
+  - Should return DMA_OUT_OF_ORDER if the device does not support in order
+    completion and is completing the operation out of order.
 
   - This function can be called in an interrupt context.
 

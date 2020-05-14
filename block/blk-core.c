@@ -40,6 +40,7 @@
 #include <linux/bpf.h>
 #include <linux/psi.h>
 #include <linux/blk-crypto.h>
+#include <linux/sched/sysctl.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>
@@ -1828,6 +1829,18 @@ void blk_finish_plug(struct blk_plug *plug)
 	current->plug = NULL;
 }
 EXPORT_SYMBOL(blk_finish_plug);
+
+void blk_io_schedule(void)
+{
+	/* Prevent hang_check timer from firing at us during very long I/O */
+	unsigned long timeout = sysctl_hung_task_timeout_secs * HZ / 2;
+
+	if (timeout)
+		io_schedule_timeout(timeout);
+	else
+		io_schedule();
+}
+EXPORT_SYMBOL_GPL(blk_io_schedule);
 
 int __init blk_dev_init(void)
 {

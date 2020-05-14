@@ -1130,8 +1130,12 @@ blk_qc_t generic_make_request(struct bio *bio)
 			bio_list_on_stack[1] = bio_list_on_stack[0];
 			bio_list_init(&bio_list_on_stack[0]);
 
-			if (blk_crypto_bio_prep(&bio))
-				ret = blk_mq_make_request(q, bio);
+			if (blk_crypto_bio_prep(&bio)) {
+				if (q->make_request_fn)
+					ret = q->make_request_fn(q, bio);
+				else
+					ret = blk_mq_make_request(q, bio);
+			}
 
 			blk_queue_exit(q);
 
@@ -1170,8 +1174,7 @@ EXPORT_SYMBOL(generic_make_request);
 blk_qc_t direct_make_request(struct bio *bio)
 {
 	struct request_queue *q = bio->bi_disk->queue;
-	bool nowait = bio->bi_opf & REQ_NOWAIT;
-	blk_qc_t ret;
+	blk_qc_t ret = BLK_QC_T_NONE;
 
 	if (WARN_ON_ONCE(q->make_request_fn)) {
 		bio_io_error(bio);

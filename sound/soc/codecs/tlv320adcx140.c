@@ -582,7 +582,7 @@ static int adcx140_reset(struct adcx140_priv *adcx140)
 	/* 8.4.2: wait >= 10 ms after entering sleep mode. */
 	usleep_range(10000, 100000);
 
-	return ret;
+	return 0;
 }
 
 static int adcx140_hw_params(struct snd_pcm_substream *substream,
@@ -758,39 +758,37 @@ static int adcx140_codec_probe(struct snd_soc_component *component)
 {
 	struct adcx140_priv *adcx140 = snd_soc_component_get_drvdata(component);
 	int sleep_cfg_val = ADCX140_WAKE_DEV;
-	u32 bias_source;
-	u32 vref_source;
-	u8 bias_cfg;
+	u8 bias_source;
+	u8 vref_source;
 	int pdm_count;
 	u32 pdm_edges[ADCX140_NUM_PDM_EDGES];
 	u32 pdm_edge_val = 0;
-	int gpi_count;
-	u32 gpi_inputs[ADCX140_NUM_GPI_PINS];
-	u32 gpi_input_val = 0;
 	int i;
 	int ret;
 
-	ret = device_property_read_u32(adcx140->dev, "ti,mic-bias-source",
+	ret = device_property_read_u8(adcx140->dev, "ti,mic-bias-source",
 				      &bias_source);
 	if (ret)
 		bias_source = ADCX140_MIC_BIAS_VAL_VREF;
 
-	if (bias_source > ADCX140_MIC_BIAS_VAL_AVDD) {
+	if (bias_source < ADCX140_MIC_BIAS_VAL_VREF ||
+	    bias_source > ADCX140_MIC_BIAS_VAL_AVDD) {
 		dev_err(adcx140->dev, "Mic Bias source value is invalid\n");
 		return -EINVAL;
 	}
 
-	ret = device_property_read_u32(adcx140->dev, "ti,vref-source",
+	ret = device_property_read_u8(adcx140->dev, "ti,vref-source",
 				      &vref_source);
 	if (ret)
 		vref_source = ADCX140_MIC_BIAS_VREF_275V;
 
-	if (vref_source > ADCX140_MIC_BIAS_VREF_1375V) {
+	if (vref_source < ADCX140_MIC_BIAS_VREF_275V ||
+	    vref_source > ADCX140_MIC_BIAS_VREF_1375V) {
 		dev_err(adcx140->dev, "Mic Bias source value is invalid\n");
 		return -EINVAL;
 	}
 
-	bias_cfg = bias_source << ADCX140_MIC_BIAS_SHIFT | vref_source;
+	bias_source |= vref_source;
 
 	pdm_count = device_property_count_u32(adcx140->dev,
 					      "ti,pdm-edge-select");
@@ -806,31 +804,6 @@ static int adcx140_codec_probe(struct snd_soc_component *component)
 
 		ret = regmap_write(adcx140->regmap, ADCX140_PDM_CFG,
 				   pdm_edge_val);
-		if (ret)
-			return ret;
-	}
-
-	gpi_count = device_property_count_u32(adcx140->dev, "ti,gpi-config");
-	if (gpi_count <= ADCX140_NUM_GPI_PINS && gpi_count > 0) {
-		ret = device_property_read_u32_array(adcx140->dev,
-						     "ti,gpi-config",
-						     gpi_inputs, gpi_count);
-		if (ret)
-			return ret;
-
-		gpi_input_val = gpi_inputs[ADCX140_GPI1_INDEX] << ADCX140_GPI_SHIFT |
-				gpi_inputs[ADCX140_GPI2_INDEX];
-
-		ret = regmap_write(adcx140->regmap, ADCX140_GPI_CFG0,
-				   gpi_input_val);
-		if (ret)
-			return ret;
-
-		gpi_input_val = gpi_inputs[ADCX140_GPI3_INDEX] << ADCX140_GPI_SHIFT |
-				gpi_inputs[ADCX140_GPI4_INDEX];
-
-		ret = regmap_write(adcx140->regmap, ADCX140_GPI_CFG1,
-				   gpi_input_val);
 		if (ret)
 			return ret;
 	}
@@ -853,7 +826,7 @@ static int adcx140_codec_probe(struct snd_soc_component *component)
 
 	ret = regmap_update_bits(adcx140->regmap, ADCX140_BIAS_CFG,
 				ADCX140_MIC_BIAS_VAL_MSK |
-				ADCX140_MIC_BIAS_VREF_MSK, bias_cfg);
+				ADCX140_MIC_BIAS_VREF_MSK, bias_source);
 	if (ret)
 		dev_err(adcx140->dev, "setting MIC bias failed %d\n", ret);
 out:

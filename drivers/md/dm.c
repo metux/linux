@@ -25,8 +25,8 @@
 #include <linux/wait.h>
 #include <linux/pr.h>
 #include <linux/refcount.h>
+#include <linux/part_stat.h>
 #include <linux/blk-crypto.h>
-#include <linux/keyslot-manager.h>
 
 #define DM_MSG_PREFIX "core"
 
@@ -1200,6 +1200,35 @@ static size_t dm_dax_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 	return ret;
 }
 
+static int dm_dax_zero_page_range(struct dax_device *dax_dev, pgoff_t pgoff,
+				  size_t nr_pages)
+{
+	struct mapped_device *md = dax_get_private(dax_dev);
+	sector_t sector = pgoff * PAGE_SECTORS;
+	struct dm_target *ti;
+	int ret = -EIO;
+	int srcu_idx;
+
+	ti = dm_dax_get_live_target(md, sector, &srcu_idx);
+
+	if (!ti)
+		goto out;
+	if (WARN_ON(!ti->type->dax_zero_page_range)) {
+		/*
+		 * ->zero_page_range() is mandatory dax operation. If we are
+		 *  here, something is wrong.
+		 */
+		dm_put_live_table(md, srcu_idx);
+		goto out;
+	}
+	ret = ti->type->dax_zero_page_range(ti, pgoff, nr_pages);
+
+ out:
+	dm_put_live_table(md, srcu_idx);
+
+	return ret;
+}
+
 /*
  * A target may call dm_accept_partial_bio only from the map routine.  It is
  * allowed for all bio types except REQ_PREFLUSH, REQ_OP_ZONE_RESET,
@@ -1743,8 +1772,9 @@ static blk_qc_t dm_process_bio(struct mapped_device *md,
 	 * won't be imposed.
 	 */
 	if (current->bio_list) {
-		blk_queue_split(md->queue, &bio);
-		if (!is_abnormal_io(bio))
+		if (is_abnormal_io(bio))
+			blk_queue_split(md->queue, &bio);
+		else
 			dm_queue_split(md, ti, &bio);
 	}
 
@@ -1795,7 +1825,8 @@ static int dm_any_congested(void *congested_data, int bdi_bits)
 			 * With request-based DM we only need to check the
 			 * top-level queue for congestion.
 			 */
-			r = md->queue->backing_dev_info->wb.state & bdi_bits;
+			struct backing_dev_info *bdi = md->queue->backing_dev_info;
+			r = bdi->wb.congested->state & bdi_bits;
 		} else {
 			map = dm_get_live_table_fast(md);
 			if (map)
@@ -1861,16 +1892,6 @@ static const struct dax_operations dm_dax_ops;
 
 static void dm_wq_work(struct work_struct *work);
 
-static void dm_init_normal_md_queue(struct mapped_device *md)
-{
-	/*
-	 * Initialize aspects of queue that aren't relevant for blk-mq
-	 */
-	md->queue->backing_dev_info->congested_fn = dm_any_congested;
-}
-
-static void dm_destroy_inline_encryption(struct request_queue *q);
-
 static void cleanup_mapped_device(struct mapped_device *md)
 {
 	if (md->wq)
@@ -1892,10 +1913,8 @@ static void cleanup_mapped_device(struct mapped_device *md)
 		put_disk(md->disk);
 	}
 
-	if (md->queue) {
-		dm_destroy_inline_encryption(md->queue);
+	if (md->queue)
 		blk_cleanup_queue(md->queue);
-	}
 
 	cleanup_srcu_struct(&md->io_barrier);
 
@@ -1956,11 +1975,15 @@ static struct mapped_device *alloc_dev(int minor)
 	INIT_LIST_HEAD(&md->table_devices);
 	spin_lock_init(&md->uevent_lock);
 
-	md->queue = blk_alloc_queue_node(GFP_KERNEL, numa_node_id);
+	/*
+	 * default to bio-based required ->make_request_fn until DM
+	 * table is loaded and md->type established. If request-based
+	 * table is loaded: blk-mq will override accordingly.
+	 */
+	md->queue = blk_alloc_queue(dm_make_request, numa_node_id);
 	if (!md->queue)
 		goto bad;
 	md->queue->queuedata = md;
-	md->queue->backing_dev_info->congested_data = md;
 
 	md->disk = alloc_disk_node(1, md->numa_node_id);
 	if (!md->disk)
@@ -1981,7 +2004,7 @@ static struct mapped_device *alloc_dev(int minor)
 	if (IS_ENABLED(CONFIG_DAX_DRIVER)) {
 		md->dax_dev = alloc_dax(md, md->disk->disk_name,
 					&dm_dax_ops, 0);
-		if (!md->dax_dev)
+		if (IS_ERR(md->dax_dev))
 			goto bad;
 	}
 
@@ -2254,160 +2277,11 @@ struct queue_limits *dm_get_queue_limits(struct mapped_device *md)
 }
 EXPORT_SYMBOL_GPL(dm_get_queue_limits);
 
-#ifdef CONFIG_BLK_INLINE_ENCRYPTION
-struct dm_keyslot_evict_args {
-	const struct blk_crypto_key *key;
-	int err;
-};
-
-static int dm_keyslot_evict_callback(struct dm_target *ti, struct dm_dev *dev,
-				     sector_t start, sector_t len, void *data)
+static void dm_init_congested_fn(struct mapped_device *md)
 {
-	struct dm_keyslot_evict_args *args = data;
-	int err;
-
-	err = blk_crypto_evict_key(dev->bdev->bd_queue, args->key);
-	if (!args->err)
-		args->err = err;
-	/* Always try to evict the key from all devices. */
-	return 0;
+	md->queue->backing_dev_info->congested_data = md;
+	md->queue->backing_dev_info->congested_fn = dm_any_congested;
 }
-
-/*
- * When an inline encryption key is evicted from a device-mapper device, evict
- * it from all the underlying devices.
- */
-static int dm_keyslot_evict(struct blk_keyslot_manager *ksm,
-			    const struct blk_crypto_key *key, unsigned int slot)
-{
-	struct mapped_device *md = container_of(ksm, struct mapped_device, ksm);
-	struct dm_keyslot_evict_args args = { key };
-	struct dm_table *t;
-	int srcu_idx;
-	int i;
-	struct dm_target *ti;
-
-	t = dm_get_live_table(md, &srcu_idx);
-	if (!t)
-		return 0;
-	for (i = 0; i < dm_table_get_num_targets(t); i++) {
-		ti = dm_table_get_target(t, i);
-		if (!ti->type->iterate_devices)
-			continue;
-		ti->type->iterate_devices(ti, dm_keyslot_evict_callback, &args);
-	}
-	dm_put_live_table(md, srcu_idx);
-	return args.err;
-}
-
-struct dm_derive_raw_secret_args {
-	const u8 *wrapped_key;
-	unsigned int wrapped_key_size;
-	u8 *secret;
-	unsigned int secret_size;
-	int err;
-};
-
-static int dm_derive_raw_secret_callback(struct dm_target *ti,
-					 struct dm_dev *dev, sector_t start,
-					 sector_t len, void *data)
-{
-	struct dm_derive_raw_secret_args *args = data;
-	struct request_queue *q = dev->bdev->bd_queue;
-
-	if (!args->err)
-		return 0;
-
-	if (!q->ksm) {
-		args->err = -EOPNOTSUPP;
-		return 0;
-	}
-
-	args->err = blk_ksm_derive_raw_secret(q->ksm, args->wrapped_key,
-					      args->wrapped_key_size,
-					      args->secret,
-					      args->secret_size);
-	/* Try another device in case this fails. */
-	return 0;
-}
-
-/*
- * Retrieve the raw_secret from the underlying device. Given that
- * only only one raw_secret can exist for a particular wrappedkey,
- * retrieve it only from the first device that supports derive_raw_secret()
- */
-static int dm_derive_raw_secret(struct blk_keyslot_manager *ksm,
-				const u8 *wrapped_key,
-				unsigned int wrapped_key_size,
-				u8 *secret, unsigned int secret_size)
-{
-	struct mapped_device *md = container_of(ksm, struct mapped_device, ksm);
-	struct dm_derive_raw_secret_args args = {
-		.wrapped_key = wrapped_key,
-		.wrapped_key_size = wrapped_key_size,
-		.secret = secret,
-		.secret_size = secret_size,
-		.err = -EOPNOTSUPP,
-	};
-	struct dm_table *t;
-	int srcu_idx;
-	int i;
-	struct dm_target *ti;
-
-	t = dm_get_live_table(md, &srcu_idx);
-	if (!t)
-		return -EOPNOTSUPP;
-	for (i = 0; i < dm_table_get_num_targets(t); i++) {
-		ti = dm_table_get_target(t, i);
-		if (!ti->type->iterate_devices)
-			continue;
-		ti->type->iterate_devices(ti, dm_derive_raw_secret_callback,
-					  &args);
-		if (!args.err)
-			break;
-	}
-	dm_put_live_table(md, srcu_idx);
-	return args.err;
-}
-
-static struct blk_ksm_ll_ops dm_ksm_ll_ops = {
-	.keyslot_evict = dm_keyslot_evict,
-	.derive_raw_secret = dm_derive_raw_secret,
-};
-
-static void dm_init_inline_encryption(struct mapped_device *md)
-{
-	blk_ksm_init_passthrough(&md->ksm);
-	md->ksm.ksm_ll_ops = dm_ksm_ll_ops;
-
-	/*
-	 * Initially declare support for all crypto settings. Anything
-	 * unsupported by a child device will be removed later when calculating
-	 * the device restrictions.
-	 */
-	md->ksm.max_dun_bytes_supported = UINT_MAX;
-	md->ksm.features = BLK_CRYPTO_FEATURE_STANDARD_KEYS |
-			   BLK_CRYPTO_FEATURE_WRAPPED_KEYS;
-	memset(md->ksm.crypto_modes_supported, 0xFF,
-	       sizeof(md->ksm.crypto_modes_supported));
-
-	blk_ksm_register(&md->ksm, md->queue);
-}
-
-static void dm_destroy_inline_encryption(struct request_queue *q)
-{
-	blk_ksm_destroy(q->ksm);
-	blk_ksm_unregister(q);
-}
-#else /* CONFIG_BLK_INLINE_ENCRYPTION */
-static inline void dm_init_inline_encryption(struct mapped_device *md)
-{
-}
-
-static inline void dm_destroy_inline_encryption(struct request_queue *q)
-{
-}
-#endif /* !CONFIG_BLK_INLINE_ENCRYPTION */
 
 /*
  * Setup the DM device's queue based on md's type
@@ -2425,12 +2299,12 @@ int dm_setup_md_queue(struct mapped_device *md, struct dm_table *t)
 			DMERR("Cannot initialize queue for request-based dm-mq mapped device");
 			return r;
 		}
+		dm_init_congested_fn(md);
 		break;
 	case DM_TYPE_BIO_BASED:
 	case DM_TYPE_DAX_BIO_BASED:
 	case DM_TYPE_NVME_BIO_BASED:
-		dm_init_normal_md_queue(md);
-		blk_queue_make_request(md->queue, dm_make_request);
+		dm_init_congested_fn(md);
 		break;
 	case DM_TYPE_NONE:
 		WARN_ON_ONCE(true);
@@ -2442,9 +2316,6 @@ int dm_setup_md_queue(struct mapped_device *md, struct dm_table *t)
 		DMERR("Cannot calculate initial queue limits");
 		return r;
 	}
-
-	dm_init_inline_encryption(md);
-
 	dm_table_set_restrictions(t, md->queue, &limits);
 	blk_register_queue(md->disk);
 
@@ -2532,6 +2403,7 @@ static void __dm_destroy(struct mapped_device *md, bool wait)
 	map = dm_get_live_table(md, &srcu_idx);
 	if (!dm_suspended_md(md)) {
 		dm_table_presuspend_targets(map);
+		set_bit(DMF_SUSPENDED, &md->flags);
 		dm_table_postsuspend_targets(map);
 	}
 	/* dm_put_live_table must be before msleep, otherwise deadlock is possible */
@@ -3363,6 +3235,7 @@ static const struct dax_operations dm_dax_ops = {
 	.dax_supported = dm_dax_supported,
 	.copy_from_iter = dm_dax_copy_from_iter,
 	.copy_to_iter = dm_dax_copy_to_iter,
+	.zero_page_range = dm_dax_zero_page_range,
 };
 
 /*

@@ -180,8 +180,6 @@ static struct bio *blk_crypto_clone_bio(struct bio *bio_src)
 	bio_clone_blkg_association(bio, bio_src);
 	blkcg_bio_issue_init(bio);
 
-	bio_clone_skip_dm_default_key(bio, bio_src);
-
 	return bio;
 }
 
@@ -491,12 +489,6 @@ bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr)
 	struct bio_crypt_ctx *bc = bio->bi_crypt_context;
 	struct bio_fallback_crypt_ctx *f_ctx;
 
-	if (bc->bc_key->crypto_cfg.is_hw_wrapped) {
-		pr_warn_once("HW wrapped key cannot be used with fallback.\n");
-		bio->bi_status = BLK_STS_NOTSUPP;
-		return false;
-	}
-
 	if (WARN_ON_ONCE(!tfms_inited[bc->bc_key->crypto_cfg.crypto_mode])) {
 		/* User didn't call blk_crypto_start_using_key() first */
 		bio->bi_status = BLK_STS_IOERR;
@@ -551,7 +543,6 @@ static int blk_crypto_fallback_init(void)
 
 	blk_crypto_ksm.ksm_ll_ops = blk_crypto_ksm_ll_ops;
 	blk_crypto_ksm.max_dun_bytes_supported = BLK_CRYPTO_MAX_IV_SIZE;
-	blk_crypto_ksm.features = BLK_CRYPTO_FEATURE_STANDARD_KEYS;
 
 	/* All blk-crypto modes have a crypto API fallback. */
 	for (i = 0; i < BLK_ENCRYPTION_MODE_MAX; i++)

@@ -160,7 +160,7 @@ static int panfrost_perfcnt_enable_locked(struct panfrost_device *pfdev,
 		gpu_write(pfdev, GPU_PRFCNT_TILER_EN, 0xffffffff);
 
 	/* The BO ref is retained by the mapping. */
-	drm_gem_object_put_unlocked(&bo->base);
+	drm_gem_object_put(&bo->base);
 
 	return 0;
 
@@ -171,7 +171,7 @@ err_put_mapping:
 err_close_bo:
 	panfrost_gem_close(&bo->base, file_priv);
 err_put_bo:
-	drm_gem_object_put_unlocked(&bo->base);
+	drm_gem_object_put(&bo->base);
 	return ret;
 }
 

@@ -959,7 +959,7 @@ static void gfx_v9_0_init_golden_registers(struct amdgpu_device *adev)
 	case CHIP_RAVEN:
 		soc15_program_register_sequence(adev, golden_settings_gc_9_1,
 						ARRAY_SIZE(golden_settings_gc_9_1));
-		if (adev->rev_id >= 8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			soc15_program_register_sequence(adev,
 							golden_settings_gc_9_1_rv2,
 							ARRAY_SIZE(golden_settings_gc_9_1_rv2));
@@ -1255,6 +1255,14 @@ static bool gfx_v9_0_should_disable_gfxoff(struct pci_dev *pdev)
 	return false;
 }
 
+static bool is_raven_kicker(struct amdgpu_device *adev)
+{
+	if (adev->pm.fw_version >= 0x41e2b)
+		return true;
+	else
+		return false;
+}
+
 static void gfx_v9_0_check_if_need_gfxoff(struct amdgpu_device *adev)
 {
 	if (gfx_v9_0_should_disable_gfxoff(adev->pdev))
@@ -1266,10 +1274,10 @@ static void gfx_v9_0_check_if_need_gfxoff(struct amdgpu_device *adev)
 	case CHIP_VEGA20:
 		break;
 	case CHIP_RAVEN:
-		if (!(adev->rev_id >= 0x8 || adev->pdev->device == 0x15d8) &&
-		    ((adev->gfx.rlc_fw_version != 106 &&
+		if (!((adev->apu_flags & AMD_APU_IS_RAVEN2) ||
+		      (adev->apu_flags & AMD_APU_IS_PICASSO)) &&
+		    ((!is_raven_kicker(adev) &&
 		      adev->gfx.rlc_fw_version < 531) ||
-		     (adev->gfx.rlc_fw_version == 53815) ||
 		     (adev->gfx.rlc_feature_version < 1) ||
 		     !adev->gfx.rlc.is_rlc_v2_1))
 			adev->pm.pp_feature &= ~PP_GFXOFF_MASK;
@@ -1610,9 +1618,9 @@ static int gfx_v9_0_init_microcode(struct amdgpu_device *adev)
 		chip_name = "vega20";
 		break;
 	case CHIP_RAVEN:
-		if (adev->rev_id >= 8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			chip_name = "raven2";
-		else if (adev->pdev->device == 0x15d8)
+		else if (adev->apu_flags & AMD_APU_IS_PICASSO)
 			chip_name = "picasso";
 		else
 			chip_name = "raven";
@@ -2112,7 +2120,7 @@ static int gfx_v9_0_gpu_early_init(struct amdgpu_device *adev)
 		adev->gfx.config.sc_prim_fifo_size_backend = 0x100;
 		adev->gfx.config.sc_hiz_tile_fifo_size = 0x30;
 		adev->gfx.config.sc_earlyz_tile_fifo_size = 0x4C0;
-		if (adev->rev_id >= 8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			gb_addr_config = RAVEN2_GB_ADDR_CONFIG_GOLDEN;
 		else
 			gb_addr_config = RAVEN_GB_ADDR_CONFIG_GOLDEN;
@@ -2961,8 +2969,7 @@ static void gfx_v9_0_init_pg(struct amdgpu_device *adev)
 	 */
 	if (adev->gfx.rlc.is_rlc_v2_1) {
 		if (adev->asic_type == CHIP_VEGA12 ||
-		    (adev->asic_type == CHIP_RAVEN &&
-		     adev->rev_id >= 8))
+		    (adev->apu_flags & AMD_APU_IS_RAVEN2))
 			gfx_v9_1_init_rlc_save_restore_list(adev);
 		gfx_v9_0_enable_save_restore_machine(adev);
 	}
@@ -4114,6 +4121,7 @@ static uint64_t gfx_v9_0_get_gpu_clock_counter(struct amdgpu_device *adev)
 {
 	uint64_t clock;
 
+	amdgpu_gfx_off_ctrl(adev, false);
 	mutex_lock(&adev->gfx.gpu_clock_mutex);
 	if (adev->asic_type == CHIP_VEGA10 && amdgpu_sriov_runtime(adev)) {
 		clock = gfx_v9_0_kiq_read_clock(adev);
@@ -4123,6 +4131,7 @@ static uint64_t gfx_v9_0_get_gpu_clock_counter(struct amdgpu_device *adev)
 			((uint64_t)RREG32_SOC15(GC, 0, mmRLC_GPU_CLOCK_COUNT_MSB) << 32ULL);
 	}
 	mutex_unlock(&adev->gfx.gpu_clock_mutex);
+	amdgpu_gfx_off_ctrl(adev, true);
 	return clock;
 }
 
@@ -4633,7 +4642,12 @@ static int gfx_v9_0_ecc_late_init(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int r;
 
-	/* limit gds clearing operation in cold boot sequence */
+	/*
+	 * Temp workaround to fix the issue that CP firmware fails to
+	 * update read pointer when CPDMA is writing clearing operation
+	 * to GDS in suspend/resume sequence on several cards. So just
+	 * limit this operation in cold boot sequence.
+	 */
 	if (!adev->in_suspend) {
 		r = gfx_v9_0_do_edc_gds_workarounds(adev);
 		if (r)
@@ -6867,7 +6881,7 @@ static void gfx_v9_0_set_gds_init(struct amdgpu_device *adev)
 		adev->gds.gds_compute_max_wave_id = 0x27f;
 		break;
 	case CHIP_RAVEN:
-		if (adev->rev_id >= 0x8)
+		if (adev->apu_flags & AMD_APU_IS_RAVEN2)
 			adev->gds.gds_compute_max_wave_id = 0x77; /* raven2 */
 		else
 			adev->gds.gds_compute_max_wave_id = 0x15f; /* raven1 */

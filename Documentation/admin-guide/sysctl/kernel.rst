@@ -448,9 +448,17 @@ When ``kptr_restrict`` is set to 2, kernel pointers printed using
 modprobe
 ========
 
-This gives the full path of the modprobe command which the kernel will
-use to load modules. This can be used to debug module loading
-requests::
+The full path to the usermode helper for autoloading kernel modules,
+by default "/sbin/modprobe".  This binary is executed when the kernel
+requests a module.  For example, if userspace passes an unknown
+filesystem type to mount(), then the kernel will automatically request
+the corresponding filesystem module by executing this usermode helper.
+This usermode helper should insert the needed module into the kernel.
+
+This sysctl only affects module autoloading.  It has no effect on the
+ability to explicitly insert modules.
+
+This sysctl can be used to debug module loading requests::
 
     echo '#! /bin/sh' > /tmp/modprobe
     echo 'echo "$@" >> /tmp/modprobe.log' >> /tmp/modprobe
@@ -458,10 +466,15 @@ requests::
     chmod a+x /tmp/modprobe
     echo /tmp/modprobe > /proc/sys/kernel/modprobe
 
-This only applies when the *kernel* is requesting that the module be
-loaded; it won't have any effect if the module is being loaded
-explicitly using ``modprobe`` from userspace.
+Alternatively, if this sysctl is set to the empty string, then module
+autoloading is completely disabled.  The kernel will not try to
+execute a usermode helper at all, nor will it call the
+kernel_module_request LSM hook.
 
+If CONFIG_STATIC_USERMODEHELPER=y is set in the kernel configuration,
+then the configured static usermode helper overrides this sysctl,
+except that the empty string is still accepted to completely disable
+module autoloading as described above.
 
 modules_disabled
 ================
@@ -504,27 +517,14 @@ Notes:
      successful IPC object allocation. If an IPC object allocation syscall
      fails, it is undefined if the value remains unmodified or is reset to -1.
 
-modprobe:
-=========
 
-The path to the usermode helper for autoloading kernel modules, by
-default "/sbin/modprobe".  This binary is executed when the kernel
-requests a module.  For example, if userspace passes an unknown
-filesystem type to mount(), then the kernel will automatically request
-the corresponding filesystem module by executing this usermode helper.
-This usermode helper should insert the needed module into the kernel.
+ngroups_max
+===========
 
-This sysctl only affects module autoloading.  It has no effect on the
-ability to explicitly insert modules.
+Maximum number of supplementary groups, _i.e._ the maximum size which
+``setgroups`` will accept. Exports ``NGROUPS_MAX`` from the kernel.
 
-If this sysctl is set to the empty string, then module autoloading is
-completely disabled.  The kernel will not try to execute a usermode
-helper at all, nor will it call the kernel_module_request LSM hook.
 
-If CONFIG_STATIC_USERMODEHELPER=y is set in the kernel configuration,
-then the configured static usermode helper overrides this sysctl,
-except that the empty string is still accepted to completely disable
-module autoloading as described above.
 
 nmi_watchdog
 ============
@@ -788,13 +788,7 @@ perf_event_paranoid
 ===================
 
 Controls use of the performance events system by unprivileged
-users (without CAP_PERFMON).  The default value is 2.
-
-For backward compatibility reasons access to system performance
-monitoring and observability remains open for CAP_SYS_ADMIN
-privileged processes but CAP_SYS_ADMIN usage for secure system
-performance monitoring and observability operations is discouraged
-with respect to CAP_PERFMON use cases.
+users (without CAP_SYS_ADMIN).  The default value is 2.
 
 ===  ==================================================================
  -1  Allow use of (almost) all events by all users.
@@ -803,13 +797,13 @@ with respect to CAP_PERFMON use cases.
      ``CAP_IPC_LOCK``.
 
 >=0  Disallow ftrace function tracepoint by users without
-     ``CAP_PERFMON``.
+     ``CAP_SYS_ADMIN``.
 
-     Disallow raw tracepoint access by users without ``CAP_PERFMON``.
+     Disallow raw tracepoint access by users without ``CAP_SYS_ADMIN``.
 
->=1  Disallow CPU event access by users without ``CAP_PERFMON``.
+>=1  Disallow CPU event access by users without ``CAP_SYS_ADMIN``.
 
->=2  Disallow kernel profiling by users without ``CAP_PERFMON``.
+>=2  Disallow kernel profiling by users without ``CAP_SYS_ADMIN``.
 ===  ==================================================================
 
 

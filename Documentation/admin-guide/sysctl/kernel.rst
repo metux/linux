@@ -838,13 +838,7 @@ perf_event_paranoid
 ===================
 
 Controls use of the performance events system by unprivileged
-users (without CAP_PERFMON).  The default value is 2.
-
-For backward compatibility reasons access to system performance
-monitoring and observability remains open for CAP_SYS_ADMIN
-privileged processes but CAP_SYS_ADMIN usage for secure system
-performance monitoring and observability operations is discouraged
-with respect to CAP_PERFMON use cases.
+users (without CAP_SYS_ADMIN).  The default value is 2.
 
 ===  ==================================================================
  -1  Allow use of (almost) all events by all users.
@@ -853,13 +847,13 @@ with respect to CAP_PERFMON use cases.
      ``CAP_IPC_LOCK``.
 
 >=0  Disallow ftrace function tracepoint by users without
-     ``CAP_PERFMON``.
+     ``CAP_SYS_ADMIN``.
 
-     Disallow raw tracepoint access by users without ``CAP_PERFMON``.
+     Disallow raw tracepoint access by users without ``CAP_SYS_ADMIN``.
 
->=1  Disallow CPU event access by users without ``CAP_PERFMON``.
+>=1  Disallow CPU event access by users without ``CAP_SYS_ADMIN``.
 
->=2  Disallow kernel profiling by users without ``CAP_PERFMON``.
+>=2  Disallow kernel profiling by users without ``CAP_SYS_ADMIN``.
 ===  ==================================================================
 
 

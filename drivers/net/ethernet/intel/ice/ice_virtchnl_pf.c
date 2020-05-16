@@ -1967,6 +1967,48 @@ error_param:
 }
 
 /**
+ * ice_wait_on_vf_reset - poll to make sure a given VF is ready after reset
+ * @vf: The VF being resseting
+ *
+ * The max poll time is about ~800ms, which is about the maximum time it takes
+ * for a VF to be reset and/or a VF driver to be removed.
+ */
+static void ice_wait_on_vf_reset(struct ice_vf *vf)
+{
+	int i;
+
+	for (i = 0; i < ICE_MAX_VF_RESET_TRIES; i++) {
+		if (test_bit(ICE_VF_STATE_INIT, vf->vf_states))
+			break;
+		msleep(ICE_MAX_VF_RESET_SLEEP_MS);
+	}
+}
+
+/**
+ * ice_check_vf_ready_for_cfg - check if VF is ready to be configured/queried
+ * @vf: VF to check if it's ready to be configured/queried
+ *
+ * The purpose of this function is to make sure the VF is not in reset, not
+ * disabled, and initialized so it can be configured and/or queried by a host
+ * administrator.
+ */
+static int ice_check_vf_ready_for_cfg(struct ice_vf *vf)
+{
+	struct ice_pf *pf;
+
+	ice_wait_on_vf_reset(vf);
+
+	if (ice_is_vf_disabled(vf))
+		return -EINVAL;
+
+	pf = vf->pf;
+	if (ice_check_vf_init(pf, vf))
+		return -EBUSY;
+
+	return 0;
+}
+
+/**
  * ice_set_vf_spoofchk
  * @netdev: network interface device structure
  * @vf_id: VF identifier
@@ -1983,16 +2025,16 @@ int ice_set_vf_spoofchk(struct net_device *netdev, int vf_id, bool ena)
 	enum ice_status status;
 	struct device *dev;
 	struct ice_vf *vf;
-	int ret = 0;
+	int ret;
 
 	dev = ice_pf_to_dev(pf);
 	if (ice_validate_vf_id(pf, vf_id))
 		return -EINVAL;
 
 	vf = &pf->vf[vf_id];
-
-	if (ice_check_vf_init(pf, vf))
-		return -EBUSY;
+	ret = ice_check_vf_ready_for_cfg(vf);
+	if (ret)
+		return ret;
 
 	vf_vsi = pf->vsi[vf->lan_vsi_idx];
 	if (!vf_vsi) {
@@ -3043,7 +3085,7 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 	struct device *dev;
 	struct ice_vf *vf;
 	u16 vlanprio;
-	int ret = 0;
+	int ret;
 
 	dev = ice_pf_to_dev(pf);
 	if (ice_validate_vf_id(pf, vf_id))
@@ -3062,15 +3104,17 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 
 	vf = &pf->vf[vf_id];
 	vsi = pf->vsi[vf->lan_vsi_idx];
-	if (ice_check_vf_init(pf, vf))
-		return -EBUSY;
+
+	ret = ice_check_vf_ready_for_cfg(vf);
+	if (ret)
+		return ret;
 
 	vlanprio = vlan_id | (qos << VLAN_PRIO_SHIFT);
 
 	if (vf->port_vlan_info == vlanprio) {
 		/* duplicate request, so just return success */
 		dev_dbg(dev, "Duplicate pvid %d request\n", vlanprio);
-		return ret;
+		return 0;
 	}
 
 	if (vlan_id || qos) {
@@ -3093,7 +3137,7 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 			return ret;
 		ret = ice_vsi_manage_pvid(vsi, 0, false);
 		if (ret)
-			goto error_manage_pvid;
+			return ret;
 	}
 
 	if (vlan_id) {
@@ -3103,7 +3147,7 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 		/* add VLAN filter for the port VLAN */
 		ret = ice_vsi_add_vlan(vsi, vlan_id, ICE_FWD_TO_VSI);
 		if (ret)
-			goto error_manage_pvid;
+			return ret;
 	}
 	/* remove old port VLAN filter with valid VLAN ID or QoS fields */
 	if (vf->port_vlan_info)
@@ -3112,8 +3156,7 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 	/* keep port VLAN information persistent on resets */
 	vf->port_vlan_info = le16_to_cpu(vsi->info.pvid);
 
-error_manage_pvid:
-	return ret;
+	return 0;
 }
 
 /**
@@ -3598,20 +3641,36 @@ ice_get_vf_cfg(struct net_device *netdev, int vf_id, struct ifla_vf_info *ivi)
 }
 
 /**
- * ice_wait_on_vf_reset
- * @vf: The VF being resseting
+ * ice_unicast_mac_exists - check if the unicast MAC exists on the PF's switch
+ * @pf: PF used to reference the switch's rules
+ * @umac: unicast MAC to compare against existing switch rules
  *
- * Poll to make sure a given VF is ready after reset
+ * Return true on the first/any match, else return false
  */
-static void ice_wait_on_vf_reset(struct ice_vf *vf)
+static bool ice_unicast_mac_exists(struct ice_pf *pf, u8 *umac)
 {
-	int i;
+	struct ice_sw_recipe *mac_recipe_list =
+		&pf->hw.switch_info->recp_list[ICE_SW_LKUP_MAC];
+	struct ice_fltr_mgmt_list_entry *list_itr;
+	struct list_head *rule_head;
+	struct mutex *rule_lock; /* protect MAC filter list access */
 
-	for (i = 0; i < ICE_MAX_VF_RESET_WAIT; i++) {
-		if (test_bit(ICE_VF_STATE_INIT, vf->vf_states))
-			break;
-		msleep(20);
+	rule_head = &mac_recipe_list->filt_rules;
+	rule_lock = &mac_recipe_list->filt_rule_lock;
+
+	mutex_lock(rule_lock);
+	list_for_each_entry(list_itr, rule_head, list_entry) {
+		u8 *existing_mac = &list_itr->fltr_info.l_data.mac.mac_addr[0];
+
+		if (ether_addr_equal(existing_mac, umac)) {
+			mutex_unlock(rule_lock);
+			return true;
+		}
 	}
+
+	mutex_unlock(rule_lock);
+
+	return false;
 }
 
 /**
@@ -3626,26 +3685,28 @@ int ice_set_vf_mac(struct net_device *netdev, int vf_id, u8 *mac)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_vf *vf;
-	int ret = 0;
+	int ret;
 
 	if (ice_validate_vf_id(pf, vf_id))
 		return -EINVAL;
 
-	vf = &pf->vf[vf_id];
-	/* Don't set MAC on disabled VF */
-	if (ice_is_vf_disabled(vf))
-		return -EINVAL;
-
-	/* In case VF is in reset mode, wait until it is completed. Depending
-	 * on factors like queue disabling routine, this could take ~250ms
-	 */
-	ice_wait_on_vf_reset(vf);
-
-	if (ice_check_vf_init(pf, vf))
-		return -EBUSY;
-
 	if (is_zero_ether_addr(mac) || is_multicast_ether_addr(mac)) {
 		netdev_err(netdev, "%pM not a valid unicast address\n", mac);
+		return -EINVAL;
+	}
+
+	vf = &pf->vf[vf_id];
+	/* nothing left to do, unicast MAC already set */
+	if (ether_addr_equal(vf->dflt_lan_addr.addr, mac))
+		return 0;
+
+	ret = ice_check_vf_ready_for_cfg(vf);
+	if (ret)
+		return ret;
+
+	if (ice_unicast_mac_exists(pf, mac)) {
+		netdev_err(netdev, "Unicast MAC %pM already exists on this PF. Preventing setting VF %u unicast MAC address to %pM\n",
+			   mac, vf_id, mac);
 		return -EINVAL;
 	}
 
@@ -3660,7 +3721,7 @@ int ice_set_vf_mac(struct net_device *netdev, int vf_id, u8 *mac)
 		    vf_id, mac);
 
 	ice_vc_reset_vf(vf);
-	return ret;
+	return 0;
 }
 
 /**
@@ -3675,22 +3736,15 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_vf *vf;
+	int ret;
 
 	if (ice_validate_vf_id(pf, vf_id))
 		return -EINVAL;
 
 	vf = &pf->vf[vf_id];
-	/* Don't set Trusted Mode on disabled VF */
-	if (ice_is_vf_disabled(vf))
-		return -EINVAL;
-
-	/* In case VF is in reset mode, wait until it is completed. Depending
-	 * on factors like queue disabling routine, this could take ~250ms
-	 */
-	ice_wait_on_vf_reset(vf);
-
-	if (ice_check_vf_init(pf, vf))
-		return -EBUSY;
+	ret = ice_check_vf_ready_for_cfg(vf);
+	if (ret)
+		return ret;
 
 	/* Check if already trusted */
 	if (trusted == vf->trusted)
@@ -3716,13 +3770,15 @@ int ice_set_vf_link_state(struct net_device *netdev, int vf_id, int link_state)
 {
 	struct ice_pf *pf = ice_netdev_to_pf(netdev);
 	struct ice_vf *vf;
+	int ret;
 
 	if (ice_validate_vf_id(pf, vf_id))
 		return -EINVAL;
 
 	vf = &pf->vf[vf_id];
-	if (ice_check_vf_init(pf, vf))
-		return -EBUSY;
+	ret = ice_check_vf_ready_for_cfg(vf);
+	if (ret)
+		return ret;
 
 	switch (link_state) {
 	case IFLA_VF_LINK_STATE_AUTO:
@@ -3758,14 +3814,15 @@ int ice_get_vf_stats(struct net_device *netdev, int vf_id,
 	struct ice_eth_stats *stats;
 	struct ice_vsi *vsi;
 	struct ice_vf *vf;
+	int ret;
 
 	if (ice_validate_vf_id(pf, vf_id))
 		return -EINVAL;
 
 	vf = &pf->vf[vf_id];
-
-	if (ice_check_vf_init(pf, vf))
-		return -EBUSY;
+	ret = ice_check_vf_ready_for_cfg(vf);
+	if (ret)
+		return ret;
 
 	vsi = pf->vsi[vf->lan_vsi_idx];
 	if (!vsi)

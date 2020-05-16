@@ -1064,6 +1064,20 @@ end_io:
 	return false;
 }
 
+static blk_qc_t do_make_request(struct bio *bio)
+{
+	struct request_queue *q = bio->bi_disk->queue;
+	blk_qc_t ret = BLK_QC_T_NONE;
+
+	if (blk_crypto_bio_prep(&bio)) {
+		if (!q->make_request_fn)
+			return blk_mq_make_request(q, bio);
+		ret = q->make_request_fn(q, bio);
+	}
+	blk_queue_exit(q);
+	return ret;
+}
+
 /**
  * generic_make_request - re-submit a bio to the block device layer for I/O
  * @bio:  The bio describing the location in memory and on the device.
@@ -1131,10 +1145,7 @@ blk_qc_t generic_make_request(struct bio *bio)
 			bio_list_init(&bio_list_on_stack[0]);
 
 			if (blk_crypto_bio_prep(&bio)) {
-				if (q->make_request_fn)
-					ret = q->make_request_fn(q, bio);
-				else
-					ret = blk_mq_make_request(q, bio);
+				ret = do_make_request(bio);
 			}
 
 			blk_queue_exit(q);
@@ -1174,7 +1185,6 @@ EXPORT_SYMBOL(generic_make_request);
 blk_qc_t direct_make_request(struct bio *bio)
 {
 	struct request_queue *q = bio->bi_disk->queue;
-	blk_qc_t ret = BLK_QC_T_NONE;
 
 	if (WARN_ON_ONCE(q->make_request_fn)) {
 		bio_io_error(bio);

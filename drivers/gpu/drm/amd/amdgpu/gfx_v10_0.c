@@ -7151,6 +7151,7 @@ static int gfx_v10_0_set_powergating_state(void *handle,
 	switch (adev->asic_type) {
 	case CHIP_NAVI10:
 	case CHIP_NAVI14:
+	case CHIP_NAVI12:
 		amdgpu_gfx_off_ctrl(adev, enable);
 		break;
 	default:

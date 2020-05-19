@@ -452,6 +452,46 @@ static void btrfs_drop_pages(struct page **pages, size_t num_pages)
 	}
 }
 
+static int btrfs_find_new_delalloc_bytes(struct btrfs_inode *inode,
+					 const u64 start,
+					 const u64 len,
+					 struct extent_state **cached_state)
+{
+	u64 search_start = start;
+	const u64 end = start + len - 1;
+
+	while (search_start < end) {
+		const u64 search_len = end - search_start + 1;
+		struct extent_map *em;
+		u64 em_len;
+		int ret = 0;
+
+		em = btrfs_get_extent(inode, NULL, 0, search_start, search_len);
+		if (IS_ERR(em))
+			return PTR_ERR(em);
+
+		if (em->block_start != EXTENT_MAP_HOLE)
+			goto next;
+
+		em_len = em->len;
+		if (em->start < search_start)
+			em_len -= search_start - em->start;
+		if (em_len > search_len)
+			em_len = search_len;
+
+		ret = set_extent_bit(&inode->io_tree, search_start,
+				     search_start + em_len - 1,
+				     EXTENT_DELALLOC_NEW,
+				     NULL, cached_state, GFP_NOFS);
+next:
+		search_start = extent_map_end(em);
+		free_extent_map(em);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 /*
  * after copy_from_user, pages need to be dirtied and we need to make
  * sure holes are created between the current EOF and the start of
@@ -460,18 +500,18 @@ static void btrfs_drop_pages(struct page **pages, size_t num_pages)
  * this also makes the decision about creating an inline extent vs
  * doing real data extents, marking pages dirty and delalloc as required.
  */
-int btrfs_dirty_pages(struct btrfs_inode *inode, struct page **pages,
+int btrfs_dirty_pages(struct inode *inode, struct page **pages,
 		      size_t num_pages, loff_t pos, size_t write_bytes,
 		      struct extent_state **cached)
 {
-	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	int err = 0;
 	int i;
 	u64 num_bytes;
 	u64 start_pos;
 	u64 end_of_last_block;
 	u64 end_pos = pos + write_bytes;
-	loff_t isize = i_size_read(&inode->vfs_inode);
+	loff_t isize = i_size_read(inode);
 	unsigned int extra_bits = 0;
 
 	start_pos = pos & ~((u64) fs_info->sectorsize - 1);
@@ -484,9 +524,27 @@ int btrfs_dirty_pages(struct btrfs_inode *inode, struct page **pages,
 	 * The pages may have already been dirty, clear out old accounting so
 	 * we can set things up properly
 	 */
-	clear_extent_bit(&inode->io_tree, start_pos, end_of_last_block,
+	clear_extent_bit(&BTRFS_I(inode)->io_tree, start_pos, end_of_last_block,
 			 EXTENT_DELALLOC | EXTENT_DO_ACCOUNTING | EXTENT_DEFRAG,
 			 0, 0, cached);
+
+	if (!btrfs_is_free_space_inode(BTRFS_I(inode))) {
+		if (start_pos >= isize &&
+		    !(BTRFS_I(inode)->flags & BTRFS_INODE_PREALLOC)) {
+			/*
+			 * There can't be any extents following eof in this case
+			 * so just set the delalloc new bit for the range
+			 * directly.
+			 */
+			extra_bits |= EXTENT_DELALLOC_NEW;
+		} else {
+			err = btrfs_find_new_delalloc_bytes(BTRFS_I(inode),
+							    start_pos,
+							    num_bytes, cached);
+			if (err)
+				return err;
+		}
+	}
 
 	err = btrfs_set_extent_delalloc(inode, start_pos, end_of_last_block,
 					extra_bits, cached);
@@ -506,7 +564,7 @@ int btrfs_dirty_pages(struct btrfs_inode *inode, struct page **pages,
 	 * at this time.
 	 */
 	if (end_pos > isize)
-		i_size_write(&inode->vfs_inode, end_pos);
+		i_size_write(inode, end_pos);
 	return 0;
 }
 
@@ -673,7 +731,7 @@ next:
  * is deleted from the tree.
  */
 int __btrfs_drop_extents(struct btrfs_trans_handle *trans,
-			 struct btrfs_root *root, struct btrfs_inode *inode,
+			 struct btrfs_root *root, struct inode *inode,
 			 struct btrfs_path *path, u64 start, u64 end,
 			 u64 *drop_end, int drop_cache,
 			 int replace_extent,
@@ -686,8 +744,7 @@ int __btrfs_drop_extents(struct btrfs_trans_handle *trans,
 	struct btrfs_ref ref = { 0 };
 	struct btrfs_key key;
 	struct btrfs_key new_key;
-	struct inode *vfs_inode = &inode->vfs_inode;
-	u64 ino = btrfs_ino(inode);
+	u64 ino = btrfs_ino(BTRFS_I(inode));
 	u64 search_start = start;
 	u64 disk_bytenr = 0;
 	u64 num_bytes = 0;
@@ -705,9 +762,9 @@ int __btrfs_drop_extents(struct btrfs_trans_handle *trans,
 	int leafs_visited = 0;
 
 	if (drop_cache)
-		btrfs_drop_extent_cache(inode, start, end - 1, 0);
+		btrfs_drop_extent_cache(BTRFS_I(inode), start, end - 1, 0);
 
-	if (start >= inode->disk_i_size && !replace_extent)
+	if (start >= BTRFS_I(inode)->disk_i_size && !replace_extent)
 		modify_tree = 0;
 
 	update_refs = (test_bit(BTRFS_ROOT_SHAREABLE, &root->state) ||
@@ -878,7 +935,7 @@ next_slot:
 							extent_end - end);
 			btrfs_mark_buffer_dirty(leaf);
 			if (update_refs && disk_bytenr > 0)
-				inode_sub_bytes(vfs_inode, end - key.offset);
+				inode_sub_bytes(inode, end - key.offset);
 			break;
 		}
 
@@ -898,7 +955,7 @@ next_slot:
 							start - key.offset);
 			btrfs_mark_buffer_dirty(leaf);
 			if (update_refs && disk_bytenr > 0)
-				inode_sub_bytes(vfs_inode, extent_end - start);
+				inode_sub_bytes(inode, extent_end - start);
 			if (end == extent_end)
 				break;
 
@@ -922,7 +979,7 @@ delete_extent_item:
 
 			if (update_refs &&
 			    extent_type == BTRFS_FILE_EXTENT_INLINE) {
-				inode_sub_bytes(vfs_inode,
+				inode_sub_bytes(inode,
 						extent_end - key.offset);
 				extent_end = ALIGN(extent_end,
 						   fs_info->sectorsize);
@@ -936,7 +993,7 @@ delete_extent_item:
 						key.offset - extent_offset);
 				ret = btrfs_free_extent(trans, &ref);
 				BUG_ON(ret); /* -ENOMEM */
-				inode_sub_bytes(vfs_inode,
+				inode_sub_bytes(inode,
 						extent_end - key.offset);
 			}
 
@@ -1000,7 +1057,11 @@ delete_extent_item:
 			if (btrfs_comp_cpu_keys(&key, &slot_key) > 0)
 				path->slots[0]++;
 		}
-		setup_items_for_insert(root, path, &key, &extent_item_size, 1);
+		setup_items_for_insert(root, path, &key,
+				       &extent_item_size,
+				       extent_item_size,
+				       sizeof(struct btrfs_item) +
+				       extent_item_size, 1);
 		*key_inserted = 1;
 	}
 
@@ -1021,8 +1082,8 @@ int btrfs_drop_extents(struct btrfs_trans_handle *trans,
 	path = btrfs_alloc_path();
 	if (!path)
 		return -ENOMEM;
-	ret = __btrfs_drop_extents(trans, root, BTRFS_I(inode), path, start,
-				   end, NULL, drop_cache, 0, 0, NULL);
+	ret = __btrfs_drop_extents(trans, root, inode, path, start, end, NULL,
+				   drop_cache, 0, 0, NULL);
 	btrfs_free_path(path);
 	return ret;
 }
@@ -1416,7 +1477,9 @@ lock_and_cleanup_extent_if_need(struct btrfs_inode *inode, struct page **pages,
 	int ret = 0;
 
 	start_pos = round_down(pos, fs_info->sectorsize);
-	last_pos = round_up(pos + write_bytes, fs_info->sectorsize) - 1;
+	last_pos = start_pos
+		+ round_up(pos + write_bytes - start_pos,
+			   fs_info->sectorsize) - 1;
 
 	if (start_pos < inode->vfs_inode.i_size) {
 		struct btrfs_ordered_extent *ordered;
@@ -1434,7 +1497,8 @@ lock_and_cleanup_extent_if_need(struct btrfs_inode *inode, struct page **pages,
 				unlock_page(pages[i]);
 				put_page(pages[i]);
 			}
-			btrfs_start_ordered_extent(ordered, 1);
+			btrfs_start_ordered_extent(&inode->vfs_inode,
+					ordered, 1);
 			btrfs_put_ordered_extent(ordered);
 			return -EAGAIN;
 		}
@@ -1468,17 +1532,14 @@ lock_and_cleanup_extent_if_need(struct btrfs_inode *inode, struct page **pages,
 	return ret;
 }
 
-static int check_can_nocow(struct btrfs_inode *inode, loff_t pos,
-			   size_t *write_bytes, bool nowait)
+static noinline int check_can_nocow(struct btrfs_inode *inode, loff_t pos,
+				    size_t *write_bytes, bool nowait)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	struct btrfs_root *root = inode->root;
 	u64 lockstart, lockend;
 	u64 num_bytes;
 	int ret;
-
-	if (!(inode->flags & (BTRFS_INODE_NODATACOW | BTRFS_INODE_PREALLOC)))
-		return 0;
 
 	if (!nowait && !btrfs_drew_try_write_lock(&root->snapshot_lock))
 		return -EAGAIN;
@@ -1507,7 +1568,7 @@ static int check_can_nocow(struct btrfs_inode *inode, loff_t pos,
 	}
 
 	ret = can_nocow_extent(&inode->vfs_inode, lockstart, &num_bytes,
-			NULL, NULL, NULL, false);
+			NULL, NULL, NULL);
 	if (ret <= 0) {
 		ret = 0;
 		if (!nowait)
@@ -1522,42 +1583,6 @@ out_unlock:
 	return ret;
 }
 
-static int check_nocow_nolock(struct btrfs_inode *inode, loff_t pos,
-			      size_t *write_bytes)
-{
-	return check_can_nocow(inode, pos, write_bytes, true);
-}
-
-/*
- * Check if we can do nocow write into the range [@pos, @pos + @write_bytes)
- *
- * @pos:	 File offset
- * @write_bytes: The length to write, will be updated to the nocow writeable
- *		 range
- *
- * This function will flush ordered extents in the range to ensure proper
- * nocow checks.
- *
- * Return:
- * >0		and update @write_bytes if we can do nocow write
- *  0		if we can't do nocow write
- * -EAGAIN	if we can't get the needed lock or there are ordered extents
- * 		for * (nowait == true) case
- * <0		if other error happened
- *
- * NOTE: Callers need to release the lock by btrfs_check_nocow_unlock().
- */
-int btrfs_check_nocow_lock(struct btrfs_inode *inode, loff_t pos,
-			   size_t *write_bytes)
-{
-	return check_can_nocow(inode, pos, write_bytes, false);
-}
-
-void btrfs_check_nocow_unlock(struct btrfs_inode *inode)
-{
-	btrfs_drew_write_unlock(&inode->root->snapshot_lock);
-}
-
 static noinline ssize_t btrfs_buffered_write(struct kiocb *iocb,
 					       struct iov_iter *i)
 {
@@ -1565,6 +1590,7 @@ static noinline ssize_t btrfs_buffered_write(struct kiocb *iocb,
 	loff_t pos = iocb->ki_pos;
 	struct inode *inode = file_inode(file);
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
+	struct btrfs_root *root = BTRFS_I(inode)->root;
 	struct page **pages = NULL;
 	struct extent_changeset *data_reserved = NULL;
 	u64 release_bytes = 0;
@@ -1617,12 +1643,13 @@ static noinline ssize_t btrfs_buffered_write(struct kiocb *iocb,
 				fs_info->sectorsize);
 
 		extent_changeset_release(data_reserved);
-		ret = btrfs_check_data_free_space(BTRFS_I(inode),
-						  &data_reserved, pos,
+		ret = btrfs_check_data_free_space(inode, &data_reserved, pos,
 						  write_bytes);
 		if (ret < 0) {
-			if (btrfs_check_nocow_lock(BTRFS_I(inode), pos,
-						   &write_bytes) > 0) {
+			if ((BTRFS_I(inode)->flags & (BTRFS_INODE_NODATACOW |
+						      BTRFS_INODE_PREALLOC)) &&
+			    check_can_nocow(BTRFS_I(inode), pos,
+					    &write_bytes, false) > 0) {
 				/*
 				 * For nodata cow case, no need to reserve
 				 * data space.
@@ -1647,11 +1674,11 @@ static noinline ssize_t btrfs_buffered_write(struct kiocb *iocb,
 				reserve_bytes);
 		if (ret) {
 			if (!only_release_metadata)
-				btrfs_free_reserved_data_space(BTRFS_I(inode),
+				btrfs_free_reserved_data_space(inode,
 						data_reserved, pos,
 						write_bytes);
 			else
-				btrfs_check_nocow_unlock(BTRFS_I(inode));
+				btrfs_drew_write_unlock(&root->snapshot_lock);
 			break;
 		}
 
@@ -1721,7 +1748,7 @@ again:
 				__pos = round_down(pos,
 						   fs_info->sectorsize) +
 					(dirty_pages << PAGE_SHIFT);
-				btrfs_delalloc_release_space(BTRFS_I(inode),
+				btrfs_delalloc_release_space(inode,
 						data_reserved, __pos,
 						release_bytes, true);
 			}
@@ -1731,9 +1758,8 @@ again:
 					fs_info->sectorsize);
 
 		if (copied > 0)
-			ret = btrfs_dirty_pages(BTRFS_I(inode), pages,
-						dirty_pages, pos, copied,
-						&cached_state);
+			ret = btrfs_dirty_pages(inode, pages, dirty_pages,
+						pos, copied, &cached_state);
 
 		/*
 		 * If we have not locked the extent range, because the range's
@@ -1756,7 +1782,7 @@ again:
 
 		release_bytes = 0;
 		if (only_release_metadata)
-			btrfs_check_nocow_unlock(BTRFS_I(inode));
+			btrfs_drew_write_unlock(&root->snapshot_lock);
 
 		if (only_release_metadata && copied > 0) {
 			lockstart = round_down(pos,
@@ -1774,6 +1800,8 @@ again:
 		cond_resched();
 
 		balance_dirty_pages_ratelimited(inode->i_mapping);
+		if (dirty_pages < (fs_info->nodesize >> PAGE_SHIFT) + 1)
+			btrfs_btree_balance_dirty(fs_info);
 
 		pos += copied;
 		num_written += copied;
@@ -1783,12 +1811,11 @@ again:
 
 	if (release_bytes) {
 		if (only_release_metadata) {
-			btrfs_check_nocow_unlock(BTRFS_I(inode));
+			btrfs_drew_write_unlock(&root->snapshot_lock);
 			btrfs_delalloc_release_metadata(BTRFS_I(inode),
 					release_bytes, true);
 		} else {
-			btrfs_delalloc_release_space(BTRFS_I(inode),
-					data_reserved,
+			btrfs_delalloc_release_space(inode, data_reserved,
 					round_down(pos, fs_info->sectorsize),
 					release_bytes, true);
 		}
@@ -1899,8 +1926,10 @@ static ssize_t btrfs_file_write_iter(struct kiocb *iocb,
 		 * We will allocate space in case nodatacow is not set,
 		 * so bail
 		 */
-		if (check_nocow_nolock(BTRFS_I(inode), pos, &nocow_bytes)
-		    <= 0) {
+		if (!(BTRFS_I(inode)->flags & (BTRFS_INODE_NODATACOW |
+					      BTRFS_INODE_PREALLOC)) ||
+		    check_can_nocow(BTRFS_I(inode), pos, &nocow_bytes,
+				    true) <= 0) {
 			inode_unlock(inode);
 			return -EAGAIN;
 		}
@@ -1961,40 +1990,7 @@ static ssize_t btrfs_file_write_iter(struct kiocb *iocb,
 		atomic_inc(&BTRFS_I(inode)->sync_writers);
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
-		/*
-		 * 1. We must always clear IOCB_DSYNC in order to not deadlock
-		 *    in iomap, as it calls generic_write_sync() in this case.
-		 * 2. If we are async, we can call iomap_dio_complete() either
-		 *    in
-		 *
-		 *    2.1. A worker thread from the last bio completed.  In this
-		 *	   case we need to mark the btrfs_dio_data that it is
-		 *	   async in order to call generic_write_sync() properly.
-		 *	   This is handled by setting BTRFS_DIO_SYNC_STUB in the
-		 *	   current->journal_info.
-		 *    2.2  The submitter context, because all IO completed
-		 *         before we exited iomap_dio_rw().  In this case we can
-		 *         just re-set the IOCB_DSYNC on the iocb and we'll do
-		 *         the sync below.  If our ->end_io() gets called and
-		 *         current->journal_info is set, then we know we're in
-		 *         our current context and we will clear
-		 *         current->journal_info to indicate that we need to
-		 *         sync below.
-		 */
-		if (sync) {
-			ASSERT(current->journal_info == NULL);
-			iocb->ki_flags &= ~IOCB_DSYNC;
-			current->journal_info = BTRFS_DIO_SYNC_STUB;
-		}
 		num_written = __btrfs_direct_write(iocb, from);
-
-		/*
-		 * As stated above, we cleared journal_info, so we need to do
-		 * the sync ourselves.
-		 */
-		if (sync && current->journal_info == NULL)
-			iocb->ki_flags |= IOCB_DSYNC;
-		current->journal_info = NULL;
 	} else {
 		num_written = btrfs_buffered_write(iocb, from);
 		if (num_written > 0)
@@ -2034,12 +2030,12 @@ int btrfs_release_file(struct inode *inode, struct file *filp)
 	filp->private_data = NULL;
 
 	/*
-	 * Set by setattr when we are about to truncate a file from a non-zero
-	 * size to a zero size.  This tries to flush down new bytes that may
-	 * have been written if the application were using truncate to replace
-	 * a file in place.
+	 * ordered_data_close is set by setattr when we are about to truncate
+	 * a file from a non-zero size to a zero size.  This tries to
+	 * flush down new bytes that may have been written if the
+	 * application were using truncate to replace a file in place.
 	 */
-	if (test_and_clear_bit(BTRFS_INODE_FLUSH_ON_CLOSE,
+	if (test_and_clear_bit(BTRFS_INODE_ORDERED_DATA_CLOSE,
 			       &BTRFS_I(inode)->runtime_flags))
 			filemap_flush(inode->i_mapping);
 	return 0;
@@ -2085,24 +2081,20 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	struct btrfs_trans_handle *trans;
 	struct btrfs_log_ctx ctx;
 	int ret = 0, err;
-	u64 len;
-	bool full_sync;
 
 	trace_btrfs_sync_file(file, datasync);
 
 	btrfs_init_log_ctx(&ctx, inode);
 
 	/*
-	 * Always set the range to a full range, otherwise we can get into
-	 * several problems, from missing file extent items to represent holes
-	 * when not using the NO_HOLES feature, to log tree corruption due to
-	 * races between hole detection during logging and completion of ordered
-	 * extents outside the range, to missing checksums due to ordered extents
-	 * for which we flushed only a subset of their pages.
+	 * Set the range to full if the NO_HOLES feature is not enabled.
+	 * This is to avoid missing file extent items representing holes after
+	 * replaying the log.
 	 */
-	start = 0;
-	end = LLONG_MAX;
-	len = (u64)LLONG_MAX + 1;
+	if (!btrfs_fs_incompat(fs_info, NO_HOLES)) {
+		start = 0;
+		end = LLONG_MAX;
+	}
 
 	/*
 	 * We write the dirty pages in the range and wait until they complete
@@ -2126,12 +2118,19 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	atomic_inc(&root->log_batch);
 
 	/*
-	 * Always check for the full sync flag while holding the inode's lock,
-	 * to avoid races with other tasks. The flag must be either set all the
-	 * time during logging or always off all the time while logging.
+	 * If the inode needs a full sync, make sure we use a full range to
+	 * avoid log tree corruption, due to hole detection racing with ordered
+	 * extent completion for adjacent ranges and races between logging and
+	 * completion of ordered extents for adjancent ranges - both races
+	 * could lead to file extent items in the log with overlapping ranges.
+	 * Do this while holding the inode lock, to avoid races with other
+	 * tasks.
 	 */
-	full_sync = test_bit(BTRFS_INODE_NEEDS_FULL_SYNC,
-			     &BTRFS_I(inode)->runtime_flags);
+	if (test_bit(BTRFS_INODE_NEEDS_FULL_SYNC,
+		     &BTRFS_I(inode)->runtime_flags)) {
+		start = 0;
+		end = LLONG_MAX;
+	}
 
 	/*
 	 * Before we acquired the inode's lock, someone may have dirtied more
@@ -2162,42 +2161,20 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	 * We have to do this here to avoid the priority inversion of waiting on
 	 * IO of a lower priority task while holding a transaction open.
 	 *
-	 * For a full fsync we wait for the ordered extents to complete while
-	 * for a fast fsync we wait just for writeback to complete, and then
-	 * attach the ordered extents to the transaction so that a transaction
-	 * commit waits for their completion, to avoid data loss if we fsync,
-	 * the current transaction commits before the ordered extents complete
-	 * and a power failure happens right after that.
+	 * Also, the range length can be represented by u64, we have to do the
+	 * typecasts to avoid signed overflow if it's [0, LLONG_MAX].
 	 */
-	if (full_sync) {
-		ret = btrfs_wait_ordered_range(inode, start, len);
-	} else {
-		/*
-		 * Get our ordered extents as soon as possible to avoid doing
-		 * checksum lookups in the csum tree, and use instead the
-		 * checksums attached to the ordered extents.
-		 */
-		btrfs_get_ordered_extents_for_logging(BTRFS_I(inode),
-						      &ctx.ordered_extents);
-		ret = filemap_fdatawait_range(inode->i_mapping, start, end);
+	ret = btrfs_wait_ordered_range(inode, start, (u64)end - (u64)start + 1);
+	if (ret) {
+		up_write(&BTRFS_I(inode)->dio_sem);
+		inode_unlock(inode);
+		goto out;
 	}
-
-	if (ret)
-		goto out_release_extents;
-
 	atomic_inc(&root->log_batch);
 
-	/*
-	 * If we are doing a fast fsync we can not bail out if the inode's
-	 * last_trans is <= then the last committed transaction, because we only
-	 * update the last_trans of the inode during ordered extent completion,
-	 * and for a fast fsync we don't wait for that, we only wait for the
-	 * writeback to complete.
-	 */
 	smp_mb();
 	if (btrfs_inode_in_log(BTRFS_I(inode), fs_info->generation) ||
-	    (BTRFS_I(inode)->last_trans <= fs_info->last_trans_committed &&
-	     (full_sync || list_empty(&ctx.ordered_extents)))) {
+	    BTRFS_I(inode)->last_trans <= fs_info->last_trans_committed) {
 		/*
 		 * We've had everything committed since the last time we were
 		 * modified so clear this flag in case it was set for whatever
@@ -2213,7 +2190,9 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 		 * checked called fsync.
 		 */
 		ret = filemap_check_wb_err(inode->i_mapping, file->f_wb_err);
-		goto out_release_extents;
+		up_write(&BTRFS_I(inode)->dio_sem);
+		inode_unlock(inode);
+		goto out;
 	}
 
 	/*
@@ -2230,11 +2209,12 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	trans = btrfs_start_transaction(root, 0);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
-		goto out_release_extents;
+		up_write(&BTRFS_I(inode)->dio_sem);
+		inode_unlock(inode);
+		goto out;
 	}
 
-	ret = btrfs_log_dentry_safe(trans, dentry, &ctx);
-	btrfs_release_log_ctx_extents(&ctx);
+	ret = btrfs_log_dentry_safe(trans, dentry, start, end, &ctx);
 	if (ret < 0) {
 		/* Fallthrough and commit/free transaction. */
 		ret = 1;
@@ -2261,13 +2241,6 @@ int btrfs_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 				goto out;
 			}
 		}
-		if (!full_sync) {
-			ret = btrfs_wait_ordered_range(inode, start, len);
-			if (ret) {
-				btrfs_end_transaction(trans);
-				goto out;
-			}
-		}
 		ret = btrfs_commit_transaction(trans);
 	} else {
 		ret = btrfs_end_transaction(trans);
@@ -2278,12 +2251,6 @@ out:
 	if (!ret)
 		ret = err;
 	return ret > 0 ? -EIO : ret;
-
-out_release_extents:
-	btrfs_release_log_ctx_extents(&ctx);
-	up_write(&BTRFS_I(inode)->dio_sem);
-	inode_unlock(inode);
-	goto out;
 }
 
 static const struct vm_operations_struct btrfs_file_vm_ops = {
@@ -2479,8 +2446,7 @@ static int btrfs_punch_hole_lock_range(struct inode *inode,
 
 		lock_extent_bits(&BTRFS_I(inode)->io_tree, lockstart, lockend,
 				 cached_state);
-		ordered = btrfs_lookup_first_ordered_extent(BTRFS_I(inode),
-							    lockend);
+		ordered = btrfs_lookup_first_ordered_extent(inode, lockend);
 
 		/*
 		 * We need to make sure we have no ordered extents in this range
@@ -2508,11 +2474,11 @@ static int btrfs_punch_hole_lock_range(struct inode *inode,
 	return 0;
 }
 
-static int btrfs_insert_replace_extent(struct btrfs_trans_handle *trans,
+static int btrfs_insert_clone_extent(struct btrfs_trans_handle *trans,
 				     struct inode *inode,
 				     struct btrfs_path *path,
-				     struct btrfs_replace_extent_info *extent_info,
-				     const u64 replace_len)
+				     struct btrfs_clone_extent_info *clone_info,
+				     const u64 clone_len)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	struct btrfs_root *root = BTRFS_I(inode)->root;
@@ -2521,69 +2487,51 @@ static int btrfs_insert_replace_extent(struct btrfs_trans_handle *trans,
 	struct btrfs_key key;
 	int slot;
 	struct btrfs_ref ref = { 0 };
+	u64 ref_offset;
 	int ret;
 
-	if (replace_len == 0)
+	if (clone_len == 0)
 		return 0;
 
-	if (extent_info->disk_offset == 0 &&
+	if (clone_info->disk_offset == 0 &&
 	    btrfs_fs_incompat(fs_info, NO_HOLES))
 		return 0;
 
 	key.objectid = btrfs_ino(BTRFS_I(inode));
 	key.type = BTRFS_EXTENT_DATA_KEY;
-	key.offset = extent_info->file_offset;
+	key.offset = clone_info->file_offset;
 	ret = btrfs_insert_empty_item(trans, root, path, &key,
-				      sizeof(struct btrfs_file_extent_item));
+				      clone_info->item_size);
 	if (ret)
 		return ret;
 	leaf = path->nodes[0];
 	slot = path->slots[0];
-	write_extent_buffer(leaf, extent_info->extent_buf,
+	write_extent_buffer(leaf, clone_info->extent_buf,
 			    btrfs_item_ptr_offset(leaf, slot),
-			    sizeof(struct btrfs_file_extent_item));
+			    clone_info->item_size);
 	extent = btrfs_item_ptr(leaf, slot, struct btrfs_file_extent_item);
-	ASSERT(btrfs_file_extent_type(leaf, extent) != BTRFS_FILE_EXTENT_INLINE);
-	btrfs_set_file_extent_offset(leaf, extent, extent_info->data_offset);
-	btrfs_set_file_extent_num_bytes(leaf, extent, replace_len);
-	if (extent_info->is_new_extent)
-		btrfs_set_file_extent_generation(leaf, extent, trans->transid);
+	btrfs_set_file_extent_offset(leaf, extent, clone_info->data_offset);
+	btrfs_set_file_extent_num_bytes(leaf, extent, clone_len);
 	btrfs_mark_buffer_dirty(leaf);
 	btrfs_release_path(path);
 
 	ret = btrfs_inode_set_file_extent_range(BTRFS_I(inode),
-			extent_info->file_offset, replace_len);
+			clone_info->file_offset, clone_len);
 	if (ret)
 		return ret;
 
 	/* If it's a hole, nothing more needs to be done. */
-	if (extent_info->disk_offset == 0)
+	if (clone_info->disk_offset == 0)
 		return 0;
 
-	inode_add_bytes(inode, replace_len);
-
-	if (extent_info->is_new_extent && extent_info->insertions == 0) {
-		key.objectid = extent_info->disk_offset;
-		key.type = BTRFS_EXTENT_ITEM_KEY;
-		key.offset = extent_info->disk_len;
-		ret = btrfs_alloc_reserved_file_extent(trans, root,
-						       btrfs_ino(BTRFS_I(inode)),
-						       extent_info->file_offset,
-						       extent_info->qgroup_reserved,
-						       &key);
-	} else {
-		u64 ref_offset;
-
-		btrfs_init_generic_ref(&ref, BTRFS_ADD_DELAYED_REF,
-				       extent_info->disk_offset,
-				       extent_info->disk_len, 0);
-		ref_offset = extent_info->file_offset - extent_info->data_offset;
-		btrfs_init_data_ref(&ref, root->root_key.objectid,
-				    btrfs_ino(BTRFS_I(inode)), ref_offset);
-		ret = btrfs_inc_extent_ref(trans, &ref);
-	}
-
-	extent_info->insertions++;
+	inode_add_bytes(inode, clone_len);
+	btrfs_init_generic_ref(&ref, BTRFS_ADD_DELAYED_REF,
+			       clone_info->disk_offset,
+			       clone_info->disk_len, 0);
+	ref_offset = clone_info->file_offset - clone_info->data_offset;
+	btrfs_init_data_ref(&ref, root->root_key.objectid,
+			    btrfs_ino(BTRFS_I(inode)), ref_offset);
+	ret = btrfs_inc_extent_ref(trans, &ref);
 
 	return ret;
 }
@@ -2591,15 +2539,15 @@ static int btrfs_insert_replace_extent(struct btrfs_trans_handle *trans,
 /*
  * The respective range must have been previously locked, as well as the inode.
  * The end offset is inclusive (last byte of the range).
- * @extent_info is NULL for fallocate's hole punching and non-NULL when replacing
- * the file range with an extent.
- * When not punching a hole, we don't want to end up in a state where we dropped
- * extents without inserting a new one, so we must abort the transaction to avoid
- * a corruption.
+ * @clone_info is NULL for fallocate's hole punching and non-NULL for extent
+ * cloning.
+ * When cloning, we don't want to end up in a state where we dropped extents
+ * without inserting a new one, so we must abort the transaction to avoid a
+ * corruption.
  */
-int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
+int btrfs_punch_hole_range(struct inode *inode, struct btrfs_path *path,
 			   const u64 start, const u64 end,
-			   struct btrfs_replace_extent_info *extent_info,
+			   struct btrfs_clone_extent_info *clone_info,
 			   struct btrfs_trans_handle **trans_out)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
@@ -2628,10 +2576,10 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 	/*
 	 * 1 - update the inode
 	 * 1 - removing the extents in the range
-	 * 1 - adding the hole extent if no_holes isn't set or if we are
-	 *     replacing the range with a new extent
+	 * 1 - adding the hole extent if no_holes isn't set or if we are cloning
+	 *     an extent
 	 */
-	if (!btrfs_fs_incompat(fs_info, NO_HOLES) || extent_info)
+	if (!btrfs_fs_incompat(fs_info, NO_HOLES) || clone_info)
 		rsv_count = 3;
 	else
 		rsv_count = 2;
@@ -2650,7 +2598,7 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 
 	cur_offset = start;
 	while (cur_offset < end) {
-		ret = __btrfs_drop_extents(trans, root, BTRFS_I(inode), path,
+		ret = __btrfs_drop_extents(trans, root, inode, path,
 					   cur_offset, end + 1, &drop_end,
 					   1, 0, 0, NULL);
 		if (ret != -ENOSPC) {
@@ -2661,15 +2609,14 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 			 * returned by __btrfs_drop_extents() without having
 			 * changed anything in the file.
 			 */
-			if (extent_info && !extent_info->is_new_extent &&
-			    ret && ret != -EOPNOTSUPP)
+			if (clone_info && ret && ret != -EOPNOTSUPP)
 				btrfs_abort_transaction(trans, ret);
 			break;
 		}
 
 		trans->block_rsv = &fs_info->trans_block_rsv;
 
-		if (!extent_info && cur_offset < drop_end &&
+		if (!clone_info && cur_offset < drop_end &&
 		    cur_offset < ino_size) {
 			ret = fill_holes(trans, BTRFS_I(inode), path,
 					cur_offset, drop_end);
@@ -2683,7 +2630,7 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 				btrfs_abort_transaction(trans, ret);
 				break;
 			}
-		} else if (!extent_info && cur_offset < drop_end) {
+		} else if (!clone_info && cur_offset < drop_end) {
 			/*
 			 * We are past the i_size here, but since we didn't
 			 * insert holes we need to clear the mapped area so we
@@ -2703,18 +2650,18 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 			}
 		}
 
-		if (extent_info && drop_end > extent_info->file_offset) {
-			u64 replace_len = drop_end - extent_info->file_offset;
+		if (clone_info && drop_end > clone_info->file_offset) {
+			u64 clone_len = drop_end - clone_info->file_offset;
 
-			ret = btrfs_insert_replace_extent(trans, inode, path,
-							extent_info, replace_len);
+			ret = btrfs_insert_clone_extent(trans, inode, path,
+							clone_info, clone_len);
 			if (ret) {
 				btrfs_abort_transaction(trans, ret);
 				break;
 			}
-			extent_info->data_len -= replace_len;
-			extent_info->data_offset += replace_len;
-			extent_info->file_offset += replace_len;
+			clone_info->data_len -= clone_len;
+			clone_info->data_offset += clone_len;
+			clone_info->file_offset += clone_len;
 		}
 
 		cur_offset = drop_end;
@@ -2738,7 +2685,7 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 		BUG_ON(ret);	/* shouldn't happen */
 		trans->block_rsv = rsv;
 
-		if (!extent_info) {
+		if (!clone_info) {
 			ret = find_first_non_hole(inode, &cur_offset, &len);
 			if (unlikely(ret < 0))
 				break;
@@ -2757,7 +2704,7 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 	 * than 16Mb would force the full fsync any way (when
 	 * try_release_extent_mapping() is invoked during page cache truncation.
 	 */
-	if (extent_info && !extent_info->is_new_extent)
+	if (clone_info)
 		set_bit(BTRFS_INODE_NEEDS_FULL_SYNC,
 			&BTRFS_I(inode)->runtime_flags);
 
@@ -2783,7 +2730,7 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 	 * (because it's useless) or if it represents a 0 bytes range (when
 	 * cur_offset == drop_end).
 	 */
-	if (!extent_info && cur_offset < ino_size && cur_offset < drop_end) {
+	if (!clone_info && cur_offset < ino_size && cur_offset < drop_end) {
 		ret = fill_holes(trans, BTRFS_I(inode), path,
 				cur_offset, drop_end);
 		if (ret) {
@@ -2791,7 +2738,7 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 			btrfs_abort_transaction(trans, ret);
 			goto out_trans;
 		}
-	} else if (!extent_info && cur_offset < drop_end) {
+	} else if (!clone_info && cur_offset < drop_end) {
 		/* See the comment in the loop above for the reasoning here. */
 		ret = btrfs_inode_clear_file_extent_range(BTRFS_I(inode),
 					cur_offset, drop_end - cur_offset);
@@ -2801,9 +2748,9 @@ int btrfs_replace_file_extents(struct inode *inode, struct btrfs_path *path,
 		}
 
 	}
-	if (extent_info) {
-		ret = btrfs_insert_replace_extent(trans, inode, path, extent_info,
-						extent_info->data_len);
+	if (clone_info) {
+		ret = btrfs_insert_clone_extent(trans, inode, path, clone_info,
+						clone_info->data_len);
 		if (ret) {
 			btrfs_abort_transaction(trans, ret);
 			goto out_trans;
@@ -2858,9 +2805,9 @@ static int btrfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 		goto out_only_mutex;
 	}
 
-	lockstart = round_up(offset, btrfs_inode_sectorsize(BTRFS_I(inode)));
+	lockstart = round_up(offset, btrfs_inode_sectorsize(inode));
 	lockend = round_down(offset + len,
-			     btrfs_inode_sectorsize(BTRFS_I(inode))) - 1;
+			     btrfs_inode_sectorsize(inode)) - 1;
 	same_block = (BTRFS_BYTES_TO_BLKS(fs_info, offset))
 		== (BTRFS_BYTES_TO_BLKS(fs_info, offset + len - 1));
 	/*
@@ -2945,7 +2892,7 @@ static int btrfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 		goto out;
 	}
 
-	ret = btrfs_replace_file_extents(inode, path, lockstart, lockend, NULL,
+	ret = btrfs_punch_hole_range(inode, path, lockstart, lockend, NULL,
 				     &trans);
 	btrfs_free_path(path);
 	if (ret)
@@ -3062,7 +3009,7 @@ enum {
 	RANGE_BOUNDARY_HOLE,
 };
 
-static int btrfs_zero_range_check_range_boundary(struct btrfs_inode *inode,
+static int btrfs_zero_range_check_range_boundary(struct inode *inode,
 						 u64 offset)
 {
 	const u64 sectorsize = btrfs_inode_sectorsize(inode);
@@ -3070,7 +3017,7 @@ static int btrfs_zero_range_check_range_boundary(struct btrfs_inode *inode,
 	int ret;
 
 	offset = round_down(offset, sectorsize);
-	em = btrfs_get_extent(inode, NULL, 0, offset, sectorsize);
+	em = btrfs_get_extent(BTRFS_I(inode), NULL, 0, offset, sectorsize);
 	if (IS_ERR(em))
 		return PTR_ERR(em);
 
@@ -3095,7 +3042,7 @@ static int btrfs_zero_range(struct inode *inode,
 	struct extent_changeset *data_reserved = NULL;
 	int ret;
 	u64 alloc_hint = 0;
-	const u64 sectorsize = btrfs_inode_sectorsize(BTRFS_I(inode));
+	const u64 sectorsize = btrfs_inode_sectorsize(inode);
 	u64 alloc_start = round_down(offset, sectorsize);
 	u64 alloc_end = round_up(offset + len, sectorsize);
 	u64 bytes_to_reserve = 0;
@@ -3185,8 +3132,7 @@ static int btrfs_zero_range(struct inode *inode,
 	 * to cover them.
 	 */
 	if (!IS_ALIGNED(offset, sectorsize)) {
-		ret = btrfs_zero_range_check_range_boundary(BTRFS_I(inode),
-							    offset);
+		ret = btrfs_zero_range_check_range_boundary(inode, offset);
 		if (ret < 0)
 			goto out;
 		if (ret == RANGE_BOUNDARY_HOLE) {
@@ -3202,7 +3148,7 @@ static int btrfs_zero_range(struct inode *inode,
 	}
 
 	if (!IS_ALIGNED(offset + len, sectorsize)) {
-		ret = btrfs_zero_range_check_range_boundary(BTRFS_I(inode),
+		ret = btrfs_zero_range_check_range_boundary(inode,
 							    offset + len);
 		if (ret < 0)
 			goto out;
@@ -3230,12 +3176,12 @@ reserve_space:
 		if (ret < 0)
 			goto out;
 		space_reserved = true;
-		ret = btrfs_punch_hole_lock_range(inode, lockstart, lockend,
-						  &cached_state);
+		ret = btrfs_qgroup_reserve_data(inode, &data_reserved,
+						alloc_start, bytes_to_reserve);
 		if (ret)
 			goto out;
-		ret = btrfs_qgroup_reserve_data(BTRFS_I(inode), &data_reserved,
-						alloc_start, bytes_to_reserve);
+		ret = btrfs_punch_hole_lock_range(inode, lockstart, lockend,
+						  &cached_state);
 		if (ret)
 			goto out;
 		ret = btrfs_prealloc_file_range(inode, mode, alloc_start,
@@ -3253,7 +3199,7 @@ reserve_space:
 	ret = btrfs_fallocate_update_isize(inode, offset + len, mode);
  out:
 	if (ret && space_reserved)
-		btrfs_free_reserved_data_space(BTRFS_I(inode), data_reserved,
+		btrfs_free_reserved_data_space(inode, data_reserved,
 					       alloc_start, bytes_to_reserve);
 	extent_changeset_free(data_reserved);
 
@@ -3277,7 +3223,7 @@ static long btrfs_fallocate(struct file *file, int mode,
 	u64 locked_end;
 	u64 actual_end = 0;
 	struct extent_map *em;
-	int blocksize = btrfs_inode_sectorsize(BTRFS_I(inode));
+	int blocksize = btrfs_inode_sectorsize(inode);
 	int ret;
 
 	alloc_start = round_down(offset, blocksize);
@@ -3359,8 +3305,7 @@ static long btrfs_fallocate(struct file *file, int mode,
 		 */
 		lock_extent_bits(&BTRFS_I(inode)->io_tree, alloc_start,
 				 locked_end, &cached_state);
-		ordered = btrfs_lookup_first_ordered_extent(BTRFS_I(inode),
-							    locked_end);
+		ordered = btrfs_lookup_first_ordered_extent(inode, locked_end);
 
 		if (ordered &&
 		    ordered->file_offset + ordered->num_bytes > alloc_start &&
@@ -3405,9 +3350,8 @@ static long btrfs_fallocate(struct file *file, int mode,
 				free_extent_map(em);
 				break;
 			}
-			ret = btrfs_qgroup_reserve_data(BTRFS_I(inode),
-					&data_reserved, cur_offset,
-					last_byte - cur_offset);
+			ret = btrfs_qgroup_reserve_data(inode, &data_reserved,
+					cur_offset, last_byte - cur_offset);
 			if (ret < 0) {
 				cur_offset = last_byte;
 				free_extent_map(em);
@@ -3419,9 +3363,8 @@ static long btrfs_fallocate(struct file *file, int mode,
 			 * range, free reserved data space first, otherwise
 			 * it'll result in false ENOSPC error.
 			 */
-			btrfs_free_reserved_data_space(BTRFS_I(inode),
-				data_reserved, cur_offset,
-				last_byte - cur_offset);
+			btrfs_free_reserved_data_space(inode, data_reserved,
+					cur_offset, last_byte - cur_offset);
 		}
 		free_extent_map(em);
 		cur_offset = last_byte;
@@ -3438,7 +3381,7 @@ static long btrfs_fallocate(struct file *file, int mode,
 					range->len, i_blocksize(inode),
 					offset + len, &alloc_hint);
 		else
-			btrfs_free_reserved_data_space(BTRFS_I(inode),
+			btrfs_free_reserved_data_space(inode,
 					data_reserved, range->start,
 					range->len);
 		list_del(&range->list);
@@ -3459,7 +3402,7 @@ out:
 	inode_unlock(inode);
 	/* Let go of our reservation. */
 	if (ret != 0 && !(mode & FALLOC_FL_ZERO_RANGE))
-		btrfs_free_reserved_data_space(BTRFS_I(inode), data_reserved,
+		btrfs_free_reserved_data_space(inode, data_reserved,
 				cur_offset, alloc_end - cur_offset);
 	extent_changeset_free(data_reserved);
 	return ret;
@@ -3557,7 +3500,7 @@ static loff_t btrfs_file_llseek(struct file *file, loff_t offset, int whence)
 
 static int btrfs_file_open(struct inode *inode, struct file *filp)
 {
-	filp->f_mode |= FMODE_NOWAIT | FMODE_BUF_RASYNC;
+	filp->f_mode |= FMODE_NOWAIT;
 	return generic_file_open(inode, filp);
 }
 
@@ -3571,8 +3514,7 @@ static ssize_t btrfs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		inode_lock_shared(inode);
 		ret = btrfs_direct_IO(iocb, to);
 		inode_unlock_shared(inode);
-		if (ret < 0 || !iov_iter_count(to) ||
-		    iocb->ki_pos >= i_size_read(file_inode(iocb->ki_filp)))
+		if (ret < 0)
 			return ret;
 	}
 

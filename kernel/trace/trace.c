@@ -7571,7 +7571,6 @@ refcount_inc(&ref->refcount);
 
 /* Pipe buffer operations for a buffer. */
 static const struct pipe_buf_operations buffer_pipe_buf_ops = {
-	.confirm		= generic_pipe_buf_confirm,
 	.release		= buffer_pipe_buf_release,
 	.get			= buffer_pipe_buf_get,
 };

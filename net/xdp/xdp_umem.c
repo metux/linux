@@ -245,7 +245,7 @@ static void xdp_umem_release(struct xdp_umem *umem)
 	}
 
 	xsk_reuseq_destroy(umem);
-
+	xp_destroy(umem->pool);
 	xdp_umem_unmap_pages(umem);
 	xdp_umem_unpin_pages(umem);
 
@@ -341,8 +341,8 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 {
 	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
 	u32 chunk_size = mr->chunk_size, headroom = mr->headroom;
-	u64 npgs, addr = mr->addr, size = mr->len;
 	unsigned int chunks, chunks_per_page;
+	u64 addr = mr->addr, size = mr->len;
 	int err;
 
 	if (chunk_size < XDP_UMEM_MIN_CHUNK_SIZE || chunk_size > PAGE_SIZE) {
@@ -372,10 +372,6 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	if ((addr + size) < addr)
 		return -EINVAL;
 
-	npgs = div_u64(size, PAGE_SIZE);
-	if (npgs > U32_MAX)
-		return -EINVAL;
-
 	chunks = (unsigned int)div_u64(size, chunk_size);
 	if (chunks == 0)
 		return -EINVAL;
@@ -394,7 +390,8 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	umem->size = size;
 	umem->headroom = headroom;
 	umem->chunk_size_nohr = chunk_size - headroom;
-	umem->npgs = (u32)npgs;
+	umem->chunk_size = chunk_size;
+	umem->npgs = size / PAGE_SIZE;
 	umem->pgs = NULL;
 	umem->user = NULL;
 	umem->flags = mr->flags;
@@ -419,11 +416,21 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	}
 
 	err = xdp_umem_map_pages(umem);
-	if (!err)
-		return 0;
+	if (err)
+		goto out_pages;
 
+	umem->pool = xp_create(umem->pgs, umem->npgs, chunks, chunk_size,
+			       headroom, size, unaligned_chunks);
+	if (!umem->pool) {
+		err = -ENOMEM;
+		goto out_unmap;
+	}
+	return 0;
+
+out_unmap:
+	xdp_umem_unmap_pages(umem);
+out_pages:
 	kvfree(umem->pages);
-
 out_pin:
 	xdp_umem_unpin_pages(umem);
 out_account:

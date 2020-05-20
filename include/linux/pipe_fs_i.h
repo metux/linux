@@ -203,6 +203,8 @@ static inline int pipe_buf_confirm(struct pipe_inode_info *pipe,
 static inline int pipe_buf_steal(struct pipe_inode_info *pipe,
 				 struct pipe_buffer *buf)
 {
+	if (!buf->ops->steal)
+		return 1;
 	return buf->ops->steal(pipe, buf);
 }
 
@@ -229,7 +231,6 @@ void free_pipe_info(struct pipe_inode_info *);
 bool generic_pipe_buf_get(struct pipe_inode_info *, struct pipe_buffer *);
 int generic_pipe_buf_confirm(struct pipe_inode_info *, struct pipe_buffer *);
 int generic_pipe_buf_steal(struct pipe_inode_info *, struct pipe_buffer *);
-int generic_pipe_buf_nosteal(struct pipe_inode_info *, struct pipe_buffer *);
 void generic_pipe_buf_release(struct pipe_inode_info *, struct pipe_buffer *);
 
 extern const struct pipe_buf_operations nosteal_pipe_buf_ops;

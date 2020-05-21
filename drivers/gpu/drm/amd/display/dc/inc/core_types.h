@@ -33,7 +33,7 @@
 #include "dc_bios_types.h"
 #include "mem_input.h"
 #include "hubp.h"
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 #include "mpc.h"
 #endif
 #include "dwb.h"
@@ -51,7 +51,9 @@ void enable_surface_flip_reporting(struct dc_plane_state *plane_state,
 #include "clock_source.h"
 #include "audio.h"
 #include "dm_pp_smu.h"
-
+#ifdef CONFIG_DRM_AMD_DC_HDCP
+#include "dm_cp_psp.h"
+#endif
 
 /************ link *****************/
 struct link_init_data {
@@ -86,9 +88,7 @@ void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 struct resource_pool;
 struct dc_state;
 struct resource_context;
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 struct clk_bw_params;
-#endif
 
 struct resource_funcs {
 	void (*destroy)(struct resource_pool **pool);
@@ -104,7 +104,7 @@ struct resource_funcs {
 
 	int (*populate_dml_pipes)(
 		struct dc *dc,
-		struct resource_context *res_ctx,
+		struct dc_state *context,
 		display_e2e_pipe_params_st *pipes);
 
 	enum dc_status (*validate_global)(
@@ -144,10 +144,22 @@ struct resource_funcs {
 			struct dc_state *context,
 			display_e2e_pipe_params_st *pipes,
 			int pipe_cnt);
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 	void (*update_bw_bounding_box)(
 			struct dc *dc,
 			struct clk_bw_params *bw_params);
+#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
+	bool (*acquire_post_bldn_3dlut)(
+			struct resource_context *res_ctx,
+			const struct resource_pool *pool,
+			int mpcc_id,
+			struct dc_3dlut **lut,
+			struct dc_transfer_func **shaper);
+
+	bool (*release_post_bldn_3dlut)(
+			struct resource_context *res_ctx,
+			const struct resource_pool *pool,
+			struct dc_3dlut **lut,
+			struct dc_transfer_func **shaper);
 #endif
 
 };
@@ -191,6 +203,10 @@ struct resource_pool {
 	unsigned int underlay_pipe_index;
 	unsigned int stream_enc_count;
 
+#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
+	struct dc_3dlut *mpc_lut[MAX_PIPES];
+	struct dc_transfer_func *mpc_shaper[MAX_PIPES];
+#endif
 	struct {
 		unsigned int xtalin_clock_inKhz;
 		unsigned int dccg_ref_clock_inKhz;
@@ -217,6 +233,7 @@ struct resource_pool {
 
 	struct abm *abm;
 	struct dmcu *dmcu;
+	struct dmub_psr *psr;
 
 #if defined(CONFIG_DRM_AMD_DC_DCN3_0)
 	struct abm *multiple_abms[MAX_PIPES];
@@ -224,6 +241,8 @@ struct resource_pool {
 
 	const struct resource_funcs *funcs;
 	const struct resource_caps *res_cap;
+
+	struct ddc_service *oem_device;
 };
 
 struct dcn_fe_bandwidth {
@@ -297,7 +316,7 @@ struct pipe_ctx {
 	struct pipe_ctx *next_odm_pipe;
 	struct pipe_ctx *prev_odm_pipe;
 
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
+#ifdef CONFIG_DRM_AMD_DC_DCN
 	struct _vcs_dpi_display_dlg_regs_st dlg_regs;
 	struct _vcs_dpi_display_ttu_regs_st ttu_regs;
 	struct _vcs_dpi_display_rq_regs_st rq_regs;
@@ -315,6 +334,9 @@ struct resource_context {
 	uint8_t clock_source_ref_count[MAX_CLOCK_SOURCES];
 	uint8_t dp_clock_source_ref_count;
 	bool is_dsc_acquired[MAX_PIPES];
+#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
+	bool is_mpc_3dlut_acquired[MAX_PIPES];
+#endif
 };
 
 struct dce_bw_output {
@@ -375,15 +397,11 @@ struct dc_state {
 
 	/* Note: these are big structures, do *not* put on stack! */
 	struct dm_pp_display_configuration pp_display_cfg;
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
+#ifdef CONFIG_DRM_AMD_DC_DCN
 	struct dcn_bw_internal_vars dcn_bw_vars;
 #endif
 
 	struct clk_mgr *clk_mgr;
-
-	struct {
-		bool full_update_needed : 1;
-	} commit_hints;
 
 	struct kref refcount;
 };

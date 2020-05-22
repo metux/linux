@@ -44,7 +44,10 @@
 			NETIF_F_NTUPLE |  \
 			NETIF_F_HW_VLAN_CTAG_FILTER | \
 			NETIF_F_HW_VLAN_CTAG_RX |     \
-			NETIF_F_HW_VLAN_CTAG_TX,      \
+			NETIF_F_HW_VLAN_CTAG_TX |     \
+			NETIF_F_GSO_UDP_L4      |     \
+			NETIF_F_GSO_PARTIAL |         \
+			NETIF_F_HW_TC,                \
 	.hw_priv_flags = IFF_UNICAST_FLT, \
 	.flow_control = true,		  \
 	.mtu = HW_ATL_B0_MTU_JUMBO,	  \
@@ -132,7 +135,7 @@ static int hw_atl_b0_hw_qos_set(struct aq_hw_s *self)
 	struct aq_nic_cfg_s *cfg = self->aq_nic_cfg;
 	u32 tx_buff_size = HW_ATL_B0_TXBUF_MAX;
 	u32 rx_buff_size = HW_ATL_B0_RXBUF_MAX;
-	unsigned int i_priority = 0U;
+	unsigned int prio = 0U;
 	u32 tc = 0U;
 
 	if (cfg->is_ptp) {
@@ -151,42 +154,45 @@ static int hw_atl_b0_hw_qos_set(struct aq_hw_s *self)
 	hw_atl_tps_tx_pkt_shed_desc_tc_arb_mode_set(self, 0U);
 	hw_atl_tps_tx_pkt_shed_data_arb_mode_set(self, 0U);
 
-	/* TX Packet Scheduler Data TC0 */
-	hw_atl_tps_tx_pkt_shed_tc_data_max_credit_set(self, 0xFFF, tc);
-	hw_atl_tps_tx_pkt_shed_tc_data_weight_set(self, 0x64, tc);
-	hw_atl_tps_tx_pkt_shed_desc_tc_max_credit_set(self, 0x50, tc);
-	hw_atl_tps_tx_pkt_shed_desc_tc_weight_set(self, 0x1E, tc);
+	tx_buff_size /= cfg->tcs;
+	rx_buff_size /= cfg->tcs;
+	for (tc = 0; tc < cfg->tcs; tc++) {
+		u32 threshold = 0U;
 
-	/* Tx buf size TC0 */
-	hw_atl_tpb_tx_pkt_buff_size_per_tc_set(self, tx_buff_size, tc);
-	hw_atl_tpb_tx_buff_hi_threshold_per_tc_set(self,
-						   (tx_buff_size *
-						   (1024 / 32U) * 66U) /
-						   100U, tc);
-	hw_atl_tpb_tx_buff_lo_threshold_per_tc_set(self,
-						   (tx_buff_size *
-						   (1024 / 32U) * 50U) /
-						   100U, tc);
+		/* TX Packet Scheduler Data TC0 */
+		hw_atl_tps_tx_pkt_shed_tc_data_max_credit_set(self, 0xFFF, tc);
+		hw_atl_tps_tx_pkt_shed_tc_data_weight_set(self, 0x64, tc);
+		hw_atl_tps_tx_pkt_shed_desc_tc_max_credit_set(self, 0x50, tc);
+		hw_atl_tps_tx_pkt_shed_desc_tc_weight_set(self, 0x1E, tc);
 
-	/* QoS Rx buf size per TC */
-	hw_atl_rpb_rx_pkt_buff_size_per_tc_set(self, rx_buff_size, tc);
-	hw_atl_rpb_rx_buff_hi_threshold_per_tc_set(self,
-						   (rx_buff_size *
-						   (1024U / 32U) * 66U) /
-						   100U, tc);
-	hw_atl_rpb_rx_buff_lo_threshold_per_tc_set(self,
-						   (rx_buff_size *
-						   (1024U / 32U) * 50U) /
-						   100U, tc);
+		/* Tx buf size TC0 */
+		hw_atl_tpb_tx_pkt_buff_size_per_tc_set(self, tx_buff_size, tc);
 
-	hw_atl_b0_set_fc(self, self->aq_nic_cfg->flow_control, tc);
+		threshold = (tx_buff_size * (1024 / 32U) * 66U) / 100U;
+		hw_atl_tpb_tx_buff_hi_threshold_per_tc_set(self, threshold, tc);
+
+		threshold = (tx_buff_size * (1024 / 32U) * 50U) / 100U;
+		hw_atl_tpb_tx_buff_lo_threshold_per_tc_set(self, threshold, tc);
+
+		/* QoS Rx buf size per TC */
+		hw_atl_rpb_rx_pkt_buff_size_per_tc_set(self, rx_buff_size, tc);
+
+		threshold = (rx_buff_size * (1024U / 32U) * 66U) / 100U;
+		hw_atl_rpb_rx_buff_hi_threshold_per_tc_set(self, threshold, tc);
+
+		threshold = (rx_buff_size * (1024U / 32U) * 50U) / 100U;
+		hw_atl_rpb_rx_buff_lo_threshold_per_tc_set(self, threshold, tc);
+
+		hw_atl_b0_set_fc(self, self->aq_nic_cfg->fc.req, tc);
+	}
 
 	if (cfg->is_ptp)
 		hw_atl_b0_tc_ptp_set(self);
 
 	/* QoS 802.1p priority -> TC mapping */
-	for (i_priority = 8U; i_priority--;)
-		hw_atl_rpf_rpb_user_priority_tc_map_set(self, i_priority, 0U);
+	for (prio = 0; prio < 8; ++prio)
+		hw_atl_rpf_rpb_user_priority_tc_map_set(self, prio,
+							cfg->prio_tc_map[prio]);
 
 	return aq_hw_err_from_flags(self);
 }
@@ -317,7 +323,7 @@ int hw_atl_b0_hw_offload_set(struct aq_hw_s *self,
 static int hw_atl_b0_hw_init_tx_path(struct aq_hw_s *self)
 {
 	/* Tx TC/Queue number config */
-	hw_atl_tpb_tps_tx_tc_mode_set(self, 1U);
+	hw_atl_tpb_tps_tx_tc_mode_set(self, self->aq_nic_cfg->tc_mode);
 
 	hw_atl_thm_lso_tcp_flag_of_first_pkt_set(self, 0x0FF6U);
 	hw_atl_thm_lso_tcp_flag_of_middle_pkt_set(self, 0x0FF6U);
@@ -343,7 +349,7 @@ static int hw_atl_b0_hw_init_rx_path(struct aq_hw_s *self)
 	int i;
 
 	/* Rx TC/RSS number config */
-	hw_atl_rpb_rpf_rx_traf_class_mode_set(self, 1U);
+	hw_atl_rpb_rpf_rx_traf_class_mode_set(self, cfg->tc_mode);
 
 	/* Rx flow control */
 	hw_atl_rpb_rx_flow_ctl_mode_set(self, 1U);
@@ -535,8 +541,9 @@ int hw_atl_b0_hw_ring_tx_xmit(struct aq_hw_s *self, struct aq_ring_s *ring,
 
 		buff = &ring->buff_ring[ring->sw_tail];
 
-		if (buff->is_gso) {
-			txd->ctl |= HW_ATL_B0_TXD_CTL_CMD_TCP;
+		if (buff->is_gso_tcp || buff->is_gso_udp) {
+			if (buff->is_gso_tcp)
+				txd->ctl |= HW_ATL_B0_TXD_CTL_CMD_TCP;
 			txd->ctl |= HW_ATL_B0_TXD_CTL_DESC_TYPE_TXC;
 			txd->ctl |= (buff->len_l3 << 31) |
 				    (buff->len_l2 << 24);
@@ -556,7 +563,7 @@ int hw_atl_b0_hw_ring_tx_xmit(struct aq_hw_s *self, struct aq_ring_s *ring,
 			txd->ctl |= buff->vlan_tx_tag << 4;
 			is_vlan = true;
 		}
-		if (!buff->is_gso && !buff->is_vlan) {
+		if (!buff->is_gso_tcp && !buff->is_gso_udp && !buff->is_vlan) {
 			buff_pa_len = buff->len;
 
 			txd->buf_addr = buff->pa;
@@ -818,6 +825,8 @@ int hw_atl_b0_hw_ring_rx_receive(struct aq_hw_s *self, struct aq_ring_s *ring)
 			}
 		}
 
+		buff->is_lro = !!(HW_ATL_B0_RXD_WB_STAT2_RSCCNT &
+				  rxd_wb->status);
 		if (HW_ATL_B0_RXD_WB_STAT2_EOP & rxd_wb->status) {
 			buff->len = rxd_wb->pkt_len %
 				AQ_CFG_RX_FRAME_MAX;
@@ -830,8 +839,7 @@ int hw_atl_b0_hw_ring_rx_receive(struct aq_hw_s *self, struct aq_ring_s *ring)
 				rxd_wb->pkt_len > AQ_CFG_RX_FRAME_MAX ?
 				AQ_CFG_RX_FRAME_MAX : rxd_wb->pkt_len;
 
-			if (HW_ATL_B0_RXD_WB_STAT2_RSCCNT &
-				rxd_wb->status) {
+			if (buff->is_lro) {
 				/* LRO */
 				buff->next = rxd_wb->next_desc_ptr;
 				++ring->stats.rx.lro_packets;
@@ -879,13 +887,16 @@ int hw_atl_b0_hw_packet_filter_set(struct aq_hw_s *self,
 {
 	struct aq_nic_cfg_s *cfg = self->aq_nic_cfg;
 	unsigned int i = 0U;
+	u32 vlan_promisc;
+	u32 l2_promisc;
 
-	hw_atl_rpfl2promiscuous_mode_en_set(self,
-					    IS_FILTER_ENABLED(IFF_PROMISC));
+	l2_promisc = IS_FILTER_ENABLED(IFF_PROMISC) ||
+		     !!(cfg->priv_flags & BIT(AQ_HW_LOOPBACK_DMA_NET));
+	vlan_promisc = l2_promisc || cfg->is_vlan_force_promisc;
 
-	hw_atl_rpf_vlan_prom_mode_en_set(self,
-				     IS_FILTER_ENABLED(IFF_PROMISC) ||
-				     cfg->is_vlan_force_promisc);
+	hw_atl_rpfl2promiscuous_mode_en_set(self, l2_promisc);
+
+	hw_atl_rpf_vlan_prom_mode_en_set(self, vlan_promisc);
 
 	hw_atl_rpfl2multicast_flr_en_set(self,
 					 IS_FILTER_ENABLED(IFF_ALLMULTI) &&
@@ -1142,6 +1153,8 @@ static int hw_atl_b0_adj_sys_clock(struct aq_hw_s *self, s64 delta)
 {
 	self->ptp_clk_offset += delta;
 
+	self->aq_fw_ops->adjust_ptp(self, self->ptp_clk_offset);
+
 	return 0;
 }
 
@@ -1192,7 +1205,7 @@ static int hw_atl_b0_gpio_pulse(struct aq_hw_s *self, u32 index,
 	fwreq.ptp_gpio_ctrl.index = index;
 	fwreq.ptp_gpio_ctrl.period = period;
 	/* Apply time offset */
-	fwreq.ptp_gpio_ctrl.start = start - self->ptp_clk_offset;
+	fwreq.ptp_gpio_ctrl.start = start;
 
 	size = sizeof(fwreq.msg_id) + sizeof(fwreq.ptp_gpio_ctrl);
 	return self->aq_fw_ops->send_fw_request(self, &fwreq, size);
@@ -1504,9 +1517,6 @@ const struct aq_hw_ops hw_atl_ops_b0 = {
 	.hw_get_sync_ts          = hw_atl_b0_get_sync_ts,
 	.rx_extract_ts           = hw_atl_b0_rx_extract_ts,
 	.extract_hwts            = hw_atl_b0_extract_hwts,
-	.hw_set_offload          = hw_atl_b0_hw_offload_set,
-	.hw_get_hw_stats         = hw_atl_utils_get_hw_stats,
-	.hw_get_fw_version       = hw_atl_utils_get_fw_version,
 	.hw_set_offload          = hw_atl_b0_hw_offload_set,
 	.hw_set_loopback         = hw_atl_b0_set_loopback,
 	.hw_set_fc               = hw_atl_b0_set_fc,

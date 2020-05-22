@@ -76,7 +76,7 @@ static struct palmas_gpadc_info palmas_gpadc_info[] = {
 	PALMAS_ADC_INFO(IN15, 0, 0, 0, 0, INVALID, INVALID, true),
 };
 
-/*
+/**
  * struct palmas_gpadc - the palmas_gpadc structure
  * @ch0_current:	channel 0 current source setting
  *			0: 0 uA
@@ -94,6 +94,7 @@ static struct palmas_gpadc_info palmas_gpadc_info[] = {
  * This is the palmas_gpadc structure to store run-time information
  * and pointers for this driver instance.
  */
+
 struct palmas_gpadc {
 	struct device			*dev;
 	struct palmas			*palmas;
@@ -834,7 +835,18 @@ static struct platform_driver palmas_gpadc_driver = {
 		.of_match_table = of_palmas_gpadc_match_tbl,
 	},
 };
-module_platform_driver(palmas_gpadc_driver);
+
+static int __init palmas_gpadc_init(void)
+{
+	return platform_driver_register(&palmas_gpadc_driver);
+}
+module_init(palmas_gpadc_init);
+
+static void __exit palmas_gpadc_exit(void)
+{
+	platform_driver_unregister(&palmas_gpadc_driver);
+}
+module_exit(palmas_gpadc_exit);
 
 MODULE_DESCRIPTION("palmas GPADC driver");
 MODULE_AUTHOR("Pradeep Goudagunta<pgoudagunta@nvidia.com>");

@@ -29,14 +29,11 @@
 
 /**
  * struct ad5446_state - driver instance specific data
- * @dev:		this device
+ * @spi:		spi_device
  * @chip_info:		chip model specific constants, available modes etc
  * @reg:		supply regulator
  * @vref_mv:		actual reference voltage used
- * @cached_val:		store/retrieve values during power down
- * @pwr_down_mode:	power down mode (1k, 100k or tristate)
- * @pwr_down:		true if the device is in power down
- * @lock:		lock to protect the data buffer during write ops
+ * @lock		lock to protect the data buffer during write ops
  */
 
 struct ad5446_state {
@@ -253,6 +250,7 @@ static int ad5446_probe(struct device *dev, const char *name,
 	st->reg = reg;
 	st->dev = dev;
 
+	/* Establish that the iio_dev is a child of the device */
 	indio_dev->name = name;
 	indio_dev->info = &ad5446_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -314,7 +312,7 @@ static int ad5660_write(struct ad5446_state *st, unsigned val)
 	return spi_write(spi, data, sizeof(data));
 }
 
-/*
+/**
  * ad5446_supported_spi_device_ids:
  * The AD5620/40/60 parts are available in different fixed internal reference
  * voltage options. The actual part numbers may look differently
@@ -536,7 +534,7 @@ static int ad5622_write(struct ad5446_state *st, unsigned val)
 	return i2c_master_send(client, (char *)&data, sizeof(data));
 }
 
-/*
+/**
  * ad5446_supported_i2c_device_ids:
  * The AD5620/40/60 parts are available in different fixed internal reference
  * voltage options. The actual part numbers may look differently

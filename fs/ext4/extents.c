@@ -2839,7 +2839,7 @@ again:
 			 * in use to avoid freeing it when removing blocks.
 			 */
 			if (sbi->s_cluster_ratio > 1) {
-				pblk = ext4_ext_pblock(ex) + end - ee_block + 1;
+				pblk = ext4_ext_pblock(ex) + end - ee_block + 2;
 				partial.pclu = EXT4_B2C(sbi, pblk);
 				partial.state = nofree;
 			}
@@ -4943,7 +4943,7 @@ int ext4_get_es_cache(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		fieinfo->fi_flags &= ~FIEMAP_FLAG_CACHE;
 	}
 
-	error = fiemap_prep(inode, fieinfo, start, &len, 0);
+	error = fiemap_prep(inode, fieinfo, start, &len, FIEMAP_FLAG_SYNC);
 	if (error)
 		return error;
 

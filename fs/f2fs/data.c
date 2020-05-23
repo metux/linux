@@ -20,6 +20,7 @@
 #include <linux/uio.h>
 #include <linux/cleancache.h>
 #include <linux/sched/signal.h>
+#include <linux/fiemap.h>
 
 #include "f2fs.h"
 #include "node.h"

@@ -997,7 +997,7 @@ int nilfs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 	unsigned int blkbits = inode->i_blkbits;
 	int ret, n;
 
-	ret = fiemap_prep(inode, fieinfo, start, &len, 0);
+	ret = fiemap_prep(inode, fieinfo, start, &len, FIEMAP_FLAG_SYNC);
 	if (ret)
 		return ret;
 

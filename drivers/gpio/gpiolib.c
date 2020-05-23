@@ -149,6 +149,7 @@ struct gpio_desc *gpiochip_get_desc(struct gpio_chip *gc,
 
 	return &gdev->descs[hwnum];
 }
+EXPORT_SYMBOL_GPL(gpiochip_get_desc);
 
 /**
  * desc_to_gpio - convert a GPIO descriptor to the integer namespace
@@ -733,10 +734,6 @@ static int linehandle_create(struct gpio_device *gdev, void __user *ip)
 			if (ret)
 				goto out_free_descs;
 		}
-
-		atomic_notifier_call_chain(&desc->gdev->notifier,
-					   GPIOLINE_CHANGED_REQUESTED, desc);
-
 		dev_dbg(&gdev->dev, "registered chardev handle for line %d\n",
 			offset);
 	}
@@ -1090,9 +1087,6 @@ static int lineevent_create(struct gpio_device *gdev, void __user *ip)
 	ret = gpiod_direction_input(desc);
 	if (ret)
 		goto out_free_desc;
-
-	atomic_notifier_call_chain(&desc->gdev->notifier,
-				   GPIOLINE_CHANGED_REQUESTED, desc);
 
 	le->irq = gpiod_to_irq(desc);
 	if (le->irq <= 0) {
@@ -2477,25 +2471,37 @@ static void gpiochip_irq_relres(struct irq_data *d)
 	gpiochip_relres_irq(gc, d->hwirq);
 }
 
+static void gpiochip_irq_mask(struct irq_data *d)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+
+	if (gc->irq.irq_mask)
+		gc->irq.irq_mask(d);
+	gpiochip_disable_irq(gc, d->hwirq);
+}
+
+static void gpiochip_irq_unmask(struct irq_data *d)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+
+	gpiochip_enable_irq(gc, d->hwirq);
+	if (gc->irq.irq_unmask)
+		gc->irq.irq_unmask(d);
+}
+
 static void gpiochip_irq_enable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 
 	gpiochip_enable_irq(gc, d->hwirq);
-	if (gc->irq.irq_enable)
-		gc->irq.irq_enable(d);
-	else
-		gc->irq.chip->irq_unmask(d);
+	gc->irq.irq_enable(d);
 }
 
 static void gpiochip_irq_disable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 
-	if (gc->irq.irq_disable)
-		gc->irq.irq_disable(d);
-	else
-		gc->irq.chip->irq_mask(d);
+	gc->irq.irq_disable(d);
 	gpiochip_disable_irq(gc, d->hwirq);
 }
 
@@ -2520,10 +2526,22 @@ static void gpiochip_set_irq_hooks(struct gpio_chip *gc)
 			  "detected irqchip that is shared with multiple gpiochips: please fix the driver.\n");
 		return;
 	}
-	gc->irq.irq_enable = irqchip->irq_enable;
-	gc->irq.irq_disable = irqchip->irq_disable;
-	irqchip->irq_enable = gpiochip_irq_enable;
-	irqchip->irq_disable = gpiochip_irq_disable;
+
+	if (irqchip->irq_disable) {
+		gc->irq.irq_disable = irqchip->irq_disable;
+		irqchip->irq_disable = gpiochip_irq_disable;
+	} else {
+		gc->irq.irq_mask = irqchip->irq_mask;
+		irqchip->irq_mask = gpiochip_irq_mask;
+	}
+
+	if (irqchip->irq_enable) {
+		gc->irq.irq_enable = irqchip->irq_enable;
+		irqchip->irq_enable = gpiochip_irq_enable;
+	} else {
+		gc->irq.irq_unmask = irqchip->irq_unmask;
+		irqchip->irq_unmask = gpiochip_irq_unmask;
+	}
 }
 
 /**
@@ -3014,6 +3032,8 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	}
 done:
 	spin_unlock_irqrestore(&gpio_lock, flags);
+	atomic_notifier_call_chain(&desc->gdev->notifier,
+				   GPIOLINE_CHANGED_REQUESTED, desc);
 	return ret;
 }
 
@@ -4229,9 +4249,7 @@ int gpiochip_lock_as_irq(struct gpio_chip *gc, unsigned int offset)
 		}
 	}
 
-	/* To be valid for IRQ the line needs to be input or open drain */
-	if (test_bit(FLAG_IS_OUT, &desc->flags) &&
-	    !test_bit(FLAG_OPEN_DRAIN, &desc->flags)) {
+	if (test_bit(FLAG_IS_OUT, &desc->flags)) {
 		chip_err(gc,
 			 "%s: tried to flag a GPIO set as output for IRQ\n",
 			 __func__);
@@ -4294,12 +4312,7 @@ void gpiochip_enable_irq(struct gpio_chip *gc, unsigned int offset)
 
 	if (!IS_ERR(desc) &&
 	    !WARN_ON(!test_bit(FLAG_USED_AS_IRQ, &desc->flags))) {
-		/*
-		 * We must not be output when using IRQ UNLESS we are
-		 * open drain.
-		 */
-		WARN_ON(test_bit(FLAG_IS_OUT, &desc->flags) &&
-			!test_bit(FLAG_OPEN_DRAIN, &desc->flags));
+		WARN_ON(test_bit(FLAG_IS_OUT, &desc->flags));
 		set_bit(FLAG_IRQ_IS_ENABLED, &desc->flags);
 	}
 }
@@ -4994,9 +5007,6 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 		return ERR_PTR(ret);
 	}
 
-	atomic_notifier_call_chain(&desc->gdev->notifier,
-				   GPIOLINE_CHANGED_REQUESTED, desc);
-
 	return desc;
 }
 EXPORT_SYMBOL_GPL(gpiod_get_index);
@@ -5061,9 +5071,6 @@ struct gpio_desc *fwnode_get_named_gpiod(struct fwnode_handle *fwnode,
 		gpiod_put(desc);
 		return ERR_PTR(ret);
 	}
-
-	atomic_notifier_call_chain(&desc->gdev->notifier,
-				   GPIOLINE_CHANGED_REQUESTED, desc);
 
 	return desc;
 }

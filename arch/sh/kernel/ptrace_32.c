@@ -455,14 +455,18 @@ long arch_ptrace(struct task_struct *child, long request,
 
 asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 {
-	if (test_thread_flag(TIF_SYSCALL_TRACE) &&
-	    tracehook_report_syscall_entry(regs)) {
-		regs->regs[0] = -ENOSYS;
-		return -1;
-	}
+	long ret = 0;
 
-	if (secure_computing() == -1)
-		return -1;
+	secure_computing_strict(regs->regs[0]);
+
+	if (test_thread_flag(TIF_SYSCALL_TRACE) &&
+	    tracehook_report_syscall_entry(regs))
+		/*
+		 * Tracing decided this syscall should not happen.
+		 * We'll return a bogus call number to get an ENOSYS
+		 * error, but leave the original number in regs->regs[0].
+		 */
+		ret = -1L;
 
 	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT)))
 		trace_sys_enter(regs, regs->regs[0]);
@@ -470,7 +474,7 @@ asmlinkage long do_syscall_trace_enter(struct pt_regs *regs)
 	audit_syscall_entry(regs->regs[3], regs->regs[4], regs->regs[5],
 			    regs->regs[6], regs->regs[7]);
 
-	return 0;
+	return ret ?: regs->regs[0];
 }
 
 asmlinkage void do_syscall_trace_leave(struct pt_regs *regs)

@@ -4886,7 +4886,7 @@ static void goya_mmu_prepare(struct hl_device *hdev, u32 asid)
 		goya_mmu_prepare_reg(hdev, goya_mmu_regs[i], asid);
 }
 
-static void goya_mmu_invalidate_cache(struct hl_device *hdev, bool is_hard,
+static int goya_mmu_invalidate_cache(struct hl_device *hdev, bool is_hard,
 					u32 flags)
 {
 	struct goya_device *goya = hdev->asic_specific;
@@ -4895,11 +4895,11 @@ static void goya_mmu_invalidate_cache(struct hl_device *hdev, bool is_hard,
 
 	if (!(goya->hw_cap_initialized & HW_CAP_MMU) ||
 		hdev->hard_reset_pending)
-		return;
+		return 0;
 
 	/* no need in L1 only invalidation in Goya */
 	if (!is_hard)
-		return;
+		return 0;
 
 	if (hdev->pldm)
 		timeout_usec = GOYA_PLDM_MMU_TIMEOUT_USEC;
@@ -4921,13 +4921,17 @@ static void goya_mmu_invalidate_cache(struct hl_device *hdev, bool is_hard,
 
 	mutex_unlock(&hdev->mmu_cache_lock);
 
-	if (rc)
-		dev_notice_ratelimited(hdev->dev,
-			"Timeout when waiting for MMU cache invalidation\n");
+	if (rc) {
+		dev_err_ratelimited(hdev->dev,
+					"MMU cache invalidation timeout\n");
+		hl_device_reset(hdev, true, false);
+	}
+
+	return rc;
 }
 
-static void goya_mmu_invalidate_cache_range(struct hl_device *hdev,
-		bool is_hard, u32 asid, u64 va, u64 size)
+static int goya_mmu_invalidate_cache_range(struct hl_device *hdev,
+				bool is_hard, u32 asid, u64 va, u64 size)
 {
 	struct goya_device *goya = hdev->asic_specific;
 	u32 status, timeout_usec, inv_data, pi;
@@ -4935,11 +4939,11 @@ static void goya_mmu_invalidate_cache_range(struct hl_device *hdev,
 
 	if (!(goya->hw_cap_initialized & HW_CAP_MMU) ||
 		hdev->hard_reset_pending)
-		return;
+		return 0;
 
 	/* no need in L1 only invalidation in Goya */
 	if (!is_hard)
-		return;
+		return 0;
 
 	if (hdev->pldm)
 		timeout_usec = GOYA_PLDM_MMU_TIMEOUT_USEC;
@@ -4972,9 +4976,13 @@ static void goya_mmu_invalidate_cache_range(struct hl_device *hdev,
 
 	mutex_unlock(&hdev->mmu_cache_lock);
 
-	if (rc)
-		dev_notice_ratelimited(hdev->dev,
-			"Timeout when waiting for MMU cache invalidation\n");
+	if (rc) {
+		dev_err_ratelimited(hdev->dev,
+					"MMU cache invalidation timeout\n");
+		hl_device_reset(hdev, true, false);
+	}
+
+	return rc;
 }
 
 int goya_send_heartbeat(struct hl_device *hdev)

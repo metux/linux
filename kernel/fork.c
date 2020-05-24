@@ -1692,6 +1692,11 @@ static inline void rcu_copy_process(struct task_struct *p)
 	INIT_LIST_HEAD(&p->rcu_tasks_holdout_list);
 	p->rcu_tasks_idle_cpu = -1;
 #endif /* #ifdef CONFIG_TASKS_RCU */
+#ifdef CONFIG_TASKS_TRACE_RCU
+	p->trc_reader_nesting = 0;
+	p->trc_reader_special.s = 0;
+	INIT_LIST_HEAD(&p->trc_holdout_list);
+#endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
 }
 
 struct pid *pidfd_pid(const struct file *file)
@@ -2419,6 +2424,20 @@ long _do_fork(struct kernel_clone_args *args)
 	long nr;
 
 	/*
+	 * For legacy clone() calls, CLONE_PIDFD uses the parent_tid argument
+	 * to return the pidfd. Hence, CLONE_PIDFD and CLONE_PARENT_SETTID are
+	 * mutually exclusive. With clone3() CLONE_PIDFD has grown a separate
+	 * field in struct clone_args and it still doesn't make sense to have
+	 * them both point at the same memory location. Performing this check
+	 * here has the advantage that we don't need to have a separate helper
+	 * to check for legacy clone().
+	 */
+	if ((args->flags & CLONE_PIDFD) &&
+	    (args->flags & CLONE_PARENT_SETTID) &&
+	    (args->pidfd == args->parent_tid))
+		return -EINVAL;
+
+	/*
 	 * Determine whether and which event to report to ptracer.  When
 	 * called from kernel_thread or CLONE_UNTRACED is explicitly
 	 * requested, no event is reported; otherwise, report if the event
@@ -2475,50 +2494,15 @@ long _do_fork(struct kernel_clone_args *args)
 	return nr;
 }
 
-bool legacy_clone_args_valid(const struct kernel_clone_args *kargs)
-{
-	/* clone(CLONE_PIDFD) uses parent_tidptr to return a pidfd */
-	if ((kargs->flags & CLONE_PIDFD) &&
-	    (kargs->flags & CLONE_PARENT_SETTID))
-		return false;
-
-	return true;
-}
-
-#ifndef CONFIG_HAVE_COPY_THREAD_TLS
-/* For compatibility with architectures that call do_fork directly rather than
- * using the syscall entry points below. */
-long do_fork(unsigned long clone_flags,
-	      unsigned long stack_start,
-	      unsigned long stack_size,
-	      int __user *parent_tidptr,
-	      int __user *child_tidptr)
-{
-	struct kernel_clone_args args = {
-		.flags		= (clone_flags & ~CSIGNAL),
-		.pidfd		= parent_tidptr,
-		.child_tid	= child_tidptr,
-		.parent_tid	= parent_tidptr,
-		.exit_signal	= (clone_flags & CSIGNAL),
-		.stack		= stack_start,
-		.stack_size	= stack_size,
-	};
-
-	if (!legacy_clone_args_valid(&args))
-		return -EINVAL;
-
-	return _do_fork(&args);
-}
-#endif
-
 /*
  * Create a kernel thread.
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
 	struct kernel_clone_args args = {
-		.flags		= ((flags | CLONE_VM | CLONE_UNTRACED) & ~CSIGNAL),
-		.exit_signal	= (flags & CSIGNAL),
+		.flags		= ((lower_32_bits(flags) | CLONE_VM |
+				    CLONE_UNTRACED) & ~CSIGNAL),
+		.exit_signal	= (lower_32_bits(flags) & CSIGNAL),
 		.stack		= (unsigned long)fn,
 		.stack_size	= (unsigned long)arg,
 	};
@@ -2579,17 +2563,14 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 #endif
 {
 	struct kernel_clone_args args = {
-		.flags		= (clone_flags & ~CSIGNAL),
+		.flags		= (lower_32_bits(clone_flags) & ~CSIGNAL),
 		.pidfd		= parent_tidptr,
 		.child_tid	= child_tidptr,
 		.parent_tid	= parent_tidptr,
-		.exit_signal	= (clone_flags & CSIGNAL),
+		.exit_signal	= (lower_32_bits(clone_flags) & CSIGNAL),
 		.stack		= newsp,
 		.tls		= tls,
 	};
-
-	if (!legacy_clone_args_valid(&args))
-		return -EINVAL;
 
 	return _do_fork(&args);
 }
@@ -2920,7 +2901,7 @@ static int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp
 /*
  * unshare allows a process to 'unshare' part of the process
  * context which was originally shared using clone.  copy_*
- * functions used by do_fork() cannot be used here directly
+ * functions used by _do_fork() cannot be used here directly
  * because they modify an inactive task_struct that is being
  * constructed. Here we are modifying the current, active,
  * task_struct.

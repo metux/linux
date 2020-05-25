@@ -33,8 +33,6 @@
 #include <asm/hypervisor.h>
 #include <asm/tlb.h>
 #include <asm/cpuidle_haltpoll.h>
-#include <asm/ptrace.h>
-#include <asm/svm.h>
 
 DEFINE_STATIC_KEY_FALSE(kvm_async_pf_enabled);
 
@@ -219,7 +217,7 @@ again:
 }
 EXPORT_SYMBOL_GPL(kvm_async_pf_task_wake);
 
-noinstr u32 kvm_read_and_reset_apf_flags(void)
+u32 kvm_read_and_reset_apf_flags(void)
 {
 	u32 flags = 0;
 
@@ -231,22 +229,14 @@ noinstr u32 kvm_read_and_reset_apf_flags(void)
 	return flags;
 }
 EXPORT_SYMBOL_GPL(kvm_read_and_reset_apf_flags);
+NOKPROBE_SYMBOL(kvm_read_and_reset_apf_flags);
 
-noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
+bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 {
-	u32 reason = kvm_read_and_reset_apf_flags();
-	irqentry_state_t state;
+	u32 flags = kvm_read_and_reset_apf_flags();
 
-	switch (reason) {
-	case KVM_PV_REASON_PAGE_NOT_PRESENT:
-	case KVM_PV_REASON_PAGE_READY:
-		break;
-	default:
+	if (!flags)
 		return false;
-	}
-
-	state = irqentry_enter(regs);
-	instrumentation_begin();
 
 	/*
 	 * If the host managed to inject an async #PF into an interrupt
@@ -256,18 +246,37 @@ noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 	if (unlikely(!(regs->flags & X86_EFLAGS_IF)))
 		panic("Host injected async #PF in interrupt disabled region\n");
 
-	if (reason == KVM_PV_REASON_PAGE_NOT_PRESENT) {
+	if (flags & KVM_PV_REASON_PAGE_NOT_PRESENT) {
 		if (unlikely(!(user_mode(regs))))
 			panic("Host injected async #PF in kernel mode\n");
 		/* Page is swapped out by the host. */
 		kvm_async_pf_task_wait_schedule(token);
-	} else {
-		kvm_async_pf_task_wake(token);
+		return true;
 	}
 
-	instrumentation_end();
-	irqentry_exit(regs, state);
+	WARN_ONCE(1, "Unexpected async PF flags: %x\n", flags);
 	return true;
+}
+NOKPROBE_SYMBOL(__kvm_handle_async_pf);
+
+__visible void __irq_entry kvm_async_pf_intr(struct pt_regs *regs)
+{
+	u32 token;
+
+	entering_ack_irq();
+
+	inc_irq_stat(irq_hv_callback_count);
+
+	if (__this_cpu_read(apf_reason.enabled)) {
+		token = __this_cpu_read(apf_reason.token);
+		rcu_irq_enter();
+		kvm_async_pf_task_wake(token);
+		rcu_irq_exit();
+		__this_cpu_write(apf_reason.token, 0);
+		wrmsrl(MSR_KVM_ASYNC_PF_ACK, 1);
+	}
+
+	exiting_irq();
 }
 
 static void __init paravirt_ops_setup(void)
@@ -313,16 +322,18 @@ static notrace void kvm_guest_apic_eoi_write(u32 reg, u32 val)
 
 static void kvm_guest_cpu_init(void)
 {
-	if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF) && kvmapf) {
-		u64 pa;
+	if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF_INT) && kvmapf) {
+		u64 pa = slow_virt_to_phys(this_cpu_ptr(&apf_reason));
 
 		WARN_ON_ONCE(!static_branch_likely(&kvm_async_pf_enabled));
 
 		pa = slow_virt_to_phys(this_cpu_ptr(&apf_reason));
-		pa |= KVM_ASYNC_PF_ENABLED;
+		pa |= KVM_ASYNC_PF_ENABLED | KVM_ASYNC_PF_DELIVERY_AS_INT;
 
 		if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF_VMEXIT))
 			pa |= KVM_ASYNC_PF_DELIVERY_AS_PF_VMEXIT;
+
+		wrmsrl(MSR_KVM_ASYNC_PF_INT, HYPERVISOR_CALLBACK_VECTOR);
 
 		wrmsrl(MSR_KVM_ASYNC_PF_EN, pa);
 		__this_cpu_write(apf_reason.enabled, 1);
@@ -648,8 +659,10 @@ static void __init kvm_guest_init(void)
 	if (kvm_para_has_feature(KVM_FEATURE_PV_EOI))
 		apic_set_eoi_write(kvm_guest_apic_eoi_write);
 
-	if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF) && kvmapf)
+	if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF_INT) && kvmapf) {
 		static_branch_enable(&kvm_async_pf_enabled);
+		alloc_intr_gate(HYPERVISOR_CALLBACK_VECTOR, kvm_async_pf_vector);
+	}
 
 #ifdef CONFIG_SMP
 	smp_ops.smp_prepare_cpus = kvm_smp_prepare_cpus;
@@ -731,34 +744,13 @@ static void __init kvm_init_platform(void)
 	x86_platform.apic_post_init = kvm_apic_init;
 }
 
-#if defined(CONFIG_AMD_MEM_ENCRYPT)
-static void kvm_sev_es_hcall_prepare(struct ghcb *ghcb, struct pt_regs *regs)
-{
-	/* RAX and CPL are already in the GHCB */
-	ghcb_set_rbx(ghcb, regs->bx);
-	ghcb_set_rcx(ghcb, regs->cx);
-	ghcb_set_rdx(ghcb, regs->dx);
-	ghcb_set_rsi(ghcb, regs->si);
-}
-
-static bool kvm_sev_es_hcall_finish(struct ghcb *ghcb, struct pt_regs *regs)
-{
-	/* No checking of the return state needed */
-	return true;
-}
-#endif
-
 const __initconst struct hypervisor_x86 x86_hyper_kvm = {
-	.name				= "KVM",
-	.detect				= kvm_detect,
-	.type				= X86_HYPER_KVM,
-	.init.guest_late_init		= kvm_guest_init,
-	.init.x2apic_available		= kvm_para_available,
-	.init.init_platform		= kvm_init_platform,
-#if defined(CONFIG_AMD_MEM_ENCRYPT)
-	.runtime.sev_es_hcall_prepare	= kvm_sev_es_hcall_prepare,
-	.runtime.sev_es_hcall_finish	= kvm_sev_es_hcall_finish,
-#endif
+	.name			= "KVM",
+	.detect			= kvm_detect,
+	.type			= X86_HYPER_KVM,
+	.init.guest_late_init	= kvm_guest_init,
+	.init.x2apic_available	= kvm_para_available,
+	.init.init_platform	= kvm_init_platform,
 };
 
 static __init int activate_jump_labels(void)
@@ -933,7 +925,7 @@ void arch_haltpoll_disable(unsigned int cpu)
 	if (!kvm_para_has_feature(KVM_FEATURE_POLL_CONTROL))
 		return;
 
-	/* Disable guest halt poll enables host halt poll */
+	/* Enable guest halt poll disables host halt poll */
 	smp_call_function_single(cpu, kvm_enable_host_haltpoll, NULL, 1);
 }
 EXPORT_SYMBOL_GPL(arch_haltpoll_disable);

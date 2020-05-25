@@ -19,7 +19,7 @@ static inline bool kvm_check_and_clear_guest_paused(void)
 #endif /* CONFIG_KVM_GUEST */
 
 #define KVM_HYPERCALL \
-        ALTERNATIVE("vmcall", "vmmcall", X86_FEATURE_VMMCALL)
+        ALTERNATIVE(".byte 0x0f,0x01,0xc1", ".byte 0x0f,0x01,0xd9", X86_FEATURE_VMMCALL)
 
 /* For KVM hypercalls, a three-byte sequence of either the vmcall or the vmmcall
  * instruction.  The hypervisor may replace it with something else but only the
@@ -104,6 +104,12 @@ static __always_inline bool kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 	else
 		return false;
 }
+
+extern __visible void kvm_async_pf_vector(void);
+#ifdef CONFIG_TRACING
+#define trace_kvm_async_pf_vector kvm_async_pf_vector
+#endif
+__visible void __irq_entry kvm_async_pf_intr(struct pt_regs *regs);
 
 #ifdef CONFIG_PARAVIRT_SPINLOCKS
 void __init kvm_spinlock_init(void);

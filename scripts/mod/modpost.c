@@ -12,6 +12,7 @@
  */
 
 #define _GNU_SOURCE
+#include <elf.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
@@ -163,7 +164,6 @@ struct symbol {
 	unsigned int vmlinux:1;    /* 1 if symbol is defined in vmlinux */
 	unsigned int kernel:1;     /* 1 if symbol is from kernel
 				    *  (only for external modules) **/
-	unsigned int preloaded:1;  /* 1 if symbol from Module.symvers, or crc */
 	unsigned int is_static:1;  /* 1 if symbol is not global */
 	enum export  export;       /* Type of export */
 	char name[];
@@ -206,13 +206,11 @@ static struct symbol *new_symbol(const char *name, struct module *module,
 				 enum export export)
 {
 	unsigned int hash;
-	struct symbol *new;
 
 	hash = tdb_hash(name) % SYMBOL_HASH_SIZE;
-	new = symbolhash[hash] = alloc_symbol(name, 0, symbolhash[hash]);
-	new->module = module;
-	new->export = export;
-	return new;
+	symbolhash[hash] = alloc_symbol(name, 0, symbolhash[hash]);
+
+	return symbolhash[hash];
 }
 
 static struct symbol *find_symbol(const char *name)
@@ -233,10 +231,8 @@ static struct symbol *find_symbol(const char *name)
 static bool contains_namespace(struct namespace_list *list,
 			       const char *namespace)
 {
-	struct namespace_list *ns_entry;
-
-	for (ns_entry = list; ns_entry != NULL; ns_entry = ns_entry->next)
-		if (strcmp(ns_entry->namespace, namespace) == 0)
+	for (; list; list = list->next)
+		if (!strcmp(list->namespace, namespace))
 			return true;
 
 	return false;
@@ -304,6 +300,23 @@ static const char *sec_name(struct elf_info *elf, int secindex)
 	return sech_name(elf, &elf->sechdrs[secindex]);
 }
 
+static void *sym_get_data_by_offset(const struct elf_info *info,
+				    unsigned int secindex, unsigned long offset)
+{
+	Elf_Shdr *sechdr = &info->sechdrs[secindex];
+
+	if (info->hdr->e_type != ET_REL)
+		offset -= sechdr->sh_addr;
+
+	return (void *)info->hdr + sechdr->sh_offset + offset;
+}
+
+static void *sym_get_data(const struct elf_info *info, const Elf_Sym *sym)
+{
+	return sym_get_data_by_offset(info, get_secindex(info, sym),
+				      sym->st_value);
+}
+
 #define strstarts(str, prefix) (strncmp(str, prefix, strlen(prefix)) == 0)
 
 static enum export export_from_secname(struct elf_info *elf, unsigned int sec)
@@ -340,10 +353,10 @@ static enum export export_from_sec(struct elf_info *elf, unsigned int sec)
 		return export_unknown;
 }
 
-static const char *namespace_from_kstrtabns(struct elf_info *info,
-					    Elf_Sym *kstrtabns)
+static const char *namespace_from_kstrtabns(const struct elf_info *info,
+					    const Elf_Sym *sym)
 {
-	char *value = info->ksymtab_strings + kstrtabns->st_value;
+	const char *value = sym_get_data(info, sym);
 	return value[0] ? value : NULL;
 }
 
@@ -377,33 +390,32 @@ static struct symbol *sym_add_exported(const char *name, struct module *mod,
 
 	if (!s) {
 		s = new_symbol(name, mod, export);
-	} else {
-		if (!s->preloaded) {
-			warn("%s: '%s' exported twice. Previous export was in %s%s\n",
-			     mod->name, name, s->module->name,
-			     is_vmlinux(s->module->name) ? "" : ".ko");
-		} else {
-			/* In case Module.symvers was out of date */
-			s->module = mod;
-		}
+	} else if (!external_module || is_vmlinux(s->module->name) ||
+		   s->module == mod) {
+		warn("%s: '%s' exported twice. Previous export was in %s%s\n",
+		     mod->name, name, s->module->name,
+		     is_vmlinux(s->module->name) ? "" : ".ko");
+		return s;
 	}
-	s->preloaded = 0;
+
+	s->module = mod;
 	s->vmlinux   = is_vmlinux(mod->name);
 	s->kernel    = 0;
 	s->export    = export;
 	return s;
 }
 
-static void sym_update_crc(const char *name, struct module *mod,
-			   unsigned int crc, enum export export)
+static void sym_set_crc(const char *name, unsigned int crc)
 {
 	struct symbol *s = find_symbol(name);
 
-	if (!s) {
-		s = new_symbol(name, mod, export);
-		/* Don't complain when we find it later. */
-		s->preloaded = 1;
-	}
+	/*
+	 * Ignore stand-alone __crc_*, which might be auto-generated symbols
+	 * such as __*_veneer in ARM ELF.
+	 */
+	if (!s)
+		return;
+
 	s->crc = crc;
 	s->crc_valid = 1;
 }
@@ -585,10 +597,6 @@ static int parse_elf(struct elf_info *info, const char *filename)
 			info->export_unused_gpl_sec = i;
 		else if (strcmp(secname, "__ksymtab_gpl_future") == 0)
 			info->export_gpl_future_sec = i;
-		else if (strcmp(secname, "__ksymtab_strings") == 0)
-			info->ksymtab_strings = (void *)hdr +
-						sechdrs[i].sh_offset -
-						sechdrs[i].sh_addr;
 
 		if (sechdrs[i].sh_type == SHT_SYMTAB) {
 			unsigned int sh_link_idx;
@@ -671,12 +679,34 @@ static int ignore_undef_symbol(struct elf_info *info, const char *symname)
 	return 0;
 }
 
-static void handle_modversions(struct module *mod, struct elf_info *info,
-			       Elf_Sym *sym, const char *symname)
+static void handle_modversion(const struct module *mod,
+			      const struct elf_info *info,
+			      const Elf_Sym *sym, const char *symname)
 {
 	unsigned int crc;
+
+	if (sym->st_shndx == SHN_UNDEF) {
+		warn("EXPORT symbol \"%s\" [%s%s] version generation failed, symbol will not be versioned.\n",
+		     symname, mod->name, is_vmlinux(mod->name) ? "":".ko");
+		return;
+	}
+
+	if (sym->st_shndx == SHN_ABS) {
+		crc = sym->st_value;
+	} else {
+		unsigned int *crcp;
+
+		/* symbol points to the CRC in the ELF object */
+		crcp = sym_get_data(info, sym);
+		crc = TO_NATIVE(*crcp);
+	}
+	sym_set_crc(symname, crc);
+}
+
+static void handle_symbol(struct module *mod, struct elf_info *info,
+			  const Elf_Sym *sym, const char *symname)
+{
 	enum export export;
-	bool is_crc = false;
 	const char *name;
 
 	if ((!is_vmlinux(mod->name) || mod->is_dot_o) &&
@@ -684,24 +714,6 @@ static void handle_modversions(struct module *mod, struct elf_info *info,
 		export = export_from_secname(info, get_secindex(info, sym));
 	else
 		export = export_from_sec(info, get_secindex(info, sym));
-
-	/* CRC'd symbol */
-	if (strstarts(symname, "__crc_")) {
-		is_crc = true;
-		crc = (unsigned int) sym->st_value;
-		if (sym->st_shndx != SHN_UNDEF && sym->st_shndx != SHN_ABS) {
-			unsigned int *crcp;
-
-			/* symbol points to the CRC in the ELF object */
-			crcp = (void *)info->hdr + sym->st_value +
-			       info->sechdrs[sym->st_shndx].sh_offset -
-			       (info->hdr->e_type != ET_REL ?
-				info->sechdrs[sym->st_shndx].sh_addr : 0);
-			crc = TO_NATIVE(*crcp);
-		}
-		sym_update_crc(symname + strlen("__crc_"), mod, crc,
-				export);
-	}
 
 	switch (sym->st_shndx) {
 	case SHN_COMMON:
@@ -717,12 +729,6 @@ static void handle_modversions(struct module *mod, struct elf_info *info,
 			break;
 		if (ignore_undef_symbol(info, symname))
 			break;
-/* cope with newer glibc (2.3.4 or higher) STT_ definition in elf.h */
-#if defined(STT_REGISTER) || defined(STT_SPARC_REGISTER)
-/* add compatibility with older glibc */
-#ifndef STT_SPARC_REGISTER
-#define STT_SPARC_REGISTER STT_REGISTER
-#endif
 		if (info->hdr->e_machine == EM_SPARC ||
 		    info->hdr->e_machine == EM_SPARCV9) {
 			/* Ignore register directives. */
@@ -735,13 +741,7 @@ static void handle_modversions(struct module *mod, struct elf_info *info,
 				symname = munged;
 			}
 		}
-#endif
 
-		if (is_crc) {
-			const char *e = is_vmlinux(mod->name) ?"":".ko";
-			warn("EXPORT symbol \"%s\" [%s%s] version generation failed, symbol will not be versioned.\n",
-			     symname + strlen("__crc_"), mod->name, e);
-		}
 		mod->unres = alloc_symbol(symname,
 					  ELF_ST_BIND(sym->st_info) == STB_WEAK,
 					  mod->unres);
@@ -1756,11 +1756,7 @@ static void check_section_mismatch(const char *modname, struct elf_info *elf,
 static unsigned int *reloc_location(struct elf_info *elf,
 				    Elf_Shdr *sechdr, Elf_Rela *r)
 {
-	Elf_Shdr *sechdrs = elf->sechdrs;
-	int section = sechdr->sh_info;
-
-	return (void *)elf->hdr + sechdrs[section].sh_offset +
-		r->r_offset;
+	return sym_get_data_by_offset(elf, sechdr->sh_info, r->r_offset);
 }
 
 static int addend_386_rel(struct elf_info *elf, Elf_Shdr *sechdr, Elf_Rela *r)
@@ -2042,18 +2038,22 @@ static void read_symbols(const char *modname)
 	for (sym = info.symtab_start; sym < info.symtab_stop; sym++) {
 		symname = remove_dot(info.strtab + sym->st_name);
 
-		handle_modversions(mod, &info, sym, symname);
+		handle_symbol(mod, &info, sym, symname);
 		handle_moddevtable(mod, &info, sym, symname);
 	}
 
-	/* Apply symbol namespaces from __kstrtabns_<symbol> entries. */
 	for (sym = info.symtab_start; sym < info.symtab_stop; sym++) {
 		symname = remove_dot(info.strtab + sym->st_name);
 
+		/* Apply symbol namespaces from __kstrtabns_<symbol> entries. */
 		if (strstarts(symname, "__kstrtabns_"))
 			sym_update_namespace(symname + strlen("__kstrtabns_"),
 					     namespace_from_kstrtabns(&info,
 								      sym));
+
+		if (strstarts(symname, "__crc_"))
+			handle_modversion(mod, &info, sym,
+					  symname + strlen("__crc_"));
 	}
 
 	// check for static EXPORT_SYMBOL_* functions && global vars
@@ -2427,7 +2427,7 @@ static void write_if_changed(struct buffer *b, const char *fname)
 }
 
 /* parse Module.symvers file. line format:
- * 0x12345678<tab>symbol<tab>module[[<tab>export]<tab>something]
+ * 0x12345678<tab>symbol<tab>module<tab>export<tab>namespace
  **/
 static void read_dump(const char *fname, unsigned int kernel)
 {
@@ -2440,7 +2440,7 @@ static void read_dump(const char *fname, unsigned int kernel)
 		return;
 
 	while ((line = get_next_line(&pos, file, size))) {
-		char *symname, *namespace, *modname, *d, *export, *end;
+		char *symname, *namespace, *modname, *d, *export;
 		unsigned int crc;
 		struct module *mod;
 		struct symbol *s;
@@ -2448,16 +2448,16 @@ static void read_dump(const char *fname, unsigned int kernel)
 		if (!(symname = strchr(line, '\t')))
 			goto fail;
 		*symname++ = '\0';
-		if (!(namespace = strchr(symname, '\t')))
-			goto fail;
-		*namespace++ = '\0';
-		if (!(modname = strchr(namespace, '\t')))
+		if (!(modname = strchr(symname, '\t')))
 			goto fail;
 		*modname++ = '\0';
-		if ((export = strchr(modname, '\t')) != NULL)
-			*export++ = '\0';
-		if (export && ((end = strchr(export, '\t')) != NULL))
-			*end = '\0';
+		if (!(export = strchr(modname, '\t')))
+			goto fail;
+		*export++ = '\0';
+		if (!(namespace = strchr(export, '\t')))
+			goto fail;
+		*namespace++ = '\0';
+
 		crc = strtoul(line, &d, 16);
 		if (*symname == '\0' || *modname == '\0' || *d != '\0')
 			goto fail;
@@ -2470,9 +2470,8 @@ static void read_dump(const char *fname, unsigned int kernel)
 		}
 		s = sym_add_exported(symname, mod, export_no(export));
 		s->kernel    = kernel;
-		s->preloaded = 1;
 		s->is_static = 0;
-		sym_update_crc(symname, mod, crc, export_no(export));
+		sym_set_crc(symname, crc);
 		sym_update_namespace(symname, namespace);
 	}
 	release_file(file, size);
@@ -2509,9 +2508,9 @@ static void write_dump(const char *fname)
 				namespace = symbol->namespace;
 				buf_printf(&buf, "0x%08x\t%s\t%s\t%s\t%s\n",
 					   symbol->crc, symbol->name,
-					   namespace ? namespace : "",
 					   symbol->module->name,
-					   export_str(symbol->export));
+					   export_str(symbol->export),
+					   namespace ? namespace : "");
 			}
 			symbol = symbol->next;
 		}

@@ -1551,6 +1551,7 @@ struct mpage_da_data {
 	struct ext4_map_blocks map;
 	struct ext4_io_submit io_submit;	/* IO submission data */
 	unsigned int do_map:1;
+	unsigned int scanned_until_end:1;
 };
 
 static void mpage_release_unused_pages(struct mpage_da_data *mpd,
@@ -1566,6 +1567,7 @@ static void mpage_release_unused_pages(struct mpage_da_data *mpd,
 	if (mpd->first_page >= mpd->next_page)
 		return;
 
+	mpd->scanned_until_end = 0;
 	index = mpd->first_page;
 	end   = mpd->next_page - 1;
 	if (invalidate) {
@@ -2212,7 +2214,11 @@ static int mpage_process_page_bufs(struct mpage_da_data *mpd,
 		if (err < 0)
 			return err;
 	}
-	return lblk < blocks;
+	if (lblk >= blocks) {
+		mpd->scanned_until_end = 1;
+		return 0;
+	}
+	return 1;
 }
 
 /*
@@ -2570,7 +2576,7 @@ static int mpage_prepare_extent_to_map(struct mpage_da_data *mpd)
 		nr_pages = pagevec_lookup_range_tag(&pvec, mapping, &index, end,
 				tag);
 		if (nr_pages == 0)
-			goto out;
+			break;
 
 		for (i = 0; i < nr_pages; i++) {
 			struct page *page = pvec.pages[i];
@@ -2625,6 +2631,7 @@ static int mpage_prepare_extent_to_map(struct mpage_da_data *mpd)
 		pagevec_release(&pvec);
 		cond_resched();
 	}
+	mpd->scanned_until_end = 1;
 	return 0;
 out:
 	pagevec_release(&pvec);
@@ -2643,7 +2650,6 @@ static int ext4_writepages(struct address_space *mapping,
 	struct inode *inode = mapping->host;
 	int needed_blocks, rsv_blocks = 0, ret = 0;
 	struct ext4_sb_info *sbi = EXT4_SB(mapping->host->i_sb);
-	bool done;
 	struct blk_plug plug;
 	bool give_up_on_write = false;
 
@@ -2729,7 +2735,6 @@ static int ext4_writepages(struct address_space *mapping,
 retry:
 	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
 		tag_pages_for_writeback(mapping, mpd.first_page, mpd.last_page);
-	done = false;
 	blk_start_plug(&plug);
 
 	/*
@@ -2739,6 +2744,7 @@ retry:
 	 * started.
 	 */
 	mpd.do_map = 0;
+	mpd.scanned_until_end = 0;
 	mpd.io_submit.io_end = ext4_init_io_end(inode, GFP_KERNEL);
 	if (!mpd.io_submit.io_end) {
 		ret = -ENOMEM;
@@ -2754,7 +2760,7 @@ retry:
 	if (ret < 0)
 		goto unplug;
 
-	while (!done && mpd.first_page <= mpd.last_page) {
+	while (!mpd.scanned_until_end && wbc->nr_to_write > 0) {
 		/* For each extent of pages we use new io_end */
 		mpd.io_submit.io_end = ext4_init_io_end(inode, GFP_KERNEL);
 		if (!mpd.io_submit.io_end) {
@@ -2789,20 +2795,9 @@ retry:
 
 		trace_ext4_da_write_pages(inode, mpd.first_page, mpd.wbc);
 		ret = mpage_prepare_extent_to_map(&mpd);
-		if (!ret) {
-			if (mpd.map.m_len)
-				ret = mpage_map_and_submit_extent(handle, &mpd,
+		if (!ret && mpd.map.m_len)
+			ret = mpage_map_and_submit_extent(handle, &mpd,
 					&give_up_on_write);
-			else {
-				/*
-				 * We scanned the whole range (or exhausted
-				 * nr_to_write), submitted what was mapped and
-				 * didn't find anything needing mapping. We are
-				 * done.
-				 */
-				done = true;
-			}
-		}
 		/*
 		 * Caution: If the handle is synchronous,
 		 * ext4_journal_stop() can wait for transaction commit

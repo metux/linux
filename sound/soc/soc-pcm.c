@@ -24,6 +24,7 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/soc-dpcm.h>
+#include <sound/soc-link.h>
 #include <sound/initval.h>
 
 #define DPCM_MAX_BE_USERS	8
@@ -201,60 +202,6 @@ static inline void dpcm_remove_debugfs_state(struct snd_soc_dpcm *dpcm)
 {
 }
 #endif
-
-static int soc_rtd_startup(struct snd_soc_pcm_runtime *rtd,
-			   struct snd_pcm_substream *substream)
-{
-	if (rtd->dai_link->ops &&
-	    rtd->dai_link->ops->startup)
-		return rtd->dai_link->ops->startup(substream);
-	return 0;
-}
-
-static void soc_rtd_shutdown(struct snd_soc_pcm_runtime *rtd,
-			     struct snd_pcm_substream *substream)
-{
-	if (rtd->dai_link->ops &&
-	    rtd->dai_link->ops->shutdown)
-		rtd->dai_link->ops->shutdown(substream);
-}
-
-static int soc_rtd_prepare(struct snd_soc_pcm_runtime *rtd,
-			   struct snd_pcm_substream *substream)
-{
-	if (rtd->dai_link->ops &&
-	    rtd->dai_link->ops->prepare)
-		return rtd->dai_link->ops->prepare(substream);
-	return 0;
-}
-
-static int soc_rtd_hw_params(struct snd_soc_pcm_runtime *rtd,
-			     struct snd_pcm_substream *substream,
-			     struct snd_pcm_hw_params *params)
-{
-	if (rtd->dai_link->ops &&
-	    rtd->dai_link->ops->hw_params)
-		return rtd->dai_link->ops->hw_params(substream, params);
-	return 0;
-}
-
-static void soc_rtd_hw_free(struct snd_soc_pcm_runtime *rtd,
-			    struct snd_pcm_substream *substream)
-{
-	if (rtd->dai_link->ops &&
-	    rtd->dai_link->ops->hw_free)
-		rtd->dai_link->ops->hw_free(substream);
-}
-
-static int soc_rtd_trigger(struct snd_soc_pcm_runtime *rtd,
-			   struct snd_pcm_substream *substream,
-			   int cmd)
-{
-	if (rtd->dai_link->ops &&
-	    rtd->dai_link->ops->trigger)
-		return rtd->dai_link->ops->trigger(substream, cmd);
-	return 0;
-}
 
 /**
  * snd_soc_runtime_action() - Increment/Decrement active count for
@@ -661,28 +608,43 @@ static void soc_pcm_init_runtime_hw(struct snd_pcm_substream *substream)
 static int soc_pcm_components_open(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_component *last = NULL;
 	struct snd_soc_component *component;
 	int i, ret = 0;
 
 	for_each_rtd_components(rtd, i, component) {
+		last = component;
+
 		ret = snd_soc_component_module_get_when_open(component);
 		if (ret < 0) {
 			dev_err(component->dev,
 				"ASoC: can't get module %s\n",
 				component->name);
-			return ret;
+			break;
 		}
 
 		ret = snd_soc_component_open(component, substream);
 		if (ret < 0) {
+			snd_soc_component_module_put_when_close(component);
 			dev_err(component->dev,
 				"ASoC: can't open component %s: %d\n",
 				component->name, ret);
-			return ret;
+			break;
 		}
 	}
 
-	return 0;
+	if (ret < 0) {
+		/* rollback on error */
+		for_each_rtd_components(rtd, i, component) {
+			if (component == last)
+				break;
+
+			snd_soc_component_close(component, substream);
+			snd_soc_component_module_put_when_close(component);
+		}
+	}
+
+	return ret;
 }
 
 static int soc_pcm_components_close(struct snd_pcm_substream *substream)
@@ -721,7 +683,7 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 	for_each_rtd_dais(rtd, i, dai)
 		snd_soc_dai_shutdown(dai, substream);
 
-	soc_rtd_shutdown(rtd, substream);
+	snd_soc_link_shutdown(rtd, substream);
 
 	soc_pcm_components_close(substream);
 
@@ -768,12 +730,9 @@ static int soc_pcm_open(struct snd_pcm_substream *substream)
 	if (ret < 0)
 		goto component_err;
 
-	ret = soc_rtd_startup(rtd, substream);
-	if (ret < 0) {
-		pr_err("ASoC: %s startup failed: %d\n",
-		       rtd->dai_link->name, ret);
-		goto component_err;
-	}
+	ret = snd_soc_link_startup(rtd, substream);
+	if (ret < 0)
+		goto rtd_startup_err;
 
 	/* startup the audio subsystem */
 	for_each_rtd_dais(rtd, i, dai) {
@@ -855,10 +814,10 @@ config_err:
 	for_each_rtd_dais(rtd, i, dai)
 		snd_soc_dai_shutdown(dai, substream);
 
-	soc_rtd_shutdown(rtd, substream);
-component_err:
+	snd_soc_link_shutdown(rtd, substream);
+rtd_startup_err:
 	soc_pcm_components_close(substream);
-
+component_err:
 	mutex_unlock(&rtd->card->pcm_mutex);
 
 	for_each_rtd_components(rtd, i, component) {
@@ -897,12 +856,9 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 
 	mutex_lock_nested(&rtd->card->pcm_mutex, rtd->card->pcm_subclass);
 
-	ret = soc_rtd_prepare(rtd, substream);
-	if (ret < 0) {
-		dev_err(rtd->card->dev,
-			"ASoC: machine prepare error: %d\n", ret);
+	ret = snd_soc_link_prepare(rtd, substream);
+	if (ret < 0)
 		goto out;
-	}
 
 	for_each_rtd_components(rtd, i, component) {
 		ret = snd_soc_component_prepare(component, substream);
@@ -987,12 +943,9 @@ static int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 	if (ret)
 		goto out;
 
-	ret = soc_rtd_hw_params(rtd, substream, params);
-	if (ret < 0) {
-		dev_err(rtd->card->dev,
-			"ASoC: machine hw_params failed: %d\n", ret);
+	ret = snd_soc_link_hw_params(rtd, substream, params);
+	if (ret < 0)
 		goto out;
-	}
 
 	for_each_rtd_codec_dais(rtd, i, codec_dai) {
 		struct snd_pcm_hw_params codec_params;
@@ -1102,7 +1055,7 @@ codec_err:
 		codec_dai->rate = 0;
 	}
 
-	soc_rtd_hw_free(rtd, substream);
+	snd_soc_link_hw_free(rtd, substream);
 
 	mutex_unlock(&rtd->card->pcm_mutex);
 	return ret;
@@ -1134,7 +1087,7 @@ static int soc_pcm_hw_free(struct snd_pcm_substream *substream)
 	}
 
 	/* free any machine hw params */
-	soc_rtd_hw_free(rtd, substream);
+	snd_soc_link_hw_free(rtd, substream);
 
 	/* free any component resources */
 	soc_pcm_components_hw_free(substream, NULL);
@@ -1157,7 +1110,7 @@ static int soc_pcm_trigger_start(struct snd_pcm_substream *substream, int cmd)
 	struct snd_soc_component *component;
 	int i, ret;
 
-	ret = soc_rtd_trigger(rtd, substream, cmd);
+	ret = snd_soc_link_trigger(rtd, substream, cmd);
 	if (ret < 0)
 		return ret;
 
@@ -1186,7 +1139,7 @@ static int soc_pcm_trigger_stop(struct snd_pcm_substream *substream, int cmd)
 			return ret;
 	}
 
-	ret = soc_rtd_trigger(rtd, substream, cmd);
+	ret = snd_soc_link_trigger(rtd, substream, cmd);
 	if (ret < 0)
 		return ret;
 
@@ -2029,7 +1982,7 @@ static int dpcm_fe_dai_shutdown(struct snd_pcm_substream *substream)
 	soc_pcm_close(substream);
 
 	/* run the stream event for each BE */
-	snd_soc_dapm_stream_stop(fe, stream);
+	dpcm_dapm_stream_event(fe, stream, SND_SOC_DAPM_STREAM_STOP);
 
 	fe->dpcm[stream].state = SND_SOC_DPCM_STATE_CLOSE;
 	dpcm_set_fe_update_state(fe, stream, SND_SOC_DPCM_UPDATE_NO);

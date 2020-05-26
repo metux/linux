@@ -1904,6 +1904,8 @@ static bool dcn21_resource_construct(
 			BREAK_TO_DEBUGGER();
 			goto create_fail;
 		}
+
+		dc->debug.dmub_command_table = false;
 	}
 
 	if (dc->config.disable_dmcu) {

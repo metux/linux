@@ -1694,14 +1694,11 @@ struct linux_efi_memreserve {
 	struct {
 		phys_addr_t	base;
 		phys_addr_t	size;
-	} entry[0];
+	} entry[];
 };
 
-#define EFI_MEMRESERVE_SIZE(count) (sizeof(struct linux_efi_memreserve) + \
-	(count) * sizeof(((struct linux_efi_memreserve *)0)->entry[0]))
-
 #define EFI_MEMRESERVE_COUNT(size) (((size) - sizeof(struct linux_efi_memreserve)) \
-	/ sizeof(((struct linux_efi_memreserve *)0)->entry[0]))
+	/ sizeof_field(struct linux_efi_memreserve, entry[0]))
 
 void efi_pci_disable_bridge_busmaster(void);
 

@@ -558,7 +558,16 @@ enum ufshcd_quirks {
 	 * This quirk needs to be enabled if the host controller regards
 	 * resolution of the values of PRDTO and PRDTL in UTRD as byte.
 	 */
+<<<<<<< HEAD
 	UFSHCD_QUIRK_PRDT_BYTE_GRAN			= 1 << 10,
+=======
+	UFSHCD_QUIRK_PRDT_BYTE_GRAN			= 1 << 9,
+
+/*
+	 * This quirk needs to be enabled if the host controller reports
+	 * OCS FATAL ERROR with device error through sense data
+	 */
+	UFSHCD_QUIRK_BROKEN_OCS_FATAL_ERROR		= 1 << 11,
 };
 
 enum ufshcd_caps {

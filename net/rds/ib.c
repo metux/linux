@@ -30,6 +30,7 @@
  * SOFTWARE.
  *
  */
+#include <linux/dmapool.h>
 #include <linux/kernel.h>
 #include <linux/in.h>
 #include <linux/if.h>
@@ -107,8 +108,7 @@ static void rds_ib_dev_free(struct work_struct *work)
 		rds_ib_destroy_mr_pool(rds_ibdev->mr_1m_pool);
 	if (rds_ibdev->pd)
 		ib_dealloc_pd(rds_ibdev->pd);
-	if (rds_ibdev->rid_hdrs_pool)
-		dma_pool_destroy(rds_ibdev->rid_hdrs_pool);
+	dma_pool_destroy(rds_ibdev->rid_hdrs_pool);
 
 	list_for_each_entry_safe(i_ipaddr, i_next, &rds_ibdev->ipaddr_list, list) {
 		list_del(&i_ipaddr->list);
@@ -130,11 +130,14 @@ void rds_ib_dev_put(struct rds_ib_device *rds_ibdev)
 static int rds_ib_add_one(struct ib_device *device)
 {
 	struct rds_ib_device *rds_ibdev;
-	bool has_fr, has_fmr;
 	int ret;
 
 	/* Only handle IB (no iWARP) devices */
 	if (device->node_type != RDMA_NODE_IB_CA)
+		return -EOPNOTSUPP;
+
+	/* Device must support FRWR */
+	if (!(device->attrs.device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS))
 		return -EOPNOTSUPP;
 
 	rds_ibdev = kzalloc_node(sizeof(struct rds_ib_device), GFP_KERNEL,
@@ -152,13 +155,14 @@ static int rds_ib_add_one(struct ib_device *device)
 	rds_ibdev->max_wrs = device->attrs.max_qp_wr;
 	rds_ibdev->max_sge = min(device->attrs.max_send_sge, RDS_IB_MAX_SGE);
 
-	has_fr = (device->attrs.device_cap_flags &
-		  IB_DEVICE_MEM_MGT_EXTENSIONS);
-	has_fmr = (device->ops.alloc_fmr && device->ops.dealloc_fmr &&
-		   device->ops.map_phys_fmr && device->ops.unmap_fmr);
-	rds_ibdev->use_fastreg = (has_fr && !has_fmr);
+	rds_ibdev->odp_capable =
+		!!(device->attrs.device_cap_flags &
+		   IB_DEVICE_ON_DEMAND_PAGING) &&
+		!!(device->attrs.odp_caps.per_transport_caps.rc_odp_caps &
+		   IB_ODP_SUPPORT_WRITE) &&
+		!!(device->attrs.odp_caps.per_transport_caps.rc_odp_caps &
+		   IB_ODP_SUPPORT_READ);
 
-	rds_ibdev->fmr_max_remaps = device->attrs.max_map_per_fmr?: 32;
 	rds_ibdev->max_1m_mrs = device->attrs.max_mr ?
 		min_t(unsigned int, (device->attrs.max_mr / 2),
 		      rds_ib_mr_1m_pool_size) : rds_ib_mr_1m_pool_size;
@@ -212,14 +216,11 @@ static int rds_ib_add_one(struct ib_device *device)
 		goto put_dev;
 	}
 
-	rdsdebug("RDS/IB: max_mr = %d, max_wrs = %d, max_sge = %d, fmr_max_remaps = %d, max_1m_mrs = %d, max_8k_mrs = %d\n",
+	rdsdebug("RDS/IB: max_mr = %d, max_wrs = %d, max_sge = %d, max_1m_mrs = %d, max_8k_mrs = %d\n",
 		 device->attrs.max_fmr, rds_ibdev->max_wrs, rds_ibdev->max_sge,
-		 rds_ibdev->fmr_max_remaps, rds_ibdev->max_1m_mrs,
-		 rds_ibdev->max_8k_mrs);
+		 rds_ibdev->max_1m_mrs, rds_ibdev->max_8k_mrs);
 
-	pr_info("RDS/IB: %s: %s supported and preferred\n",
-		device->name,
-		rds_ibdev->use_fastreg ? "FRMR" : "FMR");
+	pr_info("RDS/IB: %s: added\n", device->name);
 
 	down_write(&rds_ib_devices_lock);
 	list_add_tail_rcu(&rds_ibdev->list, &rds_ib_devices);

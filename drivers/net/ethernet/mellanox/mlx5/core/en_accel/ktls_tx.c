@@ -171,7 +171,7 @@ post_static_params(struct mlx5e_txqsq *sq,
 	pi = mlx5e_txqsq_get_next_pi(sq, num_wqebbs);
 	wqe = MLX5E_TLS_FETCH_SET_STATIC_PARAMS_WQE(sq, pi);
 	mlx5e_ktls_build_static_params(wqe, sq->pc, sq->sqn, &priv_tx->crypto_info,
-				       priv_tx->tisn, priv_tx->key_id, 0, fence,
+				       priv_tx->tisn, priv_tx->key_id, fence,
 				       TLS_OFFLOAD_CTX_DIR_TX);
 	tx_fill_wi(sq, pi, num_wqebbs, 0, NULL);
 	sq->pc += num_wqebbs;
@@ -470,7 +470,7 @@ bool mlx5e_ktls_handle_tx_skb(struct tls_context *tls_ctx, struct mlx5e_txqsq *s
 			if (likely(!skb->decrypted))
 				goto out;
 			WARN_ON_ONCE(1);
-			fallthrough;
+			/* fall-through */
 		case MLX5E_KTLS_SYNC_FAIL:
 			goto err_out;
 		}

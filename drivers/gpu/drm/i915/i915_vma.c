@@ -104,6 +104,7 @@ vma_create(struct drm_i915_gem_object *obj,
 	   struct i915_address_space *vm,
 	   const struct i915_ggtt_view *view)
 {
+	struct i915_vma *pos = ERR_PTR(-E2BIG);
 	struct i915_vma *vma;
 	struct rb_node *rb, **p;
 
@@ -184,7 +185,6 @@ vma_create(struct drm_i915_gem_object *obj,
 	rb = NULL;
 	p = &obj->vma.tree.rb_node;
 	while (*p) {
-		struct i915_vma *pos;
 		long cmp;
 
 		rb = *p;
@@ -196,16 +196,12 @@ vma_create(struct drm_i915_gem_object *obj,
 		 * and dispose of ours.
 		 */
 		cmp = i915_vma_compare(pos, vm, view);
-		if (cmp == 0) {
-			spin_unlock(&obj->vma.lock);
-			i915_vma_free(vma);
-			return pos;
-		}
-
 		if (cmp < 0)
 			p = &rb->rb_right;
-		else
+		else if (cmp > 0)
 			p = &rb->rb_left;
+		else
+			goto err_unlock;
 	}
 	rb_link_node(&vma->obj_node, rb, p);
 	rb_insert_color(&vma->obj_node, &obj->vma.tree);
@@ -228,8 +224,9 @@ vma_create(struct drm_i915_gem_object *obj,
 err_unlock:
 	spin_unlock(&obj->vma.lock);
 err_vma:
+	i915_vm_put(vm);
 	i915_vma_free(vma);
-	return ERR_PTR(-E2BIG);
+	return pos;
 }
 
 static struct i915_vma *
@@ -522,7 +519,6 @@ void i915_vma_unpin_and_release(struct i915_vma **p_vma, unsigned int flags)
 	GEM_BUG_ON(!obj);
 
 	i915_vma_unpin(vma);
-	i915_vma_close(vma);
 
 	if (flags & I915_VMA_RELEASE_MAP)
 		i915_gem_object_unpin_map(obj);
@@ -1023,13 +1019,8 @@ int i915_ggtt_pin(struct i915_vma *vma, u32 align, unsigned int flags)
 	} while (1);
 }
 
-void i915_vma_close(struct i915_vma *vma)
+static void __vma_close(struct i915_vma *vma, struct intel_gt *gt)
 {
-	struct intel_gt *gt = vma->vm->gt;
-	unsigned long flags;
-
-	GEM_BUG_ON(i915_vma_is_closed(vma));
-
 	/*
 	 * We defer actually closing, unbinding and destroying the VMA until
 	 * the next idle point, or if the object is freed in the meantime. By
@@ -1042,9 +1033,25 @@ void i915_vma_close(struct i915_vma *vma)
 	 * causing us to rebind the VMA once more. This ends up being a lot
 	 * of wasted work for the steady state.
 	 */
-	spin_lock_irqsave(&gt->closed_lock, flags);
+	GEM_BUG_ON(i915_vma_is_closed(vma));
 	list_add(&vma->closed_link, &gt->closed_vma);
-	spin_unlock_irqrestore(&gt->closed_lock, flags);
+}
+
+void i915_vma_close(struct i915_vma *vma)
+{
+	struct intel_gt *gt = vma->vm->gt;
+	unsigned long flags;
+
+	if (i915_vma_is_ggtt(vma))
+		return;
+
+	GEM_BUG_ON(!atomic_read(&vma->open_count));
+	if (atomic_dec_and_lock_irqsave(&vma->open_count,
+					&gt->closed_lock,
+					flags)) {
+		__vma_close(vma, gt);
+		spin_unlock_irqrestore(&gt->closed_lock, flags);
+	}
 }
 
 static void __i915_vma_remove_closed(struct i915_vma *vma)
@@ -1169,7 +1176,8 @@ int __i915_vma_move_to_active(struct i915_vma *vma, struct i915_request *rq)
 	GEM_BUG_ON(!i915_vma_is_pinned(vma));
 
 	/* Wait for the vma to be bound before we start! */
-	err = i915_request_await_active(rq, &vma->active, 0);
+	err = i915_request_await_active(rq, &vma->active,
+					I915_ACTIVE_AWAIT_EXCL);
 	if (err)
 		return err;
 
@@ -1210,6 +1218,10 @@ int i915_vma_move_to_active(struct i915_vma *vma,
 		dma_resv_add_shared_fence(vma->resv, &rq->fence);
 		obj->write_domain = 0;
 	}
+
+	if (flags & EXEC_OBJECT_NEEDS_FENCE && vma->fence)
+		i915_active_add_request(&vma->fence->active, rq);
+
 	obj->read_domains |= I915_GEM_GPU_DOMAINS;
 	obj->mm.dirty = true;
 
@@ -1217,45 +1229,14 @@ int i915_vma_move_to_active(struct i915_vma *vma,
 	return 0;
 }
 
-int __i915_vma_unbind(struct i915_vma *vma)
+void __i915_vma_evict(struct i915_vma *vma)
 {
-	int ret;
-
-	lockdep_assert_held(&vma->vm->mutex);
-
-	/*
-	 * First wait upon any activity as retiring the request may
-	 * have side-effects such as unpinning or even unbinding this vma.
-	 *
-	 * XXX Actually waiting under the vm->mutex is a hinderance and
-	 * should be pipelined wherever possible. In cases where that is
-	 * unavoidable, we should lift the wait to before the mutex.
-	 */
-	ret = i915_vma_sync(vma);
-	if (ret)
-		return ret;
-
-	if (i915_vma_is_pinned(vma)) {
-		vma_print_allocator(vma, "is pinned");
-		return -EAGAIN;
-	}
-
-	/*
-	 * After confirming that no one else is pinning this vma, wait for
-	 * any laggards who may have crept in during the wait (through
-	 * a residual pin skipping the vm->mutex) to complete.
-	 */
-	ret = i915_vma_sync(vma);
-	if (ret)
-		return ret;
-
-	if (!drm_mm_node_allocated(&vma->node))
-		return 0;
-
 	GEM_BUG_ON(i915_vma_is_pinned(vma));
-	GEM_BUG_ON(i915_vma_is_active(vma));
 
 	if (i915_vma_is_map_and_fenceable(vma)) {
+		/* Force a pagefault for domain tracking on next user access */
+		i915_vma_revoke_mmap(vma);
+
 		/*
 		 * Check that we have flushed all writes through the GGTT
 		 * before the unbind, other due to non-strict nature of those
@@ -1272,12 +1253,7 @@ int __i915_vma_unbind(struct i915_vma *vma)
 		i915_vma_flush_writes(vma);
 
 		/* release the fence reg _after_ flushing */
-		ret = i915_vma_revoke_fence(vma);
-		if (ret)
-			return ret;
-
-		/* Force a pagefault for domain tracking on next user access */
-		i915_vma_revoke_mmap(vma);
+		i915_vma_revoke_fence(vma);
 
 		__i915_vma_iounmap(vma);
 		clear_bit(I915_VMA_CAN_FENCE_BIT, __i915_vma_flags(vma));
@@ -1294,6 +1270,33 @@ int __i915_vma_unbind(struct i915_vma *vma)
 
 	i915_vma_detach(vma);
 	vma_unbind_pages(vma);
+}
+
+int __i915_vma_unbind(struct i915_vma *vma)
+{
+	int ret;
+
+	lockdep_assert_held(&vma->vm->mutex);
+
+	if (!drm_mm_node_allocated(&vma->node))
+		return 0;
+
+	if (i915_vma_is_pinned(vma)) {
+		vma_print_allocator(vma, "is pinned");
+		return -EAGAIN;
+	}
+
+	/*
+	 * After confirming that no one else is pinning this vma, wait for
+	 * any laggards who may have crept in during the wait (through
+	 * a residual pin skipping the vm->mutex) to complete.
+	 */
+	ret = i915_vma_sync(vma);
+	if (ret)
+		return ret;
+
+	GEM_BUG_ON(i915_vma_is_active(vma));
+	__i915_vma_evict(vma);
 
 	drm_mm_remove_node(&vma->node); /* pairs with i915_vma_release() */
 	return 0;
@@ -1305,17 +1308,22 @@ int i915_vma_unbind(struct i915_vma *vma)
 	intel_wakeref_t wakeref = 0;
 	int err;
 
+	/* Optimistic wait before taking the mutex */
+	err = i915_vma_sync(vma);
+	if (err)
+		return err;
+
 	if (!drm_mm_node_allocated(&vma->node))
 		return 0;
+
+	if (i915_vma_is_pinned(vma)) {
+		vma_print_allocator(vma, "is pinned");
+		return -EAGAIN;
+	}
 
 	if (i915_vma_is_bound(vma, I915_VMA_GLOBAL_BIND))
 		/* XXX not always required: nop_clear_range */
 		wakeref = intel_runtime_pm_get(&vm->i915->runtime_pm);
-
-	/* Optimistic wait before taking the mutex */
-	err = i915_vma_sync(vma);
-	if (err)
-		goto out_rpm;
 
 	err = mutex_lock_interruptible_nested(&vma->vm->mutex, !wakeref);
 	if (err)

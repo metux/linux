@@ -532,10 +532,9 @@ enum ufshcd_quirks {
 	UFSHCD_QUIRK_BROKEN_UFS_HCI_VERSION		= 1 << 5,
 
 	/*
-	 * This quirk needs to be enabled if the host controller reports
-	 * OCS FATAL ERROR with device error through sense data
+	 * Clear handling for transfer/task request list is just opposite.
 	 */
-	UFSHCD_QUIRK_BROKEN_OCS_FATAL_ERROR		= 1 << 6,
+	UFSHCI_QUIRK_BROKEN_REQ_LIST_CLR		= 1 << 7,
 };
 
 enum ufshcd_caps {

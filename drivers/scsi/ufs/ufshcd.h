@@ -549,7 +549,16 @@ enum ufshcd_quirks {
 	 * This quirks needs to be enabled if host controller cannot be
 	 * enabled via HCE register.
 	 */
+<<<<<<< HEAD
 	UFSHCI_QUIRK_BROKEN_HCE				= 1 << 9,
+=======
+	UFSHCI_QUIRK_BROKEN_HCE				= 1 << 8,
+
+/*
+	 * This quirk needs to be enabled if the host controller regards
+	 * resolution of the values of PRDTO and PRDTL in UTRD as byte.
+	 */
+	UFSHCD_QUIRK_PRDT_BYTE_GRAN			= 1 << 10,
 };
 
 enum ufshcd_caps {

@@ -1347,7 +1347,7 @@ dr_action_modify_check_field_limitation(struct mlx5dr_domain *dmn,
 }
 
 static bool
-dr_action_modify_check_is_ttl_modify(const u64 *sw_action)
+dr_action_modify_check_is_ttl_modify(const void *sw_action)
 {
 	u16 sw_field = MLX5_GET(set_action_in, sw_action, field);
 

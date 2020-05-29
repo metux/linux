@@ -1350,6 +1350,7 @@ int begin_new_exec(struct linux_binprm * bprm)
 	me->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC | PF_KTHREAD |
 					PF_NOFREEZE | PF_NO_SETAFFINITY);
 	flush_thread();
+	bprm->per_clear |= bprm->pf_per_clear;
 	me->personality &= ~bprm->per_clear;
 
 	/*
@@ -1624,12 +1625,12 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 		return;
 
 	if (mode & S_ISUID) {
-		bprm->per_clear |= PER_CLEAR_ON_SETID;
+		bprm->pf_per_clear |= PER_CLEAR_ON_SETID;
 		bprm->cred->euid = uid;
 	}
 
 	if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) {
-		bprm->per_clear |= PER_CLEAR_ON_SETID;
+		bprm->pf_per_clear |= PER_CLEAR_ON_SETID;
 		bprm->cred->egid = gid;
 	}
 }
@@ -1650,6 +1651,7 @@ static int prepare_binprm(struct linux_binprm *bprm)
 
 		/* Recompute parts of bprm->cred based on bprm->file */
 		bprm->active_secureexec = 0;
+		bprm->pf_per_clear = 0;
 		bprm_fill_uid(bprm);
 		retval = security_bprm_repopulate_creds(bprm);
 		if (retval)

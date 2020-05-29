@@ -496,32 +496,6 @@ void elf_add_reloc(struct elf *elf, struct reloc *reloc)
 	elf_hash_add(elf->reloc_hash, &reloc->hash, reloc_hash(reloc));
 }
 
-static int read_rel_reloc(struct section *sec, int i, struct reloc *reloc, unsigned int *symndx)
-{
-	if (!gelf_getrel(sec->data, i, &reloc->rel)) {
-		WARN_ELF("gelf_getrel");
-		return -1;
-	}
-	reloc->type = GELF_R_TYPE(reloc->rel.r_info);
-	reloc->addend = 0;
-	reloc->offset = reloc->rel.r_offset;
-	*symndx = GELF_R_SYM(reloc->rel.r_info);
-	return 0;
-}
-
-static int read_rela_reloc(struct section *sec, int i, struct reloc *reloc, unsigned int *symndx)
-{
-	if (!gelf_getrela(sec->data, i, &reloc->rela)) {
-		WARN_ELF("gelf_getrela");
-		return -1;
-	}
-	reloc->type = GELF_R_TYPE(reloc->rela.r_info);
-	reloc->addend = reloc->rela.r_addend;
-	reloc->offset = reloc->rela.r_offset;
-	*symndx = GELF_R_SYM(reloc->rela.r_info);
-	return 0;
-}
-
 static int read_relocs(struct elf *elf)
 {
 	struct section *sec;
@@ -531,8 +505,7 @@ static int read_relocs(struct elf *elf)
 	unsigned long nr_reloc, max_reloc = 0, tot_reloc = 0;
 
 	list_for_each_entry(sec, &elf->sections, list) {
-		if ((sec->sh.sh_type != SHT_RELA) &&
-		    (sec->sh.sh_type != SHT_REL))
+		if (sec->sh.sh_type != SHT_RELA)
 			continue;
 
 		sec->base = find_section_by_index(elf, sec->sh.sh_info);
@@ -552,21 +525,18 @@ static int read_relocs(struct elf *elf)
 				return -1;
 			}
 			memset(reloc, 0, sizeof(*reloc));
-			switch (sec->sh.sh_type) {
-			case SHT_REL:
-				if (read_rel_reloc(sec, i, reloc, &symndx))
-					return -1;
-				break;
-			case SHT_RELA:
-				if (read_rela_reloc(sec, i, reloc, &symndx))
-					return -1;
-				break;
-			default: return -1;
+
+			if (!gelf_getrela(sec->data, i, &reloc->rela)) {
+				WARN_ELF("gelf_getrela");
+				return -1;
 			}
 
-			reloc->sec = sec;
-			reloc->idx = i;
+			reloc->type = GELF_R_TYPE(reloc->rela.r_info);
+			reloc->addend = reloc->rela.r_addend;
+			reloc->offset = reloc->rela.r_offset;
+			symndx = GELF_R_SYM(reloc->rela.r_info);
 			reloc->sym = find_symbol_by_index(elf, symndx);
+			reloc->sec = sec;
 			if (!reloc->sym) {
 				WARN("can't find reloc entry symbol %d for %s",
 				     symndx, sec->name);
@@ -749,42 +719,10 @@ struct section *elf_create_section(struct elf *elf, const char *name,
 	elf_hash_add(elf->section_hash, &sec->hash, sec->idx);
 	elf_hash_add(elf->section_name_hash, &sec->name_hash, str_hash(sec->name));
 
-	elf->changed = true;
-
 	return sec;
 }
 
-static struct section *elf_create_rel_reloc_section(struct elf *elf, struct section *base)
-{
-	char *relocname;
-	struct section *sec;
-
-	relocname = malloc(strlen(base->name) + strlen(".rel") + 1);
-	if (!relocname) {
-		perror("malloc");
-		return NULL;
-	}
-	strcpy(relocname, ".rel");
-	strcat(relocname, base->name);
-
-	sec = elf_create_section(elf, relocname, sizeof(GElf_Rel), 0);
-	free(relocname);
-	if (!sec)
-		return NULL;
-
-	base->reloc = sec;
-	sec->base = base;
-
-	sec->sh.sh_type = SHT_REL;
-	sec->sh.sh_addralign = 8;
-	sec->sh.sh_link = find_section_by_name(elf, ".symtab")->idx;
-	sec->sh.sh_info = base->idx;
-	sec->sh.sh_flags = SHF_INFO_LINK;
-
-	return sec;
-}
-
-static struct section *elf_create_rela_reloc_section(struct elf *elf, struct section *base)
+struct section *elf_create_reloc_section(struct elf *elf, struct section *base)
 {
 	char *relocname;
 	struct section *sec;
@@ -814,53 +752,16 @@ static struct section *elf_create_rela_reloc_section(struct elf *elf, struct sec
 	return sec;
 }
 
-struct section *elf_create_reloc_section(struct elf *elf,
-					 struct section *base,
-					 int reltype)
-{
-	switch (reltype) {
-	case SHT_REL:  return elf_create_rel_reloc_section(elf, base);
-	case SHT_RELA: return elf_create_rela_reloc_section(elf, base);
-	default:       return NULL;
-	}
-}
-
-static int elf_rebuild_rel_reloc_section(struct section *sec, int nr)
+int elf_rebuild_reloc_section(struct section *sec)
 {
 	struct reloc *reloc;
-	int idx = 0, size;
-	GElf_Rel *relocs;
-
-	/* Allocate a buffer for relocations */
-	size = nr * sizeof(*relocs);
-	relocs = malloc(size);
-	if (!relocs) {
-		perror("malloc");
-		return -1;
-	}
-
-	sec->data->d_buf = relocs;
-	sec->data->d_size = size;
-
-	sec->sh.sh_size = size;
-
-	idx = 0;
-	list_for_each_entry(reloc, &sec->reloc_list, list) {
-		relocs[idx].r_offset = reloc->offset;
-		relocs[idx].r_info = GELF_R_INFO(reloc->sym->idx, reloc->type);
-		idx++;
-	}
-
-	return 0;
-}
-
-static int elf_rebuild_rela_reloc_section(struct section *sec, int nr)
-{
-	struct reloc *reloc;
-	int idx = 0, size;
+	int nr, idx = 0, size;
 	GElf_Rela *relocs;
 
-	/* Allocate a buffer for relocations with addends */
+	nr = 0;
+	list_for_each_entry(reloc, &sec->reloc_list, list)
+		nr++;
+
 	size = nr * sizeof(*relocs);
 	relocs = malloc(size);
 	if (!relocs) {
@@ -884,73 +785,7 @@ static int elf_rebuild_rela_reloc_section(struct section *sec, int nr)
 	return 0;
 }
 
-int elf_rebuild_reloc_section(struct elf *elf, struct section *sec)
-{
-	struct reloc *reloc;
-	int nr;
-
-	sec->changed = true;
-	elf->changed = true;
-
-	nr = 0;
-	list_for_each_entry(reloc, &sec->reloc_list, list)
-		nr++;
-
-	switch (sec->sh.sh_type) {
-	case SHT_REL:  return elf_rebuild_rel_reloc_section(sec, nr);
-	case SHT_RELA: return elf_rebuild_rela_reloc_section(sec, nr);
-	default:       return -1;
-	}
-}
-
-int elf_write_insn(struct elf *elf, struct section *sec,
-		   unsigned long offset, unsigned int len,
-		   const char *insn)
-{
-	Elf_Data *data = sec->data;
-
-	if (data->d_type != ELF_T_BYTE || data->d_off) {
-		WARN("write to unexpected data for section: %s", sec->name);
-		return -1;
-	}
-
-	memcpy(data->d_buf + offset, insn, len);
-	elf_flagdata(data, ELF_C_SET, ELF_F_DIRTY);
-
-	elf->changed = true;
-
-	return 0;
-}
-
-int elf_write_reloc(struct elf *elf, struct reloc *reloc)
-{
-	struct section *sec = reloc->sec;
-
-	if (sec->sh.sh_type == SHT_REL) {
-		reloc->rel.r_info = GELF_R_INFO(reloc->sym->idx, reloc->type);
-		reloc->rel.r_offset = reloc->offset;
-
-		if (!gelf_update_rel(sec->data, reloc->idx, &reloc->rel)) {
-			WARN_ELF("gelf_update_rel");
-			return -1;
-		}
-	} else {
-		reloc->rela.r_info = GELF_R_INFO(reloc->sym->idx, reloc->type);
-		reloc->rela.r_addend = reloc->addend;
-		reloc->rela.r_offset = reloc->offset;
-
-		if (!gelf_update_rela(sec->data, reloc->idx, &reloc->rela)) {
-			WARN_ELF("gelf_update_rela");
-			return -1;
-		}
-	}
-
-	elf->changed = true;
-
-	return 0;
-}
-
-int elf_write(struct elf *elf)
+int elf_write(const struct elf *elf)
 {
 	struct section *sec;
 	Elf_Scn *s;
@@ -967,8 +802,6 @@ int elf_write(struct elf *elf)
 				WARN_ELF("gelf_update_shdr");
 				return -1;
 			}
-
-			sec->changed = false;
 		}
 	}
 
@@ -980,8 +813,6 @@ int elf_write(struct elf *elf)
 		WARN_ELF("elf_update");
 		return -1;
 	}
-
-	elf->changed = false;
 
 	return 0;
 }

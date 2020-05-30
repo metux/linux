@@ -1118,9 +1118,9 @@ static long vmw_compat_ioctl(struct file *filp, unsigned int cmd,
 }
 #endif
 
-static int vmw_master_set(struct drm_device *dev,
-			  struct drm_file *file_priv,
-			  bool from_open)
+static void vmw_master_set(struct drm_device *dev,
+			   struct drm_file *file_priv,
+			   bool from_open)
 {
 	/*
 	 * Inform a new master that the layout may have changed while
@@ -1128,8 +1128,6 @@ static int vmw_master_set(struct drm_device *dev,
 	 */
 	if (!from_open)
 		drm_sysfs_hotplug_event(dev);
-
-	return 0;
 }
 
 static void vmw_master_drop(struct drm_device *dev,

@@ -5,8 +5,11 @@
 #include <linux/types.h>
 #include <linux/in6.h>
 #include <linux/siphash.h>
+#include <linux/string.h>
 #include <uapi/linux/if_ether.h>
 
+struct bpf_prog;
+struct net;
 struct sk_buff;
 
 /**
@@ -33,7 +36,6 @@ enum flow_dissect_ret {
 
 /**
  * struct flow_dissector_key_basic:
- * @thoff: Transport header offset
  * @n_proto: Network header protocol (eg. IPv4/IPv6)
  * @ip_proto: Transport header protocol (eg. TCP/UDP)
  */
@@ -48,9 +50,14 @@ struct flow_dissector_key_tags {
 };
 
 struct flow_dissector_key_vlan {
-	u16	vlan_id:12,
-		vlan_dei:1,
-		vlan_priority:3;
+	union {
+		struct {
+			u16	vlan_id:12,
+				vlan_dei:1,
+				vlan_priority:3;
+		};
+		__be16	vlan_tci;
+	};
 	__be16	vlan_tpid;
 };
 
@@ -215,9 +222,11 @@ struct flow_dissector_key_ip {
 /**
  * struct flow_dissector_key_meta:
  * @ingress_ifindex: ingress ifindex
+ * @ingress_iftype: ingress interface type
  */
 struct flow_dissector_key_meta {
 	int ingress_ifindex;
+	u16 ingress_iftype;
 };
 
 /**
@@ -240,6 +249,7 @@ enum flow_dissector_key_id {
 	FLOW_DISSECTOR_KEY_IPV4_ADDRS, /* struct flow_dissector_key_ipv4_addrs */
 	FLOW_DISSECTOR_KEY_IPV6_ADDRS, /* struct flow_dissector_key_ipv6_addrs */
 	FLOW_DISSECTOR_KEY_PORTS, /* struct flow_dissector_key_ports */
+	FLOW_DISSECTOR_KEY_PORTS_RANGE, /* struct flow_dissector_key_ports */
 	FLOW_DISSECTOR_KEY_ICMP, /* struct flow_dissector_key_icmp */
 	FLOW_DISSECTOR_KEY_ETH_ADDRS, /* struct flow_dissector_key_eth_addrs */
 	FLOW_DISSECTOR_KEY_TIPC, /* struct flow_dissector_key_tipc */
@@ -352,5 +362,17 @@ struct bpf_flow_dissector {
 	void			*data;
 	void			*data_end;
 };
+
+static inline void
+flow_dissector_init_keys(struct flow_dissector_key_control *key_control,
+			 struct flow_dissector_key_basic *key_basic)
+{
+	memset(key_control, 0, sizeof(*key_control));
+	memset(key_basic, 0, sizeof(*key_basic));
+}
+
+#ifdef CONFIG_BPF_SYSCALL
+int flow_dissector_bpf_prog_attach(struct net *net, struct bpf_prog *prog);
+#endif /* CONFIG_BPF_SYSCALL */
 
 #endif

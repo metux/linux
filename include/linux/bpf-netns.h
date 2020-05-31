@@ -36,9 +36,7 @@ int netns_bpf_prog_query(const union bpf_attr *attr,
 			 union bpf_attr __user *uattr);
 int netns_bpf_prog_attach(const union bpf_attr *attr,
 			  struct bpf_prog *prog);
-int netns_bpf_prog_detach(const union bpf_attr *attr, enum bpf_prog_type ptype);
-int netns_bpf_link_create(const union bpf_attr *attr,
-			  struct bpf_prog *prog);
+int netns_bpf_prog_detach(const union bpf_attr *attr);
 #else
 static inline int netns_bpf_prog_query(const union bpf_attr *attr,
 				       union bpf_attr __user *uattr)
@@ -52,14 +50,7 @@ static inline int netns_bpf_prog_attach(const union bpf_attr *attr,
 	return -EOPNOTSUPP;
 }
 
-static inline int netns_bpf_prog_detach(const union bpf_attr *attr,
-					enum bpf_prog_type ptype)
-{
-	return -EOPNOTSUPP;
-}
-
-static inline int netns_bpf_link_create(const union bpf_attr *attr,
-					struct bpf_prog *prog)
+static inline int netns_bpf_prog_detach(const union bpf_attr *attr)
 {
 	return -EOPNOTSUPP;
 }

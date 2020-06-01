@@ -2376,6 +2376,25 @@ static void add_srcversion(struct buffer *b, struct module *mod)
 	}
 }
 
+static void write_buf(struct buffer *b, const char *fname)
+{
+	FILE *file;
+
+	file = fopen(fname, "w");
+	if (!file) {
+		perror(fname);
+		exit(1);
+	}
+	if (fwrite(b->p, 1, b->pos, file) != b->pos) {
+		perror(fname);
+		exit(1);
+	}
+	if (fclose(file) != 0) {
+		perror(fname);
+		exit(1);
+	}
+}
+
 static void write_if_changed(struct buffer *b, const char *fname)
 {
 	char *tmp;
@@ -2408,16 +2427,7 @@ static void write_if_changed(struct buffer *b, const char *fname)
  close_write:
 	fclose(file);
  write:
-	file = fopen(fname, "w");
-	if (!file) {
-		perror(fname);
-		exit(1);
-	}
-	if (fwrite(b->p, 1, b->pos, file) != b->pos) {
-		perror(fname);
-		exit(1);
-	}
-	fclose(file);
+	write_buf(b, fname);
 }
 
 /* parse Module.symvers file. line format:
@@ -2509,7 +2519,7 @@ static void write_dump(const char *fname)
 			symbol = symbol->next;
 		}
 	}
-	write_if_changed(&buf, fname);
+	write_buf(&buf, fname);
 	free(buf.p);
 }
 

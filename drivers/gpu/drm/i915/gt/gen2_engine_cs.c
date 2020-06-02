@@ -13,25 +13,28 @@
 
 int gen2_emit_flush(struct i915_request *rq, u32 mode)
 {
-	unsigned int num_store_dw = 12;
+	unsigned int num_store_dw;
 	u32 cmd, *cs;
 
 	cmd = MI_FLUSH;
+	num_store_dw = 0;
 	if (mode & EMIT_INVALIDATE)
 		cmd |= MI_READ_FLUSH;
+	if (mode & EMIT_FLUSH)
+		num_store_dw = 4;
 
-	cs = intel_ring_begin(rq, 2 + 4 * num_store_dw);
+	cs = intel_ring_begin(rq, 2 + 3 * num_store_dw);
 	if (IS_ERR(cs))
 		return PTR_ERR(cs);
 
 	*cs++ = cmd;
 	while (num_store_dw--) {
-		*cs++ = MI_STORE_DWORD_INDEX;
-		*cs++ = I915_GEM_HWS_SCRATCH * sizeof(u32);
+		*cs++ = MI_STORE_DWORD_IMM | MI_MEM_VIRTUAL;
+		*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+						INTEL_GT_SCRATCH_FIELD_DEFAULT);
 		*cs++ = 0;
-		*cs++ = MI_FLUSH | MI_NO_WRITE_FLUSH;
 	}
-	*cs++ = cmd;
+	*cs++ = MI_FLUSH | MI_NO_WRITE_FLUSH;
 
 	intel_ring_advance(rq, cs);
 
@@ -139,21 +142,38 @@ int gen4_emit_flush_vcs(struct i915_request *rq, u32 mode)
 	return 0;
 }
 
-static u32 *__gen2_emit_breadcrumb(struct i915_request *rq, u32 *cs,
-				   int flush, int post)
+u32 *gen3_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 {
 	GEM_BUG_ON(i915_request_active_timeline(rq)->hwsp_ggtt != rq->engine->status_page.vma);
 	GEM_BUG_ON(offset_in_page(i915_request_active_timeline(rq)->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
 
 	*cs++ = MI_FLUSH;
 
-	while (flush--) {
-		*cs++ = MI_STORE_DWORD_INDEX;
-		*cs++ = I915_GEM_HWS_SCRATCH * sizeof(u32);
-		*cs++ = rq->fence.seqno;
-	}
+	*cs++ = MI_STORE_DWORD_INDEX;
+	*cs++ = I915_GEM_HWS_SEQNO_ADDR;
+	*cs++ = rq->fence.seqno;
 
-	while (post--) {
+	*cs++ = MI_USER_INTERRUPT;
+	*cs++ = MI_NOOP;
+
+	rq->tail = intel_ring_offset(rq, cs);
+	assert_ring_tail_valid(rq->ring, rq->tail);
+
+	return cs;
+}
+
+#define GEN5_WA_STORES 8 /* must be at least 1! */
+u32 *gen5_emit_breadcrumb(struct i915_request *rq, u32 *cs)
+{
+	int i;
+
+	GEM_BUG_ON(i915_request_active_timeline(rq)->hwsp_ggtt != rq->engine->status_page.vma);
+	GEM_BUG_ON(offset_in_page(i915_request_active_timeline(rq)->hwsp_offset) != I915_GEM_HWS_SEQNO_ADDR);
+
+	*cs++ = MI_FLUSH;
+
+	BUILD_BUG_ON(GEN5_WA_STORES < 1);
+	for (i = 0; i < GEN5_WA_STORES; i++) {
 		*cs++ = MI_STORE_DWORD_INDEX;
 		*cs++ = I915_GEM_HWS_SEQNO_ADDR;
 		*cs++ = rq->fence.seqno;
@@ -166,16 +186,7 @@ static u32 *__gen2_emit_breadcrumb(struct i915_request *rq, u32 *cs,
 
 	return cs;
 }
-
-u32 *gen3_emit_breadcrumb(struct i915_request *rq, u32 *cs)
-{
-	return __gen2_emit_breadcrumb(rq, cs, 16, 8);
-}
-
-u32 *gen5_emit_breadcrumb(struct i915_request *rq, u32 *cs)
-{
-	return __gen2_emit_breadcrumb(rq, cs, 8, 8);
-}
+#undef GEN5_WA_STORES
 
 /* Just userspace ABI convention to limit the wa batch bo to a resonable size */
 #define I830_BATCH_LIMIT SZ_256K

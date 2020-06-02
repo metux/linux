@@ -40,12 +40,12 @@
 
 #define GEN12_CSR_MAX_FW_SIZE		ICL_CSR_MAX_FW_SIZE
 
-#define RKL_CSR_PATH			"i915/rkl_dmc_ver2_02.bin"
-#define RKL_CSR_VERSION_REQUIRED	CSR_VERSION(2, 2)
+#define RKL_CSR_PATH			"i915/rkl_dmc_ver2_01.bin"
+#define RKL_CSR_VERSION_REQUIRED	CSR_VERSION(2, 1)
 MODULE_FIRMWARE(RKL_CSR_PATH);
 
-#define TGL_CSR_PATH			"i915/tgl_dmc_ver2_08.bin"
-#define TGL_CSR_VERSION_REQUIRED	CSR_VERSION(2, 8)
+#define TGL_CSR_PATH			"i915/tgl_dmc_ver2_06.bin"
+#define TGL_CSR_VERSION_REQUIRED	CSR_VERSION(2, 6)
 #define TGL_CSR_MAX_FW_SIZE		0x6000
 MODULE_FIRMWARE(TGL_CSR_PATH);
 
@@ -723,15 +723,15 @@ void intel_csr_ucode_init(struct drm_i915_private *dev_priv)
 		csr->max_fw_size = BXT_CSR_MAX_FW_SIZE;
 	}
 
-	if (dev_priv->params.dmc_firmware_path) {
-		if (strlen(dev_priv->params.dmc_firmware_path) == 0) {
+	if (i915_modparams.dmc_firmware_path) {
+		if (strlen(i915_modparams.dmc_firmware_path) == 0) {
 			csr->fw_path = NULL;
 			drm_info(&dev_priv->drm,
 				 "Disabling CSR firmware and runtime PM\n");
 			return;
 		}
 
-		csr->fw_path = dev_priv->params.dmc_firmware_path;
+		csr->fw_path = i915_modparams.dmc_firmware_path;
 		/* Bypass version check for firmware override. */
 		csr->required_version = 0;
 	}

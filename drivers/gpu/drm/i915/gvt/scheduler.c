@@ -403,14 +403,6 @@ static void release_shadow_wa_ctx(struct intel_shadow_wa_ctx *wa_ctx)
 	wa_ctx->indirect_ctx.shadow_va = NULL;
 }
 
-static void set_dma_address(struct i915_page_directory *pd, dma_addr_t addr)
-{
-	struct scatterlist *sg = pd->pt.base->mm.pages->sgl;
-
-	/* This is not a good idea */
-	sg->dma_address = addr;
-}
-
 static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
 					  struct intel_context *ce)
 {
@@ -419,7 +411,7 @@ static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
 	int i = 0;
 
 	if (mm->ppgtt_mm.root_entry_type == GTT_TYPE_PPGTT_ROOT_L4_ENTRY) {
-		set_dma_address(ppgtt->pd, mm->ppgtt_mm.shadow_pdps[0]);
+		px_dma(ppgtt->pd) = mm->ppgtt_mm.shadow_pdps[0];
 	} else {
 		for (i = 0; i < GVT_RING_CTX_NR_PDPS; i++) {
 			struct i915_page_directory * const pd =
@@ -429,8 +421,7 @@ static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
 			   shadow ppgtt. */
 			if (!pd)
 				break;
-
-			set_dma_address(pd, mm->ppgtt_mm.shadow_pdps[i]);
+			px_dma(pd) = mm->ppgtt_mm.shadow_pdps[i];
 		}
 	}
 }
@@ -518,18 +509,26 @@ static int prepare_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 			bb->bb_start_cmd_va = workload->shadow_ring_buffer_va
 				+ bb->bb_offset;
 
-		/*
-		 * For non-priv bb, scan&shadow is only for
-		 * debugging purpose, so the content of shadow bb
-		 * is the same as original bb. Therefore,
-		 * here, rather than switch to shadow bb's gma
-		 * address, we directly use original batch buffer's
-		 * gma address, and send original bb to hardware
-		 * directly
-		 */
-		if (!bb->ppgtt) {
+		if (bb->ppgtt) {
+			/* for non-priv bb, scan&shadow is only for
+			 * debugging purpose, so the content of shadow bb
+			 * is the same as original bb. Therefore,
+			 * here, rather than switch to shadow bb's gma
+			 * address, we directly use original batch buffer's
+			 * gma address, and send original bb to hardware
+			 * directly
+			 */
+			if (bb->clflush & CLFLUSH_AFTER) {
+				drm_clflush_virt_range(bb->va,
+						bb->obj->base.size);
+				bb->clflush &= ~CLFLUSH_AFTER;
+			}
+			i915_gem_object_finish_access(bb->obj);
+			bb->accessing = false;
+
+		} else {
 			bb->vma = i915_gem_object_ggtt_pin(bb->obj,
-							   NULL, 0, 0, 0);
+					NULL, 0, 0, 0);
 			if (IS_ERR(bb->vma)) {
 				ret = PTR_ERR(bb->vma);
 				goto err;
@@ -540,15 +539,27 @@ static int prepare_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 			if (gmadr_bytes == 8)
 				bb->bb_start_cmd_va[2] = 0;
 
+			/* No one is going to touch shadow bb from now on. */
+			if (bb->clflush & CLFLUSH_AFTER) {
+				drm_clflush_virt_range(bb->va,
+						bb->obj->base.size);
+				bb->clflush &= ~CLFLUSH_AFTER;
+			}
+
+			ret = i915_gem_object_set_to_gtt_domain(bb->obj,
+								false);
+			if (ret)
+				goto err;
+
 			ret = i915_vma_move_to_active(bb->vma,
 						      workload->req,
 						      0);
 			if (ret)
 				goto err;
-		}
 
-		/* No one is going to touch shadow bb from now on. */
-		i915_gem_object_flush_map(bb->obj);
+			i915_gem_object_finish_access(bb->obj);
+			bb->accessing = false;
+		}
 	}
 	return 0;
 err:
@@ -619,6 +630,9 @@ static void release_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 
 	list_for_each_entry_safe(bb, pos, &workload->shadow_bb, list) {
 		if (bb->obj) {
+			if (bb->accessing)
+				i915_gem_object_finish_access(bb->obj);
+
 			if (bb->va && !IS_ERR(bb->va))
 				i915_gem_object_unpin_map(bb->obj);
 
@@ -1249,13 +1263,13 @@ i915_context_ppgtt_root_restore(struct intel_vgpu_submission *s,
 	int i;
 
 	if (i915_vm_is_4lvl(&ppgtt->vm)) {
-		set_dma_address(ppgtt->pd, s->i915_context_pml4);
+		px_dma(ppgtt->pd) = s->i915_context_pml4;
 	} else {
 		for (i = 0; i < GEN8_3LVL_PDPES; i++) {
 			struct i915_page_directory * const pd =
 				i915_pd_entry(ppgtt->pd, i);
 
-			set_dma_address(pd, s->i915_context_pdps[i]);
+			px_dma(pd) = s->i915_context_pdps[i];
 		}
 	}
 }
@@ -1277,7 +1291,7 @@ void intel_vgpu_clean_submission(struct intel_vgpu *vgpu)
 
 	i915_context_ppgtt_root_restore(s, i915_vm_to_ppgtt(s->shadow[0]->vm));
 	for_each_engine(engine, vgpu->gvt->gt, id)
-		intel_context_put(s->shadow[id]);
+		intel_context_unpin(s->shadow[id]);
 
 	kmem_cache_destroy(s->workloads);
 }
@@ -1369,6 +1383,11 @@ int intel_vgpu_setup_submission(struct intel_vgpu *vgpu)
 			ce->ring = __intel_context_ring_size(ring_size);
 		}
 
+		ret = intel_context_pin(ce);
+		intel_context_put(ce);
+		if (ret)
+			goto out_shadow_ctx;
+
 		s->shadow[i] = ce;
 	}
 
@@ -1400,6 +1419,7 @@ out_shadow_ctx:
 		if (IS_ERR(s->shadow[i]))
 			break;
 
+		intel_context_unpin(s->shadow[i]);
 		intel_context_put(s->shadow[i]);
 	}
 	i915_vm_put(&ppgtt->vm);
@@ -1473,7 +1493,6 @@ void intel_vgpu_destroy_workload(struct intel_vgpu_workload *workload)
 {
 	struct intel_vgpu_submission *s = &workload->vgpu->submission;
 
-	intel_context_unpin(s->shadow[workload->engine->id]);
 	release_shadow_batch_buffer(workload);
 	release_shadow_wa_ctx(&workload->wa_ctx);
 
@@ -1715,12 +1734,6 @@ intel_vgpu_create_workload(struct intel_vgpu *vgpu,
 	if (ret) {
 		if (vgpu_is_vm_unhealthy(ret))
 			enter_failsafe_mode(vgpu, GVT_FAILSAFE_GUEST_ERR);
-		intel_vgpu_destroy_workload(workload);
-		return ERR_PTR(ret);
-	}
-
-	ret = intel_context_pin(s->shadow[engine->id]);
-	if (ret) {
 		intel_vgpu_destroy_workload(workload);
 		return ERR_PTR(ret);
 	}

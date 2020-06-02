@@ -108,8 +108,8 @@
 
 #define DRIVER_NAME		"i915"
 #define DRIVER_DESC		"Intel Graphics"
-#define DRIVER_DATE		"20200715"
-#define DRIVER_TIMESTAMP	1594811881
+#define DRIVER_DATE		"20200515"
+#define DRIVER_TIMESTAMP	1589543364
 
 struct drm_i915_gem_object;
 
@@ -422,7 +422,6 @@ struct intel_fbc {
 
 		unsigned int fence_y_offset;
 		u16 gen9_wa_cfb_stride;
-		u16 interval;
 		s8 fence_id;
 	} state_cache;
 
@@ -448,7 +447,6 @@ struct intel_fbc {
 		int cfb_size;
 		unsigned int fence_y_offset;
 		u16 gen9_wa_cfb_stride;
-		u16 interval;
 		s8 fence_id;
 		bool plane_visible;
 	} params;
@@ -693,7 +691,6 @@ struct intel_vbt_data {
 		bool initialized;
 		int bpp;
 		struct edp_power_seq pps;
-		bool hobl;
 	} edp;
 
 	struct {
@@ -833,9 +830,6 @@ struct drm_i915_private {
 
 	/* FIXME: Device release actions should all be moved to drmm_ */
 	bool do_release;
-
-	/* i915 device parameters */
-	struct i915_params params;
 
 	const struct intel_device_info __info; /* Use INTEL_INFO() to access. */
 	struct intel_runtime_info __runtime; /* Use RUNTIME_INFO() to access. */
@@ -995,7 +989,7 @@ struct drm_i915_private {
 
 	struct i915_gem_mm mm;
 	DECLARE_HASHTABLE(mm_structs, 7);
-	spinlock_t mm_lock;
+	struct mutex mm_lock;
 
 	/* Kernel Modesetting */
 
@@ -1258,7 +1252,7 @@ static inline struct drm_i915_private *pdev_to_i915(struct pci_dev *pdev)
 
 /* Iterator over subset of engines selected by mask */
 #define for_each_engine_masked(engine__, gt__, mask__, tmp__) \
-	for ((tmp__) = (mask__) & (gt__)->info.engine_mask; \
+	for ((tmp__) = (mask__) & INTEL_INFO((gt__)->i915)->engine_mask; \
 	     (tmp__) ? \
 	     ((engine__) = (gt__)->engine[__mask_next_bit(tmp__)]), 1 : \
 	     0;)
@@ -1269,11 +1263,6 @@ static inline struct drm_i915_private *pdev_to_i915(struct pci_dev *pdev)
 #define for_each_uabi_engine(engine__, i915__) \
 	for ((engine__) = rb_to_uabi_engine(rb_first(&(i915__)->uabi_engines));\
 	     (engine__); \
-	     (engine__) = rb_to_uabi_engine(rb_next(&(engine__)->uabi_node)))
-
-#define for_each_uabi_class_engine(engine__, class__, i915__) \
-	for ((engine__) = intel_engine_lookup_user((i915__), (class__), 0); \
-	     (engine__) && (engine__)->uabi_class == (class__); \
 	     (engine__) = rb_to_uabi_engine(rb_next(&(engine__)->uabi_node)))
 
 #define I915_GTT_OFFSET_NONE ((u32)-1)
@@ -1432,7 +1421,6 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define IS_ELKHARTLAKE(dev_priv)	IS_PLATFORM(dev_priv, INTEL_ELKHARTLAKE)
 #define IS_TIGERLAKE(dev_priv)	IS_PLATFORM(dev_priv, INTEL_TIGERLAKE)
 #define IS_ROCKETLAKE(dev_priv)	IS_PLATFORM(dev_priv, INTEL_ROCKETLAKE)
-#define IS_DG1(dev_priv)        IS_PLATFORM(dev_priv, INTEL_DG1)
 #define IS_HSW_EARLY_SDV(dev_priv) (IS_HASWELL(dev_priv) && \
 				    (INTEL_DEVID(dev_priv) & 0xFF00) == 0x0C00)
 #define IS_BDW_ULT(dev_priv) \
@@ -1561,29 +1549,22 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define IS_RKL_REVID(p, since, until) \
 	(IS_ROCKETLAKE(p) && IS_REVID(p, since, until))
 
-#define DG1_REVID_A0		0x0
-#define DG1_REVID_B0		0x1
-
-#define IS_DG1_REVID(p, since, until) \
-	(IS_DG1(p) && IS_REVID(p, since, until))
-
 #define IS_LP(dev_priv)	(INTEL_INFO(dev_priv)->is_lp)
 #define IS_GEN9_LP(dev_priv)	(IS_GEN(dev_priv, 9) && IS_LP(dev_priv))
 #define IS_GEN9_BC(dev_priv)	(IS_GEN(dev_priv, 9) && !IS_LP(dev_priv))
 
-#define __HAS_ENGINE(engine_mask, id) ((engine_mask) & BIT(id))
-#define HAS_ENGINE(gt, id) __HAS_ENGINE((gt)->info.engine_mask, id)
+#define HAS_ENGINE(dev_priv, id) (INTEL_INFO(dev_priv)->engine_mask & BIT(id))
 
-#define ENGINE_INSTANCES_MASK(gt, first, count) ({		\
+#define ENGINE_INSTANCES_MASK(dev_priv, first, count) ({		\
 	unsigned int first__ = (first);					\
 	unsigned int count__ = (count);					\
-	((gt)->info.engine_mask &						\
+	(INTEL_INFO(dev_priv)->engine_mask &				\
 	 GENMASK(first__ + count__ - 1, first__)) >> first__;		\
 })
-#define VDBOX_MASK(gt) \
-	ENGINE_INSTANCES_MASK(gt, VCS0, I915_MAX_VCS)
-#define VEBOX_MASK(gt) \
-	ENGINE_INSTANCES_MASK(gt, VECS0, I915_MAX_VECS)
+#define VDBOX_MASK(dev_priv) \
+	ENGINE_INSTANCES_MASK(dev_priv, VCS0, I915_MAX_VCS)
+#define VEBOX_MASK(dev_priv) \
+	ENGINE_INSTANCES_MASK(dev_priv, VECS0, I915_MAX_VECS)
 
 /*
  * The Gen7 cmdparser copies the scanned buffer to the ggtt for execution
@@ -1606,8 +1587,6 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 		(INTEL_INFO(dev_priv)->has_logical_ring_elsq)
 #define HAS_LOGICAL_RING_PREEMPTION(dev_priv) \
 		(INTEL_INFO(dev_priv)->has_logical_ring_preemption)
-
-#define HAS_MASTER_UNIT_IRQ(dev_priv) (INTEL_INFO(dev_priv)->has_master_unit_irq)
 
 #define HAS_EXECLISTS(dev_priv) HAS_LOGICAL_RING_CONTEXTS(dev_priv)
 
@@ -1663,8 +1642,6 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define HAS_DDI(dev_priv)		 (INTEL_INFO(dev_priv)->display.has_ddi)
 #define HAS_FPGA_DBG_UNCLAIMED(dev_priv) (INTEL_INFO(dev_priv)->has_fpga_dbg)
 #define HAS_PSR(dev_priv)		 (INTEL_INFO(dev_priv)->display.has_psr)
-#define HAS_PSR_HW_TRACKING(dev_priv) \
-	(INTEL_INFO(dev_priv)->display.has_psr_hw_tracking)
 #define HAS_TRANSCODER(dev_priv, trans)	 ((INTEL_INFO(dev_priv)->cpu_transcoder_mask & BIT(trans)) != 0)
 
 #define HAS_RC6(dev_priv)		 (INTEL_INFO(dev_priv)->has_rc6)
@@ -1708,7 +1685,7 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 
 /* Only valid when HAS_DISPLAY() is true */
 #define INTEL_DISPLAY_ENABLED(dev_priv) \
-	(drm_WARN_ON(&(dev_priv)->drm, !HAS_DISPLAY(dev_priv)), !(dev_priv)->params.disable_display)
+		(drm_WARN_ON(&(dev_priv)->drm, !HAS_DISPLAY(dev_priv)), !i915_modparams.disable_display)
 
 static inline bool intel_vtd_active(void)
 {

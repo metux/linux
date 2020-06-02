@@ -347,7 +347,7 @@ static int gdrst_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 			gvt_dbg_mmio("vgpu%d: request GUC Reset\n", vgpu->id);
 			vgpu_vreg_t(vgpu, GUC_STATUS) |= GS_MIA_IN_RESET;
 		}
-		engine_mask &= vgpu->gvt->gt->info.engine_mask;
+		engine_mask &= INTEL_INFO(vgpu->gvt->gt->i915)->engine_mask;
 	}
 
 	/* vgpu_lock already hold by emulate mmio r/w */
@@ -1226,7 +1226,7 @@ static int handle_g2v_notification(struct intel_vgpu *vgpu, int notification)
 	switch (notification) {
 	case VGT_G2V_PPGTT_L3_PAGE_TABLE_CREATE:
 		root_entry_type = GTT_TYPE_PPGTT_ROOT_L3_ENTRY;
-		fallthrough;
+		/* fall through */
 	case VGT_G2V_PPGTT_L4_PAGE_TABLE_CREATE:
 		mm = intel_vgpu_get_ppgtt_mm(vgpu, root_entry_type, pdps);
 		return PTR_ERR_OR_ZERO(mm);
@@ -1729,14 +1729,14 @@ static int ring_mode_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 		(*(u32 *)p_data) &= ~_MASKED_BIT_ENABLE(2);
 	write_vreg(vgpu, offset, p_data, bytes);
 
-	if (IS_MASKED_BITS_ENABLED(data, 1)) {
+	if (data & _MASKED_BIT_ENABLE(1)) {
 		enter_failsafe_mode(vgpu, GVT_FAILSAFE_UNSUPPORTED_GUEST);
 		return 0;
 	}
 
 	if ((IS_COFFEELAKE(vgpu->gvt->gt->i915) ||
 	     IS_COMETLAKE(vgpu->gvt->gt->i915)) &&
-	    IS_MASKED_BITS_ENABLED(data, 2)) {
+	    data & _MASKED_BIT_ENABLE(2)) {
 		enter_failsafe_mode(vgpu, GVT_FAILSAFE_UNSUPPORTED_GUEST);
 		return 0;
 	}
@@ -1745,14 +1745,14 @@ static int ring_mode_mmio_write(struct intel_vgpu *vgpu, unsigned int offset,
 	 * pvinfo, if not, we will treat this guest as non-gvtg-aware
 	 * guest, and stop emulating its cfg space, mmio, gtt, etc.
 	 */
-	if ((IS_MASKED_BITS_ENABLED(data, GFX_PPGTT_ENABLE) ||
-	    IS_MASKED_BITS_ENABLED(data, GFX_RUN_LIST_ENABLE)) &&
-	    !vgpu->pv_notified) {
+	if (((data & _MASKED_BIT_ENABLE(GFX_PPGTT_ENABLE)) ||
+			(data & _MASKED_BIT_ENABLE(GFX_RUN_LIST_ENABLE)))
+			&& !vgpu->pv_notified) {
 		enter_failsafe_mode(vgpu, GVT_FAILSAFE_UNSUPPORTED_GUEST);
 		return 0;
 	}
-	if (IS_MASKED_BITS_ENABLED(data, GFX_RUN_LIST_ENABLE) ||
-	    IS_MASKED_BITS_DISABLED(data, GFX_RUN_LIST_ENABLE)) {
+	if ((data & _MASKED_BIT_ENABLE(GFX_RUN_LIST_ENABLE))
+			|| (data & _MASKED_BIT_DISABLE(GFX_RUN_LIST_ENABLE))) {
 		enable_execlist = !!(data & GFX_RUN_LIST_ENABLE);
 
 		gvt_dbg_core("EXECLIST %s on ring %s\n",
@@ -1813,7 +1813,7 @@ static int ring_reset_ctl_write(struct intel_vgpu *vgpu,
 	write_vreg(vgpu, offset, p_data, bytes);
 	data = vgpu_vreg(vgpu, offset);
 
-	if (IS_MASKED_BITS_ENABLED(data, RESET_CTL_REQUEST_RESET))
+	if (data & _MASKED_BIT_ENABLE(RESET_CTL_REQUEST_RESET))
 		data |= RESET_CTL_READY_TO_RESET;
 	else if (data & _MASKED_BIT_DISABLE(RESET_CTL_REQUEST_RESET))
 		data &= ~RESET_CTL_READY_TO_RESET;
@@ -1831,8 +1831,7 @@ static int csfe_chicken1_mmio_write(struct intel_vgpu *vgpu,
 	(*(u32 *)p_data) &= ~_MASKED_BIT_ENABLE(0x18);
 	write_vreg(vgpu, offset, p_data, bytes);
 
-	if (IS_MASKED_BITS_ENABLED(data, 0x10) ||
-	    IS_MASKED_BITS_ENABLED(data, 0x8))
+	if (data & _MASKED_BIT_ENABLE(0x10) || data & _MASKED_BIT_ENABLE(0x8))
 		enter_failsafe_mode(vgpu, GVT_FAILSAFE_UNSUPPORTED_GUEST);
 
 	return 0;
@@ -1868,7 +1867,7 @@ static int csfe_chicken1_mmio_write(struct intel_vgpu *vgpu,
 	MMIO_F(prefix(BLT_RING_BASE), s, f, am, rm, d, r, w); \
 	MMIO_F(prefix(GEN6_BSD_RING_BASE), s, f, am, rm, d, r, w); \
 	MMIO_F(prefix(VEBOX_RING_BASE), s, f, am, rm, d, r, w); \
-	if (HAS_ENGINE(gvt->gt, VCS1)) \
+	if (HAS_ENGINE(dev_priv, VCS1)) \
 		MMIO_F(prefix(GEN8_BSD2_RING_BASE), s, f, am, rm, d, r, w); \
 } while (0)
 
@@ -3060,7 +3059,6 @@ static int init_skl_mmio_info(struct intel_gvt *gvt)
 	MMIO_D(_MMIO(0x72380), D_SKL_PLUS);
 	MMIO_D(_MMIO(0x7239c), D_SKL_PLUS);
 	MMIO_D(_MMIO(_PLANE_SURF_3_A), D_SKL_PLUS);
-	MMIO_D(_MMIO(_PLANE_SURF_3_B), D_SKL_PLUS);
 
 	MMIO_D(CSR_SSP_BASE, D_SKL_PLUS);
 	MMIO_D(CSR_HTP_SKL, D_SKL_PLUS);
@@ -3137,8 +3135,8 @@ static int init_skl_mmio_info(struct intel_gvt *gvt)
 	MMIO_DFH(GEN9_WM_CHICKEN3, D_SKL_PLUS, F_MODE_MASK | F_CMD_ACCESS,
 		 NULL, NULL);
 
-	MMIO_D(GAMT_CHKN_BIT_REG, D_KBL | D_CFL);
-	MMIO_D(GEN9_CTX_PREEMPT_REG, D_SKL_PLUS);
+	MMIO_D(GAMT_CHKN_BIT_REG, D_KBL);
+	MMIO_D(GEN9_CTX_PREEMPT_REG, D_KBL | D_SKL);
 
 	return 0;
 }

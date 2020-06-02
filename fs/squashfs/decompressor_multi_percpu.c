@@ -8,7 +8,6 @@
 #include <linux/slab.h>
 #include <linux/percpu.h>
 #include <linux/buffer_head.h>
-#include <linux/local_lock.h>
 
 #include "squashfs_fs.h"
 #include "squashfs_fs_sb.h"
@@ -21,8 +20,7 @@
  */
 
 struct squashfs_stream {
-	void			*stream;
-	local_lock_t	lock;
+	void		*stream;
 };
 
 void *squashfs_decompressor_create(struct squashfs_sb_info *msblk,
@@ -43,7 +41,6 @@ void *squashfs_decompressor_create(struct squashfs_sb_info *msblk,
 			err = PTR_ERR(stream->stream);
 			goto out;
 		}
-		local_lock_init(&stream->lock);
 	}
 
 	kfree(comp_opts);
@@ -75,19 +72,18 @@ void squashfs_decompressor_destroy(struct squashfs_sb_info *msblk)
 	}
 }
 
-int squashfs_decompress(struct squashfs_sb_info *msblk, struct buffer_head **bh,
-	int b, int offset, int length, struct squashfs_page_actor *output)
+int squashfs_decompress(struct squashfs_sb_info *msblk, struct bio *bio,
+	int offset, int length, struct squashfs_page_actor *output)
 {
+	struct squashfs_stream __percpu *percpu;
 	struct squashfs_stream *stream;
 	int res;
 
-	local_lock(&msblk->stream->lock);
-	stream = this_cpu_ptr(msblk->stream);
-
-	res = msblk->decompressor->decompress(msblk, stream->stream, bh, b,
-			offset, length, output);
-
-	local_unlock(&msblk->stream->lock);
+	percpu = (struct squashfs_stream __percpu *)msblk->stream;
+	stream = get_cpu_ptr(percpu);
+	res = msblk->decompressor->decompress(msblk, stream->stream, bio,
+					      offset, length, output);
+	put_cpu_ptr(stream);
 
 	if (res < 0)
 		ERROR("%s decompression failed, data probably corrupt\n",

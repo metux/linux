@@ -527,7 +527,7 @@ static int svc_udp_sendto(struct svc_rqst *rqstp)
 		.msg_control	= cmh,
 		.msg_controllen	= sizeof(buffer),
 	};
-	unsigned int uninitialized_var(sent);
+	unsigned int sent;
 	int err;
 
 	svc_release_udp_skb(rqstp);
@@ -1091,7 +1091,7 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 	struct msghdr msg = {
 		.msg_flags	= 0,
 	};
-	unsigned int uninitialized_var(sent);
+	unsigned int sent;
 	int err;
 
 	svc_release_skb(rqstp);

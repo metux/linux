@@ -182,7 +182,8 @@ static int __btrfs_add_ordered_extent(struct btrfs_inode *inode, u64 file_offset
 		 * The ordered extent has reserved qgroup space, release now
 		 * and pass the reserved number for qgroup_record to free.
 		 */
-		ret = btrfs_qgroup_release_data(inode, file_offset, num_bytes);
+		ret = btrfs_qgroup_release_data(&inode->vfs_inode, file_offset,
+						num_bytes);
 		if (ret < 0)
 			return ret;
 	}
@@ -251,30 +252,30 @@ static int __btrfs_add_ordered_extent(struct btrfs_inode *inode, u64 file_offset
 	return 0;
 }
 
-int btrfs_add_ordered_extent(struct btrfs_inode *inode, u64 file_offset,
+int btrfs_add_ordered_extent(struct inode *inode, u64 file_offset,
 			     u64 disk_bytenr, u64 num_bytes, u64 disk_num_bytes,
 			     int type)
 {
-	return __btrfs_add_ordered_extent(inode, file_offset, disk_bytenr,
+	return __btrfs_add_ordered_extent(BTRFS_I(inode), file_offset, disk_bytenr,
 					  num_bytes, disk_num_bytes, type, 0,
 					  BTRFS_COMPRESS_NONE);
 }
 
-int btrfs_add_ordered_extent_dio(struct btrfs_inode *inode, u64 file_offset,
+int btrfs_add_ordered_extent_dio(struct inode *inode, u64 file_offset,
 				 u64 disk_bytenr, u64 num_bytes,
 				 u64 disk_num_bytes, int type)
 {
-	return __btrfs_add_ordered_extent(inode, file_offset, disk_bytenr,
+	return __btrfs_add_ordered_extent(BTRFS_I(inode), file_offset, disk_bytenr,
 					  num_bytes, disk_num_bytes, type, 1,
 					  BTRFS_COMPRESS_NONE);
 }
 
-int btrfs_add_ordered_extent_compress(struct btrfs_inode *inode, u64 file_offset,
+int btrfs_add_ordered_extent_compress(struct inode *inode, u64 file_offset,
 				      u64 disk_bytenr, u64 num_bytes,
 				      u64 disk_num_bytes, int type,
 				      int compress_type)
 {
-	return __btrfs_add_ordered_extent(inode, file_offset, disk_bytenr,
+	return __btrfs_add_ordered_extent(BTRFS_I(inode), file_offset, disk_bytenr,
 					  num_bytes, disk_num_bytes, type, 0,
 					  compress_type);
 }
@@ -307,12 +308,12 @@ void btrfs_add_ordered_sum(struct btrfs_ordered_extent *entry,
  * file_offset is updated to one byte past the range that is recorded as
  * complete.  This allows you to walk forward in the file.
  */
-int btrfs_dec_test_first_ordered_pending(struct btrfs_inode *inode,
+int btrfs_dec_test_first_ordered_pending(struct inode *inode,
 				   struct btrfs_ordered_extent **cached,
 				   u64 *file_offset, u64 io_size, int uptodate)
 {
-	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	struct btrfs_ordered_inode_tree *tree = &inode->ordered_tree;
+	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
+	struct btrfs_ordered_inode_tree *tree;
 	struct rb_node *node;
 	struct btrfs_ordered_extent *entry = NULL;
 	int ret;
@@ -321,6 +322,7 @@ int btrfs_dec_test_first_ordered_pending(struct btrfs_inode *inode,
 	u64 dec_start;
 	u64 to_dec;
 
+	tree = &BTRFS_I(inode)->ordered_tree;
 	spin_lock_irqsave(&tree->lock, flags);
 	node = tree_search(tree, *file_offset);
 	if (!node) {

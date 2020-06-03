@@ -403,10 +403,7 @@ int kvmppc_ld(struct kvm_vcpu *vcpu, ulong *eaddr, int size, void *ptr,
 		return EMULATE_DONE;
 	}
 
-	vcpu->srcu_idx = srcu_read_lock(&vcpu->kvm->srcu);
-	rc = kvm_read_guest(vcpu->kvm, pte.raddr, ptr, size);
-	srcu_read_unlock(&vcpu->kvm->srcu, vcpu->srcu_idx);
-	if (rc)
+	if (kvm_read_guest(vcpu->kvm, pte.raddr, ptr, size))
 		return EMULATE_DO_MMIO;
 
 	return EMULATE_DONE;

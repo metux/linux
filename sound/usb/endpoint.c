@@ -615,8 +615,9 @@ static void release_urbs(struct snd_usb_endpoint *ep, int force)
 	for (i = 0; i < ep->nurbs; i++)
 		release_urb_ctx(&ep->urb[i]);
 
-	usb_free_coherent(ep->chip->dev, SYNC_URBS * 4,
-			  ep->syncbuf, ep->sync_dma);
+	if (ep->syncbuf)
+		usb_free_coherent(ep->chip->dev, SYNC_URBS * 4,
+				  ep->syncbuf, ep->sync_dma);
 
 	ep->syncbuf = NULL;
 	ep->nurbs = 0;

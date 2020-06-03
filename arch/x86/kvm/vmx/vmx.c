@@ -4782,10 +4782,11 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 	    !(is_page_fault(intr_info) && !(error_code & PFERR_RSVD_MASK))) {
 		vcpu->run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 		vcpu->run->internal.suberror = KVM_INTERNAL_ERROR_SIMUL_EX;
-		vcpu->run->internal.ndata = 3;
+		vcpu->run->internal.ndata = 4;
 		vcpu->run->internal.data[0] = vect_info;
 		vcpu->run->internal.data[1] = intr_info;
 		vcpu->run->internal.data[2] = error_code;
+		vcpu->run->internal.data[3] = vmx->last_cpu;
 		return 0;
 	}
 
@@ -6005,6 +6006,7 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		vcpu->run->exit_reason = KVM_EXIT_FAIL_ENTRY;
 		vcpu->run->fail_entry.hardware_entry_failure_reason
 			= exit_reason;
+		vcpu->run->fail_entry.cpu = vmx->last_cpu;
 		return 0;
 	}
 
@@ -6013,6 +6015,7 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		vcpu->run->exit_reason = KVM_EXIT_FAIL_ENTRY;
 		vcpu->run->fail_entry.hardware_entry_failure_reason
 			= vmcs_read32(VM_INSTRUCTION_ERROR);
+		vcpu->run->fail_entry.cpu = vmx->last_cpu;
 		return 0;
 	}
 
@@ -6039,6 +6042,8 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 			vcpu->run->internal.data[3] =
 				vmcs_read64(GUEST_PHYSICAL_ADDRESS);
 		}
+		vcpu->run->internal.data[vcpu->run->internal.ndata++] =
+			vmx->last_cpu;
 		return 0;
 	}
 
@@ -6094,8 +6099,9 @@ unexpected_vmexit:
 	vcpu->run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 	vcpu->run->internal.suberror =
 			KVM_INTERNAL_ERROR_UNEXPECTED_EXIT_REASON;
-	vcpu->run->internal.ndata = 1;
+	vcpu->run->internal.ndata = 2;
 	vcpu->run->internal.data[0] = exit_reason;
+	vcpu->run->internal.data[1] = vmx->last_cpu;
 	return 0;
 }
 

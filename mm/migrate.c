@@ -490,18 +490,11 @@ int migrate_page_move_mapping(struct address_space *mapping,
 	 * are mapped to swap space.
 	 */
 	if (newzone != oldzone) {
-		struct lruvec *old_lruvec, *new_lruvec;
-		struct mem_cgroup *memcg;
-
-		memcg = page_memcg(page);
-		old_lruvec = mem_cgroup_lruvec(memcg, oldzone->zone_pgdat);
-		new_lruvec = mem_cgroup_lruvec(memcg, newzone->zone_pgdat);
-
-		__dec_lruvec_state(old_lruvec, NR_FILE_PAGES);
-		__inc_lruvec_state(new_lruvec, NR_FILE_PAGES);
+		__dec_node_state(oldzone->zone_pgdat, NR_FILE_PAGES);
+		__inc_node_state(newzone->zone_pgdat, NR_FILE_PAGES);
 		if (PageSwapBacked(page) && !PageSwapCache(page)) {
-			__dec_lruvec_state(old_lruvec, NR_SHMEM);
-			__inc_lruvec_state(new_lruvec, NR_SHMEM);
+			__dec_node_state(oldzone->zone_pgdat, NR_SHMEM);
+			__inc_node_state(newzone->zone_pgdat, NR_SHMEM);
 		}
 		if (dirty && mapping_cap_account_dirty(mapping)) {
 			__dec_node_state(oldzone->zone_pgdat, NR_FILE_DIRTY);
@@ -1161,10 +1154,21 @@ out:
 }
 
 /*
+ * gcc 4.7 and 4.8 on arm get an ICEs when inlining unmap_and_move().  Work
+ * around it.
+ */
+#if defined(CONFIG_ARM) && \
+	defined(GCC_VERSION) && GCC_VERSION < 40900 && GCC_VERSION >= 40700
+#define ICE_noinline noinline
+#else
+#define ICE_noinline
+#endif
+
+/*
  * Obtain the lock on page, remove all ptes and migrate the page
  * to the newly allocated page in newpage.
  */
-static int unmap_and_move(new_page_t get_new_page,
+static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 				   free_page_t put_new_page,
 				   unsigned long private, struct page *page,
 				   int force, enum migrate_mode mode,
@@ -1544,7 +1548,7 @@ static int add_page_for_migration(struct mm_struct *mm, unsigned long addr,
 	unsigned int follflags;
 	int err;
 
-	mmap_read_lock(mm);
+	down_read(&mm->mmap_sem);
 	err = -EFAULT;
 	vma = find_vma(mm, addr);
 	if (!vma || addr < vma->vm_start || !vma_migratable(vma))
@@ -1597,7 +1601,7 @@ out_putpage:
 	 */
 	put_page(page);
 out:
-	mmap_read_unlock(mm);
+	up_read(&mm->mmap_sem);
 	return err;
 }
 
@@ -1722,7 +1726,7 @@ static void do_pages_stat_array(struct mm_struct *mm, unsigned long nr_pages,
 {
 	unsigned long i;
 
-	mmap_read_lock(mm);
+	down_read(&mm->mmap_sem);
 
 	for (i = 0; i < nr_pages; i++) {
 		unsigned long addr = (unsigned long)(*pages);
@@ -1749,7 +1753,7 @@ set_status:
 		status++;
 	}
 
-	mmap_read_unlock(mm);
+	up_read(&mm->mmap_sem);
 }
 
 /*
@@ -2109,7 +2113,7 @@ int migrate_misplaced_transhuge_page(struct mm_struct *mm,
 	 * pmd before doing set_pmd_at(), nor to flush the TLB after
 	 * set_pmd_at().  Clearing the pmd here would introduce a race
 	 * condition against MADV_DONTNEED, because MADV_DONTNEED only holds the
-	 * mmap_lock for reading.  If the pmd is set to NULL at any given time,
+	 * mmap_sem for reading.  If the pmd is set to NULL at any given time,
 	 * MADV_DONTNEED won't wait on the pmd lock and it'll skip clearing this
 	 * pmd.
 	 */
@@ -2664,7 +2668,7 @@ restore:
  * have the MIGRATE_PFN_MIGRATE flag set for their src array entry.
  *
  * It is safe to update device page table after migrate_vma_pages() because
- * both destination and source page are still locked, and the mmap_lock is held
+ * both destination and source page are still locked, and the mmap_sem is held
  * in read mode (hence no one can unmap the range being migrated).
  *
  * Once the caller is done cleaning up things and updating its page table (if it
@@ -2729,6 +2733,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 {
 	struct vm_area_struct *vma = migrate->vma;
 	struct mm_struct *mm = vma->vm_mm;
+	struct mem_cgroup *memcg;
 	bool flush = false;
 	spinlock_t *ptl;
 	pte_t entry;
@@ -2761,10 +2766,10 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 	 * pte_offset_map() on pmds where a huge pmd might be created
 	 * from a different thread.
 	 *
-	 * pte_alloc_map() is safe to use under mmap_write_lock(mm) or when
+	 * pte_alloc_map() is safe to use under down_write(mmap_sem) or when
 	 * parallel threads are excluded by other means.
 	 *
-	 * Here we only have mmap_read_lock(mm).
+	 * Here we only have down_read(mmap_sem).
 	 */
 	if (pte_alloc(mm, pmdp))
 		goto abort;
@@ -2775,7 +2780,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 
 	if (unlikely(anon_vma_prepare(vma)))
 		goto abort;
-	if (mem_cgroup_charge(page, vma->vm_mm, GFP_KERNEL))
+	if (mem_cgroup_try_charge(page, vma->vm_mm, GFP_KERNEL, &memcg))
 		goto abort;
 
 	/*
@@ -2821,6 +2826,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 
 	inc_mm_counter(mm, MM_ANONPAGES);
 	page_add_new_anon_rmap(page, vma, addr, false);
+	mem_cgroup_commit_charge(page, memcg, false);
 	if (!is_zone_device_page(page))
 		lru_cache_add_active_or_unevictable(page, vma);
 	get_page(page);
@@ -2842,6 +2848,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 
 unlock_abort:
 	pte_unmap_unlock(ptep, ptl);
+	mem_cgroup_cancel_charge(page, memcg);
 abort:
 	*src &= ~MIGRATE_PFN_MIGRATE;
 }

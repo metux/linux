@@ -82,6 +82,7 @@ static struct vfsmount *shm_mnt;
 #include <linux/uuid.h>
 
 #include <linux/uaccess.h>
+#include <asm/pgtable.h>
 
 #include "internal.h"
 
@@ -604,13 +605,11 @@ static inline bool is_huge_enabled(struct shmem_sb_info *sbinfo)
  */
 static int shmem_add_to_page_cache(struct page *page,
 				   struct address_space *mapping,
-				   pgoff_t index, void *expected, gfp_t gfp,
-				   struct mm_struct *charge_mm)
+				   pgoff_t index, void *expected, gfp_t gfp)
 {
 	XA_STATE_ORDER(xas, &mapping->i_pages, index, compound_order(page));
 	unsigned long i = 0;
 	unsigned long nr = compound_nr(page);
-	int error;
 
 	VM_BUG_ON_PAGE(PageTail(page), page);
 	VM_BUG_ON_PAGE(index != round_down(index, nr), page);
@@ -621,18 +620,6 @@ static int shmem_add_to_page_cache(struct page *page,
 	page_ref_add(page, nr);
 	page->mapping = mapping;
 	page->index = index;
-
-	if (!PageSwapCache(page)) {
-		error = mem_cgroup_charge(page, charge_mm, gfp);
-		if (error) {
-			if (PageTransHuge(page)) {
-				count_vm_event(THP_FILE_FALLBACK);
-				count_vm_event(THP_FILE_FALLBACK_CHARGE);
-			}
-			goto error;
-		}
-	}
-	cgroup_throttle_swaprate(page, gfp);
 
 	do {
 		void *entry;
@@ -654,22 +641,19 @@ next:
 			__inc_node_page_state(page, NR_SHMEM_THPS);
 		}
 		mapping->nrpages += nr;
-		__mod_lruvec_page_state(page, NR_FILE_PAGES, nr);
-		__mod_lruvec_page_state(page, NR_SHMEM, nr);
+		__mod_node_page_state(page_pgdat(page), NR_FILE_PAGES, nr);
+		__mod_node_page_state(page_pgdat(page), NR_SHMEM, nr);
 unlock:
 		xas_unlock_irq(&xas);
 	} while (xas_nomem(&xas, gfp));
 
 	if (xas_error(&xas)) {
-		error = xas_error(&xas);
-		goto error;
+		page->mapping = NULL;
+		page_ref_sub(page, nr);
+		return xas_error(&xas);
 	}
 
 	return 0;
-error:
-	page->mapping = NULL;
-	page_ref_sub(page, nr);
-	return error;
 }
 
 /*
@@ -686,8 +670,8 @@ static void shmem_delete_from_page_cache(struct page *page, void *radswap)
 	error = shmem_replace_entry(mapping, page->index, page, radswap);
 	page->mapping = NULL;
 	mapping->nrpages--;
-	__dec_lruvec_page_state(page, NR_FILE_PAGES);
-	__dec_lruvec_page_state(page, NR_SHMEM);
+	__dec_node_page_state(page, NR_FILE_PAGES);
+	__dec_node_page_state(page, NR_SHMEM);
 	xa_unlock_irq(&mapping->i_pages);
 	put_page(page);
 	BUG_ON(error);
@@ -1594,9 +1578,8 @@ static int shmem_replace_page(struct page **pagep, gfp_t gfp,
 	xa_lock_irq(&swap_mapping->i_pages);
 	error = shmem_replace_entry(swap_mapping, swap_index, oldpage, newpage);
 	if (!error) {
-		mem_cgroup_migrate(oldpage, newpage);
-		__inc_lruvec_page_state(newpage, NR_FILE_PAGES);
-		__dec_lruvec_page_state(oldpage, NR_FILE_PAGES);
+		__inc_node_page_state(newpage, NR_FILE_PAGES);
+		__dec_node_page_state(oldpage, NR_FILE_PAGES);
 	}
 	xa_unlock_irq(&swap_mapping->i_pages);
 
@@ -1608,7 +1591,8 @@ static int shmem_replace_page(struct page **pagep, gfp_t gfp,
 		 */
 		oldpage = newpage;
 	} else {
-		lru_cache_add(newpage);
+		mem_cgroup_migrate(oldpage, newpage);
+		lru_cache_add_anon(newpage);
 		*pagep = newpage;
 	}
 
@@ -1635,6 +1619,7 @@ static int shmem_swapin_page(struct inode *inode, pgoff_t index,
 	struct address_space *mapping = inode->i_mapping;
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct mm_struct *charge_mm = vma ? vma->vm_mm : current->mm;
+	struct mem_cgroup *memcg;
 	struct page *page;
 	swp_entry_t swap;
 	int error;
@@ -1679,11 +1664,29 @@ static int shmem_swapin_page(struct inode *inode, pgoff_t index,
 			goto failed;
 	}
 
-	error = shmem_add_to_page_cache(page, mapping, index,
-					swp_to_radix_entry(swap), gfp,
-					charge_mm);
+	error = mem_cgroup_try_charge_delay(page, charge_mm, gfp, &memcg);
+	if (!error) {
+		error = shmem_add_to_page_cache(page, mapping, index,
+						swp_to_radix_entry(swap), gfp);
+		/*
+		 * We already confirmed swap under page lock, and make
+		 * no memory allocation here, so usually no possibility
+		 * of error; but free_swap_and_cache() only trylocks a
+		 * page, so it is just possible that the entry has been
+		 * truncated or holepunched since swap was confirmed.
+		 * shmem_undo_range() will have done some of the
+		 * unaccounting, now delete_from_swap_cache() will do
+		 * the rest.
+		 */
+		if (error) {
+			mem_cgroup_cancel_charge(page, memcg);
+			delete_from_swap_cache(page);
+		}
+	}
 	if (error)
 		goto failed;
+
+	mem_cgroup_commit_charge(page, memcg, true);
 
 	spin_lock_irq(&info->lock);
 	info->swapped--;
@@ -1730,6 +1733,7 @@ static int shmem_getpage_gfp(struct inode *inode, pgoff_t index,
 	struct shmem_inode_info *info = SHMEM_I(inode);
 	struct shmem_sb_info *sbinfo;
 	struct mm_struct *charge_mm;
+	struct mem_cgroup *memcg;
 	struct page *page;
 	enum sgp_type sgp_huge = sgp;
 	pgoff_t hindex = index;
@@ -1854,12 +1858,22 @@ alloc_nohuge:
 	if (sgp == SGP_WRITE)
 		__SetPageReferenced(page);
 
-	error = shmem_add_to_page_cache(page, mapping, hindex,
-					NULL, gfp & GFP_RECLAIM_MASK,
-					charge_mm);
-	if (error)
+	error = mem_cgroup_try_charge_delay(page, charge_mm, gfp, &memcg);
+	if (error) {
+		if (PageTransHuge(page)) {
+			count_vm_event(THP_FILE_FALLBACK);
+			count_vm_event(THP_FILE_FALLBACK_CHARGE);
+		}
 		goto unacct;
-	lru_cache_add(page);
+	}
+	error = shmem_add_to_page_cache(page, mapping, hindex,
+					NULL, gfp & GFP_RECLAIM_MASK);
+	if (error) {
+		mem_cgroup_cancel_charge(page, memcg);
+		goto unacct;
+	}
+	mem_cgroup_commit_charge(page, memcg, false);
+	lru_cache_add_anon(page);
 
 	spin_lock_irq(&info->lock);
 	info->alloced += compound_nr(page);
@@ -2296,6 +2310,7 @@ static int shmem_mfill_atomic_pte(struct mm_struct *dst_mm,
 	struct address_space *mapping = inode->i_mapping;
 	gfp_t gfp = mapping_gfp_mask(mapping);
 	pgoff_t pgoff = linear_page_index(dst_vma, dst_addr);
+	struct mem_cgroup *memcg;
 	spinlock_t *ptl;
 	void *page_kaddr;
 	struct page *page;
@@ -2319,7 +2334,7 @@ static int shmem_mfill_atomic_pte(struct mm_struct *dst_mm,
 					     PAGE_SIZE);
 			kunmap_atomic(page_kaddr);
 
-			/* fallback to copy_from_user outside mmap_lock */
+			/* fallback to copy_from_user outside mmap_sem */
 			if (unlikely(ret)) {
 				*pagep = page;
 				shmem_inode_unacct_blocks(inode, 1);
@@ -2345,10 +2360,16 @@ static int shmem_mfill_atomic_pte(struct mm_struct *dst_mm,
 	if (unlikely(offset >= max_off))
 		goto out_release;
 
-	ret = shmem_add_to_page_cache(page, mapping, pgoff, NULL,
-				      gfp & GFP_RECLAIM_MASK, dst_mm);
+	ret = mem_cgroup_try_charge_delay(page, dst_mm, gfp, &memcg);
 	if (ret)
 		goto out_release;
+
+	ret = shmem_add_to_page_cache(page, mapping, pgoff, NULL,
+						gfp & GFP_RECLAIM_MASK);
+	if (ret)
+		goto out_release_uncharge;
+
+	mem_cgroup_commit_charge(page, memcg, false);
 
 	_dst_pte = mk_pte(page, dst_vma->vm_page_prot);
 	if (dst_vma->vm_flags & VM_WRITE)
@@ -2369,13 +2390,13 @@ static int shmem_mfill_atomic_pte(struct mm_struct *dst_mm,
 	ret = -EFAULT;
 	max_off = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 	if (unlikely(offset >= max_off))
-		goto out_release_unlock;
+		goto out_release_uncharge_unlock;
 
 	ret = -EEXIST;
 	if (!pte_none(*dst_pte))
-		goto out_release_unlock;
+		goto out_release_uncharge_unlock;
 
-	lru_cache_add(page);
+	lru_cache_add_anon(page);
 
 	spin_lock_irq(&info->lock);
 	info->alloced++;
@@ -2394,10 +2415,12 @@ static int shmem_mfill_atomic_pte(struct mm_struct *dst_mm,
 	ret = 0;
 out:
 	return ret;
-out_release_unlock:
+out_release_uncharge_unlock:
 	pte_unmap_unlock(dst_pte, ptl);
 	ClearPageDirty(page);
 	delete_from_page_cache(page);
+out_release_uncharge:
+	mem_cgroup_cancel_charge(page, memcg);
 out_release:
 	unlock_page(page);
 	put_page(page);
@@ -3178,7 +3201,7 @@ static int shmem_initxattrs(struct inode *inode,
 		new_xattr->name = kmalloc(XATTR_SECURITY_PREFIX_LEN + len,
 					  GFP_KERNEL);
 		if (!new_xattr->name) {
-			kvfree(new_xattr);
+			kfree(new_xattr);
 			return -ENOMEM;
 		}
 
@@ -4137,7 +4160,7 @@ int shmem_zero_setup(struct vm_area_struct *vma)
 	loff_t size = vma->vm_end - vma->vm_start;
 
 	/*
-	 * Cloning a new file under mmap_lock leads to a lock ordering conflict
+	 * Cloning a new file under mmap_sem leads to a lock ordering conflict
 	 * between XFS directory reading and selinux: since this file is only
 	 * accessible to the user through its mapping, use S_PRIVATE flag to
 	 * bypass file security, in the same way as shmem_kernel_file_setup().

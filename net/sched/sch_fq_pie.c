@@ -102,7 +102,7 @@ static unsigned int fq_pie_classify(struct sk_buff *skb, struct Qdisc *sch,
 		case TC_ACT_QUEUED:
 		case TC_ACT_TRAP:
 			*qerr = NET_XMIT_SUCCESS | __NET_XMIT_STOLEN;
-			fallthrough;
+			/* fall through */
 		case TC_ACT_SHOT:
 			return 0;
 		}
@@ -401,7 +401,6 @@ static int fq_pie_init(struct Qdisc *sch, struct nlattr *opt,
 
 	INIT_LIST_HEAD(&q->new_flows);
 	INIT_LIST_HEAD(&q->old_flows);
-	timer_setup(&q->adapt_timer, fq_pie_timer, 0);
 
 	if (opt) {
 		err = fq_pie_change(sch, opt, extack);
@@ -427,6 +426,7 @@ static int fq_pie_init(struct Qdisc *sch, struct nlattr *opt,
 		pie_vars_init(&flow->vars);
 	}
 
+	timer_setup(&q->adapt_timer, fq_pie_timer, 0);
 	mod_timer(&q->adapt_timer, jiffies + HZ / 2);
 
 	return 0;

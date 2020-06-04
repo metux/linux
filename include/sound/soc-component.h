@@ -2,8 +2,7 @@
  *
  * soc-component.h
  *
- * Copyright (C) 2019 Renesas Electronics Corp.
- * Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
+ * Copyright (c) 2019 Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
  */
 #ifndef __SOC_COMPONENT_H
 #define __SOC_COMPONENT_H
@@ -325,12 +324,14 @@ static inline int snd_soc_component_cache_sync(
 	return regcache_sync(component->regmap);
 }
 
-void snd_soc_component_set_aux(struct snd_soc_component *component,
-			       struct snd_soc_aux_dev *aux);
-int snd_soc_component_init(struct snd_soc_component *component);
+int snd_soc_component_initialize(struct snd_soc_component *component,
+				 const struct snd_soc_component_driver *driver,
+				 struct device *dev, const char *name);
 
 /* component IO */
-unsigned int snd_soc_component_read(struct snd_soc_component *component,
+int snd_soc_component_read(struct snd_soc_component *component,
+			   unsigned int reg, unsigned int *val);
+unsigned int snd_soc_component_read32(struct snd_soc_component *component,
 				      unsigned int reg);
 int snd_soc_component_write(struct snd_soc_component *component,
 			    unsigned int reg, unsigned int val);
@@ -425,6 +426,14 @@ int snd_soc_component_open(struct snd_soc_component *component,
 			   struct snd_pcm_substream *substream);
 int snd_soc_component_close(struct snd_soc_component *component,
 			    struct snd_pcm_substream *substream);
+int snd_soc_component_hw_params(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params);
+int snd_soc_component_hw_free(struct snd_soc_component *component,
+			      struct snd_pcm_substream *substream);
+int snd_soc_component_trigger(struct snd_soc_component *component,
+			      struct snd_pcm_substream *substream,
+			      int cmd);
 void snd_soc_component_suspend(struct snd_soc_component *component);
 void snd_soc_component_resume(struct snd_soc_component *component);
 int snd_soc_component_is_suspended(struct snd_soc_component *component);
@@ -450,12 +459,5 @@ int snd_soc_pcm_component_mmap(struct snd_pcm_substream *substream,
 int snd_soc_pcm_component_new(struct snd_soc_pcm_runtime *rtd);
 void snd_soc_pcm_component_free(struct snd_soc_pcm_runtime *rtd);
 int snd_soc_pcm_component_prepare(struct snd_pcm_substream *substream);
-int snd_soc_pcm_component_hw_params(struct snd_pcm_substream *substream,
-				    struct snd_pcm_hw_params *params,
-				    struct snd_soc_component **last);
-void snd_soc_pcm_component_hw_free(struct snd_pcm_substream *substream,
-				   struct snd_soc_component *last);
-int snd_soc_pcm_component_trigger(struct snd_pcm_substream *substream,
-				  int cmd);
 
 #endif /* __SOC_COMPONENT_H */

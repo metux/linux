@@ -2,10 +2,7 @@
 //
 // soc-component.c
 //
-// Copyright 2009-2011 Wolfson Microelectronics PLC.
 // Copyright (C) 2019 Renesas Electronics Corp.
-//
-// Mark Brown <broonie@opensource.wolfsonmicro.com>
 // Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 //
 #include <linux/module.h>
@@ -33,20 +30,20 @@ static inline int _soc_component_ret(struct snd_soc_component *component,
 	return ret;
 }
 
-void snd_soc_component_set_aux(struct snd_soc_component *component,
-			       struct snd_soc_aux_dev *aux)
+int snd_soc_component_initialize(struct snd_soc_component *component,
+				 const struct snd_soc_component_driver *driver,
+				 struct device *dev, const char *name)
 {
-	component->init = (aux) ? aux->init : NULL;
-}
+	INIT_LIST_HEAD(&component->dai_list);
+	INIT_LIST_HEAD(&component->dobj_list);
+	INIT_LIST_HEAD(&component->card_list);
+	mutex_init(&component->io_mutex);
 
-int snd_soc_component_init(struct snd_soc_component *component)
-{
-	int ret = 0;
+	component->name		= name;
+	component->dev		= dev;
+	component->driver	= driver;
 
-	if (component->init)
-		ret = component->init(component);
-
-	return soc_component_ret(component, ret);
+	return 0;
 }
 
 /**
@@ -278,6 +275,42 @@ int snd_soc_component_close(struct snd_soc_component *component,
 	return soc_component_ret(component, ret);
 }
 
+int snd_soc_component_hw_params(struct snd_soc_component *component,
+				struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params)
+{
+	int ret = 0;
+
+	if (component->driver->hw_params)
+		ret = component->driver->hw_params(component,
+						   substream, params);
+
+	return soc_component_ret(component, ret);
+}
+
+int snd_soc_component_hw_free(struct snd_soc_component *component,
+			       struct snd_pcm_substream *substream)
+{
+	int ret = 0;
+
+	if (component->driver->hw_free)
+		ret = component->driver->hw_free(component, substream);
+
+	return soc_component_ret(component, ret);
+}
+
+int snd_soc_component_trigger(struct snd_soc_component *component,
+			      struct snd_pcm_substream *substream,
+			      int cmd)
+{
+	int ret = 0;
+
+	if (component->driver->trigger)
+		ret = component->driver->trigger(component, substream, cmd);
+
+	return soc_component_ret(component, ret);
+}
+
 void snd_soc_component_suspend(struct snd_soc_component *component)
 {
 	if (component->driver->suspend)
@@ -328,15 +361,13 @@ int snd_soc_component_of_xlate_dai_name(struct snd_soc_component *component,
 					struct of_phandle_args *args,
 					const char **dai_name)
 {
+	int ret = -ENOTSUPP;
+
 	if (component->driver->of_xlate_dai_name)
-		return component->driver->of_xlate_dai_name(component,
-							    args, dai_name);
-	/*
-	 * Don't use soc_component_ret here because we may not want to report
-	 * the error just yet. If a device has more than one component, the
-	 * first may not match and we don't want spam the log with this.
-	 */
-	return -ENOTSUPP;
+		ret = component->driver->of_xlate_dai_name(component,
+							   args, dai_name);
+
+	return soc_component_ret(component, ret);
 }
 
 void snd_soc_component_setup_regmap(struct snd_soc_component *component)
@@ -389,210 +420,9 @@ EXPORT_SYMBOL_GPL(snd_soc_component_exit_regmap);
 
 #endif
 
-static unsigned int soc_component_read_no_lock(
-	struct snd_soc_component *component,
-	unsigned int reg)
-{
-	int ret;
-	unsigned int val = 0;
-
-	if (component->regmap)
-		ret = regmap_read(component->regmap, reg, &val);
-	else if (component->driver->read) {
-		ret = 0;
-		val = component->driver->read(component, reg);
-	}
-	else
-		ret = -EIO;
-
-	if (ret < 0)
-		return soc_component_ret(component, ret);
-
-	return val;
-}
-
-/**
- * snd_soc_component_read() - Read register value
- * @component: Component to read from
- * @reg: Register to read
- *
- * Return: read value
- */
-unsigned int snd_soc_component_read(struct snd_soc_component *component,
-				    unsigned int reg)
-{
-	unsigned int val;
-
-	mutex_lock(&component->io_mutex);
-	val = soc_component_read_no_lock(component, reg);
-	mutex_unlock(&component->io_mutex);
-
-	return val;
-}
-EXPORT_SYMBOL_GPL(snd_soc_component_read);
-
-static int soc_component_write_no_lock(
-	struct snd_soc_component *component,
-	unsigned int reg, unsigned int val)
-{
-	int ret = -EIO;
-
-	if (component->regmap)
-		ret = regmap_write(component->regmap, reg, val);
-	else if (component->driver->write)
-		ret = component->driver->write(component, reg, val);
-
-	return soc_component_ret(component, ret);
-}
-
-/**
- * snd_soc_component_write() - Write register value
- * @component: Component to write to
- * @reg: Register to write
- * @val: Value to write to the register
- *
- * Return: 0 on success, a negative error code otherwise.
- */
-int snd_soc_component_write(struct snd_soc_component *component,
-			    unsigned int reg, unsigned int val)
-{
-	int ret;
-
-	mutex_lock(&component->io_mutex);
-	ret = soc_component_write_no_lock(component, reg, val);
-	mutex_unlock(&component->io_mutex);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(snd_soc_component_write);
-
-static int snd_soc_component_update_bits_legacy(
-	struct snd_soc_component *component, unsigned int reg,
-	unsigned int mask, unsigned int val, bool *change)
-{
-	unsigned int old, new;
-	int ret = 0;
-
-	mutex_lock(&component->io_mutex);
-
-	old = soc_component_read_no_lock(component, reg);
-
-	new = (old & ~mask) | (val & mask);
-	*change = old != new;
-	if (*change)
-		ret = soc_component_write_no_lock(component, reg, new);
-
-	mutex_unlock(&component->io_mutex);
-
-	return soc_component_ret(component, ret);
-}
-
-/**
- * snd_soc_component_update_bits() - Perform read/modify/write cycle
- * @component: Component to update
- * @reg: Register to update
- * @mask: Mask that specifies which bits to update
- * @val: New value for the bits specified by mask
- *
- * Return: 1 if the operation was successful and the value of the register
- * changed, 0 if the operation was successful, but the value did not change.
- * Returns a negative error code otherwise.
- */
-int snd_soc_component_update_bits(struct snd_soc_component *component,
-				  unsigned int reg, unsigned int mask, unsigned int val)
-{
-	bool change;
-	int ret;
-
-	if (component->regmap)
-		ret = regmap_update_bits_check(component->regmap, reg, mask,
-					       val, &change);
-	else
-		ret = snd_soc_component_update_bits_legacy(component, reg,
-							   mask, val, &change);
-
-	if (ret < 0)
-		return soc_component_ret(component, ret);
-	return change;
-}
-EXPORT_SYMBOL_GPL(snd_soc_component_update_bits);
-
-/**
- * snd_soc_component_update_bits_async() - Perform asynchronous
- *  read/modify/write cycle
- * @component: Component to update
- * @reg: Register to update
- * @mask: Mask that specifies which bits to update
- * @val: New value for the bits specified by mask
- *
- * This function is similar to snd_soc_component_update_bits(), but the update
- * operation is scheduled asynchronously. This means it may not be completed
- * when the function returns. To make sure that all scheduled updates have been
- * completed snd_soc_component_async_complete() must be called.
- *
- * Return: 1 if the operation was successful and the value of the register
- * changed, 0 if the operation was successful, but the value did not change.
- * Returns a negative error code otherwise.
- */
-int snd_soc_component_update_bits_async(struct snd_soc_component *component,
-					unsigned int reg, unsigned int mask, unsigned int val)
-{
-	bool change;
-	int ret;
-
-	if (component->regmap)
-		ret = regmap_update_bits_check_async(component->regmap, reg,
-						     mask, val, &change);
-	else
-		ret = snd_soc_component_update_bits_legacy(component, reg,
-							   mask, val, &change);
-
-	if (ret < 0)
-		return soc_component_ret(component, ret);
-	return change;
-}
-EXPORT_SYMBOL_GPL(snd_soc_component_update_bits_async);
-
-/**
- * snd_soc_component_async_complete() - Ensure asynchronous I/O has completed
- * @component: Component for which to wait
- *
- * This function blocks until all asynchronous I/O which has previously been
- * scheduled using snd_soc_component_update_bits_async() has completed.
- */
-void snd_soc_component_async_complete(struct snd_soc_component *component)
-{
-	if (component->regmap)
-		regmap_async_complete(component->regmap);
-}
-EXPORT_SYMBOL_GPL(snd_soc_component_async_complete);
-
-/**
- * snd_soc_component_test_bits - Test register for change
- * @component: component
- * @reg: Register to test
- * @mask: Mask that specifies which bits to test
- * @value: Value to test against
- *
- * Tests a register with a new value and checks if the new value is
- * different from the old value.
- *
- * Return: 1 for change, otherwise 0.
- */
-int snd_soc_component_test_bits(struct snd_soc_component *component,
-				unsigned int reg, unsigned int mask, unsigned int value)
-{
-	unsigned int old, new;
-
-	old = snd_soc_component_read(component, reg);
-	new = (old & ~mask) | value;
-	return old != new;
-}
-EXPORT_SYMBOL_GPL(snd_soc_component_test_bits);
-
 int snd_soc_pcm_component_pointer(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	int i;
 
@@ -607,7 +437,7 @@ int snd_soc_pcm_component_pointer(struct snd_pcm_substream *substream)
 int snd_soc_pcm_component_ioctl(struct snd_pcm_substream *substream,
 				unsigned int cmd, void *arg)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	int i;
 
@@ -624,7 +454,7 @@ int snd_soc_pcm_component_ioctl(struct snd_pcm_substream *substream,
 
 int snd_soc_pcm_component_sync_stop(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	int i, ret;
 
@@ -633,7 +463,7 @@ int snd_soc_pcm_component_sync_stop(struct snd_pcm_substream *substream)
 			ret = component->driver->sync_stop(component,
 							   substream);
 			if (ret < 0)
-				return soc_component_ret(component, ret);
+				soc_component_ret(component, ret);
 		}
 	}
 
@@ -644,7 +474,7 @@ int snd_soc_pcm_component_copy_user(struct snd_pcm_substream *substream,
 				    int channel, unsigned long pos,
 				    void __user *buf, unsigned long bytes)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	int i;
 
@@ -663,7 +493,7 @@ int snd_soc_pcm_component_copy_user(struct snd_pcm_substream *substream,
 struct page *snd_soc_pcm_component_page(struct snd_pcm_substream *substream,
 					unsigned long offset)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	struct page *page;
 	int i;
@@ -684,14 +514,14 @@ struct page *snd_soc_pcm_component_page(struct snd_pcm_substream *substream,
 int snd_soc_pcm_component_mmap(struct snd_pcm_substream *substream,
 			       struct vm_area_struct *vma)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	int i;
 
 	/* FIXME. it returns 1st mmap now */
 	for_each_rtd_components(rtd, i, component)
 		if (component->driver->mmap)
-			return soc_component_ret(
+			soc_component_ret(
 				component,
 				component->driver->mmap(component,
 							substream, vma));
@@ -709,7 +539,7 @@ int snd_soc_pcm_component_new(struct snd_soc_pcm_runtime *rtd)
 		if (component->driver->pcm_construct) {
 			ret = component->driver->pcm_construct(component, rtd);
 			if (ret < 0)
-				return soc_component_ret(component, ret);
+				soc_component_ret(component, ret);
 		}
 	}
 
@@ -731,73 +561,13 @@ void snd_soc_pcm_component_free(struct snd_soc_pcm_runtime *rtd)
 
 int snd_soc_pcm_component_prepare(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_component *component;
 	int i, ret;
 
 	for_each_rtd_components(rtd, i, component) {
 		if (component->driver->prepare) {
 			ret = component->driver->prepare(component, substream);
-			if (ret < 0)
-				return soc_component_ret(component, ret);
-		}
-	}
-
-	return 0;
-}
-
-int snd_soc_pcm_component_hw_params(struct snd_pcm_substream *substream,
-				    struct snd_pcm_hw_params *params,
-				    struct snd_soc_component **last)
-{
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
-	struct snd_soc_component *component;
-	int i, ret;
-
-	for_each_rtd_components(rtd, i, component) {
-		if (component->driver->hw_params) {
-			ret = component->driver->hw_params(component,
-							   substream, params);
-			if (ret < 0) {
-				*last = component;
-				return soc_component_ret(component, ret);
-			}
-		}
-	}
-
-	*last = NULL;
-	return 0;
-}
-
-void snd_soc_pcm_component_hw_free(struct snd_pcm_substream *substream,
-				   struct snd_soc_component *last)
-{
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
-	struct snd_soc_component *component;
-	int i, ret;
-
-	for_each_rtd_components(rtd, i, component) {
-		if (component == last)
-			break;
-
-		if (component->driver->hw_free) {
-			ret = component->driver->hw_free(component, substream);
-			if (ret < 0)
-				soc_component_ret(component, ret);
-		}
-	}
-}
-
-int snd_soc_pcm_component_trigger(struct snd_pcm_substream *substream,
-				  int cmd)
-{
-	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
-	struct snd_soc_component *component;
-	int i, ret;
-
-	for_each_rtd_components(rtd, i, component) {
-		if (component->driver->trigger) {
-			ret = component->driver->trigger(component, substream, cmd);
 			if (ret < 0)
 				return soc_component_ret(component, ret);
 		}

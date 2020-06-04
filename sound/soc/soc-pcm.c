@@ -928,7 +928,6 @@ static void codec2codec_close_delayed_work(struct snd_soc_pcm_runtime *rtd)
 static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_component *component;
 	struct snd_soc_dai *dai;
 	int i, ret = 0;
 
@@ -941,14 +940,9 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 		goto out;
 	}
 
-	for_each_rtd_components(rtd, i, component) {
-		ret = snd_soc_component_prepare(component, substream);
-		if (ret < 0) {
-			dev_err(component->dev,
-				"ASoC: platform prepare error: %d\n", ret);
-			goto out;
-		}
-	}
+	ret = snd_soc_pcm_component_prepare(substream);
+	if (ret < 0)
+		goto out;
 
 	for_each_rtd_dais(rtd, i, dai) {
 		ret = snd_soc_dai_prepare(dai, substream);
@@ -2921,30 +2915,36 @@ int soc_new_pcm(struct snd_soc_pcm_runtime *rtd, int num)
 		if (rtd->dai_link->dpcm_playback) {
 			stream = SNDRV_PCM_STREAM_PLAYBACK;
 
-			for_each_rtd_cpu_dais(rtd, i, cpu_dai)
-				if (!snd_soc_dai_stream_valid(cpu_dai,
-							      stream)) {
-					dev_err(rtd->card->dev,
-						"CPU DAI %s for rtd %s does not support playback\n",
-						cpu_dai->name,
-						rtd->dai_link->stream_name);
-					return -EINVAL;
+			for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
+				if (snd_soc_dai_stream_valid(cpu_dai, stream)) {
+					playback = 1;
+					break;
 				}
-			playback = 1;
+			}
+
+			if (!playback) {
+				dev_err(rtd->card->dev,
+					"No CPU DAIs support playback for stream %s\n",
+					rtd->dai_link->stream_name);
+				return -EINVAL;
+			}
 		}
 		if (rtd->dai_link->dpcm_capture) {
 			stream = SNDRV_PCM_STREAM_CAPTURE;
 
-			for_each_rtd_cpu_dais(rtd, i, cpu_dai)
-				if (!snd_soc_dai_stream_valid(cpu_dai,
-							      stream)) {
-					dev_err(rtd->card->dev,
-						"CPU DAI %s for rtd %s does not support capture\n",
-						cpu_dai->name,
-						rtd->dai_link->stream_name);
-					return -EINVAL;
+			for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
+				if (snd_soc_dai_stream_valid(cpu_dai, stream)) {
+					capture = 1;
+					break;
 				}
-			capture = 1;
+			}
+
+			if (!capture) {
+				dev_err(rtd->card->dev,
+					"No CPU DAIs support capture for stream %s\n",
+					rtd->dai_link->stream_name);
+				return -EINVAL;
+			}
 		}
 	} else {
 		/* Adapt stream for codec2codec links */

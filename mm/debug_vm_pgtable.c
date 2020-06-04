@@ -28,6 +28,7 @@
 #include <linux/start_kernel.h>
 #include <linux/sched/mm.h>
 #include <asm/pgalloc.h>
+#include <asm/pgtable.h>
 
 #define VMFLAGS	(VM_READ|VM_WRITE|VM_EXEC)
 
@@ -60,9 +61,6 @@ static void __init pmd_basic_tests(unsigned long pfn, pgprot_t prot)
 {
 	pmd_t pmd = pfn_pmd(pfn, prot);
 
-	if (!has_transparent_hugepage())
-		return;
-
 	WARN_ON(!pmd_same(pmd, pmd));
 	WARN_ON(!pmd_young(pmd_mkyoung(pmd_mkold(pmd))));
 	WARN_ON(!pmd_dirty(pmd_mkdirty(pmd_mkclean(pmd))));
@@ -81,9 +79,6 @@ static void __init pmd_basic_tests(unsigned long pfn, pgprot_t prot)
 static void __init pud_basic_tests(unsigned long pfn, pgprot_t prot)
 {
 	pud_t pud = pfn_pud(pfn, prot);
-
-	if (!has_transparent_hugepage())
-		return;
 
 	WARN_ON(!pud_same(pud, pud));
 	WARN_ON(!pud_young(pud_mkyoung(pud_mkold(pud))));
@@ -246,13 +241,13 @@ static void __init pgd_populate_tests(struct mm_struct *mm, pgd_t *pgdp,
 static void __init pte_clear_tests(struct mm_struct *mm, pte_t *ptep,
 				   unsigned long vaddr)
 {
-	pte_t pte = ptep_get(ptep);
+	pte_t pte = READ_ONCE(*ptep);
 
 	pte = __pte(pte_val(pte) | RANDOM_ORVALUE);
 	set_pte_at(mm, vaddr, ptep, pte);
 	barrier();
 	pte_clear(mm, vaddr, ptep);
-	pte = ptep_get(ptep);
+	pte = READ_ONCE(*ptep);
 	WARN_ON(!pte_none(pte));
 }
 

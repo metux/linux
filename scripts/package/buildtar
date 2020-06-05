@@ -28,11 +28,11 @@ case "${1}" in
 		opts=
 		;;
 	targz-pkg)
-		opts="-I ${KGZIP}"
+		opts="-I ${_GZIP}"
 		tarball=${tarball}.gz
 		;;
 	tarbz2-pkg)
-		opts="-I ${KBZIP2}"
+		opts="-I ${_BZIP2}"
 		tarball=${tarball}.bz2
 		;;
 	tarxz-pkg)

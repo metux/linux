@@ -165,16 +165,6 @@ _c_flags += $(if $(patsubst n%,, \
 	$(CFLAGS_KCOV))
 endif
 
-#
-# Enable KCSAN flags except some files or directories we don't want to check
-# (depends on variables KCSAN_SANITIZE_obj.o, KCSAN_SANITIZE)
-#
-ifeq ($(CONFIG_KCSAN),y)
-_c_flags += $(if $(patsubst n%,, \
-	$(KCSAN_SANITIZE_$(basetarget).o)$(KCSAN_SANITIZE)y), \
-	$(CFLAGS_KCSAN))
-endif
-
 # $(srctree)/$(src) for including checkin headers from generated source files
 # $(objtree)/$(obj) for including generated headers from checkin source files
 ifeq ($(KBUILD_EXTMOD),)
@@ -225,9 +215,6 @@ $(foreach m, $(notdir $1), \
 	$(addprefix $(obj)/, $(foreach s, $3, $($(m:%$(strip $2)=%$(s)))))))
 endef
 
-quiet_cmd_copy = COPY    $@
-      cmd_copy = cp $< $@
-
 # Shipped files
 # ===========================================================================
 
@@ -270,12 +257,11 @@ cmd_objcopy = $(OBJCOPY) $(OBJCOPYFLAGS) $(OBJCOPYFLAGS_$(@F)) $< $@
 # ---------------------------------------------------------------------------
 
 quiet_cmd_gzip = GZIP    $@
-      cmd_gzip = cat $(real-prereqs) | $(KGZIP) -n -f -9 > $@
+      cmd_gzip = cat $(real-prereqs) | $(_GZIP) -n -f -9 > $@
 
 # DTC
 # ---------------------------------------------------------------------------
 DTC ?= $(objtree)/scripts/dtc/dtc
-DTC_FLAGS += -Wno-interrupt_provider
 
 # Disable noisy checks by default
 ifeq ($(findstring 1,$(KBUILD_EXTRA_WARN)),)
@@ -291,8 +277,7 @@ endif
 
 ifneq ($(findstring 2,$(KBUILD_EXTRA_WARN)),)
 DTC_FLAGS += -Wnode_name_chars_strict \
-	-Wproperty_name_chars_strict \
-	-Winterrupt_provider
+	-Wproperty_name_chars_strict
 endif
 
 DTC_FLAGS += $(DTC_FLAGS_$(basetarget))
@@ -364,7 +349,7 @@ printf "%08x\n" $$dec_size |						\
 )
 
 quiet_cmd_bzip2 = BZIP2   $@
-      cmd_bzip2 = { cat $(real-prereqs) | $(KBZIP2) -9; $(size_append); } > $@
+      cmd_bzip2 = { cat $(real-prereqs) | $(_BZIP2) -9; $(size_append); } > $@
 
 # Lzma
 # ---------------------------------------------------------------------------
@@ -373,7 +358,7 @@ quiet_cmd_lzma = LZMA    $@
       cmd_lzma = { cat $(real-prereqs) | $(LZMA) -9; $(size_append); } > $@
 
 quiet_cmd_lzo = LZO     $@
-      cmd_lzo = { cat $(real-prereqs) | $(KLZOP) -9; $(size_append); } > $@
+      cmd_lzo = { cat $(real-prereqs) | $(_LZOP) -9; $(size_append); } > $@
 
 quiet_cmd_lz4 = LZ4     $@
       cmd_lz4 = { cat $(real-prereqs) | $(LZ4) -l -c1 stdin stdout; \

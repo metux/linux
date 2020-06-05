@@ -331,8 +331,16 @@ asymmetric CPU topologies for now. This requirement is checked at run-time by
 looking for the presence of the SD_ASYM_CPUCAPACITY flag when the scheduling
 domains are built.
 
-See Documentation/scheduler/sched-capacity.rst for requirements to be met for this
-flag to be set in the sched_domain hierarchy.
+The flag is set/cleared automatically by the scheduler topology code whenever
+there are CPUs with different capacities in a root domain. The capacities of
+CPUs are provided by arch-specific code through the arch_scale_cpu_capacity()
+callback. As an example, arm and arm64 share an implementation of this callback
+which uses a combination of CPUFreq data and device-tree bindings to compute the
+capacity of CPUs (see drivers/base/arch_topology.c for more details).
+
+So, in order to use EAS on your platform your architecture must implement the
+arch_scale_cpu_capacity() callback, and some of the CPUs must have a lower
+capacity than others.
 
 Please note that EAS is not fundamentally incompatible with SMP, but no
 significant savings on SMP platforms have been observed yet. This restriction
@@ -397,7 +405,7 @@ Consequently, the only sane governor to use together with EAS is schedutil,
 because it is the only one providing some degree of consistency between
 frequency requests and energy predictions.
 
-Using EAS with any other governor than schedutil is not supported.
+Using EAS with any other governor than schedutil is not recommended.
 
 
 6.5 Scale-invariant utilization signals

@@ -2250,26 +2250,6 @@ static inline bool i915_mmio_reg_valid(i915_reg_t reg)
 				    MG_DP_MODE_LN1_ACU_PORT1)
 #define   MG_DP_MODE_CFG_DP_X2_MODE			(1 << 7)
 #define   MG_DP_MODE_CFG_DP_X1_MODE			(1 << 6)
-#define   MG_DP_MODE_CFG_TR2PWR_GATING			(1 << 5)
-#define   MG_DP_MODE_CFG_TRPWR_GATING			(1 << 4)
-#define   MG_DP_MODE_CFG_CLNPWR_GATING			(1 << 3)
-#define   MG_DP_MODE_CFG_DIGPWR_GATING			(1 << 2)
-#define   MG_DP_MODE_CFG_GAONPWR_GATING			(1 << 1)
-
-#define MG_MISC_SUS0_PORT1				0x168814
-#define MG_MISC_SUS0_PORT2				0x169814
-#define MG_MISC_SUS0_PORT3				0x16A814
-#define MG_MISC_SUS0_PORT4				0x16B814
-#define MG_MISC_SUS0(tc_port) \
-	_MMIO(_PORT(tc_port, MG_MISC_SUS0_PORT1, MG_MISC_SUS0_PORT2))
-#define   MG_MISC_SUS0_SUSCLK_DYNCLKGATE_MODE_MASK	(3 << 14)
-#define   MG_MISC_SUS0_SUSCLK_DYNCLKGATE_MODE(x)	((x) << 14)
-#define   MG_MISC_SUS0_CFG_TR2PWR_GATING		(1 << 12)
-#define   MG_MISC_SUS0_CFG_CL2PWR_GATING		(1 << 11)
-#define   MG_MISC_SUS0_CFG_GAONPWR_GATING		(1 << 10)
-#define   MG_MISC_SUS0_CFG_TRPWR_GATING			(1 << 7)
-#define   MG_MISC_SUS0_CFG_CL1PWR_GATING		(1 << 6)
-#define   MG_MISC_SUS0_CFG_DGPWR_GATING			(1 << 5)
 
 /* The spec defines this only for BXT PHY0, but lets assume that this
  * would exist for PHY1 too if it had a second channel.
@@ -2899,9 +2879,12 @@ static inline bool i915_mmio_reg_valid(i915_reg_t reg)
 #define LM_FIFO_WATERMARK   0x0000001F
 #define MI_ARB_STATE	_MMIO(0x20e4) /* 915+ only */
 
-#define MBUS_ABOX_CTL			_MMIO(0x45038)
-#define MBUS_ABOX1_CTL			_MMIO(0x45048)
-#define MBUS_ABOX2_CTL			_MMIO(0x4504C)
+#define _MBUS_ABOX0_CTL			0x45038
+#define _MBUS_ABOX1_CTL			0x45048
+#define _MBUS_ABOX2_CTL			0x4504C
+#define MBUS_ABOX_CTL(x)		_MMIO(_PICK(x, _MBUS_ABOX0_CTL, \
+						    _MBUS_ABOX1_CTL, \
+						    _MBUS_ABOX2_CTL))
 #define MBUS_ABOX_BW_CREDIT_MASK	(3 << 20)
 #define MBUS_ABOX_BW_CREDIT(x)		((x) << 20)
 #define MBUS_ABOX_B_CREDIT_MASK		(0xF << 16)
@@ -4179,6 +4162,10 @@ enum {
 #define   VFUNIT_CLKGATE_DIS		REG_BIT(20)
 #define   HSUNIT_CLKGATE_DIS		REG_BIT(8)
 #define   VSUNIT_CLKGATE_DIS		REG_BIT(3)
+
+#define UNSLICE_UNIT_LEVEL_CLKGATE2	_MMIO(0x94e4)
+#define   VSUNIT_CLKGATE_DIS_TGL	REG_BIT(19)
+#define   PSDUNIT_CLKGATE_DIS		REG_BIT(5)
 
 #define INF_UNIT_LEVEL_CLKGATE		_MMIO(0x9560)
 #define   CGPSF_CLKGATE_DIS		(1 << 3)
@@ -7869,12 +7856,20 @@ enum {
 #define  WAIT_FOR_PCH_RESET_ACK		(1 << 1)
 #define  WAIT_FOR_PCH_FLR_ACK		(1 << 0)
 
-#define BW_BUDDY1_CTL			_MMIO(0x45140)
-#define BW_BUDDY2_CTL			_MMIO(0x45150)
+#define _BW_BUDDY0_CTL			0x45130
+#define _BW_BUDDY1_CTL			0x45140
+#define BW_BUDDY_CTL(x)			_MMIO(_PICK_EVEN(x, \
+							 _BW_BUDDY0_CTL, \
+							 _BW_BUDDY1_CTL))
 #define   BW_BUDDY_DISABLE		REG_BIT(31)
+#define   BW_BUDDY_TLB_REQ_TIMER_MASK	REG_GENMASK(21, 16)
+#define   BW_BUDDY_TLB_REQ_TIMER(x)	REG_FIELD_PREP(BW_BUDDY_TLB_REQ_TIMER_MASK, x)
 
-#define BW_BUDDY1_PAGE_MASK		_MMIO(0x45144)
-#define BW_BUDDY2_PAGE_MASK		_MMIO(0x45154)
+#define _BW_BUDDY0_PAGE_MASK		0x45134
+#define _BW_BUDDY1_PAGE_MASK		0x45144
+#define BW_BUDDY_PAGE_MASK(x)		_MMIO(_PICK_EVEN(x, \
+							 _BW_BUDDY0_PAGE_MASK, \
+							 _BW_BUDDY1_PAGE_MASK))
 
 #define HSW_NDE_RSTWRN_OPT	_MMIO(0x46408)
 #define  RESET_PCH_HANDSHAKE_ENABLE	(1 << 4)

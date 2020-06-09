@@ -149,14 +149,14 @@ CPU page table into a device page table; HMM helps keep both synchronized. A
 device driver that wants to mirror a process address space must start with the
 registration of a mmu_interval_notifier::
 
- mni->ops = &driver_ops;
- int mmu_interval_notifier_insert(struct mmu_interval_notifier *mni,
-			          unsigned long start, unsigned long length,
-			          struct mm_struct *mm);
+ int mmu_interval_notifier_insert(struct mmu_interval_notifier *interval_sub,
+				  struct mm_struct *mm, unsigned long start,
+				  unsigned long length,
+				  const struct mmu_interval_notifier_ops *ops);
 
-During the driver_ops->invalidate() callback the device driver must perform
-the update action to the range (mark range read only, or fully unmap,
-etc.). The device must complete the update before the driver callback returns.
+During the ops->invalidate() callback the device driver must perform the
+update action to the range (mark range read only, or fully unmap, etc.). The
+device must complete the update before the driver callback returns.
 
 When the device driver wants to populate a range of virtual addresses, it can
 use::
@@ -181,25 +181,25 @@ The usage pattern is::
       struct hmm_range range;
       ...
 
-      range.notifier = &mni;
+      range.notifier = &interval_sub;
       range.start = ...;
       range.end = ...;
       range.hmm_pfns = ...;
 
-      if (!mmget_not_zero(mni->notifier.mm))
+      if (!mmget_not_zero(interval_sub->notifier.mm))
           return -EFAULT;
 
  again:
-      range.notifier_seq = mmu_interval_read_begin(&mni);
-      down_read(&mm->mmap_sem);
+      range.notifier_seq = mmu_interval_read_begin(&interval_sub);
+      mmap_read_lock(mm);
       ret = hmm_range_fault(&range);
       if (ret) {
-          up_read(&mm->mmap_sem);
+          mmap_read_unlock(mm);
           if (ret == -EBUSY)
                  goto again;
           return ret;
       }
-      up_read(&mm->mmap_sem);
+      mmap_read_unlock(mm);
 
       take_lock(driver->update);
       if (mmu_interval_read_retry(&ni, range.notifier_seq) {

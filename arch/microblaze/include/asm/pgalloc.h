@@ -12,11 +12,11 @@
 
 #include <linux/kernel.h>	/* For min/max macros */
 #include <linux/highmem.h>
+#include <linux/pgtable.h>
 #include <asm/setup.h>
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/cache.h>
-#include <linux/pgtable.h>
 
 extern void __bad_pte(pmd_t *pmd);
 

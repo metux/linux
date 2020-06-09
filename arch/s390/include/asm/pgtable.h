@@ -1003,9 +1003,9 @@ static inline pte_t pte_mkhuge(pte_t pte)
 #define IPTE_NODAT	0x400
 #define IPTE_GUEST_ASCE	0x800
 
-static inline void __ptep_ipte(unsigned long address, pte_t *ptep,
-			       unsigned long opt, unsigned long asce,
-			       int local)
+static __always_inline void __ptep_ipte(unsigned long address, pte_t *ptep,
+					unsigned long opt, unsigned long asce,
+					int local)
 {
 	unsigned long pto = (unsigned long) ptep;
 
@@ -1026,8 +1026,8 @@ static inline void __ptep_ipte(unsigned long address, pte_t *ptep,
 		: [r1] "a" (pto), [m4] "i" (local) : "memory");
 }
 
-static inline void __ptep_ipte_range(unsigned long address, int nr,
-				     pte_t *ptep, int local)
+static __always_inline void __ptep_ipte_range(unsigned long address, int nr,
+					      pte_t *ptep, int local)
 {
 	unsigned long pto = (unsigned long) ptep;
 
@@ -1290,7 +1290,8 @@ static inline pte_t *pte_offset(pmd_t *pmd, unsigned long address)
 
 #define pte_offset_kernel(pmd, address) pte_offset(pmd, address)
 #define pte_offset_map(pmd, address) pte_offset_kernel(pmd, address)
-#define pte_unmap(pte) do { } while (0)
+
+static inline void pte_unmap(pte_t *pte) { }
 
 static inline bool gup_fast_permitted(unsigned long start, unsigned long end)
 {
@@ -1435,9 +1436,9 @@ static inline void __pmdp_csp(pmd_t *pmdp)
 #define IDTE_NODAT	0x1000
 #define IDTE_GUEST_ASCE	0x2000
 
-static inline void __pmdp_idte(unsigned long addr, pmd_t *pmdp,
-			       unsigned long opt, unsigned long asce,
-			       int local)
+static __always_inline void __pmdp_idte(unsigned long addr, pmd_t *pmdp,
+					unsigned long opt, unsigned long asce,
+					int local)
 {
 	unsigned long sto;
 
@@ -1461,9 +1462,9 @@ static inline void __pmdp_idte(unsigned long addr, pmd_t *pmdp,
 	}
 }
 
-static inline void __pudp_idte(unsigned long addr, pud_t *pudp,
-			       unsigned long opt, unsigned long asce,
-			       int local)
+static __always_inline void __pudp_idte(unsigned long addr, pud_t *pudp,
+					unsigned long opt, unsigned long asce,
+					int local)
 {
 	unsigned long r3o;
 
@@ -1681,12 +1682,5 @@ extern void s390_reset_cmma(struct mm_struct *mm);
 /* s390 has a private copy of get unmapped area to deal with cache synonyms */
 #define HAVE_ARCH_UNMAPPED_AREA
 #define HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
-
-/*
- * No page table caches to initialise
- */
-static inline void pgtable_cache_init(void) { }
-
-#include <asm-generic/pgtable.h>
 
 #endif /* _S390_PAGE_H */

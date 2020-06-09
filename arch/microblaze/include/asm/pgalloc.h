@@ -16,7 +16,7 @@
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/cache.h>
-#include <asm/pgtable.h>
+#include <linux/pgtable.h>
 
 extern void __bad_pte(pmd_t *pmd);
 

@@ -35,7 +35,7 @@ struct bpf_stack_map {
 /* irq_work to run up_read() for build_id lookup in nmi context */
 struct stack_map_irq_work {
 	struct irq_work irq_work;
-	struct mm_struct *mm;
+	struct rw_semaphore *sem;
 };
 
 static void do_up_read(struct irq_work *entry)
@@ -46,7 +46,8 @@ static void do_up_read(struct irq_work *entry)
 		return;
 
 	work = container_of(entry, struct stack_map_irq_work, irq_work);
-	mmap_read_unlock_non_owner(work->mm);
+	up_read_non_owner(work->sem);
+	work->sem = NULL;
 }
 
 static DEFINE_PER_CPU(struct stack_map_irq_work, up_read_work);
@@ -322,7 +323,7 @@ static void stack_map_get_build_id_offset(struct bpf_stack_build_id *id_offs,
 	 * with build_id.
 	 */
 	if (!user || !current || !current->mm || irq_work_busy ||
-	    !mmap_read_trylock_non_owner(current->mm)) {
+	    mmap_read_trylock(current->mm) == 0) {
 		/* cannot access current->mm, fall back to ips */
 		for (i = 0; i < trace_nr; i++) {
 			id_offs[i].status = BPF_STACK_BUILD_ID_IP;
@@ -347,10 +348,16 @@ static void stack_map_get_build_id_offset(struct bpf_stack_build_id *id_offs,
 	}
 
 	if (!work) {
-		mmap_read_unlock_non_owner(current->mm);
+		mmap_read_unlock(current->mm);
 	} else {
-		work->mm = current->mm;
+		work->sem = &current->mm->mmap_sem;
 		irq_work_queue(&work->irq_work);
+		/*
+		 * The irq_work will release the mmap_sem with
+		 * up_read_non_owner(). The rwsem_release() is called
+		 * here to release the lock from lockdep's perspective.
+		 */
+		rwsem_release(&current->mm->mmap_sem.dep_map, _RET_IP_);
 	}
 }
 
@@ -665,17 +672,18 @@ BPF_CALL_4(bpf_get_task_stack, struct task_struct *, task, void *, buf,
 	return __bpf_get_stack(regs, task, NULL, buf, size, flags);
 }
 
-BTF_ID_LIST_SINGLE(bpf_get_task_stack_btf_ids, struct, task_struct)
+BTF_ID_LIST(bpf_get_task_stack_btf_ids)
+BTF_ID(struct, task_struct)
 
 const struct bpf_func_proto bpf_get_task_stack_proto = {
 	.func		= bpf_get_task_stack,
 	.gpl_only	= false,
 	.ret_type	= RET_INTEGER,
 	.arg1_type	= ARG_PTR_TO_BTF_ID,
-	.arg1_btf_id	= &bpf_get_task_stack_btf_ids[0],
 	.arg2_type	= ARG_PTR_TO_UNINIT_MEM,
 	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg4_type	= ARG_ANYTHING,
+	.btf_id		= bpf_get_task_stack_btf_ids,
 };
 
 BPF_CALL_4(bpf_get_stack_pe, struct bpf_perf_event_data_kern *, ctx,
@@ -838,7 +846,6 @@ static void stack_map_free(struct bpf_map *map)
 
 static int stack_trace_map_btf_id;
 const struct bpf_map_ops stack_trace_map_ops = {
-	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc = stack_map_alloc,
 	.map_free = stack_map_free,
 	.map_get_next_key = stack_map_get_next_key,

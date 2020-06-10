@@ -13610,7 +13610,6 @@ S:	Maintained
 W:	http://mprc.pku.edu.cn/~guanxuetao/linux
 T:	git git://github.com/gxt/linux.git
 F:	drivers/rtc/rtc-puv3.c
-F:	drivers/video/fbdev/fb-puv3.c
 
 PLANTOWER PMS7003 AIR POLLUTION SENSOR DRIVER
 M:	Tomasz Duszynski <tduszyns@gmail.com>

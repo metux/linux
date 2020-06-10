@@ -19,6 +19,8 @@
 #define OCOTP_UID_LOW			0x410
 #define OCOTP_UID_HIGH			0x420
 
+#define IMX8MP_OCOTP_UID_OFFSET		0x10
+
 /* Same as ANADIG_DIGPROG_IMX7D */
 #define ANADIG_DIGPROG_IMX8MM	0x800
 
@@ -57,6 +59,28 @@ static u32 __init imx8mq_soc_revision(void)
 	return rev;
 }
 
+static void __init imx8mm_soc_uid(void)
+{
+	void __iomem *ocotp_base;
+	struct device_node *np;
+	u32 offset = of_machine_is_compatible("fsl,imx8mp") ?
+		     IMX8MP_OCOTP_UID_OFFSET : 0;
+
+	np = of_find_compatible_node(NULL, NULL, "fsl,imx8mm-ocotp");
+	if (!np)
+		return;
+
+	ocotp_base = of_iomap(np, 0);
+	WARN_ON(!ocotp_base);
+
+	soc_uid = readl_relaxed(ocotp_base + OCOTP_UID_HIGH + offset);
+	soc_uid <<= 32;
+	soc_uid |= readl_relaxed(ocotp_base + OCOTP_UID_LOW + offset);
+
+	iounmap(ocotp_base);
+	of_node_put(np);
+}
+
 static u32 __init imx8mm_soc_revision(void)
 {
 	struct device_node *np;
@@ -74,6 +98,9 @@ static u32 __init imx8mm_soc_revision(void)
 
 	iounmap(anatop_base);
 	of_node_put(np);
+
+	imx8mm_soc_uid();
+
 	return rev;
 }
 

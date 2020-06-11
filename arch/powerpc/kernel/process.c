@@ -471,58 +471,49 @@ EXPORT_SYMBOL(giveup_all);
 
 #ifdef CONFIG_PPC_BOOK3S_64
 #ifdef CONFIG_PPC_FPU
-static bool should_restore_fp(void)
+static int restore_fp(struct task_struct *tsk)
 {
-	if (current->thread.load_fp) {
+	if (tsk->thread.load_fp) {
+		load_fp_state(&current->thread.fp_state);
 		current->thread.load_fp++;
-		return true;
+		return 1;
 	}
-	return false;
-}
-
-static void do_restore_fp(void)
-{
-	load_fp_state(&current->thread.fp_state);
+	return 0;
 }
 #else
-static bool should_restore_fp(void) { return false; }
-static void do_restore_fp(void) { }
+static int restore_fp(struct task_struct *tsk) { return 0; }
 #endif /* CONFIG_PPC_FPU */
 
 #ifdef CONFIG_ALTIVEC
-static bool should_restore_altivec(void)
+#define loadvec(thr) ((thr).load_vec)
+static int restore_altivec(struct task_struct *tsk)
 {
-	if (cpu_has_feature(CPU_FTR_ALTIVEC) && (current->thread.load_vec)) {
-		current->thread.load_vec++;
-		return true;
-	}
-	return false;
-}
+	if (cpu_has_feature(CPU_FTR_ALTIVEC) && (tsk->thread.load_vec)) {
+		load_vr_state(&tsk->thread.vr_state);
+		tsk->thread.used_vr = 1;
+		tsk->thread.load_vec++;
 
-static void do_restore_altivec(void)
-{
-	load_vr_state(&current->thread.vr_state);
-	current->thread.used_vr = 1;
+		return 1;
+	}
+	return 0;
 }
 #else
-static bool should_restore_altivec(void) { return false; }
-static void do_restore_altivec(void) { }
+#define loadvec(thr) 0
+static inline int restore_altivec(struct task_struct *tsk) { return 0; }
 #endif /* CONFIG_ALTIVEC */
 
 #ifdef CONFIG_VSX
-static bool should_restore_vsx(void)
+static int restore_vsx(struct task_struct *tsk)
 {
-	if (cpu_has_feature(CPU_FTR_VSX))
-		return true;
-	return false;
-}
-static void do_restore_vsx(void)
-{
-	current->thread.used_vsr = 1;
+	if (cpu_has_feature(CPU_FTR_VSX)) {
+		tsk->thread.used_vsr = 1;
+		return 1;
+	}
+
+	return 0;
 }
 #else
-static bool should_restore_vsx(void) { return false; }
-static void do_restore_vsx(void) { }
+static inline int restore_vsx(struct task_struct *tsk) { return 0; }
 #endif /* CONFIG_VSX */
 
 /*
@@ -538,48 +529,32 @@ static void do_restore_vsx(void) { }
 void notrace restore_math(struct pt_regs *regs)
 {
 	unsigned long msr;
-	unsigned long new_msr = 0;
+
+	if (!MSR_TM_ACTIVE(regs->msr) &&
+		!current->thread.load_fp && !loadvec(current->thread))
+		return;
 
 	msr = regs->msr;
+	msr_check_and_set(msr_all_available);
 
 	/*
-	 * new_msr tracks the facilities that are to be restored. Only reload
-	 * if the bit is not set in the user MSR (if it is set, the registers
-	 * are live for the user thread).
+	 * Only reload if the bit is not set in the user MSR, the bit BEING set
+	 * indicates that the registers are hot
 	 */
-	if ((!(msr & MSR_FP)) && should_restore_fp())
-		new_msr |= MSR_FP;
+	if ((!(msr & MSR_FP)) && restore_fp(current))
+		msr |= MSR_FP | current->thread.fpexc_mode;
 
-	if ((!(msr & MSR_VEC)) && should_restore_altivec())
-		new_msr |= MSR_VEC;
+	if ((!(msr & MSR_VEC)) && restore_altivec(current))
+		msr |= MSR_VEC;
 
-	if ((!(msr & MSR_VSX)) && should_restore_vsx()) {
-		if (((msr | new_msr) & (MSR_FP | MSR_VEC)) == (MSR_FP | MSR_VEC))
-			new_msr |= MSR_VSX;
+	if ((msr & (MSR_FP | MSR_VEC)) == (MSR_FP | MSR_VEC) &&
+			restore_vsx(current)) {
+		msr |= MSR_VSX;
 	}
 
-	if (new_msr) {
-		unsigned long fpexc_mode = 0;
+	msr_check_and_clear(msr_all_available);
 
-		msr_check_and_set(new_msr);
-
-		if (new_msr & MSR_FP) {
-			do_restore_fp();
-
-			// This also covers VSX, because VSX implies FP
-			fpexc_mode = current->thread.fpexc_mode;
-		}
-
-		if (new_msr & MSR_VEC)
-			do_restore_altivec();
-
-		if (new_msr & MSR_VSX)
-			do_restore_vsx();
-
-		msr_check_and_clear(new_msr);
-
-		regs->msr |= new_msr | fpexc_mode;
-	}
+	regs->msr = msr;
 }
 #endif
 
@@ -1624,7 +1599,6 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 {
 	struct pt_regs *childregs, *kregs;
 	extern void ret_from_fork(void);
-	extern void ret_from_fork_scv(void);
 	extern void ret_from_kernel_thread(void);
 	void (*f)(void);
 	unsigned long sp = (unsigned long)task_stack_page(p) + THREAD_SIZE;
@@ -1661,9 +1635,7 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 		if (usp)
 			childregs->gpr[1] = usp;
 		p->thread.regs = childregs;
-		/* 64s sets this in ret_from_fork */
-		if (!IS_ENABLED(CONFIG_PPC_BOOK3S_64))
-			childregs->gpr[3] = 0;  /* Result from fork() */
+		childregs->gpr[3] = 0;  /* Result from fork() */
 		if (clone_flags & CLONE_SETTLS) {
 			if (!is_32bit_task())
 				childregs->gpr[13] = tls;
@@ -1671,10 +1643,7 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 				childregs->gpr[2] = tls;
 		}
 
-		if (trap_is_scv(regs))
-			f = ret_from_fork_scv;
-		else
-			f = ret_from_fork;
+		f = ret_from_fork;
 	}
 	childregs->msr &= ~(MSR_FP|MSR_VEC|MSR_VSX);
 	sp -= STACK_FRAME_OVERHEAD;

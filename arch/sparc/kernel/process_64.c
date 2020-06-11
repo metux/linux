@@ -62,11 +62,11 @@ void arch_cpu_idle(void)
 {
 	if (tlb_type != hypervisor) {
 		touch_nmi_watchdog();
-		raw_local_irq_enable();
+		local_irq_enable();
 	} else {
 		unsigned long pstate;
 
-		raw_local_irq_enable();
+		local_irq_enable();
 
                 /* The sun4v sleeping code requires that we have PSTATE.IE cleared over
                  * the cpu sleep hypervisor call.
@@ -665,6 +665,72 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	*dst = *src;
 	return 0;
 }
+
+typedef struct {
+	union {
+		unsigned int	pr_regs[32];
+		unsigned long	pr_dregs[16];
+	} pr_fr;
+	unsigned int __unused;
+	unsigned int	pr_fsr;
+	unsigned char	pr_qcnt;
+	unsigned char	pr_q_entrysize;
+	unsigned char	pr_en;
+	unsigned int	pr_q[64];
+} elf_fpregset_t32;
+
+/*
+ * fill in the fpu structure for a core dump.
+ */
+int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs)
+{
+	unsigned long *kfpregs = current_thread_info()->fpregs;
+	unsigned long fprs = current_thread_info()->fpsaved[0];
+
+	if (test_thread_flag(TIF_32BIT)) {
+		elf_fpregset_t32 *fpregs32 = (elf_fpregset_t32 *)fpregs;
+
+		if (fprs & FPRS_DL)
+			memcpy(&fpregs32->pr_fr.pr_regs[0], kfpregs,
+			       sizeof(unsigned int) * 32);
+		else
+			memset(&fpregs32->pr_fr.pr_regs[0], 0,
+			       sizeof(unsigned int) * 32);
+		fpregs32->pr_qcnt = 0;
+		fpregs32->pr_q_entrysize = 8;
+		memset(&fpregs32->pr_q[0], 0,
+		       (sizeof(unsigned int) * 64));
+		if (fprs & FPRS_FEF) {
+			fpregs32->pr_fsr = (unsigned int) current_thread_info()->xfsr[0];
+			fpregs32->pr_en = 1;
+		} else {
+			fpregs32->pr_fsr = 0;
+			fpregs32->pr_en = 0;
+		}
+	} else {
+		if(fprs & FPRS_DL)
+			memcpy(&fpregs->pr_regs[0], kfpregs,
+			       sizeof(unsigned int) * 32);
+		else
+			memset(&fpregs->pr_regs[0], 0,
+			       sizeof(unsigned int) * 32);
+		if(fprs & FPRS_DU)
+			memcpy(&fpregs->pr_regs[16], kfpregs+16,
+			       sizeof(unsigned int) * 32);
+		else
+			memset(&fpregs->pr_regs[16], 0,
+			       sizeof(unsigned int) * 32);
+		if(fprs & FPRS_FEF) {
+			fpregs->pr_fsr = current_thread_info()->xfsr[0];
+			fpregs->pr_gsr = current_thread_info()->gsr[0];
+		} else {
+			fpregs->pr_fsr = fpregs->pr_gsr = 0;
+		}
+		fpregs->pr_fprs = fprs;
+	}
+	return 1;
+}
+EXPORT_SYMBOL(dump_fpu);
 
 unsigned long get_wchan(struct task_struct *task)
 {

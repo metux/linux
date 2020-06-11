@@ -270,8 +270,9 @@ psp_cmd_submit_buf(struct psp_context *psp,
 		amdgpu_asic_invalidate_hdp(psp->adev, NULL);
 	}
 
-	/* We allow TEE_ERROR_NOT_SUPPORTED for VMR command in SRIOV */
-	skip_unsupport = (psp->cmd_buf_mem->resp.status == 0xffff000a) && amdgpu_sriov_vf(psp->adev);
+	/* We allow TEE_ERROR_NOT_SUPPORTED for VMR command and PSP_ERR_UNKNOWN_COMMAND in SRIOV */
+	skip_unsupport = (psp->cmd_buf_mem->resp.status == TEE_ERROR_NOT_SUPPORTED ||
+		psp->cmd_buf_mem->resp.status == PSP_ERR_UNKNOWN_COMMAND) && amdgpu_sriov_vf(psp->adev);
 
 	/* In some cases, psp response status is not 0 even there is no
 	 * problem while the command is submitted. Some version of PSP FW
@@ -389,6 +390,26 @@ static int psp_tmr_init(struct psp_context *psp)
 	return ret;
 }
 
+static int psp_clear_vf_fw(struct psp_context *psp)
+{
+	int ret;
+	struct psp_gfx_cmd_resp *cmd;
+
+	if (!amdgpu_sriov_vf(psp->adev) || psp->adev->asic_type != CHIP_NAVI12)
+		return 0;
+
+	cmd = kzalloc(sizeof(struct psp_gfx_cmd_resp), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	cmd->cmd_id = GFX_CMD_ID_CLEAR_VF_FW;
+
+	ret = psp_cmd_submit_buf(psp, NULL, cmd, psp->fence_buf_mc_addr);
+	kfree(cmd);
+
+	return ret;
+}
+
 static int psp_tmr_load(struct psp_context *psp)
 {
 	int ret;
@@ -409,52 +430,6 @@ static int psp_tmr_load(struct psp_context *psp)
 	kfree(cmd);
 
 	return ret;
-}
-
-static void psp_prep_tmr_unload_cmd_buf(struct psp_context *psp,
-					struct psp_gfx_cmd_resp *cmd)
-{
-	if (amdgpu_sriov_vf(psp->adev))
-		cmd->cmd_id = GFX_CMD_ID_DESTROY_VMR;
-	else
-		cmd->cmd_id = GFX_CMD_ID_DESTROY_TMR;
-}
-
-static int psp_tmr_unload(struct psp_context *psp)
-{
-	int ret;
-	struct psp_gfx_cmd_resp *cmd;
-
-	cmd = kzalloc(sizeof(struct psp_gfx_cmd_resp), GFP_KERNEL);
-	if (!cmd)
-		return -ENOMEM;
-
-	psp_prep_tmr_unload_cmd_buf(psp, cmd);
-	DRM_INFO("free PSP TMR buffer\n");
-
-	ret = psp_cmd_submit_buf(psp, NULL, cmd,
-				 psp->fence_buf_mc_addr);
-
-	kfree(cmd);
-
-	return ret;
-}
-
-static int psp_tmr_terminate(struct psp_context *psp)
-{
-	int ret;
-	void *tmr_buf;
-	void **pptr;
-
-	ret = psp_tmr_unload(psp);
-	if (ret)
-		return ret;
-
-	/* free TMR memory buffer */
-	pptr = amdgpu_sriov_vf(psp->adev) ? &tmr_buf : NULL;
-	amdgpu_bo_free_kernel(&psp->tmr_bo, &psp->tmr_mc_addr, pptr);
-
-	return 0;
 }
 
 static void psp_prep_asd_load_cmd_buf(struct psp_gfx_cmd_resp *cmd,
@@ -1428,6 +1403,12 @@ static int psp_hw_start(struct psp_context *psp)
 		return ret;
 	}
 
+	ret = psp_clear_vf_fw(psp);
+	if (ret) {
+		DRM_ERROR("PSP clear vf fw!\n");
+		return ret;
+	}
+
 	ret = psp_tmr_init(psp);
 	if (ret) {
 		DRM_ERROR("PSP tmr init failed!\n");
@@ -1887,6 +1868,9 @@ static int psp_hw_fini(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	struct psp_context *psp = &adev->psp;
+	void *tmr_buf;
+	void **pptr;
+	int ret;
 
 	if (psp->adev->psp.ta_fw) {
 		psp_ras_terminate(psp);
@@ -1895,10 +1879,16 @@ static int psp_hw_fini(void *handle)
 	}
 
 	psp_asd_unload(psp);
+	ret = psp_clear_vf_fw(psp);
+	if (ret) {
+		DRM_ERROR("PSP clear vf fw!\n");
+		return ret;
+	}
 
-	psp_tmr_terminate(psp);
 	psp_ring_destroy(psp, PSP_RING_TYPE__KM);
 
+	pptr = amdgpu_sriov_vf(psp->adev) ? &tmr_buf : NULL;
+	amdgpu_bo_free_kernel(&psp->tmr_bo, &psp->tmr_mc_addr, pptr);
 	amdgpu_bo_free_kernel(&psp->fw_pri_bo,
 			      &psp->fw_pri_mc_addr, &psp->fw_pri_buf);
 	amdgpu_bo_free_kernel(&psp->fence_buf_bo,
@@ -1943,18 +1933,6 @@ static int psp_suspend(void *handle)
 			DRM_ERROR("Failed to terminate dtm ta\n");
 			return ret;
 		}
-	}
-
-	ret = psp_asd_unload(psp);
-	if (ret) {
-		DRM_ERROR("Failed to unload asd\n");
-		return ret;
-	}
-
-	ret = psp_tmr_terminate(psp);
-	if (ret) {
-		DRM_ERROR("Falied to terminate tmr\n");
-		return ret;
 	}
 
 	ret = psp_ring_stop(psp, PSP_RING_TYPE__KM);

@@ -79,7 +79,7 @@ void machine_power_off(void)
  */
 void arch_cpu_idle(void)
 {
-	raw_local_irq_enable();
+	local_irq_enable();
 	if (mfspr(SPR_UPR) & SPR_UPR_PMP)
 		mtspr(SPR_PMR, mfspr(SPR_PMR) | SPR_PMR_DME);
 }
@@ -212,6 +212,13 @@ void start_thread(struct pt_regs *regs, unsigned long pc, unsigned long sp)
 	regs->pc = pc;
 	regs->sr = sr;
 	regs->sp = sp;
+}
+
+/* Fill in the fpu structure for a core dump.  */
+int dump_fpu(struct pt_regs *regs, elf_fpregset_t * fpu)
+{
+	/* TODO */
+	return 0;
 }
 
 extern struct thread_info *_switch(struct thread_info *old_ti,

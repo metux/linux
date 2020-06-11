@@ -42,7 +42,6 @@
 #include <asm/spec-ctrl.h>
 #include <asm/io_bitmap.h>
 #include <asm/proto.h>
-#include <asm/frame.h>
 
 #include "process.h"
 
@@ -134,19 +133,17 @@ int copy_thread(unsigned long clone_flags, unsigned long sp, unsigned long arg,
 	fork_frame = container_of(childregs, struct fork_frame, regs);
 	frame = &fork_frame->frame;
 
-	frame->bp = encode_frame_pointer(childregs);
+	frame->bp = 0;
 	frame->ret_addr = (unsigned long) ret_from_fork;
 	p->thread.sp = (unsigned long) fork_frame;
 	p->thread.io_bitmap = NULL;
 	memset(p->thread.ptrace_bps, 0, sizeof(p->thread.ptrace_bps));
 
 #ifdef CONFIG_X86_64
-	current_save_fsgs();
-	p->thread.fsindex = current->thread.fsindex;
-	p->thread.fsbase = current->thread.fsbase;
-	p->thread.gsindex = current->thread.gsindex;
-	p->thread.gsbase = current->thread.gsbase;
-
+	savesegment(gs, p->thread.gsindex);
+	p->thread.gsbase = p->thread.gsindex ? 0 : current->thread.gsbase;
+	savesegment(fs, p->thread.fsindex);
+	p->thread.fsbase = p->thread.fsindex ? 0 : current->thread.fsbase;
 	savesegment(es, p->thread.es);
 	savesegment(ds, p->thread.ds);
 #else
@@ -685,7 +682,9 @@ void arch_cpu_idle(void)
  */
 void __cpuidle default_idle(void)
 {
-	raw_safe_halt();
+	trace_cpu_idle_rcuidle(1, smp_processor_id());
+	safe_halt();
+	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, smp_processor_id());
 }
 #if defined(CONFIG_APM_MODULE) || defined(CONFIG_HALTPOLL_CPUIDLE_MODULE)
 EXPORT_SYMBOL(default_idle);
@@ -736,8 +735,6 @@ void stop_this_cpu(void *dummy)
 /*
  * AMD Erratum 400 aware idle routine. We handle it the same way as C3 power
  * states (local apic timer and TSC stop).
- *
- * XXX this function is completely buggered vs RCU and tracing.
  */
 static void amd_e400_idle(void)
 {
@@ -759,9 +756,9 @@ static void amd_e400_idle(void)
 	 * The switch back from broadcast mode needs to be called with
 	 * interrupts disabled.
 	 */
-	raw_local_irq_disable();
+	local_irq_disable();
 	tick_broadcast_exit();
-	raw_local_irq_enable();
+	local_irq_enable();
 }
 
 /*
@@ -793,6 +790,7 @@ static int prefer_mwait_c1_over_halt(const struct cpuinfo_x86 *c)
 static __cpuidle void mwait_idle(void)
 {
 	if (!current_set_polling_and_test()) {
+		trace_cpu_idle_rcuidle(1, smp_processor_id());
 		if (this_cpu_has(X86_BUG_CLFLUSH_MONITOR)) {
 			mb(); /* quirk */
 			clflush((void *)&current_thread_info()->flags);
@@ -803,9 +801,10 @@ static __cpuidle void mwait_idle(void)
 		if (!need_resched())
 			__sti_mwait(0, 0);
 		else
-			raw_local_irq_enable();
+			local_irq_enable();
+		trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, smp_processor_id());
 	} else {
-		raw_local_irq_enable();
+		local_irq_enable();
 	}
 	__current_clr_polling();
 }

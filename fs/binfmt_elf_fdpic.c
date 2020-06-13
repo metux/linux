@@ -1456,9 +1456,6 @@ struct elf_thread_status
 	struct elf_prstatus_fdpic prstatus;	/* NT_PRSTATUS */
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct task_struct *thread;
-#ifdef ELF_CORE_COPY_XFPREGS
-	elf_fpxregset_t xfpu;		/* ELF_CORE_XFPREG_TYPE */
-#endif
 	struct memelfnote notes[3];
 	int num_notes;
 };
@@ -1490,15 +1487,6 @@ static int elf_dump_thread_status(long signr, struct elf_thread_status *t)
 		t->num_notes++;
 		sz += notesize(&t->notes[1]);
 	}
-
-#ifdef ELF_CORE_COPY_XFPREGS
-	if (elf_core_copy_task_xfpregs(p, &t->xfpu)) {
-		fill_note(&t->notes[2], "LINUX", ELF_CORE_XFPREG_TYPE,
-			  sizeof(t->xfpu), &t->xfpu);
-		t->num_notes++;
-		sz += notesize(&t->notes[2]);
-	}
-#endif
 	return sz;
 }
 
@@ -1592,9 +1580,6 @@ static int elf_fdpic_core_dump(struct coredump_params *cprm)
  	LIST_HEAD(thread_list);
  	struct list_head *t;
 	elf_fpregset_t *fpu = NULL;
-#ifdef ELF_CORE_COPY_XFPREGS
-	elf_fpxregset_t *xfpu = NULL;
-#endif
 	int thread_status_size = 0;
 	elf_addr_t *auxv;
 	struct elf_phdr *phdr4note = NULL;
@@ -1633,11 +1618,6 @@ static int elf_fdpic_core_dump(struct coredump_params *cprm)
 	fpu = kmalloc(sizeof(*fpu), GFP_KERNEL);
 	if (!fpu)
 		goto end_coredump;
-#ifdef ELF_CORE_COPY_XFPREGS
-	xfpu = kmalloc(sizeof(*xfpu), GFP_KERNEL);
-	if (!xfpu)
-		goto end_coredump;
-#endif
 
 	for (ct = current->mm->core_state->dumper.next;
 					ct; ct = ct->next) {
@@ -1702,11 +1682,6 @@ static int elf_fdpic_core_dump(struct coredump_params *cprm)
 	     elf_core_copy_task_fpregs(current, cprm->regs, fpu)))
 		fill_note(notes + numnote++,
 			  "CORE", NT_PRFPREG, sizeof(*fpu), fpu);
-#ifdef ELF_CORE_COPY_XFPREGS
-	if (elf_core_copy_task_xfpregs(current, xfpu))
-		fill_note(notes + numnote++,
-			  "LINUX", ELF_CORE_XFPREG_TYPE, sizeof(*xfpu), xfpu);
-#endif
 
 	offset += sizeof(*elf);				/* Elf header */
 	offset += segs * sizeof(struct elf_phdr);	/* Program headers */
@@ -1827,9 +1802,6 @@ end_coredump:
 	kfree(notes);
 	kfree(fpu);
 	kfree(shdr4extnum);
-#ifdef ELF_CORE_COPY_XFPREGS
-	kfree(xfpu);
-#endif
 	return has_dumped;
 #undef NUM_NOTES
 }

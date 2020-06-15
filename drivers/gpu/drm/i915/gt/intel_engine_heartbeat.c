@@ -65,14 +65,17 @@ static void heartbeat(struct work_struct *wrk)
 	struct intel_context *ce = engine->kernel_context;
 	struct i915_request *rq;
 
-	if (!intel_engine_pm_get_if_awake(engine))
-		return;
+	/* Just in case everything has gone horribly wrong, give it a kick */
+	intel_engine_flush_submission(engine);
 
 	rq = engine->heartbeat.systole;
 	if (rq && i915_request_completed(rq)) {
 		i915_request_put(rq);
 		engine->heartbeat.systole = NULL;
 	}
+
+	if (!intel_engine_pm_get_if_awake(engine))
+		return;
 
 	if (intel_gt_is_wedged(engine->gt))
 		goto out;
@@ -146,7 +149,7 @@ out:
 
 void intel_engine_unpark_heartbeat(struct intel_engine_cs *engine)
 {
-	if (!CONFIG_DRM_I915_HEARTBEAT_INTERVAL)
+	if (!IS_ACTIVE(CONFIG_DRM_I915_HEARTBEAT_INTERVAL))
 		return;
 
 	next_heartbeat(engine);
@@ -154,8 +157,8 @@ void intel_engine_unpark_heartbeat(struct intel_engine_cs *engine)
 
 void intel_engine_park_heartbeat(struct intel_engine_cs *engine)
 {
-	cancel_delayed_work(&engine->heartbeat.work);
-	i915_request_put(fetch_and_zero(&engine->heartbeat.systole));
+	if (cancel_delayed_work(&engine->heartbeat.work))
+		i915_request_put(fetch_and_zero(&engine->heartbeat.systole));
 }
 
 void intel_engine_init_heartbeat(struct intel_engine_cs *engine)
@@ -169,7 +172,7 @@ int intel_engine_set_heartbeat(struct intel_engine_cs *engine,
 	int err;
 
 	/* Send one last pulse before to cleanup persistent hogs */
-	if (!delay && CONFIG_DRM_I915_PREEMPT_TIMEOUT) {
+	if (!delay && IS_ACTIVE(CONFIG_DRM_I915_PREEMPT_TIMEOUT)) {
 		err = intel_engine_pulse(engine);
 		if (err)
 			return err;
@@ -214,7 +217,7 @@ int intel_engine_pulse(struct intel_engine_cs *engine)
 		goto out_unlock;
 	}
 
-	rq->flags |= I915_REQUEST_SENTINEL;
+	__set_bit(I915_FENCE_FLAG_SENTINEL, &rq->fence.flags);
 	idle_pulse(engine, rq);
 
 	__i915_request_commit(rq);

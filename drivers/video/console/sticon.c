@@ -139,7 +139,7 @@ static void sticon_cursor(struct vc_data *conp, int mode)
 	break;
     case CM_MOVE:
     case CM_DRAW:
-	switch (CUR_SIZE(conp->vc_cursor_type)) {
+	switch (conp->vc_cursor_type & 0x0f) {
 	case CUR_UNDERLINE:
 	case CUR_LOWER_THIRD:
 	case CUR_LOWER_HALF:
@@ -288,10 +288,8 @@ static unsigned long sticon_getxy(struct vc_data *conp, unsigned long pos,
     return ret;
 }
 
-static u8 sticon_build_attr(struct vc_data *conp, u8 color,
-			    enum vc_intensity intens,
-			    bool blink, bool underline, bool reverse,
-			    bool italic)
+static u8 sticon_build_attr(struct vc_data *conp, u8 color, u8 intens,
+			    u8 blink, u8 underline, u8 reverse, u8 italic)
 {
     u8 attr = ((color & 0x70) >> 1) | ((color & 7));
 

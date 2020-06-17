@@ -2497,9 +2497,11 @@ static int perf_series_engines(void *arg)
 			intel_engine_pm_get(p->engine);
 
 			if (intel_engine_supports_stats(p->engine))
-				p->busy = intel_engine_get_busy_time(p->engine) + 1;
+				p->busy = intel_engine_get_busy_time(p->engine,
+								     &p->time) + 1;
+			else
+				p->time = ktime_get();
 			p->runtime = -intel_context_get_total_runtime_ns(ce);
-			p->time = ktime_get();
 		}
 
 		err = (*fn)(ps);
@@ -2510,13 +2512,15 @@ static int perf_series_engines(void *arg)
 			struct perf_stats *p = &stats[idx];
 			struct intel_context *ce = ps->ce[idx];
 			int integer, decimal;
-			u64 busy, dt;
+			u64 busy, dt, now;
 
-			p->time = ktime_sub(ktime_get(), p->time);
-			if (p->busy) {
-				p->busy = ktime_sub(intel_engine_get_busy_time(p->engine),
+			if (p->busy)
+				p->busy = ktime_sub(intel_engine_get_busy_time(p->engine,
+									       &now),
 						    p->busy - 1);
-			}
+			else
+				now = ktime_get();
+			p->time = ktime_sub(now, p->time);
 
 			err = switch_to_kernel_sync(ce, err);
 			p->runtime += intel_context_get_total_runtime_ns(ce);
@@ -2576,13 +2580,14 @@ static int p_sync0(void *arg)
 		return err;
 	}
 
-	busy = false;
 	if (intel_engine_supports_stats(engine)) {
-		p->busy = intel_engine_get_busy_time(engine);
+		p->busy = intel_engine_get_busy_time(engine, &p->time);
 		busy = true;
+	} else {
+		p->time = ktime_get();
+		busy = false;
 	}
 
-	p->time = ktime_get();
 	count = 0;
 	do {
 		struct i915_request *rq;
@@ -2605,11 +2610,15 @@ static int p_sync0(void *arg)
 
 		count++;
 	} while (!__igt_timeout(end_time, NULL));
-	p->time = ktime_sub(ktime_get(), p->time);
 
 	if (busy) {
-		p->busy = ktime_sub(intel_engine_get_busy_time(engine),
+		ktime_t now;
+
+		p->busy = ktime_sub(intel_engine_get_busy_time(engine, &now),
 				    p->busy);
+		p->time = ktime_sub(now, p->time);
+	} else {
+		p->time = ktime_sub(ktime_get(), p->time);
 	}
 
 	err = switch_to_kernel_sync(ce, err);
@@ -2642,13 +2651,14 @@ static int p_sync1(void *arg)
 		return err;
 	}
 
-	busy = false;
 	if (intel_engine_supports_stats(engine)) {
-		p->busy = intel_engine_get_busy_time(engine);
+		p->busy = intel_engine_get_busy_time(engine, &p->time);
 		busy = true;
+	} else {
+		p->time = ktime_get();
+		busy = false;
 	}
 
-	p->time = ktime_get();
 	count = 0;
 	do {
 		struct i915_request *rq;
@@ -2673,11 +2683,15 @@ static int p_sync1(void *arg)
 		count++;
 	} while (!__igt_timeout(end_time, NULL));
 	i915_request_put(prev);
-	p->time = ktime_sub(ktime_get(), p->time);
 
 	if (busy) {
-		p->busy = ktime_sub(intel_engine_get_busy_time(engine),
+		ktime_t now;
+
+		p->busy = ktime_sub(intel_engine_get_busy_time(engine, &now),
 				    p->busy);
+		p->time = ktime_sub(now, p->time);
+	} else {
+		p->time = ktime_sub(ktime_get(), p->time);
 	}
 
 	err = switch_to_kernel_sync(ce, err);
@@ -2709,14 +2723,15 @@ static int p_many(void *arg)
 		return err;
 	}
 
-	busy = false;
 	if (intel_engine_supports_stats(engine)) {
-		p->busy = intel_engine_get_busy_time(engine);
+		p->busy = intel_engine_get_busy_time(engine, &p->time);
 		busy = true;
+	} else {
+		p->time = ktime_get();
+		busy = false;
 	}
 
 	count = 0;
-	p->time = ktime_get();
 	do {
 		struct i915_request *rq;
 
@@ -2729,11 +2744,15 @@ static int p_many(void *arg)
 		i915_request_add(rq);
 		count++;
 	} while (!__igt_timeout(end_time, NULL));
-	p->time = ktime_sub(ktime_get(), p->time);
 
 	if (busy) {
-		p->busy = ktime_sub(intel_engine_get_busy_time(engine),
+		ktime_t now;
+
+		p->busy = ktime_sub(intel_engine_get_busy_time(engine, &now),
 				    p->busy);
+		p->time = ktime_sub(now, p->time);
+	} else {
+		p->time = ktime_sub(ktime_get(), p->time);
 	}
 
 	err = switch_to_kernel_sync(ce, err);

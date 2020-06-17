@@ -138,8 +138,7 @@ else
 	$(_BZIP2) -1c vmlinux >vmlinux.bz2
 endif
 
-archclean:
-	rm -f vmlinux.gz vmlinux.bz2
+CLEAN_FILES += vmlinux.gz vmlinux.bz2
 
 archheaders:
 	$(Q)$(MAKE) $(build)=arch/m68k/kernel/syscalls all

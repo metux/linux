@@ -4149,11 +4149,11 @@ out_error_raw_syscalls:
 	goto out_error;
 
 out_error_mmap:
-	evlist__strerror_mmap(evlist, errno, errbuf, sizeof(errbuf));
+	perf_evlist__strerror_mmap(evlist, errno, errbuf, sizeof(errbuf));
 	goto out_error;
 
 out_error_open:
-	evlist__strerror_open(evlist, errno, errbuf, sizeof(errbuf));
+	perf_evlist__strerror_open(evlist, errno, errbuf, sizeof(errbuf));
 
 out_error:
 	fprintf(trace->output, "%s\n", errbuf);
@@ -4812,7 +4812,7 @@ int cmd_trace(int argc, const char **argv)
 			"per thread proc mmap processing timeout in ms"),
 	OPT_CALLBACK('G', "cgroup", &trace, "name", "monitor event in cgroup name only",
 		     trace__parse_cgroups),
-	OPT_INTEGER('D', "delay", &trace.opts.initial_delay,
+	OPT_UINTEGER('D', "delay", &trace.opts.initial_delay,
 		     "ms to wait before starting measurement after program "
 		     "start"),
 	OPTS_EVSWITCH(&trace.evswitch),

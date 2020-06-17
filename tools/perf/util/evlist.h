@@ -74,11 +74,6 @@ struct evlist {
 		pthread_t		th;
 		volatile int		done;
 	} thread;
-	struct {
-		int	fd;	/* control file descriptor */
-		int	ack;	/* ack file descriptor for control commands */
-		int	pos;	/* index at evlist core object to check signals */
-	} ctl_fd;
 };
 
 struct evsel_str_handler {
@@ -223,10 +218,10 @@ int perf_evlist__apply_filters(struct evlist *evlist, struct evsel **err_evsel);
 void __perf_evlist__set_leader(struct list_head *list);
 void perf_evlist__set_leader(struct evlist *evlist);
 
-u64 __evlist__combined_sample_type(struct evlist *evlist);
-u64 evlist__combined_sample_type(struct evlist *evlist);
-u64 evlist__combined_branch_type(struct evlist *evlist);
-bool evlist__sample_id_all(struct evlist *evlist);
+u64 __perf_evlist__combined_sample_type(struct evlist *evlist);
+u64 perf_evlist__combined_sample_type(struct evlist *evlist);
+u64 perf_evlist__combined_branch_type(struct evlist *evlist);
+bool perf_evlist__sample_id_all(struct evlist *evlist);
 u16 perf_evlist__id_hdr_size(struct evlist *evlist);
 
 int perf_evlist__parse_sample(struct evlist *evlist, union perf_event *event,
@@ -236,8 +231,8 @@ int perf_evlist__parse_sample_timestamp(struct evlist *evlist,
 					union perf_event *event,
 					u64 *timestamp);
 
-bool evlist__valid_sample_type(struct evlist *evlist);
-bool evlist__valid_sample_id_all(struct evlist *evlist);
+bool perf_evlist__valid_sample_type(struct evlist *evlist);
+bool perf_evlist__valid_sample_id_all(struct evlist *evlist);
 bool perf_evlist__valid_read_format(struct evlist *evlist);
 
 void perf_evlist__splice_list_tail(struct evlist *evlist,
@@ -262,8 +257,8 @@ static inline struct evsel *evlist__last(struct evlist *evlist)
 	return container_of(evsel, struct evsel, core);
 }
 
-int evlist__strerror_open(struct evlist *evlist, int err, char *buf, size_t size);
-int evlist__strerror_mmap(struct evlist *evlist, int err, char *buf, size_t size);
+int perf_evlist__strerror_open(struct evlist *evlist, int err, char *buf, size_t size);
+int perf_evlist__strerror_mmap(struct evlist *evlist, int err, char *buf, size_t size);
 
 bool perf_evlist__can_select_event(struct evlist *evlist, const char *str);
 void perf_evlist__to_front(struct evlist *evlist,
@@ -360,25 +355,4 @@ void perf_evlist__force_leader(struct evlist *evlist);
 struct evsel *perf_evlist__reset_weak_group(struct evlist *evlist,
 						 struct evsel *evsel,
 						bool close);
-#define EVLIST_CTL_CMD_ENABLE_TAG  "enable"
-#define EVLIST_CTL_CMD_DISABLE_TAG "disable"
-#define EVLIST_CTL_CMD_ACK_TAG     "ack\n"
-
-#define EVLIST_CTL_CMD_MAX_LEN 64
-
-enum evlist_ctl_cmd {
-	EVLIST_CTL_CMD_UNSUPPORTED = 0,
-	EVLIST_CTL_CMD_ENABLE,
-	EVLIST_CTL_CMD_DISABLE,
-	EVLIST_CTL_CMD_ACK
-};
-
-int evlist__initialize_ctlfd(struct evlist *evlist, int ctl_fd, int ctl_fd_ack);
-int evlist__finalize_ctlfd(struct evlist *evlist);
-bool evlist__ctlfd_initialized(struct evlist *evlist);
-int evlist__ctlfd_process(struct evlist *evlist, enum evlist_ctl_cmd *cmd);
-
-#define EVLIST_ENABLED_MSG "Events enabled\n"
-#define EVLIST_DISABLED_MSG "Events disabled\n"
-
 #endif /* __PERF_EVLIST_H */

@@ -10,6 +10,7 @@
 
 #include "include/armcp_if.h"
 #include "include/qman_if.h"
+#include <uapi/misc/habanalabs.h>
 
 #include <linux/cdev.h>
 #include <linux/iopoll.h>
@@ -792,6 +793,7 @@ struct hl_ctx {
 	struct mutex		mem_hash_lock;
 	struct mutex		mmu_lock;
 	struct list_head	debugfs_list;
+	struct hl_cs_counters	cs_counters;
 	u64			cs_sequence;
 	u64			*dram_default_hops;
 	spinlock_t		cs_lock;
@@ -1396,6 +1398,7 @@ struct hl_device_idle_busy_ts {
  * @compute_ctx: current compute context executing.
  * @idle_busy_ts_arr: array to hold time stamps of transitions from idle to busy
  *                    and vice-versa
+ * @aggregated_cs_counters: aggregated cs counters among all contexts
  * @dram_used_mem: current DRAM memory consumption.
  * @timeout_jiffies: device CS timeout value.
  * @max_power: the max power of the device, as configured by the sysadmin. This
@@ -1495,6 +1498,8 @@ struct hl_device {
 	struct hl_ctx			*compute_ctx;
 
 	struct hl_device_idle_busy_ts	*idle_busy_ts_arr;
+
+	struct hl_cs_counters		aggregated_cs_counters;
 
 	atomic64_t			dram_used_mem;
 	u64				timeout_jiffies;

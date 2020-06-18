@@ -411,6 +411,8 @@ struct intel_fbc {
 			int adjusted_x;
 			int adjusted_y;
 
+			int y;
+
 			u16 pixel_blend_mode;
 		} plane;
 
@@ -419,8 +421,6 @@ struct intel_fbc {
 			unsigned int stride;
 			u64 modifier;
 		} fb;
-
-		unsigned int fence_y_offset;
 		u16 gen9_wa_cfb_stride;
 		s8 fence_id;
 	} state_cache;
@@ -436,16 +436,15 @@ struct intel_fbc {
 		struct {
 			enum pipe pipe;
 			enum i9xx_plane_id i9xx_plane;
+			unsigned int fence_y_offset;
 		} crtc;
 
 		struct {
 			const struct drm_format_info *format;
 			unsigned int stride;
-			u64 modifier;
 		} fb;
 
 		int cfb_size;
-		unsigned int fence_y_offset;
 		u16 gen9_wa_cfb_stride;
 		s8 fence_id;
 		bool plane_visible;
@@ -834,6 +833,9 @@ struct drm_i915_private {
 
 	/* FIXME: Device release actions should all be moved to drmm_ */
 	bool do_release;
+
+	/* i915 device parameters */
+	struct i915_params params;
 
 	const struct intel_device_info __info; /* Use INTEL_INFO() to access. */
 	struct intel_runtime_info __runtime; /* Use RUNTIME_INFO() to access. */
@@ -1698,7 +1700,7 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 
 /* Only valid when HAS_DISPLAY() is true */
 #define INTEL_DISPLAY_ENABLED(dev_priv) \
-		(drm_WARN_ON(&(dev_priv)->drm, !HAS_DISPLAY(dev_priv)), !i915_modparams.disable_display)
+	(drm_WARN_ON(&(dev_priv)->drm, !HAS_DISPLAY(dev_priv)), !(dev_priv)->params.disable_display)
 
 static inline bool intel_vtd_active(void)
 {

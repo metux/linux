@@ -260,7 +260,6 @@ static void dwc2_gadget_wkup_alert_handler(struct dwc2_hsotg *hsotg)
 
 	gintsts2 = dwc2_readl(hsotg, GINTSTS2);
 	gintmsk2 = dwc2_readl(hsotg, GINTMSK2);
-	gintsts2 &= gintmsk2;
 
 	if (gintsts2 & GINTSTS2_WKUP_ALERT_INT) {
 		dev_dbg(hsotg->dev, "%s: Wkup_Alert_Int\n", __func__);
@@ -883,10 +882,11 @@ static int dwc2_gadget_fill_isoc_desc(struct dwc2_hsotg_ep *hs_ep,
 	struct dwc2_dma_desc *desc;
 	struct dwc2_hsotg *hsotg = hs_ep->parent;
 	u32 index;
+	u32 maxsize = 0;
 	u32 mask = 0;
 	u8 pid = 0;
 
-	dwc2_gadget_get_desc_params(hs_ep, &mask);
+	maxsize = dwc2_gadget_get_desc_params(hs_ep, &mask);
 
 	index = hs_ep->next_desc;
 	desc = &hs_ep->desc_list[index];
@@ -2978,8 +2978,10 @@ static void dwc2_hsotg_epint(struct dwc2_hsotg *hsotg, unsigned int idx,
 	u32 epctl_reg = dir_in ? DIEPCTL(idx) : DOEPCTL(idx);
 	u32 epsiz_reg = dir_in ? DIEPTSIZ(idx) : DOEPTSIZ(idx);
 	u32 ints;
+	u32 ctrl;
 
 	ints = dwc2_gadget_read_ep_interrupts(hsotg, idx, dir_in);
+	ctrl = dwc2_readl(hsotg, epctl_reg);
 
 	/* Clear endpoint interrupts */
 	dwc2_writel(hsotg, ints, epint_reg);

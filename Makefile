@@ -451,7 +451,7 @@ GZIP		= gzip
 BZIP2		= bzip2
 LZOP		= lzop
 LZMA		= lzma
-LZ4		= lz4c
+LZ4		= lz4
 XZ		= xz
 
 # GZIP, BZIP2, LZOP env vars are used by the tools. Support them as the command

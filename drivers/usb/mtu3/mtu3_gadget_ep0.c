@@ -417,7 +417,7 @@ static int ep0_handle_feature(struct mtu3 *mtu,
 
 		handled = 1;
 		/* ignore request if endpoint is wedged */
-		if (mep->flags & MTU3_EP_WEDGE)
+		if (mep->wedged)
 			break;
 
 		mtu3_ep_stall_set(mep, set);

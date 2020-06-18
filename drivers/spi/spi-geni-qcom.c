@@ -52,6 +52,7 @@
 /* M_CMD OP codes for SPI */
 #define SPI_TX_ONLY		1
 #define SPI_RX_ONLY		2
+#define SPI_FULL_DUPLEX		3
 #define SPI_TX_RX		7
 #define SPI_CS_ASSERT		8
 #define SPI_CS_DEASSERT		9
@@ -62,6 +63,13 @@
 #define FRAGMENTATION		BIT(2)
 #define TIMESTAMP_AFTER		BIT(3)
 #define POST_CMD_DELAY		BIT(4)
+
+enum spi_m_cmd_opcode {
+	CMD_NONE,
+	CMD_XFER,
+	CMD_CS,
+	CMD_CANCEL,
+};
 
 struct spi_geni_master {
 	struct geni_se se;
@@ -76,13 +84,11 @@ struct spi_geni_master {
 	unsigned int tx_rem_bytes;
 	unsigned int rx_rem_bytes;
 	const struct spi_transfer *cur_xfer;
-	struct completion cs_done;
-	struct completion cancel_done;
-	struct completion abort_done;
+	struct completion xfer_done;
 	unsigned int oversampling;
 	spinlock_t lock;
+	enum spi_m_cmd_opcode cur_mcmd;
 	int irq;
-	bool cs_flag;
 };
 
 static int get_spi_clk_cfg(unsigned int speed_hz,
@@ -125,22 +131,20 @@ static void handle_fifo_timeout(struct spi_master *spi,
 	struct geni_se *se = &mas->se;
 
 	spin_lock_irq(&mas->lock);
-	reinit_completion(&mas->cancel_done);
-	writel(0, se->base + SE_GENI_TX_WATERMARK_REG);
-	mas->cur_xfer = NULL;
+	reinit_completion(&mas->xfer_done);
+	mas->cur_mcmd = CMD_CANCEL;
 	geni_se_cancel_m_cmd(se);
+	writel(0, se->base + SE_GENI_TX_WATERMARK_REG);
 	spin_unlock_irq(&mas->lock);
-
-	time_left = wait_for_completion_timeout(&mas->cancel_done, HZ);
+	time_left = wait_for_completion_timeout(&mas->xfer_done, HZ);
 	if (time_left)
 		return;
 
 	spin_lock_irq(&mas->lock);
-	reinit_completion(&mas->abort_done);
+	reinit_completion(&mas->xfer_done);
 	geni_se_abort_m_cmd(se);
 	spin_unlock_irq(&mas->lock);
-
-	time_left = wait_for_completion_timeout(&mas->abort_done, HZ);
+	time_left = wait_for_completion_timeout(&mas->xfer_done, HZ);
 	if (!time_left)
 		dev_err(mas->dev, "Failed to cancel/abort m_cmd\n");
 }
@@ -152,24 +156,20 @@ static void spi_geni_set_cs(struct spi_device *slv, bool set_flag)
 	struct geni_se *se = &mas->se;
 	unsigned long time_left;
 
+	pm_runtime_get_sync(mas->dev);
 	if (!(slv->mode & SPI_CS_HIGH))
 		set_flag = !set_flag;
 
-	if (set_flag == mas->cs_flag)
-		return;
-
-	mas->cs_flag = set_flag;
-
-	pm_runtime_get_sync(mas->dev);
 	spin_lock_irq(&mas->lock);
-	reinit_completion(&mas->cs_done);
+	reinit_completion(&mas->xfer_done);
+	mas->cur_mcmd = CMD_CS;
 	if (set_flag)
 		geni_se_setup_m_cmd(se, SPI_CS_ASSERT, 0);
 	else
 		geni_se_setup_m_cmd(se, SPI_CS_DEASSERT, 0);
 	spin_unlock_irq(&mas->lock);
 
-	time_left = wait_for_completion_timeout(&mas->cs_done, HZ);
+	time_left = wait_for_completion_timeout(&mas->xfer_done, HZ);
 	if (!time_left)
 		handle_fifo_timeout(spi, NULL);
 
@@ -290,7 +290,6 @@ static int spi_geni_init(struct spi_geni_master *mas)
 {
 	struct geni_se *se = &mas->se;
 	unsigned int proto, major, minor, ver;
-	u32 spi_tx_cfg;
 
 	pm_runtime_get_sync(mas->dev);
 
@@ -309,7 +308,7 @@ static int spi_geni_init(struct spi_geni_master *mas)
 	 * Hardware programming guide suggests to configure
 	 * RX FIFO RFR level to fifo_depth-2.
 	 */
-	geni_se_init(se, mas->tx_fifo_depth - 3, mas->tx_fifo_depth - 2);
+	geni_se_init(se, 0x0, mas->tx_fifo_depth - 2);
 	/* Transmit an entire FIFO worth of data per IRQ */
 	mas->tx_wm = 1;
 	ver = geni_se_get_qup_hw_version(se);
@@ -323,13 +322,104 @@ static int spi_geni_init(struct spi_geni_master *mas)
 
 	geni_se_select_mode(se, GENI_SE_FIFO);
 
-	/* We always control CS manually */
-	spi_tx_cfg = readl(se->base + SE_SPI_TRANS_CFG);
-	spi_tx_cfg &= ~CS_TOGGLE;
-	writel(spi_tx_cfg, se->base + SE_SPI_TRANS_CFG);
-
 	pm_runtime_put(mas->dev);
 	return 0;
+}
+
+static void setup_fifo_xfer(struct spi_transfer *xfer,
+				struct spi_geni_master *mas,
+				u16 mode, struct spi_master *spi)
+{
+	u32 m_cmd = 0;
+	u32 spi_tx_cfg, len;
+	struct geni_se *se = &mas->se;
+	int ret;
+
+	/*
+	 * Ensure that our interrupt handler isn't still running from some
+	 * prior command before we start messing with the hardware behind
+	 * its back.  We don't need to _keep_ the lock here since we're only
+	 * worried about racing with out interrupt handler.  The SPI core
+	 * already handles making sure that we're not trying to do two
+	 * transfers at once or setting a chip select and doing a transfer
+	 * concurrently.
+	 *
+	 * NOTE: we actually _can't_ hold the lock here because possibly we
+	 * might call clk_set_rate() which needs to be able to sleep.
+	 */
+	spin_lock_irq(&mas->lock);
+	spin_unlock_irq(&mas->lock);
+
+	spi_tx_cfg = readl(se->base + SE_SPI_TRANS_CFG);
+	if (xfer->bits_per_word != mas->cur_bits_per_word) {
+		spi_setup_word_len(mas, mode, xfer->bits_per_word);
+		mas->cur_bits_per_word = xfer->bits_per_word;
+	}
+
+	/* Speed and bits per word can be overridden per transfer */
+	ret = geni_spi_set_clock_and_bw(mas, xfer->speed_hz);
+	if (ret)
+		return;
+
+	mas->tx_rem_bytes = 0;
+	mas->rx_rem_bytes = 0;
+	if (xfer->tx_buf && xfer->rx_buf)
+		m_cmd = SPI_FULL_DUPLEX;
+	else if (xfer->tx_buf)
+		m_cmd = SPI_TX_ONLY;
+	else if (xfer->rx_buf)
+		m_cmd = SPI_RX_ONLY;
+
+	spi_tx_cfg &= ~CS_TOGGLE;
+
+	if (!(mas->cur_bits_per_word % MIN_WORD_LEN))
+		len = xfer->len * BITS_PER_BYTE / mas->cur_bits_per_word;
+	else
+		len = xfer->len / (mas->cur_bits_per_word / BITS_PER_BYTE + 1);
+	len &= TRANS_LEN_MSK;
+
+	mas->cur_xfer = xfer;
+	if (m_cmd & SPI_TX_ONLY) {
+		mas->tx_rem_bytes = xfer->len;
+		writel(len, se->base + SE_SPI_TX_TRANS_LEN);
+	}
+
+	if (m_cmd & SPI_RX_ONLY) {
+		writel(len, se->base + SE_SPI_RX_TRANS_LEN);
+		mas->rx_rem_bytes = xfer->len;
+	}
+	writel(spi_tx_cfg, se->base + SE_SPI_TRANS_CFG);
+	mas->cur_mcmd = CMD_XFER;
+
+	/*
+	 * Lock around right before we start the transfer since our
+	 * interrupt could come in at any time now.
+	 */
+	spin_lock_irq(&mas->lock);
+	geni_se_setup_m_cmd(se, m_cmd, FRAGMENTATION);
+
+	/*
+	 * TX_WATERMARK_REG should be set after SPI configuration and
+	 * setting up GENI SE engine, as driver starts data transfer
+	 * for the watermark interrupt.
+	 */
+	if (m_cmd & SPI_TX_ONLY)
+		writel(mas->tx_wm, se->base + SE_GENI_TX_WATERMARK_REG);
+	spin_unlock_irq(&mas->lock);
+}
+
+static int spi_geni_transfer_one(struct spi_master *spi,
+				struct spi_device *slv,
+				struct spi_transfer *xfer)
+{
+	struct spi_geni_master *mas = spi_master_get_devdata(spi);
+
+	/* Terminate and return success for 0 byte length transfer */
+	if (!xfer->len)
+		return 0;
+
+	setup_fifo_xfer(xfer, mas, slv->mode, spi);
+	return 1;
 }
 
 static unsigned int geni_byte_per_fifo_word(struct spi_geni_master *mas)
@@ -346,7 +436,7 @@ static unsigned int geni_byte_per_fifo_word(struct spi_geni_master *mas)
 	return mas->fifo_width_bits / BITS_PER_BYTE;
 }
 
-static bool geni_spi_handle_tx(struct spi_geni_master *mas)
+static void geni_spi_handle_tx(struct spi_geni_master *mas)
 {
 	struct geni_se *se = &mas->se;
 	unsigned int max_bytes;
@@ -371,11 +461,8 @@ static bool geni_spi_handle_tx(struct spi_geni_master *mas)
 		iowrite32_rep(se->base + SE_GENI_TX_FIFOn, &fifo_word, 1);
 	}
 	mas->tx_rem_bytes -= max_bytes;
-	if (!mas->tx_rem_bytes) {
+	if (!mas->tx_rem_bytes)
 		writel(0, se->base + SE_GENI_TX_WATERMARK_REG);
-		return false;
-	}
-	return true;
 }
 
 static void geni_spi_handle_rx(struct spi_geni_master *mas)
@@ -414,95 +501,6 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	mas->rx_rem_bytes -= rx_bytes;
 }
 
-static void setup_fifo_xfer(struct spi_transfer *xfer,
-				struct spi_geni_master *mas,
-				u16 mode, struct spi_master *spi)
-{
-	u32 m_cmd = 0;
-	u32 len;
-	struct geni_se *se = &mas->se;
-	int ret;
-
-	/*
-	 * Ensure that our interrupt handler isn't still running from some
-	 * prior command before we start messing with the hardware behind
-	 * its back.  We don't need to _keep_ the lock here since we're only
-	 * worried about racing with out interrupt handler.  The SPI core
-	 * already handles making sure that we're not trying to do two
-	 * transfers at once or setting a chip select and doing a transfer
-	 * concurrently.
-	 *
-	 * NOTE: we actually _can't_ hold the lock here because possibly we
-	 * might call clk_set_rate() which needs to be able to sleep.
-	 */
-	spin_lock_irq(&mas->lock);
-	spin_unlock_irq(&mas->lock);
-
-	if (xfer->bits_per_word != mas->cur_bits_per_word) {
-		spi_setup_word_len(mas, mode, xfer->bits_per_word);
-		mas->cur_bits_per_word = xfer->bits_per_word;
-	}
-
-	/* Speed and bits per word can be overridden per transfer */
-	ret = geni_spi_set_clock_and_bw(mas, xfer->speed_hz);
-	if (ret)
-		return;
-
-	mas->tx_rem_bytes = 0;
-	mas->rx_rem_bytes = 0;
-
-	if (!(mas->cur_bits_per_word % MIN_WORD_LEN))
-		len = xfer->len * BITS_PER_BYTE / mas->cur_bits_per_word;
-	else
-		len = xfer->len / (mas->cur_bits_per_word / BITS_PER_BYTE + 1);
-	len &= TRANS_LEN_MSK;
-
-	mas->cur_xfer = xfer;
-	if (xfer->tx_buf) {
-		m_cmd |= SPI_TX_ONLY;
-		mas->tx_rem_bytes = xfer->len;
-		writel(len, se->base + SE_SPI_TX_TRANS_LEN);
-	}
-
-	if (xfer->rx_buf) {
-		m_cmd |= SPI_RX_ONLY;
-		writel(len, se->base + SE_SPI_RX_TRANS_LEN);
-		mas->rx_rem_bytes = xfer->len;
-	}
-
-	/*
-	 * Lock around right before we start the transfer since our
-	 * interrupt could come in at any time now.
-	 */
-	spin_lock_irq(&mas->lock);
-	geni_se_setup_m_cmd(se, m_cmd, FRAGMENTATION);
-
-	/*
-	 * TX_WATERMARK_REG should be set after SPI configuration and
-	 * setting up GENI SE engine, as driver starts data transfer
-	 * for the watermark interrupt.
-	 */
-	if (m_cmd & SPI_TX_ONLY) {
-		if (geni_spi_handle_tx(mas))
-			writel(mas->tx_wm, se->base + SE_GENI_TX_WATERMARK_REG);
-	}
-	spin_unlock_irq(&mas->lock);
-}
-
-static int spi_geni_transfer_one(struct spi_master *spi,
-				struct spi_device *slv,
-				struct spi_transfer *xfer)
-{
-	struct spi_geni_master *mas = spi_master_get_devdata(spi);
-
-	/* Terminate and return success for 0 byte length transfer */
-	if (!xfer->len)
-		return 0;
-
-	setup_fifo_xfer(xfer, mas, slv->mode, spi);
-	return 1;
-}
-
 static irqreturn_t geni_spi_isr(int irq, void *data)
 {
 	struct spi_master *spi = data;
@@ -514,11 +512,6 @@ static irqreturn_t geni_spi_isr(int irq, void *data)
 	if (!m_irq)
 		return IRQ_NONE;
 
-	if (m_irq & (M_CMD_OVERRUN_EN | M_ILLEGAL_CMD_EN | M_CMD_FAILURE_EN |
-		     M_RX_FIFO_RD_ERR_EN | M_RX_FIFO_WR_ERR_EN |
-		     M_TX_FIFO_RD_ERR_EN | M_TX_FIFO_WR_ERR_EN))
-		dev_warn(mas->dev, "Unexpected IRQ err status %#010x\n", m_irq);
-
 	spin_lock(&mas->lock);
 
 	if ((m_irq & M_RX_FIFO_WATERMARK_EN) || (m_irq & M_RX_FIFO_LAST_EN))
@@ -528,39 +521,36 @@ static irqreturn_t geni_spi_isr(int irq, void *data)
 		geni_spi_handle_tx(mas);
 
 	if (m_irq & M_CMD_DONE_EN) {
-		if (mas->cur_xfer) {
+		if (mas->cur_mcmd == CMD_XFER)
 			spi_finalize_current_transfer(spi);
-			mas->cur_xfer = NULL;
-			/*
-			 * If this happens, then a CMD_DONE came before all the
-			 * Tx buffer bytes were sent out. This is unusual, log
-			 * this condition and disable the WM interrupt to
-			 * prevent the system from stalling due an interrupt
-			 * storm.
-			 *
-			 * If this happens when all Rx bytes haven't been
-			 * received, log the condition. The only known time
-			 * this can happen is if bits_per_word != 8 and some
-			 * registers that expect xfer lengths in num spi_words
-			 * weren't written correctly.
-			 */
-			if (mas->tx_rem_bytes) {
-				writel(0, se->base + SE_GENI_TX_WATERMARK_REG);
-				dev_err(mas->dev, "Premature done. tx_rem = %d bpw%d\n",
-					mas->tx_rem_bytes, mas->cur_bits_per_word);
-			}
-			if (mas->rx_rem_bytes)
-				dev_err(mas->dev, "Premature done. rx_rem = %d bpw%d\n",
-					mas->rx_rem_bytes, mas->cur_bits_per_word);
-		} else {
-			complete(&mas->cs_done);
+		else if (mas->cur_mcmd == CMD_CS)
+			complete(&mas->xfer_done);
+		mas->cur_mcmd = CMD_NONE;
+		/*
+		 * If this happens, then a CMD_DONE came before all the Tx
+		 * buffer bytes were sent out. This is unusual, log this
+		 * condition and disable the WM interrupt to prevent the
+		 * system from stalling due an interrupt storm.
+		 * If this happens when all Rx bytes haven't been received, log
+		 * the condition.
+		 * The only known time this can happen is if bits_per_word != 8
+		 * and some registers that expect xfer lengths in num spi_words
+		 * weren't written correctly.
+		 */
+		if (mas->tx_rem_bytes) {
+			writel(0, se->base + SE_GENI_TX_WATERMARK_REG);
+			dev_err(mas->dev, "Premature done. tx_rem = %d bpw%d\n",
+				mas->tx_rem_bytes, mas->cur_bits_per_word);
 		}
+		if (mas->rx_rem_bytes)
+			dev_err(mas->dev, "Premature done. rx_rem = %d bpw%d\n",
+				mas->rx_rem_bytes, mas->cur_bits_per_word);
 	}
 
-	if (m_irq & M_CMD_CANCEL_EN)
-		complete(&mas->cancel_done);
-	if (m_irq & M_CMD_ABORT_EN)
-		complete(&mas->abort_done);
+	if ((m_irq & M_CMD_CANCEL_EN) || (m_irq & M_CMD_ABORT_EN)) {
+		mas->cur_mcmd = CMD_NONE;
+		complete(&mas->xfer_done);
+	}
 
 	/*
 	 * It's safe or a good idea to Ack all of our our interrupts at the
@@ -620,9 +610,11 @@ static int spi_geni_probe(struct platform_device *pdev)
 		return PTR_ERR(mas->se.opp_table);
 	/* OPP table is optional */
 	ret = dev_pm_opp_of_add_table(&pdev->dev);
-	if (ret && ret != -ENODEV) {
+	if (!ret) {
+		mas->se.has_opp_table = true;
+	} else if (ret != -ENODEV) {
 		dev_err(&pdev->dev, "invalid OPP table in device tree\n");
-		goto put_clkname;
+		return ret;
 	}
 
 	spi->bus_num = -1;
@@ -637,12 +629,8 @@ static int spi_geni_probe(struct platform_device *pdev)
 	spi->handle_err = handle_fifo_timeout;
 	spi->set_cs = spi_geni_set_cs;
 
-	init_completion(&mas->cs_done);
-	init_completion(&mas->cancel_done);
-	init_completion(&mas->abort_done);
+	init_completion(&mas->xfer_done);
 	spin_lock_init(&mas->lock);
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, 250);
 	pm_runtime_enable(dev);
 
 	ret = geni_icc_get(&mas->se, NULL);
@@ -674,8 +662,8 @@ spi_geni_probe_free_irq:
 spi_geni_probe_runtime_disable:
 	pm_runtime_disable(dev);
 	spi_master_put(spi);
-	dev_pm_opp_of_remove_table(&pdev->dev);
-put_clkname:
+	if (mas->se.has_opp_table)
+		dev_pm_opp_of_remove_table(&pdev->dev);
 	dev_pm_opp_put_clkname(mas->se.opp_table);
 	return ret;
 }
@@ -690,7 +678,8 @@ static int spi_geni_remove(struct platform_device *pdev)
 
 	free_irq(mas->irq, spi);
 	pm_runtime_disable(&pdev->dev);
-	dev_pm_opp_of_remove_table(&pdev->dev);
+	if (mas->se.has_opp_table)
+		dev_pm_opp_of_remove_table(&pdev->dev);
 	dev_pm_opp_put_clkname(mas->se.opp_table);
 	return 0;
 }

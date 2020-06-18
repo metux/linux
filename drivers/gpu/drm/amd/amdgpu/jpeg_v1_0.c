@@ -25,6 +25,8 @@
 #include "amdgpu_jpeg.h"
 #include "soc15.h"
 #include "soc15d.h"
+#include "vcn_v1_0.h"
+#include "jpeg_v1_0.h"
 
 #include "vcn/vcn_1_0_offset.h"
 #include "vcn/vcn_1_0_sh_mask.h"
@@ -523,7 +525,8 @@ void jpeg_v1_0_start(struct amdgpu_device *adev, int mode)
 		WREG32_SOC15(JPEG, 0, mmUVD_LMI_JRBC_RB_64BIT_BAR_HIGH, upper_32_bits(ring->gpu_addr));
 		WREG32_SOC15(JPEG, 0, mmUVD_JRBC_RB_RPTR, 0);
 		WREG32_SOC15(JPEG, 0, mmUVD_JRBC_RB_WPTR, 0);
-	}	WREG32_SOC15(JPEG, 0, mmUVD_JRBC_RB_CNTL, UVD_JRBC_RB_CNTL__RB_RPTR_WR_EN_MASK);
+		WREG32_SOC15(JPEG, 0, mmUVD_JRBC_RB_CNTL, UVD_JRBC_RB_CNTL__RB_RPTR_WR_EN_MASK);
+	}
 
 	/* initialize wptr */
 	ring->wptr = RREG32_SOC15(JPEG, 0, mmUVD_JRBC_RB_WPTR);
@@ -561,7 +564,7 @@ static const struct amdgpu_ring_funcs jpeg_v1_0_decode_ring_vm_funcs = {
 	.insert_start = jpeg_v1_0_decode_ring_insert_start,
 	.insert_end = jpeg_v1_0_decode_ring_insert_end,
 	.pad_ib = amdgpu_ring_generic_pad_ib,
-	.begin_use = amdgpu_vcn_ring_begin_use,
+	.begin_use = vcn_v1_0_ring_begin_use,
 	.end_use = amdgpu_vcn_ring_end_use,
 	.emit_wreg = jpeg_v1_0_decode_ring_emit_wreg,
 	.emit_reg_wait = jpeg_v1_0_decode_ring_emit_reg_wait,

@@ -252,6 +252,7 @@ function start_test {
 
 	save_dmesg
 	echo -n "TEST: $test ... "
+	log "===== TEST: $test ====="
 }
 
 # check_result() - verify dmesg output

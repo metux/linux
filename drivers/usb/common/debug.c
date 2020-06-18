@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
+/**
  * Common USB debugging functions
  *
- * Copyright (C) 2010-2011 Texas Instruments Incorporated - https://www.ti.com
+ * Copyright (C) 2010-2011 Texas Instruments Incorporated - http://www.ti.com
  *
  * Authors: Felipe Balbi <balbi@ti.com>,
  *	    Sebastian Andrzej Siewior <bigeasy@linutronix.de>
@@ -207,7 +207,7 @@ static void usb_decode_set_isoch_delay(__u8 wValue, char *str, size_t size)
 	snprintf(str, size, "Set Isochronous Delay(Delay = %d ns)", wValue);
 }
 
-/*
+/**
  * usb_decode_ctrl - returns a string representation of ctrl request
  */
 const char *usb_decode_ctrl(char *str, size_t size, __u8 bRequestType,

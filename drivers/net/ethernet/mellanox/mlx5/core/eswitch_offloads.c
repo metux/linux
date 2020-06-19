@@ -2284,17 +2284,6 @@ static int esw_inline_mode_to_devlink(u8 mlx5_mode, u8 *mode)
 	return 0;
 }
 
-static int mlx5_eswitch_check(const struct mlx5_core_dev *dev)
-{
-	if (MLX5_CAP_GEN(dev, port_type) != MLX5_CAP_PORT_TYPE_ETH)
-		return -EOPNOTSUPP;
-
-	if(!MLX5_ESWITCH_MANAGER(dev))
-		return -EPERM;
-
-	return 0;
-}
-
 static int eswitch_devlink_esw_mode_check(const struct mlx5_eswitch *esw)
 {
 	/* devlink commands in NONE eswitch mode are currently supported only
@@ -2307,14 +2296,13 @@ static int eswitch_devlink_esw_mode_check(const struct mlx5_eswitch *esw)
 int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 				  struct netlink_ext_ack *extack)
 {
-	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	struct mlx5_eswitch *esw = dev->priv.eswitch;
 	u16 cur_mlx5_mode, mlx5_mode = 0;
+	struct mlx5_eswitch *esw;
 	int err;
 
-	err = mlx5_eswitch_check(dev);
-	if (err)
-		return err;
+	esw = mlx5_devlink_eswitch_get(devlink);
+	if (IS_ERR(esw))
+		return PTR_ERR(esw);
 
 	if (esw_mode_from_devlink(mode, &mlx5_mode))
 		return -EINVAL;
@@ -2343,16 +2331,15 @@ unlock:
 
 int mlx5_devlink_eswitch_mode_get(struct devlink *devlink, u16 *mode)
 {
-	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	struct mlx5_eswitch *esw = dev->priv.eswitch;
+	struct mlx5_eswitch *esw;
 	int err;
 
-	err = mlx5_eswitch_check(dev);
-	if (err)
-		return err;
+	esw = mlx5_devlink_eswitch_get(devlink);
+	if (IS_ERR(esw))
+		return PTR_ERR(esw);
 
 	mutex_lock(&esw->mode_lock);
-	err = eswitch_devlink_esw_mode_check(dev->priv.eswitch);
+	err = eswitch_devlink_esw_mode_check(esw);
 	if (err)
 		goto unlock;
 
@@ -2366,13 +2353,13 @@ int mlx5_devlink_eswitch_inline_mode_set(struct devlink *devlink, u8 mode,
 					 struct netlink_ext_ack *extack)
 {
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	struct mlx5_eswitch *esw = dev->priv.eswitch;
 	int err, vport, num_vport;
+	struct mlx5_eswitch *esw;
 	u8 mlx5_mode;
 
-	err = mlx5_eswitch_check(dev);
-	if (err)
-		return err;
+	esw = mlx5_devlink_eswitch_get(devlink);
+	if (IS_ERR(esw))
+		return PTR_ERR(esw);
 
 	mutex_lock(&esw->mode_lock);
 	err = eswitch_devlink_esw_mode_check(esw);
@@ -2429,13 +2416,12 @@ out:
 
 int mlx5_devlink_eswitch_inline_mode_get(struct devlink *devlink, u8 *mode)
 {
-	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	struct mlx5_eswitch *esw = dev->priv.eswitch;
+	struct mlx5_eswitch *esw;
 	int err;
 
-	err = mlx5_eswitch_check(dev);
-	if (err)
-		return err;
+	esw = mlx5_devlink_eswitch_get(devlink);
+	if (IS_ERR(esw))
+		return PTR_ERR(esw);
 
 	mutex_lock(&esw->mode_lock);
 	err = eswitch_devlink_esw_mode_check(esw);
@@ -2453,12 +2439,12 @@ int mlx5_devlink_eswitch_encap_mode_set(struct devlink *devlink,
 					struct netlink_ext_ack *extack)
 {
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	struct mlx5_eswitch *esw = dev->priv.eswitch;
+	struct mlx5_eswitch *esw;
 	int err;
 
-	err = mlx5_eswitch_check(dev);
-	if (err)
-		return err;
+	esw = mlx5_devlink_eswitch_get(devlink);
+	if (IS_ERR(esw))
+		return PTR_ERR(esw);
 
 	mutex_lock(&esw->mode_lock);
 	err = eswitch_devlink_esw_mode_check(esw);
@@ -2513,13 +2499,13 @@ unlock:
 int mlx5_devlink_eswitch_encap_mode_get(struct devlink *devlink,
 					enum devlink_eswitch_encap_mode *encap)
 {
-	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	struct mlx5_eswitch *esw = dev->priv.eswitch;
+	struct mlx5_eswitch *esw;
 	int err;
 
-	err = mlx5_eswitch_check(dev);
-	if (err)
-		return err;
+	esw = mlx5_devlink_eswitch_get(devlink);
+	if (IS_ERR(esw))
+		return PTR_ERR(esw);
+
 
 	mutex_lock(&esw->mode_lock);
 	err = eswitch_devlink_esw_mode_check(esw);

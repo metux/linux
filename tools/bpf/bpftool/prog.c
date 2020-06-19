@@ -21,9 +21,9 @@
 #include <linux/perf_event.h>
 #include <linux/sizes.h>
 
-#include <bpf.h>
-#include <btf.h>
-#include <libbpf.h>
+#include <bpf/bpf.h>
+#include <bpf/btf.h>
+#include <bpf/libbpf.h>
 
 #include "cfg.h"
 #include "main.h"
@@ -84,144 +84,6 @@ static void print_boot_time(__u64 nsecs, char *buf, unsigned int size)
 		strftime(buf, size, "%s", &load_tm);
 	else
 		strftime(buf, size, "%FT%T%z", &load_tm);
-}
-
-static int prog_fd_by_tag(unsigned char *tag, int **fds)
-{
-	unsigned int id = 0;
-	int fd, nb_fds = 0;
-	void *tmp;
-	int err;
-
-	while (true) {
-		struct bpf_prog_info info = {};
-		__u32 len = sizeof(info);
-
-		err = bpf_prog_get_next_id(id, &id);
-		if (err) {
-			if (errno != ENOENT) {
-				p_err("%s", strerror(errno));
-				goto err_close_fds;
-			}
-			return nb_fds;
-		}
-
-		fd = bpf_prog_get_fd_by_id(id);
-		if (fd < 0) {
-			p_err("can't get prog by id (%u): %s",
-			      id, strerror(errno));
-			goto err_close_fds;
-		}
-
-		err = bpf_obj_get_info_by_fd(fd, &info, &len);
-		if (err) {
-			p_err("can't get prog info (%u): %s",
-			      id, strerror(errno));
-			goto err_close_fd;
-		}
-
-		if (memcmp(tag, info.tag, BPF_TAG_SIZE)) {
-			close(fd);
-			continue;
-		}
-
-		if (nb_fds > 0) {
-			tmp = realloc(*fds, (nb_fds + 1) * sizeof(int));
-			if (!tmp) {
-				p_err("failed to realloc");
-				goto err_close_fd;
-			}
-			*fds = tmp;
-		}
-		(*fds)[nb_fds++] = fd;
-	}
-
-err_close_fd:
-	close(fd);
-err_close_fds:
-	while (--nb_fds >= 0)
-		close((*fds)[nb_fds]);
-	return -1;
-}
-
-static int prog_parse_fds(int *argc, char ***argv, int **fds)
-{
-	if (is_prefix(**argv, "id")) {
-		unsigned int id;
-		char *endptr;
-
-		NEXT_ARGP();
-
-		id = strtoul(**argv, &endptr, 0);
-		if (*endptr) {
-			p_err("can't parse %s as ID", **argv);
-			return -1;
-		}
-		NEXT_ARGP();
-
-		(*fds)[0] = bpf_prog_get_fd_by_id(id);
-		if ((*fds)[0] < 0) {
-			p_err("get by id (%u): %s", id, strerror(errno));
-			return -1;
-		}
-		return 1;
-	} else if (is_prefix(**argv, "tag")) {
-		unsigned char tag[BPF_TAG_SIZE];
-
-		NEXT_ARGP();
-
-		if (sscanf(**argv, BPF_TAG_FMT, tag, tag + 1, tag + 2,
-			   tag + 3, tag + 4, tag + 5, tag + 6, tag + 7)
-		    != BPF_TAG_SIZE) {
-			p_err("can't parse tag");
-			return -1;
-		}
-		NEXT_ARGP();
-
-		return prog_fd_by_tag(tag, fds);
-	} else if (is_prefix(**argv, "pinned")) {
-		char *path;
-
-		NEXT_ARGP();
-
-		path = **argv;
-		NEXT_ARGP();
-
-		(*fds)[0] = open_obj_pinned_any(path, BPF_OBJ_PROG);
-		if ((*fds)[0] < 0)
-			return -1;
-		return 1;
-	}
-
-	p_err("expected 'id', 'tag' or 'pinned', got: '%s'?", **argv);
-	return -1;
-}
-
-int prog_parse_fd(int *argc, char ***argv)
-{
-	int *fds = NULL;
-	int nb_fds, fd;
-
-	fds = malloc(sizeof(int));
-	if (!fds) {
-		p_err("mem alloc failed");
-		return -1;
-	}
-	nb_fds = prog_parse_fds(argc, argv, &fds);
-	if (nb_fds != 1) {
-		if (nb_fds > 1) {
-			p_err("several programs match this handle");
-			while (nb_fds--)
-				close(fds[nb_fds]);
-		}
-		fd = -1;
-		goto exit_free;
-	}
-
-	fd = fds[0];
-exit_free:
-	free(fds);
-	return fd;
 }
 
 static void show_prog_maps(int fd, __u32 num_maps)
@@ -526,7 +388,7 @@ prog_dump(struct bpf_prog_info *info, enum dump_mode mode,
 		buf = (unsigned char *)(info->jited_prog_insns);
 		member_len = info->jited_prog_len;
 	} else {	/* DUMP_XLATED */
-		if (info->xlated_prog_len == 0) {
+		if (info->xlated_prog_len == 0 || !info->xlated_prog_insns) {
 			p_err("error retrieving insn dump: kernel.kptr_restrict set?");
 			return -1;
 		}

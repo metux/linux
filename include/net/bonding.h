@@ -86,9 +86,6 @@
 #define bond_for_each_slave_rcu(bond, pos, iter) \
 	netdev_for_each_lower_private_rcu((bond)->dev, pos, iter)
 
-#define BOND_XFRM_FEATURES (NETIF_F_HW_ESP | NETIF_F_HW_ESP_TX_CSUM | \
-			    NETIF_F_GSO_ESP)
-
 #ifdef CONFIG_NET_POLL_CONTROLLER
 extern atomic_t netpoll_block_tx;
 
@@ -182,11 +179,6 @@ struct slave {
 	struct kobject kobj;
 	struct rtnl_link_stats64 slave_stats;
 };
-
-static inline struct slave *to_slave(struct kobject *kobj)
-{
-	return container_of(kobj, struct slave, kobj);
-}
 
 struct bond_up_slave {
 	unsigned int	count;
@@ -752,9 +744,6 @@ extern struct bond_parm_tbl ad_select_tbl[];
 
 /* exported from bond_netlink.c */
 extern struct rtnl_link_ops bond_link_ops;
-
-/* exported from bond_sysfs_slave.c */
-extern const struct sysfs_ops slave_sysfs_ops;
 
 static inline netdev_tx_t bond_tx_drop(struct net_device *dev, struct sk_buff *skb)
 {

@@ -48,19 +48,23 @@ base907c_image_set(struct nv50_wndw *wndw, struct nv50_wndw_atom *asyw)
 	return 0;
 }
 
-static void
+static int
 base907c_xlut_clr(struct nv50_wndw *wndw)
 {
-	u32 *push;
-	if ((push = evo_wait(&wndw->wndw, 6))) {
-		evo_mthd(push, 0x00e0, 1);
-		evo_data(push, 0x00000000);
-		evo_mthd(push, 0x00e8, 1);
-		evo_data(push, 0x00000000);
-		evo_mthd(push, 0x00fc, 1);
-		evo_data(push, 0x00000000);
-		evo_kick(push, &wndw->wndw);
-	}
+	struct nvif_push *push = wndw->wndw.push;
+	int ret;
+
+	if ((ret = PUSH_WAIT(push, 6)))
+		return ret;
+
+	PUSH_MTHD(push, NV907C, SET_BASE_LUT_LO,
+		  NVDEF(NV907C, SET_BASE_LUT_LO, ENABLE, DISABLE));
+
+	PUSH_MTHD(push, NV907C, SET_OUTPUT_LUT_LO,
+		  NVDEF(NV907C, SET_OUTPUT_LUT_LO, ENABLE, DISABLE));
+
+	PUSH_MTHD(push, NV907C, SET_CONTEXT_DMA_LUT, 0x00000000);
+	return 0;
 }
 
 static int

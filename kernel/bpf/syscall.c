@@ -2121,7 +2121,7 @@ static int bpf_prog_load(union bpf_attr *attr, union bpf_attr __user *uattr)
 	    !bpf_capable())
 		return -EPERM;
 
-	if (is_net_admin_prog_type(type) && !capable(CAP_SYS_ADMIN))
+	if (is_net_admin_prog_type(type) && !capable(CAP_NET_ADMIN) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (is_perfmon_prog_type(type) && !perfmon_capable())
 		return -EPERM;
@@ -3037,6 +3037,23 @@ again:
 
 #define BPF_PROG_GET_FD_BY_ID_LAST_FIELD prog_id
 
+struct bpf_prog *bpf_prog_by_id(u32 id)
+{
+	struct bpf_prog *prog;
+
+	if (!id)
+		return ERR_PTR(-ENOENT);
+
+	spin_lock_bh(&prog_idr_lock);
+	prog = idr_find(&prog_idr, id);
+	if (prog)
+		prog = bpf_prog_inc_not_zero(prog);
+	else
+		prog = ERR_PTR(-ENOENT);
+	spin_unlock_bh(&prog_idr_lock);
+	return prog;
+}
+
 static int bpf_prog_get_fd_by_id(const union bpf_attr *attr)
 {
 	struct bpf_prog *prog;
@@ -3049,14 +3066,7 @@ static int bpf_prog_get_fd_by_id(const union bpf_attr *attr)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	spin_lock_bh(&prog_idr_lock);
-	prog = idr_find(&prog_idr, id);
-	if (prog)
-		prog = bpf_prog_inc_not_zero(prog);
-	else
-		prog = ERR_PTR(-ENOENT);
-	spin_unlock_bh(&prog_idr_lock);
-
+	prog = bpf_prog_by_id(id);
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);
 
@@ -3129,8 +3139,7 @@ static const struct bpf_map *bpf_map_from_imm(const struct bpf_prog *prog,
 	return NULL;
 }
 
-static struct bpf_insn *bpf_insn_prepare_dump(const struct bpf_prog *prog,
-					      const struct cred *f_cred)
+static struct bpf_insn *bpf_insn_prepare_dump(const struct bpf_prog *prog)
 {
 	const struct bpf_map *map;
 	struct bpf_insn *insns;
@@ -3156,7 +3165,7 @@ static struct bpf_insn *bpf_insn_prepare_dump(const struct bpf_prog *prog,
 		    code == (BPF_JMP | BPF_CALL_ARGS)) {
 			if (code == (BPF_JMP | BPF_CALL_ARGS))
 				insns[i].code = BPF_JMP | BPF_CALL;
-			if (!bpf_dump_raw_ok(f_cred))
+			if (!bpf_dump_raw_ok())
 				insns[i].imm = 0;
 			continue;
 		}
@@ -3212,8 +3221,7 @@ static int set_info_rec_size(struct bpf_prog_info *info)
 	return 0;
 }
 
-static int bpf_prog_get_info_by_fd(struct file *file,
-				   struct bpf_prog *prog,
+static int bpf_prog_get_info_by_fd(struct bpf_prog *prog,
 				   const union bpf_attr *attr,
 				   union bpf_attr __user *uattr)
 {
@@ -3282,11 +3290,11 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 		struct bpf_insn *insns_sanitized;
 		bool fault;
 
-		if (prog->blinded && !bpf_dump_raw_ok(file->f_cred)) {
+		if (prog->blinded && !bpf_dump_raw_ok()) {
 			info.xlated_prog_insns = 0;
 			goto done;
 		}
-		insns_sanitized = bpf_insn_prepare_dump(prog, file->f_cred);
+		insns_sanitized = bpf_insn_prepare_dump(prog);
 		if (!insns_sanitized)
 			return -ENOMEM;
 		uinsns = u64_to_user_ptr(info.xlated_prog_insns);
@@ -3320,7 +3328,7 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 	}
 
 	if (info.jited_prog_len && ulen) {
-		if (bpf_dump_raw_ok(file->f_cred)) {
+		if (bpf_dump_raw_ok()) {
 			uinsns = u64_to_user_ptr(info.jited_prog_insns);
 			ulen = min_t(u32, info.jited_prog_len, ulen);
 
@@ -3355,7 +3363,7 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 	ulen = info.nr_jited_ksyms;
 	info.nr_jited_ksyms = prog->aux->func_cnt ? : 1;
 	if (ulen) {
-		if (bpf_dump_raw_ok(file->f_cred)) {
+		if (bpf_dump_raw_ok()) {
 			unsigned long ksym_addr;
 			u64 __user *user_ksyms;
 			u32 i;
@@ -3386,7 +3394,7 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 	ulen = info.nr_jited_func_lens;
 	info.nr_jited_func_lens = prog->aux->func_cnt ? : 1;
 	if (ulen) {
-		if (bpf_dump_raw_ok(file->f_cred)) {
+		if (bpf_dump_raw_ok()) {
 			u32 __user *user_lens;
 			u32 func_len, i;
 
@@ -3443,7 +3451,7 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 	else
 		info.nr_jited_line_info = 0;
 	if (info.nr_jited_line_info && ulen) {
-		if (bpf_dump_raw_ok(file->f_cred)) {
+		if (bpf_dump_raw_ok()) {
 			__u64 __user *user_linfo;
 			u32 i;
 
@@ -3489,8 +3497,7 @@ done:
 	return 0;
 }
 
-static int bpf_map_get_info_by_fd(struct file *file,
-				  struct bpf_map *map,
+static int bpf_map_get_info_by_fd(struct bpf_map *map,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
@@ -3533,8 +3540,7 @@ static int bpf_map_get_info_by_fd(struct file *file,
 	return 0;
 }
 
-static int bpf_btf_get_info_by_fd(struct file *file,
-				  struct btf *btf,
+static int bpf_btf_get_info_by_fd(struct btf *btf,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
@@ -3549,8 +3555,7 @@ static int bpf_btf_get_info_by_fd(struct file *file,
 	return btf_get_info_by_fd(btf, attr, uattr);
 }
 
-static int bpf_link_get_info_by_fd(struct file *file,
-				  struct bpf_link *link,
+static int bpf_link_get_info_by_fd(struct bpf_link *link,
 				  const union bpf_attr *attr,
 				  union bpf_attr __user *uattr)
 {
@@ -3603,15 +3608,15 @@ static int bpf_obj_get_info_by_fd(const union bpf_attr *attr,
 		return -EBADFD;
 
 	if (f.file->f_op == &bpf_prog_fops)
-		err = bpf_prog_get_info_by_fd(f.file, f.file->private_data, attr,
+		err = bpf_prog_get_info_by_fd(f.file->private_data, attr,
 					      uattr);
 	else if (f.file->f_op == &bpf_map_fops)
-		err = bpf_map_get_info_by_fd(f.file, f.file->private_data, attr,
+		err = bpf_map_get_info_by_fd(f.file->private_data, attr,
 					     uattr);
 	else if (f.file->f_op == &btf_fops)
-		err = bpf_btf_get_info_by_fd(f.file, f.file->private_data, attr, uattr);
+		err = bpf_btf_get_info_by_fd(f.file->private_data, attr, uattr);
 	else if (f.file->f_op == &bpf_link_fops)
-		err = bpf_link_get_info_by_fd(f.file, f.file->private_data,
+		err = bpf_link_get_info_by_fd(f.file->private_data,
 					      attr, uattr);
 	else
 		err = -EINVAL;

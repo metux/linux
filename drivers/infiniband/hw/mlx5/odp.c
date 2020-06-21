@@ -291,6 +291,7 @@ static bool mlx5_ib_invalidate_range(struct mmu_interval_notifier *mni,
 	const u64 umr_block_mask = (MLX5_UMR_MTT_ALIGNMENT /
 				    sizeof(struct mlx5_mtt)) - 1;
 	u64 idx = 0, blk_start_idx = 0;
+	u64 invalidations = 0;
 	unsigned long start;
 	unsigned long end;
 	int in_block = 0;
@@ -332,6 +333,9 @@ static bool mlx5_ib_invalidate_range(struct mmu_interval_notifier *mni,
 				blk_start_idx = idx;
 				in_block = 1;
 			}
+
+			/* Count page invalidations */
+			invalidations += idx - blk_start_idx + 1;
 		} else {
 			u64 umr_offset = idx & umr_block_mask;
 
@@ -349,6 +353,9 @@ static bool mlx5_ib_invalidate_range(struct mmu_interval_notifier *mni,
 				   idx - blk_start_idx + 1, 0,
 				   MLX5_IB_UPD_XLT_ZAP |
 				   MLX5_IB_UPD_XLT_ATOMIC);
+
+	mlx5_update_odp_stats(mr, invalidations, invalidations);
+
 	/*
 	 * We are now sure that the device will not access the
 	 * memory. We can safely unmap it, and mark it as dirty if
@@ -432,8 +439,6 @@ void mlx5_ib_internal_fill_odp_caps(struct mlx5_ib_dev *dev)
 	    MLX5_CAP_GEN(dev->mdev, umr_extended_translation_offset) &&
 	    !MLX5_CAP_GEN(dev->mdev, umr_indirect_mkey_disabled))
 		caps->general_caps |= IB_ODP_SUPPORT_IMPLICIT;
-
-	return;
 }
 
 static void mlx5_ib_page_fault_resume(struct mlx5_ib_dev *dev,
@@ -548,6 +553,7 @@ struct mlx5_ib_mr *mlx5_ib_alloc_implicit_mr(struct mlx5_ib_pd *pd,
 	imr->ibmr.lkey = imr->mmkey.key;
 	imr->ibmr.rkey = imr->mmkey.key;
 	imr->umem = &umem_odp->umem;
+	imr->is_odp_implicit = true;
 	atomic_set(&imr->num_deferred_work, 0);
 	init_waitqueue_head(&imr->q_deferred_work);
 	xa_init(&imr->implicit_children);
@@ -595,23 +601,6 @@ void mlx5_ib_free_implicit_mr(struct mlx5_ib_mr *imr)
 	 */
 	synchronize_srcu(&dev->odp_srcu);
 
-	/*
-	 * All work on the prefetch list must be completed, xa_erase() prevented
-	 * new work from being created.
-	 */
-	wait_event(imr->q_deferred_work, !atomic_read(&imr->num_deferred_work));
-
-	/*
-	 * At this point it is forbidden for any other thread to enter
-	 * pagefault_mr() on this imr. It is already forbidden to call
-	 * pagefault_mr() on an implicit child. Due to this additions to
-	 * implicit_children are prevented.
-	 */
-
-	/*
-	 * Block destroy_unused_implicit_child_mr() from incrementing
-	 * num_deferred_work.
-	 */
 	xa_lock(&imr->implicit_children);
 	xa_for_each (&imr->implicit_children, idx, mtt) {
 		__xa_erase(&imr->implicit_children, idx);
@@ -620,8 +609,9 @@ void mlx5_ib_free_implicit_mr(struct mlx5_ib_mr *imr)
 	xa_unlock(&imr->implicit_children);
 
 	/*
-	 * Wait for any concurrent destroy_unused_implicit_child_mr() to
-	 * complete.
+	 * num_deferred_work can only be incremented inside the odp_srcu, or
+	 * under xa_lock while the child is in the xarray. Thus at this point
+	 * it is only decreasing, and all work holding it is now on the wq.
 	 */
 	wait_event(imr->q_deferred_work, !atomic_read(&imr->num_deferred_work));
 
@@ -922,6 +912,8 @@ next_mr:
 		ret = pagefault_mr(mr, io_virt, bcnt, bytes_mapped, 0);
 		if (ret < 0)
 			goto srcu_unlock;
+
+		mlx5_update_odp_stats(mr, faults, ret);
 
 		npages += ret;
 		ret = 0;
@@ -1758,12 +1750,17 @@ static void mlx5_ib_prefetch_mr_work(struct work_struct *w)
 	struct prefetch_mr_work *work =
 		container_of(w, struct prefetch_mr_work, work);
 	u32 bytes_mapped = 0;
+	int ret;
 	u32 i;
 
-	for (i = 0; i < work->num_sge; ++i)
-		pagefault_mr(work->frags[i].mr, work->frags[i].io_virt,
-			     work->frags[i].length, &bytes_mapped,
-			     work->pf_flags);
+	for (i = 0; i < work->num_sge; ++i) {
+		ret = pagefault_mr(work->frags[i].mr, work->frags[i].io_virt,
+				   work->frags[i].length, &bytes_mapped,
+				   work->pf_flags);
+		if (ret <= 0)
+			continue;
+		mlx5_update_odp_stats(work->frags[i].mr, prefetch, ret);
+	}
 
 	destroy_prefetch_work(work);
 }
@@ -1784,7 +1781,9 @@ static bool init_prefetch_work(struct ib_pd *pd,
 		work->frags[i].mr =
 			get_prefetchable_mr(pd, advice, sg_list[i].lkey);
 		if (!work->frags[i].mr) {
-			work->num_sge = i;
+			work->num_sge = i - 1;
+			if (i)
+				destroy_prefetch_work(work);
 			return false;
 		}
 
@@ -1819,6 +1818,7 @@ static int mlx5_ib_prefetch_sg_list(struct ib_pd *pd,
 				   &bytes_mapped, pf_flags);
 		if (ret < 0)
 			goto out;
+		mlx5_update_odp_stats(mr, prefetch, ret);
 	}
 	ret = 0;
 
@@ -1850,7 +1850,6 @@ int mlx5_ib_advise_mr_prefetch(struct ib_pd *pd,
 	srcu_key = srcu_read_lock(&dev->odp_srcu);
 	if (!init_prefetch_work(pd, advice, pf_flags, work, sg_list, num_sge)) {
 		srcu_read_unlock(&dev->odp_srcu, srcu_key);
-		destroy_prefetch_work(work);
 		return -EINVAL;
 	}
 	queue_work(system_unbound_wq, &work->work);

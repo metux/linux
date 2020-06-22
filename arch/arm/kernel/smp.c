@@ -714,7 +714,8 @@ static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
 
 static void ipi_send(const struct cpumask *target, unsigned int ipi)
 {
-	__ipi_send_mask(ipi_desc[ipi], target);
+	trace_ipi_raise_rcuidle(target, ipi_types[ipinr]);
+	__ipi_send_mask(ipi_desc[ipinr], target);
 }
 
 static void ipi_setup(int cpu)
@@ -732,7 +733,7 @@ static void ipi_teardown(int cpu)
 {
 	int i;
 
-	if (!ipi_irq_base)
+	if (WARN_ON_ONCE(!ipi_irq_base))
 		return;
 
 	for (i = 0; i < nr_ipi; i++)
@@ -758,7 +759,6 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 	}
 
 	ipi_irq_base = ipi_base;
-	set_smp_cross_call(ipi_send);
 
 	/* Setup the boot CPU immediately */
 	ipi_setup(smp_processor_id());

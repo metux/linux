@@ -1993,7 +1993,7 @@ static void frob_writable_data(const struct module_layout *layout,
 		   (layout->size - layout->ro_after_init_size) >> PAGE_SHIFT);
 }
 
-static void module_enable_ro(const struct module *mod, bool after_init)
+void module_enable_ro(const struct module *mod, bool after_init)
 {
 	if (!rodata_enabled)
 		return;
@@ -2064,7 +2064,6 @@ void set_all_modules_text_ro(void)
 }
 #else /* !CONFIG_STRICT_MODULE_RWX */
 static void module_enable_nx(const struct module *mod) { }
-static void module_enable_ro(const struct module *mod, bool after_init) {}
 #endif /*  CONFIG_STRICT_MODULE_RWX */
 static void module_enable_x(const struct module *mod)
 {

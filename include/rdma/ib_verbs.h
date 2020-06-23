@@ -72,10 +72,15 @@
 #define IB_FW_VERSION_NAME_MAX	ETHTOOL_FWVERS_LEN
 
 struct ib_umem_odp;
+struct ib_uqp_object;
+struct ib_usrq_object;
+struct ib_uwq_object;
 
 extern struct workqueue_struct *ib_wq;
 extern struct workqueue_struct *ib_comp_wq;
 extern struct workqueue_struct *ib_comp_unbound_wq;
+
+struct ib_ucq_object;
 
 __printf(3, 4) __cold
 void ibdev_printk(const char *level, const struct ib_device *ibdev,
@@ -445,6 +450,8 @@ struct ib_device_attr {
 	struct ib_tm_caps	tm_caps;
 	struct ib_cq_caps       cq_caps;
 	u64			max_dm_size;
+	/* Max entries for sgl for optimized performance per READ */
+	u32			max_sgl_rd;
 };
 
 enum ib_mtu {
@@ -1450,8 +1457,11 @@ enum ib_access_flags {
 	IB_ZERO_BASED = IB_UVERBS_ACCESS_ZERO_BASED,
 	IB_ACCESS_ON_DEMAND = IB_UVERBS_ACCESS_ON_DEMAND,
 	IB_ACCESS_HUGETLB = IB_UVERBS_ACCESS_HUGETLB,
+	IB_ACCESS_RELAXED_ORDERING = IB_UVERBS_ACCESS_RELAXED_ORDERING,
 
-	IB_ACCESS_SUPPORTED = ((IB_ACCESS_HUGETLB << 1) - 1)
+	IB_ACCESS_OPTIONAL = IB_UVERBS_ACCESS_OPTIONAL_RANGE,
+	IB_ACCESS_SUPPORTED =
+		((IB_ACCESS_HUGETLB << 1) - 1) | IB_ACCESS_OPTIONAL,
 };
 
 /*
@@ -1582,7 +1592,7 @@ enum ib_poll_context {
 
 struct ib_cq {
 	struct ib_device       *device;
-	struct ib_uobject      *uobject;
+	struct ib_ucq_object   *uobject;
 	ib_comp_handler   	comp_handler;
 	void                  (*event_handler)(struct ib_event *, void *);
 	void                   *cq_context;
@@ -1614,7 +1624,7 @@ struct ib_cq {
 struct ib_srq {
 	struct ib_device       *device;
 	struct ib_pd	       *pd;
-	struct ib_uobject      *uobject;
+	struct ib_usrq_object  *uobject;
 	void		      (*event_handler)(struct ib_event *, void *);
 	void		       *srq_context;
 	enum ib_srq_type	srq_type;
@@ -1659,7 +1669,7 @@ enum ib_wq_state {
 
 struct ib_wq {
 	struct ib_device       *device;
-	struct ib_uobject      *uobject;
+	struct ib_uwq_object   *uobject;
 	void		    *wq_context;
 	void		    (*event_handler)(struct ib_event *, void *);
 	struct ib_pd	       *pd;
@@ -1776,7 +1786,7 @@ struct ib_qp {
 	atomic_t		usecnt;
 	struct list_head	open_list;
 	struct ib_qp           *real_qp;
-	struct ib_uobject      *uobject;
+	struct ib_uqp_object   *uobject;
 	void                  (*event_handler)(struct ib_event *, void *);
 	void		       *qp_context;
 	/* sgid_attrs associated with the AV's */
@@ -2163,7 +2173,7 @@ struct ib_flow_action {
 	atomic_t			usecnt;
 };
 
-struct ib_mad_hdr;
+struct ib_mad;
 struct ib_grh;
 
 enum ib_process_mad_flags {
@@ -2185,10 +2195,6 @@ struct ib_port_cache {
 	struct ib_gid_table   *gid;
 	u8                     lmc;
 	enum ib_port_state     port_state;
-};
-
-struct ib_cache {
-	rwlock_t                lock;
 };
 
 struct ib_port_immutable {
@@ -2341,9 +2347,8 @@ struct ib_device_ops {
 	int (*process_mad)(struct ib_device *device, int process_mad_flags,
 			   u8 port_num, const struct ib_wc *in_wc,
 			   const struct ib_grh *in_grh,
-			   const struct ib_mad_hdr *in_mad, size_t in_mad_size,
-			   struct ib_mad_hdr *out_mad, size_t *out_mad_size,
-			   u16 *out_mad_pkey_index);
+			   const struct ib_mad *in_mad, struct ib_mad *out_mad,
+			   size_t *out_mad_size, u16 *out_mad_pkey_index);
 	int (*query_device)(struct ib_device *device,
 			    struct ib_device_attr *device_attr,
 			    struct ib_udata *udata);
@@ -2578,6 +2583,7 @@ struct ib_device_ops {
 	 */
 	int (*fill_res_entry)(struct sk_buff *msg,
 			      struct rdma_restrack_entry *entry);
+	int (*fill_res_mr_entry)(struct sk_buff *msg, struct ib_mr *ibmr);
 
 	/* Device lifecycle callbacks */
 	/*
@@ -2628,6 +2634,12 @@ struct ib_device_ops {
 	 */
 	int (*counter_update_stats)(struct rdma_counter *counter);
 
+	/**
+	 * Allows rdma drivers to add their own restrack attributes
+	 * dumped via 'rdma stat' iproute2 command.
+	 */
+	int (*fill_stat_mr_entry)(struct sk_buff *msg, struct ib_mr *ibmr);
+
 	DECLARE_RDMA_OBJ_SIZE(ib_ah);
 	DECLARE_RDMA_OBJ_SIZE(ib_cq);
 	DECLARE_RDMA_OBJ_SIZE(ib_pd);
@@ -2659,13 +2671,14 @@ struct ib_device {
 	struct rw_semaphore event_handler_rwsem;
 
 	/* Protects QP's event_handler calls and open_qp list */
-	spinlock_t event_handler_lock;
+	spinlock_t qp_open_list_lock;
 
 	struct rw_semaphore	      client_data_rwsem;
 	struct xarray                 client_data;
 	struct mutex                  unregistration_lock;
 
-	struct ib_cache               cache;
+	/* Synchronize GID, Pkey cache entries, subnet prefix, LMC */
+	rwlock_t cache_lock;
 	/**
 	 * port_data is indexed by port number
 	 */
@@ -2862,21 +2875,17 @@ void  ib_set_client_data(struct ib_device *device, struct ib_client *client,
 void ib_set_device_ops(struct ib_device *device,
 		       const struct ib_device_ops *ops);
 
-#if IS_ENABLED(CONFIG_INFINIBAND_USER_ACCESS)
 int rdma_user_mmap_io(struct ib_ucontext *ucontext, struct vm_area_struct *vma,
-		      unsigned long pfn, unsigned long size, pgprot_t prot);
-#else
-static inline int rdma_user_mmap_io(struct ib_ucontext *ucontext,
-				    struct vm_area_struct *vma,
-				    unsigned long pfn, unsigned long size,
-				    pgprot_t prot)
-{
-	return -EINVAL;
-}
-#endif
+		      unsigned long pfn, unsigned long size, pgprot_t prot,
+		      struct rdma_user_mmap_entry *entry);
 int rdma_user_mmap_entry_insert(struct ib_ucontext *ucontext,
 				struct rdma_user_mmap_entry *entry,
 				size_t length);
+int rdma_user_mmap_entry_insert_range(struct ib_ucontext *ucontext,
+				      struct rdma_user_mmap_entry *entry,
+				      size_t length, u32 min_pgoff,
+				      u32 max_pgoff);
+
 struct rdma_user_mmap_entry *
 rdma_user_mmap_entry_get_pgoff(struct ib_ucontext *ucontext,
 			       unsigned long pgoff);
@@ -4158,9 +4167,7 @@ static inline void ib_dma_unmap_sg_attrs(struct ib_device *dev,
  */
 static inline unsigned int ib_dma_max_seg_size(struct ib_device *dev)
 {
-	struct device_dma_parameters *p = dev->dma_device->dma_parms;
-
-	return p ? p->max_segment_size : UINT_MAX;
+	return dma_get_max_seg_size(dev->dma_device);
 }
 
 /**
@@ -4222,6 +4229,15 @@ static inline void ib_dma_free_coherent(struct ib_device *dev,
 	dma_free_coherent(dev->dma_device, size, cpu_addr, dma_handle);
 }
 
+/* ib_reg_user_mr - register a memory region for virtual addresses from kernel
+ * space. This function should be called when 'current' is the owning MM.
+ */
+struct ib_mr *ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
+			     u64 virt_addr, int mr_access_flags);
+
+/* ib_advise_mr -  give an advice about an address range in a memory region */
+int ib_advise_mr(struct ib_pd *pd, enum ib_uverbs_advise_mr_advice advice,
+		 u32 flags, struct ib_sge *sg_list, u32 num_sge);
 /**
  * ib_dereg_mr_user - Deregisters a memory region and removes it from the
  *   HCA translation table.
@@ -4328,6 +4344,9 @@ static inline int ib_check_mr_access(int flags)
 	 */
 	if (flags & (IB_ACCESS_REMOTE_ATOMIC | IB_ACCESS_REMOTE_WRITE) &&
 	    !(flags & IB_ACCESS_LOCAL_WRITE))
+		return -EINVAL;
+
+	if (flags & ~IB_ACCESS_SUPPORTED)
 		return -EINVAL;
 
 	return 0;

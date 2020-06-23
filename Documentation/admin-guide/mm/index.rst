@@ -30,6 +30,7 @@ the Linux memory management.
    idle_page_tracking
    ksm
    memory-hotplug
+   nommu-map
    numa_memory_policy
    numaperf
    pagemap

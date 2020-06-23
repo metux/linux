@@ -6,10 +6,10 @@
  */
 
 #include "goyaP.h"
-#include "../include/hw_ip/mmu/mmu_general.h"
-#include "../include/hw_ip/mmu/mmu_v1_0.h"
-#include "../include/goya/asic_reg/goya_masks.h"
-#include "../include/goya/goya_reg_map.h"
+#include "include/hw_ip/mmu/mmu_general.h"
+#include "include/hw_ip/mmu/mmu_v1_0.h"
+#include "include/goya/asic_reg/goya_masks.h"
+#include "include/goya/goya_reg_map.h"
 
 #include <linux/pci.h>
 #include <linux/genalloc.h>
@@ -138,25 +138,6 @@ static u16 goya_packet_sizes[MAX_PACKET_ID] = {
 	[PACKET_NOP]		= sizeof(struct packet_nop),
 	[PACKET_STOP]		= sizeof(struct packet_stop)
 };
-
-static inline bool validate_packet_id(enum packet_id id)
-{
-	switch (id) {
-	case PACKET_WREG_32:
-	case PACKET_WREG_BULK:
-	case PACKET_MSG_LONG:
-	case PACKET_MSG_SHORT:
-	case PACKET_CP_DMA:
-	case PACKET_MSG_PROT:
-	case PACKET_FENCE:
-	case PACKET_LIN_DMA:
-	case PACKET_NOP:
-	case PACKET_STOP:
-		return true;
-	default:
-		return false;
-	}
-}
 
 static u64 goya_mmu_regs[GOYA_MMU_REGS_NUM] = {
 	mmDMA_QM_0_GLBL_NON_SECURE_PROPS,
@@ -2260,15 +2241,29 @@ static void goya_disable_timestamp(struct hl_device *hdev)
 
 static void goya_halt_engines(struct hl_device *hdev, bool hard_reset)
 {
-	u32 wait_timeout_ms;
+	u32 wait_timeout_ms, cpu_timeout_ms;
 
 	dev_info(hdev->dev,
 		"Halting compute engines and disabling interrupts\n");
 
-	if (hdev->pldm)
+	if (hdev->pldm) {
 		wait_timeout_ms = GOYA_PLDM_RESET_WAIT_MSEC;
-	else
+		cpu_timeout_ms = GOYA_PLDM_RESET_WAIT_MSEC;
+	} else {
 		wait_timeout_ms = GOYA_RESET_WAIT_MSEC;
+		cpu_timeout_ms = GOYA_CPU_RESET_WAIT_MSEC;
+	}
+
+	if (hard_reset) {
+		/*
+		 * I don't know what is the state of the CPU so make sure it is
+		 * stopped in any means necessary
+		 */
+		WREG32(mmPSOC_GLOBAL_CONF_UBOOT_MAGIC, KMD_MSG_GOTO_WFE);
+		WREG32(mmGIC_DISTRIBUTOR__5_GICD_SETSPI_NSR,
+			GOYA_ASYNC_EVENT_ID_HALT_MACHINE);
+		msleep(cpu_timeout_ms);
+	}
 
 	goya_stop_external_queues(hdev);
 	goya_stop_internal_queues(hdev);
@@ -2573,26 +2568,14 @@ disable_queues:
 static void goya_hw_fini(struct hl_device *hdev, bool hard_reset)
 {
 	struct goya_device *goya = hdev->asic_specific;
-	u32 reset_timeout_ms, cpu_timeout_ms, status;
+	u32 reset_timeout_ms, status;
 
-	if (hdev->pldm) {
+	if (hdev->pldm)
 		reset_timeout_ms = GOYA_PLDM_RESET_TIMEOUT_MSEC;
-		cpu_timeout_ms = GOYA_PLDM_RESET_WAIT_MSEC;
-	} else {
+	else
 		reset_timeout_ms = GOYA_RESET_TIMEOUT_MSEC;
-		cpu_timeout_ms = GOYA_CPU_RESET_WAIT_MSEC;
-	}
 
 	if (hard_reset) {
-		/* I don't know what is the state of the CPU so make sure it is
-		 * stopped in any means necessary
-		 */
-		WREG32(mmPSOC_GLOBAL_CONF_UBOOT_MAGIC, KMD_MSG_GOTO_WFE);
-		WREG32(mmGIC_DISTRIBUTOR__5_GICD_SETSPI_NSR,
-			GOYA_ASYNC_EVENT_ID_HALT_MACHINE);
-
-		msleep(cpu_timeout_ms);
-
 		goya_set_ddr_bar_base(hdev, DRAM_PHYS_BASE);
 		goya_disable_clk_rlx(hdev);
 		goya_set_pll_refclk(hdev);
@@ -3474,12 +3457,6 @@ static int goya_validate_cb(struct hl_device *hdev,
 				PACKET_HEADER_PACKET_ID_MASK) >>
 					PACKET_HEADER_PACKET_ID_SHIFT);
 
-		if (!validate_packet_id(pkt_id)) {
-			dev_err(hdev->dev, "Invalid packet id %u\n", pkt_id);
-			rc = -EINVAL;
-			break;
-		}
-
 		pkt_size = goya_packet_sizes[pkt_id];
 		cb_parsed_length += pkt_size;
 		if (cb_parsed_length > parser->user_cb_size) {
@@ -3715,12 +3692,6 @@ static int goya_patch_cb(struct hl_device *hdev,
 				PACKET_HEADER_PACKET_ID_MASK) >>
 					PACKET_HEADER_PACKET_ID_SHIFT);
 
-		if (!validate_packet_id(pkt_id)) {
-			dev_err(hdev->dev, "Invalid packet id %u\n", pkt_id);
-			rc = -EINVAL;
-			break;
-		}
-
 		pkt_size = goya_packet_sizes[pkt_id];
 		cb_parsed_length += pkt_size;
 		if (cb_parsed_length > parser->user_cb_size) {
@@ -3806,8 +3777,9 @@ static int goya_parse_cb_mmu(struct hl_device *hdev,
 	parser->patched_cb_size = parser->user_cb_size +
 			sizeof(struct packet_msg_prot) * 2;
 
-	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, parser->patched_cb_size,
-			&patched_cb_handle, HL_KERNEL_ASID_ID, false);
+	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr,
+				parser->patched_cb_size,
+				&patched_cb_handle, HL_KERNEL_ASID_ID);
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -3879,8 +3851,9 @@ static int goya_parse_cb_no_mmu(struct hl_device *hdev,
 	if (rc)
 		goto free_userptr;
 
-	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, parser->patched_cb_size,
-			&patched_cb_handle, HL_KERNEL_ASID_ID, false);
+	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr,
+				parser->patched_cb_size,
+				&patched_cb_handle, HL_KERNEL_ASID_ID);
 	if (rc) {
 		dev_err(hdev->dev,
 			"Failed to allocate patched CB for DMA CS %d\n", rc);
@@ -4726,7 +4699,7 @@ static int goya_memset_device_memory(struct hl_device *hdev, u64 addr, u64 size,
 	lin_dma_pkts_cnt = DIV_ROUND_UP_ULL(size, SZ_2G);
 	cb_size = lin_dma_pkts_cnt * sizeof(struct packet_lin_dma) +
 						sizeof(struct packet_msg_prot);
-	cb = hl_cb_kernel_create(hdev, cb_size, false);
+	cb = hl_cb_kernel_create(hdev, cb_size);
 	if (!cb)
 		return -ENOMEM;
 
@@ -5256,11 +5229,6 @@ static enum hl_device_hw_state goya_get_hw_state(struct hl_device *hdev)
 	return RREG32(mmHW_STATE);
 }
 
-static int goya_ctx_init(struct hl_ctx *ctx)
-{
-	return 0;
-}
-
 u32 goya_get_queue_id_for_cq(struct hl_device *hdev, u32 cq_idx)
 {
 	return cq_idx;
@@ -5374,7 +5342,6 @@ static const struct hl_asic_funcs goya_funcs = {
 	.rreg = hl_rreg,
 	.wreg = hl_wreg,
 	.halt_coresight = goya_halt_coresight,
-	.ctx_init = goya_ctx_init,
 	.get_clk_rate = goya_get_clk_rate,
 	.get_queue_id_for_cq = goya_get_queue_id_for_cq,
 	.read_device_fw_version = goya_read_device_fw_version,

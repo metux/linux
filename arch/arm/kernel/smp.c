@@ -85,6 +85,7 @@ static int nr_ipi __read_mostly = NR_IPI;
 static struct irq_desc *ipi_desc[MAX_IPI] __read_mostly;
 
 static void ipi_setup(int cpu);
+static void ipi_teardown(int cpu);
 
 static DECLARE_COMPLETION(cpu_running);
 
@@ -711,6 +712,11 @@ static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
 	__ipi_send_mask(ipi_desc[ipinr], target);
 }
 
+static void ipi_send(const struct cpumask *target, unsigned int ipi)
+{
+	__ipi_send_mask(ipi_desc[ipi], target);
+}
+
 static void ipi_setup(int cpu)
 {
 	int i;
@@ -720,6 +726,17 @@ static void ipi_setup(int cpu)
 
 	for (i = 0; i < nr_ipi; i++)
 		enable_percpu_irq(ipi_irq_base + i, 0);
+}
+
+static void ipi_teardown(int cpu)
+{
+	int i;
+
+	if (!ipi_irq_base)
+		return;
+
+	for (i = 0; i < nr_ipi; i++)
+		disable_percpu_irq(ipi_irq_base + i);
 }
 
 void __init set_smp_ipi_range(int ipi_base, int n)
@@ -741,6 +758,7 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 	}
 
 	ipi_irq_base = ipi_base;
+	set_smp_cross_call(ipi_send);
 
 	/* Setup the boot CPU immediately */
 	ipi_setup(smp_processor_id());

@@ -31,32 +31,12 @@
 #include "nouveau_connector.h"
 #include "nouveau_bo.h"
 #include "nouveau_gem.h"
-#include "nouveau_chan.h"
 
 #include <nvif/if0004.h>
 
-struct nouveau_connector *
-nv04_encoder_get_connector(struct nouveau_encoder *encoder)
-{
-	struct drm_device *dev = to_drm_encoder(encoder)->dev;
-	struct drm_connector *connector;
-	struct drm_connector_list_iter conn_iter;
-	struct nouveau_connector *nv_connector = NULL;
-
-	drm_connector_list_iter_begin(dev, &conn_iter);
-	drm_for_each_connector_iter(connector, &conn_iter) {
-		if (connector->encoder == to_drm_encoder(encoder))
-			nv_connector = nouveau_connector(connector);
-	}
-	drm_connector_list_iter_end(&conn_iter);
-
-	return nv_connector;
-}
-
 static void
-nv04_display_fini(struct drm_device *dev, bool runtime, bool suspend)
+nv04_display_fini(struct drm_device *dev, bool suspend)
 {
-	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nv04_display *disp = nv04_display(dev);
 	struct drm_crtc *crtc;
 
@@ -67,9 +47,6 @@ nv04_display_fini(struct drm_device *dev, bool runtime, bool suspend)
 	NVWriteCRTC(dev, 0, NV_PCRTC_INTR_EN_0, 0);
 	if (nv_two_heads(dev))
 		NVWriteCRTC(dev, 1, NV_PCRTC_INTR_EN_0, 0);
-
-	if (!runtime)
-		cancel_work_sync(&drm->hpd_work);
 
 	if (!suspend)
 		return;
@@ -134,7 +111,7 @@ nv04_display_init(struct drm_device *dev, bool resume, bool runtime)
 		if (!fb || !fb->obj[0])
 			continue;
 		nvbo = nouveau_gem_object(fb->obj[0]);
-		ret = nouveau_bo_pin(nvbo, NOUVEAU_GEM_DOMAIN_VRAM, true);
+		ret = nouveau_bo_pin(nvbo, TTM_PL_FLAG_VRAM, true);
 		if (ret)
 			NV_ERROR(drm, "Could not pin framebuffer\n");
 	}
@@ -144,8 +121,7 @@ nv04_display_init(struct drm_device *dev, bool resume, bool runtime)
 		if (!nv_crtc->cursor.nvbo)
 			continue;
 
-		ret = nouveau_bo_pin(nv_crtc->cursor.nvbo,
-				     NOUVEAU_GEM_DOMAIN_VRAM, true);
+		ret = nouveau_bo_pin(nv_crtc->cursor.nvbo, TTM_PL_FLAG_VRAM, true);
 		if (!ret && nv_crtc->cursor.set_offset)
 			ret = nouveau_bo_map(nv_crtc->cursor.nvbo);
 		if (ret)
@@ -202,7 +178,7 @@ nv04_display_destroy(struct drm_device *dev)
 
 	nouveau_hw_save_vga_fonts(dev, 0);
 
-	nvif_notify_dtor(&disp->flip);
+	nvif_notify_fini(&disp->flip);
 
 	nouveau_display(dev)->priv = NULL;
 	kfree(disp);
@@ -238,8 +214,8 @@ nv04_display_create(struct drm_device *dev)
 	dev->driver_features &= ~DRIVER_ATOMIC;
 
 	/* Request page flip completion event. */
-	if (drm->channel) {
-		nvif_notify_ctor(&drm->channel->nvsw, "kmsFlip", nv04_flip_complete,
+	if (drm->nvsw.client) {
+		nvif_notify_init(&drm->nvsw, nv04_flip_complete,
 				 false, NV04_NVSW_NTFY_UEVENT,
 				 NULL, 0, 0, &disp->flip);
 	}

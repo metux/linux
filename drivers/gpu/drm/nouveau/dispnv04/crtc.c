@@ -605,16 +605,15 @@ static int
 nv_crtc_swap_fbs(struct drm_crtc *crtc, struct drm_framebuffer *old_fb)
 {
 	struct nv04_display *disp = nv04_display(crtc->dev);
-	struct drm_framebuffer *fb = crtc->primary->fb;
-	struct nouveau_bo *nvbo = nouveau_gem_object(fb->obj[0]);
+	struct nouveau_framebuffer *nvfb = nouveau_framebuffer(crtc->primary->fb);
 	struct nouveau_crtc *nv_crtc = nouveau_crtc(crtc);
 	int ret;
 
-	ret = nouveau_bo_pin(nvbo, NOUVEAU_GEM_DOMAIN_VRAM, false);
+	ret = nouveau_bo_pin(nvfb->nvbo, TTM_PL_FLAG_VRAM, false);
 	if (ret == 0) {
 		if (disp->image[nv_crtc->index])
 			nouveau_bo_unpin(disp->image[nv_crtc->index]);
-		nouveau_bo_ref(nvbo, &disp->image[nv_crtc->index]);
+		nouveau_bo_ref(nvfb->nvbo, &disp->image[nv_crtc->index]);
 	}
 
 	return ret;
@@ -823,8 +822,8 @@ nv04_crtc_do_mode_set_base(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nv04_crtc_reg *regp = &nv04_display(dev)->mode_reg.crtc_reg[nv_crtc->index];
-	struct nouveau_bo *nvbo;
 	struct drm_framebuffer *drm_fb;
+	struct nouveau_framebuffer *fb;
 	int arb_burst, arb_lwm;
 
 	NV_DEBUG(drm, "index %d\n", nv_crtc->index);
@@ -840,12 +839,13 @@ nv04_crtc_do_mode_set_base(struct drm_crtc *crtc,
 	 */
 	if (atomic) {
 		drm_fb = passed_fb;
+		fb = nouveau_framebuffer(passed_fb);
 	} else {
 		drm_fb = crtc->primary->fb;
+		fb = nouveau_framebuffer(crtc->primary->fb);
 	}
 
-	nvbo = nouveau_gem_object(drm_fb->obj[0]);
-	nv_crtc->fb.offset = nvbo->bo.offset;
+	nv_crtc->fb.offset = fb->nvbo->offset;
 
 	if (nv_crtc->lut.depth != drm_fb->format->depth) {
 		nv_crtc->lut.depth = drm_fb->format->depth;
@@ -1013,7 +1013,7 @@ nv04_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 		nv04_cursor_upload(dev, cursor, nv_crtc->cursor.nvbo);
 
 	nouveau_bo_unmap(cursor);
-	nv_crtc->cursor.offset = nv_crtc->cursor.nvbo->bo.offset;
+	nv_crtc->cursor.offset = nv_crtc->cursor.nvbo->offset;
 	nv_crtc->cursor.set_offset(nv_crtc, nv_crtc->cursor.offset);
 	nv_crtc->cursor.show(nv_crtc, true);
 out:
@@ -1143,9 +1143,8 @@ nv04_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	const int swap_interval = (flags & DRM_MODE_PAGE_FLIP_ASYNC) ? 0 : 1;
 	struct drm_device *dev = crtc->dev;
 	struct nouveau_drm *drm = nouveau_drm(dev);
-	struct drm_framebuffer *old_fb = crtc->primary->fb;
-	struct nouveau_bo *old_bo = nouveau_gem_object(old_fb->obj[0]);
-	struct nouveau_bo *new_bo = nouveau_gem_object(fb->obj[0]);
+	struct nouveau_bo *old_bo = nouveau_framebuffer(crtc->primary->fb)->nvbo;
+	struct nouveau_bo *new_bo = nouveau_framebuffer(fb)->nvbo;
 	struct nv04_page_flip_state *s;
 	struct nouveau_channel *chan;
 	struct nouveau_cli *cli;
@@ -1164,7 +1163,7 @@ nv04_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		return -ENOMEM;
 
 	if (new_bo != old_bo) {
-		ret = nouveau_bo_pin(new_bo, NOUVEAU_GEM_DOMAIN_VRAM, true);
+		ret = nouveau_bo_pin(new_bo, TTM_PL_FLAG_VRAM, true);
 		if (ret)
 			goto fail_free;
 	}
@@ -1192,7 +1191,7 @@ nv04_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	/* Initialize a page flip struct */
 	*s = (struct nv04_page_flip_state)
 		{ { }, event, crtc, fb->format->cpp[0] * 8, fb->pitches[0],
-		  new_bo->bo.offset };
+		  new_bo->offset };
 
 	/* Keep vblanks on during flip, for the target crtc of this flip */
 	drm_crtc_vblank_get(crtc);
@@ -1322,11 +1321,10 @@ nv04_crtc_create(struct drm_device *dev, int crtc_num)
 	drm_mode_crtc_set_gamma_size(&nv_crtc->base, 256);
 
 	ret = nouveau_bo_new(&nouveau_drm(dev)->client, 64*64*4, 0x100,
-			     NOUVEAU_GEM_DOMAIN_VRAM, 0, 0x0000, NULL, NULL,
+			     TTM_PL_FLAG_VRAM, 0, 0x0000, NULL, NULL,
 			     &nv_crtc->cursor.nvbo);
 	if (!ret) {
-		ret = nouveau_bo_pin(nv_crtc->cursor.nvbo,
-				     NOUVEAU_GEM_DOMAIN_VRAM, false);
+		ret = nouveau_bo_pin(nv_crtc->cursor.nvbo, TTM_PL_FLAG_VRAM, false);
 		if (!ret) {
 			ret = nouveau_bo_map(nv_crtc->cursor.nvbo);
 			if (ret)

@@ -7,7 +7,6 @@
 
 #ifndef __ASSEMBLY__
 
-#include <asm/barrier.h>
 #include <asm/unistd.h>
 
 #define VDSO_HAS_CLOCK_GETRES		1
@@ -64,8 +63,7 @@ int clock_getres_fallback(clockid_t _clkid, struct __kernel_timespec *_ts)
 	return ret;
 }
 
-static __always_inline u64 __arch_get_hw_counter(s32 clock_mode,
-						 const struct vdso_data *vd)
+static __always_inline u64 __arch_get_hw_counter(s32 clock_mode)
 {
 	u64 res;
 

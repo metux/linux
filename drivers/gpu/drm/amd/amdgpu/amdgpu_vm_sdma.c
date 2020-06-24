@@ -61,12 +61,10 @@ static int amdgpu_vm_sdma_prepare(struct amdgpu_vm_update_params *p,
 				  struct dma_resv *resv,
 				  enum amdgpu_sync_mode sync_mode)
 {
-	enum amdgpu_ib_pool_type pool = p->immediate ? AMDGPU_IB_POOL_IMMEDIATE
-		: AMDGPU_IB_POOL_DELAYED;
 	unsigned int ndw = AMDGPU_VM_SDMA_MIN_NUM_DW;
 	int r;
 
-	r = amdgpu_job_alloc_with_ib(p->adev, ndw * 4, pool, &p->job);
+	r = amdgpu_job_alloc_with_ib(p->adev, ndw * 4, &p->job);
 	if (r)
 		return r;
 
@@ -92,11 +90,11 @@ static int amdgpu_vm_sdma_commit(struct amdgpu_vm_update_params *p,
 {
 	struct amdgpu_ib *ib = p->job->ibs;
 	struct drm_sched_entity *entity;
+	struct dma_fence *f, *tmp;
 	struct amdgpu_ring *ring;
-	struct dma_fence *f;
 	int r;
 
-	entity = p->immediate ? &p->vm->immediate : &p->vm->delayed;
+	entity = p->direct ? &p->vm->direct : &p->vm->delayed;
 	ring = container_of(entity->rq->sched, struct amdgpu_ring, sched);
 
 	WARN_ON(ib->length_dw == 0);
@@ -106,16 +104,15 @@ static int amdgpu_vm_sdma_commit(struct amdgpu_vm_update_params *p,
 	if (r)
 		goto error;
 
-	if (p->unlocked) {
-		struct dma_fence *tmp = dma_fence_get(f);
-
-		swap(p->vm->last_unlocked, f);
+	if (p->direct) {
+		tmp = dma_fence_get(f);
+		swap(p->vm->last_direct, tmp);
 		dma_fence_put(tmp);
 	} else {
-		amdgpu_bo_fence(p->vm->root.base.bo, f, true);
+		dma_resv_add_shared_fence(p->vm->root.base.bo->tbo.base.resv, f);
 	}
 
-	if (fence && !p->immediate)
+	if (fence && !p->direct)
 		swap(*fence, f);
 	dma_fence_put(f);
 	return 0;
@@ -144,8 +141,8 @@ static void amdgpu_vm_sdma_copy_ptes(struct amdgpu_vm_update_params *p,
 
 	src += p->num_dw_left * 4;
 
-	pe += amdgpu_gmc_sign_extend(bo->tbo.offset);
-	trace_amdgpu_vm_copy_ptes(pe, src, count, p->immediate);
+	pe += amdgpu_bo_gpu_offset_no_check(bo);
+	trace_amdgpu_vm_copy_ptes(pe, src, count, p->direct);
 
 	amdgpu_vm_copy_pte(p->adev, ib, pe, src, count);
 }
@@ -171,8 +168,8 @@ static void amdgpu_vm_sdma_set_ptes(struct amdgpu_vm_update_params *p,
 {
 	struct amdgpu_ib *ib = p->job->ibs;
 
-	pe += amdgpu_gmc_sign_extend(bo->tbo.offset);
-	trace_amdgpu_vm_set_ptes(pe, addr, count, incr, flags, p->immediate);
+	pe += amdgpu_bo_gpu_offset_no_check(bo);
+	trace_amdgpu_vm_set_ptes(pe, addr, count, incr, flags, p->direct);
 	if (count < 3) {
 		amdgpu_vm_write_pte(p->adev, ib, pe, addr | flags,
 				    count, incr);
@@ -201,8 +198,6 @@ static int amdgpu_vm_sdma_update(struct amdgpu_vm_update_params *p,
 				 uint64_t addr, unsigned count, uint32_t incr,
 				 uint64_t flags)
 {
-	enum amdgpu_ib_pool_type pool = p->immediate ? AMDGPU_IB_POOL_IMMEDIATE
-		: AMDGPU_IB_POOL_DELAYED;
 	unsigned int i, ndw, nptes;
 	uint64_t *pte;
 	int r;
@@ -228,8 +223,7 @@ static int amdgpu_vm_sdma_update(struct amdgpu_vm_update_params *p,
 			ndw = max(ndw, AMDGPU_VM_SDMA_MIN_NUM_DW);
 			ndw = min(ndw, AMDGPU_VM_SDMA_MAX_NUM_DW);
 
-			r = amdgpu_job_alloc_with_ib(p->adev, ndw * 4, pool,
-						     &p->job);
+			r = amdgpu_job_alloc_with_ib(p->adev, ndw * 4, &p->job);
 			if (r)
 				return r;
 

@@ -61,18 +61,53 @@ __efistub__ctype		= _ctype;
  * memory mappings.
  */
 
+#define KVM_NVHE_ALIAS(sym) __kvm_nvhe_##sym = sym;
+
+/* Symbols defined in debug-sr.c (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__kvm_get_mdcr_el2);
+
+/* Symbols defined in entry.S (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__guest_exit);
+KVM_NVHE_ALIAS(abort_guest_exit_end);
+KVM_NVHE_ALIAS(abort_guest_exit_start);
+
+/* Symbols defined in switch.c (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__kvm_vcpu_run_nvhe);
+KVM_NVHE_ALIAS(hyp_panic);
+
+/* Symbols defined in sysreg-sr.c (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__kvm_enable_ssbs);
+
+/* Symbols defined in timer-sr.c (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__kvm_timer_set_cntvoff);
+
+/* Symbols defined in tlb.c (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__kvm_flush_vm_context);
+KVM_NVHE_ALIAS(__kvm_tlb_flush_local_vmid);
+KVM_NVHE_ALIAS(__kvm_tlb_flush_vmid);
+KVM_NVHE_ALIAS(__kvm_tlb_flush_vmid_ipa);
+
+/* Symbols defined in vgic-v3-sr.c (not yet compiled with nVHE build rules). */
+KVM_NVHE_ALIAS(__vgic_v3_get_ich_vtr_el2);
+KVM_NVHE_ALIAS(__vgic_v3_init_lrs);
+KVM_NVHE_ALIAS(__vgic_v3_read_vmcr);
+KVM_NVHE_ALIAS(__vgic_v3_restore_aprs);
+KVM_NVHE_ALIAS(__vgic_v3_save_aprs);
+KVM_NVHE_ALIAS(__vgic_v3_write_vmcr);
+
 /* Alternative callbacks for init-time patching of nVHE hyp code. */
+KVM_NVHE_ALIAS(arm64_enable_wa2_handling);
 KVM_NVHE_ALIAS(kvm_patch_vector_branch);
 KVM_NVHE_ALIAS(kvm_update_va_mask);
 
 /* Global kernel state accessed by nVHE hyp code. */
-KVM_NVHE_ALIAS(kvm_vgic_global_state);
+KVM_NVHE_ALIAS(arm64_ssbd_callback_required);
+KVM_NVHE_ALIAS(kvm_host_data);
 
 /* Kernel constant needed to compute idmap addresses. */
 KVM_NVHE_ALIAS(kimage_voffset);
 
 /* Kernel symbols used to call panic() from nVHE hyp code (via ERET). */
-KVM_NVHE_ALIAS(__hyp_panic_string);
 KVM_NVHE_ALIAS(panic);
 
 /* Vectors installed by hyp-init on reset HVC. */
@@ -80,28 +115,6 @@ KVM_NVHE_ALIAS(__hyp_stub_vectors);
 
 /* IDMAP TCR_EL1.T0SZ as computed by the EL1 init code */
 KVM_NVHE_ALIAS(idmap_t0sz);
-
-/* Kernel symbol used by icache_is_vpipt(). */
-KVM_NVHE_ALIAS(__icache_flags);
-
-/* Kernel symbols needed for cpus_have_final/const_caps checks. */
-KVM_NVHE_ALIAS(arm64_const_caps_ready);
-KVM_NVHE_ALIAS(cpu_hwcap_keys);
-
-/* Static keys which are set if a vGIC trap should be handled in hyp. */
-KVM_NVHE_ALIAS(vgic_v2_cpuif_trap);
-KVM_NVHE_ALIAS(vgic_v3_cpuif_trap);
-
-/* Static key checked in pmr_sync(). */
-#ifdef CONFIG_ARM64_PSEUDO_NMI
-KVM_NVHE_ALIAS(gic_pmr_sync);
-/* Static key checked in GIC_PRIO_IRQOFF. */
-KVM_NVHE_ALIAS(gic_nonsecure_priorities);
-#endif
-
-/* EL2 exception handling */
-KVM_NVHE_ALIAS(__start___kvm_ex_table);
-KVM_NVHE_ALIAS(__stop___kvm_ex_table);
 
 #endif /* CONFIG_KVM */
 

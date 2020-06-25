@@ -12,16 +12,19 @@
 struct bpfilter_umh_ops bpfilter_ops;
 EXPORT_SYMBOL_GPL(bpfilter_ops);
 
-void bpfilter_umh_cleanup(struct umd_info *info)
+static void bpfilter_umh_cleanup(struct umd_info *info)
 {
+	mutex_lock(&bpfilter_ops.lock);
+	bpfilter_ops.stop = true;
 	fput(info->pipe_to_umh);
 	fput(info->pipe_from_umh);
 	put_pid(info->tgid);
 	info->tgid = NULL;
+	mutex_unlock(&bpfilter_ops.lock);
 }
-EXPORT_SYMBOL_GPL(bpfilter_umh_cleanup);
 
-static int bpfilter_mbox_request(struct sock *sk, int optname, sockptr_t optval,
+static int bpfilter_mbox_request(struct sock *sk, int optname,
+				 char __user *optval,
 				 unsigned int optlen, bool is_set)
 {
 	int err;
@@ -36,11 +39,7 @@ static int bpfilter_mbox_request(struct sock *sk, int optname, sockptr_t optval,
 			goto out;
 		}
 	}
-	if (bpfilter_ops.info.tgid &&
-	    thread_group_exited(bpfilter_ops.info.tgid))
-		bpfilter_umh_cleanup(&bpfilter_ops.info);
-
-	if (!bpfilter_ops.info.tgid) {
+	if (bpfilter_ops.stop) {
 		err = bpfilter_ops.start();
 		if (err)
 			goto out;
@@ -51,7 +50,7 @@ out:
 	return err;
 }
 
-int bpfilter_ip_set_sockopt(struct sock *sk, int optname, sockptr_t optval,
+int bpfilter_ip_set_sockopt(struct sock *sk, int optname, char __user *optval,
 			    unsigned int optlen)
 {
 	return bpfilter_mbox_request(sk, optname, optval, optlen, true);
@@ -65,15 +64,15 @@ int bpfilter_ip_get_sockopt(struct sock *sk, int optname, char __user *optval,
 	if (get_user(len, optlen))
 		return -EFAULT;
 
-	return bpfilter_mbox_request(sk, optname, USER_SOCKPTR(optval), len,
-				     false);
+	return bpfilter_mbox_request(sk, optname, optval, len, false);
 }
 
 static int __init bpfilter_sockopt_init(void)
 {
 	mutex_init(&bpfilter_ops.lock);
-	bpfilter_ops.info.tgid = NULL;
+	bpfilter_ops.stop = true;
 	bpfilter_ops.info.driver_name = "bpfilter_umh";
+	bpfilter_ops.info.cleanup = &bpfilter_umh_cleanup;
 
 	return 0;
 }

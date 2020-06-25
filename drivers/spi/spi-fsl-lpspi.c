@@ -98,7 +98,6 @@ struct fsl_lpspi_data {
 	struct clk *clk_ipg;
 	struct clk *clk_per;
 	bool is_slave;
-	bool is_only_cs1;
 	bool is_first_byte;
 
 	void *rx_buf;
@@ -120,6 +119,8 @@ struct fsl_lpspi_data {
 	bool usedma;
 	struct completion dma_rx_completion;
 	struct completion dma_tx_completion;
+
+	int chipselect[];
 };
 
 static const struct of_device_id fsl_lpspi_dt_ids[] = {
@@ -258,9 +259,10 @@ static void fsl_lpspi_set_cmd(struct fsl_lpspi_data *fsl_lpspi)
 
 	temp |= fsl_lpspi->config.bpw - 1;
 	temp |= (fsl_lpspi->config.mode & 0x3) << 30;
-	temp |= (fsl_lpspi->config.chip_select & 0x3) << 24;
 	if (!fsl_lpspi->is_slave) {
 		temp |= fsl_lpspi->config.prescale << 27;
+		temp |= (fsl_lpspi->config.chip_select & 0x3) << 24;
+
 		/*
 		 * Set TCR_CONT will keep SS asserted after current transfer.
 		 * For the first transfer, clear TCR_CONTC to assert SS.
@@ -421,10 +423,7 @@ static int fsl_lpspi_setup_transfer(struct spi_controller *controller,
 	fsl_lpspi->config.mode = spi->mode;
 	fsl_lpspi->config.bpw = t->bits_per_word;
 	fsl_lpspi->config.speed_hz = t->speed_hz;
-	if (fsl_lpspi->is_only_cs1)
-		fsl_lpspi->config.chip_select = 1;
-	else
-		fsl_lpspi->config.chip_select = spi->chip_select;
+	fsl_lpspi->config.chip_select = spi->chip_select;
 
 	if (!fsl_lpspi->config.speed_hz)
 		fsl_lpspi->config.speed_hz = spi->max_speed_hz;
@@ -838,8 +837,6 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 	fsl_lpspi = spi_controller_get_devdata(controller);
 	fsl_lpspi->dev = &pdev->dev;
 	fsl_lpspi->is_slave = is_slave;
-	fsl_lpspi->is_only_cs1 = of_property_read_bool((&pdev->dev)->of_node,
-						"fsl,spi-only-use-cs1-sel");
 
 	controller->bits_per_word_mask = SPI_BPW_RANGE_MASK(8, 32);
 	controller->transfer_one = fsl_lpspi_transfer_one;
@@ -852,6 +849,12 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 	controller->slave_abort = fsl_lpspi_slave_abort;
 	if (!fsl_lpspi->is_slave)
 		controller->use_gpio_descriptors = true;
+
+	ret = devm_spi_register_controller(&pdev->dev, controller);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "spi_register_controller error.\n");
+		goto out_controller_put;
+	}
 
 	init_completion(&fsl_lpspi->xfer_done);
 
@@ -910,21 +913,10 @@ static int fsl_lpspi_probe(struct platform_device *pdev)
 	if (ret < 0)
 		dev_err(&pdev->dev, "dma setup error %d, use pio\n", ret);
 
-	ret = devm_spi_register_controller(&pdev->dev, controller);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "spi_register_controller error.\n");
-		goto out_pm_get;
-	}
-
-	pm_runtime_mark_last_busy(fsl_lpspi->dev);
-	pm_runtime_put_autosuspend(fsl_lpspi->dev);
-
 	return 0;
 
 out_pm_get:
-	pm_runtime_dont_use_autosuspend(fsl_lpspi->dev);
-	pm_runtime_put_sync(fsl_lpspi->dev);
-	pm_runtime_disable(fsl_lpspi->dev);
+	pm_runtime_put_noidle(fsl_lpspi->dev);
 out_controller_put:
 	spi_controller_put(controller);
 
@@ -938,10 +930,14 @@ static int fsl_lpspi_remove(struct platform_device *pdev)
 				spi_controller_get_devdata(controller);
 
 	pm_runtime_disable(fsl_lpspi->dev);
+
+	spi_master_put(controller);
+
 	return 0;
 }
 
-static int __maybe_unused fsl_lpspi_suspend(struct device *dev)
+#ifdef CONFIG_PM_SLEEP
+static int fsl_lpspi_suspend(struct device *dev)
 {
 	int ret;
 
@@ -950,7 +946,7 @@ static int __maybe_unused fsl_lpspi_suspend(struct device *dev)
 	return ret;
 }
 
-static int __maybe_unused fsl_lpspi_resume(struct device *dev)
+static int fsl_lpspi_resume(struct device *dev)
 {
 	int ret;
 
@@ -964,6 +960,7 @@ static int __maybe_unused fsl_lpspi_resume(struct device *dev)
 
 	return 0;
 }
+#endif /* CONFIG_PM_SLEEP */
 
 static const struct dev_pm_ops fsl_lpspi_pm_ops = {
 	SET_RUNTIME_PM_OPS(fsl_lpspi_runtime_suspend,

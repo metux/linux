@@ -4512,8 +4512,6 @@ static u32 gfx_v10_0_init_pa_sc_tile_steering_override(struct amdgpu_device *ade
 }
 
 #define DEFAULT_SH_MEM_BASES	(0x6000)
-#define FIRST_COMPUTE_VMID	(8)
-#define LAST_COMPUTE_VMID	(16)
 
 static void gfx_v10_0_init_compute_vmid(struct amdgpu_device *adev)
 {
@@ -4529,7 +4527,7 @@ static void gfx_v10_0_init_compute_vmid(struct amdgpu_device *adev)
 	sh_mem_bases = DEFAULT_SH_MEM_BASES | (DEFAULT_SH_MEM_BASES << 16);
 
 	mutex_lock(&adev->srbm_mutex);
-	for (i = FIRST_COMPUTE_VMID; i < LAST_COMPUTE_VMID; i++) {
+	for (i = adev->vm_manager.first_kfd_vmid; i < AMDGPU_NUM_VMID; i++) {
 		nv_grbm_select(adev, 0, 0, 0, i);
 		/* CP and shaders */
 		WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, DEFAULT_SH_MEM_CONFIG);
@@ -4537,6 +4535,15 @@ static void gfx_v10_0_init_compute_vmid(struct amdgpu_device *adev)
 	}
 	nv_grbm_select(adev, 0, 0, 0, 0);
 	mutex_unlock(&adev->srbm_mutex);
+
+	/* Initialize all compute VMIDs to have no GDS, GWS, or OA
+	   acccess. These should be enabled by FW for target VMIDs. */
+	for (i = adev->vm_manager.first_kfd_vmid; i < AMDGPU_NUM_VMID; i++) {
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_VMID0_BASE, 2 * i, 0);
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_VMID0_SIZE, 2 * i, 0);
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_GWS_VMID0, i, 0);
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_OA_VMID0, i, 0);
+	}
 }
 
 static void gfx_v10_0_init_gds_vmid(struct amdgpu_device *adev)
@@ -4700,27 +4707,7 @@ static void gfx_v10_0_enable_gui_idle_interrupt(struct amdgpu_device *adev,
 
 static int gfx_v10_0_init_csb(struct amdgpu_device *adev)
 {
-	int r;
-
 	adev->gfx.rlc.funcs->get_csb_buffer(adev, adev->gfx.rlc.cs_ptr);
-
-	if (adev->in_gpu_reset) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, false);
-		if (r)
-			return r;
-
-		r = amdgpu_bo_kmap(adev->gfx.rlc.clear_state_obj,
-				   (void **)&adev->gfx.rlc.cs_ptr);
-		if (!r) {
-			adev->gfx.rlc.funcs->get_csb_buffer(adev,
-					adev->gfx.rlc.cs_ptr);
-			amdgpu_bo_kunmap(adev->gfx.rlc.clear_state_obj);
-		}
-
-		amdgpu_bo_unreserve(adev->gfx.rlc.clear_state_obj);
-		if (r)
-			return r;
-	}
 
 	/* csib */
 	WREG32_SOC15_RLC(GC, 0, mmRLC_CSIB_ADDR_HI,
@@ -4729,22 +4716,6 @@ static int gfx_v10_0_init_csb(struct amdgpu_device *adev)
 			 adev->gfx.rlc.clear_state_gpu_addr & 0xfffffffc);
 	WREG32_SOC15_RLC(GC, 0, mmRLC_CSIB_LENGTH, adev->gfx.rlc.clear_state_size);
 
-	return 0;
-}
-
-static int gfx_v10_0_init_pg(struct amdgpu_device *adev)
-{
-	int i;
-	int r;
-
-	r = gfx_v10_0_init_csb(adev);
-	if (r)
-		return r;
-
-	for (i = 0; i < adev->num_vmhubs; i++)
-		amdgpu_gmc_flush_gpu_tlb(adev, 0, i, 0);
-
-	/* TODO: init power gating */
 	return 0;
 }
 
@@ -4846,10 +4817,6 @@ static int gfx_v10_0_rlc_resume(struct amdgpu_device *adev)
 		if (r)
 			return r;
 
-		r = gfx_v10_0_init_pg(adev);
-		if (r)
-			return r;
-
 		gfx_v10_0_init_csb(adev);
 
 		if (!amdgpu_sriov_vf(adev)) /* enable RLC SRM */
@@ -4880,9 +4847,7 @@ static int gfx_v10_0_rlc_resume(struct amdgpu_device *adev)
 				return r;
 		}
 
-		r = gfx_v10_0_init_csb(adev);
-		if (r)
-			return r;
+		gfx_v10_0_init_csb(adev);
 
 		adev->gfx.rlc.funcs->start(adev);
 
@@ -7876,17 +7841,12 @@ static int gfx_v10_0_ring_preempt_ib(struct amdgpu_ring *ring)
 	struct amdgpu_device *adev = ring->adev;
 	struct amdgpu_kiq *kiq = &adev->gfx.kiq;
 	struct amdgpu_ring *kiq_ring = &kiq->ring;
-	unsigned long flags;
 
 	if (!kiq->pmf || !kiq->pmf->kiq_unmap_queues)
 		return -EINVAL;
 
-	spin_lock_irqsave(&kiq->ring_lock, flags);
-
-	if (amdgpu_ring_alloc(kiq_ring, kiq->pmf->unmap_queues_size)) {
-		spin_unlock_irqrestore(&kiq->ring_lock, flags);
+	if (amdgpu_ring_alloc(kiq_ring, kiq->pmf->unmap_queues_size))
 		return -ENOMEM;
-	}
 
 	/* assert preemption condition */
 	amdgpu_ring_set_preempt_cond_exec(ring, false);
@@ -7896,8 +7856,6 @@ static int gfx_v10_0_ring_preempt_ib(struct amdgpu_ring *ring)
 				   ring->trail_fence_gpu_addr,
 				   ++ring->trail_seq);
 	amdgpu_ring_commit(kiq_ring);
-
-	spin_unlock_irqrestore(&kiq->ring_lock, flags);
 
 	/* poll the trailing fence */
 	for (i = 0; i < adev->usec_timeout; i++) {

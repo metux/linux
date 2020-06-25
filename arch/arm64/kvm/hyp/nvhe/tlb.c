@@ -12,8 +12,7 @@ struct tlb_inv_context {
 	u64		tcr;
 };
 
-static void __tlb_switch_to_guest(struct kvm_s2_mmu *mmu,
-				  struct tlb_inv_context *cxt)
+static void __tlb_switch_to_guest(struct kvm *kvm, struct tlb_inv_context *cxt)
 {
 	if (cpus_have_final_cap(ARM64_WORKAROUND_SPECULATIVE_AT)) {
 		u64 val;
@@ -31,17 +30,12 @@ static void __tlb_switch_to_guest(struct kvm_s2_mmu *mmu,
 		isb();
 	}
 
-	/*
-	 * __load_guest_stage2() includes an ISB only when the AT
-	 * workaround is applied. Take care of the opposite condition,
-	 * ensuring that we always have an ISB, but not two ISBs back
-	 * to back.
-	 */
-	__load_guest_stage2(mmu);
+	/* __load_guest_stage2() includes an ISB for the workaround. */
+	__load_guest_stage2(kvm);
 	asm(ALTERNATIVE("isb", "nop", ARM64_WORKAROUND_SPECULATIVE_AT));
 }
 
-static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
+static void __tlb_switch_to_host(struct kvm *kvm, struct tlb_inv_context *cxt)
 {
 	write_sysreg(0, vttbr_el2);
 
@@ -53,16 +47,15 @@ static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
 	}
 }
 
-void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
-			      phys_addr_t ipa, int level)
+void __kvm_tlb_flush_vmid_ipa(struct kvm *kvm, phys_addr_t ipa)
 {
 	struct tlb_inv_context cxt;
 
 	dsb(ishst);
 
 	/* Switch to requested VMID */
-	mmu = kern_hyp_va(mmu);
-	__tlb_switch_to_guest(mmu, &cxt);
+	kvm = kern_hyp_va(kvm);
+	__tlb_switch_to_guest(kvm, &cxt);
 
 	/*
 	 * We could do so much better if we had the VA as well.
@@ -70,7 +63,7 @@ void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
 	 * whole of Stage-1. Weep...
 	 */
 	ipa >>= 12;
-	__tlbi_level(ipas2e1is, ipa, level);
+	__tlbi(ipas2e1is, ipa);
 
 	/*
 	 * We have to ensure completion of the invalidation at Stage-2,
@@ -105,39 +98,39 @@ void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
 	if (icache_is_vpipt())
 		__flush_icache_all();
 
-	__tlb_switch_to_host(&cxt);
+	__tlb_switch_to_host(kvm, &cxt);
 }
 
-void __kvm_tlb_flush_vmid(struct kvm_s2_mmu *mmu)
+void __kvm_tlb_flush_vmid(struct kvm *kvm)
 {
 	struct tlb_inv_context cxt;
 
 	dsb(ishst);
 
 	/* Switch to requested VMID */
-	mmu = kern_hyp_va(mmu);
-	__tlb_switch_to_guest(mmu, &cxt);
+	kvm = kern_hyp_va(kvm);
+	__tlb_switch_to_guest(kvm, &cxt);
 
 	__tlbi(vmalls12e1is);
 	dsb(ish);
 	isb();
 
-	__tlb_switch_to_host(&cxt);
+	__tlb_switch_to_host(kvm, &cxt);
 }
 
-void __kvm_tlb_flush_local_vmid(struct kvm_s2_mmu *mmu)
+void __kvm_tlb_flush_local_vmid(struct kvm_vcpu *vcpu)
 {
+	struct kvm *kvm = kern_hyp_va(kern_hyp_va(vcpu)->kvm);
 	struct tlb_inv_context cxt;
 
 	/* Switch to requested VMID */
-	mmu = kern_hyp_va(mmu);
-	__tlb_switch_to_guest(mmu, &cxt);
+	__tlb_switch_to_guest(kvm, &cxt);
 
 	__tlbi(vmalle1);
 	dsb(nsh);
 	isb();
 
-	__tlb_switch_to_host(&cxt);
+	__tlb_switch_to_host(kvm, &cxt);
 }
 
 void __kvm_flush_vm_context(void)

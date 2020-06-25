@@ -66,11 +66,6 @@ __efistub__ctype		= _ctype;
 /* Symbols defined in aarch32.c (not yet compiled with nVHE build rules). */
 KVM_NVHE_ALIAS(kvm_skip_instr32);
 
-/* Symbols defined in debug-sr.c (not yet compiled with nVHE build rules). */
-KVM_NVHE_ALIAS(__debug_switch_to_guest);
-KVM_NVHE_ALIAS(__debug_switch_to_host);
-KVM_NVHE_ALIAS(__kvm_get_mdcr_el2);
-
 /* Symbols defined in entry.S (not yet compiled with nVHE build rules). */
 KVM_NVHE_ALIAS(__guest_enter);
 KVM_NVHE_ALIAS(__guest_exit);
@@ -80,18 +75,6 @@ KVM_NVHE_ALIAS(abort_guest_exit_start);
 /* Symbols defined in fpsimd.S (not yet compiled with nVHE build rules). */
 KVM_NVHE_ALIAS(__fpsimd_restore_state);
 KVM_NVHE_ALIAS(__fpsimd_save_state);
-
-/* Symbols defined in sysreg-sr.c (not yet compiled with nVHE build rules). */
-KVM_NVHE_ALIAS(__kvm_enable_ssbs);
-KVM_NVHE_ALIAS(__sysreg32_restore_state);
-KVM_NVHE_ALIAS(__sysreg32_save_state);
-KVM_NVHE_ALIAS(__sysreg_restore_state_nvhe);
-KVM_NVHE_ALIAS(__sysreg_save_state_nvhe);
-
-/* Symbols defined in timer-sr.c (not yet compiled with nVHE build rules). */
-KVM_NVHE_ALIAS(__kvm_timer_set_cntvoff);
-KVM_NVHE_ALIAS(__timer_disable_traps);
-KVM_NVHE_ALIAS(__timer_enable_traps);
 
 /* Symbols defined in vgic-v2-cpuif-proxy.c (not yet compiled with nVHE build rules). */
 KVM_NVHE_ALIAS(__vgic_v2_perform_cpuif_access);

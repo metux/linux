@@ -9,6 +9,9 @@
 #include <linux/task_work.h>
 #include <linux/usermode_driver.h>
 
+static LIST_HEAD(umh_list);
+static DEFINE_MUTEX(umh_list_lock);
+
 static struct vfsmount *blob_to_mnt(const void *data, size_t len, const char *name)
 {
 	struct file_system_type *type;
@@ -131,6 +134,7 @@ static int umd_setup(struct subprocess_info *info, struct cred *new)
 	umd_info->pipe_to_umh = to_umh[1];
 	umd_info->pipe_from_umh = from_umh[0];
 	umd_info->tgid = get_pid(task_tgid(current));
+	current->flags |= PF_UMH;
 	return 0;
 }
 
@@ -160,23 +164,53 @@ static void umd_cleanup(struct subprocess_info *info)
 int fork_usermode_driver(struct umd_info *info)
 {
 	struct subprocess_info *sub_info;
-	const char *argv[] = { info->driver_name, NULL };
+	char **argv = NULL;
 	int err;
 
 	if (WARN_ON_ONCE(info->tgid))
 		return -EBUSY;
 
 	err = -ENOMEM;
-	sub_info = call_usermodehelper_setup(info->driver_name,
-					     (char **)argv, NULL, GFP_KERNEL,
+	argv = argv_split(GFP_KERNEL, info->driver_name, NULL);
+	if (!argv)
+		goto out;
+
+	sub_info = call_usermodehelper_setup(info->driver_name, argv, NULL,
+					     GFP_KERNEL,
 					     umd_setup, umd_cleanup, info);
 	if (!sub_info)
 		goto out;
 
 	err = call_usermodehelper_exec(sub_info, UMH_WAIT_EXEC);
+	if (!err) {
+		mutex_lock(&umh_list_lock);
+		list_add(&info->list, &umh_list);
+		mutex_unlock(&umh_list_lock);
+	}
 out:
+	if (argv)
+		argv_free(argv);
 	return err;
 }
 EXPORT_SYMBOL_GPL(fork_usermode_driver);
 
+void __exit_umh(struct task_struct *tsk)
+{
+	struct umd_info *info;
+	struct pid *tgid = task_tgid(tsk);
+
+	mutex_lock(&umh_list_lock);
+	list_for_each_entry(info, &umh_list, list) {
+		if (info->tgid == tgid) {
+			list_del(&info->list);
+			mutex_unlock(&umh_list_lock);
+			goto out;
+		}
+	}
+	mutex_unlock(&umh_list_lock);
+	return;
+out:
+	if (info->cleanup)
+		info->cleanup(info);
+}
 

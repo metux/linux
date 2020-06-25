@@ -120,12 +120,12 @@ static int __kvm_vcpu_run_vhe(struct kvm_vcpu *vcpu)
 	 * HCR_EL2.TGE.
 	 *
 	 * We have already configured the guest's stage 1 translation in
-	 * kvm_vcpu_load_sysregs_vhe above.  We must now call __activate_vm
+	 * kvm_vcpu_load_sysregs above.  We must now call __activate_vm
 	 * before __activate_traps, because __activate_vm configures
 	 * stage 2 translation, and __activate_traps clear HCR_EL2.TGE
 	 * (among other things).
 	 */
-	__activate_vm(vcpu->arch.hw_mmu);
+	__activate_vm(vcpu->kvm);
 	__activate_traps(vcpu);
 
 	sysreg_restore_guest_state_vhe(guest_ctxt);
@@ -216,9 +216,4 @@ void __noreturn hyp_panic(struct kvm_cpu_context *host_ctxt)
 
 	__hyp_call_panic(spsr, elr, par, host_ctxt);
 	unreachable();
-}
-
-asmlinkage void kvm_unexpected_el2_exception(void)
-{
-	return __kvm_unexpected_el2_exception();
 }

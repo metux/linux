@@ -5,7 +5,6 @@
  */
 
 #include <hyp/switch.h>
-#include <hyp/sysreg-sr.h>
 
 #include <linux/arm-smccc.h>
 #include <linux/kvm_host.h>
@@ -27,7 +26,7 @@
 #include <asm/processor.h>
 #include <asm/thread_info.h>
 
-static void __activate_traps(struct kvm_vcpu *vcpu)
+static void __hyp_text __activate_traps(struct kvm_vcpu *vcpu)
 {
 	u64 val;
 
@@ -52,13 +51,13 @@ static void __activate_traps(struct kvm_vcpu *vcpu)
 		 * configured and enabled. We can now restore the guest's S1
 		 * configuration: SCTLR, and only then TCR.
 		 */
-		write_sysreg_el1(ctxt_sys_reg(ctxt, SCTLR_EL1),	SYS_SCTLR);
+		write_sysreg_el1(ctxt->sys_regs[SCTLR_EL1],	SYS_SCTLR);
 		isb();
-		write_sysreg_el1(ctxt_sys_reg(ctxt, TCR_EL1),	SYS_TCR);
+		write_sysreg_el1(ctxt->sys_regs[TCR_EL1],	SYS_TCR);
 	}
 }
 
-static void __deactivate_traps(struct kvm_vcpu *vcpu)
+static void __hyp_text __deactivate_traps(struct kvm_vcpu *vcpu)
 {
 	u64 mdcr_el2;
 
@@ -93,13 +92,13 @@ static void __deactivate_traps(struct kvm_vcpu *vcpu)
 	write_sysreg(CPTR_EL2_DEFAULT, cptr_el2);
 }
 
-static void __deactivate_vm(struct kvm_vcpu *vcpu)
+static void __hyp_text __deactivate_vm(struct kvm_vcpu *vcpu)
 {
 	write_sysreg(0, vttbr_el2);
 }
 
 /* Save VGICv3 state on non-VHE systems */
-static void __hyp_vgic_save_state(struct kvm_vcpu *vcpu)
+static void __hyp_text __hyp_vgic_save_state(struct kvm_vcpu *vcpu)
 {
 	if (static_branch_unlikely(&kvm_vgic_global_state.gicv3_cpuif)) {
 		__vgic_v3_save_state(&vcpu->arch.vgic_cpu.vgic_v3);
@@ -108,7 +107,7 @@ static void __hyp_vgic_save_state(struct kvm_vcpu *vcpu)
 }
 
 /* Restore VGICv3 state on non_VEH systems */
-static void __hyp_vgic_restore_state(struct kvm_vcpu *vcpu)
+static void __hyp_text __hyp_vgic_restore_state(struct kvm_vcpu *vcpu)
 {
 	if (static_branch_unlikely(&kvm_vgic_global_state.gicv3_cpuif)) {
 		__vgic_v3_activate_traps(&vcpu->arch.vgic_cpu.vgic_v3);
@@ -119,7 +118,7 @@ static void __hyp_vgic_restore_state(struct kvm_vcpu *vcpu)
 /**
  * Disable host events, enable guest events
  */
-static bool __pmu_switch_to_guest(struct kvm_cpu_context *host_ctxt)
+static bool __hyp_text __pmu_switch_to_guest(struct kvm_cpu_context *host_ctxt)
 {
 	struct kvm_host_data *host;
 	struct kvm_pmu_events *pmu;
@@ -139,7 +138,7 @@ static bool __pmu_switch_to_guest(struct kvm_cpu_context *host_ctxt)
 /**
  * Disable guest events, enable host events
  */
-static void __pmu_switch_to_host(struct kvm_cpu_context *host_ctxt)
+static void __hyp_text __pmu_switch_to_host(struct kvm_cpu_context *host_ctxt)
 {
 	struct kvm_host_data *host;
 	struct kvm_pmu_events *pmu;
@@ -155,7 +154,7 @@ static void __pmu_switch_to_host(struct kvm_cpu_context *host_ctxt)
 }
 
 /* Switch to the guest for legacy non-VHE systems */
-int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
+int __hyp_text __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 {
 	struct kvm_cpu_context *host_ctxt;
 	struct kvm_cpu_context *guest_ctxt;
@@ -194,7 +193,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__sysreg32_restore_state(vcpu);
 	__sysreg_restore_state_nvhe(guest_ctxt);
 
-	__activate_vm(kern_hyp_va(vcpu->arch.hw_mmu));
+	__activate_vm(kern_hyp_va(vcpu->kvm));
 	__activate_traps(vcpu);
 
 	__hyp_vgic_restore_state(vcpu);
@@ -242,7 +241,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	return exit_code;
 }
 
-void __noreturn hyp_panic(struct kvm_cpu_context *host_ctxt)
+void __hyp_text __noreturn hyp_panic(struct kvm_cpu_context *host_ctxt)
 {
 	u64 spsr = read_sysreg_el2(SYS_SPSR);
 	u64 elr = read_sysreg_el2(SYS_ELR);
@@ -269,9 +268,4 @@ void __noreturn hyp_panic(struct kvm_cpu_context *host_ctxt)
 		       read_sysreg(esr_el2), read_sysreg_el2(SYS_FAR),
 		       read_sysreg(hpfar_el2), par, vcpu);
 	unreachable();
-}
-
-asmlinkage void kvm_unexpected_el2_exception(void)
-{
-	return __kvm_unexpected_el2_exception();
 }

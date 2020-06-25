@@ -62,26 +62,8 @@
 
 #define CHOOSE_VHE_SYM(sym)	sym
 #define CHOOSE_NVHE_SYM(sym)	kvm_nvhe_sym(sym)
-
-#ifndef __KVM_NVHE_HYPERVISOR__
-/*
- * BIG FAT WARNINGS:
- *
- * - Don't be tempted to change the following is_kernel_in_hyp_mode()
- *   to has_vhe(). has_vhe() is implemented as a *final* capability,
- *   while this is used early at boot time, when the capabilities are
- *   not final yet....
- *
- * - Don't let the nVHE hypervisor have access to this, as it will
- *   pick the *wrong* symbol (yes, it runs at EL2...).
- */
-#define CHOOSE_HYP_SYM(sym)	(is_kernel_in_hyp_mode() ? CHOOSE_VHE_SYM(sym) \
+#define CHOOSE_HYP_SYM(sym)	(has_vhe() ? CHOOSE_VHE_SYM(sym) \
 					   : CHOOSE_NVHE_SYM(sym))
-#else
-/* The nVHE hypervisor shouldn't even try to access anything */
-extern void *__nvhe_undefined_symbol;
-#define CHOOSE_HYP_SYM(sym)	__nvhe_undefined_symbol
-#endif
 
 /* Translate a kernel address @ptr into its equivalent linear mapping */
 #define kvm_ksym_ref(ptr)						\
@@ -95,7 +77,6 @@ extern void *__nvhe_undefined_symbol;
 
 struct kvm;
 struct kvm_vcpu;
-struct kvm_s2_mmu;
 
 DECLARE_KVM_NVHE_SYM(__kvm_hyp_init);
 DECLARE_KVM_HYP_SYM(__kvm_hyp_vector);
@@ -109,14 +90,15 @@ DECLARE_KVM_HYP_SYM(__bp_harden_hyp_vecs);
 #endif
 
 extern void __kvm_flush_vm_context(void);
-extern void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa,
-				     int level);
-extern void __kvm_tlb_flush_vmid(struct kvm_s2_mmu *mmu);
-extern void __kvm_tlb_flush_local_vmid(struct kvm_s2_mmu *mmu);
+extern void __kvm_tlb_flush_vmid_ipa(struct kvm *kvm, phys_addr_t ipa);
+extern void __kvm_tlb_flush_vmid(struct kvm *kvm);
+extern void __kvm_tlb_flush_local_vmid(struct kvm_vcpu *vcpu);
 
 extern void __kvm_timer_set_cntvoff(u64 cntvoff);
 
-extern int __kvm_vcpu_run(struct kvm_vcpu *vcpu);
+extern int kvm_vcpu_run_vhe(struct kvm_vcpu *vcpu);
+
+extern int __kvm_vcpu_run_nvhe(struct kvm_vcpu *vcpu);
 
 extern void __kvm_enable_ssbs(void);
 
@@ -169,34 +151,6 @@ extern char __smccc_workaround_1_smc[__SMCCC_WORKAROUND_1_SMC_SZ];
 		*__hyp_this_cpu_ptr(sym);				\
 	 })
 
-#define __KVM_EXTABLE(from, to)						\
-	"	.pushsection	__kvm_ex_table, \"a\"\n"		\
-	"	.align		3\n"					\
-	"	.long		(" #from " - .), (" #to " - .)\n"	\
-	"	.popsection\n"
-
-
-#define __kvm_at(at_op, addr)						\
-( { 									\
-	int __kvm_at_err = 0;						\
-	u64 spsr, elr;							\
-	asm volatile(							\
-	"	mrs	%1, spsr_el2\n"					\
-	"	mrs	%2, elr_el2\n"					\
-	"1:	at	"at_op", %3\n"					\
-	"	isb\n"							\
-	"	b	9f\n"						\
-	"2:	msr	spsr_el2, %1\n"					\
-	"	msr	elr_el2, %2\n"					\
-	"	mov	%w0, %4\n"					\
-	"9:\n"								\
-	__KVM_EXTABLE(1b, 2b)						\
-	: "+r" (__kvm_at_err), "=&r" (spsr), "=&r" (elr)		\
-	: "r" (addr), "i" (-EFAULT));					\
-	__kvm_at_err;							\
-} )
-
-
 #else /* __ASSEMBLY__ */
 
 .macro hyp_adr_this_cpu reg, sym, tmp
@@ -219,21 +173,7 @@ extern char __smccc_workaround_1_smc[__SMCCC_WORKAROUND_1_SMC_SZ];
 .macro get_vcpu_ptr vcpu, ctxt
 	get_host_ctxt \ctxt, \vcpu
 	ldr	\vcpu, [\ctxt, #HOST_CONTEXT_VCPU]
-.endm
-
-/*
- * KVM extable for unexpected exceptions.
- * In the same format _asm_extable, but output to a different section so that
- * it can be mapped to EL2. The KVM version is not sorted. The caller must
- * ensure:
- * x18 has the hypervisor value to allow any Shadow-Call-Stack instrumented
- * code to write to it, and that SPSR_EL2 and ELR_EL2 are restored by the fixup.
- */
-.macro	_kvm_extable, from, to
-	.pushsection	__kvm_ex_table, "a"
-	.align		3
-	.long		(\from - .), (\to - .)
-	.popsection
+	kern_hyp_va	\vcpu
 .endm
 
 #endif

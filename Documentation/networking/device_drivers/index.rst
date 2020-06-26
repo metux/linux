@@ -8,6 +8,7 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
+   appletalk/index
    cable/index
    cellular/index
    ethernet/index

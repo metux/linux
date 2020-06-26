@@ -11,6 +11,18 @@
 #include "idxd.h"
 #include "registers.h"
 
+void idxd_device_wqs_clear_state(struct idxd_device *idxd)
+{
+	int i;
+
+	lockdep_assert_held(&idxd->dev_lock);
+	for (i = 0; i < idxd->max_wqs; i++) {
+		struct idxd_wq *wq = &idxd->wqs[i];
+
+		wq->state = IDXD_WQ_DISABLED;
+	}
+}
+
 static void idxd_device_reinit(struct work_struct *work)
 {
 	struct idxd_device *idxd = container_of(work, struct idxd_device, work);
@@ -249,6 +261,8 @@ irqreturn_t idxd_wq_thread(int irq, void *data)
 
 	processed = idxd_desc_process(irq_entry);
 	idxd_unmask_msix_vector(irq_entry->idxd, irq_entry->id);
+	/* catch anything unprocessed after unmasking */
+	processed += idxd_desc_process(irq_entry);
 
 	if (processed == 0)
 		return IRQ_NONE;

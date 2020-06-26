@@ -11,6 +11,8 @@ Contents:
    cable/index
    cellular/index
    ethernet/index
+   hamradio/index
+   wan/index
    wifi/index
 
 .. only::  subproject and html

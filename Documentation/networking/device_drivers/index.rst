@@ -9,6 +9,7 @@ Contents:
    :maxdepth: 2
 
    appletalk/index
+   atm/index
    cable/index
    cellular/index
    ethernet/index

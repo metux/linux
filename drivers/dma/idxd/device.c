@@ -6,8 +6,6 @@
 #include <linux/pci.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/dmaengine.h>
-#include <linux/irq.h>
-#include <linux/msi.h>
 #include <uapi/linux/idxd.h>
 #include "../dmaengine.h"
 #include "idxd.h"
@@ -17,28 +15,61 @@ static void idxd_cmd_exec(struct idxd_device *idxd, int cmd_code, u32 operand,
 			  u32 *status);
 
 /* Interrupt control bits */
-void idxd_mask_msix_vector(struct idxd_device *idxd, int vec_id)
+int idxd_mask_msix_vector(struct idxd_device *idxd, int vec_id)
 {
-	struct irq_data *data = irq_get_irq_data(idxd->msix_entries[vec_id].vector);
+	struct pci_dev *pdev = idxd->pdev;
+	int msixcnt = pci_msix_vec_count(pdev);
+	union msix_perm perm;
+	u32 offset;
 
-	pci_msi_mask_irq(data);
+	if (vec_id < 0 || vec_id >= msixcnt)
+		return -EINVAL;
+
+	offset = idxd->msix_perm_offset + vec_id * 8;
+	perm.bits = ioread32(idxd->reg_base + offset);
+	perm.ignore = 1;
+	iowrite32(perm.bits, idxd->reg_base + offset);
+
+	return 0;
 }
 
 void idxd_mask_msix_vectors(struct idxd_device *idxd)
 {
 	struct pci_dev *pdev = idxd->pdev;
 	int msixcnt = pci_msix_vec_count(pdev);
-	int i;
+	int i, rc;
 
-	for (i = 0; i < msixcnt; i++)
-		idxd_mask_msix_vector(idxd, i);
+	for (i = 0; i < msixcnt; i++) {
+		rc = idxd_mask_msix_vector(idxd, i);
+		if (rc < 0)
+			dev_warn(&pdev->dev,
+				 "Failed disabling msix vec %d\n", i);
+	}
 }
 
-void idxd_unmask_msix_vector(struct idxd_device *idxd, int vec_id)
+int idxd_unmask_msix_vector(struct idxd_device *idxd, int vec_id)
 {
-	struct irq_data *data = irq_get_irq_data(idxd->msix_entries[vec_id].vector);
+	struct pci_dev *pdev = idxd->pdev;
+	int msixcnt = pci_msix_vec_count(pdev);
+	union msix_perm perm;
+	u32 offset;
 
-	pci_msi_unmask_irq(data);
+	if (vec_id < 0 || vec_id >= msixcnt)
+		return -EINVAL;
+
+	offset = idxd->msix_perm_offset + vec_id * 8;
+	perm.bits = ioread32(idxd->reg_base + offset);
+	perm.ignore = 0;
+	iowrite32(perm.bits, idxd->reg_base + offset);
+
+	/*
+	 * A readback from the device ensures that any previously generated
+	 * completion record writes are visible to software based on PCI
+	 * ordering rules.
+	 */
+	perm.bits = ioread32(idxd->reg_base + offset);
+
+	return 0;
 }
 
 void idxd_unmask_error_interrupts(struct idxd_device *idxd)
@@ -410,27 +441,10 @@ int idxd_device_enable(struct idxd_device *idxd)
 	return 0;
 }
 
-void idxd_device_wqs_clear_state(struct idxd_device *idxd)
-{
-	int i;
-
-	lockdep_assert_held(&idxd->dev_lock);
-
-	for (i = 0; i < idxd->max_wqs; i++) {
-		struct idxd_wq *wq = &idxd->wqs[i];
-
-		if (wq->state == IDXD_WQ_ENABLED) {
-			idxd_wq_disable_cleanup(wq);
-			wq->state = IDXD_WQ_DISABLED;
-		}
-	}
-}
-
 int idxd_device_disable(struct idxd_device *idxd)
 {
 	struct device *dev = &idxd->pdev->dev;
 	u32 status;
-	unsigned long flags;
 
 	if (!idxd_is_enabled(idxd)) {
 		dev_dbg(dev, "Device is not enabled\n");
@@ -446,22 +460,13 @@ int idxd_device_disable(struct idxd_device *idxd)
 		return -ENXIO;
 	}
 
-	spin_lock_irqsave(&idxd->dev_lock, flags);
-	idxd_device_wqs_clear_state(idxd);
 	idxd->state = IDXD_DEV_CONF_READY;
-	spin_unlock_irqrestore(&idxd->dev_lock, flags);
 	return 0;
 }
 
 void idxd_device_reset(struct idxd_device *idxd)
 {
-	unsigned long flags;
-
 	idxd_cmd_exec(idxd, IDXD_CMD_RESET_DEVICE, 0, NULL);
-	spin_lock_irqsave(&idxd->dev_lock, flags);
-	idxd_device_wqs_clear_state(idxd);
-	idxd->state = IDXD_DEV_CONF_READY;
-	spin_unlock_irqrestore(&idxd->dev_lock, flags);
 }
 
 /* Device configuration bits */

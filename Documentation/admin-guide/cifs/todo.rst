@@ -91,7 +91,7 @@ w) Add support for additional strong encryption types, and additional spnego
 Known Bugs
 ==========
 
-See http://bugzilla.samba.org - search on product "CifsVFS" for
+See https://bugzilla.samba.org - search on product "CifsVFS" for
 current bug list.  Also check http://bugzilla.kernel.org (Product = File System, Component = CIFS)
 
 1) existing symbolic links (Windows reparse points) are recognized but

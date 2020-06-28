@@ -97,6 +97,9 @@ enum hinic_port_cmd {
 
 	HINIC_PORT_CMD_FWCTXT_INIT      = 69,
 
+	HINIC_PORT_CMD_GET_LOOPBACK_MODE = 72,
+	HINIC_PORT_CMD_SET_LOOPBACK_MODE,
+
 	HINIC_PORT_CMD_ENABLE_SPOOFCHK = 78,
 
 	HINIC_PORT_CMD_GET_MGMT_VERSION = 88,
@@ -309,6 +312,7 @@ struct hinic_hwdev {
 	struct hinic_mbox_func_to_func  *func_to_func;
 
 	struct hinic_cap                nic_cap;
+	u8				port_id;
 };
 
 struct hinic_nic_cb {

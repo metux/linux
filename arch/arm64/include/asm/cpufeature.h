@@ -684,6 +684,8 @@ static inline bool cpu_has_hw_af(void)
 						ID_AA64MMFR1_HADBS_SHIFT);
 }
 
+void dump_cpu_features(void);
+
 #endif /* __ASSEMBLY__ */
 
 #endif

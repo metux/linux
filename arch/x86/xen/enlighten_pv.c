@@ -345,13 +345,15 @@ static void set_aliased_prot(void *v, pgprot_t prot)
 	pte_t *ptep;
 	pte_t pte;
 	unsigned long pfn;
+	struct page *page;
 	unsigned char dummy;
-	void *va;
 
 	ptep = lookup_address((unsigned long)v, &level);
 	BUG_ON(ptep == NULL);
 
 	pfn = pte_pfn(*ptep);
+	page = pfn_to_page(pfn);
+
 	pte = pfn_pte(pfn, prot);
 
 	/*
@@ -381,10 +383,14 @@ static void set_aliased_prot(void *v, pgprot_t prot)
 	if (HYPERVISOR_update_va_mapping((unsigned long)v, pte, 0))
 		BUG();
 
-	va = __va(PFN_PHYS(pfn));
+	if (!PageHighMem(page)) {
+		void *av = __va(PFN_PHYS(pfn));
 
-	if (va != v && HYPERVISOR_update_va_mapping((unsigned long)va, pte, 0))
-		BUG();
+		if (av != v)
+			if (HYPERVISOR_update_va_mapping((unsigned long)av, pte, 0))
+				BUG();
+	} else
+		kmap_flush_unused();
 
 	preempt_enable();
 }

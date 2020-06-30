@@ -108,18 +108,11 @@
 
 #define DRIVER_NAME		"i915"
 #define DRIVER_DESC		"Intel Graphics"
-#define DRIVER_DATE		"20200715"
-#define DRIVER_TIMESTAMP	1594811881
+#define DRIVER_DATE		"20200914"
+#define DRIVER_TIMESTAMP	1600112063
 
 struct drm_i915_gem_object;
 
-/*
- * The code assumes that the hpd_pins below have consecutive values and
- * starting with HPD_PORT_A, the HPD pin associated with any port can be
- * retrieved by adding the corresponding port (or phy) enum value to
- * HPD_PORT_A in most cases. For example:
- * HPD_PORT_C = HPD_PORT_A + PHY_C - PHY_A
- */
 enum hpd_pin {
 	HPD_NONE = 0,
 	HPD_TV = HPD_NONE,     /* TV is known to be unreliable */
@@ -131,10 +124,12 @@ enum hpd_pin {
 	HPD_PORT_C,
 	HPD_PORT_D,
 	HPD_PORT_E,
-	HPD_PORT_F,
-	HPD_PORT_G,
-	HPD_PORT_H,
-	HPD_PORT_I,
+	HPD_PORT_TC1,
+	HPD_PORT_TC2,
+	HPD_PORT_TC3,
+	HPD_PORT_TC4,
+	HPD_PORT_TC5,
+	HPD_PORT_TC6,
 
 	HPD_NUM_PINS
 };
@@ -202,11 +197,6 @@ struct drm_i915_file_private {
 		struct drm_file *file;
 		struct rcu_head rcu;
 	};
-
-	struct {
-		spinlock_t lock;
-		struct list_head request_list;
-	} mm;
 
 	struct xarray context_xa;
 	struct xarray vm_xa;
@@ -542,13 +532,9 @@ struct intel_gmbus {
 
 struct i915_suspend_saved_registers {
 	u32 saveDSPARB;
-	u32 saveFBC_CONTROL;
-	u32 saveCACHE_MODE_0;
-	u32 saveMI_ARB_STATE;
 	u32 saveSWF0[16];
 	u32 saveSWF1[16];
 	u32 saveSWF3[3];
-	u32 savePCH_PORT_HOTPLUG;
 	u16 saveGCDGMBUS;
 };
 
@@ -1021,8 +1007,6 @@ struct drm_i915_private {
 	 * sufficient, for writing must hold all of them.
 	 */
 	u8 active_pipes;
-
-	int dpio_phy_iosf_port[I915_NUM_PHYS_VLV];
 
 	struct i915_wa_list gt_wa_list;
 
@@ -1574,12 +1558,41 @@ extern const struct i915_rev_steppings kbl_revids[];
 #define IS_EHL_REVID(p, since, until) \
 	(IS_ELKHARTLAKE(p) && IS_REVID(p, since, until))
 
-#define TGL_REVID_A0		0x0
-#define TGL_REVID_B0		0x1
-#define TGL_REVID_C0		0x2
+enum {
+	TGL_REVID_A0,
+	TGL_REVID_B0,
+	TGL_REVID_B1,
+	TGL_REVID_C0,
+	TGL_REVID_D0,
+};
 
-#define IS_TGL_REVID(p, since, until) \
-	(IS_TIGERLAKE(p) && IS_REVID(p, since, until))
+extern const struct i915_rev_steppings tgl_uy_revids[];
+extern const struct i915_rev_steppings tgl_revids[];
+
+static inline const struct i915_rev_steppings *
+tgl_revids_get(struct drm_i915_private *dev_priv)
+{
+	if (IS_TGL_U(dev_priv) || IS_TGL_Y(dev_priv))
+		return tgl_uy_revids;
+	else
+		return tgl_revids;
+}
+
+#define IS_TGL_DISP_REVID(p, since, until) \
+	(IS_TIGERLAKE(p) && \
+	 tgl_revids_get(p)->disp_stepping >= (since) && \
+	 tgl_revids_get(p)->disp_stepping <= (until))
+
+#define IS_TGL_UY_GT_REVID(p, since, until) \
+	((IS_TGL_U(p) || IS_TGL_Y(p)) && \
+	 tgl_uy_revids->gt_stepping >= (since) && \
+	 tgl_uy_revids->gt_stepping <= (until))
+
+#define IS_TGL_GT_REVID(p, since, until) \
+	(IS_TIGERLAKE(p) && \
+	 !(IS_TGL_U(p) || IS_TGL_Y(p)) && \
+	 tgl_revids->gt_stepping >= (since) && \
+	 tgl_revids->gt_stepping <= (until))
 
 #define RKL_REVID_A0		0x0
 #define RKL_REVID_B0		0x1
@@ -1818,11 +1831,18 @@ static inline void i915_gem_drain_workqueue(struct drm_i915_private *i915)
 }
 
 struct i915_vma * __must_check
+i915_gem_object_ggtt_pin_ww(struct drm_i915_gem_object *obj,
+			    struct i915_gem_ww_ctx *ww,
+			    const struct i915_ggtt_view *view,
+			    u64 size, u64 alignment, u64 flags);
+
+static inline struct i915_vma * __must_check
 i915_gem_object_ggtt_pin(struct drm_i915_gem_object *obj,
 			 const struct i915_ggtt_view *view,
-			 u64 size,
-			 u64 alignment,
-			 u64 flags);
+			 u64 size, u64 alignment, u64 flags)
+{
+	return i915_gem_object_ggtt_pin_ww(obj, NULL, view, size, alignment, flags);
+}
 
 int i915_gem_object_unbind(struct drm_i915_gem_object *obj,
 			   unsigned long flags);
@@ -1859,7 +1879,6 @@ void i915_gem_suspend_late(struct drm_i915_private *dev_priv);
 void i915_gem_resume(struct drm_i915_private *dev_priv);
 
 int i915_gem_open(struct drm_i915_private *i915, struct drm_file *file);
-void i915_gem_release(struct drm_device *dev, struct drm_file *file);
 
 int i915_gem_object_set_cache_level(struct drm_i915_gem_object *obj,
 				    enum i915_cache_level cache_level);

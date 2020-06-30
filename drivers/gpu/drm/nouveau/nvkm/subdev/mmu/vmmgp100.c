@@ -79,12 +79,8 @@ gp100_vmm_pgt_pfn(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 	dma_addr_t addr;
 
 	nvkm_kmap(pt->memory);
-	for (; ptes; ptes--, map->pfn++) {
+	while (ptes--) {
 		u64 data = 0;
-
-		if (!(*map->pfn & NVKM_VMM_PFN_V))
-			continue;
-
 		if (!(*map->pfn & NVKM_VMM_PFN_W))
 			data |= BIT_ULL(6); /* RO. */
 
@@ -104,6 +100,7 @@ gp100_vmm_pgt_pfn(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 		}
 
 		VMM_WO064(pt, vmm, ptei++ * 8, data);
+		map->pfn++;
 	}
 	nvkm_done(pt->memory);
 }
@@ -313,11 +310,8 @@ gp100_vmm_pd0_pfn(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 	dma_addr_t addr;
 
 	nvkm_kmap(pt->memory);
-	for (; ptes; ptes--, map->pfn++) {
+	while (ptes--) {
 		u64 data = 0;
-
-		if (!(*map->pfn & NVKM_VMM_PFN_V))
-			continue;
 
 		if (!(*map->pfn & NVKM_VMM_PFN_W))
 			data |= BIT_ULL(6); /* RO. */
@@ -338,6 +332,7 @@ gp100_vmm_pd0_pfn(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 		}
 
 		VMM_WO064(pt, vmm, ptei++ * 16, data);
+		map->pfn++;
 	}
 	nvkm_done(pt->memory);
 }

@@ -520,8 +520,8 @@ config DEBUG_FS_ALLOW_NONE
 endchoice
 
 source "lib/Kconfig.kgdb"
+
 source "lib/Kconfig.ubsan"
-source "lib/Kconfig.kcsan"
 
 endmenu
 
@@ -1367,15 +1367,16 @@ config WW_MUTEX_SELFTEST
 	  Say M if you want these self tests to build as a module.
 	  Say N if you are unsure.
 
-config SCF_TORTURE_TEST
-	tristate "torture tests for smp_call_function*()"
+config CSD_LOCK_WAIT_DEBUG
+	bool "Debugging for csd_lock_wait(), called from smp_call_function*()"
 	depends on DEBUG_KERNEL
-	select TORTURE_TEST
+	depends on 64BIT
+	default n
 	help
-	  This option provides a kernel module that runs torture tests
-	  on the smp_call_function() family of primitives.  The kernel
-	  module may be built after the fact on the running kernel to
-	  be tested, if desired.
+	  This option enables debug prints when CPUs are slow to respond
+	  to the smp_call_function*() IPI wrappers.  These debug prints
+	  include the IPI handler function currently executing (if any)
+	  and relevant stack traces.
 
 endmenu # lock debugging
 
@@ -1630,6 +1631,8 @@ config PROVIDE_OHCI1394_DMA_INIT
 
 source "samples/Kconfig"
 
+source "lib/Kconfig.kcsan"
+
 config ARCH_HAS_DEVMEM_IS_ALLOWED
 	bool
 
@@ -1777,13 +1780,6 @@ config FAIL_PAGE_ALLOC
 	depends on FAULT_INJECTION
 	help
 	  Provide fault-injection capability for alloc_pages().
-
-config FAULT_INJECTION_USERCOPY
-	bool "Fault injection capability for usercopy functions"
-	depends on FAULT_INJECTION
-	help
-	  Provides fault-injection capability to inject failures
-	  in usercopy functions (copy_from_user(), get_user(), ...).
 
 config FAIL_MAKE_REQUEST
 	bool "Fault-injection capability for disk IO"
@@ -2383,15 +2379,6 @@ config TEST_HMM
 	  Doing so will allow you to run tools/testing/selftest/vm/hmm-tests.
 
 	  If unsure, say N.
-
-config TEST_FREE_PAGES
-	tristate "Test freeing pages"
-	help
-	  Test that a memory leak does not occur due to a race between
-	  freeing a block of pages and a speculative page reference.
-	  Loading this module is safe if your kernel has the bug fixed.
-	  If the bug is not fixed, it will leak gigabytes of memory and
-	  probably OOM your system.
 
 config TEST_FPU
 	tristate "Test floating point operations in kernel space"

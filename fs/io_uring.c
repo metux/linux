@@ -1908,7 +1908,7 @@ static void io_iopoll_queue(struct list_head *again)
 		list_del(&req->list);
 
 		/* should have ->mm unless io_uring is dying, kill reqs then */
-		if (unlikely(!current->mm) || !io_rw_reissue(req, -EAGAIN)) {
+		if (!io_rw_reissue(req, -EAGAIN)) {
 			io_complete_rw_common(&req->rw.kiocb, -EAGAIN);
 			continue;
 		}

@@ -4,9 +4,6 @@
 
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
-
-#ifdef CONFIG_BLOCK
-
 #include <linux/major.h>
 #include <linux/genhd.h>
 #include <linux/list.h>
@@ -289,8 +286,6 @@ static inline unsigned short req_get_ioprio(struct request *req)
 
 struct blk_queue_ctx;
 
-typedef blk_qc_t (make_request_fn) (struct request_queue *q, struct bio *bio);
-
 struct bio_vec;
 
 enum blk_eh_timer_return {
@@ -400,8 +395,6 @@ struct request_queue {
 
 	struct blk_queue_stats	*stats;
 	struct rq_qos		*rq_qos;
-
-	make_request_fn		*make_request_fn;
 
 	const struct blk_mq_ops	*mq_ops;
 
@@ -875,7 +868,7 @@ extern void blk_rq_unprep_clone(struct request *rq);
 extern blk_status_t blk_insert_cloned_request(struct request_queue *q,
 				     struct request *rq);
 extern int blk_rq_append_bio(struct request *rq, struct bio **bio);
-extern void blk_queue_split(struct request_queue *, struct bio **);
+extern void blk_queue_split(struct bio **);
 extern int scsi_verify_blk_ioctl(struct block_device *, unsigned int);
 extern int scsi_cmd_blk_ioctl(struct block_device *, fmode_t,
 			      unsigned int, void __user *);
@@ -1164,13 +1157,13 @@ static inline int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 	return __blk_rq_map_sg(q, rq, sglist, &last_sg);
 }
 extern void blk_dump_rq_flags(struct request *, char *);
-extern long nr_blockdev_pages(void);
 
 bool __must_check blk_get_queue(struct request_queue *);
-struct request_queue *blk_alloc_queue(make_request_fn make_request, int node_id);
+struct request_queue *blk_alloc_queue(int node_id);
 extern void blk_put_queue(struct request_queue *);
 extern void blk_set_queue_dying(struct request_queue *);
 
+#ifdef CONFIG_BLOCK
 /*
  * blk_plug permits building a queue of related requests by holding the I/O
  * fragments for a short period. This allows merging of sequential requests
@@ -1230,9 +1223,47 @@ static inline bool blk_needs_flush_plug(struct task_struct *tsk)
 		 !list_empty(&plug->cb_list));
 }
 
+int blkdev_issue_flush(struct block_device *, gfp_t);
+long nr_blockdev_pages(void);
+#else /* CONFIG_BLOCK */
+struct blk_plug {
+};
+
+static inline void blk_start_plug(struct blk_plug *plug)
+{
+}
+
+static inline void blk_finish_plug(struct blk_plug *plug)
+{
+}
+
+static inline void blk_flush_plug(struct task_struct *task)
+{
+}
+
+static inline void blk_schedule_flush_plug(struct task_struct *task)
+{
+}
+
+
+static inline bool blk_needs_flush_plug(struct task_struct *tsk)
+{
+	return false;
+}
+
+static inline int blkdev_issue_flush(struct block_device *bdev, gfp_t gfp_mask)
+{
+	return 0;
+}
+
+static inline long nr_blockdev_pages(void)
+{
+	return 0;
+}
+#endif /* CONFIG_BLOCK */
+
 extern void blk_io_schedule(void);
 
-int blkdev_issue_flush(struct block_device *, gfp_t);
 extern int blkdev_issue_write_same(struct block_device *bdev, sector_t sector,
 		sector_t nr_sects, gfp_t gfp_mask, struct page *page);
 
@@ -1744,6 +1775,7 @@ static inline void blk_ksm_unregister(struct request_queue *q) { }
 
 
 struct block_device_operations {
+	blk_qc_t (*submit_bio) (struct bio *bio);
 	int (*open) (struct block_device *, fmode_t);
 	void (*release) (struct gendisk *, fmode_t);
 	int (*rw_page)(struct block_device *, sector_t, struct page *, unsigned int);
@@ -1832,52 +1864,6 @@ static inline bool blk_req_can_dispatch_to_zone(struct request *rq)
 }
 #endif /* CONFIG_BLK_DEV_ZONED */
 
-#else /* CONFIG_BLOCK */
-
-struct block_device;
-
-/*
- * stubs for when the block layer is configured out
- */
-#define buffer_heads_over_limit 0
-
-static inline long nr_blockdev_pages(void)
-{
-	return 0;
-}
-
-struct blk_plug {
-};
-
-static inline void blk_start_plug(struct blk_plug *plug)
-{
-}
-
-static inline void blk_finish_plug(struct blk_plug *plug)
-{
-}
-
-static inline void blk_flush_plug(struct task_struct *task)
-{
-}
-
-static inline void blk_schedule_flush_plug(struct task_struct *task)
-{
-}
-
-
-static inline bool blk_needs_flush_plug(struct task_struct *tsk)
-{
-	return false;
-}
-
-static inline int blkdev_issue_flush(struct block_device *bdev, gfp_t gfp_mask)
-{
-	return 0;
-}
-
-#endif /* CONFIG_BLOCK */
-
 static inline void blk_wake_io_task(struct task_struct *waiter)
 {
 	/*
@@ -1891,7 +1877,6 @@ static inline void blk_wake_io_task(struct task_struct *waiter)
 		wake_up_process(waiter);
 }
 
-#ifdef CONFIG_BLOCK
 unsigned long disk_start_io_acct(struct gendisk *disk, unsigned int sectors,
 		unsigned int op);
 void disk_end_io_acct(struct gendisk *disk, unsigned int op,
@@ -1917,7 +1902,6 @@ static inline void bio_end_io_acct(struct bio *bio, unsigned long start_time)
 {
 	return disk_end_io_acct(bio->bi_disk, bio_op(bio), start_time);
 }
-#endif /* CONFIG_BLOCK */
 
 int bdev_read_only(struct block_device *bdev);
 int set_blocksize(struct block_device *bdev, int size);
@@ -1944,6 +1928,7 @@ void bd_abort_claiming(struct block_device *bdev, struct block_device *whole,
 		void *holder);
 void blkdev_put(struct block_device *bdev, fmode_t mode);
 
+struct block_device *I_BDEV(struct inode *inode);
 struct block_device *bdget(dev_t);
 struct block_device *bdgrab(struct block_device *bdev);
 void bdput(struct block_device *);

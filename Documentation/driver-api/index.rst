@@ -98,7 +98,6 @@ available subsections can be seen below.
    pldmfw/index
    rfkill
    sm501
-   smsc_ece1099
    switchtec
    sync_file
    vfio-mediated-device

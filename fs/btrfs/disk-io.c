@@ -50,6 +50,7 @@
 				 BTRFS_SUPER_FLAG_METADUMP |\
 				 BTRFS_SUPER_FLAG_METADUMP_V2)
 
+static const struct extent_io_ops btree_extent_io_ops;
 static void end_workqueue_fn(struct btrfs_work *work);
 static void btrfs_destroy_ordered_extents(struct btrfs_root *root);
 static int btrfs_destroy_delayed_refs(struct btrfs_transaction *trans,
@@ -202,6 +203,53 @@ void btrfs_set_buffer_lockdep_class(u64 objectid, struct extent_buffer *eb,
 }
 
 #endif
+
+/*
+ * extents on the btree inode are pretty simple, there's one extent
+ * that covers the entire device
+ */
+struct extent_map *btree_get_extent(struct btrfs_inode *inode,
+				    struct page *page, size_t pg_offset,
+				    u64 start, u64 len)
+{
+	struct extent_map_tree *em_tree = &inode->extent_tree;
+	struct extent_map *em;
+	int ret;
+
+	read_lock(&em_tree->lock);
+	em = lookup_extent_mapping(em_tree, start, len);
+	if (em) {
+		read_unlock(&em_tree->lock);
+		goto out;
+	}
+	read_unlock(&em_tree->lock);
+
+	em = alloc_extent_map();
+	if (!em) {
+		em = ERR_PTR(-ENOMEM);
+		goto out;
+	}
+	em->start = 0;
+	em->len = (u64)-1;
+	em->block_len = (u64)-1;
+	em->block_start = 0;
+
+	write_lock(&em_tree->lock);
+	ret = add_extent_mapping(em_tree, em, 0);
+	if (ret == -EEXIST) {
+		free_extent_map(em);
+		em = lookup_extent_mapping(em_tree, start, len);
+		if (!em)
+			em = ERR_PTR(-EIO);
+	} else if (ret) {
+		free_extent_map(em);
+		em = ERR_PTR(ret);
+	}
+	write_unlock(&em_tree->lock);
+
+out:
+	return em;
+}
 
 /*
  * Compute the csum of a btree block and store the result to provided buffer.
@@ -497,35 +545,38 @@ static int csum_dirty_buffer(struct btrfs_fs_info *fs_info, struct page *page)
 static int check_tree_block_fsid(struct extent_buffer *eb)
 {
 	struct btrfs_fs_info *fs_info = eb->fs_info;
-	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices, *seed_devs;
+	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices;
 	u8 fsid[BTRFS_FSID_SIZE];
-	u8 *metadata_uuid;
+	int ret = 1;
 
 	read_extent_buffer(eb, fsid, offsetof(struct btrfs_header, fsid),
 			   BTRFS_FSID_SIZE);
-	/*
-	 * Checking the incompat flag is only valid for the current fs. For
-	 * seed devices it's forbidden to have their uuid changed so reading
-	 * ->fsid in this case is fine
-	 */
-	if (btrfs_fs_incompat(fs_info, METADATA_UUID))
-		metadata_uuid = fs_devices->metadata_uuid;
-	else
-		metadata_uuid = fs_devices->fsid;
+	while (fs_devices) {
+		u8 *metadata_uuid;
 
-	if (!memcmp(fsid, metadata_uuid, BTRFS_FSID_SIZE))
-		return 0;
+		/*
+		 * Checking the incompat flag is only valid for the current
+		 * fs. For seed devices it's forbidden to have their uuid
+		 * changed so reading ->fsid in this case is fine
+		 */
+		if (fs_devices == fs_info->fs_devices &&
+		    btrfs_fs_incompat(fs_info, METADATA_UUID))
+			metadata_uuid = fs_devices->metadata_uuid;
+		else
+			metadata_uuid = fs_devices->fsid;
 
-	list_for_each_entry(seed_devs, &fs_devices->seed_list, seed_list)
-		if (!memcmp(fsid, seed_devs->fsid, BTRFS_FSID_SIZE))
-			return 0;
-
-	return 1;
+		if (!memcmp(fsid, metadata_uuid, BTRFS_FSID_SIZE)) {
+			ret = 0;
+			break;
+		}
+		fs_devices = fs_devices->seed;
+	}
+	return ret;
 }
 
-int btrfs_validate_metadata_buffer(struct btrfs_io_bio *io_bio, u64 phy_offset,
-				   struct page *page, u64 start, u64 end,
-				   int mirror)
+static int btree_readpage_end_io_hook(struct btrfs_io_bio *io_bio,
+				      u64 phy_offset, struct page *page,
+				      u64 start, u64 end, int mirror)
 {
 	u64 found_start;
 	int found_level;
@@ -585,15 +636,16 @@ int btrfs_validate_metadata_buffer(struct btrfs_io_bio *io_bio, u64 phy_offset,
 	csum_tree_block(eb, result);
 
 	if (memcmp_extent_buffer(eb, result, 0, csum_size)) {
-		u8 val[BTRFS_CSUM_SIZE] = { 0 };
+		u32 val;
+		u32 found = 0;
+
+		memcpy(&found, result, csum_size);
 
 		read_extent_buffer(eb, &val, 0, csum_size);
 		btrfs_warn_rl(fs_info,
-	"%s checksum verify failed on %llu wanted " CSUM_FMT " found " CSUM_FMT " level %d",
+		"%s checksum verify failed on %llu wanted %x found %x level %d",
 			      fs_info->sb->s_id, eb->start,
-			      CSUM_FMT_VALUE(csum_size, val),
-			      CSUM_FMT_VALUE(csum_size, result),
-			      btrfs_header_level(eb));
+			      val, found, btrfs_header_level(eb));
 		ret = -EUCLEAN;
 		goto err;
 	}
@@ -813,8 +865,9 @@ static int check_async_write(struct btrfs_fs_info *fs_info,
 	return 1;
 }
 
-blk_status_t btrfs_submit_metadata_bio(struct inode *inode, struct bio *bio,
-				       int mirror_num, unsigned long bio_flags)
+static blk_status_t btree_submit_bio_hook(struct inode *inode, struct bio *bio,
+					  int mirror_num,
+					  unsigned long bio_flags)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	int async = check_async_write(fs_info, BTRFS_I(inode));
@@ -899,6 +952,11 @@ static int btree_writepages(struct address_space *mapping,
 	return btree_write_cache_pages(mapping, wbc);
 }
 
+static int btree_readpage(struct file *file, struct page *page)
+{
+	return extent_read_full_page(page, btree_get_extent, 0);
+}
+
 static int btree_releasepage(struct page *page, gfp_t gfp_flags)
 {
 	if (PageWriteback(page) || PageDirty(page))
@@ -938,6 +996,7 @@ static int btree_set_page_dirty(struct page *page)
 }
 
 static const struct address_space_operations btree_aops = {
+	.readpage	= btree_readpage,
 	.writepages	= btree_writepages,
 	.releasepage	= btree_releasepage,
 	.invalidatepage = btree_invalidatepage,
@@ -1057,7 +1116,6 @@ static void __setup_root(struct btrfs_root *root, struct btrfs_fs_info *fs_info,
 	mutex_init(&root->log_mutex);
 	mutex_init(&root->ordered_extent_mutex);
 	mutex_init(&root->delalloc_mutex);
-	init_waitqueue_head(&root->qgroup_flush_wait);
 	init_waitqueue_head(&root->log_writer_wait);
 	init_waitqueue_head(&root->log_commit_wait[0]);
 	init_waitqueue_head(&root->log_commit_wait[1]);
@@ -1083,6 +1141,10 @@ static void __setup_root(struct btrfs_root *root, struct btrfs_fs_info *fs_info,
 	memset(&root->root_key, 0, sizeof(root->root_key));
 	memset(&root->root_item, 0, sizeof(root->root_item));
 	memset(&root->defrag_progress, 0, sizeof(root->defrag_progress));
+	if (!dummy)
+		root->defrag_trans_start = fs_info->generation;
+	else
+		root->defrag_trans_start = 0;
 	root->root_key.objectid = objectid;
 	root->anon_dev = 0;
 
@@ -1150,8 +1212,7 @@ struct btrfs_root *btrfs_create_tree(struct btrfs_trans_handle *trans,
 	root->root_key.type = BTRFS_ROOT_ITEM_KEY;
 	root->root_key.offset = 0;
 
-	leaf = btrfs_alloc_tree_block(trans, root, 0, objectid, NULL, 0, 0, 0,
-				      BTRFS_NESTING_NORMAL);
+	leaf = btrfs_alloc_tree_block(trans, root, 0, objectid, NULL, 0, 0, 0);
 	if (IS_ERR(leaf)) {
 		ret = PTR_ERR(leaf);
 		leaf = NULL;
@@ -1223,7 +1284,7 @@ static struct btrfs_root *alloc_log_tree(struct btrfs_trans_handle *trans,
 	 */
 
 	leaf = btrfs_alloc_tree_block(trans, root, 0, BTRFS_TREE_LOG_OBJECTID,
-			NULL, 0, 0, 0, BTRFS_NESTING_NORMAL);
+			NULL, 0, 0, 0);
 	if (IS_ERR(leaf)) {
 		btrfs_put_root(root);
 		return ERR_CAST(leaf);
@@ -1281,26 +1342,32 @@ int btrfs_add_log_tree(struct btrfs_trans_handle *trans,
 	return 0;
 }
 
-static struct btrfs_root *read_tree_root_path(struct btrfs_root *tree_root,
-					      struct btrfs_path *path,
-					      struct btrfs_key *key)
+struct btrfs_root *btrfs_read_tree_root(struct btrfs_root *tree_root,
+					struct btrfs_key *key)
 {
 	struct btrfs_root *root;
 	struct btrfs_fs_info *fs_info = tree_root->fs_info;
+	struct btrfs_path *path;
 	u64 generation;
 	int ret;
 	int level;
 
-	root = btrfs_alloc_root(fs_info, key->objectid, GFP_NOFS);
-	if (!root)
+	path = btrfs_alloc_path();
+	if (!path)
 		return ERR_PTR(-ENOMEM);
+
+	root = btrfs_alloc_root(fs_info, key->objectid, GFP_NOFS);
+	if (!root) {
+		ret = -ENOMEM;
+		goto alloc_fail;
+	}
 
 	ret = btrfs_find_root(tree_root, key, path,
 			      &root->root_item, &root->root_key);
 	if (ret) {
 		if (ret > 0)
 			ret = -ENOENT;
-		goto fail;
+		goto find_fail;
 	}
 
 	generation = btrfs_root_generation(&root->root_item);
@@ -1311,39 +1378,24 @@ static struct btrfs_root *read_tree_root_path(struct btrfs_root *tree_root,
 	if (IS_ERR(root->node)) {
 		ret = PTR_ERR(root->node);
 		root->node = NULL;
-		goto fail;
+		goto find_fail;
 	} else if (!btrfs_buffer_uptodate(root->node, generation, 0)) {
 		ret = -EIO;
-		goto fail;
+		goto find_fail;
 	}
 	root->commit_root = btrfs_root_node(root);
-	return root;
-fail:
-	btrfs_put_root(root);
-	return ERR_PTR(ret);
-}
-
-struct btrfs_root *btrfs_read_tree_root(struct btrfs_root *tree_root,
-					struct btrfs_key *key)
-{
-	struct btrfs_root *root;
-	struct btrfs_path *path;
-
-	path = btrfs_alloc_path();
-	if (!path)
-		return ERR_PTR(-ENOMEM);
-	root = read_tree_root_path(tree_root, path, key);
+out:
 	btrfs_free_path(path);
-
 	return root;
+
+find_fail:
+	btrfs_put_root(root);
+alloc_fail:
+	root = ERR_PTR(ret);
+	goto out;
 }
 
-/*
- * Initialize subvolume root in-memory structure
- *
- * @anon_dev:	anonymous device to attach to the root, if zero, allocate new
- */
-static int btrfs_init_fs_root(struct btrfs_root *root, dev_t anon_dev)
+static int btrfs_init_fs_root(struct btrfs_root *root)
 {
 	int ret;
 	unsigned int nofs_flag;
@@ -1376,20 +1428,9 @@ static int btrfs_init_fs_root(struct btrfs_root *root, dev_t anon_dev)
 	spin_lock_init(&root->ino_cache_lock);
 	init_waitqueue_head(&root->ino_cache_wait);
 
-	/*
-	 * Don't assign anonymous block device to roots that are not exposed to
-	 * userspace, the id pool is limited to 1M
-	 */
-	if (is_fstree(root->root_key.objectid) &&
-	    btrfs_root_refs(&root->root_item) > 0) {
-		if (!anon_dev) {
-			ret = get_anon_bdev(&root->anon_dev);
-			if (ret)
-				goto fail;
-		} else {
-			root->anon_dev = anon_dev;
-		}
-	}
+	ret = get_anon_bdev(&root->anon_dev);
+	if (ret)
+		goto fail;
 
 	mutex_lock(&root->objectid_mutex);
 	ret = btrfs_find_highest_objectid(root,
@@ -1423,31 +1464,6 @@ static struct btrfs_root *btrfs_lookup_fs_root(struct btrfs_fs_info *fs_info,
 	return root;
 }
 
-static struct btrfs_root *btrfs_get_global_root(struct btrfs_fs_info *fs_info,
-						u64 objectid)
-{
-	if (objectid == BTRFS_ROOT_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->tree_root);
-	if (objectid == BTRFS_EXTENT_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->extent_root);
-	if (objectid == BTRFS_CHUNK_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->chunk_root);
-	if (objectid == BTRFS_DEV_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->dev_root);
-	if (objectid == BTRFS_CSUM_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->csum_root);
-	if (objectid == BTRFS_QUOTA_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->quota_root) ?
-			fs_info->quota_root : ERR_PTR(-ENOENT);
-	if (objectid == BTRFS_UUID_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->uuid_root) ?
-			fs_info->uuid_root : ERR_PTR(-ENOENT);
-	if (objectid == BTRFS_FREE_SPACE_TREE_OBJECTID)
-		return btrfs_grab_root(fs_info->free_space_root) ?
-			fs_info->free_space_root : ERR_PTR(-ENOENT);
-	return NULL;
-}
-
 int btrfs_insert_fs_root(struct btrfs_fs_info *fs_info,
 			 struct btrfs_root *root)
 {
@@ -1477,12 +1493,10 @@ void btrfs_check_leaked_roots(struct btrfs_fs_info *fs_info)
 	struct btrfs_root *root;
 
 	while (!list_empty(&fs_info->allocated_roots)) {
-		char buf[BTRFS_ROOT_NAME_BUF_LEN];
-
 		root = list_first_entry(&fs_info->allocated_roots,
 					struct btrfs_root, leak_list);
-		btrfs_err(fs_info, "leaked root %s refcount %d",
-			  btrfs_root_name(root->root_key.objectid, buf),
+		btrfs_err(fs_info, "leaked root %llu-%llu refcount %d",
+			  root->root_key.objectid, root->root_key.offset,
 			  refcount_read(&root->refs));
 		while (refcount_read(&root->refs) > 1)
 			btrfs_put_root(root);
@@ -1520,41 +1534,36 @@ void btrfs_free_fs_info(struct btrfs_fs_info *fs_info)
 }
 
 
-/*
- * Get an in-memory reference of a root structure.
- *
- * For essential trees like root/extent tree, we grab it from fs_info directly.
- * For subvolume trees, we check the cached filesystem roots first. If not
- * found, then read it from disk and add it to cached fs roots.
- *
- * Caller should release the root by calling btrfs_put_root() after the usage.
- *
- * NOTE: Reloc and log trees can't be read by this function as they share the
- *	 same root objectid.
- *
- * @objectid:	root id
- * @anon_dev:	preallocated anonymous block device number for new roots,
- * 		pass 0 for new allocation.
- * @check_ref:	whether to check root item references, If true, return -ENOENT
- *		for orphan roots
- */
-static struct btrfs_root *btrfs_get_root_ref(struct btrfs_fs_info *fs_info,
-					     u64 objectid, dev_t anon_dev,
-					     bool check_ref)
+struct btrfs_root *btrfs_get_fs_root(struct btrfs_fs_info *fs_info,
+				     u64 objectid, bool check_ref)
 {
 	struct btrfs_root *root;
 	struct btrfs_path *path;
 	struct btrfs_key key;
 	int ret;
 
-	root = btrfs_get_global_root(fs_info, objectid);
-	if (root)
-		return root;
+	if (objectid == BTRFS_ROOT_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->tree_root);
+	if (objectid == BTRFS_EXTENT_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->extent_root);
+	if (objectid == BTRFS_CHUNK_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->chunk_root);
+	if (objectid == BTRFS_DEV_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->dev_root);
+	if (objectid == BTRFS_CSUM_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->csum_root);
+	if (objectid == BTRFS_QUOTA_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->quota_root) ?
+			fs_info->quota_root : ERR_PTR(-ENOENT);
+	if (objectid == BTRFS_UUID_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->uuid_root) ?
+			fs_info->uuid_root : ERR_PTR(-ENOENT);
+	if (objectid == BTRFS_FREE_SPACE_TREE_OBJECTID)
+		return btrfs_grab_root(fs_info->free_space_root) ?
+			fs_info->free_space_root : ERR_PTR(-ENOENT);
 again:
 	root = btrfs_lookup_fs_root(fs_info, objectid);
 	if (root) {
-		/* Shouldn't get preallocated anon_dev for cached roots */
-		ASSERT(!anon_dev);
 		if (check_ref && btrfs_root_refs(&root->root_item) == 0) {
 			btrfs_put_root(root);
 			return ERR_PTR(-ENOENT);
@@ -1574,7 +1583,7 @@ again:
 		goto fail;
 	}
 
-	ret = btrfs_init_fs_root(root, anon_dev);
+	ret = btrfs_init_fs_root(root);
 	if (ret)
 		goto fail;
 
@@ -1605,79 +1614,6 @@ again:
 fail:
 	btrfs_put_root(root);
 	return ERR_PTR(ret);
-}
-
-/*
- * Get in-memory reference of a root structure
- *
- * @objectid:	tree objectid
- * @check_ref:	if set, verify that the tree exists and the item has at least
- *		one reference
- */
-struct btrfs_root *btrfs_get_fs_root(struct btrfs_fs_info *fs_info,
-				     u64 objectid, bool check_ref)
-{
-	return btrfs_get_root_ref(fs_info, objectid, 0, check_ref);
-}
-
-/*
- * Get in-memory reference of a root structure, created as new, optionally pass
- * the anonymous block device id
- *
- * @objectid:	tree objectid
- * @anon_dev:	if zero, allocate a new anonymous block device or use the
- *		parameter value
- */
-struct btrfs_root *btrfs_get_new_fs_root(struct btrfs_fs_info *fs_info,
-					 u64 objectid, dev_t anon_dev)
-{
-	return btrfs_get_root_ref(fs_info, objectid, anon_dev, true);
-}
-
-/*
- * btrfs_get_fs_root_commit_root - return a root for the given objectid
- * @fs_info:	the fs_info
- * @objectid:	the objectid we need to lookup
- *
- * This is exclusively used for backref walking, and exists specifically because
- * of how qgroups does lookups.  Qgroups will do a backref lookup at delayed ref
- * creation time, which means we may have to read the tree_root in order to look
- * up a fs root that is not in memory.  If the root is not in memory we will
- * read the tree root commit root and look up the fs root from there.  This is a
- * temporary root, it will not be inserted into the radix tree as it doesn't
- * have the most uptodate information, it'll simply be discarded once the
- * backref code is finished using the root.
- */
-struct btrfs_root *btrfs_get_fs_root_commit_root(struct btrfs_fs_info *fs_info,
-						 struct btrfs_path *path,
-						 u64 objectid)
-{
-	struct btrfs_root *root;
-	struct btrfs_key key;
-
-	ASSERT(path->search_commit_root && path->skip_locking);
-
-	/*
-	 * This can return -ENOENT if we ask for a root that doesn't exist, but
-	 * since this is called via the backref walking code we won't be looking
-	 * up a root that doesn't exist, unless there's corruption.  So if root
-	 * != NULL just return it.
-	 */
-	root = btrfs_get_global_root(fs_info, objectid);
-	if (root)
-		return root;
-
-	root = btrfs_lookup_fs_root(fs_info, objectid);
-	if (root)
-		return root;
-
-	key.objectid = objectid;
-	key.type = BTRFS_ROOT_ITEM_KEY;
-	key.offset = (u64)-1;
-	root = read_tree_root_path(fs_info->tree_root, path, &key);
-	btrfs_release_path(path);
-
-	return root;
 }
 
 /*
@@ -1792,6 +1728,7 @@ static int transaction_kthread(void *arg)
 
 		now = ktime_get_seconds();
 		if (cur->state < TRANS_STATE_COMMIT_START &&
+		    !test_bit(BTRFS_FS_NEED_ASYNC_COMMIT, &fs_info->flags) &&
 		    (now < cur->start_time ||
 		     now - cur->start_time < fs_info->commit_interval)) {
 			spin_unlock(&fs_info->trans_lock);
@@ -2043,7 +1980,8 @@ void btrfs_put_root(struct btrfs_root *root)
 		if (root->anon_dev)
 			free_anon_bdev(root->anon_dev);
 		btrfs_drew_lock_destroy(&root->snapshot_lock);
-		free_root_extent_buffers(root);
+		free_extent_buffer(root->node);
+		free_extent_buffer(root->commit_root);
 		kfree(root->free_ino_ctl);
 		kfree(root->free_ino_pinned);
 #ifdef CONFIG_BTRFS_DEBUG
@@ -2119,9 +2057,11 @@ static void btrfs_init_btree_inode(struct btrfs_fs_info *fs_info)
 
 	RB_CLEAR_NODE(&BTRFS_I(inode)->rb_node);
 	extent_io_tree_init(fs_info, &BTRFS_I(inode)->io_tree,
-			    IO_TREE_BTREE_INODE_IO, inode);
+			    IO_TREE_INODE_IO, inode);
 	BTRFS_I(inode)->io_tree.track_uptodate = false;
 	extent_map_tree_init(&BTRFS_I(inode)->extent_tree);
+
+	BTRFS_I(inode)->io_tree.ops = &btree_extent_io_ops;
 
 	BTRFS_I(inode)->root = btrfs_grab_root(fs_info->tree_root);
 	memset(&BTRFS_I(inode)->location, 0, sizeof(struct btrfs_key));
@@ -2628,17 +2568,16 @@ static int __cold init_tree_roots(struct btrfs_fs_info *fs_info)
 		level = btrfs_super_root_level(sb);
 		tree_root->node = read_tree_block(fs_info, btrfs_super_root(sb),
 						  generation, level, NULL);
-		if (IS_ERR(tree_root->node)) {
+		if (IS_ERR(tree_root->node) ||
+		    !extent_buffer_uptodate(tree_root->node)) {
 			handle_error = true;
-			ret = PTR_ERR(tree_root->node);
-			tree_root->node = NULL;
-			btrfs_warn(fs_info, "couldn't read tree root");
-			continue;
 
-		} else if (!extent_buffer_uptodate(tree_root->node)) {
-			handle_error = true;
-			ret = -EIO;
-			btrfs_warn(fs_info, "error while reading tree root");
+			if (IS_ERR(tree_root->node))
+				ret = PTR_ERR(tree_root->node);
+			else if (!extent_buffer_uptodate(tree_root->node))
+				ret = -EUCLEAN;
+
+			btrfs_warn(fs_info, "failed to read tree root");
 			continue;
 		}
 
@@ -2754,7 +2693,7 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 	fs_info->check_integrity_print_mask = 0;
 #endif
 	btrfs_init_balance(fs_info);
-	btrfs_init_async_reclaim_work(fs_info);
+	btrfs_init_async_reclaim_work(&fs_info->async_reclaim_work);
 
 	spin_lock_init(&fs_info->block_group_cache_lock);
 	fs_info->block_group_cache_tree = RB_ROOT;
@@ -2929,7 +2868,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	}
 
 	/*
-	 * Verify the type first, if that or the checksum value are
+	 * Verify the type first, if that or the the checksum value are
 	 * corrupted, we'll find out
 	 */
 	csum_type = btrfs_super_csum_type(disk_super);
@@ -3091,6 +3030,8 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 		goto fail_sb_buffer;
 	}
 
+	sb->s_bdi->capabilities |= BDI_CAP_CGROUP_WRITEBACK;
+	sb->s_bdi->ra_pages = VM_READAHEAD_PAGES;
 	sb->s_bdi->ra_pages *= btrfs_super_num_devices(disk_super);
 	sb->s_bdi->ra_pages = max(sb->s_bdi->ra_pages, SZ_4M / PAGE_SIZE);
 
@@ -3416,8 +3357,6 @@ fail_block_groups:
 	btrfs_put_block_group_cache(fs_info);
 
 fail_tree_roots:
-	if (fs_info->data_reloc_root)
-		btrfs_drop_and_free_fs_root(fs_info, fs_info->data_reloc_root);
 	free_root_pointers(fs_info, true);
 	invalidate_inode_pages2(fs_info->btree_inode->i_mapping);
 
@@ -3481,12 +3420,8 @@ struct btrfs_super_block *btrfs_read_dev_one_super(struct block_device *bdev,
 		return ERR_CAST(page);
 
 	super = page_address(page);
-	if (btrfs_super_magic(super) != BTRFS_MAGIC) {
-		btrfs_release_disk_super(super);
-		return ERR_PTR(-ENODATA);
-	}
-
-	if (btrfs_super_bytenr(super) != bytenr) {
+	if (btrfs_super_bytenr(super) != bytenr ||
+		    btrfs_super_magic(super) != BTRFS_MAGIC) {
 		btrfs_release_disk_super(super);
 		return ERR_PTR(-EINVAL);
 	}
@@ -4059,7 +3994,6 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	btrfs_cleanup_defrag_inodes(fs_info);
 
 	cancel_work_sync(&fs_info->async_reclaim_work);
-	cancel_work_sync(&fs_info->async_data_reclaim_work);
 
 	/* Cancel or finish ongoing discard work */
 	btrfs_discard_cleanup(fs_info);
@@ -4098,11 +4032,6 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 
 	ASSERT(list_empty(&fs_info->delayed_iputs));
 	set_bit(BTRFS_FS_CLOSING_DONE, &fs_info->flags);
-
-	if (btrfs_check_quota_leak(fs_info)) {
-		WARN_ON(IS_ENABLED(CONFIG_BTRFS_DEBUG));
-		btrfs_err(fs_info, "qgroup reserved space leaked");
-	}
 
 	btrfs_free_qgroup_config(fs_info);
 	ASSERT(list_empty(&fs_info->delalloc_roots));
@@ -4556,7 +4485,6 @@ static void btrfs_cleanup_bg_io(struct btrfs_block_group *cache)
 		cache->io_ctl.inode = NULL;
 		iput(inode);
 	}
-	ASSERT(cache->io_ctl.pages == NULL);
 	btrfs_put_block_group(cache);
 }
 
@@ -4691,3 +4619,9 @@ static int btrfs_cleanup_transaction(struct btrfs_fs_info *fs_info)
 
 	return 0;
 }
+
+static const struct extent_io_ops btree_extent_io_ops = {
+	/* mandatory callbacks */
+	.submit_bio_hook = btree_submit_bio_hook,
+	.readpage_end_io_hook = btree_readpage_end_io_hook,
+};

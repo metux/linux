@@ -1273,7 +1273,6 @@ static blk_qc_t __map_bio(struct dm_target_io *tio)
 	sector_t sector;
 	struct bio *clone = &tio->clone;
 	struct dm_io *io = tio->io;
-	struct mapped_device *md = io->md;
 	struct dm_target *ti = tio->ti;
 	blk_qc_t ret = BLK_QC_T_NONE;
 
@@ -1295,10 +1294,7 @@ static blk_qc_t __map_bio(struct dm_target_io *tio)
 		/* the bio has been remapped so dispatch it */
 		trace_block_bio_remap(clone->bi_disk->queue, clone,
 				      bio_dev(io->orig_bio), sector);
-		if (md->type == DM_TYPE_NVME_BIO_BASED)
-			ret = direct_make_request(clone);
-		else
-			ret = generic_make_request(clone);
+		ret = submit_bio_noacct(clone);
 		break;
 	case DM_MAPIO_KILL:
 		free_tio(tio);
@@ -1645,7 +1641,7 @@ static blk_qc_t __split_and_process_bio(struct mapped_device *md,
 			error = __split_and_process_non_flush(&ci);
 			if (current->bio_list && ci.sector_count && !error) {
 				/*
-				 * Remainder must be passed to generic_make_request()
+				 * Remainder must be passed to submit_bio_noacct()
 				 * so that it gets handled *after* bios already submitted
 				 * have been completely processed.
 				 * We take a clone of the original to store in
@@ -1670,7 +1666,7 @@ static blk_qc_t __split_and_process_bio(struct mapped_device *md,
 
 				bio_chain(b, bio);
 				trace_block_split(md->queue, b, bio->bi_iter.bi_sector);
-				ret = generic_make_request(bio);
+				ret = submit_bio_noacct(bio);
 				break;
 			}
 		}
@@ -1738,7 +1734,7 @@ static void dm_queue_split(struct mapped_device *md, struct dm_target *ti, struc
 
 		bio_chain(split, *bio);
 		trace_block_split(md->queue, split, (*bio)->bi_iter.bi_sector);
-		generic_make_request(*bio);
+		submit_bio_noacct(*bio);
 		*bio = split;
 	}
 }
@@ -1816,31 +1812,6 @@ static blk_qc_t dm_submit_bio(struct bio *bio)
 
 	dm_put_live_table(md, srcu_idx);
 	return ret;
-}
-
-static int dm_any_congested(void *congested_data, int bdi_bits)
-{
-	int r = bdi_bits;
-	struct mapped_device *md = congested_data;
-	struct dm_table *map;
-
-	if (!test_bit(DMF_BLOCK_IO_FOR_SUSPEND, &md->flags)) {
-		if (dm_request_based(md)) {
-			/*
-			 * With request-based DM we only need to check the
-			 * top-level queue for congestion.
-			 */
-			struct backing_dev_info *bdi = md->queue->backing_dev_info;
-			r = bdi->wb.congested->state & bdi_bits;
-		} else {
-			map = dm_get_live_table_fast(md);
-			if (map)
-				r = dm_table_any_congested(map, bdi_bits);
-			dm_put_live_table_fast(md);
-		}
-	}
-
-	return r;
 }
 
 /*-----------------------------------------------------------------
@@ -2281,12 +2252,6 @@ struct queue_limits *dm_get_queue_limits(struct mapped_device *md)
 }
 EXPORT_SYMBOL_GPL(dm_get_queue_limits);
 
-static void dm_init_congested_fn(struct mapped_device *md)
-{
-	md->queue->backing_dev_info->congested_data = md;
-	md->queue->backing_dev_info->congested_fn = dm_any_congested;
-}
-
 /*
  * Setup the DM device's queue based on md's type
  */
@@ -2303,12 +2268,10 @@ int dm_setup_md_queue(struct mapped_device *md, struct dm_table *t)
 			DMERR("Cannot initialize queue for request-based dm-mq mapped device");
 			return r;
 		}
-		dm_init_congested_fn(md);
 		break;
 	case DM_TYPE_BIO_BASED:
 	case DM_TYPE_DAX_BIO_BASED:
 	case DM_TYPE_NVME_BIO_BASED:
-		dm_init_congested_fn(md);
 		break;
 	case DM_TYPE_NONE:
 		WARN_ON_ONCE(true);
@@ -2530,7 +2493,7 @@ static void dm_wq_work(struct work_struct *work)
 			break;
 
 		if (dm_request_based(md))
-			(void) generic_make_request(c);
+			(void) submit_bio_noacct(c);
 		else
 			(void) dm_process_bio(md, map, c);
 	}

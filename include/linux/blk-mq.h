@@ -267,9 +267,27 @@ struct blk_mq_queue_data {
 	bool last;
 };
 
+typedef blk_status_t (queue_rq_fn)(struct blk_mq_hw_ctx *,
+		const struct blk_mq_queue_data *);
+typedef void (commit_rqs_fn)(struct blk_mq_hw_ctx *);
+typedef bool (get_budget_fn)(struct request_queue *);
+typedef void (put_budget_fn)(struct request_queue *);
+typedef enum blk_eh_timer_return (timeout_fn)(struct request *, bool);
+typedef int (init_hctx_fn)(struct blk_mq_hw_ctx *, void *, unsigned int);
+typedef void (exit_hctx_fn)(struct blk_mq_hw_ctx *, unsigned int);
+typedef int (init_request_fn)(struct blk_mq_tag_set *set, struct request *,
+		unsigned int, unsigned int);
+typedef void (exit_request_fn)(struct blk_mq_tag_set *set, struct request *,
+		unsigned int);
+
 typedef bool (busy_iter_fn)(struct blk_mq_hw_ctx *, struct request *, void *,
 		bool);
 typedef bool (busy_tag_iter_fn)(struct request *, void *, bool);
+typedef int (poll_fn)(struct blk_mq_hw_ctx *);
+typedef int (map_queues_fn)(struct blk_mq_tag_set *set);
+typedef bool (busy_fn)(struct request_queue *);
+typedef void (complete_fn)(struct request *);
+typedef void (cleanup_rq_fn)(struct request *);
 
 /**
  * struct blk_mq_ops - Callback functions that implements block driver
@@ -279,8 +297,7 @@ struct blk_mq_ops {
 	/**
 	 * @queue_rq: Queue a new request from block IO.
 	 */
-	blk_status_t (*queue_rq)(struct blk_mq_hw_ctx *,
-				 const struct blk_mq_queue_data *);
+	queue_rq_fn		*queue_rq;
 
 	/**
 	 * @commit_rqs: If a driver uses bd->last to judge when to submit
@@ -289,7 +306,7 @@ struct blk_mq_ops {
 	 * purpose of kicking the hardware (which the last request otherwise
 	 * would have done).
 	 */
-	void (*commit_rqs)(struct blk_mq_hw_ctx *);
+	commit_rqs_fn		*commit_rqs;
 
 	/**
 	 * @get_budget: Reserve budget before queue request, once .queue_rq is
@@ -297,38 +314,37 @@ struct blk_mq_ops {
 	 * reserved budget. Also we have to handle failure case
 	 * of .get_budget for avoiding I/O deadlock.
 	 */
-	bool (*get_budget)(struct request_queue *);
-
+	get_budget_fn		*get_budget;
 	/**
 	 * @put_budget: Release the reserved budget.
 	 */
-	void (*put_budget)(struct request_queue *);
+	put_budget_fn		*put_budget;
 
 	/**
 	 * @timeout: Called on request timeout.
 	 */
-	enum blk_eh_timer_return (*timeout)(struct request *, bool);
+	timeout_fn		*timeout;
 
 	/**
 	 * @poll: Called to poll for completion of a specific tag.
 	 */
-	int (*poll)(struct blk_mq_hw_ctx *);
+	poll_fn			*poll;
 
 	/**
 	 * @complete: Mark the request as complete.
 	 */
-	void (*complete)(struct request *);
+	complete_fn		*complete;
 
 	/**
 	 * @init_hctx: Called when the block layer side of a hardware queue has
 	 * been set up, allowing the driver to allocate/init matching
 	 * structures.
 	 */
-	int (*init_hctx)(struct blk_mq_hw_ctx *, void *, unsigned int);
+	init_hctx_fn		*init_hctx;
 	/**
 	 * @exit_hctx: Ditto for exit/teardown.
 	 */
-	void (*exit_hctx)(struct blk_mq_hw_ctx *, unsigned int);
+	exit_hctx_fn		*exit_hctx;
 
 	/**
 	 * @init_request: Called for every command allocated by the block layer
@@ -337,13 +353,11 @@ struct blk_mq_ops {
 	 * Tag greater than or equal to queue_depth is for setting up
 	 * flush request.
 	 */
-	int (*init_request)(struct blk_mq_tag_set *set, struct request *,
-			    unsigned int, unsigned int);
+	init_request_fn		*init_request;
 	/**
 	 * @exit_request: Ditto for exit/teardown.
 	 */
-	void (*exit_request)(struct blk_mq_tag_set *set, struct request *,
-			     unsigned int);
+	exit_request_fn		*exit_request;
 
 	/**
 	 * @initialize_rq_fn: Called from inside blk_get_request().
@@ -354,18 +368,18 @@ struct blk_mq_ops {
 	 * @cleanup_rq: Called before freeing one request which isn't completed
 	 * yet, and usually for freeing the driver private data.
 	 */
-	void (*cleanup_rq)(struct request *);
+	cleanup_rq_fn		*cleanup_rq;
 
 	/**
 	 * @busy: If set, returns whether or not this queue currently is busy.
 	 */
-	bool (*busy)(struct request_queue *);
+	busy_fn			*busy;
 
 	/**
 	 * @map_queues: This allows drivers specify their own queue mapping by
 	 * overriding the setup-time function that builds the mq_map.
 	 */
-	int (*map_queues)(struct blk_mq_tag_set *set);
+	map_queues_fn		*map_queues;
 
 #ifdef CONFIG_BLK_DEBUG_FS
 	/**

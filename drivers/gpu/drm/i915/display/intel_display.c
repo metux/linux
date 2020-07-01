@@ -2029,12 +2029,12 @@ intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane)
 	case I915_FORMAT_MOD_Y_TILED_CCS:
 		if (is_ccs_plane(fb, color_plane))
 			return 128;
-		fallthrough;
+		/* fall through */
 	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
 	case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
 		if (is_ccs_plane(fb, color_plane))
 			return 64;
-		fallthrough;
+		/* fall through */
 	case I915_FORMAT_MOD_Y_TILED:
 		if (IS_GEN(dev_priv, 2) || HAS_128_BYTE_Y_TILING(dev_priv))
 			return 128;
@@ -2043,7 +2043,7 @@ intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane)
 	case I915_FORMAT_MOD_Yf_TILED_CCS:
 		if (is_ccs_plane(fb, color_plane))
 			return 128;
-		fallthrough;
+		/* fall through */
 	case I915_FORMAT_MOD_Yf_TILED:
 		switch (cpp) {
 		case 1:
@@ -2185,7 +2185,7 @@ static unsigned int intel_surf_alignment(const struct drm_framebuffer *fb,
 	case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
 		if (is_semiplanar_uv_plane(fb, color_plane))
 			return intel_tile_row_size(fb, color_plane);
-		fallthrough;
+		/* Fall-through */
 	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
 		return 16 * 1024;
 	case I915_FORMAT_MOD_Y_TILED_CCS:
@@ -2194,7 +2194,7 @@ static unsigned int intel_surf_alignment(const struct drm_framebuffer *fb,
 		if (INTEL_GEN(dev_priv) >= 12 &&
 		    is_semiplanar_uv_plane(fb, color_plane))
 			return intel_tile_row_size(fb, color_plane);
-		fallthrough;
+		/* Fall-through */
 	case I915_FORMAT_MOD_Yf_TILED:
 		return 1 * 1024 * 1024;
 	default:
@@ -6211,7 +6211,7 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 	case DRM_FORMAT_ARGB16161616F:
 		if (INTEL_GEN(dev_priv) >= 11)
 			break;
-		fallthrough;
+		/* fall through */
 	default:
 		drm_dbg_kms(&dev_priv->drm,
 			    "[PLANE:%d:%s] FB:%d unsupported scaling format 0x%x\n",
@@ -10073,8 +10073,7 @@ static void ilk_set_pipeconf(const struct intel_crtc_state *crtc_state)
 	drm_WARN_ON(&dev_priv->drm, crtc_state->limited_color_range &&
 		    crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB);
 
-	if (crtc_state->limited_color_range &&
-	    !intel_crtc_has_type(crtc_state, INTEL_OUTPUT_SDVO))
+	if (crtc_state->limited_color_range)
 		val |= PIPECONF_COLOR_RANGE_SELECT;
 
 	if (crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB)
@@ -10896,7 +10895,7 @@ static void hsw_get_ddi_pll(struct drm_i915_private *dev_priv, enum port port,
 		break;
 	default:
 		MISSING_CASE(ddi_pll_sel);
-		fallthrough;
+		/* fall through */
 	case PORT_CLK_SEL_NONE:
 		return;
 	}
@@ -10956,10 +10955,10 @@ static bool hsw_get_transcoder_state(struct intel_crtc *crtc,
 			drm_WARN(dev, 1,
 				 "unknown pipe linked to transcoder %s\n",
 				 transcoder_name(panel_transcoder));
-			fallthrough;
+			/* fall through */
 		case TRANS_DDI_EDP_INPUT_A_ONOFF:
 			force_thru = true;
-			fallthrough;
+			/* fall through */
 		case TRANS_DDI_EDP_INPUT_A_ON:
 			trans_pipe = PIPE_A;
 			break;
@@ -13183,7 +13182,7 @@ static bool check_digital_port_conflicts(struct intel_atomic_state *state)
 		case INTEL_OUTPUT_DDI:
 			if (drm_WARN_ON(dev, !HAS_DDI(to_i915(dev))))
 				break;
-			fallthrough;
+			/* else, fall through */
 		case INTEL_OUTPUT_DP:
 		case INTEL_OUTPUT_HDMI:
 		case INTEL_OUTPUT_EDP:
@@ -14930,7 +14929,7 @@ static int intel_atomic_check(struct drm_device *dev,
 	if (any_ms && !check_digital_port_conflicts(state)) {
 		drm_dbg_kms(&dev_priv->drm,
 			    "rejecting conflicting digital port configuration\n");
-		ret = -EINVAL;
+		ret = EINVAL;
 		goto fail;
 	}
 
@@ -14956,6 +14955,12 @@ static int intel_atomic_check(struct drm_device *dev,
 	if (dev_priv->wm.distrust_bios_wm)
 		any_ms = true;
 
+	if (any_ms) {
+		ret = intel_modeset_checks(state);
+		if (ret)
+			goto fail;
+	}
+
 	intel_fbc_choose_crtc(dev_priv, state);
 	ret = calc_watermark_data(state);
 	if (ret)
@@ -14970,10 +14975,6 @@ static int intel_atomic_check(struct drm_device *dev,
 		goto fail;
 
 	if (any_ms) {
-		ret = intel_modeset_checks(state);
-		if (ret)
-			goto fail;
-
 		ret = intel_modeset_calc_cdclk(state);
 		if (ret)
 			return ret;
@@ -16331,8 +16332,7 @@ intel_primary_plane_create(struct drm_i915_private *dev_priv, enum pipe pipe)
 	 * On gen2/3 only plane A can do FBC, but the panel fitter and LVDS
 	 * port is hooked to pipe B. Hence we want plane A feeding pipe B.
 	 */
-	if (HAS_FBC(dev_priv) && INTEL_GEN(dev_priv) < 4 &&
-	    INTEL_NUM_PIPES(dev_priv) == 2)
+	if (HAS_FBC(dev_priv) && INTEL_GEN(dev_priv) < 4)
 		plane->i9xx_plane = (enum i9xx_plane_id) !pipe;
 	else
 		plane->i9xx_plane = (enum i9xx_plane_id) pipe;

@@ -395,7 +395,7 @@ struct rxrpc_bundle {
 	unsigned int		debug_id;
 	bool			try_upgrade;	/* True if the bundle is attempting upgrade */
 	bool			alloc_conn;	/* True if someone's getting a conn */
-	short			alloc_error;	/* Error from last conn allocation */
+	unsigned short		alloc_error;	/* Error from last conn allocation */
 	spinlock_t		channel_lock;
 	struct rb_node		local_node;	/* Node in local->client_conns */
 	struct list_head	waiting_calls;	/* Calls waiting for channels */
@@ -831,7 +831,6 @@ void rxrpc_clean_up_local_conns(struct rxrpc_local *);
  * conn_event.c
  */
 void rxrpc_process_connection(struct work_struct *);
-void rxrpc_process_delayed_final_acks(struct rxrpc_connection *, bool);
 
 /*
  * conn_object.c

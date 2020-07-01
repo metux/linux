@@ -433,6 +433,7 @@ static void rxrpc_add_conn_to_bundle(struct rxrpc_bundle *bundle, gfp_t gfp)
 		if (!rxrpc_may_reuse_conn(old)) {
 			if (old)
 				trace_rxrpc_client(old, -1, rxrpc_client_replace);
+			candidate->bundle = rxrpc_get_bundle(bundle);
 			candidate->bundle_shift = shift;
 			bundle->conns[i] = candidate;
 			for (j = 0; j < RXRPC_MAXCALLS; j++)
@@ -483,12 +484,6 @@ static void rxrpc_maybe_add_conn(struct rxrpc_bundle *bundle, gfp_t gfp)
 	}
 
 	if (!usable)
-		goto alloc_conn;
-
-	if (!bundle->avail_chans &&
-	    !bundle->try_upgrade &&
-	    !list_empty(&bundle->waiting_calls) &&
-	    usable < ARRAY_SIZE(bundle->conns))
 		goto alloc_conn;
 
 	spin_unlock(&bundle->channel_lock);
@@ -723,9 +718,8 @@ granted_channel:
 	/* Paired with the write barrier in rxrpc_activate_one_channel(). */
 	smp_rmb();
 
-out_put_bundle:
-	rxrpc_put_bundle(bundle);
 out:
+	rxrpc_put_bundle(bundle);
 	_leave(" = %d", ret);
 	return ret;
 
@@ -742,7 +736,7 @@ wait_failed:
 	trace_rxrpc_client(call->conn, ret, rxrpc_client_chan_wait_failed);
 	rxrpc_set_call_completion(call, RXRPC_CALL_LOCAL_ERROR, 0, ret);
 	rxrpc_disconnect_client_call(bundle, call);
-	goto out_put_bundle;
+	goto out;
 }
 
 /*
@@ -901,13 +895,10 @@ static void rxrpc_unbundle_conn(struct rxrpc_connection *conn)
 	struct rxrpc_bundle *bundle = conn->bundle;
 	struct rxrpc_local *local = bundle->params.local;
 	unsigned int bindex;
-	bool need_drop = false, need_put = false;
+	bool need_drop = false;
 	int i;
 
 	_enter("C=%x", conn->debug_id);
-
-	if (conn->flags & RXRPC_CONN_FINAL_ACK_MASK)
-		rxrpc_process_delayed_final_acks(conn, true);
 
 	spin_lock(&bundle->channel_lock);
 	bindex = conn->bundle_shift / RXRPC_MAXCALLS;
@@ -931,11 +922,10 @@ static void rxrpc_unbundle_conn(struct rxrpc_connection *conn)
 		if (i == ARRAY_SIZE(bundle->conns) && !bundle->params.exclusive) {
 			_debug("erase bundle");
 			rb_erase(&bundle->local_node, &local->client_bundles);
-			need_put = true;
 		}
 
 		spin_unlock(&local->client_bundles_lock);
-		if (need_put)
+		if (i == ARRAY_SIZE(bundle->conns))
 			rxrpc_put_bundle(bundle);
 	}
 
@@ -1115,7 +1105,6 @@ void rxrpc_clean_up_local_conns(struct rxrpc_local *local)
 		conn = list_entry(graveyard.next,
 				  struct rxrpc_connection, cache_link);
 		list_del_init(&conn->cache_link);
-		rxrpc_unbundle_conn(conn);
 		rxrpc_put_connection(conn);
 	}
 

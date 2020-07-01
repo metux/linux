@@ -1714,7 +1714,6 @@ static void __io_req_task_submit(struct io_kiocb *req)
 {
 	struct io_ring_ctx *ctx = req->ctx;
 
-	__set_current_state(TASK_RUNNING);
 	if (!__io_sq_thread_acquire_mm(ctx)) {
 		mutex_lock(&ctx->uring_lock);
 		__io_queue_sqe(req, NULL, NULL);
@@ -1899,6 +1898,17 @@ static int io_put_kbuf(struct io_kiocb *req)
 	return cflags;
 }
 
+static inline bool io_run_task_work(void)
+{
+	if (current->task_works) {
+		__set_current_state(TASK_RUNNING);
+		task_work_run();
+		return true;
+	}
+
+	return false;
+}
+
 static void io_iopoll_queue(struct list_head *again)
 {
 	struct io_kiocb *req;
@@ -2079,8 +2089,7 @@ static int io_iopoll_check(struct io_ring_ctx *ctx, unsigned *nr_events,
 		 */
 		if (!(++iters & 7)) {
 			mutex_unlock(&ctx->uring_lock);
-			if (current->task_works)
-				task_work_run();
+			io_run_task_work();
 			mutex_lock(&ctx->uring_lock);
 		}
 
@@ -2175,8 +2184,6 @@ static void io_rw_resubmit(struct callback_head *cb)
 	struct io_kiocb *req = container_of(cb, struct io_kiocb, task_work);
 	struct io_ring_ctx *ctx = req->ctx;
 	int err;
-
-	__set_current_state(TASK_RUNNING);
 
 	err = io_sq_thread_acquire_mm(ctx, req);
 
@@ -4417,6 +4424,29 @@ struct io_poll_table {
 	int error;
 };
 
+static int io_req_task_work_add(struct io_kiocb *req, struct callback_head *cb)
+{
+	struct task_struct *tsk = req->task;
+	struct io_ring_ctx *ctx = req->ctx;
+	int ret, notify = TWA_RESUME;
+
+	/*
+	 * SQPOLL kernel thread doesn't need notification, just a wakeup.
+	 * If we're not using an eventfd, then TWA_RESUME is always fine,
+	 * as we won't have dependencies between request completions for
+	 * other kernel wait conditions.
+	 */
+	if (ctx->flags & IORING_SETUP_SQPOLL)
+		notify = 0;
+	else if (ctx->cq_ev_fd)
+		notify = TWA_SIGNAL;
+
+	ret = task_work_add(tsk, cb, notify);
+	if (!ret)
+		wake_up_process(tsk);
+	return ret;
+}
+
 static int __io_async_wake(struct io_kiocb *req, struct io_poll_iocb *poll,
 			   __poll_t mask, task_work_func_t func)
 {
@@ -4440,13 +4470,13 @@ static int __io_async_wake(struct io_kiocb *req, struct io_poll_iocb *poll,
 	 * of executing it. We can't safely execute it anyway, as we may not
 	 * have the needed state needed for it anyway.
 	 */
-	ret = task_work_add(tsk, &req->task_work, true);
+	ret = io_req_task_work_add(req, &req->task_work);
 	if (unlikely(ret)) {
 		WRITE_ONCE(poll->canceled, true);
 		tsk = io_wq_get_task(req->ctx->io_wq);
-		task_work_add(tsk, &req->task_work, true);
+		task_work_add(tsk, &req->task_work, 0);
+		wake_up_process(tsk);
 	}
-	wake_up_process(tsk);
 	return 1;
 }
 
@@ -6338,8 +6368,7 @@ static int io_sq_thread(void *data)
 			if (!list_empty(&ctx->poll_list) || need_resched() ||
 			    (!time_after(jiffies, timeout) && ret != -EBUSY &&
 			    !percpu_ref_is_dying(&ctx->refs))) {
-				if (current->task_works)
-					task_work_run();
+				io_run_task_work();
 				cond_resched();
 				continue;
 			}
@@ -6371,8 +6400,7 @@ static int io_sq_thread(void *data)
 					finish_wait(&ctx->sqo_wait, &wait);
 					break;
 				}
-				if (current->task_works) {
-					task_work_run();
+				if (io_run_task_work()) {
 					finish_wait(&ctx->sqo_wait, &wait);
 					continue;
 				}
@@ -6397,8 +6425,7 @@ static int io_sq_thread(void *data)
 		timeout = jiffies + ctx->sq_thread_idle;
 	}
 
-	if (current->task_works)
-		task_work_run();
+	io_run_task_work();
 
 	io_sq_thread_drop_mm(ctx);
 	revert_creds(old_cred);
@@ -6463,9 +6490,8 @@ static int io_cqring_wait(struct io_ring_ctx *ctx, int min_events,
 	do {
 		if (io_cqring_events(ctx, false) >= min_events)
 			return 0;
-		if (!current->task_works)
+		if (!io_run_task_work())
 			break;
-		task_work_run();
 	} while (1);
 
 	if (sig) {
@@ -6486,15 +6512,23 @@ static int io_cqring_wait(struct io_ring_ctx *ctx, int min_events,
 	do {
 		prepare_to_wait_exclusive(&ctx->wait, &iowq.wq,
 						TASK_INTERRUPTIBLE);
-		if (current->task_works)
-			task_work_run();
-		if (io_should_wake(&iowq, false))
-			break;
-		schedule();
+		/* make sure we run task_work before checking for signals */
+		if (io_run_task_work())
+			continue;
 		if (signal_pending(current)) {
+			if (current->jobctl & JOBCTL_TASK_WORK) {
+				spin_lock_irq(&current->sighand->siglock);
+				current->jobctl &= ~JOBCTL_TASK_WORK;
+				recalc_sigpending();
+				spin_unlock_irq(&current->sighand->siglock);
+				continue;
+			}
 			ret = -EINTR;
 			break;
 		}
+		if (io_should_wake(&iowq, false))
+			break;
+		schedule();
 	} while (1);
 	finish_wait(&ctx->wait, &iowq.wq);
 
@@ -7922,8 +7956,7 @@ SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
 	int submitted = 0;
 	struct fd f;
 
-	if (current->task_works)
-		task_work_run();
+	io_run_task_work();
 
 	if (flags & ~(IORING_ENTER_GETEVENTS | IORING_ENTER_SQ_WAKEUP))
 		return -EINVAL;

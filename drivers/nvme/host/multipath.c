@@ -65,30 +65,51 @@ void nvme_set_disk_name(char *disk_name, struct nvme_ns *ns,
 	}
 }
 
-void nvme_failover_req(struct request *req)
+bool nvme_failover_req(struct request *req)
 {
 	struct nvme_ns *ns = req->q->queuedata;
-	u16 status = nvme_req(req)->status & 0x7ff;
+	u16 status = nvme_req(req)->status;
 	unsigned long flags;
 
-	nvme_mpath_clear_current_path(ns);
-
-	/*
-	 * If we got back an ANA error, we know the controller is alive but not
-	 * ready to serve this namespace.  Kick of a re-read of the ANA
-	 * information page, and just try any other available path for now.
-	 */
-	if (nvme_is_ana_error(status) && ns->ctrl->ana_log_buf) {
-		set_bit(NVME_NS_ANA_PENDING, &ns->flags);
-		queue_work(nvme_wq, &ns->ctrl->ana_work);
+	switch (status & 0x7ff) {
+	case NVME_SC_ANA_TRANSITION:
+	case NVME_SC_ANA_INACCESSIBLE:
+	case NVME_SC_ANA_PERSISTENT_LOSS:
+		/*
+		 * If we got back an ANA error we know the controller is alive,
+		 * but not ready to serve this namespaces.  The spec suggests
+		 * we should update our general state here, but due to the fact
+		 * that the admin and I/O queues are not serialized that is
+		 * fundamentally racy.  So instead just clear the current path,
+		 * mark the the path as pending and kick of a re-read of the ANA
+		 * log page ASAP.
+		 */
+		nvme_mpath_clear_current_path(ns);
+		if (ns->ctrl->ana_log_buf) {
+			set_bit(NVME_NS_ANA_PENDING, &ns->flags);
+			queue_work(nvme_wq, &ns->ctrl->ana_work);
+		}
+		break;
+	case NVME_SC_HOST_PATH_ERROR:
+	case NVME_SC_HOST_ABORTED_CMD:
+		/*
+		 * Temporary transport disruption in talking to the controller.
+		 * Try to send on a new path.
+		 */
+		nvme_mpath_clear_current_path(ns);
+		break;
+	default:
+		/* This was a non-ANA error so follow the normal error path. */
+		return false;
 	}
 
 	spin_lock_irqsave(&ns->head->requeue_lock, flags);
 	blk_steal_bios(&ns->head->requeue_list, req);
 	spin_unlock_irqrestore(&ns->head->requeue_lock, flags);
-
 	blk_mq_end_request(req, 0);
+
 	kblockd_schedule_work(&ns->head->requeue_work);
+	return true;
 }
 
 void nvme_kick_requeue_lists(struct nvme_ctrl *ctrl)
@@ -146,18 +167,9 @@ void nvme_mpath_clear_ctrl_paths(struct nvme_ctrl *ctrl)
 
 static bool nvme_path_is_disabled(struct nvme_ns *ns)
 {
-	/*
-	 * We don't treat NVME_CTRL_DELETING as a disabled path as I/O should
-	 * still be able to complete assuming that the controller is connected.
-	 * Otherwise it will fail immediately and return to the requeue list.
-	 */
-	if (ns->ctrl->state != NVME_CTRL_LIVE &&
-	    ns->ctrl->state != NVME_CTRL_DELETING)
-		return true;
-	if (test_bit(NVME_NS_ANA_PENDING, &ns->flags) ||
-	    test_bit(NVME_NS_REMOVING, &ns->flags))
-		return true;
-	return false;
+	return ns->ctrl->state != NVME_CTRL_LIVE ||
+		test_bit(NVME_NS_ANA_PENDING, &ns->flags) ||
+		test_bit(NVME_NS_REMOVING, &ns->flags);
 }
 
 static struct nvme_ns *__nvme_find_path(struct nvme_ns_head *head, int node)
@@ -212,7 +224,7 @@ static struct nvme_ns *nvme_next_ns(struct nvme_ns_head *head,
 static struct nvme_ns *nvme_round_robin_path(struct nvme_ns_head *head,
 		int node, struct nvme_ns *old)
 {
-	struct nvme_ns *ns, *found = NULL;
+	struct nvme_ns *ns, *found, *fallback = NULL;
 
 	if (list_is_singular(&head->list)) {
 		if (nvme_path_is_disabled(old))
@@ -231,22 +243,12 @@ static struct nvme_ns *nvme_round_robin_path(struct nvme_ns_head *head,
 			goto out;
 		}
 		if (ns->ana_state == NVME_ANA_NONOPTIMIZED)
-			found = ns;
+			fallback = ns;
 	}
 
-	/*
-	 * The loop above skips the current path for round-robin semantics.
-	 * Fall back to the current path if either:
-	 *  - no other optimized path found and current is optimized,
-	 *  - no other usable path found and current is usable.
-	 */
-	if (!nvme_path_is_disabled(old) &&
-	    (old->ana_state == NVME_ANA_OPTIMIZED ||
-	     (!found && old->ana_state == NVME_ANA_NONOPTIMIZED)))
-		return old;
-
-	if (!found)
+	if (!fallback)
 		return NULL;
+	found = fallback;
 out:
 	rcu_assign_pointer(head->current_path[node], found);
 	return found;
@@ -264,13 +266,10 @@ inline struct nvme_ns *nvme_find_path(struct nvme_ns_head *head)
 	struct nvme_ns *ns;
 
 	ns = srcu_dereference(head->current_path[node], &head->srcu);
-	if (unlikely(!ns))
-		return __nvme_find_path(head, node);
-
-	if (READ_ONCE(head->subsys->iopolicy) == NVME_IOPOLICY_RR)
-		return nvme_round_robin_path(head, node, ns);
-	if (unlikely(!nvme_path_is_optimized(ns)))
-		return __nvme_find_path(head, node);
+	if (READ_ONCE(head->subsys->iopolicy) == NVME_IOPOLICY_RR && ns)
+		ns = nvme_round_robin_path(head, node, ns);
+	if (unlikely(!ns || !nvme_path_is_optimized(ns)))
+		ns = __nvme_find_path(head, node);
 	return ns;
 }
 
@@ -315,7 +314,7 @@ blk_qc_t nvme_ns_head_submit_bio(struct bio *bio)
 		trace_block_bio_remap(bio->bi_disk->queue, bio,
 				      disk_devt(ns->head->disk),
 				      bio->bi_iter.bi_sector);
-		ret = submit_bio_noacct(bio);
+		ret = direct_make_request(bio);
 	} else if (nvme_available_path(head)) {
 		dev_warn_ratelimited(dev, "no usable path - requeuing I/O\n");
 
@@ -352,7 +351,7 @@ static void nvme_requeue_work(struct work_struct *work)
 		 * path.
 		 */
 		bio->bi_disk = head->disk;
-		submit_bio_noacct(bio);
+		generic_make_request(bio);
 	}
 }
 
@@ -528,7 +527,7 @@ static int nvme_read_ana_log(struct nvme_ctrl *ctrl)
 	int error;
 
 	mutex_lock(&ctrl->ana_lock);
-	error = nvme_get_log(ctrl, NVME_NSID_ALL, NVME_LOG_ANA, 0, NVME_CSI_NVM,
+	error = nvme_get_log(ctrl, NVME_NSID_ALL, NVME_LOG_ANA, 0,
 			ctrl->ana_log_buf, ctrl->ana_log_size, 0);
 	if (error) {
 		dev_warn(ctrl->device, "Failed to get ANA log: %d\n", error);
@@ -563,9 +562,6 @@ out_unlock:
 static void nvme_ana_work(struct work_struct *work)
 {
 	struct nvme_ctrl *ctrl = container_of(work, struct nvme_ctrl, ana_work);
-
-	if (ctrl->state != NVME_CTRL_LIVE)
-		return;
 
 	nvme_read_ana_log(ctrl);
 }
@@ -673,9 +669,13 @@ void nvme_mpath_add_disk(struct nvme_ns *ns, struct nvme_id_ns *id)
 		nvme_mpath_set_live(ns);
 	}
 
-	if (blk_queue_stable_writes(ns->queue) && ns->head->disk)
-		blk_queue_flag_set(QUEUE_FLAG_STABLE_WRITES,
-				   ns->head->disk->queue);
+	if (bdi_cap_stable_pages_required(ns->queue->backing_dev_info)) {
+		struct gendisk *disk = ns->head->disk;
+
+		if (disk)
+			disk->queue->backing_dev_info->capabilities |=
+					BDI_CAP_STABLE_WRITES;
+	}
 }
 
 void nvme_mpath_remove_disk(struct nvme_ns_head *head)

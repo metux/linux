@@ -198,6 +198,10 @@ static const struct mtk_iommu_iova_region mt6873_multi_dom[] = {
 	{ .iova_base = SZ_4G * 2, .size = SZ_4G}, /* CAM/MDP: 8G ~ 12G */
 	{ .iova_base = 0x240000000ULL, .size = 0x4000000}, /* CCU0 */
 	{ .iova_base = 0x244000000ULL, .size = 0x4000000}, /* CCU1 */
+	{ .iova_base = SZ_4G * 3, .size = SZ_4G}, /* APU DATA */
+	{ .iova_base = 0x304000000ULL, .size = 0x4000000}, /* APU VLM */
+	{ .iova_base = 0x310000000ULL, .size = 0x10000000}, /* APU VPU */
+	{ .iova_base = 0x370000000ULL, .size = 0x12600000}, /* APU REG */
 };
 
 /*
@@ -850,6 +854,9 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 			return PTR_ERR(data->bclk);
 	}
 
+	if (data->plat_data->is_apu)
+		goto skip_smi;
+
 	larb_nr = of_count_phandle_with_args(dev->of_node,
 					     "mediatek,larbs", NULL);
 	if (larb_nr < 0)
@@ -1048,6 +1055,15 @@ static const struct mtk_iommu_plat_data mt6873_data = {
 			 {0, 14, 16}, {0, 13, 18, 17}},
 };
 
+static const struct mtk_iommu_plat_data mt6873_data_apu = {
+	.m4u_plat        = M4U_MT6873,
+	.is_apu          = true,
+	.inv_sel_reg     = REG_MMU_INV_SEL_GEN2,
+	.iova_region     = mt6873_multi_dom,
+	.larbid_remap    = {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}},
+	.iova_region_cnt = ARRAY_SIZE(mt6873_multi_dom),
+};
+
 static const struct mtk_iommu_plat_data mt8167_data = {
 	.m4u_plat     = M4U_MT8167,
 	.flags        = RESET_AXI | HAS_LEGACY_IVRP_PADDR,
@@ -1091,6 +1107,7 @@ static const struct of_device_id mtk_iommu_of_ids[] = {
 	{ .compatible = "mediatek,mt2712-m4u", .data = &mt2712_data},
 	{ .compatible = "mediatek,mt6779-m4u", .data = &mt6779_data},
 	{ .compatible = "mediatek,mt6873-m4u", .data = &mt6873_data},
+	{ .compatible = "mediatek,mt6873-apu-iommu", .data = &mt6873_data_apu},
 	{ .compatible = "mediatek,mt8167-m4u", .data = &mt8167_data},
 	{ .compatible = "mediatek,mt8173-m4u", .data = &mt8173_data},
 	{ .compatible = "mediatek,mt8183-m4u", .data = &mt8183_data},

@@ -7,6 +7,21 @@
 #include "en.h"
 #include <linux/indirect_call_wrapper.h>
 
+#define MLX5E_TX_WQE_EMPTY_DS_COUNT (sizeof(struct mlx5e_tx_wqe) / MLX5_SEND_WQE_DS)
+
+/* The mult of MLX5_SEND_WQE_MAX_WQEBBS * MLX5_SEND_WQEBB_NUM_DS
+ * (16 * 4 == 64) does not fit in the 6-bit DS field of Ctrl Segment.
+ * We use a bound lower that MLX5_SEND_WQE_MAX_WQEBBS to let a
+ * full-session WQE be cache-aligned.
+ */
+#if L1_CACHE_BYTES < 128
+#define MLX5E_TX_MPW_MAX_WQEBBS (MLX5_SEND_WQE_MAX_WQEBBS - 1)
+#else
+#define MLX5E_TX_MPW_MAX_WQEBBS (MLX5_SEND_WQE_MAX_WQEBBS - 2)
+#endif
+
+#define MLX5E_TX_MPW_MAX_NUM_DS (MLX5E_TX_MPW_MAX_WQEBBS * MLX5_SEND_WQEBB_NUM_DS)
+
 #define INL_HDR_START_SZ (sizeof(((struct mlx5_wqe_eth_seg *)NULL)->inline_hdr.start))
 
 enum mlx5e_icosq_wqe_type {
@@ -108,6 +123,7 @@ struct mlx5e_tx_wqe_info {
 	u32 num_bytes;
 	u8 num_wqebbs;
 	u8 num_dma;
+	u8 num_fifo_pkts;
 #ifdef CONFIG_MLX5_EN_TLS
 	struct page *resync_dump_frag_page;
 #endif
@@ -234,6 +250,23 @@ mlx5e_dma_push(struct mlx5e_txqsq *sq, dma_addr_t addr, u32 size,
 	dma->type = map_type;
 }
 
+static inline struct sk_buff **mlx5e_skb_fifo_get(struct mlx5e_txqsq *sq, u16 i)
+{
+	return &sq->db.skb_fifo[i & sq->skb_fifo_mask];
+}
+
+static inline void mlx5e_skb_fifo_push(struct mlx5e_txqsq *sq, struct sk_buff *skb)
+{
+	struct sk_buff **skb_item = mlx5e_skb_fifo_get(sq, sq->skb_fifo_pc++);
+
+	*skb_item = skb;
+}
+
+static inline struct sk_buff *mlx5e_skb_fifo_pop(struct mlx5e_txqsq *sq)
+{
+	return *mlx5e_skb_fifo_get(sq, sq->skb_fifo_cc++);
+}
+
 static inline void
 mlx5e_tx_dma_unmap(struct device *pdev, struct mlx5e_sq_dma *dma)
 {
@@ -250,6 +283,12 @@ mlx5e_tx_dma_unmap(struct device *pdev, struct mlx5e_sq_dma *dma)
 }
 
 void mlx5e_sq_xmit_simple(struct mlx5e_txqsq *sq, struct sk_buff *skb, bool xmit_more);
+void mlx5e_tx_mpwqe_ensure_complete(struct mlx5e_txqsq *sq);
+
+static inline bool mlx5e_tx_mpwqe_is_full(struct mlx5e_tx_mpwqe *session)
+{
+	return session->ds_count == MLX5E_TX_MPW_MAX_NUM_DS;
+}
 
 static inline void mlx5e_rqwq_reset(struct mlx5e_rq *rq)
 {

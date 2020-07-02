@@ -3488,8 +3488,6 @@ static void macb_probe_queues(void __iomem *mem,
 			      unsigned int *queue_mask,
 			      unsigned int *num_queues)
 {
-	unsigned int hw_q;
-
 	*queue_mask = 0x1;
 	*num_queues = 1;
 
@@ -3504,10 +3502,7 @@ static void macb_probe_queues(void __iomem *mem,
 
 	/* bit 0 is never set but queue 0 always exists */
 	*queue_mask |= readl_relaxed(mem + GEM_DCFG6) & 0xff;
-
-	for (hw_q = 1; hw_q < MACB_MAX_QUEUES; ++hw_q)
-		if (*queue_mask & (1 << hw_q))
-			(*num_queues)++;
+	*num_queues = hweight32(*queue_mask);
 }
 
 static int macb_clk_init(struct platform_device *pdev, struct clk **pclk,

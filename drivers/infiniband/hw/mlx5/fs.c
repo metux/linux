@@ -1865,14 +1865,12 @@ static int get_dests(struct uverbs_attr_bundle *attrs,
 		else
 			*dest_id = mqp->raw_packet_qp.rq.tirn;
 		*dest_type = MLX5_FLOW_DESTINATION_TYPE_TIR;
-	} else if (fs_matcher->ns_type == MLX5_FLOW_NAMESPACE_EGRESS ||
-		   fs_matcher->ns_type == MLX5_FLOW_NAMESPACE_RDMA_TX) {
+	} else if (fs_matcher->ns_type == MLX5_FLOW_NAMESPACE_EGRESS) {
 		*dest_type = MLX5_FLOW_DESTINATION_TYPE_PORT;
 	}
 
 	if (*dest_type == MLX5_FLOW_DESTINATION_TYPE_TIR &&
-	    (fs_matcher->ns_type == MLX5_FLOW_NAMESPACE_EGRESS ||
-	     fs_matcher->ns_type == MLX5_FLOW_NAMESPACE_RDMA_TX))
+	    fs_matcher->ns_type == MLX5_FLOW_NAMESPACE_EGRESS)
 		return -EINVAL;
 
 	return 0;
@@ -1905,7 +1903,7 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_CREATE_FLOW)(
 	struct mlx5_flow_context flow_context = {.flow_tag =
 		MLX5_FS_DEFAULT_FLOW_TAG};
 	u32 *offset_attr, offset = 0, counter_id = 0;
-	int dest_id, dest_type = -1, inlen, len, ret, i;
+	int dest_id, dest_type, inlen, len, ret, i;
 	struct mlx5_ib_flow_handler *flow_handler;
 	struct mlx5_ib_flow_matcher *fs_matcher;
 	struct ib_uobject **arr_flow_actions;

@@ -1051,6 +1051,11 @@ static inline struct mlx5_ib_rwq *to_mibrwq(struct mlx5_core_qp *core_qp)
 	return container_of(core_qp, struct mlx5_ib_rwq, core_qp);
 }
 
+static inline struct mlx5_ib_mr *to_mibmr(struct mlx5_core_mkey *mmkey)
+{
+	return container_of(mmkey, struct mlx5_ib_mr, mmkey);
+}
+
 static inline struct mlx5_ib_pd *to_mpd(struct ib_pd *ibpd)
 {
 	return container_of(ibpd, struct mlx5_ib_pd, ibpd);
@@ -1348,12 +1353,35 @@ extern const struct uapi_definition mlx5_ib_flow_defs[];
 extern const struct uapi_definition mlx5_ib_qos_defs[];
 extern const struct uapi_definition mlx5_ib_std_types_defs[];
 
+
+#if IS_ENABLED(CONFIG_INFINIBAND_USER_ACCESS)
+int mlx5_ib_devx_create(struct mlx5_ib_dev *dev, bool is_user);
+void mlx5_ib_devx_destroy(struct mlx5_ib_dev *dev, u16 uid);
+void mlx5_ib_devx_init_event_table(struct mlx5_ib_dev *dev);
+void mlx5_ib_devx_cleanup_event_table(struct mlx5_ib_dev *dev);
+#else
+static inline int
+mlx5_ib_devx_create(struct mlx5_ib_dev *dev,
+			   bool is_user) { return -EOPNOTSUPP; }
+static inline void mlx5_ib_devx_destroy(struct mlx5_ib_dev *dev, u16 uid) {}
+static inline void mlx5_ib_devx_init_event_table(struct mlx5_ib_dev *dev) {}
+static inline void mlx5_ib_devx_cleanup_event_table(struct mlx5_ib_dev *dev) {}
+#endif
 static inline void init_query_mad(struct ib_smp *mad)
 {
 	mad->base_version  = 1;
 	mad->mgmt_class    = IB_MGMT_CLASS_SUBN_LID_ROUTED;
 	mad->class_version = 1;
 	mad->method	   = IB_MGMT_METHOD_GET;
+}
+
+static inline u8 convert_access(int acc)
+{
+	return (acc & IB_ACCESS_REMOTE_ATOMIC ? MLX5_PERM_ATOMIC       : 0) |
+	       (acc & IB_ACCESS_REMOTE_WRITE  ? MLX5_PERM_REMOTE_WRITE : 0) |
+	       (acc & IB_ACCESS_REMOTE_READ   ? MLX5_PERM_REMOTE_READ  : 0) |
+	       (acc & IB_ACCESS_LOCAL_WRITE   ? MLX5_PERM_LOCAL_WRITE  : 0) |
+	       MLX5_PERM_LOCAL_READ;
 }
 
 static inline int is_qp1(enum ib_qp_type qp_type)
@@ -1454,13 +1482,8 @@ static inline bool mlx5_ib_can_use_umr(struct mlx5_ib_dev *dev,
 		return false;
 
 	if (access_flags & IB_ACCESS_RELAXED_ORDERING &&
-	    MLX5_CAP_GEN(dev->mdev, relaxed_ordering_write) &&
-	    !MLX5_CAP_GEN(dev->mdev, relaxed_ordering_write_umr))
-		return false;
-
-	if (access_flags & IB_ACCESS_RELAXED_ORDERING &&
-	     MLX5_CAP_GEN(dev->mdev, relaxed_ordering_read) &&
-	     !MLX5_CAP_GEN(dev->mdev, relaxed_ordering_read_umr))
+	    (MLX5_CAP_GEN(dev->mdev, relaxed_ordering_write) ||
+	     MLX5_CAP_GEN(dev->mdev, relaxed_ordering_read)))
 		return false;
 
 	return true;

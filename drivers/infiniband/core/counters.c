@@ -8,7 +8,7 @@
 #include "core_priv.h"
 #include "restrack.h"
 
-#define ALL_AUTO_MODE_MASKS (RDMA_COUNTER_MASK_QP_TYPE)
+#define ALL_AUTO_MODE_MASKS (RDMA_COUNTER_MASK_QP_TYPE | RDMA_COUNTER_MASK_PID)
 
 static int __counter_set_mode(struct rdma_counter_mode *curr,
 			      enum rdma_nl_counter_mode new_mode,
@@ -149,12 +149,12 @@ static bool auto_mode_match(struct ib_qp *qp, struct rdma_counter *counter,
 	struct auto_mode_param *param = &counter->mode.param;
 	bool match = true;
 
-	/* Ensure that counter belongs to the right PID */
-	if (task_pid_nr(counter->res.task) != task_pid_nr(qp->res.task))
-		return false;
-
 	if (auto_mask & RDMA_COUNTER_MASK_QP_TYPE)
 		match &= (param->qp_type == qp->qp_type);
+
+	if (auto_mask & RDMA_COUNTER_MASK_PID)
+		match &= (task_pid_nr(counter->res.task) ==
+			  task_pid_nr(qp->res.task));
 
 	return match;
 }
@@ -277,6 +277,9 @@ int rdma_counter_bind_qp_auto(struct ib_qp *qp, u8 port)
 	struct ib_device *dev = qp->device;
 	struct rdma_counter *counter;
 	int ret;
+
+	if (!qp->res.valid)
+		return 0;
 
 	if (!rdma_is_port_valid(dev, port))
 		return -EINVAL;

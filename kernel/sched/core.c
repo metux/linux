@@ -25,6 +25,7 @@
 #include "../smpboot.h"
 
 #include "pelt.h"
+#include "smp.h"
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -77,6 +78,100 @@ __read_mostly int scheduler_running;
  * default: 0.95s
  */
 int sysctl_sched_rt_runtime = 950000;
+
+
+/*
+ * Serialization rules:
+ *
+ * Lock order:
+ *
+ *   p->pi_lock
+ *     rq->lock
+ *       hrtimer_cpu_base->lock (hrtimer_start() for bandwidth controls)
+ *
+ *  rq1->lock
+ *    rq2->lock  where: rq1 < rq2
+ *
+ * Regular state:
+ *
+ * Normal scheduling state is serialized by rq->lock. __schedule() takes the
+ * local CPU's rq->lock, it optionally removes the task from the runqueue and
+ * always looks at the local rq data structures to find the most elegible task
+ * to run next.
+ *
+ * Task enqueue is also under rq->lock, possibly taken from another CPU.
+ * Wakeups from another LLC domain might use an IPI to transfer the enqueue to
+ * the local CPU to avoid bouncing the runqueue state around [ see
+ * ttwu_queue_wakelist() ]
+ *
+ * Task wakeup, specifically wakeups that involve migration, are horribly
+ * complicated to avoid having to take two rq->locks.
+ *
+ * Special state:
+ *
+ * System-calls and anything external will use task_rq_lock() which acquires
+ * both p->pi_lock and rq->lock. As a consequence the state they change is
+ * stable while holding either lock:
+ *
+ *  - sched_setaffinity()/
+ *    set_cpus_allowed_ptr():	p->cpus_ptr, p->nr_cpus_allowed
+ *  - set_user_nice():		p->se.load, p->*prio
+ *  - __sched_setscheduler():	p->sched_class, p->policy, p->*prio,
+ *				p->se.load, p->rt_priority,
+ *				p->dl.dl_{runtime, deadline, period, flags, bw, density}
+ *  - sched_setnuma():		p->numa_preferred_nid
+ *  - sched_move_task()/
+ *    cpu_cgroup_fork():	p->sched_task_group
+ *  - uclamp_update_active()	p->uclamp*
+ *
+ * p->state <- TASK_*:
+ *
+ *   is changed locklessly using set_current_state(), __set_current_state() or
+ *   set_special_state(), see their respective comments, or by
+ *   try_to_wake_up(). This latter uses p->pi_lock to serialize against
+ *   concurrent self.
+ *
+ * p->on_rq <- { 0, 1 = TASK_ON_RQ_QUEUED, 2 = TASK_ON_RQ_MIGRATING }:
+ *
+ *   is set by activate_task() and cleared by deactivate_task(), under
+ *   rq->lock. Non-zero indicates the task is runnable, the special
+ *   ON_RQ_MIGRATING state is used for migration without holding both
+ *   rq->locks. It indicates task_cpu() is not stable, see task_rq_lock().
+ *
+ * p->on_cpu <- { 0, 1 }:
+ *
+ *   is set by prepare_task() and cleared by finish_task() such that it will be
+ *   set before p is scheduled-in and cleared after p is scheduled-out, both
+ *   under rq->lock. Non-zero indicates the task is running on its CPU.
+ *
+ *   [ The astute reader will observe that it is possible for two tasks on one
+ *     CPU to have ->on_cpu = 1 at the same time. ]
+ *
+ * task_cpu(p): is changed by set_task_cpu(), the rules are:
+ *
+ *  - Don't call set_task_cpu() on a blocked task:
+ *
+ *    We don't care what CPU we're not running on, this simplifies hotplug,
+ *    the CPU assignment of blocked tasks isn't required to be valid.
+ *
+ *  - for try_to_wake_up(), called under p->pi_lock:
+ *
+ *    This allows try_to_wake_up() to only take one rq->lock, see its comment.
+ *
+ *  - for migration called under rq->lock:
+ *    [ see task_on_rq_migrating() in task_rq_lock() ]
+ *
+ *    o move_queued_task()
+ *    o detach_task()
+ *
+ *  - for migration called under double_rq_lock():
+ *
+ *    o __migrate_swap_task()
+ *    o push_rt_task() / pull_rt_task()
+ *    o push_dl_task() / pull_dl_task()
+ *    o dl_task_offline_migration()
+ *
+ */
 
 /*
  * __task_rq_lock - lock the rq @p resides on.
@@ -642,39 +737,23 @@ void wake_up_nohz_cpu(int cpu)
 		wake_up_idle_cpu(cpu);
 }
 
-static inline bool got_nohz_idle_kick(void)
-{
-	int cpu = smp_processor_id();
-
-	if (!(atomic_read(nohz_flags(cpu)) & NOHZ_KICK_MASK))
-		return false;
-
-	if (idle_cpu(cpu) && !need_resched())
-		return true;
-
-	/*
-	 * We can't run Idle Load Balance on this CPU for this time so we
-	 * cancel it and clear NOHZ_BALANCE_KICK
-	 */
-	atomic_andnot(NOHZ_KICK_MASK, nohz_flags(cpu));
-	return false;
-}
-
 static void nohz_csd_func(void *info)
 {
 	struct rq *rq = info;
+	int cpu = cpu_of(rq);
+	unsigned int flags;
 
-	if (got_nohz_idle_kick()) {
-		rq->idle_balance = 1;
+	/*
+	 * Release the rq::nohz_csd.
+	 */
+	flags = atomic_fetch_andnot(NOHZ_KICK_MASK, nohz_flags(cpu));
+	WARN_ON(!(flags & NOHZ_KICK_MASK));
+
+	rq->idle_balance = idle_cpu(cpu);
+	if (rq->idle_balance && !need_resched()) {
+		rq->nohz_idle_balance = flags;
 		raise_softirq_irqoff(SCHED_SOFTIRQ);
 	}
-}
-
-#else /* CONFIG_NO_HZ_COMMON */
-
-static inline bool got_nohz_idle_kick(void)
-{
-	return false;
 }
 
 #endif /* CONFIG_NO_HZ_COMMON */
@@ -1558,8 +1637,7 @@ static struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
 {
 	lockdep_assert_held(&rq->lock);
 
-	WRITE_ONCE(p->on_rq, TASK_ON_RQ_MIGRATING);
-	dequeue_task(rq, p, DEQUEUE_NOCLOCK);
+	deactivate_task(rq, p, DEQUEUE_NOCLOCK);
 	set_task_cpu(p, new_cpu);
 	rq_unlock(rq, rf);
 
@@ -1567,8 +1645,7 @@ static struct rq *move_queued_task(struct rq *rq, struct rq_flags *rf,
 
 	rq_lock(rq, rf);
 	BUG_ON(task_cpu(p) != new_cpu);
-	enqueue_task(rq, p, 0);
-	p->on_rq = TASK_ON_RQ_QUEUED;
+	activate_task(rq, p, 0);
 	check_preempt_curr(rq, p, 0);
 
 	return rq;
@@ -1623,7 +1700,7 @@ static int migration_cpu_stop(void *data)
 	 * __migrate_task() such that we will not miss enforcing cpus_ptr
 	 * during wakeups, see set_cpus_allowed_ptr()'s TASK_WAKING test.
 	 */
-	sched_ttwu_pending();
+	flush_smp_call_function_from_idle();
 
 	raw_spin_lock(&p->pi_lock);
 	rq_lock(rq, &rf);
@@ -1721,7 +1798,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 		goto out;
 	}
 
-	if (cpumask_equal(p->cpus_ptr, new_mask))
+	if (cpumask_equal(&p->cpus_mask, new_mask))
 		goto out;
 
 	/*
@@ -2333,12 +2410,31 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 }
 
 /*
- * Called in case the task @p isn't fully descheduled from its runqueue,
- * in this case we must do a remote wakeup. Its a 'light' wakeup though,
- * since all we need to do is flip p->state to TASK_RUNNING, since
- * the task is still ->on_rq.
+ * Consider @p being inside a wait loop:
+ *
+ *   for (;;) {
+ *      set_current_state(TASK_UNINTERRUPTIBLE);
+ *
+ *      if (CONDITION)
+ *         break;
+ *
+ *      schedule();
+ *   }
+ *   __set_current_state(TASK_RUNNING);
+ *
+ * between set_current_state() and schedule(). In this case @p is still
+ * runnable, so all that needs doing is change p->state back to TASK_RUNNING in
+ * an atomic manner.
+ *
+ * By taking task_rq(p)->lock we serialize against schedule(), if @p->on_rq
+ * then schedule() must still happen and p->state can be changed to
+ * TASK_RUNNING. Otherwise we lost the race, schedule() has happened, and we
+ * need to do a full wakeup with enqueue.
+ *
+ * Returns: %true when the wakeup is done,
+ *          %false otherwise.
  */
-static int ttwu_remote(struct task_struct *p, int wake_flags)
+static int ttwu_runnable(struct task_struct *p, int wake_flags)
 {
 	struct rq_flags rf;
 	struct rq *rq;
@@ -2357,52 +2453,63 @@ static int ttwu_remote(struct task_struct *p, int wake_flags)
 }
 
 #ifdef CONFIG_SMP
-void sched_ttwu_pending(void)
+void sched_ttwu_pending(void *arg)
 {
+	struct llist_node *llist = arg;
 	struct rq *rq = this_rq();
-	struct llist_node *llist = llist_del_all(&rq->wake_list);
 	struct task_struct *p, *t;
 	struct rq_flags rf;
 
 	if (!llist)
 		return;
 
+	/*
+	 * rq::ttwu_pending racy indication of out-standing wakeups.
+	 * Races such that false-negatives are possible, since they
+	 * are shorter lived that false-positives would be.
+	 */
+	WRITE_ONCE(rq->ttwu_pending, 0);
+
 	rq_lock_irqsave(rq, &rf);
 	update_rq_clock(rq);
 
-	llist_for_each_entry_safe(p, t, llist, wake_entry)
+	llist_for_each_entry_safe(p, t, llist, wake_entry.llist) {
+		if (WARN_ON_ONCE(p->on_cpu))
+			smp_cond_load_acquire(&p->on_cpu, !VAL);
+
+		if (WARN_ON_ONCE(task_cpu(p) != cpu_of(rq)))
+			set_task_cpu(p, cpu_of(rq));
+
 		ttwu_do_activate(rq, p, p->sched_remote_wakeup ? WF_MIGRATED : 0, &rf);
+	}
 
 	rq_unlock_irqrestore(rq, &rf);
 }
 
-static void wake_csd_func(void *info)
+void send_call_function_single_ipi(int cpu)
 {
-	sched_ttwu_pending();
+	struct rq *rq = cpu_rq(cpu);
+
+	if (!set_nr_if_polling(rq->idle))
+		arch_send_call_function_single_ipi(cpu);
+	else
+		trace_sched_wake_idle_without_ipi(cpu);
 }
 
-void scheduler_ipi(void)
-{
-	/*
-	 * Fold TIF_NEED_RESCHED into the preempt_count; anybody setting
-	 * TIF_NEED_RESCHED remotely (for the first time) will also send
-	 * this IPI.
-	 */
-	preempt_fold_need_resched();
-}
-
-static void ttwu_queue_remote(struct task_struct *p, int cpu, int wake_flags)
+/*
+ * Queue a task on the target CPUs wake_list and wake the CPU via IPI if
+ * necessary. The wakee CPU on receipt of the IPI will queue the task
+ * via sched_ttwu_wakeup() for activation so the wakee incurs the cost
+ * of the wakeup instead of the waker.
+ */
+static void __ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
 {
 	struct rq *rq = cpu_rq(cpu);
 
 	p->sched_remote_wakeup = !!(wake_flags & WF_MIGRATED);
 
-	if (llist_add(&p->wake_entry, &rq->wake_list)) {
-		if (!set_nr_if_polling(rq->idle))
-			smp_call_function_single_async(cpu, &rq->wake_csd);
-		else
-			trace_sched_wake_idle_without_ipi(cpu);
-	}
+	WRITE_ONCE(rq->ttwu_pending, 1);
+	__smp_call_single_queue(cpu, &p->wake_entry.llist);
 }
 
 void wake_up_if_idle(int cpu)
@@ -2433,6 +2540,49 @@ bool cpus_share_cache(int this_cpu, int that_cpu)
 {
 	return per_cpu(sd_llc_id, this_cpu) == per_cpu(sd_llc_id, that_cpu);
 }
+
+static inline bool ttwu_queue_cond(int cpu, int wake_flags)
+{
+	/*
+	 * If the CPU does not share cache, then queue the task on the
+	 * remote rqs wakelist to avoid accessing remote data.
+	 */
+	if (!cpus_share_cache(smp_processor_id(), cpu))
+		return true;
+
+	/*
+	 * If the task is descheduling and the only running task on the
+	 * CPU then use the wakelist to offload the task activation to
+	 * the soon-to-be-idle CPU as the current CPU is likely busy.
+	 * nr_running is checked to avoid unnecessary task stacking.
+	 */
+	if ((wake_flags & WF_ON_CPU) && cpu_rq(cpu)->nr_running <= 1)
+		return true;
+
+	return false;
+}
+
+static bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
+{
+	if (sched_feat(TTWU_QUEUE) && ttwu_queue_cond(cpu, wake_flags)) {
+		if (WARN_ON_ONCE(cpu == smp_processor_id()))
+			return false;
+
+		sched_clock_cpu(cpu); /* Sync clocks across CPUs */
+		__ttwu_queue_wakelist(p, cpu, wake_flags);
+		return true;
+	}
+
+	return false;
+}
+
+#else /* !CONFIG_SMP */
+
+static inline bool ttwu_queue_wakelist(struct task_struct *p, int cpu, int wake_flags)
+{
+	return false;
+}
+
 #endif /* CONFIG_SMP */
 
 static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
@@ -2440,13 +2590,8 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	struct rq *rq = cpu_rq(cpu);
 	struct rq_flags rf;
 
-#if defined(CONFIG_SMP)
-	if (sched_feat(TTWU_QUEUE) && !cpus_share_cache(smp_processor_id(), cpu)) {
-		sched_clock_cpu(cpu); /* Sync clocks across CPUs */
-		ttwu_queue_remote(p, cpu, wake_flags);
+	if (ttwu_queue_wakelist(p, cpu, wake_flags))
 		return;
-	}
-#endif
 
 	rq_lock(rq, &rf);
 	update_rq_clock(rq);
@@ -2502,8 +2647,8 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
  * migration. However the means are completely different as there is no lock
  * chain to provide order. Instead we do:
  *
- *   1) smp_store_release(X->on_cpu, 0)
- *   2) smp_cond_load_acquire(!X->on_cpu)
+ *   1) smp_store_release(X->on_cpu, 0)   -- finish_task()
+ *   2) smp_cond_load_acquire(!X->on_cpu) -- try_to_wake_up()
  *
  * Example:
  *
@@ -2543,15 +2688,33 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
  * @state: the mask of task states that can be woken
  * @wake_flags: wake modifier flags (WF_*)
  *
- * If (@state & @p->state) @p->state = TASK_RUNNING.
+ * Conceptually does:
+ *
+ *   If (@state & @p->state) @p->state = TASK_RUNNING.
  *
  * If the task was not queued/runnable, also place it back on a runqueue.
  *
- * Atomic against schedule() which would dequeue a task, also see
- * set_current_state().
+ * This function is atomic against schedule() which would dequeue the task.
  *
- * This function executes a full memory barrier before accessing the task
- * state; see set_current_state().
+ * It issues a full memory barrier before accessing @p->state, see the comment
+ * with set_current_state().
+ *
+ * Uses p->pi_lock to serialize against concurrent wake-ups.
+ *
+ * Relies on p->pi_lock stabilizing:
+ *  - p->sched_class
+ *  - p->cpus_ptr
+ *  - p->sched_task_group
+ * in order to do migration, see its use of select_task_rq()/set_task_cpu().
+ *
+ * Tries really hard to only take one task_rq(p)->lock for performance.
+ * Takes rq->lock in:
+ *  - ttwu_runnable()    -- old rq, unavoidable, see comment there;
+ *  - ttwu_queue()       -- new rq, for enqueue of the task;
+ *  - psi_ttwu_dequeue() -- much sadness :-( accounting will kill us.
+ *
+ * As a consequence we race really badly with just about everything. See the
+ * many memory barriers and their comments for details.
  *
  * Return: %true if @p->state changes (an actual wakeup was done),
  *	   %false otherwise.
@@ -2567,7 +2730,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		/*
 		 * We're waking current, this means 'p->on_rq' and 'task_cpu(p)
 		 * == smp_processor_id()'. Together this means we can special
-		 * case the whole 'p->on_rq && ttwu_remote()' case below
+		 * case the whole 'p->on_rq && ttwu_runnable()' case below
 		 * without taking any locks.
 		 *
 		 * In particular:
@@ -2579,7 +2742,6 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 			goto out;
 
 		success = 1;
-		cpu = task_cpu(p);
 		trace_sched_waking(p);
 		p->state = TASK_RUNNING;
 		trace_sched_wakeup(p);
@@ -2589,8 +2751,8 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	/*
 	 * If we are going to wake up a thread waiting for CONDITION we
 	 * need to ensure that CONDITION=1 done by the caller can not be
-	 * reordered with p->state check below. This pairs with mb() in
-	 * set_current_state() the waiting thread does.
+	 * reordered with p->state check below. This pairs with smp_store_mb()
+	 * in set_current_state() that the waiting thread does.
 	 */
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
 	smp_mb__after_spinlock();
@@ -2601,7 +2763,6 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 
 	/* We're going to change ->state: */
 	success = 1;
-	cpu = task_cpu(p);
 
 	/*
 	 * Ensure we load p->on_rq _after_ p->state, otherwise it would
@@ -2626,8 +2787,13 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 * A similar smb_rmb() lives in try_invoke_on_locked_down_task().
 	 */
 	smp_rmb();
-	if (READ_ONCE(p->on_rq) && ttwu_remote(p, wake_flags))
+	if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags))
 		goto unlock;
+
+	if (p->in_iowait) {
+		delayacct_blkio_end(p);
+		atomic_dec(&task_rq(p)->nr_iowait);
+	}
 
 #ifdef CONFIG_SMP
 	/*
@@ -2665,6 +2831,29 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 
 	/*
 	 * If the owning (remote) CPU is still in the middle of schedule() with
+	 * this task as prev, considering queueing p on the remote CPUs wake_list
+	 * which potentially sends an IPI instead of spinning on p->on_cpu to
+	 * let the waker make forward progress. This is safe because IRQs are
+	 * disabled and the IPI will deliver after on_cpu is cleared.
+	 *
+	 * Ensure we load task_cpu(p) after p->on_cpu:
+	 *
+	 * set_task_cpu(p, cpu);
+	 *   STORE p->cpu = @cpu
+	 * __schedule() (switch to task 'p')
+	 *   LOCK rq->lock
+	 *   smp_mb__after_spin_lock()		smp_cond_load_acquire(&p->on_cpu)
+	 *   STORE p->on_cpu = 1		LOAD p->cpu
+	 *
+	 * to ensure we observe the correct CPU on which the task is currently
+	 * scheduling.
+	 */
+	if (smp_load_acquire(&p->on_cpu) &&
+	    ttwu_queue_wakelist(p, task_cpu(p), wake_flags | WF_ON_CPU))
+		goto unlock;
+
+	/*
+	 * If the owning (remote) CPU is still in the middle of schedule() with
 	 * this task as prev, wait until its done referencing the task.
 	 *
 	 * Pairs with the smp_store_release() in finish_task().
@@ -2674,28 +2863,14 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 */
 	smp_cond_load_acquire(&p->on_cpu, !VAL);
 
-	p->sched_contributes_to_load = !!task_contributes_to_load(p);
-	p->state = TASK_WAKING;
-
-	if (p->in_iowait) {
-		delayacct_blkio_end(p);
-		atomic_dec(&task_rq(p)->nr_iowait);
-	}
-
 	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags);
 	if (task_cpu(p) != cpu) {
 		wake_flags |= WF_MIGRATED;
 		psi_ttwu_dequeue(p);
 		set_task_cpu(p, cpu);
 	}
-
-#else /* CONFIG_SMP */
-
-	if (p->in_iowait) {
-		delayacct_blkio_end(p);
-		atomic_dec(&task_rq(p)->nr_iowait);
-	}
-
+#else
+	cpu = task_cpu(p);
 #endif /* CONFIG_SMP */
 
 	ttwu_queue(p, cpu, wake_flags);
@@ -2703,7 +2878,7 @@ unlock:
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
 out:
 	if (success)
-		ttwu_stat(p, cpu, wake_flags);
+		ttwu_stat(p, task_cpu(p), wake_flags);
 	preempt_enable();
 
 	return success;
@@ -2823,6 +2998,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->capture_control = NULL;
 #endif
 	init_numa_balancing(clone_flags, p);
+#ifdef CONFIG_SMP
+	p->wake_entry.u_flags = CSD_TYPE_TTWU;
+#endif
 }
 
 DEFINE_STATIC_KEY_FALSE(sched_numa_balancing);
@@ -2997,6 +3175,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 * Silence PROVE_RCU.
 	 */
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
+	rseq_migrate(p);
 	/*
 	 * We're setting the CPU for the first time, we don't migrate,
 	 * so use __set_task_cpu().
@@ -3061,6 +3240,7 @@ void wake_up_new_task(struct task_struct *p)
 	 * as we're not fully set-up yet.
 	 */
 	p->recent_used_cpu = task_cpu(p);
+	rseq_migrate(p);
 	__set_task_cpu(p, select_task_rq(p, task_cpu(p), SD_BALANCE_FORK, 0));
 #endif
 	rq = __task_rq_lock(p, &rf);
@@ -3177,8 +3357,10 @@ static inline void prepare_task(struct task_struct *next)
 	/*
 	 * Claim the task as running, we do this before switching to it
 	 * such that any running task will have this set.
+	 *
+	 * See the ttwu() WF_ON_CPU case and its ordering comment.
 	 */
-	next->on_cpu = 1;
+	WRITE_ONCE(next->on_cpu, 1);
 #endif
 }
 
@@ -3186,8 +3368,9 @@ static inline void finish_task(struct task_struct *prev)
 {
 #ifdef CONFIG_SMP
 	/*
-	 * After ->on_cpu is cleared, the task can be moved to a different CPU.
-	 * We must ensure this doesn't happen until the switch is completely
+	 * This must be the very last reference to @prev from this CPU. After
+	 * p->on_cpu is cleared, the task can be moved to a different CPU. We
+	 * must ensure this doesn't happen until the switch is completely
 	 * finished.
 	 *
 	 * In particular, the load of prev->state in finish_task_switch() must
@@ -3980,8 +4163,7 @@ static noinline void __schedule_bug(struct task_struct *prev)
 	if (IS_ENABLED(CONFIG_DEBUG_PREEMPT)
 	    && in_atomic_preempt_off()) {
 		pr_err("Preemption disabled at:");
-		print_ip_sym(preempt_disable_ip);
-		pr_cont("\n");
+		print_ip_sym(KERN_ERR, preempt_disable_ip);
 	}
 	if (panic_on_warn)
 		panic("scheduling while atomic\n");
@@ -4623,7 +4805,8 @@ void rt_mutex_setprio(struct task_struct *p, struct task_struct *pi_task)
 	 */
 	if (dl_prio(prio)) {
 		if (!dl_prio(p->normal_prio) ||
-		    (pi_task && dl_entity_preempt(&pi_task->dl, &p->dl))) {
+		    (pi_task && dl_prio(pi_task->prio) &&
+		     dl_entity_preempt(&pi_task->dl, &p->dl))) {
 			p->dl.dl_boosted = 1;
 			queue_flag |= ENQUEUE_REPLENISH;
 		} else
@@ -4799,7 +4982,7 @@ int idle_cpu(int cpu)
 		return 0;
 
 #ifdef CONFIG_SMP
-	if (!llist_empty(&rq->wake_list))
+	if (rq->ttwu_pending)
 		return 0;
 #endif
 
@@ -6115,7 +6298,7 @@ void sched_show_task(struct task_struct *p)
 		(unsigned long)task_thread_info(p)->flags);
 
 	print_worker_info(KERN_INFO, p);
-	show_stack(p, NULL);
+	show_stack(p, NULL, KERN_INFO);
 	put_task_stack(p);
 }
 EXPORT_SYMBOL_GPL(sched_show_task);
@@ -6353,13 +6536,14 @@ void idle_task_exit(void)
 	struct mm_struct *mm = current->active_mm;
 
 	BUG_ON(cpu_online(smp_processor_id()));
+	BUG_ON(current != this_rq()->idle);
 
 	if (mm != &init_mm) {
 		switch_mm(mm, &init_mm, current);
-		current->active_mm = &init_mm;
 		finish_arch_post_lock_switch();
 	}
-	mmdrop(mm);
+
+	/* finish_cpu(), as ran on the BP, will clean up the active_mm state */
 }
 
 /*
@@ -6649,7 +6833,6 @@ int sched_cpu_dying(unsigned int cpu)
 	struct rq_flags rf;
 
 	/* Handle pending wakeups and then migrate everything off */
-	sched_ttwu_pending();
 	sched_tick_stop(cpu);
 
 	rq_lock_irqsave(rq, &rf);
@@ -6760,6 +6943,8 @@ void __init sched_init(void)
 		root_task_group.cfs_rq = (struct cfs_rq **)ptr;
 		ptr += nr_cpu_ids * sizeof(void **);
 
+		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
+		init_cfs_bandwidth(&root_task_group.cfs_bandwidth);
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 #ifdef CONFIG_RT_GROUP_SCHED
 		root_task_group.rt_se = (struct sched_rt_entity **)ptr;
@@ -6812,7 +6997,6 @@ void __init sched_init(void)
 		init_rt_rq(&rq->rt);
 		init_dl_rq(&rq->dl);
 #ifdef CONFIG_FAIR_GROUP_SCHED
-		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
 		rq->tmp_alone_branch = &rq->leaf_cfs_rq_list;
 		/*
@@ -6834,7 +7018,6 @@ void __init sched_init(void)
 		 * We achieve this by letting root_task_group's tasks sit
 		 * directly in rq->cfs (i.e root_task_group->se[] = NULL).
 		 */
-		init_cfs_bandwidth(&root_task_group.cfs_bandwidth);
 		init_tg_cfs_entry(&root_task_group, &rq->cfs, NULL, i, NULL);
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
@@ -6855,8 +7038,6 @@ void __init sched_init(void)
 		rq->idle_stamp = 0;
 		rq->avg_idle = 2*sysctl_sched_migration_cost;
 		rq->max_idle_balance_cost = sysctl_sched_migration_cost;
-
-		rq_csd_init(rq, &rq->wake_csd, wake_csd_func);
 
 		INIT_LIST_HEAD(&rq->cfs_tasks);
 
@@ -6970,8 +7151,7 @@ void ___might_sleep(const char *file, int line, int preempt_offset)
 	if (IS_ENABLED(CONFIG_DEBUG_PREEMPT)
 	    && !preempt_count_equals(preempt_offset)) {
 		pr_err("Preemption disabled at:");
-		print_ip_sym(preempt_disable_ip);
-		pr_cont("\n");
+		print_ip_sym(KERN_ERR, preempt_disable_ip);
 	}
 	dump_stack();
 	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);

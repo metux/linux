@@ -8282,7 +8282,7 @@ M:	Alexander Aring <alex.aring@gmail.com>
 M:	Stefan Schmidt <stefan@datenfreihafen.org>
 L:	linux-wpan@vger.kernel.org
 S:	Maintained
-W:	http://wpan.cakelab.org/
+W:	https://linux-wpan.org/
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/sschmidt/wpan.git
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/sschmidt/wpan-next.git
 F:	Documentation/networking/ieee802154.rst
@@ -8407,13 +8407,6 @@ S:	Maintained
 F:	Documentation/hwmon/ina2xx.rst
 F:	drivers/hwmon/ina2xx.c
 F:	include/linux/platform_data/ina2xx.h
-
-INCREMENTAL FILE SYSTEM
-M:	Paul Lawrence <paullawrence@google.com>
-L:	linux-unionfs@vger.kernel.org
-S:	Supported
-F:	fs/incfs/
-F:	tools/testing/selftests/filesystems/incfs/
 
 INDUSTRY PACK SUBSYSTEM (IPACK)
 M:	Samuel Iglesias Gonsalvez <siglesias@igalia.com>
@@ -10758,7 +10751,7 @@ F:	Documentation/devicetree/bindings/dma/mtk-*
 F:	drivers/dma/mediatek/
 
 MEDIATEK ETHERNET DRIVER
-M:	Felix Fietkau <nbd@openwrt.org>
+M:	Felix Fietkau <nbd@nbd.name>
 M:	John Crispin <john@phrozen.org>
 M:	Sean Wang <sean.wang@mediatek.com>
 M:	Mark Lee <Mark-MC.Lee@mediatek.com>
@@ -11035,6 +11028,15 @@ S:	Maintained
 F:	Documentation/core-api/boot-time-mm.rst
 F:	include/linux/memblock.h
 F:	mm/memblock.c
+
+MEMORY FREQUENCY SCALING DRIVERS FOR NVIDIA TEGRA
+M:	Dmitry Osipenko <digetx@gmail.com>
+L:	linux-pm@vger.kernel.org
+L:	linux-tegra@vger.kernel.org
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/chanwoo/linux.git
+S:	Maintained
+F:	drivers/devfreq/tegra20-devfreq.c
+F:	drivers/devfreq/tegra30-devfreq.c
 
 MEMORY MANAGEMENT
 M:	Andrew Morton <akpm@linux-foundation.org>
@@ -11317,14 +11319,6 @@ L:	linux-arm-kernel@lists.infradead.org
 L:	dmaengine@vger.kernel.org
 S:	Supported
 F:	drivers/dma/at_xdmac.c
-
-MICROSEMI ETHERNET SWITCH DRIVER
-M:	Alexandre Belloni <alexandre.belloni@bootlin.com>
-M:	Microchip Linux Driver Support <UNGLinuxDriver@microchip.com>
-L:	netdev@vger.kernel.org
-S:	Supported
-F:	drivers/net/ethernet/mscc/
-F:	include/soc/mscc/ocelot*
 
 MICROSEMI MIPS SOCS
 M:	Alexandre Belloni <alexandre.belloni@bootlin.com>
@@ -12279,6 +12273,18 @@ M:	Peter Zijlstra <peterz@infradead.org>
 S:	Supported
 F:	tools/objtool/
 
+OCELOT ETHERNET SWITCH DRIVER
+M:	Microchip Linux Driver Support <UNGLinuxDriver@microchip.com>
+M:	Vladimir Oltean <vladimir.oltean@nxp.com>
+M:	Claudiu Manoil <claudiu.manoil@nxp.com>
+M:	Alexandre Belloni <alexandre.belloni@bootlin.com>
+L:	netdev@vger.kernel.org
+S:	Supported
+F:	drivers/net/dsa/ocelot/*
+F:	drivers/net/ethernet/mscc/
+F:	include/soc/mscc/ocelot*
+F:	net/dsa/tag_ocelot.c
+
 OCXL (Open Coherent Accelerator Processor Interface OpenCAPI) DRIVER
 M:	Frederic Barrat <fbarrat@linux.ibm.com>
 M:	Andrew Donnellan <ajd@linux.ibm.com>
@@ -12625,13 +12631,13 @@ F:	arch/mips/boot/dts/ralink/omega2p.dts
 
 OP-TEE DRIVER
 M:	Jens Wiklander <jens.wiklander@linaro.org>
-L:	tee-dev@lists.linaro.org
+L:	op-tee@lists.trustedfirmware.org
 S:	Maintained
 F:	drivers/tee/optee/
 
 OP-TEE RANDOM NUMBER GENERATOR (RNG) DRIVER
 M:	Sumit Garg <sumit.garg@linaro.org>
-L:	tee-dev@lists.linaro.org
+L:	op-tee@lists.trustedfirmware.org
 S:	Maintained
 F:	drivers/char/hw_random/optee-rng.c
 
@@ -14123,6 +14129,15 @@ L:	dmaengine@vger.kernel.org
 S:	Supported
 F:	drivers/dma/qcom/hidma*
 
+QUALCOMM I2C CCI DRIVER
+M:	Loic Poulain <loic.poulain@linaro.org>
+M:	Robert Foss <robert.foss@linaro.org>
+L:	linux-i2c@vger.kernel.org
+L:	linux-arm-msm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/i2c/i2c-qcom-cci.txt
+F:	drivers/i2c/busses/i2c-qcom-cci.c
+
 QUALCOMM IOMMU
 M:	Rob Clark <robdclark@gmail.com>
 L:	iommu@lists.linux-foundation.org
@@ -14456,7 +14471,7 @@ F:	Documentation/devicetree/bindings/i2c/renesas,iic-emev2.txt
 F:	drivers/i2c/busses/i2c-emev2.c
 
 RENESAS ETHERNET DRIVERS
-R:	Sergei Shtylyov <sergei.shtylyov@cogentembedded.com>
+R:	Sergei Shtylyov <sergei.shtylyov@gmail.com>
 L:	netdev@vger.kernel.org
 L:	linux-renesas-soc@vger.kernel.org
 F:	Documentation/devicetree/bindings/net/renesas,*.txt
@@ -15939,8 +15954,10 @@ SPARSE CHECKER
 M:	"Luc Van Oostenryck" <luc.vanoostenryck@gmail.com>
 L:	linux-sparse@vger.kernel.org
 S:	Maintained
-W:	https://sparse.wiki.kernel.org/
+W:	https://sparse.docs.kernel.org/
 T:	git git://git.kernel.org/pub/scm/devel/sparse/sparse.git
+Q:	https://patchwork.kernel.org/project/linux-sparse/list/
+B:	https://bugzilla.kernel.org/enter_bug.cgi?component=Sparse&product=Tools
 F:	include/linux/compiler.h
 
 SPEAR CLOCK FRAMEWORK SUPPORT
@@ -16645,7 +16662,7 @@ F:	include/media/i2c/tw9910.h
 
 TEE SUBSYSTEM
 M:	Jens Wiklander <jens.wiklander@linaro.org>
-L:	tee-dev@lists.linaro.org
+L:	op-tee@lists.trustedfirmware.org
 S:	Maintained
 F:	Documentation/tee.txt
 F:	drivers/tee/
@@ -18106,14 +18123,6 @@ M:	Stephen Chandler Paul <thatslyude@gmail.com>
 S:	Maintained
 F:	drivers/input/serio/userio.c
 F:	include/uapi/linux/userio.h
-
-VITESSE FELIX ETHERNET SWITCH DRIVER
-M:	Vladimir Oltean <vladimir.oltean@nxp.com>
-M:	Claudiu Manoil <claudiu.manoil@nxp.com>
-L:	netdev@vger.kernel.org
-S:	Maintained
-F:	drivers/net/dsa/ocelot/*
-F:	net/dsa/tag_ocelot.c
 
 VIVID VIRTUAL VIDEO DRIVER
 M:	Hans Verkuil <hverkuil@xs4all.nl>

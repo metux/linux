@@ -20,8 +20,8 @@ properties:
           - atmel,at91rm9200-tcb
           - atmel,at91sam9x5-tcb
           - atmel,sama5d2-tcb
-      - const: simple-mfd
-      - const: syscon
+        - const: simple-mfd
+        - const: syscon
 
   reg:
     maxItems: 1
@@ -37,6 +37,15 @@ properties:
     description:
       List of clock names. Always includes t0_clk and slow clk. Also includes
       t1_clk and t2_clk if a clock per channel is available.
+    oneOf:
+      - items:
+        - const: t0_clk
+        - const: slow_clk
+      - items:
+        - const: t0_clk
+        - const: t1_clk
+        - const: t2_clk
+        - const: slow_clk
     minItems: 2
     maxItems: 4
 

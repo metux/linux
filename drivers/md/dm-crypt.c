@@ -69,6 +69,7 @@ struct dm_crypt_io {
 	u8 *integrity_metadata;
 	bool integrity_metadata_from_pool;
 	struct work_struct work;
+	struct tasklet_struct tasklet;
 
 	struct convert_context ctx;
 
@@ -127,7 +128,8 @@ struct iv_elephant_private {
  * and encrypts / decrypts at the same time.
  */
 enum flags { DM_CRYPT_SUSPENDED, DM_CRYPT_KEY_VALID,
-	     DM_CRYPT_SAME_CPU, DM_CRYPT_NO_OFFLOAD };
+	     DM_CRYPT_SAME_CPU, DM_CRYPT_NO_OFFLOAD,
+	     DM_CRYPT_NO_READ_WORKQUEUE, DM_CRYPT_NO_WRITE_WORKQUEUE };
 
 enum cipher_flags {
 	CRYPT_MODE_INTEGRITY_AEAD,	/* Use authenticated mode for cihper */
@@ -300,7 +302,7 @@ static struct crypto_aead *any_tfm_aead(struct crypt_config *cc)
  * elephant: The extended version of eboiv with additional Elephant diffuser
  *           used with Bitlocker CBC mode.
  *           This mode was used in older Windows systems
- *           https://download.microsoft.com/download/0/2/3/0238acaf-d3bf-4a6d-b3d6-0a0be4bbb36e/bitlockercipher200608.pdf
+ *           http://download.microsoft.com/download/0/2/3/0238acaf-d3bf-4a6d-b3d6-0a0be4bbb36e/bitlockercipher200608.pdf
  */
 
 static int crypt_iv_plain_gen(struct crypt_config *cc, u8 *iv,
@@ -407,7 +409,7 @@ static void crypt_iv_lmk_dtr(struct crypt_config *cc)
 		crypto_free_shash(lmk->hash_tfm);
 	lmk->hash_tfm = NULL;
 
-	kfree_sensitive(lmk->seed);
+	kzfree(lmk->seed);
 	lmk->seed = NULL;
 }
 
@@ -558,9 +560,9 @@ static void crypt_iv_tcw_dtr(struct crypt_config *cc)
 {
 	struct iv_tcw_private *tcw = &cc->iv_gen_private.tcw;
 
-	kfree_sensitive(tcw->iv_seed);
+	kzfree(tcw->iv_seed);
 	tcw->iv_seed = NULL;
-	kfree_sensitive(tcw->whitening);
+	kzfree(tcw->whitening);
 	tcw->whitening = NULL;
 
 	if (tcw->crc32_tfm && !IS_ERR(tcw->crc32_tfm))
@@ -994,8 +996,8 @@ static int crypt_iv_elephant(struct crypt_config *cc, struct dm_crypt_request *d
 
 	kunmap_atomic(data);
 out:
-	kfree_sensitive(ks);
-	kfree_sensitive(es);
+	kzfree(ks);
+	kzfree(es);
 	skcipher_request_free(req);
 	return r;
 }
@@ -1523,7 +1525,7 @@ static void crypt_free_req(struct crypt_config *cc, void *req, struct bio *base_
  * Encrypt / decrypt data from one bio to another one (can be the same one)
  */
 static blk_status_t crypt_convert(struct crypt_config *cc,
-			 struct convert_context *ctx)
+			 struct convert_context *ctx, bool atomic)
 {
 	unsigned int tag_offset = 0;
 	unsigned int sector_step = cc->sector_size >> SECTOR_SHIFT;
@@ -1566,7 +1568,8 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 			atomic_dec(&ctx->cc_pending);
 			ctx->cc_sector += sector_step;
 			tag_offset++;
-			cond_resched();
+			if (!atomic)
+				cond_resched();
 			continue;
 		/*
 		 * There was a data integrity error.
@@ -1789,7 +1792,7 @@ static int kcryptd_io_read(struct dm_crypt_io *io, gfp_t gfp)
 		return 1;
 	}
 
-	submit_bio_noacct(clone);
+	generic_make_request(clone);
 	return 0;
 }
 
@@ -1815,7 +1818,7 @@ static void kcryptd_io_write(struct dm_crypt_io *io)
 {
 	struct bio *clone = io->ctx.bio_out;
 
-	submit_bio_noacct(clone);
+	generic_make_request(clone);
 }
 
 #define crypt_io_from_node(node) rb_entry((node), struct dm_crypt_io, rb_node)
@@ -1892,8 +1895,9 @@ static void kcryptd_crypt_write_io_submit(struct dm_crypt_io *io, int async)
 
 	clone->bi_iter.bi_sector = cc->start + io->sector;
 
-	if (likely(!async) && test_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags)) {
-		submit_bio_noacct(clone);
+	if ((likely(!async) && test_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags)) ||
+	    test_bit(DM_CRYPT_NO_WRITE_WORKQUEUE, &cc->flags)) {
+		generic_make_request(clone);
 		return;
 	}
 
@@ -1941,7 +1945,8 @@ static void kcryptd_crypt_write_convert(struct dm_crypt_io *io)
 	sector += bio_sectors(clone);
 
 	crypt_inc_pending(io);
-	r = crypt_convert(cc, &io->ctx);
+	r = crypt_convert(cc, &io->ctx,
+			  test_bit(DM_CRYPT_NO_WRITE_WORKQUEUE, &cc->flags));
 	if (r)
 		io->error = r;
 	crypt_finished = atomic_dec_and_test(&io->ctx.cc_pending);
@@ -1971,7 +1976,8 @@ static void kcryptd_crypt_read_convert(struct dm_crypt_io *io)
 	crypt_convert_init(cc, &io->ctx, io->base_bio, io->base_bio,
 			   io->sector);
 
-	r = crypt_convert(cc, &io->ctx);
+	r = crypt_convert(cc, &io->ctx,
+			  test_bit(DM_CRYPT_NO_READ_WORKQUEUE, &cc->flags));
 	if (r)
 		io->error = r;
 
@@ -2031,9 +2037,27 @@ static void kcryptd_crypt(struct work_struct *work)
 		kcryptd_crypt_write_convert(io);
 }
 
+static void kcryptd_crypt_tasklet(unsigned long work)
+{
+	kcryptd_crypt((struct work_struct *)work);
+}
+
 static void kcryptd_queue_crypt(struct dm_crypt_io *io)
 {
 	struct crypt_config *cc = io->cc;
+
+	if ((bio_data_dir(io->base_bio) == READ && test_bit(DM_CRYPT_NO_READ_WORKQUEUE, &cc->flags)) ||
+	    (bio_data_dir(io->base_bio) == WRITE && test_bit(DM_CRYPT_NO_WRITE_WORKQUEUE, &cc->flags))) {
+		if (in_irq()) {
+			/* Crypto API's "skcipher_walk_first() refuses to work in hard IRQ context */
+			tasklet_init(&io->tasklet, kcryptd_crypt_tasklet, (unsigned long)&io->work);
+			tasklet_schedule(&io->tasklet);
+			return;
+		}
+
+		kcryptd_crypt(&io->work);
+		return;
+	}
 
 	INIT_WORK(&io->work, kcryptd_crypt);
 	queue_work(cc->crypt_queue, &io->work);
@@ -2294,7 +2318,7 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 
 	key = request_key(type, key_desc + 1, NULL);
 	if (IS_ERR(key)) {
-		kfree_sensitive(new_key_string);
+		kzfree(new_key_string);
 		return PTR_ERR(key);
 	}
 
@@ -2304,7 +2328,7 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 	if (ret < 0) {
 		up_read(&key->sem);
 		key_put(key);
-		kfree_sensitive(new_key_string);
+		kzfree(new_key_string);
 		return ret;
 	}
 
@@ -2318,10 +2342,10 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 
 	if (!ret) {
 		set_bit(DM_CRYPT_KEY_VALID, &cc->flags);
-		kfree_sensitive(cc->key_string);
+		kzfree(cc->key_string);
 		cc->key_string = new_key_string;
 	} else
-		kfree_sensitive(new_key_string);
+		kzfree(new_key_string);
 
 	return ret;
 }
@@ -2382,7 +2406,7 @@ static int crypt_set_key(struct crypt_config *cc, char *key)
 	clear_bit(DM_CRYPT_KEY_VALID, &cc->flags);
 
 	/* wipe references to any kernel keyring key */
-	kfree_sensitive(cc->key_string);
+	kzfree(cc->key_string);
 	cc->key_string = NULL;
 
 	/* Decode key from its hex representation. */
@@ -2414,7 +2438,7 @@ static int crypt_wipe_key(struct crypt_config *cc)
 			return r;
 	}
 
-	kfree_sensitive(cc->key_string);
+	kzfree(cc->key_string);
 	cc->key_string = NULL;
 	r = crypt_setkey(cc);
 	memset(&cc->key, 0, cc->key_size * sizeof(u8));
@@ -2493,15 +2517,15 @@ static void crypt_dtr(struct dm_target *ti)
 	if (cc->dev)
 		dm_put_device(ti, cc->dev);
 
-	kfree_sensitive(cc->cipher_string);
-	kfree_sensitive(cc->key_string);
-	kfree_sensitive(cc->cipher_auth);
-	kfree_sensitive(cc->authenc_key);
+	kzfree(cc->cipher_string);
+	kzfree(cc->key_string);
+	kzfree(cc->cipher_auth);
+	kzfree(cc->authenc_key);
 
 	mutex_destroy(&cc->bio_alloc_lock);
 
 	/* Must zero key material before freeing */
-	kfree_sensitive(cc);
+	kzfree(cc);
 
 	spin_lock(&dm_crypt_clients_lock);
 	WARN_ON(!dm_crypt_clients_n);
@@ -2838,7 +2862,7 @@ static int crypt_ctr_optional(struct dm_target *ti, unsigned int argc, char **ar
 	struct crypt_config *cc = ti->private;
 	struct dm_arg_set as;
 	static const struct dm_arg _args[] = {
-		{0, 6, "Invalid number of feature args"},
+		{0, 8, "Invalid number of feature args"},
 	};
 	unsigned int opt_params, val;
 	const char *opt_string, *sval;
@@ -2868,6 +2892,10 @@ static int crypt_ctr_optional(struct dm_target *ti, unsigned int argc, char **ar
 
 		else if (!strcasecmp(opt_string, "submit_from_crypt_cpus"))
 			set_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags);
+		else if (!strcasecmp(opt_string, "no_read_workqueue"))
+			set_bit(DM_CRYPT_NO_READ_WORKQUEUE, &cc->flags);
+		else if (!strcasecmp(opt_string, "no_write_workqueue"))
+			set_bit(DM_CRYPT_NO_WRITE_WORKQUEUE, &cc->flags);
 		else if (sscanf(opt_string, "integrity:%u:", &val) == 1) {
 			if (val == 0 || val > MAX_TAG_SIZE) {
 				ti->error = "Invalid integrity arguments";
@@ -3196,6 +3224,8 @@ static void crypt_status(struct dm_target *ti, status_type_t type,
 		num_feature_args += !!ti->num_discard_bios;
 		num_feature_args += test_bit(DM_CRYPT_SAME_CPU, &cc->flags);
 		num_feature_args += test_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags);
+		num_feature_args += test_bit(DM_CRYPT_NO_READ_WORKQUEUE, &cc->flags);
+		num_feature_args += test_bit(DM_CRYPT_NO_WRITE_WORKQUEUE, &cc->flags);
 		num_feature_args += cc->sector_size != (1 << SECTOR_SHIFT);
 		num_feature_args += test_bit(CRYPT_IV_LARGE_SECTORS, &cc->cipher_flags);
 		if (cc->on_disk_tag_size)
@@ -3208,6 +3238,10 @@ static void crypt_status(struct dm_target *ti, status_type_t type,
 				DMEMIT(" same_cpu_crypt");
 			if (test_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags))
 				DMEMIT(" submit_from_crypt_cpus");
+			if (test_bit(DM_CRYPT_NO_READ_WORKQUEUE, &cc->flags))
+				DMEMIT(" no_read_workqueue");
+			if (test_bit(DM_CRYPT_NO_WRITE_WORKQUEUE, &cc->flags))
+				DMEMIT(" no_write_workqueue");
 			if (cc->on_disk_tag_size)
 				DMEMIT(" integrity:%u:%s", cc->on_disk_tag_size, cc->cipher_auth);
 			if (cc->sector_size != (1 << SECTOR_SHIFT))
@@ -3320,7 +3354,7 @@ static void crypt_io_hints(struct dm_target *ti, struct queue_limits *limits)
 
 static struct target_type crypt_target = {
 	.name   = "crypt",
-	.version = {1, 21, 0},
+	.version = {1, 22, 0},
 	.module = THIS_MODULE,
 	.ctr    = crypt_ctr,
 	.dtr    = crypt_dtr,

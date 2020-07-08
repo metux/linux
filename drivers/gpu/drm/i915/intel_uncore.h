@@ -35,6 +35,7 @@
 struct drm_i915_private;
 struct intel_runtime_pm;
 struct intel_uncore;
+struct intel_gt;
 
 enum forcewake_domain_id {
 	FW_DOMAIN_ID_RENDER = 0,
@@ -184,7 +185,8 @@ intel_uncore_has_fifo(const struct intel_uncore *uncore)
 
 void intel_uncore_init_early(struct intel_uncore *uncore);
 int intel_uncore_init_mmio(struct intel_uncore *uncore);
-void intel_uncore_prune_mmio_domains(struct intel_uncore *uncore);
+void intel_uncore_prune_engine_fw_domains(struct intel_uncore *uncore,
+					  struct intel_gt *gt);
 bool intel_uncore_unclaimed_mmio(struct intel_uncore *uncore);
 bool intel_uncore_arm_unclaimed_mmio_detection(struct intel_uncore *uncore);
 void intel_uncore_fini_mmio(struct intel_uncore *uncore);

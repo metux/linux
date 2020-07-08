@@ -65,6 +65,117 @@ DEFINE_RPCXDRBUF_EVENT(recvfrom);
 DEFINE_RPCXDRBUF_EVENT(reply_pages);
 
 
+DECLARE_EVENT_CLASS(rpc_clnt_class,
+	TP_PROTO(
+		const struct rpc_clnt *clnt
+	),
+
+	TP_ARGS(clnt),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, client_id)
+	),
+
+	TP_fast_assign(
+		__entry->client_id = clnt->cl_clid;
+	),
+
+	TP_printk("clid=%u", __entry->client_id)
+);
+
+#define DEFINE_RPC_CLNT_EVENT(name)					\
+		DEFINE_EVENT(rpc_clnt_class,				\
+				rpc_clnt_##name,			\
+				TP_PROTO(				\
+					const struct rpc_clnt *clnt	\
+				),					\
+				TP_ARGS(clnt))
+
+DEFINE_RPC_CLNT_EVENT(free);
+DEFINE_RPC_CLNT_EVENT(killall);
+DEFINE_RPC_CLNT_EVENT(shutdown);
+DEFINE_RPC_CLNT_EVENT(release);
+DEFINE_RPC_CLNT_EVENT(replace_xprt);
+DEFINE_RPC_CLNT_EVENT(replace_xprt_err);
+
+TRACE_EVENT(rpc_clnt_new,
+	TP_PROTO(
+		const struct rpc_clnt *clnt,
+		const struct rpc_xprt *xprt,
+		const char *program,
+		const char *server
+	),
+
+	TP_ARGS(clnt, xprt, program, server),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, client_id)
+		__string(addr, xprt->address_strings[RPC_DISPLAY_ADDR])
+		__string(port, xprt->address_strings[RPC_DISPLAY_PORT])
+		__string(program, program)
+		__string(server, server)
+	),
+
+	TP_fast_assign(
+		__entry->client_id = clnt->cl_clid;
+		__assign_str(addr, xprt->address_strings[RPC_DISPLAY_ADDR]);
+		__assign_str(port, xprt->address_strings[RPC_DISPLAY_PORT]);
+		__assign_str(program, program)
+		__assign_str(server, server)
+	),
+
+	TP_printk("client=%u peer=[%s]:%s program=%s server=%s",
+		__entry->client_id, __get_str(addr), __get_str(port),
+		__get_str(program), __get_str(server))
+);
+
+TRACE_EVENT(rpc_clnt_new_err,
+	TP_PROTO(
+		const char *program,
+		const char *server,
+		int error
+	),
+
+	TP_ARGS(program, server, error),
+
+	TP_STRUCT__entry(
+		__field(int, error)
+		__string(program, program)
+		__string(server, server)
+	),
+
+	TP_fast_assign(
+		__entry->error = error;
+		__assign_str(program, program)
+		__assign_str(server, server)
+	),
+
+	TP_printk("program=%s server=%s error=%d",
+		__get_str(program), __get_str(server), __entry->error)
+);
+
+TRACE_EVENT(rpc_clnt_clone_err,
+	TP_PROTO(
+		const struct rpc_clnt *clnt,
+		int error
+	),
+
+	TP_ARGS(clnt, error),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, client_id)
+		__field(int, error)
+	),
+
+	TP_fast_assign(
+		__entry->client_id = clnt->cl_clid;
+		__entry->error = error;
+	),
+
+	TP_printk("client=%u error=%d", __entry->client_id, __entry->error)
+);
+
+
 TRACE_DEFINE_ENUM(RPC_AUTH_OK);
 TRACE_DEFINE_ENUM(RPC_AUTH_BADCRED);
 TRACE_DEFINE_ENUM(RPC_AUTH_REJECTEDCRED);
@@ -723,6 +834,97 @@ DEFINE_RPC_SOCKET_EVENT_DONE(rpc_socket_error);
 DEFINE_RPC_SOCKET_EVENT_DONE(rpc_socket_reset_connection);
 DEFINE_RPC_SOCKET_EVENT(rpc_socket_close);
 DEFINE_RPC_SOCKET_EVENT(rpc_socket_shutdown);
+
+TRACE_EVENT(rpc_socket_nospace,
+	TP_PROTO(
+		const struct rpc_rqst *rqst,
+		const struct sock_xprt *transport
+	),
+
+	TP_ARGS(rqst, transport),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, task_id)
+		__field(unsigned int, client_id)
+		__field(unsigned int, total)
+		__field(unsigned int, remaining)
+	),
+
+	TP_fast_assign(
+		__entry->task_id = rqst->rq_task->tk_pid;
+		__entry->client_id = rqst->rq_task->tk_client->cl_clid;
+		__entry->total = rqst->rq_slen;
+		__entry->remaining = rqst->rq_slen - transport->xmit.offset;
+	),
+
+	TP_printk("task:%u@%u total=%u remaining=%u",
+		__entry->task_id, __entry->client_id,
+		__entry->total, __entry->remaining
+	)
+);
+
+TRACE_DEFINE_ENUM(XPRT_LOCKED);
+TRACE_DEFINE_ENUM(XPRT_CONNECTED);
+TRACE_DEFINE_ENUM(XPRT_CONNECTING);
+TRACE_DEFINE_ENUM(XPRT_CLOSE_WAIT);
+TRACE_DEFINE_ENUM(XPRT_BOUND);
+TRACE_DEFINE_ENUM(XPRT_BINDING);
+TRACE_DEFINE_ENUM(XPRT_CLOSING);
+TRACE_DEFINE_ENUM(XPRT_CONGESTED);
+TRACE_DEFINE_ENUM(XPRT_CWND_WAIT);
+TRACE_DEFINE_ENUM(XPRT_WRITE_SPACE);
+
+#define rpc_show_xprt_state(x)						\
+	__print_flags(x, "|",						\
+		{ (1UL << XPRT_LOCKED),		"LOCKED"},		\
+		{ (1UL << XPRT_CONNECTED),	"CONNECTED"},		\
+		{ (1UL << XPRT_CONNECTING),	"CONNECTING"},		\
+		{ (1UL << XPRT_CLOSE_WAIT),	"CLOSE_WAIT"},		\
+		{ (1UL << XPRT_BOUND),		"BOUND"},		\
+		{ (1UL << XPRT_BINDING),	"BINDING"},		\
+		{ (1UL << XPRT_CLOSING),	"CLOSING"},		\
+		{ (1UL << XPRT_CONGESTED),	"CONGESTED"},		\
+		{ (1UL << XPRT_CWND_WAIT),	"CWND_WAIT"},		\
+		{ (1UL << XPRT_WRITE_SPACE),	"WRITE_SPACE"})
+
+DECLARE_EVENT_CLASS(rpc_xprt_lifetime_class,
+	TP_PROTO(
+		const struct rpc_xprt *xprt
+	),
+
+	TP_ARGS(xprt),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, state)
+		__string(addr, xprt->address_strings[RPC_DISPLAY_ADDR])
+		__string(port, xprt->address_strings[RPC_DISPLAY_PORT])
+	),
+
+	TP_fast_assign(
+		__entry->state = xprt->state;
+		__assign_str(addr, xprt->address_strings[RPC_DISPLAY_ADDR]);
+		__assign_str(port, xprt->address_strings[RPC_DISPLAY_PORT]);
+	),
+
+	TP_printk("peer=[%s]:%s state=%s",
+		__get_str(addr), __get_str(port),
+		rpc_show_xprt_state(__entry->state))
+);
+
+#define DEFINE_RPC_XPRT_LIFETIME_EVENT(name) \
+	DEFINE_EVENT(rpc_xprt_lifetime_class, \
+			xprt_##name, \
+			TP_PROTO( \
+				const struct rpc_xprt *xprt \
+			), \
+			TP_ARGS(xprt))
+
+DEFINE_RPC_XPRT_LIFETIME_EVENT(create);
+DEFINE_RPC_XPRT_LIFETIME_EVENT(disconnect_auto);
+DEFINE_RPC_XPRT_LIFETIME_EVENT(disconnect_done);
+DEFINE_RPC_XPRT_LIFETIME_EVENT(disconnect_force);
+DEFINE_RPC_XPRT_LIFETIME_EVENT(disconnect_cleanup);
+DEFINE_RPC_XPRT_LIFETIME_EVENT(destroy);
 
 DECLARE_EVENT_CLASS(rpc_xprt_event,
 	TP_PROTO(

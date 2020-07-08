@@ -242,12 +242,12 @@ static void xgpu_ai_mailbox_flr_work(struct work_struct *work)
 	/* block amdgpu_gpu_recover till msg FLR COMPLETE received,
 	 * otherwise the mailbox msg will be ruined/reseted by
 	 * the VF FLR.
+	 *
+	 * we can unlock the reset_sem to allow "amdgpu_job_timedout"
+	 * to run gpu_recover() after FLR_NOTIFICATION_CMPL received
+	 * which means host side had finished this VF's FLR.
 	 */
-	if (!down_read_trylock(&adev->reset_sem))
-		return;
-
-	atomic_set(&adev->in_gpu_reset, 1);
-
+	down_read(&adev->reset_sem);
 	do {
 		if (xgpu_ai_mailbox_peek_msg(adev) == IDH_FLR_NOTIFICATION_CMPL)
 			goto flr_done;
@@ -257,13 +257,11 @@ static void xgpu_ai_mailbox_flr_work(struct work_struct *work)
 	} while (timeout > 1);
 
 flr_done:
-	atomic_set(&adev->in_gpu_reset, 0);
 	up_read(&adev->reset_sem);
 
 	/* Trigger recovery for world switch failure if no TDR */
 	if (amdgpu_device_should_recover_gpu(adev)
-		&& (!amdgpu_device_has_job_running(adev) ||
-		adev->sdma_timeout == MAX_SCHEDULE_TIMEOUT))
+		&& adev->sdma_timeout == MAX_SCHEDULE_TIMEOUT)
 		amdgpu_device_gpu_recover(adev, NULL);
 }
 

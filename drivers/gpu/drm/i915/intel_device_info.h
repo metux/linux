@@ -184,7 +184,7 @@ struct intel_device_info {
 
 	u8 gen;
 	u8 gt; /* GT number, 0 if undefined */
-	intel_engine_mask_t engine_mask; /* Engines supported by the HW */
+	intel_engine_mask_t platform_engine_mask; /* Engines supported by the HW */
 
 	enum intel_platform platform;
 
@@ -246,8 +246,6 @@ struct intel_runtime_info {
 	u8 num_sprites[I915_MAX_PIPES];
 	u8 num_scalers[I915_MAX_PIPES];
 
-	u8 num_engines;
-
 	/* Slice/subslice/EU info */
 	struct sseu_dev_info sseu;
 
@@ -255,9 +253,6 @@ struct intel_runtime_info {
 
 	u32 cs_timestamp_frequency_hz;
 	u32 cs_timestamp_period_ns;
-
-	/* Media engine access to SFC per instance */
-	u8 vdbox_sfc_access;
 };
 
 struct intel_driver_caps {

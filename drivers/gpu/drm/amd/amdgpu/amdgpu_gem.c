@@ -66,12 +66,26 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 	bp.type = type;
 	bp.resv = resv;
 	bp.preferred_domain = initial_domain;
+retry:
 	bp.flags = flags;
 	bp.domain = initial_domain;
 	r = amdgpu_bo_create(adev, &bp, &bo);
-	if (r)
-		return r;
+	if (r) {
+		if (r != -ERESTARTSYS) {
+			if (flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED) {
+				flags &= ~AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
+				goto retry;
+			}
 
+			if (initial_domain == AMDGPU_GEM_DOMAIN_VRAM) {
+				initial_domain |= AMDGPU_GEM_DOMAIN_GTT;
+				goto retry;
+			}
+			DRM_DEBUG("Failed to allocate GEM object (%ld, %d, %u, %d)\n",
+				  size, initial_domain, alignment, r);
+		}
+		return r;
+	}
 	*obj = &bo->tbo.base;
 
 	return 0;
@@ -79,7 +93,7 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 
 void amdgpu_gem_force_release(struct amdgpu_device *adev)
 {
-	struct drm_device *ddev = adev_to_drm(adev);
+	struct drm_device *ddev = adev->ddev;
 	struct drm_file *file;
 
 	mutex_lock(&ddev->filelist_mutex);
@@ -203,7 +217,7 @@ out_unlock:
 int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *filp)
 {
-	struct amdgpu_device *adev = drm_to_adev(dev);
+	struct amdgpu_device *adev = dev->dev_private;
 	struct amdgpu_fpriv *fpriv = filp->driver_priv;
 	struct amdgpu_vm *vm = &fpriv->vm;
 	union drm_amdgpu_gem_create *args = data;
@@ -211,7 +225,7 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 	uint64_t size = args->in.bo_size;
 	struct dma_resv *resv = NULL;
 	struct drm_gem_object *gobj;
-	uint32_t handle, initial_domain;
+	uint32_t handle;
 	int r;
 
 	/* reject invalid gem flags */
@@ -255,28 +269,9 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 		resv = vm->root.base.bo->tbo.base.resv;
 	}
 
-retry:
-	initial_domain = (u32)(0xffffffff & args->in.domains);
 	r = amdgpu_gem_object_create(adev, size, args->in.alignment,
-				     initial_domain,
+				     (u32)(0xffffffff & args->in.domains),
 				     flags, ttm_bo_type_device, resv, &gobj);
-	if (r) {
-		if (r != -ERESTARTSYS) {
-			if (flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED) {
-				flags &= ~AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
-				goto retry;
-			}
-
-			if (initial_domain == AMDGPU_GEM_DOMAIN_VRAM) {
-				initial_domain |= AMDGPU_GEM_DOMAIN_GTT;
-				goto retry;
-			}
-			DRM_DEBUG("Failed to allocate GEM object (%llu, %d, %llu, %d)\n",
-				  size, initial_domain, args->in.alignment, r);
-		}
-		return r;
-	}
-
 	if (flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID) {
 		if (!r) {
 			struct amdgpu_bo *abo = gem_to_amdgpu_bo(gobj);
@@ -303,7 +298,7 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
 			     struct drm_file *filp)
 {
 	struct ttm_operation_ctx ctx = { true, false };
-	struct amdgpu_device *adev = drm_to_adev(dev);
+	struct amdgpu_device *adev = dev->dev_private;
 	struct drm_amdgpu_gem_userptr *args = data;
 	struct drm_gem_object *gobj;
 	struct amdgpu_bo *bo;
@@ -592,7 +587,7 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 
 	struct drm_amdgpu_gem_va *args = data;
 	struct drm_gem_object *gobj;
-	struct amdgpu_device *adev = drm_to_adev(dev);
+	struct amdgpu_device *adev = dev->dev_private;
 	struct amdgpu_fpriv *fpriv = filp->driver_priv;
 	struct amdgpu_bo *abo;
 	struct amdgpu_bo_va *bo_va;
@@ -601,7 +596,6 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 	struct ww_acquire_ctx ticket;
 	struct list_head list, duplicates;
 	uint64_t va_flags;
-	uint64_t vm_size;
 	int r = 0;
 
 	if (args->va_address < AMDGPU_VA_RESERVED_SIZE) {
@@ -621,15 +615,6 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 	}
 
 	args->va_address &= AMDGPU_GMC_HOLE_MASK;
-
-	vm_size = adev->vm_manager.max_pfn * AMDGPU_GPU_PAGE_SIZE;
-	vm_size -= AMDGPU_VA_RESERVED_SIZE;
-	if (args->va_address + args->map_size > vm_size) {
-		dev_dbg(&dev->pdev->dev,
-			"va_address 0x%llx is in top reserved area 0x%llx\n",
-			args->va_address + args->map_size, vm_size);
-		return -EINVAL;
-	}
 
 	if ((args->flags & ~valid_flags) && (args->flags & ~prt_flags)) {
 		dev_dbg(&dev->pdev->dev, "invalid flags combination 0x%08X\n",
@@ -686,6 +671,8 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 		bo_va = NULL;
 	}
 
+	down_read(&adev->reset_sem);
+
 	switch (args->operation) {
 	case AMDGPU_VA_OP_MAP:
 		va_flags = amdgpu_gem_va_map_flags(adev, args->flags);
@@ -715,6 +702,8 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 		amdgpu_gem_va_update_vm(adev, &fpriv->vm, bo_va,
 					args->operation);
 
+	up_read(&adev->reset_sem);
+
 error_backoff:
 	ttm_eu_backoff_reservation(&ticket, &list);
 
@@ -726,7 +715,7 @@ error_unref:
 int amdgpu_gem_op_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *filp)
 {
-	struct amdgpu_device *adev = drm_to_adev(dev);
+	struct amdgpu_device *adev = dev->dev_private;
 	struct drm_amdgpu_gem_op *args = data;
 	struct drm_gem_object *gobj;
 	struct amdgpu_vm_bo_base *base;
@@ -803,7 +792,7 @@ int amdgpu_mode_dumb_create(struct drm_file *file_priv,
 			    struct drm_device *dev,
 			    struct drm_mode_create_dumb *args)
 {
-	struct amdgpu_device *adev = drm_to_adev(dev);
+	struct amdgpu_device *adev = dev->dev_private;
 	struct drm_gem_object *gobj;
 	uint32_t handle;
 	u64 flags = AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |

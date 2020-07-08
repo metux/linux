@@ -125,6 +125,42 @@ MODULE_FIRMWARE(FIRMWARE_NAVI12_DMCU);
 static int amdgpu_dm_init(struct amdgpu_device *adev);
 static void amdgpu_dm_fini(struct amdgpu_device *adev);
 
+static enum drm_mode_subconnector get_subconnector_type(struct dc_link *link)
+{
+	switch (link->dpcd_caps.dongle_type) {
+	case DISPLAY_DONGLE_NONE:
+		return DRM_MODE_SUBCONNECTOR_Native;
+	case DISPLAY_DONGLE_DP_VGA_CONVERTER:
+		return DRM_MODE_SUBCONNECTOR_VGA;
+	case DISPLAY_DONGLE_DP_DVI_CONVERTER:
+	case DISPLAY_DONGLE_DP_DVI_DONGLE:
+		return DRM_MODE_SUBCONNECTOR_DVID;
+	case DISPLAY_DONGLE_DP_HDMI_CONVERTER:
+	case DISPLAY_DONGLE_DP_HDMI_DONGLE:
+		return DRM_MODE_SUBCONNECTOR_HDMIA;
+	case DISPLAY_DONGLE_DP_HDMI_MISMATCHED_DONGLE:
+	default:
+		return DRM_MODE_SUBCONNECTOR_Unknown;
+	}
+}
+
+static void update_subconnector_property(struct amdgpu_dm_connector *aconnector)
+{
+	struct dc_link *link = aconnector->dc_link;
+	struct drm_connector *connector = &aconnector->base;
+	enum drm_mode_subconnector subconnector = DRM_MODE_SUBCONNECTOR_Unknown;
+
+	if (connector->connector_type != DRM_MODE_CONNECTOR_DisplayPort)
+		return;
+
+	if (aconnector->dc_sink)
+		subconnector = get_subconnector_type(link);
+
+	drm_object_property_set_value(&connector->base,
+			connector->dev->mode_config.dp_subconnector_property,
+			subconnector);
+}
+
 /*
  * initializes drm_device display related structures, based on the information
  * provided by DAL. The drm strcutures are: drm_crtc, drm_connector,
@@ -1660,7 +1696,7 @@ static int dm_suspend(void *handle)
 	struct amdgpu_display_manager *dm = &adev->dm;
 	int ret = 0;
 
-	if (adev->in_gpu_reset) {
+	if (amdgpu_in_reset(adev)) {
 		mutex_lock(&dm->dc_lock);
 		dm->cached_dc_state = dc_copy_state(dm->dc->current_state);
 
@@ -1846,7 +1882,7 @@ static int dm_resume(void *handle)
 	struct dc_state *dc_state;
 	int i, r, j;
 
-	if (adev->in_gpu_reset) {
+	if (amdgpu_in_reset(adev)) {
 		dc_state = dm->cached_dc_state;
 
 		r = dm_dmub_hw_init(adev);
@@ -2103,7 +2139,6 @@ void amdgpu_dm_update_connector_after_detect(
 	if (aconnector->mst_mgr.mst_state == true)
 		return;
 
-
 	sink = aconnector->dc_link->local_sink;
 	if (sink)
 		dc_sink_retain(sink);
@@ -2228,6 +2263,8 @@ void amdgpu_dm_update_connector_after_detect(
 	}
 
 	mutex_unlock(&dev->mode_config.mutex);
+
+	update_subconnector_property(aconnector);
 
 	if (sink)
 		dc_sink_release(sink);
@@ -3441,21 +3478,12 @@ static bool modeset_required(struct drm_crtc_state *crtc_state,
 			     struct dc_stream_state *new_stream,
 			     struct dc_stream_state *old_stream)
 {
-	if (!drm_atomic_crtc_needs_modeset(crtc_state))
-		return false;
-
-	if (!crtc_state->enable)
-		return false;
-
-	return crtc_state->active;
+	return crtc_state->active && drm_atomic_crtc_needs_modeset(crtc_state);
 }
 
 static bool modereset_required(struct drm_crtc_state *crtc_state)
 {
-	if (!drm_atomic_crtc_needs_modeset(crtc_state))
-		return false;
-
-	return !crtc_state->enable || !crtc_state->active;
+	return !crtc_state->active && drm_atomic_crtc_needs_modeset(crtc_state);
 }
 
 static void amdgpu_dm_encoder_destroy(struct drm_encoder *encoder)
@@ -4769,6 +4797,8 @@ amdgpu_dm_connector_detect(struct drm_connector *connector, bool force)
 		connected = (aconnector->dc_sink != NULL);
 	else
 		connected = (aconnector->base.force == DRM_FORCE_ON);
+
+	update_subconnector_property(aconnector);
 
 	return (connected ? connector_status_connected :
 			connector_status_disconnected);
@@ -8033,8 +8063,7 @@ skip_modeset:
 	 * We want to do dc stream updates that do not require a
 	 * full modeset below.
 	 */
-	if (!(enable && aconnector && new_crtc_state->enable &&
-	      new_crtc_state->active))
+	if (!(enable && aconnector && new_crtc_state->active))
 		return 0;
 	/*
 	 * Given above conditions, the dc state cannot be NULL because:

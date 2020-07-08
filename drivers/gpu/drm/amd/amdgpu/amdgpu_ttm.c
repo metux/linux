@@ -579,7 +579,7 @@ static int amdgpu_move_vram_ram(struct ttm_buffer_object *bo, bool evict,
 	/* move BO (in tmp_mem) to new_mem */
 	r = ttm_bo_move_ttm(bo, ctx, new_mem);
 out_cleanup:
-	ttm_bo_mem_put(bo, &tmp_mem);
+	ttm_resource_free(bo, &tmp_mem);
 	return r;
 }
 
@@ -626,7 +626,7 @@ static int amdgpu_move_ram_vram(struct ttm_buffer_object *bo, bool evict,
 		goto out_cleanup;
 	}
 out_cleanup:
-	ttm_bo_mem_put(bo, &tmp_mem);
+	ttm_resource_free(bo, &tmp_mem);
 	return r;
 }
 
@@ -751,12 +751,7 @@ static int amdgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_reso
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bdev);
 	struct drm_mm_node *mm_node = mem->mm_node;
-
-	mem->bus.addr = NULL;
-	mem->bus.offset = 0;
-	mem->bus.size = mem->num_pages << PAGE_SHIFT;
-	mem->bus.base = 0;
-	mem->bus.is_iomem = false;
+	size_t bus_size = (size_t)mem->num_pages << PAGE_SHIFT;
 
 	switch (mem->mem_type) {
 	case TTM_PL_SYSTEM:
@@ -767,7 +762,7 @@ static int amdgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_reso
 	case TTM_PL_VRAM:
 		mem->bus.offset = mem->start << PAGE_SHIFT;
 		/* check if it's visible */
-		if ((mem->bus.offset + mem->bus.size) > adev->gmc.visible_vram_size)
+		if ((mem->bus.offset + bus_size) > adev->gmc.visible_vram_size)
 			return -EINVAL;
 		/* Only physically contiguous buffers apply. In a contiguous
 		 * buffer, size of the first mm_node would match the number of
@@ -1205,11 +1200,11 @@ int amdgpu_ttm_alloc_gart(struct ttm_buffer_object *bo)
 		gtt->offset = (u64)tmp.start << PAGE_SHIFT;
 		r = amdgpu_ttm_gart_bind(adev, bo, flags);
 		if (unlikely(r)) {
-			ttm_bo_mem_put(bo, &tmp);
+			ttm_resource_free(bo, &tmp);
 			return r;
 		}
 
-		ttm_bo_mem_put(bo, &bo->mem);
+		ttm_resource_free(bo, &bo->mem);
 		bo->mem = tmp;
 	}
 
@@ -1408,21 +1403,26 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
  * amdgpu_ttm_tt_set_userptr - Initialize userptr GTT ttm_tt for the current
  * task
  *
- * @ttm: The ttm_tt object to bind this userptr object to
+ * @bo: The ttm_buffer_object to bind this userptr to
  * @addr:  The address in the current tasks VM space to use
  * @flags: Requirements of userptr object.
  *
  * Called by amdgpu_gem_userptr_ioctl() to bind userptr pages
  * to current task
  */
-int amdgpu_ttm_tt_set_userptr(struct ttm_tt *ttm, uint64_t addr,
-			      uint32_t flags)
+int amdgpu_ttm_tt_set_userptr(struct ttm_buffer_object *bo,
+			      uint64_t addr, uint32_t flags)
 {
-	struct amdgpu_ttm_tt *gtt = (void *)ttm;
+	struct amdgpu_ttm_tt *gtt;
 
-	if (gtt == NULL)
-		return -EINVAL;
+	if (!bo->ttm) {
+		/* TODO: We want a separate TTM object type for userptrs */
+		bo->ttm = amdgpu_ttm_tt_create(bo, 0);
+		if (bo->ttm == NULL)
+			return -ENOMEM;
+	}
 
+	gtt = (void*)bo->ttm;
 	gtt->userptr = addr;
 	gtt->userflags = flags;
 
@@ -2035,7 +2035,7 @@ void amdgpu_ttm_set_buffer_funcs_status(struct amdgpu_device *adev, bool enable)
 	uint64_t size;
 	int r;
 
-	if (!adev->mman.initialized || adev->in_gpu_reset ||
+	if (!adev->mman.initialized || amdgpu_in_reset(adev) ||
 	    adev->mman.buffer_funcs_enabled == enable)
 		return;
 

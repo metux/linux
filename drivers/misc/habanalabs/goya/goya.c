@@ -426,12 +426,14 @@ int goya_get_fixed_properties(struct hl_device *hdev)
 	prop->dmmu.start_addr = VA_DDR_SPACE_START;
 	prop->dmmu.end_addr = VA_DDR_SPACE_END;
 	prop->dmmu.page_size = PAGE_SIZE_2MB;
+	prop->dmmu.num_hops = MMU_ARCH_5_HOPS;
 
 	/* shifts and masks are the same in PMMU and DMMU */
 	memcpy(&prop->pmmu, &prop->dmmu, sizeof(prop->dmmu));
 	prop->pmmu.start_addr = VA_HOST_SPACE_START;
 	prop->pmmu.end_addr = VA_HOST_SPACE_END;
 	prop->pmmu.page_size = PAGE_SIZE_4KB;
+	prop->pmmu.num_hops = MMU_ARCH_5_HOPS;
 
 	/* PMMU and HPMMU are the same except of page size */
 	memcpy(&prop->pmmu_huge, &prop->pmmu, sizeof(prop->pmmu));
@@ -3808,8 +3810,9 @@ static int goya_parse_cb_mmu(struct hl_device *hdev,
 	parser->patched_cb_size = parser->user_cb_size +
 			sizeof(struct packet_msg_prot) * 2;
 
-	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, parser->patched_cb_size,
-			&patched_cb_handle, HL_KERNEL_ASID_ID, false);
+	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, hdev->kernel_ctx,
+				parser->patched_cb_size, false, false,
+				&patched_cb_handle);
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -3881,8 +3884,9 @@ static int goya_parse_cb_no_mmu(struct hl_device *hdev,
 	if (rc)
 		goto free_userptr;
 
-	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, parser->patched_cb_size,
-			&patched_cb_handle, HL_KERNEL_ASID_ID, false);
+	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, hdev->kernel_ctx,
+				parser->patched_cb_size, false, false,
+				&patched_cb_handle);
 	if (rc) {
 		dev_err(hdev->dev,
 			"Failed to allocate patched CB for DMA CS %d\n", rc);
@@ -4509,7 +4513,7 @@ static int goya_unmask_irq_arr(struct hl_device *hdev, u32 *irq_arr,
 	total_pkt_size = sizeof(struct cpucp_unmask_irq_arr_packet) +
 			irq_arr_size;
 
-	/* data should be aligned to 8 bytes in order to ArmCP to copy it */
+	/* data should be aligned to 8 bytes in order to CPU-CP to copy it */
 	total_pkt_size = (total_pkt_size + 0x7) & ~0x7;
 
 	/* total_pkt_size is casted to u16 later on */
@@ -4644,7 +4648,8 @@ void goya_handle_eqe(struct hl_device *hdev, struct hl_eq_entry *eq_entry)
 	case GOYA_ASYNC_EVENT_ID_L2_RAM_ECC:
 	case GOYA_ASYNC_EVENT_ID_PSOC_GPIO_05_SW_RESET:
 		goya_print_irq_info(hdev, event_type, false);
-		hl_device_reset(hdev, true, false);
+		if (hdev->hard_reset_on_fw_events)
+			hl_device_reset(hdev, true, false);
 		break;
 
 	case GOYA_ASYNC_EVENT_ID_PCIE_DEC:
@@ -5172,7 +5177,8 @@ static bool goya_is_device_idle(struct hl_device *hdev, u64 *mask,
 		is_idle &= is_eng_idle;
 
 		if (mask)
-			*mask |= !is_eng_idle << (GOYA_ENGINE_ID_DMA_0 + i);
+			*mask |= ((u64) !is_eng_idle) <<
+						(GOYA_ENGINE_ID_DMA_0 + i);
 		if (s)
 			seq_printf(s, dma_fmt, i, is_eng_idle ? "Y" : "N",
 					qm_glbl_sts0, dma_core_sts0);
@@ -5195,7 +5201,8 @@ static bool goya_is_device_idle(struct hl_device *hdev, u64 *mask,
 		is_idle &= is_eng_idle;
 
 		if (mask)
-			*mask |= !is_eng_idle << (GOYA_ENGINE_ID_TPC_0 + i);
+			*mask |= ((u64) !is_eng_idle) <<
+						(GOYA_ENGINE_ID_TPC_0 + i);
 		if (s)
 			seq_printf(s, fmt, i, is_eng_idle ? "Y" : "N",
 				qm_glbl_sts0, cmdq_glbl_sts0, tpc_cfg_sts);
@@ -5215,7 +5222,7 @@ static bool goya_is_device_idle(struct hl_device *hdev, u64 *mask,
 	is_idle &= is_eng_idle;
 
 	if (mask)
-		*mask |= !is_eng_idle << GOYA_ENGINE_ID_MME_0;
+		*mask |= ((u64) !is_eng_idle) << GOYA_ENGINE_ID_MME_0;
 	if (s) {
 		seq_printf(s, fmt, 0, is_eng_idle ? "Y" : "N", qm_glbl_sts0,
 				cmdq_glbl_sts0, mme_arch_sts);
@@ -5375,7 +5382,6 @@ static const struct hl_asic_funcs goya_funcs = {
 	.send_cpu_message = goya_send_cpu_message,
 	.get_hw_state = goya_get_hw_state,
 	.pci_bars_map = goya_pci_bars_map,
-	.set_dram_bar_base = goya_set_ddr_bar_base,
 	.init_iatu = goya_init_iatu,
 	.rreg = hl_rreg,
 	.wreg = hl_wreg,

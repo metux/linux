@@ -401,12 +401,14 @@ struct hl_info_sync_manager {
  * @parsing_drop_cnt: dropped due to error in packet parsing
  * @queue_full_drop_cnt: dropped due to queue full
  * @device_in_reset_drop_cnt: dropped due to device in reset
+ * @max_cs_in_flight_drop_cnt: dropped due to maximum CS in-flight
  */
 struct hl_cs_counters {
 	__u64 out_of_mem_drop_cnt;
 	__u64 parsing_drop_cnt;
 	__u64 queue_full_drop_cnt;
 	__u64 device_in_reset_drop_cnt;
+	__u64 max_cs_in_flight_drop_cnt;
 };
 
 struct hl_info_cs_counters {
@@ -460,6 +462,9 @@ struct hl_info_args {
 /* 2MB minus 32 bytes for 2xMSG_PROT */
 #define HL_MAX_CB_SIZE		(0x200000 - 32)
 
+/* Indicates whether the command buffer should be mapped to the device's MMU */
+#define HL_CB_FLAGS_MAP		0x1
+
 struct hl_cb_in {
 	/* Handle of CB or 0 if we want to create one */
 	__u64 cb_handle;
@@ -471,7 +476,8 @@ struct hl_cb_in {
 	__u32 cb_size;
 	/* Context ID - Currently not in use */
 	__u32 ctx_id;
-	__u32 pad;
+	/* HL_CB_FLAGS_* */
+	__u32 flags;
 };
 
 struct hl_cb_out {
@@ -854,6 +860,12 @@ struct hl_debug_args {
  * When creating a new CB, the IOCTL returns a handle of it, and the user-space
  * process needs to use that handle to mmap the buffer so it can access them.
  *
+ * In some instances, the device must access the command buffer through the
+ * device's MMU, and thus its memory should be mapped. In these cases, user can
+ * indicate the driver that such a mapping is required.
+ * The resulting device virtual address will be used internally by the driver,
+ * and won't be returned to user.
+ *
  */
 #define HL_IOCTL_CB		\
 		_IOWR('H', 0x02, union hl_cb_args)
@@ -911,6 +923,9 @@ struct hl_debug_args {
  * to wait until the handle's CS has finished executing. The user will wait
  * inside the kernel until the CS has finished or until the user-requested
  * timeout has expired.
+ *
+ * If the timeout value is 0, the driver won't sleep at all. It will check
+ * the status of the CS and return immediately
  *
  * The return value of the IOCTL is a standard Linux error code. The possible
  * values are:

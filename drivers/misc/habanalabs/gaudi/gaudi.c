@@ -441,6 +441,7 @@ static int gaudi_get_fixed_properties(struct hl_device *hdev)
 	prop->pmmu.end_addr =
 			(VA_HOST_SPACE_START + VA_HOST_SPACE_SIZE / 2) - 1;
 	prop->pmmu.page_size = PAGE_SIZE_4KB;
+	prop->pmmu.num_hops = MMU_ARCH_5_HOPS;
 
 	/* PMMU and HPMMU are the same except of page size */
 	memcpy(&prop->pmmu_huge, &prop->pmmu, sizeof(prop->pmmu));
@@ -2854,7 +2855,7 @@ static int gaudi_init_cpu_queues(struct hl_device *hdev, u32 cpu_timeout)
 
 	if (err) {
 		dev_err(hdev->dev,
-			"Failed to communicate with ARM CPU (ArmCP timeout)\n");
+			"Failed to communicate with Device CPU (CPU-CP timeout)\n");
 		return -EIO;
 	}
 
@@ -4113,8 +4114,9 @@ static int gaudi_parse_cb_mmu(struct hl_device *hdev,
 	parser->patched_cb_size = parser->user_cb_size +
 			sizeof(struct packet_msg_prot) * 2;
 
-	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, parser->patched_cb_size,
-			&patched_cb_handle, HL_KERNEL_ASID_ID, false);
+	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, hdev->kernel_ctx,
+				parser->patched_cb_size, false, false,
+				&patched_cb_handle);
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -4186,8 +4188,9 @@ static int gaudi_parse_cb_no_mmu(struct hl_device *hdev,
 	if (rc)
 		goto free_userptr;
 
-	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, parser->patched_cb_size,
-			&patched_cb_handle, HL_KERNEL_ASID_ID, false);
+	rc = hl_cb_create(hdev, &hdev->kernel_cb_mgr, hdev->kernel_ctx,
+				parser->patched_cb_size, false, false,
+				&patched_cb_handle);
 	if (rc) {
 		dev_err(hdev->dev,
 			"Failed to allocate patched CB for DMA CS %d\n", rc);
@@ -5616,7 +5619,7 @@ static bool gaudi_tpc_read_interrupts(struct hl_device *hdev, u8 tpc_id,
 	bool soft_reset_required = false;
 
 	/* Accessing the TPC_INTR_CAUSE registers requires disabling the clock
-	 * gating, and thus cannot be done in ArmCP and should be done instead
+	 * gating, and thus cannot be done in CPU-CP and should be done instead
 	 * by the driver.
 	 */
 
@@ -6113,7 +6116,7 @@ static bool gaudi_is_device_idle(struct hl_device *hdev, u64 *mask,
 		is_idle &= is_eng_idle;
 
 		if (mask)
-			*mask |= !is_eng_idle <<
+			*mask |= ((u64) !is_eng_idle) <<
 					(GAUDI_ENGINE_ID_DMA_0 + dma_id);
 		if (s)
 			seq_printf(s, fmt, dma_id,
@@ -6136,7 +6139,8 @@ static bool gaudi_is_device_idle(struct hl_device *hdev, u64 *mask,
 		is_idle &= is_eng_idle;
 
 		if (mask)
-			*mask |= !is_eng_idle << (GAUDI_ENGINE_ID_TPC_0 + i);
+			*mask |= ((u64) !is_eng_idle) <<
+						(GAUDI_ENGINE_ID_TPC_0 + i);
 		if (s)
 			seq_printf(s, fmt, i,
 				is_eng_idle ? "Y" : "N",
@@ -6164,7 +6168,8 @@ static bool gaudi_is_device_idle(struct hl_device *hdev, u64 *mask,
 		is_idle &= is_eng_idle;
 
 		if (mask)
-			*mask |= !is_eng_idle << (GAUDI_ENGINE_ID_MME_0 + i);
+			*mask |= ((u64) !is_eng_idle) <<
+						(GAUDI_ENGINE_ID_MME_0 + i);
 		if (s) {
 			if (!is_slave)
 				seq_printf(s, fmt, i,
@@ -6640,7 +6645,6 @@ static const struct hl_asic_funcs gaudi_funcs = {
 	.send_cpu_message = gaudi_send_cpu_message,
 	.get_hw_state = gaudi_get_hw_state,
 	.pci_bars_map = gaudi_pci_bars_map,
-	.set_dram_bar_base = gaudi_set_hbm_bar_base,
 	.init_iatu = gaudi_init_iatu,
 	.rreg = hl_rreg,
 	.wreg = hl_wreg,

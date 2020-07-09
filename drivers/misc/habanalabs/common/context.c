@@ -37,6 +37,7 @@ static void hl_ctx_fini(struct hl_ctx *ctx)
 		if ((hdev->in_debug) && (hdev->compute_ctx == ctx))
 			hl_device_set_debug_mode(hdev, false);
 
+		hl_cb_va_pool_fini(ctx);
 		hl_vm_ctx_fini(ctx);
 		hl_asid_free(hdev, ctx->asid);
 	} else {
@@ -138,28 +139,47 @@ int hl_ctx_init(struct hl_device *hdev, struct hl_ctx *ctx, bool is_kernel_ctx)
 		rc = hl_mmu_ctx_init(ctx);
 		if (rc) {
 			dev_err(hdev->dev, "Failed to init mmu ctx module\n");
-			goto mem_ctx_err;
+			goto err_free_cs_pending;
 		}
 	} else {
 		ctx->asid = hl_asid_alloc(hdev);
 		if (!ctx->asid) {
 			dev_err(hdev->dev, "No free ASID, failed to create context\n");
-			return -ENOMEM;
+			rc = -ENOMEM;
+			goto err_free_cs_pending;
 		}
 
 		rc = hl_vm_ctx_init(ctx);
 		if (rc) {
 			dev_err(hdev->dev, "Failed to init mem ctx module\n");
 			rc = -ENOMEM;
-			goto mem_ctx_err;
+			goto err_asid_free;
+		}
+
+		rc = hl_cb_va_pool_init(ctx);
+		if (rc) {
+			dev_err(hdev->dev,
+				"Failed to init VA pool for mapped CB\n");
+			goto err_vm_ctx_fini;
+		}
+
+		rc = hdev->asic_funcs->ctx_init(ctx);
+		if (rc) {
+			dev_err(hdev->dev, "ctx_init failed\n");
+			goto err_cb_va_pool_fini;
 		}
 	}
 
 	return 0;
 
-mem_ctx_err:
-	if (ctx->asid != HL_KERNEL_ASID_ID)
-		hl_asid_free(hdev, ctx->asid);
+err_cb_va_pool_fini:
+	hl_cb_va_pool_fini(ctx);
+err_vm_ctx_fini:
+	hl_vm_ctx_fini(ctx);
+err_asid_free:
+	hl_asid_free(hdev, ctx->asid);
+err_free_cs_pending:
+	kfree(ctx->cs_pending);
 
 	return rc;
 }

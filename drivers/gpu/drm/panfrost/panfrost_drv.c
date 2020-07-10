@@ -14,7 +14,6 @@
 #include <drm/drm_utils.h>
 
 #include "panfrost_device.h"
-#include "panfrost_devfreq.h"
 #include "panfrost_gem.h"
 #include "panfrost_mmu.h"
 #include "panfrost_job.h"
@@ -479,6 +478,7 @@ static void panfrost_drm_mm_color_adjust(const struct drm_mm_node *node,
 static int
 panfrost_open(struct drm_device *dev, struct drm_file *file)
 {
+	int ret;
 	struct panfrost_device *pfdev = dev->dev_private;
 	struct panfrost_file_priv *panfrost_priv;
 
@@ -489,7 +489,28 @@ panfrost_open(struct drm_device *dev, struct drm_file *file)
 	panfrost_priv->pfdev = pfdev;
 	file->driver_priv = panfrost_priv;
 
-	return panfrost_job_open(panfrost_priv);
+	spin_lock_init(&panfrost_priv->mm_lock);
+
+	/* 4G enough for now. can be 48-bit */
+	drm_mm_init(&panfrost_priv->mm, SZ_32M >> PAGE_SHIFT, (SZ_4G - SZ_32M) >> PAGE_SHIFT);
+	panfrost_priv->mm.color_adjust = panfrost_drm_mm_color_adjust;
+
+	ret = panfrost_mmu_pgtable_alloc(panfrost_priv);
+	if (ret)
+		goto err_pgtable;
+
+	ret = panfrost_job_open(panfrost_priv);
+	if (ret)
+		goto err_job;
+
+	return 0;
+
+err_job:
+	panfrost_mmu_pgtable_free(panfrost_priv);
+err_pgtable:
+	drm_mm_takedown(&panfrost_priv->mm);
+	kfree(panfrost_priv);
+	return ret;
 }
 
 static void
@@ -500,6 +521,8 @@ panfrost_postclose(struct drm_device *dev, struct drm_file *file)
 	panfrost_perfcnt_close(file);
 	panfrost_job_close(panfrost_priv);
 
+	panfrost_mmu_pgtable_free(panfrost_priv);
+	drm_mm_takedown(&panfrost_priv->mm);
 	kfree(panfrost_priv);
 }
 
@@ -520,6 +543,11 @@ static const struct drm_ioctl_desc panfrost_drm_driver_ioctls[] = {
 
 DEFINE_DRM_GEM_FOPS(panfrost_drm_driver_fops);
 
+/*
+ * Panfrost driver version:
+ * - 1.0 - initial interface
+ * - 1.1 - adds HEAP and NOEXEC flags for CREATE_BO
+ */
 static struct drm_driver panfrost_drm_driver = {
 	.driver_features	= DRIVER_RENDER | DRIVER_GEM | DRIVER_SYNCOBJ,
 	.open			= panfrost_open,
@@ -531,7 +559,7 @@ static struct drm_driver panfrost_drm_driver = {
 	.desc			= "panfrost DRM",
 	.date			= "20180908",
 	.major			= 1,
-	.minor			= 0,
+	.minor			= 1,
 
 	.gem_create_object	= panfrost_gem_create_object,
 	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
@@ -567,17 +595,8 @@ static int panfrost_probe(struct platform_device *pdev)
 	ddev->dev_private = pfdev;
 	pfdev->ddev = ddev;
 
-	spin_lock_init(&pfdev->mm_lock);
 	mutex_init(&pfdev->shrinker_lock);
 	INIT_LIST_HEAD(&pfdev->shrinker_list);
-
-	/* 4G enough for now. can be 48-bit */
-	drm_mm_init(&pfdev->mm, SZ_32M >> PAGE_SHIFT, (SZ_4G - SZ_32M) >> PAGE_SHIFT);
-	pfdev->mm.color_adjust = panfrost_drm_mm_color_adjust;
-
-	pm_runtime_use_autosuspend(pfdev->dev);
-	pm_runtime_set_autosuspend_delay(pfdev->dev, 50); /* ~3 frames */
-	pm_runtime_enable(pfdev->dev);
 
 	err = panfrost_device_init(pfdev);
 	if (err) {
@@ -586,12 +605,11 @@ static int panfrost_probe(struct platform_device *pdev)
 		goto err_out0;
 	}
 
-	err = panfrost_devfreq_init(pfdev);
-	if (err) {
-		if (err != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Fatal error during devfreq init\n");
-		goto err_out1;
-	}
+	pm_runtime_set_active(pfdev->dev);
+	pm_runtime_mark_last_busy(pfdev->dev);
+	pm_runtime_enable(pfdev->dev);
+	pm_runtime_set_autosuspend_delay(pfdev->dev, 50); /* ~3 frames */
+	pm_runtime_use_autosuspend(pfdev->dev);
 
 	/*
 	 * Register the DRM device with the core and the connectors with
@@ -606,9 +624,9 @@ static int panfrost_probe(struct platform_device *pdev)
 	return 0;
 
 err_out1:
+	pm_runtime_disable(pfdev->dev);
 	panfrost_device_fini(pfdev);
 err_out0:
-	pm_runtime_disable(pfdev->dev);
 	drm_dev_put(ddev);
 	return err;
 }
@@ -620,10 +638,12 @@ static int panfrost_remove(struct platform_device *pdev)
 
 	drm_dev_unregister(ddev);
 	panfrost_gem_shrinker_cleanup(ddev);
+
 	pm_runtime_get_sync(pfdev->dev);
-	pm_runtime_put_sync_autosuspend(pfdev->dev);
-	pm_runtime_disable(pfdev->dev);
 	panfrost_device_fini(pfdev);
+	pm_runtime_put_sync_suspend(pfdev->dev);
+	pm_runtime_disable(pfdev->dev);
+
 	drm_dev_put(ddev);
 	return 0;
 }

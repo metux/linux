@@ -300,9 +300,7 @@ Description:
 
 		Valid values: 0 - 100 (percent)
 
-<<<<<<< HEAD
-=======
-What:		/sys/class/power_supply/<supply_name>/capacity_level
+What:		/sys/class/power_supply/<supply_name>/capacity_error_margin
 Date:		April 2019
 Contact:	linux-pm@vger.kernel.org
 Description:
@@ -318,7 +316,6 @@ Description:
 
 		Valid values: 0 - 100 (percent)
 
->>>>>>> f038b084b4015 (docs: ABI: cleanup several ABI documents)
 What:		/sys/class/power_supply/<supply_name>/capacity_level
 Date:		June 2009
 Contact:	linux-pm@vger.kernel.org
@@ -709,8 +706,6 @@ Description:
 
 		- 1: enabled
 		- 0: disabled
-<<<<<<< HEAD
-=======
 
 What:		/sys/class/power_supply/<supply_name>/manufacture_year
 Date:		January 2020
@@ -741,4 +736,24 @@ Description:
 
 		Access: Read
 		Valid values: 1-31
->>>>>>> f038b084b4015 (docs: ABI: cleanup several ABI documents)
+
+What:		/sys/class/power_supply/<supply_name>/quick_charge_type
+Date:		Jul 2020
+Contact:	Fei Jiang <jiangfei1@xiaomi.com>
+		Description:
+		Reports the kind of quick charge type based on different adapter power.
+		Different quick charge type represent different charging power.
+		QUICK_CHARGE_NORMAL : Charging Power <= 10W
+		QUICK_CHARGE_FAST : 10W < Charging Power <= 20W
+		QUICK_CHARGE_FLASH : 20W < Charging Power <= 30W
+		QUICK_CHARGE_TURBE : 30W < Charging Power <= 50W
+		QUICK_CHARGE_SUPER : Charging Power > 50W
+
+		Access: Read-Only
+		Valid values:
+			0: QUICK_CHARGE_NORMAL,
+			1: QUICK_CHARGE_FAST,
+			2: QUICK_CHARGE_FLASH,
+			3: QUICK_CHARGE_TURBE,
+			4: QUICK_CHARGE_SUPER.
+

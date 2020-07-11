@@ -60,8 +60,8 @@ struct linux_binprm {
 	int unsafe;		/* how unsafe this exec is (mask of LSM_UNSAFE_*) */
 	unsigned int per_clear;	/* bits to clear in current->personality */
 	int argc, envc;
-	const char * filename;	/* Name of binary as seen by procps */
-	const char * interp;	/* Name of the binary really executed. Most
+	const char *filename;	/* Name of binary as seen by procps */
+	const char *interp;	/* Name of the binary really executed. Most
 				   of the time same as filename, but could be
 				   different for binfmt_{misc,script} */
 	unsigned interp_flags;

@@ -123,13 +123,9 @@ static int hl_device_release_ctrl(struct inode *inode, struct file *filp)
 static int hl_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct hl_fpriv *hpriv = filp->private_data;
-	unsigned long vm_pgoff;
 
-	vm_pgoff = vma->vm_pgoff;
-	vma->vm_pgoff = HL_MMAP_OFFSET_VALUE_GET(vm_pgoff);
-
-	switch (vm_pgoff & HL_MMAP_TYPE_MASK) {
-	case HL_MMAP_TYPE_CB:
+	if ((vma->vm_pgoff & HL_MMAP_CB_MASK) == HL_MMAP_CB_MASK) {
+		vma->vm_pgoff ^= HL_MMAP_CB_MASK;
 		return hl_cb_mmap(hpriv, vma);
 	}
 
@@ -231,16 +227,16 @@ delete_cdev_device:
 
 static void device_cdev_sysfs_del(struct hl_device *hdev)
 {
-	if (!hdev->cdev_sysfs_created)
-		goto put_devices;
+	/* device_release() won't be called so must free devices explicitly */
+	if (!hdev->cdev_sysfs_created) {
+		kfree(hdev->dev_ctrl);
+		kfree(hdev->dev);
+		return;
+	}
 
 	hl_sysfs_fini(hdev);
 	cdev_device_del(&hdev->cdev_ctrl, hdev->dev_ctrl);
 	cdev_device_del(&hdev->cdev, hdev->dev);
-
-put_devices:
-	put_device(hdev->dev);
-	put_device(hdev->dev_ctrl);
 }
 
 /*
@@ -290,9 +286,9 @@ static int device_early_init(struct hl_device *hdev)
 	}
 
 	for (i = 0 ; i < hdev->asic_prop.completion_queues_count ; i++) {
-		snprintf(workq_name, 32, "hl-free-jobs-%u", (u32) i);
+		snprintf(workq_name, 32, "hl-free-jobs-%u", i);
 		hdev->cq_wq[i] = create_singlethread_workqueue(workq_name);
-		if (hdev->cq_wq[i] == NULL) {
+		if (hdev->cq_wq == NULL) {
 			dev_err(hdev->dev, "Failed to allocate CQ workqueue\n");
 			rc = -ENOMEM;
 			goto free_cq_wq;
@@ -321,10 +317,6 @@ static int device_early_init(struct hl_device *hdev)
 		goto free_chip_info;
 	}
 
-	rc = hl_mmu_if_set_funcs(hdev);
-	if (rc)
-		goto free_idle_busy_ts_arr;
-
 	hl_cb_mgr_init(&hdev->kernel_cb_mgr);
 
 	mutex_init(&hdev->send_cpu_message_lock);
@@ -338,8 +330,6 @@ static int device_early_init(struct hl_device *hdev)
 
 	return 0;
 
-free_idle_busy_ts_arr:
-	kfree(hdev->idle_busy_ts_arr);
 free_chip_info:
 	kfree(hdev->hl_chip_info);
 free_eq_wq:
@@ -881,7 +871,7 @@ int hl_device_reset(struct hl_device *hdev, bool hard_reset,
 			 * so this message won't be sent
 			 */
 			if (hl_fw_send_pci_access_msg(hdev,
-					CPUCP_PACKET_DISABLE_PCI_ACCESS))
+					ARMCP_PACKET_DISABLE_PCI_ACCESS))
 				dev_warn(hdev->dev,
 					"Failed to disable PCI access by F/W\n");
 		}
@@ -967,13 +957,14 @@ again:
 		flush_workqueue(hdev->eq_wq);
 	}
 
+	/* Release kernel context */
+	if ((hard_reset) && (hl_ctx_put(hdev->kernel_ctx) == 1))
+		hdev->kernel_ctx = NULL;
+
 	/* Reset the H/W. It will be in idle state after this returns */
 	hdev->asic_funcs->hw_fini(hdev, hard_reset);
 
 	if (hard_reset) {
-		/* Release kernel context */
-		if (hl_ctx_put(hdev->kernel_ctx) == 1)
-			hdev->kernel_ctx = NULL;
 		hl_vm_fini(hdev);
 		hl_mmu_fini(hdev);
 		hl_eq_reset(hdev, &hdev->event_queue);
@@ -1042,18 +1033,14 @@ again:
 		}
 	}
 
-	/* Device is now enabled as part of the initialization requires
-	 * communication with the device firmware to get information that
-	 * is required for the initialization itself
-	 */
-	hdev->disabled = false;
-
 	rc = hdev->asic_funcs->hw_init(hdev);
 	if (rc) {
 		dev_err(hdev->dev,
 			"failed to initialize the H/W after reset\n");
 		goto out_err;
 	}
+
+	hdev->disabled = false;
 
 	/* Check that the communication with the device is working */
 	rc = hdev->asic_funcs->test_queues(hdev);
@@ -1078,7 +1065,7 @@ again:
 			goto out_err;
 		}
 
-		hl_set_max_power(hdev);
+		hl_set_max_power(hdev, hdev->max_power);
 	} else {
 		rc = hdev->asic_funcs->soft_reset_late_init(hdev);
 		if (rc) {
@@ -1274,18 +1261,14 @@ int hl_device_init(struct hl_device *hdev, struct class *hclass)
 	 */
 	add_cdev_sysfs_on_err = true;
 
-	/* Device is now enabled as part of the initialization requires
-	 * communication with the device firmware to get information that
-	 * is required for the initialization itself
-	 */
-	hdev->disabled = false;
-
 	rc = hdev->asic_funcs->hw_init(hdev);
 	if (rc) {
 		dev_err(hdev->dev, "failed to initialize the H/W\n");
 		rc = 0;
 		goto out_disabled;
 	}
+
+	hdev->disabled = false;
 
 	/* Check that the communication with the device is working */
 	rc = hdev->asic_funcs->test_queues(hdev);
@@ -1327,11 +1310,6 @@ int hl_device_init(struct hl_device *hdev, struct class *hclass)
 		goto out_disabled;
 	}
 
-	/* Need to call this again because the max power might change,
-	 * depending on card type for certain ASICs
-	 */
-	hl_set_max_power(hdev);
-
 	/*
 	 * hl_hwmon_init() must be called after device_late_init(), because only
 	 * there we get the information from the device about which
@@ -1371,9 +1349,9 @@ sw_fini:
 early_fini:
 	device_early_fini(hdev);
 free_dev_ctrl:
-	put_device(hdev->dev_ctrl);
+	kfree(hdev->dev_ctrl);
 free_dev:
-	put_device(hdev->dev);
+	kfree(hdev->dev);
 out_disabled:
 	hdev->disabled = true;
 	if (add_cdev_sysfs_on_err)
@@ -1464,12 +1442,12 @@ void hl_device_fini(struct hl_device *hdev)
 
 	hl_cb_pool_fini(hdev);
 
-	/* Reset the H/W. It will be in idle state after this returns */
-	hdev->asic_funcs->hw_fini(hdev, true);
-
 	/* Release kernel context */
 	if ((hdev->kernel_ctx) && (hl_ctx_put(hdev->kernel_ctx) != 1))
 		dev_err(hdev->dev, "kernel ctx is still alive\n");
+
+	/* Reset the H/W. It will be in idle state after this returns */
+	hdev->asic_funcs->hw_fini(hdev, true);
 
 	hl_vm_fini(hdev);
 

@@ -9,11 +9,11 @@
 #define GAUDIP_H_
 
 #include <uapi/misc/habanalabs.h>
-#include "../common/habanalabs.h"
-#include "../include/common/hl_boot_if.h"
-#include "../include/gaudi/gaudi_packets.h"
-#include "../include/gaudi/gaudi.h"
-#include "../include/gaudi/gaudi_async_events.h"
+#include "habanalabs.h"
+#include "include/common/hl_boot_if.h"
+#include "include/gaudi/gaudi_packets.h"
+#include "include/gaudi/gaudi.h"
+#include "include/gaudi/gaudi_async_events.h"
 
 #define NUMBER_OF_EXT_HW_QUEUES		12
 #define NUMBER_OF_CMPLT_QUEUES		NUMBER_OF_EXT_HW_QUEUES
@@ -41,8 +41,7 @@
 
 #define GAUDI_MAX_CLK_FREQ		2200000000ull	/* 2200 MHz */
 
-#define MAX_POWER_DEFAULT_PCI		200000		/* 200W */
-#define MAX_POWER_DEFAULT_PMC		350000		/* 350W */
+#define MAX_POWER_DEFAULT		200000		/* 200W */
 
 #define GAUDI_CPU_TIMEOUT_USEC		15000000	/* 15s */
 

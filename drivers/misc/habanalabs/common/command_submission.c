@@ -370,7 +370,7 @@ static void cs_do_release(struct kref *ref)
 static void cs_timedout(struct work_struct *work)
 {
 	struct hl_device *hdev;
-	int rc;
+	int ctx_asid, rc;
 	struct hl_cs *cs = container_of(work, struct hl_cs,
 						 work_tdr.work);
 	rc = cs_get_unless_zero(cs);
@@ -386,6 +386,7 @@ static void cs_timedout(struct work_struct *work)
 	cs->timedout = true;
 
 	hdev = cs->ctx->hdev;
+	ctx_asid = cs->ctx->asid;
 
 	dev_err(hdev->dev,
 		"Command submission %llu has not finished in time!\n",
@@ -808,14 +809,6 @@ static int cs_ioctl_signal_wait(struct hl_fpriv *hpriv, enum hl_cs_type cs_type,
 
 	/* currently it is guaranteed to have only one chunk */
 	chunk = &cs_chunk_array[0];
-
-	if (chunk->queue_index >= hdev->asic_prop.max_queues) {
-		dev_err(hdev->dev, "Queue index %d is invalid\n",
-			chunk->queue_index);
-		rc = -EINVAL;
-		goto free_cs_chunk_array;
-	}
-
 	q_idx = chunk->queue_index;
 	hw_queue_prop = &hdev->asic_prop.hw_queues_props[q_idx];
 	q_type = hw_queue_prop->type;
@@ -926,19 +919,18 @@ static int cs_ioctl_signal_wait(struct hl_fpriv *hpriv, enum hl_cs_type cs_type,
 		goto put_cs;
 	}
 
-	if (cs->type == CS_TYPE_WAIT)
-		cb_size = hdev->asic_funcs->get_wait_cb_size(hdev);
-	else
-		cb_size = hdev->asic_funcs->get_signal_cb_size(hdev);
-
-	cb = hl_cb_kernel_create(hdev, cb_size,
-				q_type == QUEUE_TYPE_HW && hdev->mmu_enable);
+	cb = hl_cb_kernel_create(hdev, PAGE_SIZE);
 	if (!cb) {
 		ctx->cs_counters.out_of_mem_drop_cnt++;
 		kfree(job);
 		rc = -EFAULT;
 		goto put_cs;
 	}
+
+	if (cs->type == CS_TYPE_WAIT)
+		cb_size = hdev->asic_funcs->get_wait_cb_size(hdev);
+	else
+		cb_size = hdev->asic_funcs->get_signal_cb_size(hdev);
 
 	job->id = 0;
 	job->cs = cs;

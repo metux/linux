@@ -6,7 +6,7 @@
  */
 
 #include "habanalabs.h"
-#include "../include/hw_ip/pci/pci_general.h"
+#include "include/hw_ip/pci/pci_general.h"
 
 #include <linux/pci.h>
 #include <linux/bitfield.h>
@@ -227,7 +227,7 @@ int hl_pci_set_inbound_region(struct hl_device *hdev, u8 region,
 	}
 
 	/* Point to the specified address */
-	rc |= hl_pci_iatu_write(hdev, offset + 0x14,
+	rc = hl_pci_iatu_write(hdev, offset + 0x14,
 			lower_32_bits(pci_region->addr));
 	rc |= hl_pci_iatu_write(hdev, offset + 0x18,
 			upper_32_bits(pci_region->addr));
@@ -369,17 +369,15 @@ int hl_pci_init(struct hl_device *hdev)
 	rc = hdev->asic_funcs->init_iatu(hdev);
 	if (rc) {
 		dev_err(hdev->dev, "Failed to initialize iATU\n");
-		goto unmap_pci_bars;
+		goto disable_device;
 	}
 
 	rc = hl_pci_set_dma_mask(hdev);
 	if (rc)
-		goto unmap_pci_bars;
+		goto disable_device;
 
 	return 0;
 
-unmap_pci_bars:
-	hl_pci_bars_unmap(hdev);
 disable_device:
 	pci_clear_master(pdev);
 	pci_disable_device(pdev);

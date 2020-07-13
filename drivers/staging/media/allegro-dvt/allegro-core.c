@@ -100,9 +100,11 @@ struct allegro_buffer {
 	struct list_head head;
 };
 
+struct allegro_dev;
 struct allegro_channel;
 
 struct allegro_mbox {
+	struct allegro_dev *dev;
 	unsigned int head;
 	unsigned int tail;
 	unsigned int data;
@@ -129,8 +131,8 @@ struct allegro_dev {
 	struct completion init_complete;
 
 	/* The mailbox interface */
-	struct allegro_mbox mbox_command;
-	struct allegro_mbox mbox_status;
+	struct allegro_mbox *mbox_command;
+	struct allegro_mbox *mbox_status;
 
 	/*
 	 * The downstream driver limits the users to 64 users, thus I can use
@@ -749,12 +751,20 @@ static void allegro_free_buffer(struct allegro_dev *dev,
  * Mailbox interface to send messages to the MCU.
  */
 
-static int allegro_mbox_init(struct allegro_dev *dev,
-			     struct allegro_mbox *mbox,
-			     unsigned int base, size_t size)
+static void allegro_mcu_interrupt(struct allegro_dev *dev);
+static void allegro_handle_message(struct allegro_dev *dev,
+				   union mcu_msg_response *msg);
+
+static struct allegro_mbox *allegro_mbox_init(struct allegro_dev *dev,
+					      unsigned int base, size_t size)
 {
+	struct allegro_mbox *mbox;
+
+	mbox = devm_kmalloc(&dev->plat_dev->dev, sizeof(*mbox), GFP_KERNEL);
 	if (!mbox)
-		return -EINVAL;
+		return ERR_PTR(-ENOMEM);
+
+	mbox->dev = dev;
 
 	mbox->head = base;
 	mbox->tail = base + 0x4;
@@ -765,7 +775,7 @@ static int allegro_mbox_init(struct allegro_dev *dev,
 	regmap_write(dev->sram, mbox->head, 0);
 	regmap_write(dev->sram, mbox->tail, 0);
 
-	return 0;
+	return mbox;
 }
 
 static int allegro_mbox_write(struct allegro_dev *dev,
@@ -879,9 +889,50 @@ static ssize_t allegro_mbox_read(struct allegro_dev *dev,
 	return size;
 }
 
-static void allegro_mcu_interrupt(struct allegro_dev *dev)
+/**
+ * allegro_mbox_send() - Send a message via the mailbox
+ * @mbox: the mailbox which is used to send the message
+ * @msg: the message to send
+ */
+static int allegro_mbox_send(struct allegro_mbox *mbox, void *msg)
 {
-	regmap_write(dev->regmap, AL5_MCU_INTERRUPT, BIT(0));
+	struct allegro_dev *dev = mbox->dev;
+	struct mcu_msg_header *header = msg;
+	ssize_t size = sizeof(*header) + header->length;
+	int err;
+
+	err = allegro_mbox_write(dev, mbox, msg, size);
+	if (err)
+		goto out;
+
+	allegro_mcu_interrupt(dev);
+
+out:
+	return err;
+}
+
+/**
+ * allegro_mbox_notify() - Notify the mailbox about a new message
+ * @mbox: The allegro_mbox to notify
+ */
+static void allegro_mbox_notify(struct allegro_mbox *mbox)
+{
+	struct allegro_dev *dev = mbox->dev;
+	union mcu_msg_response *msg;
+	ssize_t size;
+
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
+	if (!msg)
+		return;
+
+	size = allegro_mbox_read(dev, mbox, msg, sizeof(*msg));
+	if (size < 0)
+		goto out;
+
+	allegro_handle_message(dev, msg);
+
+out:
+	kfree(msg);
 }
 
 static void allegro_mcu_send_init(struct allegro_dev *dev,
@@ -902,8 +953,7 @@ static void allegro_mcu_send_init(struct allegro_dev *dev,
 	msg.l2_cache[1] = -1;
 	msg.l2_cache[2] = -1;
 
-	allegro_mbox_write(dev, &dev->mbox_command, &msg, sizeof(msg));
-	allegro_mcu_interrupt(dev);
+	allegro_mbox_send(dev->mbox_command, &msg);
 }
 
 static u32 v4l2_pixelformat_to_mcu_format(u32 pixelformat)
@@ -1070,8 +1120,7 @@ static int allegro_mcu_send_create_channel(struct allegro_dev *dev,
 	msg.subframe_latency = 0x00000000;
 	msg.lda_control_mode = 0x700d0000;
 
-	allegro_mbox_write(dev, &dev->mbox_command, &msg, sizeof(msg));
-	allegro_mcu_interrupt(dev);
+	allegro_mbox_send(dev->mbox_command, &msg);
 
 	return 0;
 }
@@ -1088,8 +1137,7 @@ static int allegro_mcu_send_destroy_channel(struct allegro_dev *dev,
 
 	msg.channel_id = channel->mcu_channel_id;
 
-	allegro_mbox_write(dev, &dev->mbox_command, &msg, sizeof(msg));
-	allegro_mcu_interrupt(dev);
+	allegro_mbox_send(dev->mbox_command, &msg);
 
 	return 0;
 }
@@ -1113,8 +1161,7 @@ static int allegro_mcu_send_put_stream_buffer(struct allegro_dev *dev,
 	msg.offset = ENCODER_STREAM_OFFSET;
 	msg.stream_id = 0; /* copied to mcu_msg_encode_frame_response */
 
-	allegro_mbox_write(dev, &dev->mbox_command, &msg, sizeof(msg));
-	allegro_mcu_interrupt(dev);
+	allegro_mbox_send(dev->mbox_command, &msg);
 
 	return 0;
 }
@@ -1141,8 +1188,7 @@ static int allegro_mcu_send_encode_frame(struct allegro_dev *dev,
 	msg.ep2 = 0x0;
 	msg.ep2_v = msg.ep2 | MCU_CACHE_OFFSET;
 
-	allegro_mbox_write(dev, &dev->mbox_command, &msg, sizeof(msg));
-	allegro_mcu_interrupt(dev);
+	allegro_mbox_send(dev->mbox_command, &msg);
 
 	return 0;
 }
@@ -1205,12 +1251,8 @@ static int allegro_mcu_push_buffer_internal(struct allegro_channel *channel,
 		buffer++;
 	}
 
-	err = allegro_mbox_write(dev, &dev->mbox_command, msg, size);
-	if (err)
-		goto out;
-	allegro_mcu_interrupt(dev);
+	err = allegro_mbox_send(dev->mbox_command, msg);
 
-out:
 	kfree(msg);
 	return err;
 }
@@ -1726,51 +1768,28 @@ allegro_handle_encode_frame(struct allegro_dev *dev,
 	return 0;
 }
 
-static int allegro_receive_message(struct allegro_dev *dev)
+static void allegro_handle_message(struct allegro_dev *dev,
+				   union mcu_msg_response *msg)
 {
-	union mcu_msg_response *msg;
-	ssize_t size;
-	int err = 0;
-
-	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	size = allegro_mbox_read(dev, &dev->mbox_status, msg, sizeof(*msg));
-	if (size < sizeof(msg->header)) {
-		v4l2_err(&dev->v4l2_dev,
-			 "invalid mbox message (%zd): must be at least %zu\n",
-			 size, sizeof(msg->header));
-		err = -EINVAL;
-		goto out;
-	}
-
 	switch (msg->header.type) {
 	case MCU_MSG_TYPE_INIT:
-		err = allegro_handle_init(dev, &msg->init);
+		allegro_handle_init(dev, &msg->init);
 		break;
 	case MCU_MSG_TYPE_CREATE_CHANNEL:
-		err = allegro_handle_create_channel(dev, &msg->create_channel);
+		allegro_handle_create_channel(dev, &msg->create_channel);
 		break;
 	case MCU_MSG_TYPE_DESTROY_CHANNEL:
-		err = allegro_handle_destroy_channel(dev,
-						     &msg->destroy_channel);
+		allegro_handle_destroy_channel(dev, &msg->destroy_channel);
 		break;
 	case MCU_MSG_TYPE_ENCODE_FRAME:
-		err = allegro_handle_encode_frame(dev, &msg->encode_frame);
+		allegro_handle_encode_frame(dev, &msg->encode_frame);
 		break;
 	default:
 		v4l2_warn(&dev->v4l2_dev,
 			  "%s: unknown message %s\n",
 			  __func__, msg_type_name(msg->header.type));
-		err = -EINVAL;
 		break;
 	}
-
-out:
-	kfree(msg);
-
-	return err;
 }
 
 static irqreturn_t allegro_hardirq(int irq, void *data)
@@ -1791,7 +1810,7 @@ static irqreturn_t allegro_irq_thread(int irq, void *data)
 {
 	struct allegro_dev *dev = data;
 
-	allegro_receive_message(dev);
+	allegro_mbox_notify(dev->mbox_status);
 
 	return IRQ_HANDLED;
 }
@@ -1930,6 +1949,11 @@ static int allegro_mcu_reset(struct allegro_dev *dev)
 		return err;
 
 	return allegro_mcu_wait_for_sleep(dev);
+}
+
+static void allegro_mcu_interrupt(struct allegro_dev *dev)
+{
+	regmap_write(dev->regmap, AL5_MCU_INTERRUPT, BIT(0));
 }
 
 static void allegro_destroy_channel(struct allegro_channel *channel)
@@ -2737,10 +2761,15 @@ static int allegro_mcu_hw_init(struct allegro_dev *dev,
 {
 	int err;
 
-	allegro_mbox_init(dev, &dev->mbox_command,
-			  info->mailbox_cmd, info->mailbox_size);
-	allegro_mbox_init(dev, &dev->mbox_status,
-			  info->mailbox_status, info->mailbox_size);
+	dev->mbox_command = allegro_mbox_init(dev, info->mailbox_cmd,
+					      info->mailbox_size);
+	dev->mbox_status = allegro_mbox_init(dev, info->mailbox_status,
+					     info->mailbox_size);
+	if (!dev->mbox_command || !dev->mbox_status) {
+		v4l2_err(&dev->v4l2_dev,
+			 "failed to initialize mailboxes\n");
+		return -EIO;
+	}
 
 	allegro_mcu_enable_interrupts(dev);
 

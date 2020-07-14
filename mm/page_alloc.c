@@ -7777,11 +7777,13 @@ static void __setup_per_zone_wmarks(void)
 	}
 
 	for_each_zone(zone) {
-		u64 min, low;
+		u64 tmp, low;
 
 		spin_lock_irqsave(&zone->lock, flags);
 		tmp = (u64)pages_min * zone_managed_pages(zone);
 		do_div(tmp, lowmem_pages);
+		low = (u64)pages_low * zone_managed_pages(zone);
+		do_div(low, vm_total_pages);
 		if (is_highmem(zone)) {
 			/*
 			 * __GFP_HIGH and PF_MEMALLOC allocations usually don't
@@ -7815,8 +7817,8 @@ static void __setup_per_zone_wmarks(void)
 				      watermark_scale_factor, 10000));
 
 		zone->watermark_boost = 0;
-		zone->_watermark[WMARK_LOW]  = min_wmark_pages(zone) + tmp;
-		zone->_watermark[WMARK_HIGH] = min_wmark_pages(zone) + tmp * 2;
+		zone->_watermark[WMARK_LOW]  = min_wmark_pages(zone) + low + tmp;
+		zone->_watermark[WMARK_HIGH] = min_wmark_pages(zone) + low + tmp * 2;
 
 		spin_unlock_irqrestore(&zone->lock, flags);
 	}

@@ -2365,6 +2365,9 @@ static int _ext4_show_options(struct seq_file *seq, struct super_block *sb,
 	if (DUMMY_ENCRYPTION_ENABLED(sbi))
 		SEQ_OPTS_PUTS("test_dummy_encryption");
 
+	if (sb->s_flags & SB_INLINECRYPT)
+		SEQ_OPTS_PUTS("inlinecrypt");
+
 	if (test_opt(sb, DAX_ALWAYS)) {
 		if (IS_EXT2_SB(sb))
 			SEQ_OPTS_PUTS("dax");

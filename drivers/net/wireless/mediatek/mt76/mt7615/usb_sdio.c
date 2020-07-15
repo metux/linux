@@ -24,7 +24,6 @@ const u32 mt7663_usb_sdio_reg_map[] = {
 	[MT_TOP_MISC_BASE]	= 0x81020000,
 	[MT_PLE_BASE]		= 0x82060000,
 	[MT_PSE_BASE]		= 0x82068000,
-	[MT_PP_BASE]		= 0x8206c000,
 	[MT_WTBL_BASE_ADDR]	= 0x820e0000,
 	[MT_CFG_BASE]		= 0x820f0000,
 	[MT_AGG_BASE]		= 0x820f2000,
@@ -226,6 +225,7 @@ bool mt7663_usb_sdio_tx_status_data(struct mt76_dev *mdev, u8 *update)
 EXPORT_SYMBOL_GPL(mt7663_usb_sdio_tx_status_data);
 
 void mt7663_usb_sdio_tx_complete_skb(struct mt76_dev *mdev,
+				     enum mt76_txq_id qid,
 				     struct mt76_queue_entry *e)
 {
 	unsigned int headroom = MT_USB_TXD_SIZE;
@@ -234,7 +234,7 @@ void mt7663_usb_sdio_tx_complete_skb(struct mt76_dev *mdev,
 		headroom += MT_USB_HDR_SIZE;
 	skb_pull(e->skb, headroom);
 
-	mt76_tx_complete_skb(mdev, e->wcid, e->skb);
+	mt76_tx_complete_skb(mdev, e->skb);
 }
 EXPORT_SYMBOL_GPL(mt7663_usb_sdio_tx_complete_skb);
 
@@ -247,7 +247,6 @@ int mt7663_usb_sdio_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	struct mt7615_dev *dev = container_of(mdev, struct mt7615_dev, mt76);
 	struct sk_buff *skb = tx_info->skb;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-	int pad;
 
 	if ((info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE) &&
 	    !msta->rate_probe) {
@@ -259,16 +258,10 @@ int mt7663_usb_sdio_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	}
 
 	mt7663_usb_sdio_write_txwi(dev, wcid, qid, sta, skb);
-	if (mt76_is_usb(mdev)) {
-		u32 len = skb->len;
+	if (mt76_is_usb(mdev))
+		put_unaligned_le32(skb->len, skb_push(skb, sizeof(skb->len)));
 
-		put_unaligned_le32(len, skb_push(skb, sizeof(len)));
-		pad = round_up(skb->len, 4) + 4 - skb->len;
-	} else {
-		pad = round_up(skb->len, 4) - skb->len;
-	}
-
-	return mt76_skb_adjust_pad(skb, pad);
+	return mt76_skb_adjust_pad(skb);
 }
 EXPORT_SYMBOL_GPL(mt7663_usb_sdio_tx_prepare_skb);
 
@@ -365,15 +358,11 @@ int mt7663_usb_sdio_register_device(struct mt7615_dev *dev)
 	if (err)
 		return err;
 
+	/* check hw sg support in order to enable AMSDU */
+	hw->max_tx_fragments = dev->mt76.usb.sg_en ? MT_HW_TXP_MAX_BUF_NUM : 1;
 	hw->extra_tx_headroom += MT_USB_TXD_SIZE;
-	if (mt76_is_usb(&dev->mt76)) {
+	if (mt76_is_usb(&dev->mt76))
 		hw->extra_tx_headroom += MT_USB_HDR_SIZE;
-		/* check hw sg support in order to enable AMSDU */
-		if (dev->mt76.usb.sg_en)
-			hw->max_tx_fragments = MT_HW_TXP_MAX_BUF_NUM;
-		else
-			hw->max_tx_fragments = 1;
-	}
 
 	err = mt76_register_device(&dev->mt76, true, mt7615_rates,
 				   ARRAY_SIZE(mt7615_rates));

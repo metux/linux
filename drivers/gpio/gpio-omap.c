@@ -60,7 +60,6 @@ struct gpio_bank {
 	struct clk *dbck;
 	struct notifier_block nb;
 	unsigned int is_suspended:1;
-	unsigned int needs_resume:1;
 	u32 mod_usage;
 	u32 irq_usage;
 	u32 dbck_enable_mask;
@@ -899,18 +898,16 @@ static int omap_gpio_set_config(struct gpio_chip *chip, unsigned offset,
 	u32 debounce;
 	int ret = -ENOTSUPP;
 
-	switch (pinconf_to_config_param(config)) {
-	case PIN_CONFIG_BIAS_DISABLE:
-	case PIN_CONFIG_BIAS_PULL_UP:
-	case PIN_CONFIG_BIAS_PULL_DOWN:
+	if ((pinconf_to_config_param(config) == PIN_CONFIG_BIAS_DISABLE) ||
+	    (pinconf_to_config_param(config) == PIN_CONFIG_BIAS_PULL_UP) ||
+	    (pinconf_to_config_param(config) == PIN_CONFIG_BIAS_PULL_DOWN))
+	{
 		ret = gpiochip_generic_config(chip, offset, config);
-		break;
-	case PIN_CONFIG_INPUT_DEBOUNCE:
+	}
+	else if (pinconf_to_config_param(config) == PIN_CONFIG_INPUT_DEBOUNCE)
+	{
 		debounce = pinconf_to_config_argument(config);
 		ret = omap_gpio_debounce(chip, offset, debounce);
-		break;
-	default:
-		break;
 	}
 
 	return ret;
@@ -1516,34 +1513,9 @@ static int __maybe_unused omap_gpio_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused omap_gpio_suspend(struct device *dev)
-{
-	struct gpio_bank *bank = dev_get_drvdata(dev);
-
-	if (bank->is_suspended)
-		return 0;
-
-	bank->needs_resume = 1;
-
-	return omap_gpio_runtime_suspend(dev);
-}
-
-static int __maybe_unused omap_gpio_resume(struct device *dev)
-{
-	struct gpio_bank *bank = dev_get_drvdata(dev);
-
-	if (!bank->needs_resume)
-		return 0;
-
-	bank->needs_resume = 0;
-
-	return omap_gpio_runtime_resume(dev);
-}
-
 static const struct dev_pm_ops gpio_pm_ops = {
 	SET_RUNTIME_PM_OPS(omap_gpio_runtime_suspend, omap_gpio_runtime_resume,
 									NULL)
-	SET_LATE_SYSTEM_SLEEP_PM_OPS(omap_gpio_suspend, omap_gpio_resume)
 };
 
 static struct platform_driver omap_gpio_driver = {

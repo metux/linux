@@ -226,6 +226,19 @@ static struct mtk_iommu_domain *to_mtk_domain(struct iommu_domain *dom)
 	return container_of(dom, struct mtk_iommu_domain, domain);
 }
 
+static int mtk_iommu_rpm_get(struct device *dev)
+{
+	if (pm_runtime_enabled(dev))
+		return pm_runtime_get_sync(dev);
+	return 0;
+}
+
+static void mtk_iommu_rpm_put(struct device *dev)
+{
+	if (pm_runtime_enabled(dev))
+		pm_runtime_put_autosuspend(dev);
+}
+
 static void mtk_iommu_tlb_flush_all(struct mtk_iommu_data *data)
 {
 	for_each_m4u(data) {
@@ -256,6 +269,11 @@ static void mtk_iommu_tlb_flush_range_sync(unsigned long iova, size_t size,
 				continue;
 		}
 
+		/* skip tlb flush when pm is not active
+		 * if (!pm_runtime_active(data->dev))
+		 *	continue;
+		 */
+		mtk_iommu_rpm_get(data->dev);
 		spin_lock_irqsave(&data->tlb_lock, flags);
 		writel_relaxed(F_INVLD_EN1 | F_INVLD_EN0,
 			       data->base + data->plat_data->inv_sel_reg);
@@ -502,7 +520,7 @@ static int mtk_iommu_attach_device(struct iommu_domain *domain,
 			return ret;
 		}
 		data->m4u_dom = dom;
-		ret = pm_runtime_get_sync(data->dev);
+		ret = mtk_iommu_rpm_get(dev);
 		if (ret < 0) {
 			dev_err(data->dev, "pm runtime get fail %d in attach\n",
 				ret);
@@ -512,6 +530,7 @@ static int mtk_iommu_attach_device(struct iommu_domain *domain,
 		       data->base + REG_MMU_PT_BASE_ADDR);
 
 		pm_runtime_put(m4udev);
+		mtk_iommu_rpm_put(dev);
 	}
 
 	mtk_iommu_config(data, dev, true, domid);
@@ -531,17 +550,11 @@ static int mtk_iommu_map(struct iommu_domain *domain, unsigned long iova,
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
 	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
-	int ret;
 
 	/* The "4GB mode" M4U physically can not use the lower remap of Dram. */
 	if (dom->data->enable_4GB)
 		paddr |= BIT_ULL(32);
 
-	ret = pm_runtime_get_sync(data->dev);
-	if (ret < 0) {
-		dev_err(data->dev, "pm runtime get fail %d in map\n", ret);
-		return ret;
-	}
 	/* Synchronize with the tlb_lock */
 	return dom->iop->map(dom->iop, iova, paddr, size, prot, gfp);
 }
@@ -551,25 +564,8 @@ static size_t mtk_iommu_unmap(struct iommu_domain *domain,
 			      struct iommu_iotlb_gather *gather)
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
-	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
-	size_t sz;
-	int ret;
-	unsigned long end = iova + size - 1;
 
-	if (gather->start > iova)
-		gather->start = iova;
-	if (gather->end < end)
-		gather->end = end;
-
-	ret = pm_runtime_get_sync(data->dev);
-	if (ret < 0) {
-		dev_err(data->dev, "pm runtime get fail %d in unmap\n", ret);
-		return ret;
-	}
-
-	sz = dom->iop->unmap(dom->iop, iova, size, gather);
-	pm_runtime_put(data->dev);
-	return sz;
+	return dom->iop->unmap(dom->iop, iova, size, gather);
 }
 
 static void mtk_iommu_flush_iotlb_all(struct iommu_domain *domain)
@@ -704,10 +700,14 @@ static int mtk_iommu_hw_init(const struct mtk_iommu_data *data)
 	u32 regval;
 	int ret;
 
-	ret = clk_prepare_enable(data->bclk);
-	if (ret) {
-		dev_err(data->dev, "Failed to enable iommu bclk(%d)\n", ret);
-		return ret;
+	/* bclk will be enabled in pm callback in power-domain case. */
+	if (!pm_runtime_enabled(data->dev)) {
+		ret = clk_prepare_enable(data->bclk);
+		if (ret) {
+			dev_err(data->dev, "Failed to enable iommu bclk(%d)\n",
+				ret);
+			return ret;
+		}
 	}
 
 	if (data->plat_data->m4u_plat == M4U_MT8173) {
@@ -894,8 +894,11 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 	if (!smicomm_node)
 		return -EINVAL;
 
-	ret = pm_runtime_get_sync(dev);
-	if (ret)
+	if (dev->pm_domain)
+		pm_runtime_enable(dev);
+
+	ret = mtk_iommu_rpm_get(dev);
+	if (ret < 0)
 		return ret;
 
 	plarbdev = of_find_device_by_node(smicomm_node);

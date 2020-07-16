@@ -3982,7 +3982,7 @@ static int io_send(struct io_kiocb *req, bool force_nonblock,
 
 	ret = import_single_range(WRITE, sr->buf, sr->len, &iov, &msg.msg_iter);
 	if (unlikely(ret))
-		return ret;
+		return ret;;
 
 	msg.msg_name = NULL;
 	msg.msg_control = NULL;
@@ -4238,10 +4238,8 @@ static int io_recv(struct io_kiocb *req, bool force_nonblock,
 		buf = u64_to_user_ptr(kbuf->addr);
 
 	ret = import_single_range(READ, buf, sr->len, &iov, &msg.msg_iter);
-	if (unlikely(ret)) {
-		kfree(kbuf);
-		return ret;
-	}
+	if (unlikely(ret))
+		goto out_free;
 
 	req->flags |= REQ_F_NEED_CLEANUP;
 	msg.msg_name = NULL;
@@ -4262,7 +4260,7 @@ static int io_recv(struct io_kiocb *req, bool force_nonblock,
 		return -EAGAIN;
 	if (ret == -ERESTARTSYS)
 		ret = -EINTR;
-
+out_free:
 	kfree(kbuf);
 	req->flags &= ~REQ_F_NEED_CLEANUP;
 	if (ret < 0)

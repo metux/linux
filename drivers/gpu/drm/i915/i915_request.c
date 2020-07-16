@@ -1637,7 +1637,7 @@ static bool busywait_stop(unsigned long timeout, unsigned int cpu)
 	return this_cpu != cpu;
 }
 
-static bool __i915_spin_request(const struct i915_request * const rq, int state)
+static bool __i915_spin_request(struct i915_request * const rq, int state)
 {
 	unsigned long timeout_ns;
 	unsigned int cpu;
@@ -1670,7 +1670,7 @@ static bool __i915_spin_request(const struct i915_request * const rq, int state)
 	timeout_ns = READ_ONCE(rq->engine->props.max_busywait_duration_ns);
 	timeout_ns += local_clock_ns(&cpu);
 	do {
-		if (i915_request_completed(rq))
+		if (dma_fence_is_signaled(&rq->fence))
 			return true;
 
 		if (signal_pending_state(state, current))
@@ -1694,7 +1694,7 @@ static void request_wait_wake(struct dma_fence *fence, struct dma_fence_cb *cb)
 {
 	struct request_wait *wait = container_of(cb, typeof(*wait), cb);
 
-	wake_up_process(wait->tsk);
+	wake_up_process(fetch_and_zero(&wait->tsk));
 }
 
 /**
@@ -1763,10 +1763,8 @@ long i915_request_wait(struct i915_request *rq,
 	 * duration, which we currently lack.
 	 */
 	if (IS_ACTIVE(CONFIG_DRM_I915_MAX_REQUEST_BUSYWAIT) &&
-	    __i915_spin_request(rq, state)) {
-		dma_fence_signal(&rq->fence);
+	    __i915_spin_request(rq, state))
 		goto out;
-	}
 
 	/*
 	 * This client is about to stall waiting for the GPU. In many cases
@@ -1790,10 +1788,8 @@ long i915_request_wait(struct i915_request *rq,
 	for (;;) {
 		set_current_state(state);
 
-		if (i915_request_completed(rq)) {
-			dma_fence_signal(&rq->fence);
+		if (dma_fence_is_signaled(&rq->fence))
 			break;
-		}
 
 		intel_engine_flush_submission(rq->engine);
 
@@ -1811,7 +1807,9 @@ long i915_request_wait(struct i915_request *rq,
 	}
 	__set_current_state(TASK_RUNNING);
 
-	dma_fence_remove_callback(&rq->fence, &wait.cb);
+	if (READ_ONCE(wait.tsk))
+		dma_fence_remove_callback(&rq->fence, &wait.cb);
+	GEM_BUG_ON(!list_empty(&wait.cb.node));
 
 out:
 	mutex_release(&rq->engine->gt->reset.mutex.dep_map, _THIS_IP_);

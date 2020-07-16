@@ -58,7 +58,6 @@
 #include "amdgpu_amdkfd.h"
 #include "amdgpu_sdma.h"
 #include "amdgpu_ras.h"
-#include "amdgpu_atomfirmware.h"
 #include "bif/bif_4_1_d.h"
 
 #define AMDGPU_TTM_VRAM_MAX_DW_READ	(size_t)128
@@ -85,7 +84,7 @@ static int amdgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	switch (type) {
 	case TTM_PL_SYSTEM:
 		/* System memory */
-		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->flags = 0;
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_CACHED;
 		break;
@@ -94,13 +93,12 @@ static int amdgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		man->func = &amdgpu_gtt_mgr_func;
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_CACHED;
-		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE | TTM_MEMTYPE_FLAG_CMA;
+		man->flags = 0;
 		break;
 	case TTM_PL_VRAM:
 		/* "On-card" video ram */
 		man->func = &amdgpu_vram_mgr_func;
-		man->flags = TTM_MEMTYPE_FLAG_FIXED |
-			     TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->flags = TTM_MEMTYPE_FLAG_FIXED;
 		man->available_caching = TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC;
 		man->default_caching = TTM_PL_FLAG_WC;
 		break;
@@ -109,7 +107,7 @@ static int amdgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	case AMDGPU_PL_OA:
 		/* On-chip GDS memory*/
 		man->func = &ttm_bo_manager_func;
-		man->flags = TTM_MEMTYPE_FLAG_FIXED | TTM_MEMTYPE_FLAG_CMA;
+		man->flags = TTM_MEMTYPE_FLAG_FIXED;
 		man->available_caching = TTM_PL_FLAG_UNCACHED;
 		man->default_caching = TTM_PL_FLAG_UNCACHED;
 		break;
@@ -430,12 +428,22 @@ int amdgpu_ttm_copy_mem_to_mem(struct amdgpu_device *adev,
 	}
 
 	src_offset = src->offset;
-	src_mm = amdgpu_find_mm_node(src->mem, &src_offset);
-	src_node_size = (src_mm->size << PAGE_SHIFT) - src_offset;
+	if (src->mem->mm_node) {
+		src_mm = amdgpu_find_mm_node(src->mem, &src_offset);
+		src_node_size = (src_mm->size << PAGE_SHIFT) - src_offset;
+	} else {
+		src_mm = NULL;
+		src_node_size = ULLONG_MAX;
+	}
 
 	dst_offset = dst->offset;
-	dst_mm = amdgpu_find_mm_node(dst->mem, &dst_offset);
-	dst_node_size = (dst_mm->size << PAGE_SHIFT) - dst_offset;
+	if (dst->mem->mm_node) {
+		dst_mm = amdgpu_find_mm_node(dst->mem, &dst_offset);
+		dst_node_size = (dst_mm->size << PAGE_SHIFT) - dst_offset;
+	} else {
+		dst_mm = NULL;
+		dst_node_size = ULLONG_MAX;
+	}
 
 	mutex_lock(&adev->mman.gtt_window_lock);
 
@@ -787,7 +795,6 @@ memcpy:
  */
 static int amdgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem)
 {
-	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bdev);
 	struct drm_mm_node *mm_node = mem->mm_node;
 
@@ -796,8 +803,7 @@ static int amdgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_mem_
 	mem->bus.size = mem->num_pages << PAGE_SHIFT;
 	mem->bus.base = 0;
 	mem->bus.is_iomem = false;
-	if (!(man->flags & TTM_MEMTYPE_FLAG_MAPPABLE))
-		return -EINVAL;
+
 	switch (mem->mem_type) {
 	case TTM_PL_SYSTEM:
 		/* system memory */
@@ -825,10 +831,6 @@ static int amdgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_mem_
 		return -EINVAL;
 	}
 	return 0;
-}
-
-static void amdgpu_ttm_io_mem_free(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem)
-{
 }
 
 static unsigned long amdgpu_ttm_io_mem_pfn(struct ttm_buffer_object *bo,
@@ -1051,7 +1053,6 @@ static int amdgpu_ttm_tt_pin_userptr(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	unsigned nents;
 	int r;
 
 	int write = !(gtt->userflags & AMDGPU_GEM_USERPTR_READONLY);
@@ -1066,9 +1067,8 @@ static int amdgpu_ttm_tt_pin_userptr(struct ttm_tt *ttm)
 		goto release_sg;
 
 	/* Map SG to device */
-	r = -ENOMEM;
-	nents = dma_map_sg(adev->dev, ttm->sg->sgl, ttm->sg->nents, direction);
-	if (nents == 0)
+	r = dma_map_sgtable(adev->dev, ttm->sg, direction, 0);
+	if (r)
 		goto release_sg;
 
 	/* convert SG to linear array of pages and dma addresses */
@@ -1079,7 +1079,6 @@ static int amdgpu_ttm_tt_pin_userptr(struct ttm_tt *ttm)
 
 release_sg:
 	kfree(ttm->sg);
-	ttm->sg = NULL;
 	return r;
 }
 
@@ -1100,8 +1099,7 @@ static void amdgpu_ttm_tt_unpin_userptr(struct ttm_tt *ttm)
 		return;
 
 	/* unmap the pages mapped to the device */
-	dma_unmap_sg(adev->dev, ttm->sg->sgl, ttm->sg->nents, direction);
-
+	dma_unmap_sgtable(adev->dev, ttm->sg, direction, 0);
 	sg_free_table(ttm->sg);
 
 #if IS_ENABLED(CONFIG_DRM_AMDGPU_USERPTR)
@@ -1119,7 +1117,7 @@ static void amdgpu_ttm_tt_unpin_userptr(struct ttm_tt *ttm)
 #endif
 }
 
-static int amdgpu_ttm_gart_bind(struct amdgpu_device *adev,
+int amdgpu_ttm_gart_bind(struct amdgpu_device *adev,
 				struct ttm_buffer_object *tbo,
 				uint64_t flags)
 {
@@ -1297,7 +1295,7 @@ int amdgpu_ttm_recover_gart(struct ttm_buffer_object *tbo)
  * Called by ttm_tt_unbind() on behalf of ttm_bo_move_ttm() and
  * ttm_tt_destroy().
  */
-static void amdgpu_ttm_backend_unbind(struct ttm_tt *ttm)
+static int amdgpu_ttm_backend_unbind(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
@@ -1308,13 +1306,14 @@ static void amdgpu_ttm_backend_unbind(struct ttm_tt *ttm)
 		amdgpu_ttm_tt_unpin_userptr(ttm);
 
 	if (gtt->offset == AMDGPU_BO_INVALID_OFFSET)
-		return;
+		return 0;
 
 	/* unbind shouldn't be done for GDS/GWS/OA in ttm_bo_clean_mm */
 	r = amdgpu_gart_unbind(adev, gtt->offset, ttm->num_pages);
 	if (r)
 		DRM_ERROR("failed to unbind %lu pages at 0x%08llX\n",
 			  gtt->ttm.ttm.num_pages, gtt->offset);
+	return r;
 }
 
 static void amdgpu_ttm_backend_destroy(struct ttm_tt *ttm)
@@ -1755,7 +1754,6 @@ static struct ttm_bo_driver amdgpu_bo_driver = {
 	.release_notify = &amdgpu_bo_release_notify,
 	.fault_reserve_notify = &amdgpu_bo_fault_reserve_notify,
 	.io_mem_reserve = &amdgpu_ttm_io_mem_reserve,
-	.io_mem_free = &amdgpu_ttm_io_mem_free,
 	.io_mem_pfn = amdgpu_ttm_io_mem_pfn,
 	.access_memory = &amdgpu_ttm_access_memory,
 	.del_from_lru_notify = &amdgpu_vm_del_from_lru_notify
@@ -1825,86 +1823,54 @@ static int amdgpu_ttm_training_reserve_vram_fini(struct amdgpu_device *adev)
 	return 0;
 }
 
-static void amdgpu_ttm_training_data_block_init(struct amdgpu_device *adev)
+static u64 amdgpu_ttm_training_get_c2p_offset(u64 vram_size)
 {
-	struct psp_memory_training_context *ctx = &adev->psp.mem_train_ctx;
+       if ((vram_size & (SZ_1M - 1)) < (SZ_4K + 1) )
+               vram_size -= SZ_1M;
 
-	memset(ctx, 0, sizeof(*ctx));
-
-	ctx->c2p_train_data_offset =
-		ALIGN((adev->gmc.mc_vram_size - adev->discovery_tmr_size - SZ_1M), SZ_1M);
-	ctx->p2c_train_data_offset =
-		(adev->gmc.mc_vram_size - GDDR6_MEM_TRAINING_OFFSET);
-	ctx->train_data_size =
-		GDDR6_MEM_TRAINING_DATA_SIZE_IN_BYTES;
-	
-	DRM_DEBUG("train_data_size:%llx,p2c_train_data_offset:%llx,c2p_train_data_offset:%llx.\n",
-			ctx->train_data_size,
-			ctx->p2c_train_data_offset,
-			ctx->c2p_train_data_offset);
+       return ALIGN(vram_size, SZ_1M);
 }
 
-/*
- * reserve TMR memory at the top of VRAM which holds
- * IP Discovery data and is protected by PSP.
+/**
+ * amdgpu_ttm_training_reserve_vram_init - create bo vram reservation from memory training
+ *
+ * @adev: amdgpu_device pointer
+ *
+ * create bo vram reservation from memory training.
  */
-static int amdgpu_ttm_reserve_tmr(struct amdgpu_device *adev)
+static int amdgpu_ttm_training_reserve_vram_init(struct amdgpu_device *adev)
 {
 	int ret;
 	struct psp_memory_training_context *ctx = &adev->psp.mem_train_ctx;
-	bool mem_train_support = false;
 
-	if (!amdgpu_sriov_vf(adev)) {
-		ret = amdgpu_mem_train_support(adev);
-		if (ret == 1)
-			mem_train_support = true;
-		else if (ret == -1)
-			return -EINVAL;
-		else
-			DRM_DEBUG("memory training does not support!\n");
+	memset(ctx, 0, sizeof(*ctx));
+	if (!adev->fw_vram_usage.mem_train_support) {
+		DRM_DEBUG("memory training does not support!\n");
+		return 0;
 	}
 
-	/*
-	 * Query reserved tmr size through atom firmwareinfo for Sienna_Cichlid and onwards for all
-	 * the use cases (IP discovery/G6 memory training/profiling/diagnostic data.etc)
-	 *
-	 * Otherwise, fallback to legacy approach to check and reserve tmr block for ip
-	 * discovery data and G6 memory training data respectively
-	 */
-	adev->discovery_tmr_size =
-		amdgpu_atomfirmware_get_fw_reserved_fb_size(adev);
-	if (!adev->discovery_tmr_size)
-		adev->discovery_tmr_size = DISCOVERY_TMR_OFFSET;
+	ctx->c2p_train_data_offset = amdgpu_ttm_training_get_c2p_offset(adev->gmc.mc_vram_size);
+	ctx->p2c_train_data_offset = (adev->gmc.mc_vram_size - GDDR6_MEM_TRAINING_OFFSET);
+	ctx->train_data_size = GDDR6_MEM_TRAINING_DATA_SIZE_IN_BYTES;
 
-	if (mem_train_support) {
-		/* reserve vram for mem train according to TMR location */
-		amdgpu_ttm_training_data_block_init(adev);
-		ret = amdgpu_bo_create_kernel_at(adev,
+	DRM_DEBUG("train_data_size:%llx,p2c_train_data_offset:%llx,c2p_train_data_offset:%llx.\n",
+		  ctx->train_data_size,
+		  ctx->p2c_train_data_offset,
+		  ctx->c2p_train_data_offset);
+
+	ret = amdgpu_bo_create_kernel_at(adev,
 					 ctx->c2p_train_data_offset,
 					 ctx->train_data_size,
 					 AMDGPU_GEM_DOMAIN_VRAM,
 					 &ctx->c2p_bo,
 					 NULL);
-		if (ret) {
-			DRM_ERROR("alloc c2p_bo failed(%d)!\n", ret);
-			amdgpu_ttm_training_reserve_vram_fini(adev);
-			return ret;
-		}
-		ctx->init = PSP_MEM_TRAIN_RESERVE_SUCCESS;
-	}
-
-	ret = amdgpu_bo_create_kernel_at(adev,
-				adev->gmc.real_vram_size - adev->discovery_tmr_size,
-				adev->discovery_tmr_size,
-				AMDGPU_GEM_DOMAIN_VRAM,
-				&adev->discovery_memory,
-				NULL);
 	if (ret) {
-		DRM_ERROR("alloc tmr failed(%d)!\n", ret);
-		amdgpu_bo_free_kernel(&adev->discovery_memory, NULL, NULL);
+		DRM_ERROR("alloc c2p_bo failed(%d)!\n", ret);
+		amdgpu_ttm_training_reserve_vram_fini(adev);
 		return ret;
 	}
 
+	ctx->init = PSP_MEM_TRAIN_RESERVE_SUCCESS;
 	return 0;
 }
 
@@ -1972,12 +1938,11 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 	}
 
 	/*
-	 * only NAVI10 and onwards ASIC support for IP discovery.
-	 * If IP discovery enabled, a block of memory should be
-	 * reserved for IP discovey.
+	 *The reserved vram for memory training must be pinned to the specified
+	 *place on the VRAM, so reserve it early.
 	 */
-	if (adev->discovery_bin) {
-		r = amdgpu_ttm_reserve_tmr(adev);
+	if (!amdgpu_sriov_vf(adev)) {
+		r = amdgpu_ttm_training_reserve_vram_init(adev);
 		if (r)
 			return r;
 	}
@@ -1992,6 +1957,21 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 				    NULL, &stolen_vga_buf);
 	if (r)
 		return r;
+
+	/*
+	 * reserve TMR memory at the top of VRAM which holds
+	 * IP Discovery data and is protected by PSP.
+	 */
+	if (adev->discovery_tmr_size > 0) {
+		r = amdgpu_bo_create_kernel_at(adev,
+			adev->gmc.real_vram_size - adev->discovery_tmr_size,
+			adev->discovery_tmr_size,
+			AMDGPU_GEM_DOMAIN_VRAM,
+			&adev->discovery_memory,
+			NULL);
+		if (r)
+			return r;
+	}
 
 	DRM_INFO("amdgpu: %uM of VRAM memory ready\n",
 		 (unsigned) (adev->gmc.real_vram_size / (1024 * 1024)));

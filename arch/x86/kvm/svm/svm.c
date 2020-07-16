@@ -254,7 +254,7 @@ static inline void invlpga(unsigned long addr, u32 asid)
 	asm volatile (__ex("invlpga %1, %0") : : "c"(asid), "a"(addr));
 }
 
-static int get_max_npt_level(void)
+static int get_npt_level(struct kvm_vcpu *vcpu)
 {
 #ifdef CONFIG_X86_64
 	return PT64_ROOT_4LEVEL;
@@ -885,7 +885,7 @@ static __init int svm_hardware_setup(void)
 	if (npt_enabled && !npt)
 		npt_enabled = false;
 
-	kvm_configure_mmu(npt_enabled, get_max_npt_level(), PG_LEVEL_1G);
+	kvm_configure_mmu(npt_enabled, PG_LEVEL_1G);
 	pr_info("kvm: Nested Paging %sabled\n", npt_enabled ? "en" : "dis");
 
 	if (nrips) {
@@ -2183,12 +2183,6 @@ static int iret_interception(struct vcpu_svm *svm)
 	return 1;
 }
 
-static int invd_interception(struct vcpu_svm *svm)
-{
-	/* Treat an INVD instruction as a NOP and just skip it. */
-	return kvm_skip_emulated_instruction(&svm->vcpu);
-}
-
 static int invlpg_interception(struct vcpu_svm *svm)
 {
 	if (!static_cpu_has(X86_FEATURE_DECODEASSISTS))
@@ -2674,7 +2668,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_IA32_APICBASE:
 		if (kvm_vcpu_apicv_active(vcpu))
 			avic_update_vapic_bar(to_svm(vcpu), data);
-		fallthrough;
+		/* Fall through */
 	default:
 		return kvm_set_msr_common(vcpu, msr);
 	}
@@ -2780,7 +2774,7 @@ static int (*const svm_exit_handlers[])(struct vcpu_svm *svm) = {
 	[SVM_EXIT_RDPMC]			= rdpmc_interception,
 	[SVM_EXIT_CPUID]			= cpuid_interception,
 	[SVM_EXIT_IRET]                         = iret_interception,
-	[SVM_EXIT_INVD]                         = invd_interception,
+	[SVM_EXIT_INVD]                         = emulate_on_interception,
 	[SVM_EXIT_PAUSE]			= pause_interception,
 	[SVM_EXIT_HLT]				= halt_interception,
 	[SVM_EXIT_INVLPG]			= invlpg_interception,
@@ -2943,6 +2937,8 @@ static int handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		vcpu->arch.cr0 = svm->vmcb->save.cr0;
 	if (npt_enabled)
 		vcpu->arch.cr3 = svm->vmcb->save.cr3;
+
+	svm_complete_interrupts(svm);
 
 	if (is_guest_mode(vcpu)) {
 		int vmexit;
@@ -3508,6 +3504,7 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu)
 	stgi();
 
 	/* Any pending NMI will happen here */
+	exit_fastpath = svm_exit_handlers_fastpath(vcpu);
 
 	if (unlikely(svm->vmcb->control.exit_code == SVM_EXIT_NMI))
 		kvm_after_interrupt(&svm->vcpu);
@@ -3521,7 +3518,6 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu)
 	}
 
 	svm->vmcb->control.tlb_ctl = TLB_CONTROL_DO_NOTHING;
-	vmcb_mark_all_clean(svm->vmcb);
 
 	/* if exit due to PF check for async PF */
 	if (svm->vmcb->control.exit_code == SVM_EXIT_EXCP_BASE + PF_VECTOR)
@@ -3541,8 +3537,7 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu)
 		     SVM_EXIT_EXCP_BASE + MC_VECTOR))
 		svm_handle_mce(svm);
 
-	svm_complete_interrupts(svm);
-	exit_fastpath = svm_exit_handlers_fastpath(vcpu);
+	vmcb_mark_all_clean(svm->vmcb);
 	return exit_fastpath;
 }
 
@@ -3905,28 +3900,21 @@ static int svm_pre_enter_smm(struct kvm_vcpu *vcpu, char *smstate)
 static int svm_pre_leave_smm(struct kvm_vcpu *vcpu, const char *smstate)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+	struct vmcb *nested_vmcb;
 	struct kvm_host_map map;
+	u64 guest;
+	u64 vmcb;
 	int ret = 0;
 
-	if (guest_cpuid_has(vcpu, X86_FEATURE_LM)) {
-		u64 saved_efer = GET_SMSTATE(u64, smstate, 0x7ed0);
-		u64 guest = GET_SMSTATE(u64, smstate, 0x7ed8);
-		u64 vmcb = GET_SMSTATE(u64, smstate, 0x7ee0);
+	guest = GET_SMSTATE(u64, smstate, 0x7ed8);
+	vmcb = GET_SMSTATE(u64, smstate, 0x7ee0);
 
-		if (guest) {
-			if (!guest_cpuid_has(vcpu, X86_FEATURE_SVM))
-				return 1;
-
-			if (!(saved_efer & EFER_SVME))
-				return 1;
-
-			if (kvm_vcpu_map(&svm->vcpu,
-					 gpa_to_gfn(vmcb), &map) == -EINVAL)
-				return 1;
-
-			ret = enter_svm_guest_mode(svm, vmcb, map.hva);
-			kvm_vcpu_unmap(&svm->vcpu, &map, true);
-		}
+	if (guest) {
+		if (kvm_vcpu_map(&svm->vcpu, gpa_to_gfn(vmcb), &map) == -EINVAL)
+			return 1;
+		nested_vmcb = map.hva;
+		ret = enter_svm_guest_mode(svm, vmcb, nested_vmcb);
+		kvm_vcpu_unmap(&svm->vcpu, &map, true);
 	}
 
 	return ret;
@@ -4124,6 +4112,7 @@ static struct kvm_x86_ops svm_x86_ops __initdata = {
 
 	.set_tss_addr = svm_set_tss_addr,
 	.set_identity_map_addr = svm_set_identity_map_addr,
+	.get_tdp_level = get_npt_level,
 	.get_mt_mask = svm_get_mt_mask,
 
 	.get_exit_info = svm_get_exit_info,

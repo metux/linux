@@ -648,11 +648,11 @@
 };
 
 &dss {
-	status = "okay";
+	status = "ok";
 };
 
 &dsi1 {
-	status = "okay";
+	status = "ok";
 	vdd-supply = <&vcxio>;
 
 	port {
@@ -678,7 +678,7 @@
 };
 
 &dsi2 {
-	status = "okay";
+	status = "ok";
 	vdd-supply = <&vcxio>;
 
 	port {
@@ -704,7 +704,7 @@
 };
 
 &hdmi {
-	status = "okay";
+	status = "ok";
 	vdda-supply = <&vdac>;
 
 	port {

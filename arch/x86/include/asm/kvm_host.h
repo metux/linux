@@ -1057,7 +1057,7 @@ struct kvm_x86_ops {
 	void (*vcpu_load)(struct kvm_vcpu *vcpu, int cpu);
 	void (*vcpu_put)(struct kvm_vcpu *vcpu);
 
-	void (*update_bp_intercept)(struct kvm_vcpu *vcpu);
+	void (*update_exception_bitmap)(struct kvm_vcpu *vcpu);
 	int (*get_msr)(struct kvm_vcpu *vcpu, struct msr_data *msr);
 	int (*set_msr)(struct kvm_vcpu *vcpu, struct msr_data *msr);
 	u64 (*get_segment_base)(struct kvm_vcpu *vcpu, int seg);
@@ -1136,7 +1136,8 @@ struct kvm_x86_ops {
 	int (*get_tdp_level)(struct kvm_vcpu *vcpu);
 	u64 (*get_mt_mask)(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio);
 
-	void (*load_mmu_pgd)(struct kvm_vcpu *vcpu, unsigned long cr3);
+	void (*load_mmu_pgd)(struct kvm_vcpu *vcpu, unsigned long pgd,
+			     int pgd_level);
 
 	bool (*has_wbinvd_exit)(void);
 
@@ -1263,7 +1264,7 @@ struct kvm_arch_async_pf {
 };
 
 extern u64 __read_mostly host_efer;
-
+extern bool __read_mostly allow_smaller_maxphyaddr;
 extern struct kvm_x86_ops kvm_x86_ops;
 
 #define __KVM_HAVE_ARCH_VM_ALLOC
@@ -1509,12 +1510,6 @@ void kvm_mmu_new_pgd(struct kvm_vcpu *vcpu, gpa_t new_pgd, bool skip_tlb_flush,
 		     bool skip_mmu_sync);
 
 void kvm_configure_mmu(bool enable_tdp, int tdp_page_level);
-
-static inline gpa_t translate_gpa(struct kvm_vcpu *vcpu, gpa_t gpa, u32 access,
-				  struct x86_exception *exception)
-{
-	return gpa;
-}
 
 static inline u16 kvm_read_ldt(void)
 {

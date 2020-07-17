@@ -27,7 +27,7 @@ static u32 chipid;
 
 u32 tegra_read_chipid(void)
 {
-	WARN(!chipid, "Tegra Chip ID not yet available\n");
+	WARN(!chipid, "Tegra APB MISC not yet available\n");
 
 	return chipid;
 }
@@ -49,6 +49,8 @@ u8 tegra_get_minor_rev(void)
 
 u32 tegra_read_straps(void)
 {
+	WARN(!chipid, "Tegra ABP MISC not yet available\n");
+
 	return strapping;
 }
 
@@ -67,6 +69,7 @@ u32 tegra_read_ram_code(void)
 static const struct of_device_id apbmisc_match[] __initconst = {
 	{ .compatible = "nvidia,tegra20-apbmisc", },
 	{ .compatible = "nvidia,tegra186-misc", },
+	{ .compatible = "nvidia,tegra194-misc", },
 	{},
 };
 
@@ -124,7 +127,7 @@ void __init tegra_init_apbmisc(void)
 			apbmisc.flags = IORESOURCE_MEM;
 
 			/* strapping options */
-			if (tegra_get_chip_id() == TEGRA124) {
+			if (of_machine_is_compatible("nvidia,tegra124")) {
 				straps.start = 0x7000e864;
 				straps.end = 0x7000e867;
 			} else {

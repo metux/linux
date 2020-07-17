@@ -106,7 +106,6 @@
 #include <net/xfrm.h>
 #include <trace/events/udp.h>
 #include <linux/static_key.h>
-#include <linux/btf_ids.h>
 #include <trace/events/skb.h>
 #include <net/busy_poll.h>
 #include "udp_impl.h"
@@ -409,10 +408,10 @@ static u32 udp_ehashfn(const struct net *net, const __be32 laddr,
 			      udp_ehash_secret + net_hash_mix(net));
 }
 
-static struct sock *lookup_reuseport(struct net *net, struct sock *sk,
-				     struct sk_buff *skb,
-				     __be32 saddr, __be16 sport,
-				     __be32 daddr, unsigned short hnum)
+static inline struct sock *lookup_reuseport(struct net *net, struct sock *sk,
+					    struct sk_buff *skb,
+					    __be32 saddr, __be16 sport,
+					    __be32 daddr, unsigned short hnum)
 {
 	struct sock *reuse_sk = NULL;
 	u32 hash;
@@ -421,6 +420,9 @@ static struct sock *lookup_reuseport(struct net *net, struct sock *sk,
 		hash = udp_ehashfn(net, daddr, hnum, saddr, sport);
 		reuse_sk = reuseport_select_sock(sk, hash, skb,
 						 sizeof(struct udphdr));
+		/* Fall back to scoring if group has connections */
+		if (reuseport_has_conns(sk, false))
+			return NULL;
 	}
 	return reuse_sk;
 }
@@ -444,38 +446,14 @@ static struct sock *udp4_lib_lookup2(struct net *net,
 		if (score > badness) {
 			result = lookup_reuseport(net, sk, skb,
 						  saddr, sport, daddr, hnum);
-			/* Fall back to scoring if group has connections */
-			if (result && !reuseport_has_conns(sk, false))
+			if (result)
 				return result;
 
-			result = result ? : sk;
 			badness = score;
+			result = sk;
 		}
 	}
 	return result;
-}
-
-static struct sock *udp4_lookup_run_bpf(struct net *net,
-					struct udp_table *udptable,
-					struct sk_buff *skb,
-					__be32 saddr, __be16 sport,
-					__be32 daddr, u16 hnum)
-{
-	struct sock *sk, *reuse_sk;
-	bool no_reuseport;
-
-	if (udptable != &udp_table)
-		return NULL; /* only UDP is supported */
-
-	no_reuseport = bpf_sk_lookup_run_v4(net, IPPROTO_UDP,
-					    saddr, sport, daddr, hnum, &sk);
-	if (no_reuseport || IS_ERR_OR_NULL(sk))
-		return sk;
-
-	reuse_sk = lookup_reuseport(net, sk, skb, saddr, sport, daddr, hnum);
-	if (reuse_sk)
-		sk = reuse_sk;
-	return sk;
 }
 
 /* UDP is nearly always wildcards out the wazoo, it makes no sense to try
@@ -485,45 +463,27 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
 		__be16 sport, __be32 daddr, __be16 dport, int dif,
 		int sdif, struct udp_table *udptable, struct sk_buff *skb)
 {
+	struct sock *result;
 	unsigned short hnum = ntohs(dport);
 	unsigned int hash2, slot2;
 	struct udp_hslot *hslot2;
-	struct sock *result, *sk;
 
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	slot2 = hash2 & udptable->mask;
 	hslot2 = &udptable->hash2[slot2];
 
-	/* Lookup connected or non-wildcard socket */
 	result = udp4_lib_lookup2(net, saddr, sport,
 				  daddr, hnum, dif, sdif,
 				  hslot2, skb);
-	if (!IS_ERR_OR_NULL(result) && result->sk_state == TCP_ESTABLISHED)
-		goto done;
+	if (!result) {
+		hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
+		slot2 = hash2 & udptable->mask;
+		hslot2 = &udptable->hash2[slot2];
 
-	/* Lookup redirect from BPF */
-	if (static_branch_unlikely(&bpf_sk_lookup_enabled)) {
-		sk = udp4_lookup_run_bpf(net, udptable, skb,
-					 saddr, sport, daddr, hnum);
-		if (sk) {
-			result = sk;
-			goto done;
-		}
+		result = udp4_lib_lookup2(net, saddr, sport,
+					  htonl(INADDR_ANY), hnum, dif, sdif,
+					  hslot2, skb);
 	}
-
-	/* Got non-wildcard socket or error on first lookup */
-	if (result)
-		goto done;
-
-	/* Lookup wildcard sockets */
-	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
-	slot2 = hash2 & udptable->mask;
-	hslot2 = &udptable->hash2[slot2];
-
-	result = udp4_lib_lookup2(net, saddr, sport,
-				  htonl(INADDR_ANY), hnum, dif, sdif,
-				  hslot2, skb);
-done:
 	if (IS_ERR(result))
 		return NULL;
 	return result;
@@ -2105,7 +2065,7 @@ static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 	/*
 	 * 	UDP-Lite specific tests, ignored on UDP sockets
 	 */
-	if ((up->pcflag & UDPLITE_RECV_CC)  &&  UDP_SKB_CB(skb)->partial_cov) {
+	if ((is_udplite & UDPLITE_RECV_CC)  &&  UDP_SKB_CB(skb)->partial_cov) {
 
 		/*
 		 * MIB statistics other than incrementing the error count are
@@ -2586,7 +2546,7 @@ void udp_destroy_sock(struct sock *sk)
  *	Socket option code for UDP
  */
 int udp_lib_setsockopt(struct sock *sk, int level, int optname,
-		       sockptr_t optval, unsigned int optlen,
+		       char __user *optval, unsigned int optlen,
 		       int (*push_pending_frames)(struct sock *))
 {
 	struct udp_sock *up = udp_sk(sk);
@@ -2597,7 +2557,7 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 	if (optlen < sizeof(int))
 		return -EINVAL;
 
-	if (copy_from_sockptr(&val, optval, sizeof(val)))
+	if (get_user(val, (int __user *)optval))
 		return -EFAULT;
 
 	valbool = val ? 1 : 0;
@@ -2701,15 +2661,25 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 }
 EXPORT_SYMBOL(udp_lib_setsockopt);
 
-int udp_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
-		   unsigned int optlen)
+int udp_setsockopt(struct sock *sk, int level, int optname,
+		   char __user *optval, unsigned int optlen)
 {
 	if (level == SOL_UDP  ||  level == SOL_UDPLITE)
-		return udp_lib_setsockopt(sk, level, optname,
-					  optval, optlen,
+		return udp_lib_setsockopt(sk, level, optname, optval, optlen,
 					  udp_push_pending_frames);
 	return ip_setsockopt(sk, level, optname, optval, optlen);
 }
+
+#ifdef CONFIG_COMPAT
+int compat_udp_setsockopt(struct sock *sk, int level, int optname,
+			  char __user *optval, unsigned int optlen)
+{
+	if (level == SOL_UDP  ||  level == SOL_UDPLITE)
+		return udp_lib_setsockopt(sk, level, optname, optval, optlen,
+					  udp_push_pending_frames);
+	return compat_ip_setsockopt(sk, level, optname, optval, optlen);
+}
+#endif
 
 int udp_lib_getsockopt(struct sock *sk, int level, int optname,
 		       char __user *optval, int __user *optlen)
@@ -2776,6 +2746,15 @@ int udp_getsockopt(struct sock *sk, int level, int optname,
 	return ip_getsockopt(sk, level, optname, optval, optlen);
 }
 
+#ifdef CONFIG_COMPAT
+int compat_udp_getsockopt(struct sock *sk, int level, int optname,
+				 char __user *optval, int __user *optlen)
+{
+	if (level == SOL_UDP  ||  level == SOL_UDPLITE)
+		return udp_lib_getsockopt(sk, level, optname, optval, optlen);
+	return compat_ip_getsockopt(sk, level, optname, optval, optlen);
+}
+#endif
 /**
  * 	udp_poll - wait for a UDP event.
  *	@file: - file struct
@@ -2847,6 +2826,10 @@ struct proto udp_prot = {
 	.sysctl_rmem_offset	= offsetof(struct net, ipv4.sysctl_udp_rmem_min),
 	.obj_size		= sizeof(struct udp_sock),
 	.h.udp_table		= &udp_table,
+#ifdef CONFIG_COMPAT
+	.compat_setsockopt	= compat_udp_setsockopt,
+	.compat_getsockopt	= compat_udp_getsockopt,
+#endif
 	.diag_destroy		= udp_abort,
 };
 EXPORT_SYMBOL(udp_prot);
@@ -3181,7 +3164,7 @@ static struct pernet_operations __net_initdata udp_sysctl_ops = {
 DEFINE_BPF_ITER_FUNC(udp, struct bpf_iter_meta *meta,
 		     struct udp_sock *udp_sk, uid_t uid, int bucket)
 
-static int bpf_iter_init_udp(void *priv_data, struct bpf_iter_aux_info *aux)
+static int bpf_iter_init_udp(void *priv_data)
 {
 	struct udp_iter_state *st = priv_data;
 	struct udp_seq_afinfo *afinfo;
@@ -3194,7 +3177,7 @@ static int bpf_iter_init_udp(void *priv_data, struct bpf_iter_aux_info *aux)
 	afinfo->family = AF_UNSPEC;
 	afinfo->udp_table = &udp_table;
 	st->bpf_seq_afinfo = afinfo;
-	ret = bpf_iter_init_seq_net(priv_data, aux);
+	ret = bpf_iter_init_seq_net(priv_data);
 	if (ret)
 		kfree(afinfo);
 	return ret;
@@ -3208,26 +3191,21 @@ static void bpf_iter_fini_udp(void *priv_data)
 	bpf_iter_fini_seq_net(priv_data);
 }
 
-static const struct bpf_iter_seq_info udp_seq_info = {
+static const struct bpf_iter_reg udp_reg_info = {
+	.target			= "udp",
 	.seq_ops		= &bpf_iter_udp_seq_ops,
 	.init_seq_private	= bpf_iter_init_udp,
 	.fini_seq_private	= bpf_iter_fini_udp,
 	.seq_priv_size		= sizeof(struct udp_iter_state),
-};
-
-static struct bpf_iter_reg udp_reg_info = {
-	.target			= "udp",
 	.ctx_arg_info_size	= 1,
 	.ctx_arg_info		= {
 		{ offsetof(struct bpf_iter__udp, udp_sk),
 		  PTR_TO_BTF_ID_OR_NULL },
 	},
-	.seq_info		= &udp_seq_info,
 };
 
 static void __init bpf_iter_register(void)
 {
-	udp_reg_info.ctx_arg_info[0].btf_id = btf_sock_ids[BTF_SOCK_TYPE_UDP];
 	if (bpf_iter_reg_target(&udp_reg_info))
 		pr_warn("Warning: could not register bpf iterator udp\n");
 }

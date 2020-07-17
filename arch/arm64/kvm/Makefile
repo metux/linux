@@ -3,8 +3,7 @@
 # Makefile for Kernel-based Virtual Machine module
 #
 
-ccflags-y += -I $(srctree)/$(src) -I $(srctree)/virt/kvm/arm/vgic
-CFLAGS_REMOVE_debug.o += $(CC_FLAGS_CFI)
+ccflags-y += -I $(srctree)/$(src)
 
 KVM=../../../virt/kvm
 

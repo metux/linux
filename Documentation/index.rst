@@ -184,6 +184,7 @@ to ReStructured Text format, or are simply too old.
    :maxdepth: 2
 
    staging/index
+   watch_queue
 
 
 Translations

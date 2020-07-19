@@ -3,7 +3,6 @@
  * Copyright (C) 2017-2018, Bootlin
  */
 
-#include <linux/backlight.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -11,6 +10,7 @@
 #include <linux/fb.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 
 #include <linux/gpio/consumer.h>
 #include <linux/regulator/consumer.h>
@@ -20,15 +20,6 @@
 #include <drm/drm_panel.h>
 
 #include <video/mipi_display.h>
-
-struct ili9881c {
-	struct drm_panel	panel;
-	struct mipi_dsi_device	*dsi;
-
-	struct backlight_device *backlight;
-	struct regulator	*power;
-	struct gpio_desc	*reset;
-};
 
 enum ili9881c_op {
 	ILI9881C_SWITCH_PAGE,
@@ -45,6 +36,21 @@ struct ili9881c_instr {
 		} cmd;
 		u8	page;
 	} arg;
+};
+
+struct ili9881c_desc {
+	const struct ili9881c_instr *init;
+	const size_t init_length;
+	const struct drm_display_mode *mode;
+};
+
+struct ili9881c {
+	struct drm_panel	panel;
+	struct mipi_dsi_device	*dsi;
+	const struct ili9881c_desc	*desc;
+
+	struct regulator	*power;
+	struct gpio_desc	*reset;
 };
 
 #define ILI9881C_SWITCH_PAGE_INSTR(_page)	\
@@ -66,7 +72,7 @@ struct ili9881c_instr {
 		},					\
 	}
 
-static const struct ili9881c_instr ili9881c_init[] = {
+static const struct ili9881c_instr lhr050h41_init[] = {
 	ILI9881C_SWITCH_PAGE_INSTR(3),
 	ILI9881C_COMMAND_INSTR(0x01, 0x00),
 	ILI9881C_COMMAND_INSTR(0x02, 0x00),
@@ -313,8 +319,8 @@ static int ili9881c_prepare(struct drm_panel *panel)
 	gpiod_set_value(ctx->reset, 0);
 	msleep(20);
 
-	for (i = 0; i < ARRAY_SIZE(ili9881c_init); i++) {
-		const struct ili9881c_instr *instr = &ili9881c_init[i];
+	for (i = 0; i < ctx->desc->init_length; i++) {
+		const struct ili9881c_instr *instr = &ctx->desc->init[i];
 
 		if (instr->op == ILI9881C_SWITCH_PAGE)
 			ret = ili9881c_switch_page(ctx, instr->arg.page);
@@ -348,7 +354,6 @@ static int ili9881c_enable(struct drm_panel *panel)
 	msleep(120);
 
 	mipi_dsi_dcs_set_display_on(ctx->dsi);
-	backlight_enable(ctx->backlight);
 
 	return 0;
 }
@@ -357,7 +362,6 @@ static int ili9881c_disable(struct drm_panel *panel)
 {
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
 
-	backlight_disable(ctx->backlight);
 	return mipi_dsi_dcs_set_display_off(ctx->dsi);
 }
 
@@ -372,7 +376,7 @@ static int ili9881c_unprepare(struct drm_panel *panel)
 	return 0;
 }
 
-static const struct drm_display_mode bananapi_default_mode = {
+static const struct drm_display_mode lhr050h41_default_mode = {
 	.clock		= 62000,
 
 	.hdisplay	= 720,
@@ -384,20 +388,23 @@ static const struct drm_display_mode bananapi_default_mode = {
 	.vsync_start	= 1280 + 10,
 	.vsync_end	= 1280 + 10 + 10,
 	.vtotal		= 1280 + 10 + 10 + 20,
+
+	.width_mm	= 62,
+	.height_mm	= 110,
 };
 
-static int ili9881c_get_modes(struct drm_panel *panel)
+static int ili9881c_get_modes(struct drm_panel *panel,
+			      struct drm_connector *connector)
 {
-	struct drm_connector *connector = panel->connector;
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(panel->drm, &bananapi_default_mode);
+	mode = drm_mode_duplicate(connector->dev, ctx->desc->mode);
 	if (!mode) {
 		dev_err(&ctx->dsi->dev, "failed to add mode %ux%ux@%u\n",
-			bananapi_default_mode.hdisplay,
-			bananapi_default_mode.vdisplay,
-			drm_mode_vrefresh(&bananapi_default_mode));
+			ctx->desc->mode->hdisplay,
+			ctx->desc->mode->vdisplay,
+			drm_mode_vrefresh(ctx->desc->mode));
 		return -ENOMEM;
 	}
 
@@ -406,8 +413,8 @@ static int ili9881c_get_modes(struct drm_panel *panel)
 	mode->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
 	drm_mode_probed_add(connector, mode);
 
-	panel->connector->display_info.width_mm = 62;
-	panel->connector->display_info.height_mm = 110;
+	connector->display_info.width_mm = mode->width_mm;
+	connector->display_info.height_mm = mode->height_mm;
 
 	return 1;
 }
@@ -422,7 +429,6 @@ static const struct drm_panel_funcs ili9881c_funcs = {
 
 static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 {
-	struct device_node *np;
 	struct ili9881c *ctx;
 	int ret;
 
@@ -431,8 +437,10 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 		return -ENOMEM;
 	mipi_dsi_set_drvdata(dsi, ctx);
 	ctx->dsi = dsi;
+	ctx->desc = of_device_get_match_data(&dsi->dev);
 
-	drm_panel_init(&ctx->panel, &dsi->dev, &ili9881c_funcs);
+	drm_panel_init(&ctx->panel, &dsi->dev, &ili9881c_funcs,
+		       DRM_MODE_CONNECTOR_DSI);
 
 	ctx->power = devm_regulator_get(&dsi->dev, "power");
 	if (IS_ERR(ctx->power)) {
@@ -446,14 +454,9 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->reset);
 	}
 
-	np = of_parse_phandle(dsi->dev.of_node, "backlight", 0);
-	if (np) {
-		ctx->backlight = of_find_backlight_by_node(np);
-		of_node_put(np);
-
-		if (!ctx->backlight)
-			return -EPROBE_DEFER;
-	}
+	ret = drm_panel_of_backlight(&ctx->panel);
+	if (ret)
+		return ret;
 
 	drm_panel_add(&ctx->panel);
 
@@ -471,14 +474,17 @@ static int ili9881c_dsi_remove(struct mipi_dsi_device *dsi)
 	mipi_dsi_detach(dsi);
 	drm_panel_remove(&ctx->panel);
 
-	if (ctx->backlight)
-		put_device(&ctx->backlight->dev);
-
 	return 0;
 }
 
+static const struct ili9881c_desc lhr050h41_desc = {
+	.init = lhr050h41_init,
+	.init_length = ARRAY_SIZE(lhr050h41_init),
+	.mode = &lhr050h41_default_mode,
+};
+
 static const struct of_device_id ili9881c_of_match[] = {
-	{ .compatible = "bananapi,lhr050h41" },
+	{ .compatible = "bananapi,lhr050h41", .data = &lhr050h41_desc },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ili9881c_of_match);

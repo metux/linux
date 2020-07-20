@@ -1108,18 +1108,6 @@ static enum bp_result bios_parser_enable_disp_power_gating(
 		action);
 }
 
-static enum bp_result bios_parser_enable_lvtma_control(
-	struct dc_bios *dcb,
-	uint8_t uc_pwr_on)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.enable_lvtma_control)
-		return BP_RESULT_FAILURE;
-
-	return bp->cmd_tbl.enable_lvtma_control(bp, uc_pwr_on);
-}
-
 static bool bios_parser_is_accelerated_mode(
 	struct dc_bios *dcb)
 {
@@ -2113,7 +2101,7 @@ static struct atom_dc_golden_table_v1 *bios_get_golden_table(
 									DATA_TABLES(dce_info));
 			if (!disp_cntl_tbl_4_4)
 				return NULL;
-			dc_golden_offset = DATA_TABLES(dce_info) + disp_cntl_tbl_4_4->dc_golden_table_offset;
+			dc_golden_offset = disp_cntl_tbl_4_4->dc_golden_table_offset;
 			*dc_golden_table_ver = disp_cntl_tbl_4_4->dc_golden_table_ver;
 			break;
 		}
@@ -2127,7 +2115,7 @@ static struct atom_dc_golden_table_v1 *bios_get_golden_table(
 		return NULL;
 
 	return GET_IMAGE(struct atom_dc_golden_table_v1,
-			dc_golden_offset);
+					 dc_golden_offset);
 }
 
 static enum bp_result bios_get_atom_dc_golden_table(
@@ -2220,9 +2208,7 @@ static const struct dc_vbios_funcs vbios_funcs = {
 	.get_board_layout_info = bios_get_board_layout_info,
 	.pack_data_tables = bios_parser_pack_data_tables,
 
-	.get_atom_dc_golden_table = bios_get_atom_dc_golden_table,
-
-	.enable_lvtma_control = bios_parser_enable_lvtma_control
+	.get_atom_dc_golden_table = bios_get_atom_dc_golden_table
 };
 
 static bool bios_parser2_construct(

@@ -41,8 +41,9 @@ u32 aq_hw_read_reg(struct aq_hw_s *hw, u32 reg)
 {
 	u32 value = readl(hw->mmio + reg);
 
-	if (value == U32_MAX &&
-	    readl(hw->mmio + hw->aq_nic_cfg->aq_hw_caps->hw_alive_check_addr) == U32_MAX)
+	if ((~0U) == value &&
+	    (~0U) == readl(hw->mmio +
+			   hw->aq_nic_cfg->aq_hw_caps->hw_alive_check_addr))
 		aq_utils_obj_set(&hw->flags, AQ_HW_FLAG_ERR_UNPLUG);
 
 	return value;

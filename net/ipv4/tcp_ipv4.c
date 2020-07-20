@@ -1195,7 +1195,7 @@ static void tcp_clear_md5_list(struct sock *sk)
 }
 
 static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
-				 sockptr_t optval, int optlen)
+				 char __user *optval, int optlen)
 {
 	struct tcp_md5sig cmd;
 	struct sockaddr_in *sin = (struct sockaddr_in *)&cmd.tcpm_addr;
@@ -1206,7 +1206,7 @@ static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
 	if (optlen < sizeof(cmd))
 		return -EINVAL;
 
-	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
+	if (copy_from_user(&cmd, optval, sizeof(cmd)))
 		return -EFAULT;
 
 	if (sin->sin_family != AF_INET)
@@ -1788,12 +1788,12 @@ bool tcp_add_backlog(struct sock *sk, struct sk_buff *skb)
 
 	__skb_pull(skb, hdrlen);
 	if (skb_try_coalesce(tail, skb, &fragstolen, &delta)) {
+		thtail->window = th->window;
+
 		TCP_SKB_CB(tail)->end_seq = TCP_SKB_CB(skb)->end_seq;
 
-		if (likely(!before(TCP_SKB_CB(skb)->ack_seq, TCP_SKB_CB(tail)->ack_seq))) {
+		if (after(TCP_SKB_CB(skb)->ack_seq, TCP_SKB_CB(tail)->ack_seq))
 			TCP_SKB_CB(tail)->ack_seq = TCP_SKB_CB(skb)->ack_seq;
-			thtail->window = th->window;
-		}
 
 		/* We have to update both TCP_SKB_CB(tail)->tcp_flags and
 		 * thtail->fin, so that the fast path in tcp_rcv_established()
@@ -2921,7 +2921,7 @@ static struct pernet_operations __net_initdata tcp_sk_ops = {
 DEFINE_BPF_ITER_FUNC(tcp, struct bpf_iter_meta *meta,
 		     struct sock_common *sk_common, uid_t uid)
 
-static int bpf_iter_init_tcp(void *priv_data, struct bpf_iter_aux_info *aux)
+static int bpf_iter_init_tcp(void *priv_data)
 {
 	struct tcp_iter_state *st = priv_data;
 	struct tcp_seq_afinfo *afinfo;
@@ -2933,7 +2933,7 @@ static int bpf_iter_init_tcp(void *priv_data, struct bpf_iter_aux_info *aux)
 
 	afinfo->family = AF_UNSPEC;
 	st->bpf_seq_afinfo = afinfo;
-	ret = bpf_iter_init_seq_net(priv_data, aux);
+	ret = bpf_iter_init_seq_net(priv_data);
 	if (ret)
 		kfree(afinfo);
 	return ret;
@@ -2947,21 +2947,17 @@ static void bpf_iter_fini_tcp(void *priv_data)
 	bpf_iter_fini_seq_net(priv_data);
 }
 
-static const struct bpf_iter_seq_info tcp_seq_info = {
+static struct bpf_iter_reg tcp_reg_info = {
+	.target			= "tcp",
 	.seq_ops		= &bpf_iter_tcp_seq_ops,
 	.init_seq_private	= bpf_iter_init_tcp,
 	.fini_seq_private	= bpf_iter_fini_tcp,
 	.seq_priv_size		= sizeof(struct tcp_iter_state),
-};
-
-static struct bpf_iter_reg tcp_reg_info = {
-	.target			= "tcp",
 	.ctx_arg_info_size	= 1,
 	.ctx_arg_info		= {
 		{ offsetof(struct bpf_iter__tcp, sk_common),
 		  PTR_TO_BTF_ID_OR_NULL },
 	},
-	.seq_info		= &tcp_seq_info,
 };
 
 static void __init bpf_iter_register(void)

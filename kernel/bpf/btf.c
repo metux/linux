@@ -3806,19 +3806,6 @@ bool btf_ctx_access(int off, int size, enum bpf_access_type type,
 			btf_kind_str[BTF_INFO_KIND(t->info)]);
 		return false;
 	}
-
-	/* check for PTR_TO_RDONLY_BUF_OR_NULL or PTR_TO_RDWR_BUF_OR_NULL */
-	for (i = 0; i < prog->aux->ctx_arg_info_size; i++) {
-		const struct bpf_ctx_arg_aux *ctx_arg_info = &prog->aux->ctx_arg_info[i];
-
-		if (ctx_arg_info->offset == off &&
-		    (ctx_arg_info->reg_type == PTR_TO_RDONLY_BUF_OR_NULL ||
-		     ctx_arg_info->reg_type == PTR_TO_RDWR_BUF_OR_NULL)) {
-			info->reg_type = ctx_arg_info->reg_type;
-			return true;
-		}
-	}
-
 	if (t->type == 0)
 		/* This is a pointer to void.
 		 * It is the same as scalar from the verifier safety pov.
@@ -4095,7 +4082,7 @@ int btf_resolve_helper_id(struct bpf_verifier_log *log,
 {
 	int id;
 
-	if (fn->arg_type[arg] != ARG_PTR_TO_BTF_ID || !btf_vmlinux)
+	if (fn->arg_type[arg] != ARG_PTR_TO_BTF_ID)
 		return -EINVAL;
 	id = fn->btf_id[arg];
 	if (!id || id > btf_vmlinux->nr_types)

@@ -110,14 +110,14 @@ contain files named "0", "1", "2", ... The file numbers also represent
 increasing zone start sector on the device.
 
 All read and write operations to zone files are not allowed beyond the file
-maximum size, that is, beyond the zone size. Any access exceeding the zone
-size is failed with the -EFBIG error.
+maximum size, that is, beyond the zone capacity. Any access exceeding the zone
+capacity is failed with the -EFBIG error.
 
 Creating, deleting, renaming or modifying any attribute of files and
 sub-directories is not allowed.
 
 The number of blocks of a file as reported by stat() and fstat() indicates the
-size of the file zone, or in other words, the maximum file size.
+capacity of the zone file, or in other words, the maximum file size.
 
 Conventional zone files
 -----------------------
@@ -139,7 +139,7 @@ Sequential zone files can only be written sequentially, starting from the file
 end, that is, write operations can only be append writes. Zonefs makes no
 attempt at accepting random writes and will fail any write request that has a
 start offset not corresponding to the end of the file, or to the end of the last
-write issued and still in-flight (for asynchrnous I/O operations).
+write issued and still in-flight (for asynchronous I/O operations).
 
 Since dirty page writeback by the page cache does not guarantee a sequential
 write pattern, zonefs prevents buffered writes and writeable shared mappings
@@ -147,7 +147,7 @@ on sequential files. Only direct I/O writes are accepted for these files.
 zonefs relies on the sequential delivery of write I/O requests to the device
 implemented by the block layer elevator. An elevator implementing the sequential
 write feature for zoned block device (ELEVATOR_F_ZBD_SEQ_WRITE elevator feature)
-must be used. This type of elevator (e.g. mq-deadline) is the set by default
+must be used. This type of elevator (e.g. mq-deadline) is set by default
 for zoned block devices on device initialization.
 
 There are no restrictions on the type of I/O used for read operations in
@@ -156,8 +156,8 @@ all accepted.
 
 Truncating sequential zone files is allowed only down to 0, in which case, the
 zone is reset to rewind the file zone write pointer position to the start of
-the zone, or up to the zone size, in which case the file's zone is transitioned
-to the FULL state (finish zone operation).
+the zone, or up to the zone capacity, in which case the file's zone is
+transitioned to the FULL state (finish zone operation).
 
 Format options
 --------------
@@ -202,7 +202,7 @@ additional conditions that result in I/O errors.
   may still happen in the case of a partial failure of a very large direct I/O
   operation split into multiple BIOs/requests or asynchronous I/O operations.
   If one of the write request within the set of sequential write requests
-  issued to the device fails, all write requests after queued after it will
+  issued to the device fails, all write requests queued after it will
   become unaligned and fail.
 
 * Delayed write errors: similarly to regular block devices, if the device side
@@ -213,7 +213,7 @@ additional conditions that result in I/O errors.
   causing all data to be dropped after the sector that caused the error.
 
 All I/O errors detected by zonefs are notified to the user with an error code
-return for the system call that trigered or detected the error. The recovery
+return for the system call that triggered or detected the error. The recovery
 actions taken by zonefs in response to I/O errors depend on the I/O type (read
 vs write) and on the reason for the error (bad sector, unaligned writes or zone
 condition change).
@@ -228,7 +228,7 @@ condition change).
 * A zone condition change to read-only or offline also always triggers zonefs
   I/O error recovery.
 
-Zonefs minimal I/O error recovery may change a file size and a file access
+Zonefs minimal I/O error recovery may change a file size and file access
 permissions.
 
 * File size changes:
@@ -243,7 +243,7 @@ permissions.
   A file size may also be reduced to reflect a delayed write error detected on
   fsync(): in this case, the amount of data effectively written in the zone may
   be less than originally indicated by the file inode size. After such I/O
-  error, zonefs always fixes a file inode size to reflect the amount of data
+  error, zonefs always fixes the file inode size to reflect the amount of data
   persistently stored in the file zone.
 
 * Access permission changes:
@@ -264,11 +264,11 @@ conditions::
     |    option    | condition | size     read    write    read    write |
     +--------------+-----------+-----------------------------------------+
     |              | good      | fixed    yes     no       yes     yes   |
-    | remount-ro   | read-only | fixed    yes     no       yes     no    |
+    | remount-ro   | read-only | as is    yes     no       yes     no    |
     | (default)    | offline   |   0      no      no       no      no    |
     +--------------+-----------+-----------------------------------------+
     |              | good      | fixed    yes     no       yes     yes   |
-    | zone-ro      | read-only | fixed    yes     no       yes     no    |
+    | zone-ro      | read-only | as is    yes     no       yes     no    |
     |              | offline   |   0      no      no       no      no    |
     +--------------+-----------+-----------------------------------------+
     |              | good      |   0      no      no       yes     yes   |
@@ -276,7 +276,7 @@ conditions::
     |              | offline   |   0      no      no       no      no    |
     +--------------+-----------+-----------------------------------------+
     |              | good      | fixed    yes     yes      yes     yes   |
-    | repair       | read-only | fixed    yes     no       yes     no    |
+    | repair       | read-only | as is    yes     no       yes     no    |
     |              | offline   |   0      no      no       no      no    |
     +--------------+-----------+-----------------------------------------+
 
@@ -288,11 +288,11 @@ Further notes:
   permissions to read-only applies to all files. The file system is remounted
   read-only.
 * Access permission and file size changes due to the device transitioning zones
-  to the offline condition are permanent. Remounting or reformating the device
+  to the offline condition are permanent. Remounting or reformatting the device
   with mkfs.zonefs (mkzonefs) will not change back offline zone files to a good
   state.
 * File access permission changes to read-only due to the device transitioning
-  zones to the read-only condition are permanent. Remounting or reformating
+  zones to the read-only condition are permanent. Remounting or reformatting
   the device will not re-enable file write access.
 * File access permission changes implied by the remount-ro, zone-ro and
   zone-offline mount options are temporary for zones in a good condition.
@@ -308,15 +308,23 @@ Mount options
 
 zonefs define the "errors=<behavior>" mount option to allow the user to specify
 zonefs behavior in response to I/O errors, inode size inconsistencies or zone
-condition chages. The defined behaviors are as follow:
+condition changes. The defined behaviors are as follow:
 
 * remount-ro (default)
 * zone-ro
 * zone-offline
 * repair
 
-The I/O error actions defined for each behavior is detailed in the previous
-section.
+The run-time I/O error actions defined for each behavior are detailed in the
+previous section. Mount time I/O errors will cause the mount operation to fail.
+The handling of read-only zones also differs between mount-time and run-time.
+If a read-only zone is found at mount time, the zone is always treated in the
+same manner as offline zones, that is, all accesses are disabled and the zone
+file size set to 0. This is necessary as the write pointer of read-only zones
+is defined as invalib by the ZBC and ZAC standards, making it impossible to
+discover the amount of data that has been written to the zone. In the case of a
+read-only zone discovered at run-time, as indicated in the previous section.
+The size of the zone file is left unchanged from its last updated value.
 
 Zonefs User Space Tools
 =======================
@@ -393,8 +401,9 @@ append-writes to the file::
     # ls -l /mnt/seq/0
     -rw-r----- 1 root root 0 Nov 25 13:49 /mnt/seq/0
 
-Since files are statically mapped to zones on the disk, the number of blocks of
-a file as reported by stat() and fstat() indicates the size of the file zone::
+Since files are statically mapped to zones on the disk, the number of blocks
+of a file as reported by stat() and fstat() indicates the capacity of the file
+zone::
 
     # stat /mnt/seq/0
     File: /mnt/seq/0
@@ -408,5 +417,6 @@ a file as reported by stat() and fstat() indicates the size of the file zone::
 
 The number of blocks of the file ("Blocks") in units of 512B blocks gives the
 maximum file size of 524288 * 512 B = 256 MB, corresponding to the device zone
-size in this example. Of note is that the "IO block" field always indicates the
-minimum I/O size for writes and corresponds to the device physical sector size.
+capacity in this example. Of note is that the "IO block" field always
+indicates the minimum I/O size for writes and corresponds to the device
+physical sector size.

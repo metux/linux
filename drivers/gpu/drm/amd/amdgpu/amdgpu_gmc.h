@@ -250,4 +250,8 @@ bool amdgpu_gmc_filter_faults(struct amdgpu_device *adev, uint64_t addr,
 
 extern void amdgpu_gmc_tmz_set(struct amdgpu_device *adev);
 
+extern void
+amdgpu_gmc_set_vm_fault_masks(struct amdgpu_device *adev, int hub_type,
+			      bool enable);
+
 #endif

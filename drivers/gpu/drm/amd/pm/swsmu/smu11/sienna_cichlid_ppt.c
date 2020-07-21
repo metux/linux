@@ -68,19 +68,16 @@
 	FEATURE_MASK(FEATURE_DPM_LINK_BIT)       | \
 	FEATURE_MASK(FEATURE_DPM_SOCCLK_BIT)     | \
 	FEATURE_MASK(FEATURE_DPM_FCLK_BIT)	 | \
-	FEATURE_MASK(FEATURE_DPM_DCEFCLK_BIT)	 | \
-	FEATURE_MASK(FEATURE_DPM_MP0CLK_BIT))
-
-#define SMU_11_0_7_GFX_BUSY_THRESHOLD 15
+	FEATURE_MASK(FEATURE_DPM_DCEFCLK_BIT))
 
 static struct cmn2asic_msg_mapping sienna_cichlid_message_map[SMU_MSG_MAX_COUNT] = {
 	MSG_MAP(TestMessage,			PPSMC_MSG_TestMessage,                 1),
 	MSG_MAP(GetSmuVersion,			PPSMC_MSG_GetSmuVersion,               1),
 	MSG_MAP(GetDriverIfVersion,		PPSMC_MSG_GetDriverIfVersion,          1),
-	MSG_MAP(SetAllowedFeaturesMaskLow,	PPSMC_MSG_SetAllowedFeaturesMaskLow,   0),
-	MSG_MAP(SetAllowedFeaturesMaskHigh,	PPSMC_MSG_SetAllowedFeaturesMaskHigh,  0),
-	MSG_MAP(EnableAllSmuFeatures,		PPSMC_MSG_EnableAllSmuFeatures,        0),
-	MSG_MAP(DisableAllSmuFeatures,		PPSMC_MSG_DisableAllSmuFeatures,       0),
+	MSG_MAP(SetAllowedFeaturesMaskLow,	PPSMC_MSG_SetAllowedFeaturesMaskLow,   1),
+	MSG_MAP(SetAllowedFeaturesMaskHigh,	PPSMC_MSG_SetAllowedFeaturesMaskHigh,  1),
+	MSG_MAP(EnableAllSmuFeatures,		PPSMC_MSG_EnableAllSmuFeatures,        1),
+	MSG_MAP(DisableAllSmuFeatures,		PPSMC_MSG_DisableAllSmuFeatures,       1),
 	MSG_MAP(EnableSmuFeaturesLow,		PPSMC_MSG_EnableSmuFeaturesLow,        1),
 	MSG_MAP(EnableSmuFeaturesHigh,		PPSMC_MSG_EnableSmuFeaturesHigh,       1),
 	MSG_MAP(DisableSmuFeaturesLow,		PPSMC_MSG_DisableSmuFeaturesLow,       1),
@@ -88,45 +85,43 @@ static struct cmn2asic_msg_mapping sienna_cichlid_message_map[SMU_MSG_MAX_COUNT]
 	MSG_MAP(GetEnabledSmuFeaturesLow,       PPSMC_MSG_GetRunningSmuFeaturesLow,    1),
 	MSG_MAP(GetEnabledSmuFeaturesHigh,	PPSMC_MSG_GetRunningSmuFeaturesHigh,   1),
 	MSG_MAP(SetWorkloadMask,		PPSMC_MSG_SetWorkloadMask,             1),
-	MSG_MAP(SetPptLimit,			PPSMC_MSG_SetPptLimit,                 0),
-	MSG_MAP(SetDriverDramAddrHigh,		PPSMC_MSG_SetDriverDramAddrHigh,       0),
-	MSG_MAP(SetDriverDramAddrLow,		PPSMC_MSG_SetDriverDramAddrLow,        0),
-	MSG_MAP(SetToolsDramAddrHigh,		PPSMC_MSG_SetToolsDramAddrHigh,        0),
-	MSG_MAP(SetToolsDramAddrLow,		PPSMC_MSG_SetToolsDramAddrLow,         0),
-	MSG_MAP(TransferTableSmu2Dram,		PPSMC_MSG_TransferTableSmu2Dram,       0),
-	MSG_MAP(TransferTableDram2Smu,		PPSMC_MSG_TransferTableDram2Smu,       0),
-	MSG_MAP(UseDefaultPPTable,		PPSMC_MSG_UseDefaultPPTable,           0),
-	MSG_MAP(RunDcBtc,			PPSMC_MSG_RunDcBtc,                    0),
-	MSG_MAP(EnterBaco,			PPSMC_MSG_EnterBaco,                   0),
-	MSG_MAP(SetSoftMinByFreq,		PPSMC_MSG_SetSoftMinByFreq,            0),
-	MSG_MAP(SetSoftMaxByFreq,		PPSMC_MSG_SetSoftMaxByFreq,            0),
+	MSG_MAP(SetPptLimit,			PPSMC_MSG_SetPptLimit,                 1),
+	MSG_MAP(SetDriverDramAddrHigh,		PPSMC_MSG_SetDriverDramAddrHigh,       1),
+	MSG_MAP(SetDriverDramAddrLow,		PPSMC_MSG_SetDriverDramAddrLow,        1),
+	MSG_MAP(SetToolsDramAddrHigh,		PPSMC_MSG_SetToolsDramAddrHigh,        1),
+	MSG_MAP(SetToolsDramAddrLow,		PPSMC_MSG_SetToolsDramAddrLow,         1),
+	MSG_MAP(TransferTableSmu2Dram,		PPSMC_MSG_TransferTableSmu2Dram,       1),
+	MSG_MAP(TransferTableDram2Smu,		PPSMC_MSG_TransferTableDram2Smu,       1),
+	MSG_MAP(UseDefaultPPTable,		PPSMC_MSG_UseDefaultPPTable,           1),
+	MSG_MAP(EnterBaco,			PPSMC_MSG_EnterBaco,                   1),
+	MSG_MAP(SetSoftMinByFreq,		PPSMC_MSG_SetSoftMinByFreq,            1),
+	MSG_MAP(SetSoftMaxByFreq,		PPSMC_MSG_SetSoftMaxByFreq,            1),
 	MSG_MAP(SetHardMinByFreq,		PPSMC_MSG_SetHardMinByFreq,            1),
-	MSG_MAP(SetHardMaxByFreq,		PPSMC_MSG_SetHardMaxByFreq,            0),
+	MSG_MAP(SetHardMaxByFreq,		PPSMC_MSG_SetHardMaxByFreq,            1),
 	MSG_MAP(GetMinDpmFreq,			PPSMC_MSG_GetMinDpmFreq,               1),
 	MSG_MAP(GetMaxDpmFreq,			PPSMC_MSG_GetMaxDpmFreq,               1),
 	MSG_MAP(GetDpmFreqByIndex,		PPSMC_MSG_GetDpmFreqByIndex,           1),
-	MSG_MAP(SetGeminiMode,			PPSMC_MSG_SetGeminiMode,               0),
-	MSG_MAP(SetGeminiApertureHigh,		PPSMC_MSG_SetGeminiApertureHigh,       0),
-	MSG_MAP(SetGeminiApertureLow,		PPSMC_MSG_SetGeminiApertureLow,        0),
-	MSG_MAP(OverridePcieParameters,		PPSMC_MSG_OverridePcieParameters,      0),
-	MSG_MAP(ReenableAcDcInterrupt,		PPSMC_MSG_ReenableAcDcInterrupt,       0),
-	MSG_MAP(NotifyPowerSource,		PPSMC_MSG_NotifyPowerSource,           0),
-	MSG_MAP(SetUclkFastSwitch,		PPSMC_MSG_SetUclkFastSwitch,           0),
-	MSG_MAP(SetVideoFps,			PPSMC_MSG_SetVideoFps,                 0),
+	MSG_MAP(SetGeminiMode,			PPSMC_MSG_SetGeminiMode,               1),
+	MSG_MAP(SetGeminiApertureHigh,		PPSMC_MSG_SetGeminiApertureHigh,       1),
+	MSG_MAP(SetGeminiApertureLow,		PPSMC_MSG_SetGeminiApertureLow,        1),
+	MSG_MAP(OverridePcieParameters,		PPSMC_MSG_OverridePcieParameters,      1),
+	MSG_MAP(ReenableAcDcInterrupt,		PPSMC_MSG_ReenableAcDcInterrupt,       1),
+	MSG_MAP(NotifyPowerSource,		PPSMC_MSG_NotifyPowerSource,           1),
+	MSG_MAP(SetUclkFastSwitch,		PPSMC_MSG_SetUclkFastSwitch,           1),
+	MSG_MAP(SetVideoFps,			PPSMC_MSG_SetVideoFps,                 1),
 	MSG_MAP(PrepareMp1ForUnload,		PPSMC_MSG_PrepareMp1ForUnload,         1),
-	MSG_MAP(AllowGfxOff,			PPSMC_MSG_AllowGfxOff,                 0),
-	MSG_MAP(DisallowGfxOff,			PPSMC_MSG_DisallowGfxOff,              0),
-	MSG_MAP(GetPptLimit,			PPSMC_MSG_GetPptLimit,                 0),
+	MSG_MAP(AllowGfxOff,			PPSMC_MSG_AllowGfxOff,                 1),
+	MSG_MAP(DisallowGfxOff,			PPSMC_MSG_DisallowGfxOff,              1),
+	MSG_MAP(GetPptLimit,			PPSMC_MSG_GetPptLimit,                 1),
 	MSG_MAP(GetDcModeMaxDpmFreq,		PPSMC_MSG_GetDcModeMaxDpmFreq,         1),
-	MSG_MAP(ExitBaco,			PPSMC_MSG_ExitBaco,                    0),
-	MSG_MAP(PowerUpVcn,			PPSMC_MSG_PowerUpVcn,                  0),
-	MSG_MAP(PowerDownVcn,			PPSMC_MSG_PowerDownVcn,                0),
-	MSG_MAP(PowerUpJpeg,			PPSMC_MSG_PowerUpJpeg,                 0),
-	MSG_MAP(PowerDownJpeg,			PPSMC_MSG_PowerDownJpeg,               0),
-	MSG_MAP(BacoAudioD3PME,			PPSMC_MSG_BacoAudioD3PME,              0),
-	MSG_MAP(ArmD3,				PPSMC_MSG_ArmD3,                       0),
-	MSG_MAP(Mode1Reset,                     PPSMC_MSG_Mode1Reset,		       0),
-	MSG_MAP(SetMGpuFanBoostLimitRpm,	PPSMC_MSG_SetMGpuFanBoostLimitRpm,     0),
+	MSG_MAP(ExitBaco,			PPSMC_MSG_ExitBaco,                    1),
+	MSG_MAP(PowerUpVcn,			PPSMC_MSG_PowerUpVcn,                  1),
+	MSG_MAP(PowerDownVcn,			PPSMC_MSG_PowerDownVcn,                1),
+	MSG_MAP(PowerUpJpeg,			PPSMC_MSG_PowerUpJpeg,                 1),
+	MSG_MAP(PowerDownJpeg,			PPSMC_MSG_PowerDownJpeg,               1),
+	MSG_MAP(BacoAudioD3PME,			PPSMC_MSG_BacoAudioD3PME,              1),
+	MSG_MAP(ArmD3,				PPSMC_MSG_ArmD3,                       1),
+	MSG_MAP(Mode1Reset,                     PPSMC_MSG_Mode1Reset,		       1),
 };
 
 static struct cmn2asic_mapping sienna_cichlid_clk_map[SMU_CLK_COUNT] = {
@@ -151,17 +146,14 @@ static struct cmn2asic_mapping sienna_cichlid_feature_mask_map[SMU_FEATURE_COUNT
 	FEA_MAP(DPM_GFXCLK),
 	FEA_MAP(DPM_GFX_GPO),
 	FEA_MAP(DPM_UCLK),
-	FEA_MAP(DPM_FCLK),
 	FEA_MAP(DPM_SOCCLK),
 	FEA_MAP(DPM_MP0CLK),
 	FEA_MAP(DPM_LINK),
 	FEA_MAP(DPM_DCEFCLK),
-	FEA_MAP(DPM_XGMI),
 	FEA_MAP(MEM_VDDCI_SCALING),
 	FEA_MAP(MEM_MVDD_SCALING),
 	FEA_MAP(DS_GFXCLK),
 	FEA_MAP(DS_SOCCLK),
-	FEA_MAP(DS_FCLK),
 	FEA_MAP(DS_LCLK),
 	FEA_MAP(DS_DCEFCLK),
 	FEA_MAP(DS_UCLK),
@@ -217,7 +209,7 @@ static struct cmn2asic_mapping sienna_cichlid_workload_map[PP_SMC_POWER_PROFILE_
 	WORKLOAD_MAP(PP_SMC_POWER_PROFILE_POWERSAVING,		WORKLOAD_PPLIB_POWER_SAVING_BIT),
 	WORKLOAD_MAP(PP_SMC_POWER_PROFILE_VIDEO,		WORKLOAD_PPLIB_VIDEO_BIT),
 	WORKLOAD_MAP(PP_SMC_POWER_PROFILE_VR,			WORKLOAD_PPLIB_VR_BIT),
-	WORKLOAD_MAP(PP_SMC_POWER_PROFILE_COMPUTE,		WORKLOAD_PPLIB_COMPUTE_BIT),
+	WORKLOAD_MAP(PP_SMC_POWER_PROFILE_COMPUTE,		WORKLOAD_PPLIB_CUSTOM_BIT),
 	WORKLOAD_MAP(PP_SMC_POWER_PROFILE_CUSTOM,		WORKLOAD_PPLIB_CUSTOM_BIT),
 };
 
@@ -234,7 +226,6 @@ sienna_cichlid_get_allowed_feature_mask(struct smu_context *smu,
 
 	*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_PREFETCHER_BIT)
 				| FEATURE_MASK(FEATURE_DPM_FCLK_BIT)
-				| FEATURE_MASK(FEATURE_DPM_MP0CLK_BIT)
 				| FEATURE_MASK(FEATURE_DS_SOCCLK_BIT)
 				| FEATURE_MASK(FEATURE_DS_DCEFCLK_BIT)
 				| FEATURE_MASK(FEATURE_DS_FCLK_BIT)
@@ -301,9 +292,11 @@ static int sienna_cichlid_check_powerplay_table(struct smu_context *smu)
 		table_context->power_play_table;
 	struct smu_baco_context *smu_baco = &smu->smu_baco;
 
+	mutex_lock(&smu_baco->mutex);
 	if (powerplay_table->platform_caps & SMU_11_0_7_PP_PLATFORM_CAP_BACO ||
 	    powerplay_table->platform_caps & SMU_11_0_7_PP_PLATFORM_CAP_MACO)
 		smu_baco->platform_support = true;
+	mutex_unlock(&smu_baco->mutex);
 
 	table_context->thermal_controller_type =
 		powerplay_table->thermal_controller_type;
@@ -390,26 +383,14 @@ static int sienna_cichlid_tables_init(struct smu_context *smu)
 
 	smu_table->metrics_table = kzalloc(sizeof(SmuMetrics_t), GFP_KERNEL);
 	if (!smu_table->metrics_table)
-		goto err0_out;
+		return -ENOMEM;
 	smu_table->metrics_time = 0;
-
-	smu_table->gpu_metrics_table_size = sizeof(struct gpu_metrics_v1_0);
-	smu_table->gpu_metrics_table = kzalloc(smu_table->gpu_metrics_table_size, GFP_KERNEL);
-	if (!smu_table->gpu_metrics_table)
-		goto err1_out;
 
 	smu_table->watermarks_table = kzalloc(sizeof(Watermarks_t), GFP_KERNEL);
 	if (!smu_table->watermarks_table)
-		goto err2_out;
+		return -ENOMEM;
 
 	return 0;
-
-err2_out:
-	kfree(smu_table->gpu_metrics_table);
-err1_out:
-	kfree(smu_table->metrics_table);
-err0_out:
-	return -ENOMEM;
 }
 
 static int sienna_cichlid_get_smu_metrics_data(struct smu_context *smu,
@@ -421,13 +402,19 @@ static int sienna_cichlid_get_smu_metrics_data(struct smu_context *smu,
 	int ret = 0;
 
 	mutex_lock(&smu->metrics_lock);
-
-	ret = smu_cmn_get_metrics_table_locked(smu,
-					       NULL,
-					       false);
-	if (ret) {
-		mutex_unlock(&smu->metrics_lock);
-		return ret;
+	if (!smu_table->metrics_time ||
+	     time_after(jiffies, smu_table->metrics_time + msecs_to_jiffies(1))) {
+		ret = smu_cmn_update_table(smu,
+				       SMU_TABLE_SMU_METRICS,
+				       0,
+				       smu_table->metrics_table,
+				       false);
+		if (ret) {
+			dev_info(smu->adev->dev, "Failed to export SMU metrics table!\n");
+			mutex_unlock(&smu->metrics_lock);
+			return ret;
+		}
+		smu_table->metrics_time = jiffies;
 	}
 
 	switch (member) {
@@ -455,20 +442,14 @@ static int sienna_cichlid_get_smu_metrics_data(struct smu_context *smu,
 	case METRICS_CURR_DCEFCLK:
 		*value = metrics->CurrClock[PPCLK_DCEFCLK];
 		break;
-	case METRICS_CURR_FCLK:
-		*value = metrics->CurrClock[PPCLK_FCLK];
-		break;
 	case METRICS_AVERAGE_GFXCLK:
-		if (metrics->AverageGfxActivity <= SMU_11_0_7_GFX_BUSY_THRESHOLD)
-			*value = metrics->AverageGfxclkFrequencyPostDs;
-		else
-			*value = metrics->AverageGfxclkFrequencyPreDs;
+		*value = metrics->AverageGfxclkFrequency;
 		break;
 	case METRICS_AVERAGE_FCLK:
-		*value = metrics->AverageFclkFrequencyPostDs;
+		*value = metrics->AverageFclkFrequency;
 		break;
 	case METRICS_AVERAGE_UCLK:
-		*value = metrics->AverageUclkFrequencyPostDs;
+		*value = metrics->AverageUclkFrequency;
 		break;
 	case METRICS_AVERAGE_GFXACTIVITY:
 		*value = metrics->AverageGfxActivity;
@@ -780,7 +761,10 @@ static int sienna_cichlid_set_default_dpm_table(struct smu_context *smu)
 
 static int sienna_cichlid_dpm_set_vcn_enable(struct smu_context *smu, bool enable)
 {
+	struct smu_power_context *smu_power = &smu->smu_power;
+	struct smu_power_gate *power_gate = &smu_power->power_gate;
 	struct amdgpu_device *adev = smu->adev;
+
 	int ret = 0;
 
 	if (enable) {
@@ -789,25 +773,27 @@ static int sienna_cichlid_dpm_set_vcn_enable(struct smu_context *smu, bool enabl
 			ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_PowerUpVcn, 0, NULL);
 			if (ret)
 				return ret;
-			if (adev->vcn.num_vcn_inst > 1) {
+			if (adev->asic_type == CHIP_SIENNA_CICHLID) {
 				ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_PowerUpVcn,
 								  0x10000, NULL);
 				if (ret)
 					return ret;
 			}
 		}
+		power_gate->vcn_gated = false;
 	} else {
 		if (smu_cmn_feature_is_enabled(smu, SMU_FEATURE_MM_DPM_PG_BIT)) {
 			ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_PowerDownVcn, 0, NULL);
 			if (ret)
 				return ret;
-			if (adev->vcn.num_vcn_inst > 1) {
+			if (adev->asic_type == CHIP_SIENNA_CICHLID) {
 				ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_PowerDownVcn,
 								  0x10000, NULL);
 				if (ret)
 					return ret;
 			}
 		}
+		power_gate->vcn_gated = true;
 	}
 
 	return ret;
@@ -815,6 +801,8 @@ static int sienna_cichlid_dpm_set_vcn_enable(struct smu_context *smu, bool enabl
 
 static int sienna_cichlid_dpm_set_jpeg_enable(struct smu_context *smu, bool enable)
 {
+	struct smu_power_context *smu_power = &smu->smu_power;
+	struct smu_power_gate *power_gate = &smu_power->power_gate;
 	int ret = 0;
 
 	if (enable) {
@@ -823,12 +811,14 @@ static int sienna_cichlid_dpm_set_jpeg_enable(struct smu_context *smu, bool enab
 			if (ret)
 				return ret;
 		}
+		power_gate->jpeg_gated = false;
 	} else {
 		if (smu_cmn_feature_is_enabled(smu, SMU_FEATURE_MM_DPM_PG_BIT)) {
 			ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_PowerDownJpeg, 0, NULL);
 			if (ret)
 				return ret;
 		}
+		power_gate->jpeg_gated = true;
 	}
 
 	return ret;
@@ -954,23 +944,23 @@ static int sienna_cichlid_print_clk_levels(struct smu_context *smu,
 			freq_values[1] = cur_value;
 			mark_index = cur_value == freq_values[0] ? 0 :
 				     cur_value == freq_values[2] ? 2 : 1;
+			if (mark_index != 1)
+				freq_values[1] = (freq_values[0] + freq_values[2]) / 2;
 
-			count = 3;
-			if (mark_index != 1) {
-				count = 2;
-				freq_values[1] = freq_values[2];
-			}
-
-			for (i = 0; i < count; i++) {
+			for (i = 0; i < 3; i++) {
 				size += sprintf(buf + size, "%d: %uMhz %s\n", i, freq_values[i],
-						cur_value  == freq_values[i] ? "*" : "");
+						i == mark_index ? "*" : "");
 			}
 
 		}
 		break;
 	case SMU_PCIE:
-		gen_speed = smu_v11_0_get_current_pcie_link_speed_level(smu);
-		lane_width = smu_v11_0_get_current_pcie_link_width_level(smu);
+		gen_speed = (RREG32_PCIE(smnPCIE_LC_SPEED_CNTL) &
+			     PSWUSP0_PCIE_LC_SPEED_CNTL__LC_CURRENT_DATA_RATE_MASK)
+			>> PSWUSP0_PCIE_LC_SPEED_CNTL__LC_CURRENT_DATA_RATE__SHIFT;
+		lane_width = (RREG32_PCIE(smnPCIE_LC_LINK_WIDTH_CNTL) &
+			      PCIE_LC_LINK_WIDTH_CNTL__LC_LINK_WIDTH_RD_MASK)
+			>> PCIE_LC_LINK_WIDTH_CNTL__LC_LINK_WIDTH_RD__SHIFT;
 		for (i = 0; i < NUM_LINK_LEVELS; i++)
 			size += sprintf(buf + size, "%d: %s %s %dMhz %s\n", i,
 					(dpm_context->dpm_tables.pcie_table.pcie_gen[i] == 0) ? "2.5GT/s," :
@@ -1160,14 +1150,10 @@ static bool sienna_cichlid_is_dpm_running(struct smu_context *smu)
 {
 	int ret = 0;
 	uint32_t feature_mask[2];
-	uint64_t feature_enabled;
-
+	unsigned long feature_enabled;
 	ret = smu_cmn_get_enabled_mask(smu, feature_mask, 2);
-	if (ret)
-		return false;
-
-	feature_enabled = (uint64_t)feature_mask[1] << 32 | feature_mask[0];
-
+	feature_enabled = (unsigned long)((uint64_t)feature_mask[0] |
+			   ((uint64_t)feature_mask[1] << 32));
 	return !!(feature_enabled & SMC_DPM_FEATURE);
 }
 
@@ -1178,17 +1164,26 @@ static int sienna_cichlid_get_fan_speed_rpm(struct smu_context *smu,
 		return -EINVAL;
 
 	return sienna_cichlid_get_smu_metrics_data(smu,
-						METRICS_CURR_FANSPEED,
-						speed);
+						   METRICS_CURR_FANSPEED,
+						   speed);
 }
 
-static int sienna_cichlid_get_fan_parameters(struct smu_context *smu)
+static int sienna_cichlid_get_fan_speed_percent(struct smu_context *smu,
+					uint32_t *speed)
 {
+	int ret = 0;
+	uint32_t percent = 0;
+	uint32_t current_rpm;
 	PPTable_t *pptable = smu->smu_table.driver_pptable;
 
-	smu->fan_max_rpm = pptable->FanMaximumRpm;
+	ret = sienna_cichlid_get_fan_speed_rpm(smu, &current_rpm);
+	if (ret)
+		return ret;
 
-	return 0;
+	percent = current_rpm * 100 / pptable->FanMaximumRpm;
+	*speed = percent > 100 ? 100 : percent;
+
+	return ret;
 }
 
 static int sienna_cichlid_get_power_profile_mode(struct smu_context *smu, char *buf)
@@ -1412,43 +1407,58 @@ static int sienna_cichlid_notify_smc_display_config(struct smu_context *smu)
 }
 
 static int sienna_cichlid_set_watermarks_table(struct smu_context *smu,
-					       struct pp_smu_wm_range_sets *clock_ranges)
+					       struct dm_pp_wm_sets_with_clock_ranges_soc15
+					       *clock_ranges)
 {
 	Watermarks_t *table = smu->smu_table.watermarks_table;
 	int ret = 0;
 	int i;
 
 	if (clock_ranges) {
-		if (clock_ranges->num_reader_wm_sets > NUM_WM_RANGES ||
-		    clock_ranges->num_writer_wm_sets > NUM_WM_RANGES)
+		if (clock_ranges->num_wm_dmif_sets > 4 ||
+		    clock_ranges->num_wm_mcif_sets > 4)
 			return -EINVAL;
 
-		for (i = 0; i < clock_ranges->num_reader_wm_sets; i++) {
-			table->WatermarkRow[WM_DCEFCLK][i].MinClock =
-				clock_ranges->reader_wm_sets[i].min_drain_clk_mhz;
-			table->WatermarkRow[WM_DCEFCLK][i].MaxClock =
-				clock_ranges->reader_wm_sets[i].max_drain_clk_mhz;
-			table->WatermarkRow[WM_DCEFCLK][i].MinUclk =
-				clock_ranges->reader_wm_sets[i].min_fill_clk_mhz;
-			table->WatermarkRow[WM_DCEFCLK][i].MaxUclk =
-				clock_ranges->reader_wm_sets[i].max_fill_clk_mhz;
-
-			table->WatermarkRow[WM_DCEFCLK][i].WmSetting =
-				clock_ranges->reader_wm_sets[i].wm_inst;
+		for (i = 0; i < clock_ranges->num_wm_dmif_sets; i++) {
+			table->WatermarkRow[1][i].MinClock =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_min_dcfclk_clk_in_khz /
+				1000));
+			table->WatermarkRow[1][i].MaxClock =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_max_dcfclk_clk_in_khz /
+				1000));
+			table->WatermarkRow[1][i].MinUclk =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_min_mem_clk_in_khz /
+				1000));
+			table->WatermarkRow[1][i].MaxUclk =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_max_mem_clk_in_khz /
+				1000));
+			table->WatermarkRow[1][i].WmSetting = (uint8_t)
+					clock_ranges->wm_dmif_clocks_ranges[i].wm_set_id;
 		}
 
-		for (i = 0; i < clock_ranges->num_writer_wm_sets; i++) {
-			table->WatermarkRow[WM_SOCCLK][i].MinClock =
-				clock_ranges->writer_wm_sets[i].min_fill_clk_mhz;
-			table->WatermarkRow[WM_SOCCLK][i].MaxClock =
-				clock_ranges->writer_wm_sets[i].max_fill_clk_mhz;
-			table->WatermarkRow[WM_SOCCLK][i].MinUclk =
-				clock_ranges->writer_wm_sets[i].min_drain_clk_mhz;
-			table->WatermarkRow[WM_SOCCLK][i].MaxUclk =
-				clock_ranges->writer_wm_sets[i].max_drain_clk_mhz;
-
-			table->WatermarkRow[WM_SOCCLK][i].WmSetting =
-				clock_ranges->writer_wm_sets[i].wm_inst;
+		for (i = 0; i < clock_ranges->num_wm_mcif_sets; i++) {
+			table->WatermarkRow[0][i].MinClock =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_min_socclk_clk_in_khz /
+				1000));
+			table->WatermarkRow[0][i].MaxClock =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_max_socclk_clk_in_khz /
+				1000));
+			table->WatermarkRow[0][i].MinUclk =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_min_mem_clk_in_khz /
+				1000));
+			table->WatermarkRow[0][i].MaxUclk =
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_max_mem_clk_in_khz /
+				1000));
+			table->WatermarkRow[0][i].WmSetting = (uint8_t)
+					clock_ranges->wm_mcif_clocks_ranges[i].wm_set_id;
 		}
 
 		smu->watermarks_bitmap |= WATERMARKS_EXIST;
@@ -1724,11 +1734,6 @@ static int sienna_cichlid_get_dpm_ultimate_freq(struct smu_context *smu,
 		amdgpu_gfx_off_ctrl(adev, true);
 
 	return ret;
-}
-
-static int sienna_cichlid_run_btc(struct smu_context *smu)
-{
-	return smu_cmn_send_smc_msg(smu, SMU_MSG_RunDcBtc, NULL);
 }
 
 static bool sienna_cichlid_is_baco_supported(struct smu_context *smu)
@@ -2279,6 +2284,11 @@ static void sienna_cichlid_dump_pptable(struct smu_context *smu)
 	dev_info(smu->adev->dev, "SkuReserved[6] = 0x%x\n", pptable->SkuReserved[6]);
 	dev_info(smu->adev->dev, "SkuReserved[7] = 0x%x\n", pptable->SkuReserved[7]);
 	dev_info(smu->adev->dev, "SkuReserved[8] = 0x%x\n", pptable->SkuReserved[8]);
+	dev_info(smu->adev->dev, "SkuReserved[9] = 0x%x\n", pptable->SkuReserved[9]);
+	dev_info(smu->adev->dev, "SkuReserved[10] = 0x%x\n", pptable->SkuReserved[10]);
+	dev_info(smu->adev->dev, "SkuReserved[11] = 0x%x\n", pptable->SkuReserved[11]);
+	dev_info(smu->adev->dev, "SkuReserved[12] = 0x%x\n", pptable->SkuReserved[12]);
+	dev_info(smu->adev->dev, "SkuReserved[13] = 0x%x\n", pptable->SkuReserved[13]);
 
 	dev_info(smu->adev->dev, "GamingClk[0] = 0x%x\n", pptable->GamingClk[0]);
 	dev_info(smu->adev->dev, "GamingClk[1] = 0x%x\n", pptable->GamingClk[1]);
@@ -2427,6 +2437,8 @@ static void sienna_cichlid_fill_i2c_req(SwI2cRequest_t  *req, bool write,
 {
 	int i;
 
+	BUG_ON(numbytes > MAX_SW_I2C_COMMANDS);
+
 	req->I2CcontrollerPort = 0;
 	req->I2CSpeed = 2;
 	req->SlaveAddress = address;
@@ -2464,12 +2476,6 @@ static int sienna_cichlid_i2c_read_data(struct i2c_adapter *control,
 	struct smu_table_context *smu_table = &adev->smu.smu_table;
 	struct smu_table *table = &smu_table->driver_table;
 
-	if (numbytes > MAX_SW_I2C_COMMANDS) {
-		dev_err(adev->dev, "numbytes requested %d is over max allowed %d\n",
-			numbytes, MAX_SW_I2C_COMMANDS);
-		return -EINVAL;
-	}
-
 	memset(&req, 0, sizeof(req));
 	sienna_cichlid_fill_i2c_req(&req, false, address, numbytes, data);
 
@@ -2505,12 +2511,6 @@ static int sienna_cichlid_i2c_write_data(struct i2c_adapter *control,
 	uint32_t ret;
 	SwI2cRequest_t req;
 	struct amdgpu_device *adev = to_amdgpu_device(control);
-
-	if (numbytes > MAX_SW_I2C_COMMANDS) {
-		dev_err(adev->dev, "numbytes requested %d is over max allowed %d\n",
-			numbytes, MAX_SW_I2C_COMMANDS);
-		return -EINVAL;
-	}
 
 	memset(&req, 0, sizeof(req));
 	sienna_cichlid_fill_i2c_req(&req, true, address, numbytes, data);
@@ -2625,10 +2625,21 @@ static const struct i2c_algorithm sienna_cichlid_i2c_algo = {
 	.functionality = sienna_cichlid_i2c_func,
 };
 
+static bool sienna_cichlid_i2c_adapter_is_added(struct i2c_adapter *control)
+{
+	struct amdgpu_device *adev = to_amdgpu_device(control);
+
+	return control->dev.parent == &adev->pdev->dev;
+}
+
 static int sienna_cichlid_i2c_control_init(struct smu_context *smu, struct i2c_adapter *control)
 {
 	struct amdgpu_device *adev = to_amdgpu_device(control);
 	int res;
+
+	/* smu_i2c_eeprom_init may be called twice in sriov */
+	if (sienna_cichlid_i2c_adapter_is_added(control))
+		return 0;
 
 	control->owner = THIS_MODULE;
 	control->class = I2C_CLASS_SPD;
@@ -2645,79 +2656,12 @@ static int sienna_cichlid_i2c_control_init(struct smu_context *smu, struct i2c_a
 
 static void sienna_cichlid_i2c_control_fini(struct smu_context *smu, struct i2c_adapter *control)
 {
+	if (!sienna_cichlid_i2c_adapter_is_added(control))
+		return;
+
 	i2c_del_adapter(control);
 }
 
-static ssize_t sienna_cichlid_get_gpu_metrics(struct smu_context *smu,
-					      void **table)
-{
-	struct smu_table_context *smu_table = &smu->smu_table;
-	struct gpu_metrics_v1_0 *gpu_metrics =
-		(struct gpu_metrics_v1_0 *)smu_table->gpu_metrics_table;
-	SmuMetrics_t metrics;
-	int ret = 0;
-
-	ret = smu_cmn_get_metrics_table(smu,
-					&metrics,
-					true);
-	if (ret)
-		return ret;
-
-	smu_v11_0_init_gpu_metrics_v1_0(gpu_metrics);
-
-	gpu_metrics->temperature_edge = metrics.TemperatureEdge;
-	gpu_metrics->temperature_hotspot = metrics.TemperatureHotspot;
-	gpu_metrics->temperature_mem = metrics.TemperatureMem;
-	gpu_metrics->temperature_vrgfx = metrics.TemperatureVrGfx;
-	gpu_metrics->temperature_vrsoc = metrics.TemperatureVrSoc;
-	gpu_metrics->temperature_vrmem = metrics.TemperatureVrMem0;
-
-	gpu_metrics->average_gfx_activity = metrics.AverageGfxActivity;
-	gpu_metrics->average_umc_activity = metrics.AverageUclkActivity;
-	gpu_metrics->average_mm_activity = metrics.VcnActivityPercentage;
-
-	gpu_metrics->average_socket_power = metrics.AverageSocketPower;
-	gpu_metrics->energy_accumulator = metrics.EnergyAccumulator;
-
-	if (metrics.AverageGfxActivity <= SMU_11_0_7_GFX_BUSY_THRESHOLD)
-		gpu_metrics->average_gfxclk_frequency = metrics.AverageGfxclkFrequencyPostDs;
-	else
-		gpu_metrics->average_gfxclk_frequency = metrics.AverageGfxclkFrequencyPreDs;
-	gpu_metrics->average_uclk_frequency = metrics.AverageUclkFrequencyPostDs;
-	gpu_metrics->average_vclk0_frequency = metrics.AverageVclk0Frequency;
-	gpu_metrics->average_dclk0_frequency = metrics.AverageDclk0Frequency;
-	gpu_metrics->average_vclk1_frequency = metrics.AverageVclk1Frequency;
-	gpu_metrics->average_dclk1_frequency = metrics.AverageDclk1Frequency;
-
-	gpu_metrics->current_gfxclk = metrics.CurrClock[PPCLK_GFXCLK];
-	gpu_metrics->current_socclk = metrics.CurrClock[PPCLK_SOCCLK];
-	gpu_metrics->current_uclk = metrics.CurrClock[PPCLK_UCLK];
-	gpu_metrics->current_vclk0 = metrics.CurrClock[PPCLK_VCLK_0];
-	gpu_metrics->current_dclk0 = metrics.CurrClock[PPCLK_DCLK_0];
-	gpu_metrics->current_vclk1 = metrics.CurrClock[PPCLK_VCLK_1];
-	gpu_metrics->current_dclk1 = metrics.CurrClock[PPCLK_DCLK_1];
-
-	gpu_metrics->throttle_status = metrics.ThrottlerStatus;
-
-	gpu_metrics->current_fan_speed = metrics.CurrFanSpeed;
-
-	gpu_metrics->pcie_link_width =
-			smu_v11_0_get_current_pcie_link_width(smu);
-	gpu_metrics->pcie_link_speed =
-			smu_v11_0_get_current_pcie_link_speed(smu);
-
-	*table = (void *)gpu_metrics;
-
-	return sizeof(struct gpu_metrics_v1_0);
-}
-
-static int sienna_cichlid_enable_mgpu_fan_boost(struct smu_context *smu)
-{
-	return smu_cmn_send_smc_msg_with_param(smu,
-					       SMU_MSG_SetMGpuFanBoostLimitRpm,
-					       0,
-					       NULL);
-}
 
 static const struct pptable_funcs sienna_cichlid_ppt_funcs = {
 	.get_allowed_feature_mask = sienna_cichlid_get_allowed_feature_mask,
@@ -2733,6 +2677,7 @@ static const struct pptable_funcs sienna_cichlid_ppt_funcs = {
 	.display_config_changed = sienna_cichlid_display_config_changed,
 	.notify_smc_display_config = sienna_cichlid_notify_smc_display_config,
 	.is_dpm_running = sienna_cichlid_is_dpm_running,
+	.get_fan_speed_percent = sienna_cichlid_get_fan_speed_percent,
 	.get_fan_speed_rpm = sienna_cichlid_get_fan_speed_rpm,
 	.get_power_profile_mode = sienna_cichlid_get_power_profile_mode,
 	.set_power_profile_mode = sienna_cichlid_set_power_profile_mode,
@@ -2776,6 +2721,7 @@ static const struct pptable_funcs sienna_cichlid_ppt_funcs = {
 	.display_clock_voltage_request = smu_v11_0_display_clock_voltage_request,
 	.get_fan_control_mode = smu_v11_0_get_fan_control_mode,
 	.set_fan_control_mode = smu_v11_0_set_fan_control_mode,
+	.set_fan_speed_percent = smu_v11_0_set_fan_speed_percent,
 	.set_fan_speed_rpm = smu_v11_0_set_fan_speed_rpm,
 	.set_xgmi_pstate = smu_v11_0_set_xgmi_pstate,
 	.gfx_off_control = smu_v11_0_gfx_off_control,
@@ -2791,15 +2737,8 @@ static const struct pptable_funcs sienna_cichlid_ppt_funcs = {
 	.mode1_reset = smu_v11_0_mode1_reset,
 	.get_dpm_ultimate_freq = sienna_cichlid_get_dpm_ultimate_freq,
 	.set_soft_freq_limited_range = smu_v11_0_set_soft_freq_limited_range,
-	.run_btc = sienna_cichlid_run_btc,
 	.get_pp_feature_mask = smu_cmn_get_pp_feature_mask,
 	.set_pp_feature_mask = smu_cmn_set_pp_feature_mask,
-	.get_gpu_metrics = sienna_cichlid_get_gpu_metrics,
-	.enable_mgpu_fan_boost = sienna_cichlid_enable_mgpu_fan_boost,
-	.gfx_ulv_control = smu_v11_0_gfx_ulv_control,
-	.deep_sleep_control = smu_v11_0_deep_sleep_control,
-	.get_fan_parameters = sienna_cichlid_get_fan_parameters,
-	.interrupt_work = smu_v11_0_interrupt_work,
 };
 
 void sienna_cichlid_set_ppt_funcs(struct smu_context *smu)

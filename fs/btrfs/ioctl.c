@@ -378,18 +378,6 @@ static int check_xflags(unsigned int flags)
 	return 0;
 }
 
-bool btrfs_exclop_start(struct btrfs_fs_info *fs_info,
-			enum btrfs_exclusive_operation type)
-{
-	return !cmpxchg(&fs_info->exclusive_operation, BTRFS_EXCLOP_NONE, type);
-}
-
-void btrfs_exclop_finish(struct btrfs_fs_info *fs_info)
-{
-	WRITE_ONCE(fs_info->exclusive_operation, BTRFS_EXCLOP_NONE);
-	sysfs_notify(&fs_info->fs_devices->fsid_kobj, NULL, "exclusive_operation");
-}
-
 /*
  * Set the xflags from the internal inode flags. The remaining items of fsxattr
  * are zeroed.
@@ -630,7 +618,7 @@ static noinline int create_subvol(struct inode *dir,
 	trans = btrfs_start_transaction(root, 0);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
-		btrfs_subvolume_release_metadata(root, &block_rsv);
+		btrfs_subvolume_release_metadata(fs_info, &block_rsv);
 		goto fail_free;
 	}
 	trans->block_rsv = &block_rsv;
@@ -640,8 +628,7 @@ static noinline int create_subvol(struct inode *dir,
 	if (ret)
 		goto fail;
 
-	leaf = btrfs_alloc_tree_block(trans, root, 0, objectid, NULL, 0, 0, 0,
-				      BTRFS_NESTING_NORMAL);
+	leaf = btrfs_alloc_tree_block(trans, root, 0, objectid, NULL, 0, 0, 0);
 	if (IS_ERR(leaf)) {
 		ret = PTR_ERR(leaf);
 		goto fail;
@@ -755,7 +742,7 @@ fail:
 	kfree(root_item);
 	trans->block_rsv = NULL;
 	trans->bytes_reserved = 0;
-	btrfs_subvolume_release_metadata(root, &block_rsv);
+	btrfs_subvolume_release_metadata(fs_info, &block_rsv);
 
 	err = btrfs_commit_transaction(trans);
 	if (err && !ret)
@@ -869,7 +856,7 @@ fail:
 	if (ret && pending_snapshot->snap)
 		pending_snapshot->snap->anon_dev = 0;
 	btrfs_put_root(pending_snapshot->snap);
-	btrfs_subvolume_release_metadata(root, &pending_snapshot->block_rsv);
+	btrfs_subvolume_release_metadata(fs_info, &pending_snapshot->block_rsv);
 free_pending:
 	if (pending_snapshot->anon_dev)
 		free_anon_bdev(pending_snapshot->anon_dev);
@@ -1274,7 +1261,6 @@ static int cluster_pages_for_defrag(struct inode *inode,
 	u64 page_start;
 	u64 page_end;
 	u64 page_cnt;
-	u64 start = (u64)start_index << PAGE_SHIFT;
 	int ret;
 	int i;
 	int i_done;
@@ -1291,7 +1277,8 @@ static int cluster_pages_for_defrag(struct inode *inode,
 	page_cnt = min_t(u64, (u64)num_pages, (u64)file_end - start_index + 1);
 
 	ret = btrfs_delalloc_reserve_space(BTRFS_I(inode), &data_reserved,
-			start, page_cnt << PAGE_SHIFT);
+			start_index << PAGE_SHIFT,
+			page_cnt << PAGE_SHIFT);
 	if (ret)
 		return ret;
 	i_done = 0;
@@ -1319,7 +1306,7 @@ again:
 				break;
 
 			unlock_page(page);
-			btrfs_start_ordered_extent(ordered, 1);
+			btrfs_start_ordered_extent(inode, ordered, 1);
 			btrfs_put_ordered_extent(ordered);
 			lock_page(page);
 			/*
@@ -1380,7 +1367,8 @@ again:
 		btrfs_mod_outstanding_extents(BTRFS_I(inode), 1);
 		spin_unlock(&BTRFS_I(inode)->lock);
 		btrfs_delalloc_release_space(BTRFS_I(inode), data_reserved,
-				start, (page_cnt - i_done) << PAGE_SHIFT, true);
+				start_index << PAGE_SHIFT,
+				(page_cnt - i_done) << PAGE_SHIFT, true);
 	}
 
 
@@ -1407,7 +1395,8 @@ out:
 		put_page(pages[i]);
 	}
 	btrfs_delalloc_release_space(BTRFS_I(inode), data_reserved,
-			start, page_cnt << PAGE_SHIFT, true);
+			start_index << PAGE_SHIFT,
+			page_cnt << PAGE_SHIFT, true);
 	btrfs_delalloc_release_extents(BTRFS_I(inode), page_cnt << PAGE_SHIFT);
 	extent_changeset_free(data_reserved);
 	return ret;
@@ -1649,7 +1638,7 @@ static noinline int btrfs_ioctl_resize(struct file *file,
 	if (ret)
 		return ret;
 
-	if (!btrfs_exclop_start(fs_info, BTRFS_EXCLOP_RESIZE)) {
+	if (test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags)) {
 		mnt_drop_write_file(file);
 		return BTRFS_ERROR_DEV_EXCL_RUN_IN_PROGRESS;
 	}
@@ -1763,7 +1752,7 @@ static noinline int btrfs_ioctl_resize(struct file *file,
 out_free:
 	kfree(vol_args);
 out:
-	btrfs_exclop_finish(fs_info);
+	clear_bit(BTRFS_FS_EXCL_OP, &fs_info->flags);
 	mnt_drop_write_file(file);
 	return ret;
 }
@@ -3137,7 +3126,7 @@ static long btrfs_ioctl_add_dev(struct btrfs_fs_info *fs_info, void __user *arg)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (!btrfs_exclop_start(fs_info, BTRFS_EXCLOP_DEV_ADD))
+	if (test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags))
 		return BTRFS_ERROR_DEV_EXCL_RUN_IN_PROGRESS;
 
 	vol_args = memdup_user(arg, sizeof(*vol_args));
@@ -3154,7 +3143,7 @@ static long btrfs_ioctl_add_dev(struct btrfs_fs_info *fs_info, void __user *arg)
 
 	kfree(vol_args);
 out:
-	btrfs_exclop_finish(fs_info);
+	clear_bit(BTRFS_FS_EXCL_OP, &fs_info->flags);
 	return ret;
 }
 
@@ -3183,7 +3172,7 @@ static long btrfs_ioctl_rm_dev_v2(struct file *file, void __user *arg)
 		goto out;
 	}
 
-	if (!btrfs_exclop_start(fs_info, BTRFS_EXCLOP_DEV_REMOVE)) {
+	if (test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags)) {
 		ret = BTRFS_ERROR_DEV_EXCL_RUN_IN_PROGRESS;
 		goto out;
 	}
@@ -3194,7 +3183,7 @@ static long btrfs_ioctl_rm_dev_v2(struct file *file, void __user *arg)
 		vol_args->name[BTRFS_SUBVOL_NAME_MAX] = '\0';
 		ret = btrfs_rm_device(fs_info, vol_args->name, 0);
 	}
-	btrfs_exclop_finish(fs_info);
+	clear_bit(BTRFS_FS_EXCL_OP, &fs_info->flags);
 
 	if (!ret) {
 		if (vol_args->flags & BTRFS_DEVICE_SPEC_BY_ID)
@@ -3225,7 +3214,7 @@ static long btrfs_ioctl_rm_dev(struct file *file, void __user *arg)
 	if (ret)
 		return ret;
 
-	if (!btrfs_exclop_start(fs_info, BTRFS_EXCLOP_DEV_REMOVE)) {
+	if (test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags)) {
 		ret = BTRFS_ERROR_DEV_EXCL_RUN_IN_PROGRESS;
 		goto out_drop_write;
 	}
@@ -3243,7 +3232,7 @@ static long btrfs_ioctl_rm_dev(struct file *file, void __user *arg)
 		btrfs_info(fs_info, "disk deleted %s", vol_args->name);
 	kfree(vol_args);
 out:
-	btrfs_exclop_finish(fs_info);
+	clear_bit(BTRFS_FS_EXCL_OP, &fs_info->flags);
 out_drop_write:
 	mnt_drop_write_file(file);
 
@@ -3473,12 +3462,15 @@ static long btrfs_ioctl_space_info(struct btrfs_fs_info *fs_info,
 		struct btrfs_space_info *tmp;
 
 		info = NULL;
-		list_for_each_entry(tmp, &fs_info->space_info, list) {
+		rcu_read_lock();
+		list_for_each_entry_rcu(tmp, &fs_info->space_info,
+					list) {
 			if (tmp->flags == types[i]) {
 				info = tmp;
 				break;
 			}
 		}
+		rcu_read_unlock();
 
 		if (!info)
 			continue;
@@ -3526,12 +3518,15 @@ static long btrfs_ioctl_space_info(struct btrfs_fs_info *fs_info,
 			break;
 
 		info = NULL;
-		list_for_each_entry(tmp, &fs_info->space_info, list) {
+		rcu_read_lock();
+		list_for_each_entry_rcu(tmp, &fs_info->space_info,
+					list) {
 			if (tmp->flags == types[i]) {
 				info = tmp;
 				break;
 			}
 		}
+		rcu_read_unlock();
 
 		if (!info)
 			continue;
@@ -3741,11 +3736,11 @@ static long btrfs_ioctl_dev_replace(struct btrfs_fs_info *fs_info,
 			ret = -EROFS;
 			goto out;
 		}
-		if (!btrfs_exclop_start(fs_info, BTRFS_EXCLOP_DEV_REPLACE)) {
+		if (test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags)) {
 			ret = BTRFS_ERROR_DEV_EXCL_RUN_IN_PROGRESS;
 		} else {
 			ret = btrfs_dev_replace_by_ioctl(fs_info, p);
-			btrfs_exclop_finish(fs_info);
+			clear_bit(BTRFS_FS_EXCL_OP, &fs_info->flags);
 		}
 		break;
 	case BTRFS_IOCTL_DEV_REPLACE_CMD_STATUS:
@@ -3956,7 +3951,7 @@ static long btrfs_ioctl_balance(struct file *file, void __user *arg)
 		return ret;
 
 again:
-	if (btrfs_exclop_start(fs_info, BTRFS_EXCLOP_BALANCE)) {
+	if (!test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags)) {
 		mutex_lock(&fs_info->balance_mutex);
 		need_unlock = true;
 		goto locked;
@@ -4002,6 +3997,7 @@ again:
 	}
 
 locked:
+	BUG_ON(!test_bit(BTRFS_FS_EXCL_OP, &fs_info->flags));
 
 	if (arg) {
 		bargs = memdup_user(arg, sizeof(*bargs));
@@ -4056,10 +4052,10 @@ locked:
 
 do_balance:
 	/*
-	 * Ownership of bctl and exclusive operation goes to btrfs_balance.
-	 * bctl is freed in reset_balance_state, or, if restriper was paused
-	 * all the way until unmount, in free_fs_info.  The flag should be
-	 * cleared after reset_balance_state.
+	 * Ownership of bctl and filesystem flag BTRFS_FS_EXCL_OP goes to
+	 * btrfs_balance.  bctl is freed in reset_balance_state, or, if
+	 * restriper was paused all the way until unmount, in free_fs_info.
+	 * The flag should be cleared after reset_balance_state.
 	 */
 	need_unlock = false;
 
@@ -4078,7 +4074,7 @@ out_bargs:
 out_unlock:
 	mutex_unlock(&fs_info->balance_mutex);
 	if (need_unlock)
-		btrfs_exclop_finish(fs_info);
+		clear_bit(BTRFS_FS_EXCL_OP, &fs_info->flags);
 out:
 	mnt_drop_write_file(file);
 	return ret;

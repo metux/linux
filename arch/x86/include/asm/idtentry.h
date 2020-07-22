@@ -11,11 +11,6 @@
 
 #include <asm/irq_stack.h>
 
-/* Temporary define */
-#define idtentry_enter_user	irqentry_enter_from_user_mode
-
-void idtentry_exit_user(struct pt_regs *regs);
-
 typedef struct idtentry_state {
 	bool exit_rcu;
 } idtentry_state_t;

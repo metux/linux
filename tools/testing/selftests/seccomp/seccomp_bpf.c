@@ -116,14 +116,14 @@ struct seccomp_data {
 #  define __NR_seccomp 277
 # elif defined(__riscv)
 #  define __NR_seccomp 277
-# elif defined(__csky__)
-#  define __NR_seccomp 277
 # elif defined(__hppa__)
 #  define __NR_seccomp 338
 # elif defined(__powerpc__)
 #  define __NR_seccomp 358
 # elif defined(__s390__)
 #  define __NR_seccomp 348
+# elif defined(__sh__)
+#  define __NR_seccomp 372
 # else
 #  warning "seccomp syscall number unknown for this architecture"
 #  define __NR_seccomp 0xffff
@@ -1605,14 +1605,6 @@ TEST_F(TRACE_poke, getpid_runs_normally)
 # define ARCH_REGS	struct user_regs_struct
 # define SYSCALL_NUM	a7
 # define SYSCALL_RET	a0
-#elif defined(__csky__)
-# define ARCH_REGS	struct pt_regs
-#if defined(__CSKYABIV2__)
-# define SYSCALL_NUM	regs[3]
-#else
-# define SYSCALL_NUM	regs[9]
-#endif
-# define SYSCALL_RET	a0
 #elif defined(__hppa__)
 # define ARCH_REGS	struct user_regs_struct
 # define SYSCALL_NUM	gr[20]
@@ -1632,6 +1624,10 @@ TEST_F(TRACE_poke, getpid_runs_normally)
 # define SYSCALL_SYSCALL_NUM regs[4]
 # define SYSCALL_RET	regs[2]
 # define SYSCALL_NUM_RET_SHARE_REG
+#elif defined(__sh__)
+# define ARCH_REGS	struct pt_regs
+# define SYSCALL_NUM	gpr[3]
+# define SYSCALL_RET	gpr[0]
 #else
 # error "Do not know how to find your architecture's registers and syscalls"
 #endif
@@ -1703,8 +1699,7 @@ void change_syscall(struct __test_metadata *_metadata,
 	EXPECT_EQ(0, ret) {}
 
 #if defined(__x86_64__) || defined(__i386__) || defined(__powerpc__) || \
-	defined(__s390__) || defined(__hppa__) || defined(__riscv) || \
-	defined(__csky__)
+	defined(__s390__) || defined(__hppa__) || defined(__riscv) || defined(__sh__)
 	{
 		regs.SYSCALL_NUM = syscall;
 	}

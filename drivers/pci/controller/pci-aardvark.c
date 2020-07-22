@@ -651,7 +651,7 @@ static bool advk_pcie_valid_device(struct advk_pcie *pcie, struct pci_bus *bus,
 	 * If the link goes down after we check for link-up, nothing bad
 	 * happens but the config access times out.
 	 */
-	if (!pci_is_root_bus(bus) && !advk_pcie_link_up(pcie))
+	if (bus->number != pcie->root_bus_nr && !advk_pcie_link_up(pcie))
 		return false;
 
 	return true;
@@ -1119,6 +1119,7 @@ static int advk_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct advk_pcie *pcie;
+	struct resource *bus;
 	struct pci_host_bridge *bridge;
 	int ret, irq;
 
@@ -1145,6 +1146,14 @@ static int advk_pcie_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to register interrupt\n");
 		return ret;
 	}
+
+	ret = pci_parse_request_of_pci_ranges(dev, &bridge->windows,
+					      &bridge->dma_ranges, &bus);
+	if (ret) {
+		dev_err(dev, "Failed to parse resources\n");
+		return ret;
+	}
+	bridge->busnr = bus->start;
 
 	pcie->reset_gpio = devm_gpiod_get_from_of_node(dev, dev->of_node,
 						       "reset-gpios", 0,
@@ -1195,6 +1204,8 @@ static int advk_pcie_probe(struct platform_device *pdev)
 
 	bridge->sysdata = pcie;
 	bridge->ops = &advk_pcie_ops;
+	bridge->map_irq = of_irq_parse_and_map_pci;
+	bridge->swizzle_irq = pci_common_swizzle;
 
 	ret = pci_host_probe(bridge);
 	if (ret < 0) {

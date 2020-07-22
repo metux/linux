@@ -11,12 +11,10 @@
 
 #include <asm/irq_stack.h>
 
-typedef struct idtentry_state {
-	bool exit_rcu;
-} idtentry_state_t;
-
-idtentry_state_t idtentry_enter(struct pt_regs *regs);
-void idtentry_exit(struct pt_regs *regs, idtentry_state_t state);
+/* Temporary defines */
+typedef irqentry_state_t idtentry_state_t;
+#define idtentry_enter irqentry_enter
+#define idtentry_exit irqentry_exit
 
 bool idtentry_enter_nmi(struct pt_regs *regs);
 void idtentry_exit_nmi(struct pt_regs *regs, bool irq_state);

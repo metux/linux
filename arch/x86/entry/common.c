@@ -10,13 +10,13 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
+#include <linux/entry-common.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/tracehook.h>
 #include <linux/audit.h>
-#include <linux/seccomp.h>
 #include <linux/signal.h>
 #include <linux/export.h>
 #include <linux/context_tracking.h>
@@ -42,69 +42,7 @@
 #include <asm/syscall.h>
 #include <asm/irq_stack.h>
 
-#define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
-
-/* Check that the stack and regs on entry from user mode are sane. */
-static noinstr void check_user_regs(struct pt_regs *regs)
-{
-	if (IS_ENABLED(CONFIG_DEBUG_ENTRY)) {
-		/*
-		 * Make sure that the entry code gave us a sensible EFLAGS
-		 * register.  Native because we want to check the actual CPU
-		 * state, not the interrupt state as imagined by Xen.
-		 */
-		unsigned long flags = native_save_fl();
-		WARN_ON_ONCE(flags & (X86_EFLAGS_AC | X86_EFLAGS_DF |
-				      X86_EFLAGS_NT));
-
-		/* We think we came from user mode. Make sure pt_regs agrees. */
-		WARN_ON_ONCE(!user_mode(regs));
-
-		/*
-		 * All entries from user mode (except #DF) should be on the
-		 * normal thread stack and should have user pt_regs in the
-		 * correct location.
-		 */
-		WARN_ON_ONCE(!on_thread_stack());
-		WARN_ON_ONCE(regs != task_pt_regs(current));
-	}
-}
-
-#ifdef CONFIG_CONTEXT_TRACKING
-/**
- * enter_from_user_mode - Establish state when coming from user mode
- *
- * Syscall entry disables interrupts, but user mode is traced as interrupts
- * enabled. Also with NO_HZ_FULL RCU might be idle.
- *
- * 1) Tell lockdep that interrupts are disabled
- * 2) Invoke context tracking if enabled to reactivate RCU
- * 3) Trace interrupts off state
- */
-static noinstr void enter_from_user_mode(struct pt_regs *regs)
-{
-	enum ctx_state state = ct_state();
-
-	check_user_regs(regs);
-	lockdep_hardirqs_off(CALLER_ADDR0);
-	user_exit_irqoff();
-
-	instrumentation_begin();
-	CT_WARN_ON(state != CONTEXT_USER);
-	trace_hardirqs_off_finish();
-	instrumentation_end();
-}
-#else
-static __always_inline void enter_from_user_mode(struct pt_regs *regs)
-{
-	check_user_regs(regs);
-	lockdep_hardirqs_off(CALLER_ADDR0);
-	instrumentation_begin();
-	trace_hardirqs_off_finish();
-	instrumentation_end();
-}
-#endif
 
 /**
  * exit_to_user_mode - Fixup state when exiting to user mode
@@ -129,86 +67,9 @@ static __always_inline void exit_to_user_mode(void)
 	lockdep_hardirqs_on(CALLER_ADDR0);
 }
 
-static void do_audit_syscall_entry(struct pt_regs *regs, u32 arch)
-{
-#ifdef CONFIG_X86_64
-	if (arch == AUDIT_ARCH_X86_64) {
-		audit_syscall_entry(regs->orig_ax, regs->di,
-				    regs->si, regs->dx, regs->r10);
-	} else
-#endif
-	{
-		audit_syscall_entry(regs->orig_ax, regs->bx,
-				    regs->cx, regs->dx, regs->si);
-	}
-}
-
-/*
- * Returns the syscall nr to run (which should match regs->orig_ax) or -1
- * to skip the syscall.
- */
-static long syscall_trace_enter(struct pt_regs *regs)
-{
-	u32 arch = in_ia32_syscall() ? AUDIT_ARCH_I386 : AUDIT_ARCH_X86_64;
-
-	struct thread_info *ti = current_thread_info();
-	unsigned long ret = 0;
-	u32 work;
-
-	work = READ_ONCE(ti->flags);
-
-	if (work & (_TIF_SYSCALL_TRACE | _TIF_SYSCALL_EMU)) {
-		ret = tracehook_report_syscall_entry(regs);
-		if (ret || (work & _TIF_SYSCALL_EMU))
-			return -1L;
-	}
-
-#ifdef CONFIG_SECCOMP
-	/*
-	 * Do seccomp after ptrace, to catch any tracer changes.
-	 */
-	if (work & _TIF_SECCOMP) {
-		struct seccomp_data sd;
-
-		sd.arch = arch;
-		sd.nr = regs->orig_ax;
-		sd.instruction_pointer = regs->ip;
-#ifdef CONFIG_X86_64
-		if (arch == AUDIT_ARCH_X86_64) {
-			sd.args[0] = regs->di;
-			sd.args[1] = regs->si;
-			sd.args[2] = regs->dx;
-			sd.args[3] = regs->r10;
-			sd.args[4] = regs->r8;
-			sd.args[5] = regs->r9;
-		} else
-#endif
-		{
-			sd.args[0] = regs->bx;
-			sd.args[1] = regs->cx;
-			sd.args[2] = regs->dx;
-			sd.args[3] = regs->si;
-			sd.args[4] = regs->di;
-			sd.args[5] = regs->bp;
-		}
-
-		ret = __secure_computing(&sd);
-		if (ret == -1)
-			return ret;
-	}
-#endif
-
-	if (unlikely(test_thread_flag(TIF_SYSCALL_TRACEPOINT)))
-		trace_sys_enter(regs, regs->orig_ax);
-
-	do_audit_syscall_entry(regs, arch);
-
-	return ret ?: regs->orig_ax;
-}
-
 #define EXIT_TO_USERMODE_LOOP_FLAGS				\
 	(_TIF_SIGPENDING | _TIF_NOTIFY_RESUME | _TIF_UPROBE |	\
-	 _TIF_NEED_RESCHED | _TIF_USER_RETURN_NOTIFY | _TIF_PATCH_PENDING)
+	 _TIF_NEED_RESCHED | _TIF_PATCH_PENDING)
 
 static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 {
@@ -242,9 +103,6 @@ static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 			rseq_handle_notify_resume(NULL, regs);
 		}
 
-		if (cached_flags & _TIF_USER_RETURN_NOTIFY)
-			fire_user_return_notifiers();
-
 		/* Disable IRQs and retry */
 		local_irq_disable();
 
@@ -272,6 +130,9 @@ static void __prepare_exit_to_usermode(struct pt_regs *regs)
 
 	/* Reload ti->flags; we may have rescheduled above. */
 	cached_flags = READ_ONCE(ti->flags);
+
+	if (cached_flags & _TIF_USER_RETURN_NOTIFY)
+		fire_user_return_notifiers();
 
 	if (unlikely(cached_flags & _TIF_IO_BITMAP))
 		tss_update_io_bitmap();
@@ -369,16 +230,9 @@ __visible noinstr void syscall_return_slowpath(struct pt_regs *regs)
 #ifdef CONFIG_X86_64
 __visible noinstr void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 {
-	struct thread_info *ti;
+	nr = syscall_enter_from_user_mode(regs, nr);
 
-	enter_from_user_mode(regs);
 	instrumentation_begin();
-
-	local_irq_enable();
-	ti = current_thread_info();
-	if (READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY)
-		nr = syscall_trace_enter(regs);
-
 	if (likely(nr < NR_syscalls)) {
 		nr = array_index_nospec(nr, NR_syscalls);
 		regs->ax = sys_call_table[nr](regs);
@@ -390,64 +244,55 @@ __visible noinstr void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 		regs->ax = x32_sys_call_table[nr](regs);
 #endif
 	}
-	__syscall_return_slowpath(regs);
-
 	instrumentation_end();
-	exit_to_user_mode();
+	syscall_return_slowpath(regs);
 }
 #endif
 
 #if defined(CONFIG_X86_32) || defined(CONFIG_IA32_EMULATION)
-/*
- * Does a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.  Does
- * all entry and exit work and returns with IRQs off.  This function is
- * extremely hot in workloads that use it, and it's usually called from
- * do_fast_syscall_32, so forcibly inline it to improve performance.
- */
-static void do_syscall_32_irqs_on(struct pt_regs *regs)
+static __always_inline unsigned int syscall_32_enter(struct pt_regs *regs)
 {
-	struct thread_info *ti = current_thread_info();
 	unsigned int nr = (unsigned int)regs->orig_ax;
 
-#ifdef CONFIG_IA32_EMULATION
-	ti->status |= TS_COMPAT;
-#endif
+	if (IS_ENABLED(CONFIG_IA32_EMULATION))
+		current_thread_info()->status |= TS_COMPAT;
+	/*
+	 * Subtlety here: if ptrace pokes something larger than 2^32-1 into
+	 * orig_ax, the unsigned int return value truncates it.  This may
+	 * or may not be necessary, but it matches the old asm behavior.
+	 */
+	return (unsigned int)syscall_enter_from_user_mode(regs, nr);
+}
 
-	if (READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY) {
-		/*
-		 * Subtlety here: if ptrace pokes something larger than
-		 * 2^32-1 into orig_ax, this truncates it.  This may or
-		 * may not be necessary, but it matches the old asm
-		 * behavior.
-		 */
-		nr = syscall_trace_enter(regs);
-	}
-
+/*
+ * Invoke a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.
+ */
+static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs,
+						  unsigned int nr)
+{
 	if (likely(nr < IA32_NR_syscalls)) {
+		instrumentation_begin();
 		nr = array_index_nospec(nr, IA32_NR_syscalls);
 		regs->ax = ia32_sys_call_table[nr](regs);
+		instrumentation_end();
 	}
-
-	__syscall_return_slowpath(regs);
 }
 
 /* Handles int $0x80 */
 __visible noinstr void do_int80_syscall_32(struct pt_regs *regs)
 {
-	enter_from_user_mode(regs);
-	instrumentation_begin();
+	unsigned int nr = syscall_32_enter(regs);
 
-	local_irq_enable();
-	do_syscall_32_irqs_on(regs);
-
-	instrumentation_end();
-	exit_to_user_mode();
+	do_syscall_32_irqs_on(regs, nr);
+	syscall_return_slowpath(regs);
 }
 
-static bool __do_fast_syscall_32(struct pt_regs *regs)
+static noinstr bool __do_fast_syscall_32(struct pt_regs *regs)
 {
+	unsigned int nr	= syscall_32_enter(regs);
 	int res;
 
+	instrumentation_begin();
 	/* Fetch EBP from where the vDSO stashed it. */
 	if (IS_ENABLED(CONFIG_X86_64)) {
 		/*
@@ -460,17 +305,18 @@ static bool __do_fast_syscall_32(struct pt_regs *regs)
 		res = get_user(*(u32 *)&regs->bp,
 		       (u32 __user __force *)(unsigned long)(u32)regs->sp);
 	}
+	instrumentation_end();
 
 	if (res) {
 		/* User code screwed up. */
 		regs->ax = -EFAULT;
-		local_irq_disable();
-		__prepare_exit_to_usermode(regs);
+		syscall_return_slowpath(regs);
 		return false;
 	}
 
 	/* Now this is just like a normal syscall. */
-	do_syscall_32_irqs_on(regs);
+	do_syscall_32_irqs_on(regs, nr);
+	syscall_return_slowpath(regs);
 	return true;
 }
 
@@ -483,7 +329,6 @@ __visible noinstr long do_fast_syscall_32(struct pt_regs *regs)
 	 */
 	unsigned long landing_pad = (unsigned long)current->mm->context.vdso +
 					vdso_image_32.sym_int80_landing_pad;
-	bool success;
 
 	/*
 	 * SYSENTER loses EIP, and even SYSCALL32 needs us to skip forward
@@ -492,17 +337,8 @@ __visible noinstr long do_fast_syscall_32(struct pt_regs *regs)
 	 */
 	regs->ip = landing_pad;
 
-	enter_from_user_mode(regs);
-	instrumentation_begin();
-
-	local_irq_enable();
-	success = __do_fast_syscall_32(regs);
-
-	instrumentation_end();
-	exit_to_user_mode();
-
-	/* If it failed, keep it simple: use IRET. */
-	if (!success)
+	/* Invoke the syscall. If it failed, keep it simple: use IRET. */
+	if (!__do_fast_syscall_32(regs))
 		return 0;
 
 #ifdef CONFIG_X86_64
@@ -579,7 +415,7 @@ SYSCALL_DEFINE0(ni_syscall)
  * solves the problem of kernel mode pagefaults which can schedule, which
  * is not possible after invoking rcu_irq_enter() without undoing it.
  *
- * For user mode entries enter_from_user_mode() must be invoked to
+ * For user mode entries irqentry_enter_from_user_mode() must be invoked to
  * establish the proper context for NOHZ_FULL. Otherwise scheduling on exit
  * would not be possible.
  *
@@ -588,14 +424,14 @@ SYSCALL_DEFINE0(ni_syscall)
  * The return value must be fed into the state argument of
  * idtentry_exit().
  */
-noinstr idtentry_state_t idtentry_enter(struct pt_regs *regs)
+idtentry_state_t noinstr idtentry_enter(struct pt_regs *regs)
 {
 	idtentry_state_t ret = {
 		.exit_rcu = false,
 	};
 
 	if (user_mode(regs)) {
-		enter_from_user_mode(regs);
+		irqentry_enter_from_user_mode(regs);
 		return ret;
 	}
 
@@ -626,7 +462,7 @@ noinstr idtentry_state_t idtentry_enter(struct pt_regs *regs)
 		/*
 		 * If RCU is not watching then the same careful
 		 * sequence vs. lockdep and tracing is required
-		 * as in enter_from_user_mode().
+		 * as in irqentry_enter_from_user_mode().
 		 */
 		lockdep_hardirqs_off(CALLER_ADDR0);
 		rcu_irq_enter();
@@ -682,7 +518,7 @@ static void idtentry_exit_cond_resched(struct pt_regs *regs, bool may_sched)
  * Counterpart to idtentry_enter(). The return value of the entry
  * function must be fed into the @state argument.
  */
-noinstr void idtentry_exit(struct pt_regs *regs, idtentry_state_t state)
+void noinstr idtentry_exit(struct pt_regs *regs, idtentry_state_t state)
 {
 	lockdep_assert_irqs_disabled();
 
@@ -720,18 +556,6 @@ noinstr void idtentry_exit(struct pt_regs *regs, idtentry_state_t state)
 }
 
 /**
- * idtentry_enter_user - Handle state tracking on idtentry from user mode
- * @regs:	Pointer to pt_regs of interrupted context
- *
- * Invokes enter_from_user_mode() to establish the proper context for
- * NOHZ_FULL. Otherwise scheduling on exit would not be possible.
- */
-noinstr void idtentry_enter_user(struct pt_regs *regs)
-{
-	enter_from_user_mode(regs);
-}
-
-/**
  * idtentry_exit_user - Handle return from exception to user mode
  * @regs:	Pointer to pt_regs (exception entry regs)
  *
@@ -743,45 +567,11 @@ noinstr void idtentry_enter_user(struct pt_regs *regs)
  *
  * Counterpart to idtentry_enter_user().
  */
-noinstr void idtentry_exit_user(struct pt_regs *regs)
+void noinstr idtentry_exit_user(struct pt_regs *regs)
 {
 	lockdep_assert_irqs_disabled();
 
 	prepare_exit_to_usermode(regs);
-}
-
-noinstr bool idtentry_enter_nmi(struct pt_regs *regs)
-{
-	bool irq_state = lockdep_hardirqs_enabled();
-
-	__nmi_enter();
-	lockdep_hardirqs_off(CALLER_ADDR0);
-	lockdep_hardirq_enter();
-	rcu_nmi_enter();
-
-	instrumentation_begin();
-	trace_hardirqs_off_finish();
-	ftrace_nmi_enter();
-	instrumentation_end();
-
-	return irq_state;
-}
-
-noinstr void idtentry_exit_nmi(struct pt_regs *regs, bool restore)
-{
-	instrumentation_begin();
-	ftrace_nmi_exit();
-	if (restore) {
-		trace_hardirqs_on_prepare();
-		lockdep_hardirqs_on_prepare(CALLER_ADDR0);
-	}
-	instrumentation_end();
-
-	rcu_nmi_exit();
-	lockdep_hardirq_exit();
-	if (restore)
-		lockdep_hardirqs_on(CALLER_ADDR0);
-	__nmi_exit();
 }
 
 #ifdef CONFIG_XEN_PV

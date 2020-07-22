@@ -295,7 +295,7 @@ parent_names[0] = slck_name;
 							 sama5d2_periphck[i].n,
 							 "masterck",
 							 sama5d2_periphck[i].id,
-							 &range);
+							 &range, INT_MIN);
 		if (IS_ERR(hw))
 			goto err_free;
 
@@ -308,7 +308,8 @@ parent_names[0] = slck_name;
 							 sama5d2_periph32ck[i].n,
 							 "h32mxck",
 							 sama5d2_periph32ck[i].id,
-							 &sama5d2_periph32ck[i].r);
+							 &sama5d2_periph32ck[i].r,
+							 INT_MIN);
 		if (IS_ERR(hw))
 			goto err_free;
 

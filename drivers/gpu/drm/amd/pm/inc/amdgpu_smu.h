@@ -270,14 +270,10 @@ struct smu_table_context
 	 */
 	struct smu_table		driver_table;
 	struct smu_table		memory_pool;
-	struct smu_table		dummy_read_1_table;
 	uint8_t                         thermal_controller_type;
 
 	void				*overdrive_table;
 	void                            *boot_overdrive_table;
-
-	uint32_t			gpu_metrics_table_size;
-	void				*gpu_metrics_table;
 };
 
 struct smu_dpm_context {
@@ -453,10 +449,6 @@ struct smu_context
 
 	struct work_struct throttling_logging_work;
 	atomic64_t throttle_int_counter;
-	struct work_struct interrupt_work;
-
-	unsigned fan_max_rpm;
-	unsigned manual_fan_speed_rpm;
 };
 
 struct i2c_adapter;
@@ -500,9 +492,10 @@ struct pptable_funcs {
 	int (*notify_smc_display_config)(struct smu_context *smu);
 	int (*set_cpu_power_state)(struct smu_context *smu);
 	bool (*is_dpm_running)(struct smu_context *smu);
+	int (*get_fan_speed_percent)(struct smu_context *smu, uint32_t *speed);
 	int (*get_fan_speed_rpm)(struct smu_context *smu, uint32_t *speed);
 	int (*set_watermarks_table)(struct smu_context *smu,
-				    struct pp_smu_wm_range_sets *clock_ranges);
+				    struct dm_pp_wm_sets_with_clock_ranges_soc15 *clock_ranges);
 	int (*get_thermal_temperature_range)(struct smu_context *smu, struct smu_temperature_range *range);
 	int (*get_uclk_dpm_states)(struct smu_context *smu, uint32_t *clocks_in_khz, uint32_t *num_states);
 	int (*set_default_od_settings)(struct smu_context *smu);
@@ -575,6 +568,7 @@ struct pptable_funcs {
 	int (*conv_power_profile_to_pplib_workload)(int power_profile);
 	uint32_t (*get_fan_control_mode)(struct smu_context *smu);
 	int (*set_fan_control_mode)(struct smu_context *smu, uint32_t mode);
+	int (*set_fan_speed_percent)(struct smu_context *smu, uint32_t speed);
 	int (*set_fan_speed_rpm)(struct smu_context *smu, uint32_t speed);
 	int (*set_xgmi_pstate)(struct smu_context *smu, uint32_t pstate);
 	int (*gfx_off_control)(struct smu_context *smu, bool enable);
@@ -592,17 +586,12 @@ struct pptable_funcs {
 	int (*mode2_reset)(struct smu_context *smu);
 	int (*get_dpm_ultimate_freq)(struct smu_context *smu, enum smu_clk_type clk_type, uint32_t *min, uint32_t *max);
 	int (*set_soft_freq_limited_range)(struct smu_context *smu, enum smu_clk_type clk_type, uint32_t min, uint32_t max);
+	int (*disable_umc_cdr_12gbps_workaround)(struct smu_context *smu);
 	int (*set_power_source)(struct smu_context *smu, enum smu_power_src_type power_src);
 	void (*log_thermal_throttling_event)(struct smu_context *smu);
 	size_t (*get_pp_feature_mask)(struct smu_context *smu, char *buf);
 	int (*set_pp_feature_mask)(struct smu_context *smu, uint64_t new_mask);
 	ssize_t (*get_gpu_metrics)(struct smu_context *smu, void **table);
-	int (*enable_mgpu_fan_boost)(struct smu_context *smu);
-	int (*gfx_ulv_control)(struct smu_context *smu, bool enablement);
-	int (*deep_sleep_control)(struct smu_context *smu, bool enablement);
-	int (*get_fan_parameters)(struct smu_context *smu);
-	int (*post_init)(struct smu_context *smu);
-	void (*interrupt_work)(struct smu_context *smu);
 };
 
 typedef enum {
@@ -706,6 +695,7 @@ int smu_set_fan_speed_percent(struct smu_context *smu, uint32_t speed);
 int smu_get_fan_speed_rpm(struct smu_context *smu, uint32_t *speed);
 
 int smu_set_deep_sleep_dcefclk(struct smu_context *smu, int clk);
+int smu_set_active_display_count(struct smu_context *smu, uint32_t count);
 
 int smu_get_clock_by_type(struct smu_context *smu,
 			  enum amd_pp_clock_type type,
@@ -757,7 +747,7 @@ enum amd_pm_state_type smu_get_current_power_state(struct smu_context *smu);
 int smu_write_watermarks_table(struct smu_context *smu);
 int smu_set_watermarks_for_clock_ranges(
 		struct smu_context *smu,
-		struct pp_smu_wm_range_sets *clock_ranges);
+		struct dm_pp_wm_sets_with_clock_ranges_soc15 *clock_ranges);
 
 /* smu to display interface */
 extern int smu_display_configuration_change(struct smu_context *smu, const
@@ -805,8 +795,6 @@ int smu_get_dpm_clock_table(struct smu_context *smu,
 int smu_get_status_gfxoff(struct amdgpu_device *adev, uint32_t *value);
 
 ssize_t smu_sys_get_gpu_metrics(struct smu_context *smu, void **table);
-
-int smu_enable_mgpu_fan_boost(struct smu_context *smu);
 
 #endif
 #endif

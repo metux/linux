@@ -746,6 +746,7 @@ static int smu_sw_init(void *handle)
 	mutex_init(&smu->message_lock);
 
 	INIT_WORK(&smu->throttling_logging_work, smu_throttling_logging_work_fn);
+	atomic64_set(&smu->throttle_int_counter, 0);
 	smu->watermarks_bitmap = 0;
 	smu->power_profile_mode = PP_SMC_POWER_PROFILE_BOOTUP_DEFAULT;
 	smu->default_power_profile_mode = PP_SMC_POWER_PROFILE_BOOTUP_DEFAULT;
@@ -2645,4 +2646,24 @@ int smu_get_dpm_clock_table(struct smu_context *smu,
 	mutex_unlock(&smu->mutex);
 
 	return ret;
+}
+
+ssize_t smu_sys_get_gpu_metrics(struct smu_context *smu,
+				void **table)
+{
+	ssize_t size;
+
+	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
+		return -EOPNOTSUPP;
+
+	if (!smu->ppt_funcs->get_gpu_metrics)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&smu->mutex);
+
+	size = smu->ppt_funcs->get_gpu_metrics(smu, table);
+
+	mutex_unlock(&smu->mutex);
+
+	return size;
 }

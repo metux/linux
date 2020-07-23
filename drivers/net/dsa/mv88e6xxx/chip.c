@@ -2715,6 +2715,8 @@ static int mv88e6xxx_get_max_mtu(struct dsa_switch *ds, int port)
 
 	if (chip->info->ops->port_set_jumbo_size)
 		return 10240;
+	else if (chip->info->ops->set_max_frame_size)
+		return 1632;
 	return 1522;
 }
 
@@ -2726,6 +2728,8 @@ static int mv88e6xxx_change_mtu(struct dsa_switch *ds, int port, int new_mtu)
 	mv88e6xxx_reg_lock(chip);
 	if (chip->info->ops->port_set_jumbo_size)
 		ret = chip->info->ops->port_set_jumbo_size(chip, port, new_mtu);
+	else if (chip->info->ops->set_max_frame_size)
+		ret = chip->info->ops->set_max_frame_size(chip, new_mtu);
 	else
 		if (new_mtu > 1522)
 			ret = -EINVAL;
@@ -3466,6 +3470,7 @@ static const struct mv88e6xxx_ops mv88e6085_ops = {
 	.vtu_getnext = mv88e6352_g1_vtu_getnext,
 	.vtu_loadpurge = mv88e6352_g1_vtu_loadpurge,
 	.phylink_validate = mv88e6185_phylink_validate,
+	.set_max_frame_size = mv88e6185_g1_set_max_frame_size,
 };
 
 static const struct mv88e6xxx_ops mv88e6095_ops = {
@@ -3494,6 +3499,7 @@ static const struct mv88e6xxx_ops mv88e6095_ops = {
 	.vtu_getnext = mv88e6185_g1_vtu_getnext,
 	.vtu_loadpurge = mv88e6185_g1_vtu_loadpurge,
 	.phylink_validate = mv88e6185_phylink_validate,
+	.set_max_frame_size = mv88e6185_g1_set_max_frame_size,
 };
 
 static const struct mv88e6xxx_ops mv88e6097_ops = {
@@ -3531,6 +3537,7 @@ static const struct mv88e6xxx_ops mv88e6097_ops = {
 	.vtu_getnext = mv88e6352_g1_vtu_getnext,
 	.vtu_loadpurge = mv88e6352_g1_vtu_loadpurge,
 	.phylink_validate = mv88e6185_phylink_validate,
+	.set_max_frame_size = mv88e6185_g1_set_max_frame_size,
 };
 
 static const struct mv88e6xxx_ops mv88e6123_ops = {
@@ -3565,6 +3572,7 @@ static const struct mv88e6xxx_ops mv88e6123_ops = {
 	.vtu_getnext = mv88e6352_g1_vtu_getnext,
 	.vtu_loadpurge = mv88e6352_g1_vtu_loadpurge,
 	.phylink_validate = mv88e6185_phylink_validate,
+	.set_max_frame_size = mv88e6185_g1_set_max_frame_size,
 };
 
 static const struct mv88e6xxx_ops mv88e6131_ops = {
@@ -3954,6 +3962,7 @@ static const struct mv88e6xxx_ops mv88e6185_ops = {
 	.vtu_getnext = mv88e6185_g1_vtu_getnext,
 	.vtu_loadpurge = mv88e6185_g1_vtu_loadpurge,
 	.phylink_validate = mv88e6185_phylink_validate,
+	.set_max_frame_size = mv88e6185_g1_set_max_frame_size,
 };
 
 static const struct mv88e6xxx_ops mv88e6190_ops = {

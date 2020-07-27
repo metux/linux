@@ -848,6 +848,9 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 	if (data->irq < 0)
 		return data->irq;
 
+	if (dev->pm_domain)
+		pm_runtime_enable(dev);
+
 	if (MTK_IOMMU_HAS_FLAG(data->plat_data, HAS_BCLK)) {
 		data->bclk = devm_clk_get(dev, "bclk");
 		if (IS_ERR(data->bclk))
@@ -887,6 +890,28 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 
 		component_match_add_release(dev, &match, release_of,
 					    compare_of, larbnode);
+
+		/*
+		 * Add link for smi-common and m4u once is ok. and the link is
+		 * only needed while m4u has power-domain.
+		 */
+		if (i || !pm_runtime_enabled(dev))
+			continue;
+
+		smicomm_node = of_parse_phandle(larbnode, "mediatek,smi", 0);
+		if (!smicomm_node) {
+			of_node_put(larbnode);
+			return -EINVAL;
+		}
+
+		plarbdev = of_find_device_by_node(smicomm_node);
+		of_node_put(smicomm_node);
+		data->smicomm_dev = &plarbdev->dev;
+
+		link = device_link_add(&plarbdev->dev, dev,
+				       DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME);
+		if (!link)
+			dev_err(dev, "Unable link %s.\n", plarbdev->name);
 	}
 
 	/* Get smi-common dev from the last larb. */
@@ -894,8 +919,6 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 	if (!smicomm_node)
 		return -EINVAL;
 
-	if (dev->pm_domain)
-		pm_runtime_enable(dev);
 
 	ret = mtk_iommu_rpm_get(dev);
 	if (ret < 0)
@@ -972,6 +995,7 @@ static int mtk_iommu_remove(struct platform_device *pdev)
 	if (iommu_present(&platform_bus_type))
 		bus_set_iommu(&platform_bus_type, NULL);
 
+	device_link_remove(data->smicomm_dev, &pdev->dev);
 	clk_disable_unprepare(data->bclk);
 	device_link_remove(data->smicomm_dev, &pdev->dev);
 	pm_runtime_disable(&pdev->dev);

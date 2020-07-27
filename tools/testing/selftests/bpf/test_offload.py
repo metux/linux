@@ -312,7 +312,10 @@ class DebugfsDir:
             if f == "ports":
                 continue
             p = os.path.join(path, f)
-            if os.path.isfile(p) and os.access(p, os.R_OK):
+            if os.path.isfile(p):
+                # We need to init trap_flow_action_cookie before read it
+                if f == "trap_flow_action_cookie":
+                    cmd('echo deadbeef > %s/%s' % (path, f))
                 _, out = cmd('cat %s/%s' % (path, f))
                 dfs[f] = out.strip()
             elif os.path.isdir(p):

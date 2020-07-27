@@ -934,8 +934,6 @@ Return values
 	* H_UNSUPPORTED		if called from the wrong context (e.g.
 				from an SVM or before an H_SVM_INIT_START
 				hypercall).
-	* H_STATE		if the hypervisor could not successfully
-                                transition the VM to Secure VM.
 
 Description
 ~~~~~~~~~~~

@@ -284,13 +284,6 @@ struct i915_request {
 	/** timeline->request entry for this request */
 	struct list_head link;
 
-	/** ring->request_list entry for this request */
-	struct list_head ring_link;
-
-	struct drm_i915_file_private *file_priv;
-	/** file_priv list entry for this request */
-	struct list_head client_link;
-
 	I915_SELFTEST_DECLARE(struct {
 		struct list_head link;
 		unsigned long delay;
@@ -317,6 +310,8 @@ void i915_request_set_error_once(struct i915_request *rq, int error);
 void __i915_request_skip(struct i915_request *rq);
 
 struct i915_request *__i915_request_commit(struct i915_request *request);
+void __i915_request_queue(struct i915_request *rq,
+			  const struct i915_sched_attr *attr);
 
 bool i915_request_retire(struct i915_request *rq);
 void i915_request_retire_upto(struct i915_request *rq);
@@ -360,7 +355,7 @@ int i915_request_await_execution(struct i915_request *rq,
 
 void i915_request_add(struct i915_request *rq);
 
-void __i915_request_submit(struct i915_request *request);
+bool __i915_request_submit(struct i915_request *request);
 void i915_request_submit(struct i915_request *request);
 
 void __i915_request_unsubmit(struct i915_request *request);

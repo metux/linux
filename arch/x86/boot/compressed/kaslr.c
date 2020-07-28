@@ -617,7 +617,6 @@ static void __process_mem_region(struct mem_vector *entry,
 {
 	struct mem_vector region, overlap;
 	unsigned long start_orig, end;
-	struct mem_vector cur_entry;
 
 	/* Ignore entries entirely below our minimum. */
 	if (entry->start + entry->size < minimum)
@@ -627,11 +626,9 @@ static void __process_mem_region(struct mem_vector *entry,
 	end = min(entry->size + entry->start, mem_limit);
 	if (entry->start >= end)
 		return;
-	cur_entry.start = entry->start;
-	cur_entry.size = end - entry->start;
 
-	region.start = cur_entry.start;
-	region.size = cur_entry.size;
+	region.start = entry->start;
+	region.size = end - entry->start;
 
 	/* Give up if slot area array is full. */
 	while (slot_area_index < MAX_SLOT_AREA) {
@@ -645,7 +642,7 @@ static void __process_mem_region(struct mem_vector *entry,
 		region.start = ALIGN(region.start, CONFIG_PHYSICAL_ALIGN);
 
 		/* Did we raise the address above the passed in memory entry? */
-		if (region.start > cur_entry.start + cur_entry.size)
+		if (region.start > end)
 			return;
 
 		/* Reduce size by any delta from the original address. */

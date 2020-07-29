@@ -295,6 +295,8 @@ i915_vma_instance(struct drm_i915_gem_object *obj,
 
 struct i915_vma_work {
 	struct dma_fence_work base;
+	struct i915_address_space *vm;
+	struct i915_vm_pt_stash stash;
 	struct i915_vma *vma;
 	struct drm_i915_gem_object *pinned;
 	struct i915_sw_dma_fence_cb cb;
@@ -306,13 +308,10 @@ static int __vma_bind(struct dma_fence_work *work)
 {
 	struct i915_vma_work *vw = container_of(work, typeof(*vw), base);
 	struct i915_vma *vma = vw->vma;
-	int err;
 
-	err = vma->ops->bind_vma(vma, vw->cache_level, vw->flags);
-	if (err)
-		atomic_or(I915_VMA_ERROR, &vma->flags);
-
-	return err;
+	vma->ops->bind_vma(vw->vm, &vw->stash,
+			   vma, vw->cache_level, vw->flags);
+	return 0;
 }
 
 static void __vma_release(struct dma_fence_work *work)
@@ -321,6 +320,9 @@ static void __vma_release(struct dma_fence_work *work)
 
 	if (vw->pinned)
 		__i915_gem_object_unpin_pages(vw->pinned);
+
+	i915_vm_free_pt_stash(vw->vm, &vw->stash);
+	i915_vm_put(vw->vm);
 }
 
 static const struct dma_fence_work_ops bind_ops = {
@@ -380,7 +382,6 @@ int i915_vma_bind(struct i915_vma *vma,
 {
 	u32 bind_flags;
 	u32 vma_flags;
-	int ret;
 
 	GEM_BUG_ON(!drm_mm_node_allocated(&vma->node));
 	GEM_BUG_ON(vma->size > vma->node.size);
@@ -398,22 +399,20 @@ int i915_vma_bind(struct i915_vma *vma,
 
 	vma_flags = atomic_read(&vma->flags);
 	vma_flags &= I915_VMA_GLOBAL_BIND | I915_VMA_LOCAL_BIND;
-	if (flags & PIN_UPDATE)
-		bind_flags |= vma_flags;
-	else
-		bind_flags &= ~vma_flags;
+
+	bind_flags &= ~vma_flags;
 	if (bind_flags == 0)
 		return 0;
 
 	GEM_BUG_ON(!vma->pages);
 
 	trace_i915_vma_bind(vma, bind_flags);
-	if (work && (bind_flags & ~vma_flags) & vma->vm->bind_async_flags) {
+	if (work && bind_flags & vma->vm->bind_async_flags) {
 		struct dma_fence *prev;
 
 		work->vma = vma;
 		work->cache_level = cache_level;
-		work->flags = bind_flags | I915_VMA_ALLOC;
+		work->flags = bind_flags;
 
 		/*
 		 * Note we only want to chain up to the migration fence on
@@ -439,9 +438,7 @@ int i915_vma_bind(struct i915_vma *vma,
 			work->pinned = vma->obj;
 		}
 	} else {
-		ret = vma->ops->bind_vma(vma, cache_level, bind_flags);
-		if (ret)
-			return ret;
+		vma->ops->bind_vma(vma->vm, NULL, vma, cache_level, bind_flags);
 	}
 
 	atomic_or(bind_flags, &vma->flags);
@@ -869,7 +866,6 @@ int i915_vma_pin(struct i915_vma *vma, u64 size, u64 alignment, u64 flags)
 	BUILD_BUG_ON(PIN_GLOBAL != I915_VMA_GLOBAL_BIND);
 	BUILD_BUG_ON(PIN_USER != I915_VMA_LOCAL_BIND);
 
-	GEM_BUG_ON(flags & PIN_UPDATE);
 	GEM_BUG_ON(!(flags & (PIN_USER | PIN_GLOBAL)));
 
 	/* First try and grab the pin without rebinding the vma */
@@ -886,6 +882,14 @@ int i915_vma_pin(struct i915_vma *vma, u64 size, u64 alignment, u64 flags)
 			err = -ENOMEM;
 			goto err_pages;
 		}
+
+		work->vm = i915_vm_get(vma->vm);
+
+		/* Allocate enough page directories to used PTE */
+		if (vma->vm->allocate_va_range)
+			i915_vm_alloc_pt_stash(vma->vm,
+					       &work->stash,
+					       vma->size);
 	}
 
 	if (flags & PIN_GLOBAL)
@@ -1091,7 +1095,8 @@ void i915_vma_release(struct kref *ref)
 
 		spin_lock(&obj->vma.lock);
 		list_del(&vma->obj_link);
-		rb_erase(&vma->obj_node, &obj->vma.tree);
+		if (!RB_EMPTY_NODE(&vma->obj_node))
+			rb_erase(&vma->obj_node, &obj->vma.tree);
 		spin_unlock(&obj->vma.lock);
 	}
 
@@ -1173,6 +1178,12 @@ void i915_vma_revoke_mmap(struct i915_vma *vma)
 		list_del(&vma->obj->userfault_link);
 }
 
+static int
+__i915_request_await_bind(struct i915_request *rq, struct i915_vma *vma)
+{
+	return __i915_request_await_exclusive(rq, &vma->active);
+}
+
 int __i915_vma_move_to_active(struct i915_vma *vma, struct i915_request *rq)
 {
 	int err;
@@ -1180,8 +1191,7 @@ int __i915_vma_move_to_active(struct i915_vma *vma, struct i915_request *rq)
 	GEM_BUG_ON(!i915_vma_is_pinned(vma));
 
 	/* Wait for the vma to be bound before we start! */
-	err = i915_request_await_active(rq, &vma->active,
-					I915_ACTIVE_AWAIT_EXCL);
+	err = __i915_request_await_bind(rq, vma);
 	if (err)
 		return err;
 
@@ -1267,7 +1277,7 @@ void __i915_vma_evict(struct i915_vma *vma)
 
 	if (likely(atomic_read(&vma->vm->open))) {
 		trace_i915_vma_unbind(vma);
-		vma->ops->unbind_vma(vma);
+		vma->ops->unbind_vma(vma->vm, vma);
 	}
 	atomic_and(~(I915_VMA_BIND_MASK | I915_VMA_ERROR | I915_VMA_GGTT_WRITE),
 		   &vma->flags);

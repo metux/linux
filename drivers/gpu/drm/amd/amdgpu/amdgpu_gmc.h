@@ -239,7 +239,6 @@ struct amdgpu_gmc {
 
 	struct amdgpu_xgmi xgmi;
 	struct amdgpu_irq_src	ecc_irq;
-	int noretry;
 };
 
 #define amdgpu_gmc_flush_gpu_tlb(adev, vmid, vmhub, type) ((adev)->gmc.gmc_funcs->flush_gpu_tlb((adev), (vmid), (vmhub), (type)))
@@ -301,7 +300,6 @@ void amdgpu_gmc_ras_fini(struct amdgpu_device *adev);
 int amdgpu_gmc_allocate_vm_inv_eng(struct amdgpu_device *adev);
 
 extern void amdgpu_gmc_tmz_set(struct amdgpu_device *adev);
-extern void amdgpu_gmc_noretry_set(struct amdgpu_device *adev);
 
 extern void
 amdgpu_gmc_set_vm_fault_masks(struct amdgpu_device *adev, int hub_type,

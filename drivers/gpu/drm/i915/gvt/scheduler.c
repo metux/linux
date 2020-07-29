@@ -403,6 +403,14 @@ static void release_shadow_wa_ctx(struct intel_shadow_wa_ctx *wa_ctx)
 	wa_ctx->indirect_ctx.shadow_va = NULL;
 }
 
+static void set_dma_address(struct i915_page_directory *pd, dma_addr_t addr)
+{
+	struct scatterlist *sg = pd->pt.base->mm.pages->sgl;
+
+	/* This is not a good idea */
+	sg->dma_address = addr;
+}
+
 static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
 					  struct intel_context *ce)
 {
@@ -411,7 +419,7 @@ static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
 	int i = 0;
 
 	if (mm->ppgtt_mm.root_entry_type == GTT_TYPE_PPGTT_ROOT_L4_ENTRY) {
-		px_dma(ppgtt->pd) = mm->ppgtt_mm.shadow_pdps[0];
+		set_dma_address(ppgtt->pd, mm->ppgtt_mm.shadow_pdps[0]);
 	} else {
 		for (i = 0; i < GVT_RING_CTX_NR_PDPS; i++) {
 			struct i915_page_directory * const pd =
@@ -421,7 +429,8 @@ static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
 			   shadow ppgtt. */
 			if (!pd)
 				break;
-			px_dma(pd) = mm->ppgtt_mm.shadow_pdps[i];
+
+			set_dma_address(pd, mm->ppgtt_mm.shadow_pdps[i]);
 		}
 	}
 }
@@ -509,26 +518,18 @@ static int prepare_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 			bb->bb_start_cmd_va = workload->shadow_ring_buffer_va
 				+ bb->bb_offset;
 
-		if (bb->ppgtt) {
-			/* for non-priv bb, scan&shadow is only for
-			 * debugging purpose, so the content of shadow bb
-			 * is the same as original bb. Therefore,
-			 * here, rather than switch to shadow bb's gma
-			 * address, we directly use original batch buffer's
-			 * gma address, and send original bb to hardware
-			 * directly
-			 */
-			if (bb->clflush & CLFLUSH_AFTER) {
-				drm_clflush_virt_range(bb->va,
-						bb->obj->base.size);
-				bb->clflush &= ~CLFLUSH_AFTER;
-			}
-			i915_gem_object_finish_access(bb->obj);
-			bb->accessing = false;
-
-		} else {
+		/*
+		 * For non-priv bb, scan&shadow is only for
+		 * debugging purpose, so the content of shadow bb
+		 * is the same as original bb. Therefore,
+		 * here, rather than switch to shadow bb's gma
+		 * address, we directly use original batch buffer's
+		 * gma address, and send original bb to hardware
+		 * directly
+		 */
+		if (!bb->ppgtt) {
 			bb->vma = i915_gem_object_ggtt_pin(bb->obj,
-					NULL, 0, 0, 0);
+							   NULL, 0, 0, 0);
 			if (IS_ERR(bb->vma)) {
 				ret = PTR_ERR(bb->vma);
 				goto err;
@@ -539,27 +540,15 @@ static int prepare_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 			if (gmadr_bytes == 8)
 				bb->bb_start_cmd_va[2] = 0;
 
-			/* No one is going to touch shadow bb from now on. */
-			if (bb->clflush & CLFLUSH_AFTER) {
-				drm_clflush_virt_range(bb->va,
-						bb->obj->base.size);
-				bb->clflush &= ~CLFLUSH_AFTER;
-			}
-
-			ret = i915_gem_object_set_to_gtt_domain(bb->obj,
-								false);
-			if (ret)
-				goto err;
-
 			ret = i915_vma_move_to_active(bb->vma,
 						      workload->req,
 						      0);
 			if (ret)
 				goto err;
-
-			i915_gem_object_finish_access(bb->obj);
-			bb->accessing = false;
 		}
+
+		/* No one is going to touch shadow bb from now on. */
+		i915_gem_object_flush_map(bb->obj);
 	}
 	return 0;
 err:
@@ -630,9 +619,6 @@ static void release_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 
 	list_for_each_entry_safe(bb, pos, &workload->shadow_bb, list) {
 		if (bb->obj) {
-			if (bb->accessing)
-				i915_gem_object_finish_access(bb->obj);
-
 			if (bb->va && !IS_ERR(bb->va))
 				i915_gem_object_unpin_map(bb->obj);
 
@@ -1263,13 +1249,13 @@ i915_context_ppgtt_root_restore(struct intel_vgpu_submission *s,
 	int i;
 
 	if (i915_vm_is_4lvl(&ppgtt->vm)) {
-		px_dma(ppgtt->pd) = s->i915_context_pml4;
+		set_dma_address(ppgtt->pd, s->i915_context_pml4);
 	} else {
 		for (i = 0; i < GEN8_3LVL_PDPES; i++) {
 			struct i915_page_directory * const pd =
 				i915_pd_entry(ppgtt->pd, i);
 
-			px_dma(pd) = s->i915_context_pdps[i];
+			set_dma_address(pd, s->i915_context_pdps[i]);
 		}
 	}
 }

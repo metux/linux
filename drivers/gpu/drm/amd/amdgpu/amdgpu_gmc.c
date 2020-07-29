@@ -413,44 +413,6 @@ void amdgpu_gmc_tmz_set(struct amdgpu_device *adev)
 	}
 }
 
-/**
- * amdgpu_noretry_set -- set per asic noretry defaults
- * @adev: amdgpu_device pointer
- *
- * Set a per asic default for the no-retry parameter.
- *
- */
-void amdgpu_gmc_noretry_set(struct amdgpu_device *adev)
-{
-	struct amdgpu_gmc *gmc = &adev->gmc;
-
-	switch (adev->asic_type) {
-	case CHIP_RAVEN:
-		/* Raven currently has issues with noretry
-		 * regardless of what we decide for other
-		 * asics, we should leave raven with
-		 * noretry = 0 until we root cause the
-		 * issues.
-		 */
-		if (amdgpu_noretry == -1)
-			gmc->noretry = 0;
-		else
-			gmc->noretry = amdgpu_noretry;
-		break;
-	default:
-		/* default this to 0 for now, but we may want
-		 * to change this in the future for certain
-		 * GPUs as it can increase performance in
-		 * certain cases.
-		 */
-		if (amdgpu_noretry == -1)
-			gmc->noretry = 0;
-		else
-			gmc->noretry = amdgpu_noretry;
-		break;
-	}
-}
-
 void amdgpu_gmc_set_vm_fault_masks(struct amdgpu_device *adev, int hub_type,
 				   bool enable)
 {
@@ -498,9 +460,6 @@ void amdgpu_gmc_get_vbios_allocations(struct amdgpu_device *adev)
 		size = 0;
 	else
 		size = amdgpu_gmc_get_vbios_fb_size(adev);
-
-	if (adev->mman.keep_stolen_vga_memory)
-		size = max(size, (unsigned)AMDGPU_VBIOS_VGA_ALLOCATION);
 
 	/* set to 0 if the pre-OS buffer uses up most of vram */
 	if ((adev->gmc.real_vram_size - size) < (8 * 1024 * 1024))

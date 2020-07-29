@@ -178,12 +178,6 @@ static int igt_ppgtt_alloc(void *arg)
 		if (err)
 			goto err_ppgtt_cleanup;
 
-		err = i915_vm_pin_pt_stash(&ppgtt->vm, &stash);
-		if (err) {
-			i915_vm_free_pt_stash(&ppgtt->vm, &stash);
-			goto err_ppgtt_cleanup;
-		}
-
 		ppgtt->vm.allocate_va_range(&ppgtt->vm, &stash, 0, size);
 		cond_resched();
 
@@ -199,12 +193,6 @@ static int igt_ppgtt_alloc(void *arg)
 		err = i915_vm_alloc_pt_stash(&ppgtt->vm, &stash, size - last);
 		if (err)
 			goto err_ppgtt_cleanup;
-
-		err = i915_vm_pin_pt_stash(&ppgtt->vm, &stash);
-		if (err) {
-			i915_vm_free_pt_stash(&ppgtt->vm, &stash);
-			goto err_ppgtt_cleanup;
-		}
 
 		ppgtt->vm.allocate_va_range(&ppgtt->vm, &stash,
 					    last, size - last);
@@ -300,11 +288,6 @@ static int lowlevel_hole(struct i915_address_space *vm,
 				if (i915_vm_alloc_pt_stash(vm, &stash,
 							   BIT_ULL(size)))
 					break;
-
-				if (i915_vm_pin_pt_stash(vm, &stash)) {
-					i915_vm_free_pt_stash(vm, &stash);
-					break;
-				}
 
 				vm->allocate_va_range(vm, &stash,
 						      addr, BIT_ULL(size));
@@ -1727,7 +1710,7 @@ int i915_gem_gtt_mock_selftests(void)
 	mock_fini_ggtt(ggtt);
 	kfree(ggtt);
 out_put:
-	mock_destroy_device(i915);
+	drm_dev_put(&i915->drm);
 	return err;
 }
 
@@ -1928,12 +1911,6 @@ static int igt_cs_tlb(void *arg)
 			err = i915_vm_alloc_pt_stash(vm, &stash, chunk_size);
 			if (err)
 				goto end;
-
-			err = i915_vm_pin_pt_stash(vm, &stash);
-			if (err) {
-				i915_vm_free_pt_stash(vm, &stash);
-				goto end;
-			}
 
 			vm->allocate_va_range(vm, &stash, offset, chunk_size);
 

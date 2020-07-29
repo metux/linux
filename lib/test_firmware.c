@@ -26,8 +26,6 @@
 #include <linux/vmalloc.h>
 #include <linux/efi_embedded_fw.h>
 
-MODULE_IMPORT_NS(TEST_FIRMWARE);
-
 #define TEST_FIRMWARE_NAME	"test-firmware.bin"
 #define TEST_FIRMWARE_NUM_REQS	4
 #define TEST_FIRMWARE_BUF_SIZE	SZ_1K
@@ -491,9 +489,7 @@ out:
 static DEVICE_ATTR_WO(trigger_request);
 
 #ifdef CONFIG_EFI_EMBEDDED_FIRMWARE
-extern struct list_head efi_embedded_fw_list;
-extern bool efi_embedded_fw_checked;
-
+#include "../drivers/firmware/efi/embedded-firmware.h"
 static ssize_t trigger_request_platform_store(struct device *dev,
 					      struct device_attribute *attr,
 					      const char *buf, size_t count)

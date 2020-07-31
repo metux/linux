@@ -273,7 +273,7 @@ struct intel_engine_execlists {
 	 *
 	 * Note these register may be either mmio or HWSP shadow.
 	 */
-	u64 *csb_status;
+	u32 *csb_status;
 
 	/**
 	 * @csb_size: context status buffer FIFO size

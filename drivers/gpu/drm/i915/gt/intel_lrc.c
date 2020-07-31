@@ -137,6 +137,7 @@
 #include "i915_perf.h"
 #include "i915_trace.h"
 #include "i915_vgpu.h"
+#include "intel_breadcrumbs.h"
 #include "intel_context.h"
 #include "intel_engine_pm.h"
 #include "intel_gt.h"
@@ -1805,16 +1806,31 @@ static bool virtual_matches(const struct virtual_engine *ve,
 	return true;
 }
 
-static void virtual_xfer_breadcrumbs(struct virtual_engine *ve)
+static void virtual_xfer_context(struct virtual_engine *ve,
+				 struct intel_engine_cs *engine)
 {
+	unsigned int n;
+
+	if (likely(engine == ve->siblings[0]))
+		return;
+
+	GEM_BUG_ON(READ_ONCE(ve->context.inflight));
+	if (!intel_engine_has_relative_mmio(engine))
+		virtual_update_register_offsets(ve->context.lrc_reg_state,
+						engine);
+
 	/*
-	 * All the outstanding signals on ve->siblings[0] must have
-	 * been completed, just pending the interrupt handler. As those
-	 * signals still refer to the old sibling (via rq->engine), we must
-	 * transfer those to the old irq_worker to keep our locking
-	 * consistent.
+	 * Move the bound engine to the top of the list for
+	 * future execution. We then kick this tasklet first
+	 * before checking others, so that we preferentially
+	 * reuse this set of bound registers.
 	 */
-	intel_engine_transfer_stale_breadcrumbs(ve->siblings[0], &ve->context);
+	for (n = 1; n < ve->num_siblings; n++) {
+		if (ve->siblings[n] == engine) {
+			swap(ve->siblings[n], ve->siblings[0]);
+			break;
+		}
+	}
 }
 
 #define for_each_waiter(p__, rq__) \
@@ -2265,38 +2281,23 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 			GEM_BUG_ON(!(rq->execution_mask & engine->mask));
 			WRITE_ONCE(rq->engine, engine);
 
-			if (engine != ve->siblings[0]) {
-				u32 *regs = ve->context.lrc_reg_state;
-				unsigned int n;
-
-				GEM_BUG_ON(READ_ONCE(ve->context.inflight));
-
-				if (!intel_engine_has_relative_mmio(engine))
-					virtual_update_register_offsets(regs,
-									engine);
-
-				if (!list_empty(&ve->context.signals))
-					virtual_xfer_breadcrumbs(ve);
-
-				/*
-				 * Move the bound engine to the top of the list
-				 * for future execution. We then kick this
-				 * tasklet first before checking others, so that
-				 * we preferentially reuse this set of bound
-				 * registers.
-				 */
-				for (n = 1; n < ve->num_siblings; n++) {
-					if (ve->siblings[n] == engine) {
-						swap(ve->siblings[n],
-						     ve->siblings[0]);
-						break;
-					}
-				}
-
-				GEM_BUG_ON(ve->siblings[0] != engine);
-			}
-
 			if (__i915_request_submit(rq)) {
+				/*
+				 * Only after we confirm that we will submit
+				 * this request (i.e. it has not already
+				 * completed), do we want to update the context.
+				 *
+				 * This serves two purposes. It avoids
+				 * unnecessary work if we are resubmitting an
+				 * already completed request after timeslicing.
+				 * But more importantly, it prevents us altering
+				 * ve->siblings[] on an idle context, where
+				 * we may be using ve->siblings[] in
+				 * virtual_context_enter / virtual_context_exit.
+				 */
+				virtual_xfer_context(ve, engine);
+				GEM_BUG_ON(ve->siblings[0] != engine);
+
 				submit = true;
 				last = rq;
 			}
@@ -4119,7 +4120,7 @@ static int execlists_resume(struct intel_engine_cs *engine)
 {
 	intel_mocs_init_engine(engine);
 
-	intel_engine_reset_breadcrumbs(engine);
+	intel_breadcrumbs_reset(engine->breadcrumbs);
 
 	if (GEM_SHOW_DEBUG() && unexpected_starting_state(engine)) {
 		struct drm_printer p = drm_debug_printer(__func__);
@@ -5721,9 +5722,7 @@ intel_execlists_create_virtual(struct intel_engine_cs **siblings,
 	snprintf(ve->base.name, sizeof(ve->base.name), "virtual");
 
 	intel_engine_init_active(&ve->base, ENGINE_VIRTUAL);
-	intel_engine_init_breadcrumbs(&ve->base);
 	intel_engine_init_execlists(&ve->base);
-	ve->base.breadcrumbs.irq_armed = true; /* fake HW, used for irq_work */
 
 	ve->base.cops = &virtual_context_ops;
 	ve->base.request_alloc = execlists_request_alloc;
@@ -5739,6 +5738,12 @@ intel_execlists_create_virtual(struct intel_engine_cs **siblings,
 		     (unsigned long)ve);
 
 	intel_context_init(&ve->context, &ve->base);
+
+	ve->base.breadcrumbs = intel_breadcrumbs_create(NULL);
+	if (!ve->base.breadcrumbs) {
+		err = -ENOMEM;
+		goto err_put;
+	}
 
 	for (n = 0; n < count; n++) {
 		struct intel_engine_cs *sibling = siblings[n];

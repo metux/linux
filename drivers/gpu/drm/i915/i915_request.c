@@ -301,14 +301,24 @@ bool i915_request_retire(struct i915_request *rq)
 		dma_fence_signal_locked(&rq->fence);
 	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &rq->fence.flags))
 		i915_request_cancel_breadcrumb(rq);
+	spin_unlock_irq(&rq->lock);
+
 	if (i915_request_has_waitboost(rq)) {
 		GEM_BUG_ON(!atomic_read(&rq->engine->gt->rps.num_waiters));
 		atomic_dec(&rq->engine->gt->rps.num_waiters);
 	}
-	if (!test_bit(I915_FENCE_FLAG_ACTIVE, &rq->fence.flags)) {
-		set_bit(I915_FENCE_FLAG_ACTIVE, &rq->fence.flags);
-		__notify_execute_cb(rq);
-	}
+
+	/*
+	 * We only loosely track inflight requests across preemption,
+	 * and so we may find ourselves attempting to retire a _completed_
+	 * request that we have removed from the HW and put back on a run
+	 * queue.
+	 *
+	 * As we set I915_FENCE_FLAG_ACTIVE on the request, this should be
+	 * after removing the breadcrumb and signaling it, so that we do not
+	 * inadvertently attach the breadcrumb to a completed request.
+	 */
+	remove_from_engine(rq);
 	GEM_BUG_ON(!llist_empty(&rq->execute_cb));
 	spin_unlock_irq(&rq->lock);
 
@@ -369,17 +379,38 @@ static bool __request_in_flight(const struct i915_request *signal)
 	 * As we know that there are always preemption points between
 	 * requests, we know that only the currently executing request
 	 * may be still active even though we have cleared the flag.
-	 * However, we can't rely on our tracking of ELSP[0] to known
+	 * However, we can't rely on our tracking of ELSP[0] to know
 	 * which request is currently active and so maybe stuck, as
 	 * the tracking maybe an event behind. Instead assume that
 	 * if the context is still inflight, then it is still active
 	 * even if the active flag has been cleared.
+	 *
+	 * To further complicate matters, if there a pending promotion, the HW
+	 * may either perform a context switch to the second inflight execlists,
+	 * or it may switch to the pending set of execlists. In the case of the
+	 * latter, it may send the ACK and we process the event copying the
+	 * pending[] over top of inflight[], _overwriting_ our *active. Since
+	 * this implies the HW is arbitrating and not struck in *active, we do
+	 * not worry about complete accuracy, but we do require no read/write
+	 * tearing of the pointer [the read of the pointer must be valid, even
+	 * as the array is being overwritten, for which we require the writes
+	 * to avoid tearing.]
+	 *
+	 * Note that the read of *execlists->active may race with the promotion
+	 * of execlists->pending[] to execlists->inflight[], overwritting
+	 * the value at *execlists->active. This is fine. The promotion implies
+	 * that we received an ACK from the HW, and so the context is not
+	 * stuck -- if we do not see ourselves in *active, the inflight status
+	 * is valid. If instead we see ourselves being copied into *active,
+	 * we are inflight and may signal the callback.
 	 */
 	if (!intel_context_inflight(signal->context))
 		return false;
 
 	rcu_read_lock();
-	for (port = __engine_active(signal->engine); (rq = *port); port++) {
+	for (port = __engine_active(signal->engine);
+	     (rq = READ_ONCE(*port)); /* may race with promotion of pending[] */
+	     port++) {
 		if (rq->context == signal->context) {
 			inflight = i915_seqno_passed(rq->fence.seqno,
 						     signal->fence.seqno);
@@ -541,22 +572,27 @@ bool __i915_request_submit(struct i915_request *request)
 	engine->serial++;
 	result = true;
 
-xfer:	/* We may be recursing from the signal callback of another i915 fence */
-	spin_lock_nested(&request->lock, SINGLE_DEPTH_NESTING);
-
+xfer:
 	if (!test_and_set_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags)) {
 		list_move_tail(&request->sched.link, &engine->active.requests);
 		clear_bit(I915_FENCE_FLAG_PQUEUE, &request->fence.flags);
-		__notify_execute_cb(request);
 	}
-	GEM_BUG_ON(!llist_empty(&request->execute_cb));
+
+	/*
+	 * XXX Rollback bonded-execution on __i915_request_unsubmit()?
+	 *
+	 * In the future, perhaps when we have an active time-slicing scheduler,
+	 * it will be interesting to unsubmit parallel execution and remove
+	 * busywaits from the GPU until their master is restarted. This is
+	 * quite hairy, we have to carefully rollback the fence and do a
+	 * preempt-to-idle cycle on the target engine, all the while the
+	 * master execute_cb may refire.
+	 */
+	__notify_execute_cb(request);
 
 	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &request->fence.flags) &&
-	    !test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &request->fence.flags) &&
 	    !i915_request_enable_breadcrumb(request))
 		intel_engine_signal_breadcrumbs(engine);
-
-	spin_unlock(&request->lock);
 
 	return result;
 }
@@ -578,26 +614,26 @@ void __i915_request_unsubmit(struct i915_request *request)
 {
 	struct intel_engine_cs *engine = request->engine;
 
+	/*
+	 * Only unwind in reverse order, required so that the per-context list
+	 * is kept in seqno/ring order.
+	 */
 	RQ_TRACE(request, "\n");
 
 	GEM_BUG_ON(!irqs_disabled());
 	lockdep_assert_held(&engine->active.lock);
 
 	/*
-	 * Only unwind in reverse order, required so that the per-context list
-	 * is kept in seqno/ring order.
+	 * Before we remove this breadcrumb from the signal list, we have
+	 * to ensure that a concurrent dma_fence_enable_signaling() does not
+	 * attach itself. We first mark the request as no longer active and
+	 * make sure that is visible to other cores, and then remove the
+	 * breadcrumb if attached.
 	 */
-
-	/* We may be recursing from the signal callback of another i915 fence */
-	spin_lock_nested(&request->lock, SINGLE_DEPTH_NESTING);
-
+	GEM_BUG_ON(!test_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags));
+	clear_bit_unlock(I915_FENCE_FLAG_ACTIVE, &request->fence.flags);
 	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &request->fence.flags))
 		i915_request_cancel_breadcrumb(request);
-
-	GEM_BUG_ON(!test_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags));
-	clear_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags);
-
-	spin_unlock(&request->lock);
 
 	/* We've already spun, don't charge on resubmitting. */
 	if (request->sched.semaphores && i915_request_started(request))

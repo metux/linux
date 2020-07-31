@@ -217,11 +217,7 @@ i915_active_is_idle(const struct i915_active *ref)
 	return !atomic_read(&ref->count);
 }
 
-#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM)
 void i915_active_fini(struct i915_active *ref);
-#else
-static inline void i915_active_fini(struct i915_active *ref) { }
-#endif
 
 int i915_global_active_init(void);
 void i915_global_active_shrink(void);

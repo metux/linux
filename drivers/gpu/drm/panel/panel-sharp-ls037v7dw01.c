@@ -186,7 +186,9 @@ static int ls037v7dw01_probe(struct platform_device *pdev)
 
 	drm_panel_init(&lcd->panel, &pdev->dev, &ls037v7dw01_funcs);
 
-	return drm_panel_add(&lcd->panel);
+	drm_panel_add(&lcd->panel);
+
+	return 0;
 }
 
 static int ls037v7dw01_remove(struct platform_device *pdev)

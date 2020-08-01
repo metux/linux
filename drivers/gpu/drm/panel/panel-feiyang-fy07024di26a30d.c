@@ -227,9 +227,7 @@ static int feiyang_dsi_probe(struct mipi_dsi_device *dsi)
 	if (IS_ERR(ctx->backlight))
 		return PTR_ERR(ctx->backlight);
 
-	ret = drm_panel_add(&ctx->panel);
-	if (ret < 0)
-		return ret;
+	drm_panel_add(&ctx->panel);
 
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_BURST;
 	dsi->format = MIPI_DSI_FMT_RGB888;

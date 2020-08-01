@@ -455,7 +455,9 @@ static int tpg110_probe(struct spi_device *spi)
 	drm_panel_init(&tpg->panel, dev, &tpg110_drm_funcs);
 	spi_set_drvdata(spi, tpg);
 
-	return drm_panel_add(&tpg->panel);
+	drm_panel_add(&tpg->panel);
+
+	return 0;
 }
 
 static int tpg110_remove(struct spi_device *spi)

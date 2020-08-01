@@ -353,7 +353,9 @@ static int ld9040_probe(struct spi_device *spi)
 
 	drm_panel_init(&ctx->panel, dev, &ld9040_drm_funcs);
 
-	return drm_panel_add(&ctx->panel);
+	drm_panel_add(&ctx->panel);
+
+	return 0;
 }
 
 static int ld9040_remove(struct spi_device *spi)

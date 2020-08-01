@@ -393,7 +393,9 @@ static int kingdisplay_panel_add(struct kingdisplay_panel *kingdisplay)
 	drm_panel_init(&kingdisplay->base, &kingdisplay->link->dev,
 		       &kingdisplay_panel_funcs);
 
-	return drm_panel_add(&kingdisplay->base);
+	drm_panel_add(&kingdisplay->base);
+
+	return 0;
 }
 
 static void kingdisplay_panel_del(struct kingdisplay_panel *kingdisplay)

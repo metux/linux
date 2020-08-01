@@ -289,7 +289,9 @@ static int lcd_olinuxino_probe(struct i2c_client *client,
 
 	drm_panel_init(&lcd->panel, dev, &lcd_olinuxino_funcs);
 
-	return drm_panel_add(&lcd->panel);
+	drm_panel_add(&lcd->panel);
+
+	return 0;
 }
 
 static int lcd_olinuxino_remove(struct i2c_client *client)

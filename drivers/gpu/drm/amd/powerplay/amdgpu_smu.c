@@ -134,8 +134,8 @@ int smu_get_dpm_freq_range(struct smu_context *smu,
 	return ret;
 }
 
-static int smu_dpm_set_vcn_enable_locked(struct smu_context *smu,
-					 bool enable)
+static int smu_dpm_set_vcn_enable(struct smu_context *smu,
+				  bool enable)
 {
 	struct smu_power_context *smu_power = &smu->smu_power;
 	struct smu_power_gate *power_gate = &smu_power->power_gate;
@@ -144,48 +144,17 @@ static int smu_dpm_set_vcn_enable_locked(struct smu_context *smu,
 	if (!smu->ppt_funcs->dpm_set_vcn_enable)
 		return 0;
 
+	mutex_lock(&power_gate->vcn_gate_lock);
+
 	if (atomic_read(&power_gate->vcn_gated) ^ enable)
-		return 0;
+		goto out;
 
 	ret = smu->ppt_funcs->dpm_set_vcn_enable(smu, enable);
 	if (!ret)
 		atomic_set(&power_gate->vcn_gated, !enable);
 
-	return ret;
-}
-
-static int smu_dpm_set_vcn_enable(struct smu_context *smu,
-				  bool enable)
-{
-	struct smu_power_context *smu_power = &smu->smu_power;
-	struct smu_power_gate *power_gate = &smu_power->power_gate;
-	int ret = 0;
-
-	mutex_lock(&power_gate->vcn_gate_lock);
-
-	ret = smu_dpm_set_vcn_enable_locked(smu, enable);
-
+out:
 	mutex_unlock(&power_gate->vcn_gate_lock);
-
-	return ret;
-}
-
-static int smu_dpm_set_jpeg_enable_locked(struct smu_context *smu,
-					  bool enable)
-{
-	struct smu_power_context *smu_power = &smu->smu_power;
-	struct smu_power_gate *power_gate = &smu_power->power_gate;
-	int ret = 0;
-
-	if (!smu->ppt_funcs->dpm_set_jpeg_enable)
-		return 0;
-
-	if (atomic_read(&power_gate->jpeg_gated) ^ enable)
-		return 0;
-
-	ret = smu->ppt_funcs->dpm_set_jpeg_enable(smu, enable);
-	if (!ret)
-		atomic_set(&power_gate->jpeg_gated, !enable);
 
 	return ret;
 }
@@ -197,10 +166,19 @@ static int smu_dpm_set_jpeg_enable(struct smu_context *smu,
 	struct smu_power_gate *power_gate = &smu_power->power_gate;
 	int ret = 0;
 
+	if (!smu->ppt_funcs->dpm_set_jpeg_enable)
+		return 0;
+
 	mutex_lock(&power_gate->jpeg_gate_lock);
 
-	ret = smu_dpm_set_jpeg_enable_locked(smu, enable);
+	if (atomic_read(&power_gate->jpeg_gated) ^ enable)
+		goto out;
 
+	ret = smu->ppt_funcs->dpm_set_jpeg_enable(smu, enable);
+	if (!ret)
+		atomic_set(&power_gate->jpeg_gated, !enable);
+
+out:
 	mutex_unlock(&power_gate->jpeg_gate_lock);
 
 	return ret;
@@ -426,45 +404,6 @@ static int smu_early_init(void *handle)
 	return smu_set_funcs(adev);
 }
 
-static int smu_set_default_dpm_table(struct smu_context *smu)
-{
-	struct smu_power_context *smu_power = &smu->smu_power;
-	struct smu_power_gate *power_gate = &smu_power->power_gate;
-	int vcn_gate, jpeg_gate;
-	int ret = 0;
-
-	if (!smu->ppt_funcs->set_default_dpm_table)
-		return 0;
-
-	mutex_lock(&power_gate->vcn_gate_lock);
-	mutex_lock(&power_gate->jpeg_gate_lock);
-
-	vcn_gate = atomic_read(&power_gate->vcn_gated);
-	jpeg_gate = atomic_read(&power_gate->jpeg_gated);
-
-	ret = smu_dpm_set_vcn_enable_locked(smu, true);
-	if (ret)
-		goto err0_out;
-
-	ret = smu_dpm_set_jpeg_enable_locked(smu, true);
-	if (ret)
-		goto err1_out;
-
-	ret = smu->ppt_funcs->set_default_dpm_table(smu);
-	if (ret)
-		dev_err(smu->adev->dev,
-			"Failed to setup default dpm clock tables!\n");
-
-	smu_dpm_set_jpeg_enable_locked(smu, !jpeg_gate);
-err1_out:
-	smu_dpm_set_vcn_enable_locked(smu, !vcn_gate);
-err0_out:
-	mutex_unlock(&power_gate->jpeg_gate_lock);
-	mutex_unlock(&power_gate->vcn_gate_lock);
-
-	return ret;
-}
-
 static int smu_late_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
@@ -477,6 +416,17 @@ static int smu_late_init(void *handle)
 	ret = smu_set_default_od_settings(smu);
 	if (ret) {
 		dev_err(adev->dev, "Failed to setup default OD settings!\n");
+		return ret;
+	}
+
+	/*
+	 * Set initialized values (get from vbios) to dpm tables context such as
+	 * gfxclk, memclk, dcefclk, and etc. And enable the DPM feature for each
+	 * type of clks.
+	 */
+	ret = smu_set_default_dpm_table(smu);
+	if (ret) {
+		dev_err(adev->dev, "Failed to setup default dpm clock tables!\n");
 		return ret;
 	}
 
@@ -975,17 +925,6 @@ static int smu_smc_hw_setup(struct smu_context *smu)
 		return ret;
 	}
 
-	/*
-	 * Set initialized values (get from vbios) to dpm tables context such as
-	 * gfxclk, memclk, dcefclk, and etc. And enable the DPM feature for each
-	 * type of clks.
-	 */
-	ret = smu_set_default_dpm_table(smu);
-	if (ret) {
-		dev_err(adev->dev, "Failed to setup default dpm clock tables!\n");
-		return ret;
-	}
-
 	ret = smu_notify_display_change(smu);
 	if (ret)
 		return ret;
@@ -1128,7 +1067,7 @@ static int smu_disable_dpms(struct smu_context *smu)
 	 */
 	if (smu->uploading_custom_pp_table &&
 	    (adev->asic_type >= CHIP_NAVI10) &&
-	    (adev->asic_type <= CHIP_NAVY_FLOUNDER))
+	    (adev->asic_type <= CHIP_NAVI12))
 		return 0;
 
 	/*
@@ -1213,9 +1152,7 @@ static int smu_hw_fini(void *handle)
 int smu_reset(struct smu_context *smu)
 {
 	struct amdgpu_device *adev = smu->adev;
-	int ret;
-
-	amdgpu_gfx_off_ctrl(smu->adev, false);
+	int ret = 0;
 
 	ret = smu_hw_fini(adev);
 	if (ret)
@@ -1226,12 +1163,8 @@ int smu_reset(struct smu_context *smu)
 		return ret;
 
 	ret = smu_late_init(adev);
-	if (ret)
-		return ret;
 
-	amdgpu_gfx_off_ctrl(smu->adev, true);
-
-	return 0;
+	return ret;
 }
 
 static int smu_suspend(void *handle)

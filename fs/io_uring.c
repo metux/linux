@@ -1982,11 +1982,7 @@ static void io_iopoll_queue(struct list_head *again)
 	do {
 		req = list_first_entry(again, struct io_kiocb, inflight_entry);
 		list_del(&req->inflight_entry);
-
 		__io_complete_rw(req, -EAGAIN, 0, NULL);
-
-		refcount_inc(&req->refs);
-		io_queue_async_work(req);
 	} while (!list_empty(again));
 }
 
@@ -2966,9 +2962,8 @@ static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
 
 	wpq = container_of(wait, struct wait_page_queue, wait);
 
-	ret = wake_page_match(wpq, key);
-	if (ret != 1)
-		return ret;
+	if (!wake_page_match(wpq, key))
+		return 0;
 
 	list_del_init(&wait->entry);
 
@@ -2987,6 +2982,28 @@ static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
 	}
 	return 1;
 }
+
+static inline int kiocb_wait_page_queue_init(struct kiocb *kiocb,
+					     struct wait_page_queue *wait,
+					     wait_queue_func_t func,
+					     void *data)
+{
+	/* Can't support async wakeup with polled IO */
+	if (kiocb->ki_flags & IOCB_HIPRI)
+		return -EINVAL;
+	if (kiocb->ki_filp->f_mode & FMODE_BUF_RASYNC) {
+		wait->wait.func = func;
+		wait->wait.private = data;
+		wait->wait.flags = 0;
+		INIT_LIST_HEAD(&wait->wait.entry);
+		kiocb->ki_flags |= IOCB_WAITQ;
+		kiocb->ki_waitq = wait;
+		return 0;
+	}
+
+	return -EOPNOTSUPP;
+}
+
 
 static bool io_rw_should_retry(struct io_kiocb *req)
 {
@@ -4543,10 +4560,11 @@ static void io_poll_task_handler(struct io_kiocb *req, struct io_kiocb **nxt)
 	}
 
 	hash_del(&req->hash_node);
-	*nxt = io_poll_complete(req, req->result, 0);
+	io_poll_complete(req, req->result, 0);
+	req->flags |= REQ_F_COMP_LOCKED;
+	*nxt = io_put_req_find_next(req);
 	spin_unlock_irq(&ctx->completion_lock);
 
-	io_put_req_find_next(req, nxt);
 	io_cqring_ev_posted(ctx);
 }
 
@@ -7573,7 +7591,7 @@ static int io_sqe_buffer_register(struct io_ring_ctx *ctx, void __user *arg,
 		}
 
 		ret = 0;
-		down_read(&current->mm->mmap_sem);
+		mmap_read_lock(current->mm);
 		pret = pin_user_pages(ubuf, nr_pages,
 				      FOLL_WRITE | FOLL_LONGTERM,
 				      pages, vmas);
@@ -7591,7 +7609,7 @@ static int io_sqe_buffer_register(struct io_ring_ctx *ctx, void __user *arg,
 		} else {
 			ret = pret < 0 ? pret : -EFAULT;
 		}
-		up_read(&current->mm->mmap_sem);
+		mmap_read_unlock(current->mm);
 		if (ret) {
 			/*
 			 * if we did partial map, or found file backed vmas,
@@ -7792,9 +7810,8 @@ static void io_ring_ctx_wait_and_kill(struct io_ring_ctx *ctx)
 	 * is closed but resources aren't reaped yet. This can cause
 	 * spurious failure in setting up a new ring.
 	 */
-	if (ctx->account_mem)
-		io_unaccount_mem(ctx->user,
-				ring_pages(ctx->sq_entries, ctx->cq_entries));
+	io_unaccount_mem(ctx, ring_pages(ctx->sq_entries, ctx->cq_entries),
+			 ACCT_LOCKED);
 
 	INIT_WORK(&ctx->exit_work, io_ring_exit_work);
 	queue_work(system_wq, &ctx->exit_work);

@@ -2933,9 +2933,8 @@ static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
 
 	wpq = container_of(wait, struct wait_page_queue, wait);
 
-	ret = wake_page_match(wpq, key);
-	if (ret != 1)
-		return ret;
+	if (!wake_page_match(wpq, key))
+		return 0;
 
 	list_del_init(&wait->entry);
 
@@ -2954,6 +2953,28 @@ static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
 	}
 	return 1;
 }
+
+static inline int kiocb_wait_page_queue_init(struct kiocb *kiocb,
+					     struct wait_page_queue *wait,
+					     wait_queue_func_t func,
+					     void *data)
+{
+	/* Can't support async wakeup with polled IO */
+	if (kiocb->ki_flags & IOCB_HIPRI)
+		return -EINVAL;
+	if (kiocb->ki_filp->f_mode & FMODE_BUF_RASYNC) {
+		wait->wait.func = func;
+		wait->wait.private = data;
+		wait->wait.flags = 0;
+		INIT_LIST_HEAD(&wait->wait.entry);
+		kiocb->ki_flags |= IOCB_WAITQ;
+		kiocb->ki_waitq = wait;
+		return 0;
+	}
+
+	return -EOPNOTSUPP;
+}
+
 
 static bool io_rw_should_retry(struct io_kiocb *req)
 {

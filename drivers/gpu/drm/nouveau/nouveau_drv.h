@@ -164,8 +164,6 @@ struct nouveau_drm {
 		int type_vram;
 		int type_host[2];
 		int type_ncoh[2];
-		struct mutex io_reserve_mutex;
-		struct list_head io_reserve_lru;
 	} ttm;
 
 	/* GEM interface support */
@@ -200,8 +198,6 @@ struct nouveau_drm {
 	struct nvbios vbios;
 	struct nouveau_display *display;
 	struct work_struct hpd_work;
-	struct mutex hpd_lock;
-	u32 hpd_pending;
 	struct work_struct fbcon_work;
 	int fbcon_new_state;
 #ifdef CONFIG_ACPI

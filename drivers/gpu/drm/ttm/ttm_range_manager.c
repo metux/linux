@@ -54,10 +54,10 @@ static inline struct ttm_range_manager *to_range_manager(struct ttm_resource_man
 	return container_of(man, struct ttm_range_manager, manager);
 }
 
-static int ttm_range_man_alloc(struct ttm_resource_manager *man,
-			       struct ttm_buffer_object *bo,
-			       const struct ttm_place *place,
-			       struct ttm_resource *mem)
+static int ttm_range_man_get_node(struct ttm_resource_manager *man,
+				  struct ttm_buffer_object *bo,
+				  const struct ttm_place *place,
+				  struct ttm_resource *mem)
 {
 	struct ttm_range_manager *rman = to_range_manager(man);
 	struct drm_mm *mm = &rman->mm;
@@ -95,8 +95,8 @@ static int ttm_range_man_alloc(struct ttm_resource_manager *man,
 	return ret;
 }
 
-static void ttm_range_man_free(struct ttm_resource_manager *man,
-			       struct ttm_resource *mem)
+static void ttm_range_man_put_node(struct ttm_resource_manager *man,
+				   struct ttm_resource *mem)
 {
 	struct ttm_range_manager *rman = to_range_manager(man);
 
@@ -113,7 +113,10 @@ static void ttm_range_man_free(struct ttm_resource_manager *man,
 static const struct ttm_resource_manager_func ttm_range_manager_func;
 
 int ttm_range_man_init(struct ttm_bo_device *bdev,
-		       unsigned type, bool use_tt,
+		       unsigned type,
+		       uint32_t available_caching,
+		       uint32_t default_caching,
+		       bool use_tt,
 		       unsigned long p_size)
 {
 	struct ttm_resource_manager *man;
@@ -124,6 +127,8 @@ int ttm_range_man_init(struct ttm_bo_device *bdev,
 		return -ENOMEM;
 
 	man = &rman->manager;
+	man->available_caching = available_caching;
+	man->default_caching = default_caching;
 	man->use_tt = use_tt;
 
 	man->func = &ttm_range_manager_func;
@@ -176,7 +181,7 @@ static void ttm_range_man_debug(struct ttm_resource_manager *man,
 }
 
 static const struct ttm_resource_manager_func ttm_range_manager_func = {
-	.alloc = ttm_range_man_alloc,
-	.free = ttm_range_man_free,
+	.get_node = ttm_range_man_get_node,
+	.put_node = ttm_range_man_put_node,
 	.debug = ttm_range_man_debug
 };

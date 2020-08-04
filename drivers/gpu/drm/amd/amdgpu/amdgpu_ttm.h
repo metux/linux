@@ -32,25 +32,14 @@
 #define AMDGPU_PL_GWS		(TTM_PL_PRIV + 1)
 #define AMDGPU_PL_OA		(TTM_PL_PRIV + 2)
 
+#define AMDGPU_PL_FLAG_GDS		(TTM_PL_FLAG_PRIV << 0)
+#define AMDGPU_PL_FLAG_GWS		(TTM_PL_FLAG_PRIV << 1)
+#define AMDGPU_PL_FLAG_OA		(TTM_PL_FLAG_PRIV << 2)
+
 #define AMDGPU_GTT_MAX_TRANSFER_SIZE	512
 #define AMDGPU_GTT_NUM_TRANSFER_WINDOWS	2
 
 #define AMDGPU_POISON	0xd0bed0be
-
-struct amdgpu_vram_mgr {
-	struct ttm_resource_manager manager;
-	struct drm_mm mm;
-	spinlock_t lock;
-	atomic64_t usage;
-	atomic64_t vis_usage;
-};
-
-struct amdgpu_gtt_mgr {
-	struct ttm_resource_manager manager;
-	struct drm_mm mm;
-	spinlock_t lock;
-	atomic64_t available;
-};
 
 struct amdgpu_mman {
 	struct ttm_bo_device		bdev;
@@ -70,26 +59,6 @@ struct amdgpu_mman {
 	struct mutex				gtt_window_lock;
 	/* Scheduler entity for buffer moves */
 	struct drm_sched_entity			entity;
-
-	struct amdgpu_vram_mgr vram_mgr;
-	struct amdgpu_gtt_mgr gtt_mgr;
-
-	uint64_t		stolen_vga_size;
-	struct amdgpu_bo	*stolen_vga_memory;
-	uint64_t		stolen_extended_size;
-	struct amdgpu_bo	*stolen_extended_memory;
-	bool			keep_stolen_vga_memory;
-
-	/* discovery */
-	uint8_t				*discovery_bin;
-	uint32_t			discovery_tmr_size;
-	struct amdgpu_bo		*discovery_memory;
-
-	/* firmware VRAM reservation */
-	u64		fw_vram_usage_start_offset;
-	u64		fw_vram_usage_size;
-	struct amdgpu_bo	*fw_vram_usage_reserved_bo;
-	void		*fw_vram_usage_va;
 };
 
 struct amdgpu_copy_mem {
@@ -163,8 +132,8 @@ static inline bool amdgpu_ttm_tt_get_user_pages_done(struct ttm_tt *ttm)
 #endif
 
 void amdgpu_ttm_tt_set_user_pages(struct ttm_tt *ttm, struct page **pages);
-int amdgpu_ttm_tt_set_userptr(struct ttm_buffer_object *bo,
-			      uint64_t addr, uint32_t flags);
+int amdgpu_ttm_tt_set_userptr(struct ttm_tt *ttm, uint64_t addr,
+				     uint32_t flags);
 bool amdgpu_ttm_tt_has_userptr(struct ttm_tt *ttm);
 struct mm_struct *amdgpu_ttm_tt_get_usermm(struct ttm_tt *ttm);
 bool amdgpu_ttm_tt_affect_userptr(struct ttm_tt *ttm, unsigned long start,

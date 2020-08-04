@@ -202,7 +202,7 @@ static void f2fs_verify_bio(struct bio *bio)
 		dic = (struct decompress_io_ctx *)page_private(page);
 
 		if (dic) {
-			if (refcount_dec_not_one(&dic->ref))
+			if (atomic_dec_return(&dic->pending_pages))
 				continue;
 			f2fs_verify_pages(dic->rpages,
 						dic->cluster_size);
@@ -1416,7 +1416,7 @@ alloc:
 	set_summary(&sum, dn->nid, dn->ofs_in_node, ni.version);
 	old_blkaddr = dn->data_blkaddr;
 	f2fs_allocate_data_block(sbi, NULL, old_blkaddr, &dn->data_blkaddr,
-				&sum, seg_type, NULL, false);
+				&sum, seg_type, NULL);
 	if (GET_SEGNO(sbi, old_blkaddr) != NULL_SEGNO)
 		invalidate_mapping_pages(META_MAPPING(sbi),
 					old_blkaddr, old_blkaddr);
@@ -2272,8 +2272,8 @@ submit_and_realloc:
 			if (IS_ERR(bio)) {
 				ret = PTR_ERR(bio);
 				dic->failed = true;
-				if (refcount_sub_and_test(dic->nr_cpages - i,
-							&dic->ref)) {
+				if (!atomic_sub_return(dic->nr_cpages - i,
+							&dic->pending_pages)) {
 					f2fs_decompress_end_io(dic->rpages,
 							cc->cluster_size, true,
 							false);

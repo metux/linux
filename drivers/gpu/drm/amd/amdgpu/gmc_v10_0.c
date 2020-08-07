@@ -25,6 +25,7 @@
 #include "amdgpu.h"
 #include "amdgpu_atomfirmware.h"
 #include "gmc_v10_0.h"
+#include "umc_v8_7.h"
 
 #include "hdp/hdp_5_0_0_offset.h"
 #include "hdp/hdp_5_0_0_sh_mask.h"
@@ -54,6 +55,14 @@ static const struct soc15_reg_golden golden_settings_navi10_hdp[] =
 	/* TODO add golden setting for hdp */
 };
 #endif
+
+static int gmc_v10_0_ecc_interrupt_state(struct amdgpu_device *adev,
+					 struct amdgpu_irq_src *src,
+					 unsigned type,
+					 enum amdgpu_interrupt_state state)
+{
+	return 0;
+}
 
 static int
 gmc_v10_0_vm_fault_interrupt_state(struct amdgpu_device *adev,
@@ -131,10 +140,20 @@ static const struct amdgpu_irq_src_funcs gmc_v10_0_irq_funcs = {
 	.process = gmc_v10_0_process_interrupt,
 };
 
-static void gmc_v10_0_set_irq_funcs(struct amdgpu_device *adev)
+static const struct amdgpu_irq_src_funcs gmc_v10_0_ecc_funcs = {
+	.set = gmc_v10_0_ecc_interrupt_state,
+	.process = amdgpu_umc_process_ecc_irq,
+};
+
+ static void gmc_v10_0_set_irq_funcs(struct amdgpu_device *adev)
 {
 	adev->gmc.vm_fault.num_types = 1;
 	adev->gmc.vm_fault.funcs = &gmc_v10_0_irq_funcs;
+
+	if (!amdgpu_sriov_vf(adev)) {
+		adev->gmc.ecc_irq.num_types = 1;
+		adev->gmc.ecc_irq.funcs = &gmc_v10_0_ecc_funcs;
+	}
 }
 
 /**
@@ -553,6 +572,28 @@ static void gmc_v10_0_get_vm_pte(struct amdgpu_device *adev,
 	}
 }
 
+static unsigned gmc_v10_0_get_vbios_fb_size(struct amdgpu_device *adev)
+{
+	u32 d1vga_control = RREG32_SOC15(DCE, 0, mmD1VGA_CONTROL);
+	unsigned size;
+
+	if (REG_GET_FIELD(d1vga_control, D1VGA_CONTROL, D1VGA_MODE_ENABLE)) {
+		size = AMDGPU_VBIOS_VGA_ALLOCATION;
+	} else {
+		u32 viewport;
+		u32 pitch;
+
+		viewport = RREG32_SOC15(DCE, 0, mmHUBP0_DCSURF_PRI_VIEWPORT_DIMENSION);
+		pitch = RREG32_SOC15(DCE, 0, mmHUBPREQ0_DCSURF_SURFACE_PITCH);
+		size = (REG_GET_FIELD(viewport,
+					HUBP0_DCSURF_PRI_VIEWPORT_DIMENSION, PRI_VIEWPORT_HEIGHT) *
+				REG_GET_FIELD(pitch, HUBPREQ0_DCSURF_SURFACE_PITCH, PITCH) *
+				4);
+	}
+
+	return size;
+}
+
 static const struct amdgpu_gmc_funcs gmc_v10_0_gmc_funcs = {
 	.flush_gpu_tlb = gmc_v10_0_flush_gpu_tlb,
 	.flush_gpu_tlb_pasid = gmc_v10_0_flush_gpu_tlb_pasid,
@@ -560,7 +601,8 @@ static const struct amdgpu_gmc_funcs gmc_v10_0_gmc_funcs = {
 	.emit_pasid_mapping = gmc_v10_0_emit_pasid_mapping,
 	.map_mtype = gmc_v10_0_map_mtype,
 	.get_vm_pde = gmc_v10_0_get_vm_pde,
-	.get_vm_pte = gmc_v10_0_get_vm_pte
+	.get_vm_pte = gmc_v10_0_get_vm_pte,
+	.get_vbios_fb_size = gmc_v10_0_get_vbios_fb_size,
 };
 
 static void gmc_v10_0_set_gmc_funcs(struct amdgpu_device *adev)
@@ -569,12 +611,36 @@ static void gmc_v10_0_set_gmc_funcs(struct amdgpu_device *adev)
 		adev->gmc.gmc_funcs = &gmc_v10_0_gmc_funcs;
 }
 
+static void gmc_v10_0_set_umc_funcs(struct amdgpu_device *adev)
+{
+	switch (adev->asic_type) {
+	case CHIP_SIENNA_CICHLID:
+		adev->umc.max_ras_err_cnt_per_query = UMC_V8_7_TOTAL_CHANNEL_NUM;
+		adev->umc.channel_inst_num = UMC_V8_7_CHANNEL_INSTANCE_NUM;
+		adev->umc.umc_inst_num = UMC_V8_7_UMC_INSTANCE_NUM;
+		adev->umc.channel_offs = UMC_V8_7_PER_CHANNEL_OFFSET_SIENNA;
+		adev->umc.channel_idx_tbl = &umc_v8_7_channel_idx_tbl[0][0];
+		adev->umc.funcs = &umc_v8_7_funcs;
+		break;
+	default:
+		break;
+	}
+}
+
+
+static void gmc_v10_0_set_mmhub_funcs(struct amdgpu_device *adev)
+{
+	adev->mmhub.funcs = &mmhub_v2_0_funcs;
+}
+
 static int gmc_v10_0_early_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	gmc_v10_0_set_mmhub_funcs(adev);
 	gmc_v10_0_set_gmc_funcs(adev);
 	gmc_v10_0_set_irq_funcs(adev);
+	gmc_v10_0_set_umc_funcs(adev);
 
 	adev->gmc.shared_aperture_start = 0x2000000000000000ULL;
 	adev->gmc.shared_aperture_end =
@@ -594,6 +660,10 @@ static int gmc_v10_0_late_init(void *handle)
 	amdgpu_bo_late_init(adev);
 
 	r = amdgpu_gmc_allocate_vm_inv_eng(adev);
+	if (r)
+		return r;
+
+	r = amdgpu_gmc_ras_late_init(adev);
 	if (r)
 		return r;
 
@@ -701,36 +771,6 @@ static int gmc_v10_0_gart_init(struct amdgpu_device *adev)
 	return amdgpu_gart_table_vram_alloc(adev);
 }
 
-static unsigned gmc_v10_0_get_vbios_fb_size(struct amdgpu_device *adev)
-{
-	u32 d1vga_control = RREG32_SOC15(DCE, 0, mmD1VGA_CONTROL);
-	unsigned size;
-
-	if (REG_GET_FIELD(d1vga_control, D1VGA_CONTROL, D1VGA_MODE_ENABLE)) {
-		size = 9 * 1024 * 1024; /* reserve 8MB for vga emulator and 1 MB for FB */
-	} else {
-		u32 viewport;
-		u32 pitch;
-
-		viewport = RREG32_SOC15(DCE, 0, mmHUBP0_DCSURF_PRI_VIEWPORT_DIMENSION);
-		pitch = RREG32_SOC15(DCE, 0, mmHUBPREQ0_DCSURF_SURFACE_PITCH);
-		size = (REG_GET_FIELD(viewport,
-					HUBP0_DCSURF_PRI_VIEWPORT_DIMENSION, PRI_VIEWPORT_HEIGHT) *
-				REG_GET_FIELD(pitch, HUBPREQ0_DCSURF_SURFACE_PITCH, PITCH) *
-				4);
-	}
-	/* return 0 if the pre-OS buffer uses up most of vram */
-	if ((adev->gmc.real_vram_size - size) < (8 * 1024 * 1024)) {
-		DRM_ERROR("Warning: pre-OS buffer uses most of vram, \
-				be aware of gart table overwrite\n");
-		return 0;
-	}
-
-	return size;
-}
-
-
-
 static int gmc_v10_0_sw_init(void *handle)
 {
 	int r, vram_width = 0, vram_type = 0, vram_vendor = 0;
@@ -742,7 +782,7 @@ static int gmc_v10_0_sw_init(void *handle)
 	else
 		gfxhub_v2_0_init(adev);
 
-	mmhub_v2_0_init(adev);
+	adev->mmhub.funcs->init(adev);
 
 	spin_lock_init(&adev->gmc.invalidate_lock);
 
@@ -790,6 +830,14 @@ static int gmc_v10_0_sw_init(void *handle)
 	if (r)
 		return r;
 
+	if (!amdgpu_sriov_vf(adev)) {
+		/* interrupt sent to DF. */
+		r = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_DF, 0,
+				      &adev->gmc.ecc_irq);
+		if (r)
+			return r;
+	}
+
 	/*
 	 * Set the internal MC address mask This is the max address of the GPU's
 	 * internal address space.
@@ -812,7 +860,7 @@ static int gmc_v10_0_sw_init(void *handle)
 	if (r)
 		return r;
 
-	adev->gmc.stolen_size = gmc_v10_0_get_vbios_fb_size(adev);
+	amdgpu_gmc_get_vbios_allocations(adev);
 
 	/* Memory manager */
 	r = amdgpu_bo_init(adev);
@@ -903,7 +951,7 @@ static int gmc_v10_0_gart_enable(struct amdgpu_device *adev)
 	if (r)
 		return r;
 
-	r = mmhub_v2_0_gart_enable(adev);
+	r = adev->mmhub.funcs->gart_enable(adev);
 	if (r)
 		return r;
 
@@ -925,7 +973,7 @@ static int gmc_v10_0_gart_enable(struct amdgpu_device *adev)
 		gfxhub_v2_1_set_fault_enable_default(adev, value);
 	else
 		gfxhub_v2_0_set_fault_enable_default(adev, value);
-	mmhub_v2_0_set_fault_enable_default(adev, value);
+	adev->mmhub.funcs->set_fault_enable_default(adev, value);
 	gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_MMHUB_0, 0);
 	gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_GFXHUB_0, 0);
 
@@ -950,6 +998,9 @@ static int gmc_v10_0_hw_init(void *handle)
 	if (r)
 		return r;
 
+	if (adev->umc.funcs && adev->umc.funcs->init_registers)
+		adev->umc.funcs->init_registers(adev);
+
 	return 0;
 }
 
@@ -967,7 +1018,7 @@ static void gmc_v10_0_gart_disable(struct amdgpu_device *adev)
 		gfxhub_v2_1_gart_disable(adev);
 	else
 		gfxhub_v2_0_gart_disable(adev);
-	mmhub_v2_0_gart_disable(adev);
+	adev->mmhub.funcs->gart_disable(adev);
 	amdgpu_gart_table_vram_unpin(adev);
 }
 
@@ -981,6 +1032,7 @@ static int gmc_v10_0_hw_fini(void *handle)
 		return 0;
 	}
 
+	amdgpu_irq_put(adev, &adev->gmc.ecc_irq, 0);
 	amdgpu_irq_put(adev, &adev->gmc.vm_fault, 0);
 	gmc_v10_0_gart_disable(adev);
 
@@ -1033,7 +1085,7 @@ static int gmc_v10_0_set_clockgating_state(void *handle,
 	int r;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	r = mmhub_v2_0_set_clockgating(adev, state);
+	r = adev->mmhub.funcs->set_clockgating(adev, state);
 	if (r)
 		return r;
 
@@ -1048,7 +1100,7 @@ static void gmc_v10_0_get_clockgating_state(void *handle, u32 *flags)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	mmhub_v2_0_get_clockgating(adev, flags);
+	adev->mmhub.funcs->get_clockgating(adev, flags);
 
 	if (adev->asic_type == CHIP_SIENNA_CICHLID ||
 	    adev->asic_type == CHIP_NAVY_FLOUNDER)

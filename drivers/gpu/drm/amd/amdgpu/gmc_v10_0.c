@@ -631,10 +631,17 @@ static void gmc_v10_0_set_umc_funcs(struct amdgpu_device *adev)
 	}
 }
 
+
+static void gmc_v10_0_set_mmhub_funcs(struct amdgpu_device *adev)
+{
+	adev->mmhub.funcs = &mmhub_v2_0_funcs;
+}
+
 static int gmc_v10_0_early_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	gmc_v10_0_set_mmhub_funcs(adev);
 	gmc_v10_0_set_gmc_funcs(adev);
 	gmc_v10_0_set_irq_funcs(adev);
 	gmc_v10_0_set_umc_funcs(adev);
@@ -779,7 +786,7 @@ static int gmc_v10_0_sw_init(void *handle)
 	else
 		gfxhub_v2_0_init(adev);
 
-	mmhub_v2_0_init(adev);
+	adev->mmhub.funcs->init(adev);
 
 	spin_lock_init(&adev->gmc.invalidate_lock);
 
@@ -948,7 +955,7 @@ static int gmc_v10_0_gart_enable(struct amdgpu_device *adev)
 	if (r)
 		return r;
 
-	r = mmhub_v2_0_gart_enable(adev);
+	r = adev->mmhub.funcs->gart_enable(adev);
 	if (r)
 		return r;
 
@@ -970,7 +977,7 @@ static int gmc_v10_0_gart_enable(struct amdgpu_device *adev)
 		gfxhub_v2_1_set_fault_enable_default(adev, value);
 	else
 		gfxhub_v2_0_set_fault_enable_default(adev, value);
-	mmhub_v2_0_set_fault_enable_default(adev, value);
+	adev->mmhub.funcs->set_fault_enable_default(adev, value);
 	gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_MMHUB_0, 0);
 	gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_GFXHUB_0, 0);
 
@@ -1015,7 +1022,7 @@ static void gmc_v10_0_gart_disable(struct amdgpu_device *adev)
 		gfxhub_v2_1_gart_disable(adev);
 	else
 		gfxhub_v2_0_gart_disable(adev);
-	mmhub_v2_0_gart_disable(adev);
+	adev->mmhub.funcs->gart_disable(adev);
 	amdgpu_gart_table_vram_unpin(adev);
 }
 
@@ -1082,7 +1089,7 @@ static int gmc_v10_0_set_clockgating_state(void *handle,
 	int r;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	r = mmhub_v2_0_set_clockgating(adev, state);
+	r = adev->mmhub.funcs->set_clockgating(adev, state);
 	if (r)
 		return r;
 
@@ -1097,7 +1104,7 @@ static void gmc_v10_0_get_clockgating_state(void *handle, u32 *flags)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	mmhub_v2_0_get_clockgating(adev, flags);
+	adev->mmhub.funcs->get_clockgating(adev, flags);
 
 	if (adev->asic_type == CHIP_SIENNA_CICHLID ||
 	    adev->asic_type == CHIP_NAVY_FLOUNDER)

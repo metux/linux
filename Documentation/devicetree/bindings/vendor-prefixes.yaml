@@ -197,8 +197,6 @@ patternProperties:
     description: Ceva, Inc.
   "^checkpoint,.*":
     description: Check Point Software Technologies Ltd.
-  "^chefree,.*":
-    description: Chefree Technology Corp.
   "^chipidea,.*":
     description: Chipidea, Inc
   "^chipone,.*":
@@ -265,8 +263,6 @@ patternProperties:
     description: Denx Software Engineering
   "^devantech,.*":
     description: Devantech, Ltd.
-  "^dfi,.*":
-    description: DFI Inc.
   "^dh,.*":
     description: DH electronics GmbH
   "^difrnce,.*":
@@ -427,8 +423,6 @@ patternProperties:
     description: Gumstix, Inc.
   "^gw,.*":
     description: Gateworks Corporation
-                 use "gateworks" vendor prefix
-    deprecated: true
   "^hannstar,.*":
     description: HannStar Display Corporation
   "^haoyu,.*":
@@ -607,8 +601,6 @@ patternProperties:
     description: Logic Technologies Limited
   "^longcheer,.*":
     description: Longcheer Technology (Shanghai) Co., Ltd.
-  "^lontium,.*":
-    description: Lontium Semiconductor Corporation
   "^loongson,.*":
     description: Loongson Technology Corporation Limited
   "^lsi,.*":
@@ -619,8 +611,6 @@ patternProperties:
     description: Linux Automation GmbH
   "^macnica,.*":
     description: Macnica Americas
-  "^mantix,.*":
-    description: Mantix Display Technology Co.,Ltd.
   "^mapleboard,.*":
     description: Mapleboard.org
   "^marvell,.*":
@@ -653,8 +643,6 @@ patternProperties:
     description: MEMSIC Inc.
   "^menlo,.*":
     description: Menlo Systems GmbH
-  "^meraki,.*":
-    description: Cisco Meraki, LLC
   "^merrii,.*":
     description: Merrii Technology Co., Ltd.
   "^micrel,.*":
@@ -842,8 +830,6 @@ patternProperties:
     description: Poslab Technology Co., Ltd.
   "^pov,.*":
     description: Point of View International B.V.
-  "^powertip,.*":
-    description: Powertip Tech. Corp.
   "^powervr,.*":
     description: PowerVR (deprecated, use img)
   "^primux,.*":
@@ -888,8 +874,6 @@ patternProperties:
     description: Realtek Semiconductor Corp.
   "^renesas,.*":
     description: Renesas Electronics Corporation
-  "^rex,.*":
-    description: iMX6 Rex Project
   "^rervision,.*":
     description: Shenzhen Rervision Technology Co., Ltd.
   "^richtek,.*":
@@ -900,8 +884,6 @@ patternProperties:
     description: Rikomagic Tech Corp. Ltd
   "^riscv,.*":
     description: RISC-V Foundation
-  "^riot,.*":
-    description: Embest RIoT
   "^rockchip,.*":
     description: Fuzhou Rockchip Electronics Co., Ltd
   "^rocktech,.*":
@@ -1011,7 +993,7 @@ patternProperties:
   "^sst,.*":
     description: Silicon Storage Technology, Inc.
   "^sstar,.*":
-    description: Xiamen Xingchen(SigmaStar) Technology Co., Ltd.
+    description: Xiamen Xingchen(SigmaStar) Technology Co., Ltd. 
       (formerly part of MStar Semiconductor, Inc.)
   "^st,.*":
     description: STMicroelectronics
@@ -1154,8 +1136,6 @@ patternProperties:
     description: Vision Optical Technology Co., Ltd.
   "^vxt,.*":
     description: VXT Ltd
-  "^wand,.*":
-    description: Wandbord (Technexion)
   "^waveshare,.*":
     description: Waveshare Electronics
   "^wd,.*":
@@ -1194,8 +1174,6 @@ patternProperties:
     description: Shenzhen Xingbangda Display Technology Co., Ltd
   "^xinpeng,.*":
     description: Shenzhen Xinpeng Technology Co., Ltd
-  "^xiphera,.*":
-    description: Xiphera Ltd.
   "^xlnx,.*":
     description: Xilinx
   "^xnano,.*":
@@ -1212,8 +1190,6 @@ patternProperties:
     description: Yones Toptech Co., Ltd.
   "^ysoft,.*":
     description: Y Soft Corporation a.s.
-  "^zealz,.*":
-    description: Zealz
   "^zarlink,.*":
     description: Zarlink Semiconductor
   "^zeitec,.*":
@@ -1222,8 +1198,8 @@ patternProperties:
     description: Shenzhen Zidoo Technology Co., Ltd.
   "^zii,.*":
     description: Zodiac Inflight Innovations
-  "^zinitix,.*":
-    description: Zinitix Co., Ltd
+  "^zkmagic,.*":
+    description: Shenzhen Zkmagic Technology Co., Ltd.
   "^zte,.*":
     description: ZTE Corp.
   "^zyxel,.*":

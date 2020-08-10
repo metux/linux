@@ -495,40 +495,37 @@ enum ufshcd_quirks {
 	/*
 	 * Clear handling for transfer/task request list is just opposite.
 	 */
-	UFSHCI_QUIRK_BROKEN_REQ_LIST_CLR		= 1 << 7,
+	UFSHCI_QUIRK_BROKEN_REQ_LIST_CLR		= 1 << 6,
 
 	/*
 	 * This quirk needs to be enabled if host controller doesn't allow
 	 * that the interrupt aggregation timer and counter are reset by s/w.
 	 */
-<<<<<<< HEAD
-	UFSHCI_QUIRK_SKIP_RESET_INTR_AGGR		= 1 << 8,
-=======
 	UFSHCI_QUIRK_SKIP_RESET_INTR_AGGR		= 1 << 7,
 
-/*
+	/*
 	 * This quirks needs to be enabled if host controller cannot be
 	 * enabled via HCE register.
 	 */
-<<<<<<< HEAD
-	UFSHCI_QUIRK_BROKEN_HCE				= 1 << 9,
-=======
 	UFSHCI_QUIRK_BROKEN_HCE				= 1 << 8,
 
-/*
+	/*
 	 * This quirk needs to be enabled if the host controller regards
 	 * resolution of the values of PRDTO and PRDTL in UTRD as byte.
 	 */
-<<<<<<< HEAD
-	UFSHCD_QUIRK_PRDT_BYTE_GRAN			= 1 << 10,
-=======
 	UFSHCD_QUIRK_PRDT_BYTE_GRAN			= 1 << 9,
 
-/*
+	/*
 	 * This quirk needs to be enabled if the host controller reports
 	 * OCS FATAL ERROR with device error through sense data
 	 */
-	UFSHCD_QUIRK_BROKEN_OCS_FATAL_ERROR		= 1 << 11,
+	UFSHCD_QUIRK_BROKEN_OCS_FATAL_ERROR		= 1 << 10,
+
+	/*
+	 * This quirk needs to be enabled if the host controller has
+	 * auto-hibernate capability but it doesn't work.
+	 */
+	UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8		= 1 << 11,
 };
 
 enum ufshcd_caps {
@@ -609,7 +606,6 @@ struct ufs_hba_variant_params {
  * @ufs_version: UFS Version to which controller complies
  * @vops: pointer to variant specific operations
  * @priv: pointer to variant specific private data
- * @sg_entry_size: size of struct ufshcd_sg_entry (may include variant fields)
  * @irq: Irq number of the controller
  * @active_uic_cmd: handle of active UIC command
  * @uic_cmd_mutex: mutex for uic command
@@ -692,7 +688,6 @@ struct ufs_hba {
 	const struct ufs_hba_variant_ops *vops;
 	struct ufs_hba_variant_params *vps;
 	void *priv;
-	size_t sg_entry_size;
 	unsigned int irq;
 	bool is_irq_enabled;
 	enum ufs_ref_clk_freq dev_ref_clk_freq;
@@ -814,7 +809,8 @@ return true;
 
 static inline bool ufshcd_is_auto_hibern8_supported(struct ufs_hba *hba)
 {
-	return (hba->capabilities & MASK_AUTO_HIBERN8_SUPPORT);
+	return (hba->capabilities & MASK_AUTO_HIBERN8_SUPPORT) &&
+		!(hba->quirks & UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8);
 }
 
 static inline bool ufshcd_is_auto_hibern8_enabled(struct ufs_hba *hba)
@@ -1194,6 +1190,5 @@ static inline u8 ufshcd_scsi_to_upiu_lun(unsigned int scsi_lun)
 
 int ufshcd_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 		     const char *prefix);
-int ufshcd_uic_hibern8_enter(struct ufs_hba *hba);
-int ufshcd_uic_hibern8_exit(struct ufs_hba *hba);
+
 #endif /* End of Header */

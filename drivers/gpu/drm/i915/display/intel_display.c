@@ -10803,9 +10803,18 @@ static void icl_get_ddi_pll(struct drm_i915_private *dev_priv, enum port port,
 	u32 temp;
 
 	if (intel_phy_is_combo(dev_priv, phy)) {
-		temp = intel_de_read(dev_priv, ICL_DPCLKA_CFGCR0) &
-			ICL_DPCLKA_CFGCR0_DDI_CLK_SEL_MASK(phy);
-		id = temp >> ICL_DPCLKA_CFGCR0_DDI_CLK_SEL_SHIFT(phy);
+		u32 mask, shift;
+
+		if (IS_ROCKETLAKE(dev_priv)) {
+			mask = RKL_DPCLKA_CFGCR0_DDI_CLK_SEL_MASK(phy);
+			shift = RKL_DPCLKA_CFGCR0_DDI_CLK_SEL_SHIFT(phy);
+		} else {
+			mask = ICL_DPCLKA_CFGCR0_DDI_CLK_SEL_MASK(phy);
+			shift = ICL_DPCLKA_CFGCR0_DDI_CLK_SEL_SHIFT(phy);
+		}
+
+		temp = intel_de_read(dev_priv, ICL_DPCLKA_CFGCR0) & mask;
+		id = temp >> shift;
 		port_dpll_id = ICL_PORT_DPLL_DEFAULT;
 	} else if (intel_phy_is_tc(dev_priv, phy)) {
 		u32 clk_sel = intel_de_read(dev_priv, DDI_CLK_SEL(port)) & DDI_CLK_SEL_MASK;
@@ -12760,6 +12769,9 @@ static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 			return ret;
 
 	}
+
+	if (!mode_changed)
+		intel_psr2_sel_fetch_update(state, crtc);
 
 	return 0;
 }
@@ -15135,6 +15147,8 @@ static void commit_pipe_config(struct intel_atomic_state *state,
 
 		if (new_crtc_state->update_pipe)
 			intel_pipe_fastset(old_crtc_state, new_crtc_state);
+
+		intel_psr2_program_trans_man_trk_ctl(new_crtc_state);
 	}
 
 	if (dev_priv->display.atomic_update_watermarks)

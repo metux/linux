@@ -30,17 +30,12 @@ unsigned long pseries_memory_block_size(void)
 
 	np = of_find_node_by_path("/ibm,dynamic-reconfiguration-memory");
 	if (np) {
-		int len;
-		int size_cells;
-		const __be32 *prop;
+		const __be64 *size;
 
-		size_cells = of_n_size_cells(np);
-
-		prop = of_get_property(np, "ibm,lmb-size", &len);
-		if (prop && len >= size_cells * sizeof(__be32))
-			memblock_size = of_read_number(prop, size_cells);
+		size = of_get_property(np, "ibm,lmb-size", NULL);
+		if (size)
+			memblock_size = be64_to_cpup(size);
 		of_node_put(np);
-
 	} else  if (machine_is(pseries)) {
 		/* This fallback really only applies to pseries */
 		unsigned int memzero_size = 0;
@@ -282,7 +277,7 @@ static int dlpar_offline_lmb(struct drmem_lmb *lmb)
 	return dlpar_change_lmb_state(lmb, false);
 }
 
-static int pseries_remove_memblock(unsigned long base, unsigned long memblock_size)
+static int pseries_remove_memblock(unsigned long base, unsigned int memblock_size)
 {
 	unsigned long block_sz, start_pfn;
 	int sections_per_block;
@@ -313,11 +308,10 @@ out:
 
 static int pseries_remove_mem_node(struct device_node *np)
 {
-	const __be32 *prop;
+	const __be32 *regs;
 	unsigned long base;
-	unsigned long lmb_size;
+	unsigned int lmb_size;
 	int ret = -EINVAL;
-	int addr_cells, size_cells;
 
 	/*
 	 * Check to see if we are actually removing memory
@@ -328,19 +322,12 @@ static int pseries_remove_mem_node(struct device_node *np)
 	/*
 	 * Find the base address and size of the memblock
 	 */
-	prop = of_get_property(np, "reg", NULL);
-	if (!prop)
+	regs = of_get_property(np, "reg", NULL);
+	if (!regs)
 		return ret;
 
-	addr_cells = of_n_addr_cells(np);
-	size_cells = of_n_size_cells(np);
-
-	/*
-	 * "reg" property represents (addr,size) tuple.
-	 */
-	base = of_read_number(prop, addr_cells);
-	prop += addr_cells;
-	lmb_size = of_read_number(prop, size_cells);
+	base = be64_to_cpu(*(unsigned long *)regs);
+	lmb_size = be32_to_cpu(regs[3]);
 
 	pseries_remove_memblock(base, lmb_size);
 	return 0;
@@ -577,7 +564,7 @@ static int dlpar_memory_remove_by_ic(u32 lmbs_to_remove, u32 drc_index)
 
 #else
 static inline int pseries_remove_memblock(unsigned long base,
-					  unsigned long memblock_size)
+					  unsigned int memblock_size)
 {
 	return -EOPNOTSUPP;
 }
@@ -624,13 +611,11 @@ static int dlpar_add_lmb(struct drmem_lmb *lmb)
 
 	block_sz = memory_block_size_bytes();
 
-	/* Find the node id for this LMB.  Fake one if necessary. */
-	nid = of_drconf_to_nid_single(lmb);
-	if (nid < 0 || !node_possible(nid))
-		nid = first_online_node;
+	/* Find the node id for this address. */
+	nid = memory_add_physaddr_to_nid(lmb->base_addr);
 
 	/* Add the memory */
-	rc = __add_memory(nid, lmb->base_addr, block_sz, MHP_NONE);
+	rc = __add_memory(nid, lmb->base_addr, block_sz);
 	if (rc) {
 		invalidate_lmb_associativity_index(lmb);
 		return rc;
@@ -901,11 +886,10 @@ int dlpar_memory(struct pseries_hp_errorlog *hp_elog)
 
 static int pseries_add_mem_node(struct device_node *np)
 {
-	const __be32 *prop;
+	const __be32 *regs;
 	unsigned long base;
-	unsigned long lmb_size;
+	unsigned int lmb_size;
 	int ret = -EINVAL;
-	int addr_cells, size_cells;
 
 	/*
 	 * Check to see if we are actually adding memory
@@ -916,18 +900,12 @@ static int pseries_add_mem_node(struct device_node *np)
 	/*
 	 * Find the base and size of the memblock
 	 */
-	prop = of_get_property(np, "reg", NULL);
-	if (!prop)
+	regs = of_get_property(np, "reg", NULL);
+	if (!regs)
 		return ret;
 
-	addr_cells = of_n_addr_cells(np);
-	size_cells = of_n_size_cells(np);
-	/*
-	 * "reg" property represents (addr,size) tuple.
-	 */
-	base = of_read_number(prop, addr_cells);
-	prop += addr_cells;
-	lmb_size = of_read_number(prop, size_cells);
+	base = be64_to_cpu(*(unsigned long *)regs);
+	lmb_size = be32_to_cpu(regs[3]);
 
 	/*
 	 * Update memory region to represent the memory add

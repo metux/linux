@@ -1530,12 +1530,18 @@ static char *memory_stat_format(struct mem_cgroup *memcg)
 	seq_buf_printf(&s, "%s %lu\n", vm_event_name(PGMAJFAULT),
 		       memcg_events(memcg, PGMAJFAULT));
 
-	seq_buf_printf(&s, "workingset_refault %lu\n",
-		       memcg_page_state(memcg, WORKINGSET_REFAULT));
-	seq_buf_printf(&s, "workingset_activate %lu\n",
-		       memcg_page_state(memcg, WORKINGSET_ACTIVATE));
+	seq_buf_printf(&s, "workingset_refault_anon %lu\n",
+		       memcg_page_state(memcg, WORKINGSET_REFAULT_ANON));
+	seq_buf_printf(&s, "workingset_refault_file %lu\n",
+		       memcg_page_state(memcg, WORKINGSET_REFAULT_FILE));
+	seq_buf_printf(&s, "workingset_activate_anon %lu\n",
+		       memcg_page_state(memcg, WORKINGSET_ACTIVATE_ANON));
+	seq_buf_printf(&s, "workingset_activate_file %lu\n",
+		       memcg_page_state(memcg, WORKINGSET_ACTIVATE_FILE));
 	seq_buf_printf(&s, "workingset_restore %lu\n",
-		       memcg_page_state(memcg, WORKINGSET_RESTORE));
+		       memcg_page_state(memcg, WORKINGSET_RESTORE_ANON));
+	seq_buf_printf(&s, "workingset_restore %lu\n",
+		       memcg_page_state(memcg, WORKINGSET_RESTORE_FILE));
 	seq_buf_printf(&s, "workingset_nodereclaim %lu\n",
 		       memcg_page_state(memcg, WORKINGSET_NODERECLAIM));
 
@@ -5131,13 +5137,18 @@ static int alloc_mem_cgroup_per_node_info(struct mem_cgroup *memcg, int node)
 	if (!pn)
 		return 1;
 
-	pn->lruvec_stat_local = alloc_percpu(struct lruvec_stat);
+	/* We charge the parent cgroup, never the current task */
+	WARN_ON_ONCE(!current->active_memcg);
+
+	pn->lruvec_stat_local = alloc_percpu_gfp(struct lruvec_stat,
+						 GFP_KERNEL_ACCOUNT);
 	if (!pn->lruvec_stat_local) {
 		kfree(pn);
 		return 1;
 	}
 
-	pn->lruvec_stat_cpu = alloc_percpu(struct lruvec_stat);
+	pn->lruvec_stat_cpu = alloc_percpu_gfp(struct lruvec_stat,
+					       GFP_KERNEL_ACCOUNT);
 	if (!pn->lruvec_stat_cpu) {
 		free_percpu(pn->lruvec_stat_local);
 		kfree(pn);
@@ -5211,11 +5222,16 @@ static struct mem_cgroup *mem_cgroup_alloc(void)
 		goto fail;
 	}
 
-	memcg->vmstats_local = alloc_percpu(struct memcg_vmstats_percpu);
+	/* We charge the parent cgroup, never the current task */
+	WARN_ON_ONCE(!current->active_memcg);
+
+	memcg->vmstats_local = alloc_percpu_gfp(struct memcg_vmstats_percpu,
+						GFP_KERNEL_ACCOUNT);
 	if (!memcg->vmstats_local)
 		goto fail;
 
-	memcg->vmstats_percpu = alloc_percpu(struct memcg_vmstats_percpu);
+	memcg->vmstats_percpu = alloc_percpu_gfp(struct memcg_vmstats_percpu,
+						 GFP_KERNEL_ACCOUNT);
 	if (!memcg->vmstats_percpu)
 		goto fail;
 
@@ -5264,7 +5280,9 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	struct mem_cgroup *memcg;
 	long error = -ENOMEM;
 
+	memalloc_use_memcg(parent);
 	memcg = mem_cgroup_alloc();
+	memalloc_unuse_memcg();
 	if (IS_ERR(memcg))
 		return ERR_CAST(memcg);
 

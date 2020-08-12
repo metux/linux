@@ -178,6 +178,7 @@ extern uint amdgpu_dm_abm_level;
 extern struct amdgpu_mgpu_info mgpu_info;
 extern int amdgpu_ras_enable;
 extern uint amdgpu_ras_mask;
+extern int amdgpu_bad_page_threshold;
 extern int amdgpu_async_gfx_ring;
 extern int amdgpu_mcbp;
 extern int amdgpu_discovery;
@@ -187,9 +188,11 @@ extern int amdgpu_force_asic_type;
 #ifdef CONFIG_HSA_AMD
 extern int sched_policy;
 extern bool debug_evictions;
+extern bool no_system_mem_limit;
 #else
 static const int sched_policy = KFD_SCHED_POLICY_HWS;
 static const bool debug_evictions; /* = false */
+static const bool no_system_mem_limit;
 #endif
 
 extern int amdgpu_tmz;
@@ -201,6 +204,7 @@ extern int amdgpu_si_support;
 #ifdef CONFIG_DRM_AMDGPU_CIK
 extern int amdgpu_cik_support;
 #endif
+extern int amdgpu_num_kcq;
 
 #define AMDGPU_VM_MAX_NUM_CTX			4096
 #define AMDGPU_SG_THRESHOLD			(256*1024*1024)
@@ -211,6 +215,8 @@ extern int amdgpu_cik_support;
 #define AMDGPU_DEBUGFS_MAX_COMPONENTS		32
 #define AMDGPUFB_CONN_LIMIT			4
 #define AMDGPU_BIOS_NUM_SCRATCH			16
+
+#define AMDGPU_VBIOS_VGA_ALLOCATION		(9 * 1024 * 1024) /* reserve 8MB for vga emulator and 1 MB for FB */
 
 /* hard reset data */
 #define AMDGPU_ASIC_RESET_DATA                  0x39d5e86b
@@ -648,16 +654,6 @@ struct amdgpu_atcs {
 };
 
 /*
- * Firmware VRAM reservation
- */
-struct amdgpu_fw_vram_usage {
-	u64 start_offset;
-	u64 size;
-	struct amdgpu_bo *reserved_bo;
-	void *va;
-};
-
-/*
  * CGS
  */
 struct cgs_device *amdgpu_cgs_create_device(struct amdgpu_device *adev);
@@ -765,7 +761,6 @@ struct amdgpu_device {
 	bool				is_atom_fw;
 	uint8_t				*bios;
 	uint32_t			bios_size;
-	struct amdgpu_bo		*stolen_vga_memory;
 	uint32_t			bios_scratch_reg_offset;
 	uint32_t			bios_scratch[AMDGPU_BIOS_NUM_SCRATCH];
 
@@ -941,8 +936,6 @@ struct amdgpu_device {
 	struct delayed_work     delayed_init_work;
 
 	struct amdgpu_virt	virt;
-	/* firmware VRAM reservation */
-	struct amdgpu_fw_vram_usage fw_vram_usage;
 
 	/* link all shadow bo */
 	struct list_head                shadow_list;
@@ -956,9 +949,9 @@ struct amdgpu_device {
 	bool                            in_suspend;
 	bool				in_hibernate;
 
-	atomic_t                        in_gpu_reset;
+	bool                            in_gpu_reset;
 	enum pp_mp1_state               mp1_state;
-	struct rw_semaphore	reset_sem;
+	struct mutex  lock_reset;
 	struct amdgpu_doorbell_index doorbell_index;
 
 	struct mutex			notifier_lock;
@@ -1271,11 +1264,6 @@ static struct device_attribute pmu_attr_##_name = __ATTR_RO(_name)
 static inline bool amdgpu_is_tmz(struct amdgpu_device *adev)
 {
        return adev->gmc.tmz_enabled;
-}
-
-static inline bool amdgpu_in_reset(struct amdgpu_device *adev)
-{
-	return atomic_read(&adev->in_gpu_reset) ? true : false;
 }
 
 #endif

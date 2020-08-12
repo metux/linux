@@ -1111,7 +1111,7 @@ static int smu_disable_dpms(struct smu_context *smu)
 	struct amdgpu_device *adev = smu->adev;
 	int ret = 0;
 	bool use_baco = !smu->is_apu &&
-		((amdgpu_in_reset(adev) &&
+		((adev->in_gpu_reset &&
 		  (amdgpu_asic_reset_method(adev) == AMD_RESET_METHOD_BACO)) ||
 		 ((adev->in_runpm || adev->in_hibernate) && amdgpu_asic_supports_baco(adev)));
 
@@ -2660,4 +2660,21 @@ ssize_t smu_sys_get_gpu_metrics(struct smu_context *smu,
 	mutex_unlock(&smu->mutex);
 
 	return size;
+}
+
+int smu_enable_mgpu_fan_boost(struct smu_context *smu)
+{
+	int ret = 0;
+
+	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&smu->mutex);
+
+	if (smu->ppt_funcs->enable_mgpu_fan_boost)
+		ret = smu->ppt_funcs->enable_mgpu_fan_boost(smu);
+
+	mutex_unlock(&smu->mutex);
+
+	return ret;
 }

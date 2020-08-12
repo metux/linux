@@ -744,6 +744,8 @@ static int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file
 			dev_info.ids_flags |= AMDGPU_IDS_FLAGS_FUSION;
 		if (amdgpu_mcbp || amdgpu_sriov_vf(adev))
 			dev_info.ids_flags |= AMDGPU_IDS_FLAGS_PREEMPTION;
+		if (amdgpu_is_tmz(adev))
+			dev_info.ids_flags |= AMDGPU_IDS_FLAGS_TMZ;
 
 		vm_size = adev->vm_manager.max_pfn * AMDGPU_GPU_PAGE_SIZE;
 		vm_size -= AMDGPU_VA_RESERVED_SIZE;
@@ -1092,8 +1094,6 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 	if (!fpriv)
 		return;
 
-	down_read(&adev->reset_sem);
-
 	pm_runtime_get_sync(dev->dev);
 
 	if (amdgpu_device_ip_get_ip_block(adev, AMD_IP_BLOCK_TYPE_UVD) != NULL)
@@ -1132,8 +1132,6 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 
 	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
-
-	up_read(&adev->reset_sem);
 }
 
 /*

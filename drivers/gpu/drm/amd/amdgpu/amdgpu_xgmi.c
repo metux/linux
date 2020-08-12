@@ -372,7 +372,7 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev, int lo
 	tmp->hive_id = adev->gmc.xgmi.hive_id;
 	INIT_LIST_HEAD(&tmp->device_list);
 	mutex_init(&tmp->hive_lock);
-	atomic_set(&tmp->in_reset, 0);
+	mutex_init(&tmp->reset_lock);
 	task_barrier_init(&tmp->tb);
 
 	if (lock)
@@ -397,7 +397,6 @@ int amdgpu_xgmi_set_pstate(struct amdgpu_device *adev, int pstate)
 						hive->hi_req_gpu : adev;
 	bool is_hi_req = pstate == AMDGPU_XGMI_PSTATE_MAX_VEGA20;
 	bool init_low = hive->pstate == AMDGPU_XGMI_PSTATE_UNKNOWN;
-	bool locked;
 
 	/* fw bug so temporarily disable pstate switching */
 	return 0;
@@ -405,9 +404,7 @@ int amdgpu_xgmi_set_pstate(struct amdgpu_device *adev, int pstate)
 	if (!hive || adev->asic_type != CHIP_VEGA20)
 		return 0;
 
-	locked = atomic_read(&hive->in_reset) ? false : true;
-	if (locked)
-		mutex_lock(&hive->hive_lock);
+	mutex_lock(&hive->hive_lock);
 
 	if (is_hi_req)
 		hive->hi_req_count++;
@@ -442,8 +439,7 @@ int amdgpu_xgmi_set_pstate(struct amdgpu_device *adev, int pstate)
 							adev : NULL;
 	}
 out:
-	if (locked)
-		mutex_unlock(&hive->hive_lock);
+	mutex_unlock(&hive->hive_lock);
 	return ret;
 }
 
@@ -545,7 +541,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 			}
 			ret = amdgpu_xgmi_update_topology(hive, tmp_adev);
 			if (ret)
-				goto exit;
+				goto exit_unlock;
 		}
 
 		/* get latest topology info for each device from psp */
@@ -558,7 +554,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 					tmp_adev->gmc.xgmi.node_id,
 					tmp_adev->gmc.xgmi.hive_id, ret);
 				/* To do : continue with some node failed or disable the whole hive */
-				goto exit;
+				goto exit_unlock;
 			}
 		}
 	}
@@ -566,7 +562,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 	if (!ret)
 		ret = amdgpu_xgmi_sysfs_add_dev_info(adev, hive);
 
-
+exit_unlock:
 	mutex_unlock(&hive->hive_lock);
 exit:
 	if (!ret)
@@ -598,6 +594,7 @@ int amdgpu_xgmi_remove_device(struct amdgpu_device *adev)
 	if(!(--hive->number_devices)){
 		amdgpu_xgmi_sysfs_destroy(adev, hive);
 		mutex_destroy(&hive->hive_lock);
+		mutex_destroy(&hive->reset_lock);
 	}
 
 	return psp_xgmi_terminate(&adev->psp);

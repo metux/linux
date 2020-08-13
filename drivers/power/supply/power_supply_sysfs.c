@@ -52,6 +52,7 @@ static const char * const power_supply_type_text[] = {
 	[POWER_SUPPLY_TYPE_USB_PD]		= "USB_PD",
 	[POWER_SUPPLY_TYPE_USB_PD_DRP]		= "USB_PD_DRP",
 	[POWER_SUPPLY_TYPE_APPLE_BRICK_ID]	= "BrickID",
+	[POWER_SUPPLY_TYPE_WIRELESS]		= "Wireless",
 };
 
 static const char * const power_supply_usb_type_text[] = {

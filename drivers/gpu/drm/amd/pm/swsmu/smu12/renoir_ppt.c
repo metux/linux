@@ -618,44 +618,6 @@ static int renoir_get_current_activity_percent(struct smu_context *smu,
 	return 0;
 }
 
-static int renoir_get_vddc(struct smu_context *smu, uint32_t *value,
-			   unsigned int index)
-{
-	int ret = 0;
-	SmuMetrics_t metrics;
-
-	if (index >= 2)
-		return -EINVAL;
-
-	if (!value)
-		return -EINVAL;
-
-	ret = smu_cmn_get_metrics_table(smu, &metrics, false);
-	if (ret)
-		return ret;
-
-	*value = metrics.Voltage[index];
-
-	return 0;
-}
-
-static int renoir_get_power(struct smu_context *smu, uint32_t *value)
-{
-	int ret = 0;
-	SmuMetrics_t metrics;
-
-	if (!value)
-		return -EINVAL;
-
-	ret = smu_cmn_get_metrics_table(smu, &metrics, false);
-	if (ret)
-		return ret;
-
-	*value = metrics.CurrentSocketPower << 8;
-
-	return 0;
-}
-
 /**
  * This interface get dpm clock table for dc
  */
@@ -834,58 +796,8 @@ static int renoir_set_performance_level(struct smu_context *smu,
 		ret = renoir_force_dpm_limit_value(smu, false);
 		break;
 	case AMD_DPM_FORCED_LEVEL_AUTO:
-		ret = renoir_unforce_dpm_levels(smu);
-		break;
 	case AMD_DPM_FORCED_LEVEL_PROFILE_STANDARD:
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetHardMinGfxClk,
-						      RENOIR_UMD_PSTATE_GFXCLK,
-						      NULL);
-		if (ret)
-			return ret;
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetHardMinFclkByFreq,
-						      RENOIR_UMD_PSTATE_FCLK,
-						      NULL);
-		if (ret)
-			return ret;
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetHardMinSocclkByFreq,
-						      RENOIR_UMD_PSTATE_SOCCLK,
-						      NULL);
-		if (ret)
-			return ret;
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetHardMinVcn,
-						      RENOIR_UMD_PSTATE_VCNCLK,
-						      NULL);
-		if (ret)
-			return ret;
-
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetSoftMaxGfxClk,
-						      RENOIR_UMD_PSTATE_GFXCLK,
-						      NULL);
-		if (ret)
-			return ret;
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetSoftMaxFclkByFreq,
-						      RENOIR_UMD_PSTATE_FCLK,
-						      NULL);
-		if (ret)
-			return ret;
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetSoftMaxSocclkByFreq,
-						      RENOIR_UMD_PSTATE_SOCCLK,
-						      NULL);
-		if (ret)
-			return ret;
-		ret = smu_cmn_send_smc_msg_with_param(smu,
-						      SMU_MSG_SetSoftMaxVcn,
-						      RENOIR_UMD_PSTATE_VCNCLK,
-						      NULL);
-		if (ret)
-			return ret;
+		ret = renoir_unforce_dpm_levels(smu);
 		break;
 	case AMD_DPM_FORCED_LEVEL_PROFILE_MIN_SCLK:
 	case AMD_DPM_FORCED_LEVEL_PROFILE_MIN_MCLK:
@@ -915,48 +827,50 @@ static int renoir_set_performance_level(struct smu_context *smu,
  */
 static int renoir_set_watermarks_table(
 		struct smu_context *smu,
-		struct pp_smu_wm_range_sets *clock_ranges)
+		struct dm_pp_wm_sets_with_clock_ranges_soc15 *clock_ranges)
 {
 	Watermarks_t *table = smu->smu_table.watermarks_table;
 	int ret = 0;
 	int i;
 
 	if (clock_ranges) {
-		if (clock_ranges->num_reader_wm_sets > NUM_WM_RANGES ||
-		    clock_ranges->num_writer_wm_sets > NUM_WM_RANGES)
+		if (clock_ranges->num_wm_dmif_sets > 4 ||
+				clock_ranges->num_wm_mcif_sets > 4)
 			return -EINVAL;
 
 		/* save into smu->smu_table.tables[SMU_TABLE_WATERMARKS]->cpu_addr*/
-		for (i = 0; i < clock_ranges->num_reader_wm_sets; i++) {
+		for (i = 0; i < clock_ranges->num_wm_dmif_sets; i++) {
 			table->WatermarkRow[WM_DCFCLK][i].MinClock =
-				clock_ranges->reader_wm_sets[i].min_drain_clk_mhz;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_min_dcfclk_clk_in_khz));
 			table->WatermarkRow[WM_DCFCLK][i].MaxClock =
-				clock_ranges->reader_wm_sets[i].max_drain_clk_mhz;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_max_dcfclk_clk_in_khz));
 			table->WatermarkRow[WM_DCFCLK][i].MinMclk =
-				clock_ranges->reader_wm_sets[i].min_fill_clk_mhz;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_min_mem_clk_in_khz));
 			table->WatermarkRow[WM_DCFCLK][i].MaxMclk =
-				clock_ranges->reader_wm_sets[i].max_fill_clk_mhz;
-
-			table->WatermarkRow[WM_DCFCLK][i].WmSetting =
-				clock_ranges->reader_wm_sets[i].wm_inst;
-			table->WatermarkRow[WM_DCFCLK][i].WmType =
-				clock_ranges->reader_wm_sets[i].wm_type;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_dmif_clocks_ranges[i].wm_max_mem_clk_in_khz));
+			table->WatermarkRow[WM_DCFCLK][i].WmSetting = (uint8_t)
+					clock_ranges->wm_dmif_clocks_ranges[i].wm_set_id;
 		}
 
-		for (i = 0; i < clock_ranges->num_writer_wm_sets; i++) {
+		for (i = 0; i < clock_ranges->num_wm_mcif_sets; i++) {
 			table->WatermarkRow[WM_SOCCLK][i].MinClock =
-				clock_ranges->writer_wm_sets[i].min_fill_clk_mhz;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_min_socclk_clk_in_khz));
 			table->WatermarkRow[WM_SOCCLK][i].MaxClock =
-				clock_ranges->writer_wm_sets[i].max_fill_clk_mhz;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_max_socclk_clk_in_khz));
 			table->WatermarkRow[WM_SOCCLK][i].MinMclk =
-				clock_ranges->writer_wm_sets[i].min_drain_clk_mhz;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_min_mem_clk_in_khz));
 			table->WatermarkRow[WM_SOCCLK][i].MaxMclk =
-				clock_ranges->writer_wm_sets[i].max_drain_clk_mhz;
-
-			table->WatermarkRow[WM_SOCCLK][i].WmSetting =
-				clock_ranges->writer_wm_sets[i].wm_inst;
-			table->WatermarkRow[WM_SOCCLK][i].WmType =
-				clock_ranges->writer_wm_sets[i].wm_type;
+				cpu_to_le16((uint16_t)
+				(clock_ranges->wm_mcif_clocks_ranges[i].wm_max_mem_clk_in_khz));
+			table->WatermarkRow[WM_SOCCLK][i].WmSetting = (uint8_t)
+					clock_ranges->wm_mcif_clocks_ranges[i].wm_set_id;
 		}
 
 		smu->watermarks_bitmap |= WATERMARKS_EXIST;
@@ -1038,18 +952,6 @@ static int renoir_read_sensor(struct smu_context *smu,
 	case AMDGPU_PP_SENSOR_GFX_SCLK:
 		ret = renoir_get_current_clk_freq_by_table(smu, SMU_GFXCLK, (uint32_t *)data);
 		*(uint32_t *)data *= 100;
-		*size = 4;
-		break;
-	case AMDGPU_PP_SENSOR_VDDGFX:
-		ret = renoir_get_vddc(smu, (uint32_t *)data, 0);
-		*size = 4;
-		break;
-	case AMDGPU_PP_SENSOR_VDDNB:
-		ret = renoir_get_vddc(smu, (uint32_t *)data, 1);
-		*size = 4;
-		break;
-	case AMDGPU_PP_SENSOR_GPU_POWER:
-		ret = renoir_get_power(smu, (uint32_t *)data);
 		*size = 4;
 		break;
 	default:

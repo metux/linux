@@ -122,7 +122,7 @@ void amdgpu_dpm_print_ps_status(struct amdgpu_device *adev,
 
 void amdgpu_dpm_get_active_displays(struct amdgpu_device *adev)
 {
-	struct drm_device *ddev = adev_to_drm(adev);
+	struct drm_device *ddev = adev->ddev;
 	struct drm_crtc *crtc;
 	struct amdgpu_crtc *amdgpu_crtc;
 
@@ -143,7 +143,7 @@ void amdgpu_dpm_get_active_displays(struct amdgpu_device *adev)
 
 u32 amdgpu_dpm_get_vblank_time(struct amdgpu_device *adev)
 {
-	struct drm_device *dev = adev_to_drm(adev);
+	struct drm_device *dev = adev->ddev;
 	struct drm_crtc *crtc;
 	struct amdgpu_crtc *amdgpu_crtc;
 	u32 vblank_in_pixels;
@@ -170,7 +170,7 @@ u32 amdgpu_dpm_get_vblank_time(struct amdgpu_device *adev)
 
 u32 amdgpu_dpm_get_vrefresh(struct amdgpu_device *adev)
 {
-	struct drm_device *dev = adev_to_drm(adev);
+	struct drm_device *dev = adev->ddev;
 	struct drm_crtc *crtc;
 	struct amdgpu_crtc *amdgpu_crtc;
 	u32 vrefresh = 0;
@@ -1114,6 +1114,8 @@ int amdgpu_dpm_baco_reset(struct amdgpu_device *adev)
 	void *pp_handle = adev->powerplay.pp_handle;
 	struct smu_context *smu = &adev->smu;
 	int ret = 0;
+
+	dev_info(adev->dev, "GPU BACO reset\n");
 
 	if (is_support_sw_smu(adev)) {
 		ret = smu_baco_enter(smu);

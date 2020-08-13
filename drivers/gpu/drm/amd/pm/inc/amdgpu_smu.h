@@ -274,6 +274,9 @@ struct smu_table_context
 
 	void				*overdrive_table;
 	void                            *boot_overdrive_table;
+
+	uint32_t			gpu_metrics_table_size;
+	void				*gpu_metrics_table;
 };
 
 struct smu_dpm_context {
@@ -592,6 +595,7 @@ struct pptable_funcs {
 	size_t (*get_pp_feature_mask)(struct smu_context *smu, char *buf);
 	int (*set_pp_feature_mask)(struct smu_context *smu, uint64_t new_mask);
 	ssize_t (*get_gpu_metrics)(struct smu_context *smu, void **table);
+	int (*enable_mgpu_fan_boost)(struct smu_context *smu);
 };
 
 typedef enum {
@@ -795,6 +799,8 @@ int smu_get_dpm_clock_table(struct smu_context *smu,
 int smu_get_status_gfxoff(struct amdgpu_device *adev, uint32_t *value);
 
 ssize_t smu_sys_get_gpu_metrics(struct smu_context *smu, void **table);
+
+int smu_enable_mgpu_fan_boost(struct smu_context *smu);
 
 #endif
 #endif

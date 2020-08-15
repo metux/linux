@@ -6,7 +6,7 @@
  */
 
 #include "habanalabs.h"
-#include "include/hw_ip/mmu/mmu_general.h"
+#include "../include/hw_ip/mmu/mmu_general.h"
 
 #include <linux/pci.h>
 #include <linux/debugfs.h>
@@ -19,9 +19,9 @@
 static struct dentry *hl_debug_root;
 
 static int hl_debugfs_i2c_read(struct hl_device *hdev, u8 i2c_bus, u8 i2c_addr,
-				u8 i2c_reg, u32 *val)
+				u8 i2c_reg, long *val)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	if (hl_device_disabled_or_in_reset(hdev))
@@ -29,14 +29,14 @@ static int hl_debugfs_i2c_read(struct hl_device *hdev, u8 i2c_bus, u8 i2c_addr,
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_I2C_RD <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_I2C_RD <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.i2c_bus = i2c_bus;
 	pkt.i2c_addr = i2c_addr;
 	pkt.i2c_reg = i2c_reg;
 
 	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
-						0, (long *) val);
+						0, val);
 
 	if (rc)
 		dev_err(hdev->dev, "Failed to read from I2C, error %d\n", rc);
@@ -47,7 +47,7 @@ static int hl_debugfs_i2c_read(struct hl_device *hdev, u8 i2c_bus, u8 i2c_addr,
 static int hl_debugfs_i2c_write(struct hl_device *hdev, u8 i2c_bus, u8 i2c_addr,
 				u8 i2c_reg, u32 val)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	if (hl_device_disabled_or_in_reset(hdev))
@@ -55,8 +55,8 @@ static int hl_debugfs_i2c_write(struct hl_device *hdev, u8 i2c_bus, u8 i2c_addr,
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_I2C_WR <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_I2C_WR <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.i2c_bus = i2c_bus;
 	pkt.i2c_addr = i2c_addr;
 	pkt.i2c_reg = i2c_reg;
@@ -73,7 +73,7 @@ static int hl_debugfs_i2c_write(struct hl_device *hdev, u8 i2c_bus, u8 i2c_addr,
 
 static void hl_debugfs_led_set(struct hl_device *hdev, u8 led, u8 state)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	if (hl_device_disabled_or_in_reset(hdev))
@@ -81,8 +81,8 @@ static void hl_debugfs_led_set(struct hl_device *hdev, u8 led, u8 state)
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_LED_SET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_LED_SET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.led_index = cpu_to_le32(led);
 	pkt.value = cpu_to_le64(state);
 
@@ -110,7 +110,7 @@ static int command_buffers_show(struct seq_file *s, void *data)
 			seq_puts(s, "---------------------------------------------------------------\n");
 		}
 		seq_printf(s,
-			"   %03d        %d    0x%08x      %d          %d          %d\n",
+			"   %03llu        %d    0x%08x      %d          %d          %d\n",
 			cb->id, cb->ctx_id, cb->size,
 			kref_read(&cb->refcount),
 			cb->mmap, cb->cs_cnt);
@@ -827,7 +827,7 @@ static ssize_t hl_i2c_data_read(struct file *f, char __user *buf,
 	struct hl_dbg_device_entry *entry = file_inode(f)->i_private;
 	struct hl_device *hdev = entry->hdev;
 	char tmp_buf[32];
-	u32 val;
+	long val;
 	ssize_t rc;
 
 	if (*ppos)
@@ -842,7 +842,7 @@ static ssize_t hl_i2c_data_read(struct file *f, char __user *buf,
 		return rc;
 	}
 
-	sprintf(tmp_buf, "0x%02x\n", val);
+	sprintf(tmp_buf, "0x%02lx\n", val);
 	rc = simple_read_from_buffer(buf, count, ppos, tmp_buf,
 			strlen(tmp_buf));
 
@@ -982,7 +982,7 @@ static ssize_t hl_clk_gate_read(struct file *f, char __user *buf,
 		return 0;
 
 	sprintf(tmp_buf, "0x%llx\n", hdev->clock_gating_mask);
-	rc = simple_read_from_buffer(buf, strlen(tmp_buf) + 1, ppos, tmp_buf,
+	rc = simple_read_from_buffer(buf, count, ppos, tmp_buf,
 			strlen(tmp_buf) + 1);
 
 	return rc;

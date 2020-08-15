@@ -9,11 +9,11 @@
 #define GAUDIP_H_
 
 #include <uapi/misc/habanalabs.h>
-#include "habanalabs.h"
-#include "include/common/hl_boot_if.h"
-#include "include/gaudi/gaudi_packets.h"
-#include "include/gaudi/gaudi.h"
-#include "include/gaudi/gaudi_async_events.h"
+#include "../common/habanalabs.h"
+#include "../include/common/hl_boot_if.h"
+#include "../include/gaudi/gaudi_packets.h"
+#include "../include/gaudi/gaudi.h"
+#include "../include/gaudi/gaudi_async_events.h"
 
 #define NUMBER_OF_EXT_HW_QUEUES		12
 #define NUMBER_OF_CMPLT_QUEUES		NUMBER_OF_EXT_HW_QUEUES
@@ -41,7 +41,8 @@
 
 #define GAUDI_MAX_CLK_FREQ		2200000000ull	/* 2200 MHz */
 
-#define MAX_POWER_DEFAULT		200000		/* 200W */
+#define MAX_POWER_DEFAULT_PCI		200000		/* 200W */
+#define MAX_POWER_DEFAULT_PMC		350000		/* 350W */
 
 #define GAUDI_CPU_TIMEOUT_USEC		15000000	/* 15s */
 
@@ -215,7 +216,7 @@ struct gaudi_internal_qman_info {
 
 /**
  * struct gaudi_device - ASIC specific manage structure.
- * @armcp_info_get: get information on device from ArmCP
+ * @cpucp_info_get: get information on device from CPU-CP
  * @hw_queues_lock: protects the H/W queues from concurrent access.
  * @clk_gate_mutex: protects code areas that require clock gating to be disabled
  *                  temporarily
@@ -238,7 +239,7 @@ struct gaudi_internal_qman_info {
  *                    8-bit value so use u8.
  */
 struct gaudi_device {
-	int (*armcp_info_get)(struct hl_device *hdev);
+	int (*cpucp_info_get)(struct hl_device *hdev);
 
 	/* TODO: remove hw_queues_lock after moving to scheduler code */
 	spinlock_t			hw_queues_lock;

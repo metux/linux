@@ -288,7 +288,7 @@ static int device_early_init(struct hl_device *hdev)
 	for (i = 0 ; i < hdev->asic_prop.completion_queues_count ; i++) {
 		snprintf(workq_name, 32, "hl-free-jobs-%u", (u32) i);
 		hdev->cq_wq[i] = create_singlethread_workqueue(workq_name);
-		if (hdev->cq_wq == NULL) {
+		if (hdev->cq_wq[i] == NULL) {
 			dev_err(hdev->dev, "Failed to allocate CQ workqueue\n");
 			rc = -ENOMEM;
 			goto free_cq_wq;
@@ -871,7 +871,7 @@ int hl_device_reset(struct hl_device *hdev, bool hard_reset,
 			 * so this message won't be sent
 			 */
 			if (hl_fw_send_pci_access_msg(hdev,
-					ARMCP_PACKET_DISABLE_PCI_ACCESS))
+					CPUCP_PACKET_DISABLE_PCI_ACCESS))
 				dev_warn(hdev->dev,
 					"Failed to disable PCI access by F/W\n");
 		}
@@ -1033,14 +1033,18 @@ again:
 		}
 	}
 
+	/* Device is now enabled as part of the initialization requires
+	 * communication with the device firmware to get information that
+	 * is required for the initialization itself
+	 */
+	hdev->disabled = false;
+
 	rc = hdev->asic_funcs->hw_init(hdev);
 	if (rc) {
 		dev_err(hdev->dev,
 			"failed to initialize the H/W after reset\n");
 		goto out_err;
 	}
-
-	hdev->disabled = false;
 
 	/* Check that the communication with the device is working */
 	rc = hdev->asic_funcs->test_queues(hdev);
@@ -1065,7 +1069,7 @@ again:
 			goto out_err;
 		}
 
-		hl_set_max_power(hdev, hdev->max_power);
+		hl_set_max_power(hdev);
 	} else {
 		rc = hdev->asic_funcs->soft_reset_late_init(hdev);
 		if (rc) {
@@ -1261,14 +1265,18 @@ int hl_device_init(struct hl_device *hdev, struct class *hclass)
 	 */
 	add_cdev_sysfs_on_err = true;
 
+	/* Device is now enabled as part of the initialization requires
+	 * communication with the device firmware to get information that
+	 * is required for the initialization itself
+	 */
+	hdev->disabled = false;
+
 	rc = hdev->asic_funcs->hw_init(hdev);
 	if (rc) {
 		dev_err(hdev->dev, "failed to initialize the H/W\n");
 		rc = 0;
 		goto out_disabled;
 	}
-
-	hdev->disabled = false;
 
 	/* Check that the communication with the device is working */
 	rc = hdev->asic_funcs->test_queues(hdev);
@@ -1309,6 +1317,11 @@ int hl_device_init(struct hl_device *hdev, struct class *hclass)
 		rc = 0;
 		goto out_disabled;
 	}
+
+	/* Need to call this again because the max power might change,
+	 * depending on card type for certain ASICs
+	 */
+	hl_set_max_power(hdev);
 
 	/*
 	 * hl_hwmon_init() must be called after device_late_init(), because only

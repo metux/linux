@@ -9,12 +9,12 @@
 #define GOYAP_H_
 
 #include <uapi/misc/habanalabs.h>
-#include "habanalabs.h"
-#include "include/common/hl_boot_if.h"
-#include "include/goya/goya_packets.h"
-#include "include/goya/goya.h"
-#include "include/goya/goya_async_events.h"
-#include "include/goya/goya_fw_if.h"
+#include "../common/habanalabs.h"
+#include "../include/common/hl_boot_if.h"
+#include "../include/goya/goya_packets.h"
+#include "../include/goya/goya.h"
+#include "../include/goya/goya_async_events.h"
+#include "../include/goya/goya_fw_if.h"
 
 #define NUMBER_OF_CMPLT_QUEUES		5
 #define NUMBER_OF_EXT_HW_QUEUES		5
@@ -207,7 +207,7 @@ void goya_set_max_power(struct hl_device *hdev, u64 value);
 void goya_set_pll_profile(struct hl_device *hdev, enum hl_pll_frequency freq);
 void goya_add_device_attr(struct hl_device *hdev,
 			struct attribute_group *dev_attr_grp);
-int goya_armcp_info_get(struct hl_device *hdev);
+int goya_cpucp_info_get(struct hl_device *hdev);
 int goya_debug_coresight(struct hl_device *hdev, void *data);
 void goya_halt_coresight(struct hl_device *hdev);
 

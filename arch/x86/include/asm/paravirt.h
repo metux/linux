@@ -412,6 +412,12 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 	PVOP_VCALL2(mmu.set_pte, ptep, pte.pte);
 }
 
+static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pte)
+{
+	PVOP_VCALL4(mmu.set_pte_at, mm, addr, ptep, pte.pte);
+}
+
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
 	PVOP_VCALL2(mmu.set_pmd, pmdp, native_pmd_val(pmd));
@@ -448,7 +454,7 @@ static inline pudval_t pud_val(pud_t pud)
 
 static inline void pud_clear(pud_t *pudp)
 {
-	set_pud(pudp, native_make_pud(0));
+	set_pud(pudp, __pud(0));
 }
 
 static inline void set_p4d(p4d_t *p4dp, p4d_t p4d)
@@ -485,15 +491,15 @@ static inline void __set_pgd(pgd_t *pgdp, pgd_t pgd)
 } while (0)
 
 #define pgd_clear(pgdp) do {						\
-	if (pgtable_l5_enabled())					\
-		set_pgd(pgdp, native_make_pgd(0));			\
+	if (pgtable_l5_enabled())						\
+		set_pgd(pgdp, __pgd(0));				\
 } while (0)
 
 #endif  /* CONFIG_PGTABLE_LEVELS == 5 */
 
 static inline void p4d_clear(p4d_t *p4dp)
 {
-	set_p4d(p4dp, native_make_p4d(0));
+	set_p4d(p4dp, __p4d(0));
 }
 
 static inline void set_pte_atomic(pte_t *ptep, pte_t pte)
@@ -504,12 +510,12 @@ static inline void set_pte_atomic(pte_t *ptep, pte_t pte)
 static inline void pte_clear(struct mm_struct *mm, unsigned long addr,
 			     pte_t *ptep)
 {
-	set_pte(ptep, native_make_pte(0));
+	set_pte_at(mm, addr, ptep, __pte(0));
 }
 
 static inline void pmd_clear(pmd_t *pmdp)
 {
-	set_pmd(pmdp, native_make_pmd(0));
+	set_pmd(pmdp, __pmd(0));
 }
 
 #define  __HAVE_ARCH_START_CONTEXT_SWITCH
@@ -580,9 +586,16 @@ bool __raw_callee_save___native_vcpu_is_preempted(long cpu);
 #endif /* SMP && PARAVIRT_SPINLOCKS */
 
 #ifdef CONFIG_X86_32
+#define PV_SAVE_REGS "pushl %ecx; pushl %edx;"
+#define PV_RESTORE_REGS "popl %edx; popl %ecx;"
+
 /* save and restore all caller-save registers, except return value */
 #define PV_SAVE_ALL_CALLER_REGS		"pushl %ecx;"
 #define PV_RESTORE_ALL_CALLER_REGS	"popl  %ecx;"
+
+#define PV_FLAGS_ARG "0"
+#define PV_EXTRA_CLOBBERS
+#define PV_VEXTRA_CLOBBERS
 #else
 /* save and restore all caller-save registers, except return value */
 #define PV_SAVE_ALL_CALLER_REGS						\
@@ -603,6 +616,14 @@ bool __raw_callee_save___native_vcpu_is_preempted(long cpu);
 	"pop %rsi;"							\
 	"pop %rdx;"							\
 	"pop %rcx;"
+
+/* We save some registers, but all of them, that's too much. We clobber all
+ * caller saved registers but the argument parameter */
+#define PV_SAVE_REGS "pushq %%rdi;"
+#define PV_RESTORE_REGS "popq %%rdi;"
+#define PV_EXTRA_CLOBBERS EXTRA_CLOBBERS, "rcx" , "rdx", "rsi"
+#define PV_VEXTRA_CLOBBERS EXTRA_CLOBBERS, "rdi", "rcx" , "rdx", "rsi"
+#define PV_FLAGS_ARG "D"
 #endif
 
 /*

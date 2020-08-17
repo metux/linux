@@ -556,7 +556,7 @@ void notrace restore_math(struct pt_regs *regs)
 
 	regs->msr = msr;
 }
-#endif
+#endif /* CONFIG_PPC_BOOK3S_64 */
 
 static void save_all(struct task_struct *tsk)
 {

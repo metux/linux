@@ -698,8 +698,8 @@ static void retire_submit(struct msm_gpu *gpu, struct msm_ringbuffer *ring,
 
 	for (i = 0; i < submit->nr_bos; i++) {
 		struct msm_gem_object *msm_obj = submit->bos[i].obj;
-
-		msm_gem_active_put(&msm_obj->base);
+		/* move to inactive: */
+		msm_gem_move_to_inactive(&msm_obj->base);
 		msm_gem_unpin_iova(&msm_obj->base, submit->aspace);
 		drm_gem_object_put_locked(&msm_obj->base);
 	}
@@ -774,7 +774,6 @@ void msm_gpu_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 
 	for (i = 0; i < submit->nr_bos; i++) {
 		struct msm_gem_object *msm_obj = submit->bos[i].obj;
-		struct drm_gem_object *drm_obj = &msm_obj->base;
 		uint64_t iova;
 
 		/* can't happen yet.. but when we add 2d support we'll have
@@ -787,11 +786,9 @@ void msm_gpu_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 		msm_gem_get_and_pin_iova(&msm_obj->base, submit->aspace, &iova);
 
 		if (submit->bos[i].flags & MSM_SUBMIT_BO_WRITE)
-			dma_resv_add_excl_fence(drm_obj->resv, submit->fence);
+			msm_gem_move_to_active(&msm_obj->base, gpu, true, submit->fence);
 		else if (submit->bos[i].flags & MSM_SUBMIT_BO_READ)
-			dma_resv_add_shared_fence(drm_obj->resv, submit->fence);
-
-		msm_gem_active_get(drm_obj, gpu);
+			msm_gem_move_to_active(&msm_obj->base, gpu, false, submit->fence);
 	}
 
 	gpu->funcs->submit(gpu, submit);
@@ -828,30 +825,6 @@ static int get_clocks(struct platform_device *pdev, struct msm_gpu *gpu)
 		gpu->nr_clocks, "rbbmtimer");
 
 	return 0;
-}
-
-/* Return a new address space for a msm_drm_private instance */
-struct msm_gem_address_space *
-msm_gpu_create_private_address_space(struct msm_gpu *gpu, struct task_struct *task)
-{
-	struct msm_gem_address_space *aspace = NULL;
-	if (!gpu)
-		return NULL;
-
-	/*
-	 * If the target doesn't support private address spaces then return
-	 * the global one
-	 */
-	if (gpu->funcs->create_private_address_space) {
-		aspace = gpu->funcs->create_private_address_space(gpu);
-		if (!IS_ERR(aspace))
-			aspace->pid = get_pid(task_pid(task));
-	}
-
-	if (IS_ERR_OR_NULL(aspace))
-		aspace = msm_gem_address_space_get(gpu->aspace);
-
-	return aspace;
 }
 
 int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,

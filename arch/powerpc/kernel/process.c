@@ -2102,10 +2102,8 @@ void show_stack(struct task_struct *tsk, unsigned long *stack,
 	unsigned long sp, ip, lr, newsp;
 	int count = 0;
 	int firstframe = 1;
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
 	unsigned long ret_addr;
 	int ftrace_idx = 0;
-#endif
 
 	if (tsk == NULL)
 		tsk = current;
@@ -2133,12 +2131,10 @@ void show_stack(struct task_struct *tsk, unsigned long *stack,
 		if (!firstframe || ip != lr) {
 			printk("%s["REG"] ["REG"] %pS",
 				loglvl, sp, ip, (void *)ip);
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
 			ret_addr = ftrace_graph_ret_addr(current,
 						&ftrace_idx, ip, stack);
 			if (ret_addr != ip)
 				pr_cont(" (%pS)", (void *)ret_addr);
-#endif
 			if (firstframe)
 				pr_cont(" (unreliable)");
 			pr_cont("\n");

@@ -25,16 +25,6 @@
 	.idProduct = prod, \
 	.bInterfaceClass = USB_CLASS_VENDOR_SPEC
 
-/* A standard entry matching with vid/pid and the audio class/subclass */
-#define USB_AUDIO_DEVICE(vend, prod) \
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE | \
-		       USB_DEVICE_ID_MATCH_INT_CLASS | \
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS, \
-	.idVendor = vend, \
-	.idProduct = prod, \
-	.bInterfaceClass = USB_CLASS_AUDIO, \
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-
 /* FTDI devices */
 {
 	USB_DEVICE(0x0403, 0xb8d8),
@@ -68,14 +58,34 @@
 	}
 },
 
-/* E-Mu 0202 USB */
-{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f02) },
-/* E-Mu 0404 USB */
-{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f04) },
-/* E-Mu Tracker Pre */
-{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f0a) },
-/* E-Mu 0204 USB */
-{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f19) },
+{
+	/* E-Mu 0202 USB */
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor = 0x041e,
+	.idProduct = 0x3f02,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+},
+{
+	/* E-Mu 0404 USB */
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor = 0x041e,
+	.idProduct = 0x3f04,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+},
+{
+	/* E-Mu Tracker Pre */
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor = 0x041e,
+	.idProduct = 0x3f0a,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+},
+{
+	/* E-Mu 0204 USB */
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor = 0x041e,
+	.idProduct = 0x3f19,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+},
 
 /*
  * HP Wireless Audio
@@ -117,13 +127,69 @@
  * Logitech QuickCam: bDeviceClass is vendor-specific, so generic interface
  * class matches do not take effect without an explicit ID match.
  */
-{ USB_AUDIO_DEVICE(0x046d, 0x0850) },
-{ USB_AUDIO_DEVICE(0x046d, 0x08ae) },
-{ USB_AUDIO_DEVICE(0x046d, 0x08c6) },
-{ USB_AUDIO_DEVICE(0x046d, 0x08f0) },
-{ USB_AUDIO_DEVICE(0x046d, 0x08f5) },
-{ USB_AUDIO_DEVICE(0x046d, 0x08f6) },
-{ USB_AUDIO_DEVICE(0x046d, 0x0990) },
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x0850,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+},
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x08ae,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+},
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x08c6,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+},
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x08f0,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+},
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x08f5,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+},
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x08f6,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+},
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x046d,
+	.idProduct = 0x0990,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL,
+},
 
 /*
  * Yamaha devices
@@ -2699,23 +2765,6 @@ YAMAHA_DEVICE(0x7010, "UB99"),
 	}
 },
 
-/* Lenovo ThinkStation P620 Rear Line-in, Line-out and Microphone */
-{
-	USB_DEVICE(0x17aa, 0x1046),
-	.driver_info = (unsigned long) & (const struct snd_usb_audio_quirk) {
-		.ifnum = QUIRK_ANY_INTERFACE,
-		.type = QUIRK_SETUP_DISABLE_AUTOSUSPEND
-	}
-},
-/* Lenovo ThinkStation P620 Internal Speaker + Front Headset */
-{
-	USB_DEVICE(0x17aa, 0x104d),
-	.driver_info = (unsigned long) & (const struct snd_usb_audio_quirk) {
-		.ifnum = QUIRK_ANY_INTERFACE,
-		.type = QUIRK_SETUP_DISABLE_AUTOSUSPEND
-	}
-},
-
 /* Native Instruments MK2 series */
 {
 	/* Komplete Audio 6 */
@@ -2748,7 +2797,10 @@ YAMAHA_DEVICE(0x7010, "UB99"),
 },
 
 /* KeithMcMillen Stringport */
-{ USB_DEVICE(0x1f38, 0x0001) }, /* FIXME: should be more restrictive matching */
+{
+	USB_DEVICE(0x1f38, 0x0001),
+	.bInterfaceClass = USB_CLASS_AUDIO,
+},
 
 /* Miditech devices */
 {
@@ -2779,7 +2831,13 @@ YAMAHA_DEVICE(0x7010, "UB99"),
  */
 
 #define AU0828_DEVICE(vid, pid, vname, pname) { \
-	USB_AUDIO_DEVICE(vid, pid), \
+	.idVendor = vid, \
+	.idProduct = pid, \
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE | \
+		       USB_DEVICE_ID_MATCH_INT_CLASS | \
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS, \
+	.bInterfaceClass = USB_CLASS_AUDIO, \
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL, \
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) { \
 		.vendor_name = vname, \
 		.product_name = pname, \
@@ -2809,7 +2867,13 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 
 /* Syntek STK1160 */
 {
-	USB_AUDIO_DEVICE(0x05e1, 0x0408),
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x05e1,
+	.idProduct = 0x0408,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL,
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
 		.vendor_name = "Syntek",
 		.product_name = "STK1160",
@@ -2971,7 +3035,10 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 },
 {
 	/* Tascam US122 MKII - playback-only support */
-	USB_DEVICE_VENDOR_SPEC(0x0644, 0x8021),
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor = 0x0644,
+	.idProduct = 0x8021,
+	.bInterfaceClass = USB_CLASS_AUDIO,
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
 		.vendor_name = "TASCAM",
 		.product_name = "US122 MKII",
@@ -3389,40 +3456,14 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 {
 	/*
 	 * Pioneer DJ DJM-250MK2
-	 * PCM is 8 channels out @ 48 fixed (endpoint 0x01)
-	 * and 8 channels in @ 48 fixed (endpoint 0x82).
+	 * PCM is 8 channels out @ 48 fixed (endpoints 0x01).
+	 * The output from computer to the mixer is usable.
 	 *
-	 * Both playback and recording is working, even simultaneously.
-	 *
-	 * Playback channels could be mapped to:
-	 *  - CH1
-	 *  - CH2
-	 *  - AUX
-	 *
-	 * Recording channels could be mapped to:
-	 *  - Post CH1 Fader
-	 *  - Post CH2 Fader
-	 *  - Cross Fader A
-	 *  - Cross Fader B
-	 *  - MIC
-	 *  - AUX
-	 *  - REC OUT
-	 *
-	 * There is remaining problem with recording directly from PHONO/LINE.
-	 * If we map a channel to:
-	 *  - CH1 Control Tone PHONO
-	 *  - CH1 Control Tone LINE
-	 *  - CH2 Control Tone PHONO
-	 *  - CH2 Control Tone LINE
-	 * it is silent.
-	 * There is no signal even on other operating systems with official drivers.
-	 * The signal appears only when a supported application is started.
-	 * This needs to be investigated yet...
-	 * (there is quite a lot communication on the USB in both directions)
-	 *
-	 * In current version this mixer could be used for playback
-	 * and for recording from vinyls (through Post CH* Fader)
-	 * but not for DVS (Digital Vinyl Systems) like in Mixxx.
+	 * The input (phono or line to computer) is not working.
+	 * It should be at endpoint 0x82 and probably also 8 channels,
+	 * but it seems that it works only with Pioneer proprietary software.
+	 * Even on officially supported OS, the Audacity was unable to record
+	 * and Mixxx to recognize the control vinyls.
 	 */
 	USB_DEVICE_VENDOR_SPEC(0x2b73, 0x0017),
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
@@ -3441,26 +3482,6 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 					.endpoint = 0x01,
 					.ep_attr = USB_ENDPOINT_XFER_ISOC|
 						USB_ENDPOINT_SYNC_ASYNC,
-					.rates = SNDRV_PCM_RATE_48000,
-					.rate_min = 48000,
-					.rate_max = 48000,
-					.nr_rates = 1,
-					.rate_table = (unsigned int[]) { 48000 }
-					}
-			},
-			{
-				.ifnum = 0,
-				.type = QUIRK_AUDIO_FIXED_ENDPOINT,
-				.data = &(const struct audioformat) {
-					.formats = SNDRV_PCM_FMTBIT_S24_3LE,
-					.channels = 8, // inputs
-					.iface = 0,
-					.altsetting = 1,
-					.altset_idx = 1,
-					.endpoint = 0x82,
-					.ep_attr = USB_ENDPOINT_XFER_ISOC|
-						USB_ENDPOINT_SYNC_ASYNC|
-						USB_ENDPOINT_USAGE_IMPLICIT_FB,
 					.rates = SNDRV_PCM_RATE_48000,
 					.rate_min = 48000,
 					.rate_max = 48000,
@@ -3607,7 +3628,13 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
  * channels to be swapped and out of phase, which is dealt with in quirks.c.
  */
 {
-	USB_AUDIO_DEVICE(0x534d, 0x2109),
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
+		       USB_DEVICE_ID_MATCH_INT_CLASS |
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
+	.idVendor = 0x534d,
+	.idProduct = 0x2109,
+	.bInterfaceClass = USB_CLASS_AUDIO,
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL,
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
 		.vendor_name = "MacroSilicon",
 		.product_name = "MS2109",
@@ -3648,4 +3675,3 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 },
 
 #undef USB_DEVICE_VENDOR_SPEC
-#undef USB_AUDIO_DEVICE

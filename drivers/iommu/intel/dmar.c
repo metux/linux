@@ -316,6 +316,9 @@ static int dmar_pci_bus_add_dev(struct dmar_pci_notify_info *info)
 	if (ret < 0 && dmar_dev_scope_status == 0)
 		dmar_dev_scope_status = ret;
 
+	if (ret >= 0)
+		intel_irq_remap_add_device(info);
+
 	return ret;
 }
 
@@ -473,7 +476,7 @@ static int dmar_parse_one_rhsa(struct acpi_dmar_header *header, void *arg)
 	rhsa = (struct acpi_dmar_rhsa *)header;
 	for_each_drhd_unit(drhd) {
 		if (drhd->reg_base_addr == rhsa->base_address) {
-			int node = acpi_map_pxm_to_node(rhsa->proximity_domain);
+			int node = pxm_to_node(rhsa->proximity_domain);
 
 			if (!node_online(node))
 				node = NUMA_NO_NODE;

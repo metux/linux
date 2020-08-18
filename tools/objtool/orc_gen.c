@@ -177,16 +177,16 @@ int create_orc_sections(struct objtool_file *file)
 
 
 	/* create .orc_unwind_ip and .rela.orc_unwind_ip sections */
-	sec = elf_create_section(file->elf, ".orc_unwind_ip", sizeof(int), idx);
+	sec = elf_create_section(file->elf, ".orc_unwind_ip", 0, sizeof(int), idx);
 	if (!sec)
 		return -1;
 
-	ip_relocsec = elf_create_reloc_section(file->elf, sec);
+	ip_relocsec = elf_create_reloc_section(file->elf, sec, SHT_RELA);
 	if (!ip_relocsec)
 		return -1;
 
 	/* create .orc_unwind section */
-	u_sec = elf_create_section(file->elf, ".orc_unwind",
+	u_sec = elf_create_section(file->elf, ".orc_unwind", 0,
 				   sizeof(struct orc_entry), idx);
 
 	/* populate sections */

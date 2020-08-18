@@ -76,7 +76,7 @@ static inline bool libbpf_validate_opts(const char *opts,
 
 		for (i = opts_sz; i < user_sz; i++) {
 			if (opts[i]) {
-				pr_warn("%s has non-zero extra bytes",
+				pr_warn("%s has non-zero extra bytes\n",
 					type_name);
 				return false;
 			}
@@ -95,8 +95,27 @@ static inline bool libbpf_validate_opts(const char *opts,
 #define OPTS_GET(opts, field, fallback_value) \
 	(OPTS_HAS(opts, field) ? (opts)->field : fallback_value)
 
+int parse_cpu_mask_str(const char *s, bool **mask, int *mask_sz);
+int parse_cpu_mask_file(const char *fcpu, bool **mask, int *mask_sz);
 int libbpf__load_raw_btf(const char *raw_types, size_t types_len,
 			 const char *str_sec, size_t str_len);
+
+int bpf_object__section_size(const struct bpf_object *obj, const char *name,
+			     __u32 *size);
+int bpf_object__variable_offset(const struct bpf_object *obj, const char *name,
+				__u32 *off);
+
+struct nlattr;
+typedef int (*libbpf_dump_nlmsg_t)(void *cookie, void *msg, struct nlattr **tb);
+int libbpf_netlink_open(unsigned int *nl_pid);
+int libbpf_nl_get_link(int sock, unsigned int nl_pid,
+		       libbpf_dump_nlmsg_t dump_link_nlmsg, void *cookie);
+int libbpf_nl_get_class(int sock, unsigned int nl_pid, int ifindex,
+			libbpf_dump_nlmsg_t dump_class_nlmsg, void *cookie);
+int libbpf_nl_get_qdisc(int sock, unsigned int nl_pid, int ifindex,
+			libbpf_dump_nlmsg_t dump_qdisc_nlmsg, void *cookie);
+int libbpf_nl_get_filter(int sock, unsigned int nl_pid, int ifindex, int handle,
+			 libbpf_dump_nlmsg_t dump_filter_nlmsg, void *cookie);
 
 struct btf_ext_info {
 	/*
@@ -119,6 +138,44 @@ struct btf_ext_info {
 	     i < (sec)->num_info;					\
 	     i++, rec = (void *)rec + (seg)->rec_size)
 
+/*
+ * The .BTF.ext ELF section layout defined as
+ *   struct btf_ext_header
+ *   func_info subsection
+ *
+ * The func_info subsection layout:
+ *   record size for struct bpf_func_info in the func_info subsection
+ *   struct btf_sec_func_info for section #1
+ *   a list of bpf_func_info records for section #1
+ *     where struct bpf_func_info mimics one in include/uapi/linux/bpf.h
+ *     but may not be identical
+ *   struct btf_sec_func_info for section #2
+ *   a list of bpf_func_info records for section #2
+ *   ......
+ *
+ * Note that the bpf_func_info record size in .BTF.ext may not
+ * be the same as the one defined in include/uapi/linux/bpf.h.
+ * The loader should ensure that record_size meets minimum
+ * requirement and pass the record as is to the kernel. The
+ * kernel will handle the func_info properly based on its contents.
+ */
+struct btf_ext_header {
+	__u16	magic;
+	__u8	version;
+	__u8	flags;
+	__u32	hdr_len;
+
+	/* All offsets are in bytes relative to the end of this header */
+	__u32	func_info_off;
+	__u32	func_info_len;
+	__u32	line_info_off;
+	__u32	line_info_len;
+
+	/* optional part of .BTF.ext header */
+	__u32	core_relo_off;
+	__u32	core_relo_len;
+};
+
 struct btf_ext {
 	union {
 		struct btf_ext_header *hdr;
@@ -126,7 +183,7 @@ struct btf_ext {
 	};
 	struct btf_ext_info func_info;
 	struct btf_ext_info line_info;
-	struct btf_ext_info field_reloc_info;
+	struct btf_ext_info core_relo_info;
 	__u32 data_size;
 };
 
@@ -151,28 +208,34 @@ struct bpf_line_info_min {
 	__u32	line_col;
 };
 
-/* bpf_field_info_kind encodes which aspect of captured field has to be
- * adjusted by relocations. Currently supported values are:
- *   - BPF_FIELD_BYTE_OFFSET: field offset (in bytes);
- *   - BPF_FIELD_EXISTS: field existence (1, if field exists; 0, otherwise);
+/* bpf_core_relo_kind encodes which aspect of captured field/type/enum value
+ * has to be adjusted by relocations.
  */
-enum bpf_field_info_kind {
+enum bpf_core_relo_kind {
 	BPF_FIELD_BYTE_OFFSET = 0,	/* field byte offset */
+	BPF_FIELD_BYTE_SIZE = 1,	/* field size in bytes */
 	BPF_FIELD_EXISTS = 2,		/* field existence in target kernel */
+	BPF_FIELD_SIGNED = 3,		/* field signedness (0 - unsigned, 1 - signed) */
+	BPF_FIELD_LSHIFT_U64 = 4,	/* bitfield-specific left bitshift */
+	BPF_FIELD_RSHIFT_U64 = 5,	/* bitfield-specific right bitshift */
 };
 
-/* The minimum bpf_field_reloc checked by the loader
+/* The minimum bpf_core_relo checked by the loader
  *
- * Field relocation captures the following data:
+ * CO-RE relocation captures the following data:
  * - insn_off - instruction offset (in bytes) within a BPF program that needs
  *   its insn->imm field to be relocated with actual field info;
  * - type_id - BTF type ID of the "root" (containing) entity of a relocatable
- *   field;
+ *   type or field;
  * - access_str_off - offset into corresponding .BTF string section. String
- *   itself encodes an accessed field using a sequence of field and array
- *   indicies, separated by colon (:). It's conceptually very close to LLVM's
- *   getelementptr ([0]) instruction's arguments for identifying offset to 
- *   a field.
+ *   interpretation depends on specific relocation kind:
+ *     - for field-based relocations, string encodes an accessed field using
+ *     a sequence of field and array indices, separated by colon (:). It's
+ *     conceptually very close to LLVM's getelementptr ([0]) instruction's
+ *     arguments for identifying offset to a field.
+ *     - for type-based relocations, strings is expected to be just "0";
+ *     - for enum value-based relocations, string contains an index of enum
+ *     value within its enum type;
  *
  * Example to provide a better feel.
  *
@@ -203,11 +266,11 @@ enum bpf_field_info_kind {
  *
  *   [0] https://llvm.org/docs/LangRef.html#getelementptr-instruction
  */
-struct bpf_field_reloc {
+struct bpf_core_relo {
 	__u32   insn_off;
 	__u32   type_id;
 	__u32   access_str_off;
-	enum bpf_field_info_kind kind;
+	enum bpf_core_relo_kind kind;
 };
 
 #endif /* __LIBBPF_LIBBPF_INTERNAL_H */

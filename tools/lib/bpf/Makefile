@@ -52,7 +52,7 @@ ifndef VERBOSE
 endif
 
 FEATURE_USER = .libbpf
-FEATURE_TESTS = libelf libelf-mmap zlib bpf reallocarray
+FEATURE_TESTS = libelf libelf-mmap zlib bpf
 FEATURE_DISPLAY = libelf zlib bpf
 
 INCLUDES = -I. -I$(srctree)/tools/include -I$(srctree)/tools/include/uapi
@@ -96,10 +96,6 @@ endif
 
 ifeq ($(feature-libelf-mmap), 1)
   override CFLAGS += -DHAVE_LIBELF_MMAP_SUPPORT
-endif
-
-ifeq ($(feature-reallocarray), 0)
-  override CFLAGS += -DCOMPAT_NEED_REALLOCARRAY
 endif
 
 # Append required CFLAGS

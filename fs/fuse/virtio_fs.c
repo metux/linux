@@ -24,6 +24,8 @@ enum {
 	VQ_REQUEST
 };
 
+#define VQ_NAME_LEN	24
+
 /* Per-virtqueue state */
 struct virtio_fs_vq {
 	spinlock_t lock;
@@ -35,7 +37,8 @@ struct virtio_fs_vq {
 	struct fuse_dev *fud;
 	bool connected;
 	long in_flight;
-	char name[24];
+	struct completion in_flight_zero; /* No inflight requests */
+	char name[VQ_NAME_LEN];
 } ____cacheline_aligned_in_smp;
 
 /* A virtio-fs device instance */
@@ -48,11 +51,15 @@ struct virtio_fs {
 	unsigned int num_request_queues; /* number of request queues */
 };
 
-struct virtio_fs_forget {
+struct virtio_fs_forget_req {
 	struct fuse_in_header ih;
 	struct fuse_forget_in arg;
+};
+
+struct virtio_fs_forget {
 	/* This request can be temporarily queued on virt queue */
 	struct list_head list;
+	struct virtio_fs_forget_req req;
 };
 
 struct virtio_fs_req_work {
@@ -87,6 +94,8 @@ static inline void dec_in_flight_req(struct virtio_fs_vq *fsvq)
 {
 	WARN_ON(fsvq->in_flight <= 0);
 	fsvq->in_flight--;
+	if (!fsvq->in_flight)
+		complete(&fsvq->in_flight_zero);
 }
 
 static void release_virtio_fs_obj(struct kref *ref)
@@ -117,22 +126,23 @@ static void virtio_fs_drain_queue(struct virtio_fs_vq *fsvq)
 	WARN_ON(fsvq->in_flight < 0);
 
 	/* Wait for in flight requests to finish.*/
-	while (1) {
-		spin_lock(&fsvq->lock);
-		if (!fsvq->in_flight) {
-			spin_unlock(&fsvq->lock);
-			break;
-		}
+	spin_lock(&fsvq->lock);
+	if (fsvq->in_flight) {
+		/* We are holding virtio_fs_mutex. There should not be any
+		 * waiters waiting for completion.
+		 */
+		reinit_completion(&fsvq->in_flight_zero);
 		spin_unlock(&fsvq->lock);
-		/* TODO use completion instead of timeout */
-		usleep_range(1000, 2000);
+		wait_for_completion(&fsvq->in_flight_zero);
+	} else {
+		spin_unlock(&fsvq->lock);
 	}
 
 	flush_work(&fsvq->done_work);
 	flush_delayed_work(&fsvq->dispatch_work);
 }
 
-static void virtio_fs_drain_all_queues(struct virtio_fs *fs)
+static void virtio_fs_drain_all_queues_locked(struct virtio_fs *fs)
 {
 	struct virtio_fs_vq *fsvq;
 	int i;
@@ -141,6 +151,19 @@ static void virtio_fs_drain_all_queues(struct virtio_fs *fs)
 		fsvq = &fs->vqs[i];
 		virtio_fs_drain_queue(fsvq);
 	}
+}
+
+static void virtio_fs_drain_all_queues(struct virtio_fs *fs)
+{
+	/* Provides mutual exclusion between ->remove and ->kill_sb
+	 * paths. We don't want both of these draining queue at the
+	 * same time. Current completion logic reinits completion
+	 * and that means there should not be any other thread
+	 * doing reinit or waiting for completion already.
+	 */
+	mutex_lock(&virtio_fs_mutex);
+	virtio_fs_drain_all_queues_locked(fs);
+	mutex_unlock(&virtio_fs_mutex);
 }
 
 static void virtio_fs_start_all_queues(struct virtio_fs *fs)
@@ -331,6 +354,7 @@ static int send_forget_request(struct virtio_fs_vq *fsvq,
 	struct virtqueue *vq;
 	int ret = 0;
 	bool notify;
+	struct virtio_fs_forget_req *req = &forget->req;
 
 	spin_lock(&fsvq->lock);
 	if (!fsvq->connected) {
@@ -340,7 +364,7 @@ static int send_forget_request(struct virtio_fs_vq *fsvq,
 		goto out;
 	}
 
-	sg_init_one(&sg, forget, sizeof(*forget));
+	sg_init_one(&sg, req, sizeof(*req));
 	vq = fsvq->vq;
 	dev_dbg(&vq->vdev->dev, "%s\n", __func__);
 
@@ -574,6 +598,26 @@ static void virtio_fs_vq_done(struct virtqueue *vq)
 	schedule_work(&fsvq->done_work);
 }
 
+static void virtio_fs_init_vq(struct virtio_fs_vq *fsvq, char *name,
+			      int vq_type)
+{
+	strncpy(fsvq->name, name, VQ_NAME_LEN);
+	spin_lock_init(&fsvq->lock);
+	INIT_LIST_HEAD(&fsvq->queued_reqs);
+	INIT_LIST_HEAD(&fsvq->end_reqs);
+	init_completion(&fsvq->in_flight_zero);
+
+	if (vq_type == VQ_REQUEST) {
+		INIT_WORK(&fsvq->done_work, virtio_fs_requests_done_work);
+		INIT_DELAYED_WORK(&fsvq->dispatch_work,
+				  virtio_fs_request_dispatch_work);
+	} else {
+		INIT_WORK(&fsvq->done_work, virtio_fs_hiprio_done_work);
+		INIT_DELAYED_WORK(&fsvq->dispatch_work,
+				  virtio_fs_hiprio_dispatch_work);
+	}
+}
+
 /* Initialize virtqueues */
 static int virtio_fs_setup_vqs(struct virtio_device *vdev,
 			       struct virtio_fs *fs)
@@ -589,7 +633,7 @@ static int virtio_fs_setup_vqs(struct virtio_device *vdev,
 	if (fs->num_request_queues == 0)
 		return -EINVAL;
 
-	fs->nvqs = 1 + fs->num_request_queues;
+	fs->nvqs = VQ_REQUEST + fs->num_request_queues;
 	fs->vqs = kcalloc(fs->nvqs, sizeof(fs->vqs[VQ_HIPRIO]), GFP_KERNEL);
 	if (!fs->vqs)
 		return -ENOMEM;
@@ -603,27 +647,17 @@ static int virtio_fs_setup_vqs(struct virtio_device *vdev,
 		goto out;
 	}
 
+	/* Initialize the hiprio/forget request virtqueue */
 	callbacks[VQ_HIPRIO] = virtio_fs_vq_done;
-	snprintf(fs->vqs[VQ_HIPRIO].name, sizeof(fs->vqs[VQ_HIPRIO].name),
-			"hiprio");
+	virtio_fs_init_vq(&fs->vqs[VQ_HIPRIO], "hiprio", VQ_HIPRIO);
 	names[VQ_HIPRIO] = fs->vqs[VQ_HIPRIO].name;
-	INIT_WORK(&fs->vqs[VQ_HIPRIO].done_work, virtio_fs_hiprio_done_work);
-	INIT_LIST_HEAD(&fs->vqs[VQ_HIPRIO].queued_reqs);
-	INIT_LIST_HEAD(&fs->vqs[VQ_HIPRIO].end_reqs);
-	INIT_DELAYED_WORK(&fs->vqs[VQ_HIPRIO].dispatch_work,
-			virtio_fs_hiprio_dispatch_work);
-	spin_lock_init(&fs->vqs[VQ_HIPRIO].lock);
 
 	/* Initialize the requests virtqueues */
 	for (i = VQ_REQUEST; i < fs->nvqs; i++) {
-		spin_lock_init(&fs->vqs[i].lock);
-		INIT_WORK(&fs->vqs[i].done_work, virtio_fs_requests_done_work);
-		INIT_DELAYED_WORK(&fs->vqs[i].dispatch_work,
-				  virtio_fs_request_dispatch_work);
-		INIT_LIST_HEAD(&fs->vqs[i].queued_reqs);
-		INIT_LIST_HEAD(&fs->vqs[i].end_reqs);
-		snprintf(fs->vqs[i].name, sizeof(fs->vqs[i].name),
-			 "requests.%u", i - VQ_REQUEST);
+		char vq_name[VQ_NAME_LEN];
+
+		snprintf(vq_name, VQ_NAME_LEN, "requests.%u", i - VQ_REQUEST);
+		virtio_fs_init_vq(&fs->vqs[i], vq_name, VQ_REQUEST);
 		callbacks[i] = virtio_fs_vq_done;
 		names[i] = fs->vqs[i].name;
 	}
@@ -715,7 +749,7 @@ static void virtio_fs_remove(struct virtio_device *vdev)
 	/* This device is going away. No one should get new reference */
 	list_del_init(&fs->list);
 	virtio_fs_stop_all_queues(fs);
-	virtio_fs_drain_all_queues(fs);
+	virtio_fs_drain_all_queues_locked(fs);
 	vdev->config->reset(vdev);
 	virtio_fs_cleanup_vqs(vdev, fs);
 
@@ -740,12 +774,12 @@ static int virtio_fs_restore(struct virtio_device *vdev)
 }
 #endif /* CONFIG_PM_SLEEP */
 
-const static struct virtio_device_id id_table[] = {
+static const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_FS, VIRTIO_DEV_ANY_ID },
 	{},
 };
 
-const static unsigned int feature_table[] = {};
+static const unsigned int feature_table[] = {};
 
 static struct virtio_driver virtio_fs_driver = {
 	.driver.name		= KBUILD_MODNAME,
@@ -766,6 +800,7 @@ __releases(fiq->lock)
 {
 	struct fuse_forget_link *link;
 	struct virtio_fs_forget *forget;
+	struct virtio_fs_forget_req *req;
 	struct virtio_fs *fs;
 	struct virtio_fs_vq *fsvq;
 	u64 unique;
@@ -779,14 +814,15 @@ __releases(fiq->lock)
 
 	/* Allocate a buffer for the request */
 	forget = kmalloc(sizeof(*forget), GFP_NOFS | __GFP_NOFAIL);
+	req = &forget->req;
 
-	forget->ih = (struct fuse_in_header){
+	req->ih = (struct fuse_in_header){
 		.opcode = FUSE_FORGET,
 		.nodeid = link->forget_one.nodeid,
 		.unique = unique,
-		.len = sizeof(*forget),
+		.len = sizeof(*req),
 	};
-	forget->arg = (struct fuse_forget_in){
+	req->arg = (struct fuse_forget_in){
 		.nlookup = link->forget_one.nlookup,
 	};
 
@@ -1038,7 +1074,7 @@ __releases(fiq->lock)
 	}
 }
 
-const static struct fuse_iqueue_ops virtio_fs_fiq_ops = {
+static const struct fuse_iqueue_ops virtio_fs_fiq_ops = {
 	.wake_forget_and_unlock		= virtio_fs_wake_forget_and_unlock,
 	.wake_interrupt_and_unlock	= virtio_fs_wake_interrupt_and_unlock,
 	.wake_pending_and_unlock	= virtio_fs_wake_pending_and_unlock,

@@ -100,8 +100,8 @@ void flush_thread(void)
 {
 }
 
-int copy_thread(unsigned long clone_flags,
-		unsigned long usp, unsigned long arg, struct task_struct *p)
+int copy_thread(unsigned long clone_flags, unsigned long usp, unsigned long arg,
+		struct task_struct *p, unsigned long tls)
 {
 	struct pt_regs *childregs = task_pt_regs(p);
 	struct pt_regs *regs;
@@ -140,7 +140,7 @@ int copy_thread(unsigned long clone_flags,
 
 	/* Initialize tls register. */
 	if (clone_flags & CLONE_SETTLS)
-		childstack->r23 = regs->r8;
+		childstack->r23 = tls;
 
 	return 0;
 }
@@ -250,4 +250,21 @@ void start_thread(struct pt_regs *regs, unsigned long pc, unsigned long sp)
 	regs->estatus = ESTATUS_EPIE | ESTATUS_EU;
 	regs->ea = pc;
 	regs->sp = sp;
+}
+
+asmlinkage int nios2_clone(unsigned long clone_flags, unsigned long newsp,
+			   int __user *parent_tidptr, int __user *child_tidptr,
+			   unsigned long tls)
+{
+	struct kernel_clone_args args = {
+		.flags		= (lower_32_bits(clone_flags) & ~CSIGNAL),
+		.pidfd		= parent_tidptr,
+		.child_tid	= child_tidptr,
+		.parent_tid	= parent_tidptr,
+		.exit_signal	= (lower_32_bits(clone_flags) & CSIGNAL),
+		.stack		= newsp,
+		.tls		= tls,
+	};
+
+	return kernel_clone(&args);
 }

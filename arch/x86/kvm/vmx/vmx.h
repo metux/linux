@@ -170,6 +170,8 @@ struct nested_vmx {
 	u16 posted_intr_nv;
 
 	struct hrtimer preemption_timer;
+	u64 preemption_timer_deadline;
+	bool has_preemption_timer_deadline;
 	bool preemption_timer_expired;
 
 	/* to migrate it to L2 if VM_ENTRY_LOAD_DEBUG_CONTROLS is off */
@@ -287,8 +289,6 @@ struct vcpu_vmx {
 
 	u64 current_tsc_ratio;
 
-	u32 host_pkru;
-
 	unsigned long host_debugctlmsr;
 
 	/*
@@ -321,8 +321,8 @@ struct kvm_vmx {
 };
 
 bool nested_vmx_allowed(struct kvm_vcpu *vcpu);
-void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu);
-void vmx_vcpu_load(struct kvm_vcpu *vcpu, int cpu);
+void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu,
+			struct loaded_vmcs *buddy);
 int allocate_vpid(void);
 void free_vpid(int vpid);
 void vmx_set_constant_host_state(struct vcpu_vmx *vmx);
@@ -345,6 +345,8 @@ u64 construct_eptp(struct kvm_vcpu *vcpu, unsigned long root_hpa,
 		   int root_level);
 void update_exception_bitmap(struct kvm_vcpu *vcpu);
 void vmx_update_msr_bitmap(struct kvm_vcpu *vcpu);
+bool vmx_nmi_blocked(struct kvm_vcpu *vcpu);
+bool vmx_interrupt_blocked(struct kvm_vcpu *vcpu);
 bool vmx_get_nmi_mask(struct kvm_vcpu *vcpu);
 void vmx_set_nmi_mask(struct kvm_vcpu *vcpu, bool masked);
 void vmx_set_virtual_apic_mode(struct kvm_vcpu *vcpu);
@@ -352,6 +354,9 @@ struct shared_msr_entry *find_msr_entry(struct vcpu_vmx *vmx, u32 msr);
 void pt_update_intercept_for_msr(struct vcpu_vmx *vmx);
 void vmx_update_host_rsp(struct vcpu_vmx *vmx, unsigned long host_rsp);
 int vmx_find_msr_index(struct vmx_msrs *m, u32 msr);
+int vmx_handle_memory_failure(struct kvm_vcpu *vcpu, int r,
+			      struct x86_exception *e);
+void vmx_ept_load_pdptrs(struct kvm_vcpu *vcpu);
 
 #define POSTED_INTR_ON  0
 #define POSTED_INTR_SN  1
@@ -451,8 +456,11 @@ static inline void vmx_register_cache_reset(struct kvm_vcpu *vcpu)
 				  | (1 << VCPU_EXREG_RFLAGS)
 				  | (1 << VCPU_EXREG_PDPTR)
 				  | (1 << VCPU_EXREG_SEGMENTS)
+				  | (1 << VCPU_EXREG_CR0)
 				  | (1 << VCPU_EXREG_CR3)
-				  | (1 << VCPU_EXREG_EXIT_INFO_1));
+				  | (1 << VCPU_EXREG_CR4)
+				  | (1 << VCPU_EXREG_EXIT_INFO_1)
+				  | (1 << VCPU_EXREG_EXIT_INFO_2));
 	vcpu->arch.regs_dirty = 0;
 }
 
@@ -505,6 +513,17 @@ static inline unsigned long vmx_get_exit_qual(struct kvm_vcpu *vcpu)
 		vmx->exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
 	}
 	return vmx->exit_qualification;
+}
+
+static inline u32 vmx_get_intr_info(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+
+	if (!kvm_register_is_available(vcpu, VCPU_EXREG_EXIT_INFO_2)) {
+		kvm_register_mark_available(vcpu, VCPU_EXREG_EXIT_INFO_2);
+		vmx->exit_intr_info = vmcs_read32(VM_EXIT_INTR_INFO);
+	}
+	return vmx->exit_intr_info;
 }
 
 struct vmcs *alloc_vmcs_cpu(bool shadow, int cpu, gfp_t flags);

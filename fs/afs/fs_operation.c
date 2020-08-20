@@ -36,7 +36,7 @@ struct afs_operation *afs_alloc_operation(struct key *key, struct afs_volume *vo
 	}
 
 	op->key		= key;
-	op->volume	= afs_get_volume(volume);
+	op->volume	= afs_get_volume(volume, afs_volume_trace_get_new_op);
 	op->net		= volume->cell->net;
 	op->cb_v_break	= volume->cb_v_break;
 	op->debug_id	= atomic_inc_return(&afs_operation_debug_counter);
@@ -71,7 +71,7 @@ static bool afs_get_io_locks(struct afs_operation *op)
 		swap(vnode, vnode2);
 
 	if (mutex_lock_interruptible(&vnode->io_lock) < 0) {
-		op->error = -EINTR;
+		op->error = -ERESTARTSYS;
 		op->flags |= AFS_OPERATION_STOP;
 		_leave(" = f [I 0]");
 		return false;
@@ -80,7 +80,7 @@ static bool afs_get_io_locks(struct afs_operation *op)
 
 	if (vnode2) {
 		if (mutex_lock_interruptible_nested(&vnode2->io_lock, 1) < 0) {
-			op->error = -EINTR;
+			op->error = -ERESTARTSYS;
 			op->flags |= AFS_OPERATION_STOP;
 			mutex_unlock(&vnode->io_lock);
 			op->flags &= ~AFS_OPERATION_LOCK_0;
@@ -143,12 +143,6 @@ bool afs_begin_vnode_operation(struct afs_operation *op)
 		if (!afs_get_io_locks(op))
 			return false;
 
-	read_seqlock_excl(&vnode->cb_lock);
-	op->cbi = afs_get_cb_interest(
-		rcu_dereference_protected(vnode->cb_interest,
-					  lockdep_is_held(&vnode->cb_lock.lock)));
-	read_sequnlock_excl(&vnode->cb_lock);
-
 	afs_prepare_vnode(op, &op->file[0], 0);
 	afs_prepare_vnode(op, &op->file[1], 1);
 	op->cb_v_break = op->volume->cb_v_break;
@@ -183,8 +177,8 @@ void afs_wait_for_operation(struct afs_operation *op)
 	_enter("");
 
 	while (afs_select_fileserver(op)) {
-		op->cb_s_break = op->cbi->server->cb_s_break;
-		if (test_bit(AFS_SERVER_FL_IS_YFS, &op->cbi->server->flags) &&
+		op->cb_s_break = op->server->cb_s_break;
+		if (test_bit(AFS_SERVER_FL_IS_YFS, &op->server->flags) &&
 		    op->ops->issue_yfs_rpc)
 			op->ops->issue_yfs_rpc(op);
 		else
@@ -193,9 +187,17 @@ void afs_wait_for_operation(struct afs_operation *op)
 		op->error = afs_wait_for_call_to_complete(op->call, &op->ac);
 	}
 
-	if (op->error == 0) {
+	switch (op->error) {
+	case 0:
 		_debug("success");
 		op->ops->success(op);
+		break;
+	case -ECONNABORTED:
+		if (op->ops->aborted)
+			op->ops->aborted(op);
+		break;
+	default:
+		break;
 	}
 
 	afs_end_vnode_operation(op);
@@ -231,9 +233,9 @@ int afs_put_operation(struct afs_operation *op)
 	}
 
 	afs_end_cursor(&op->ac);
-	afs_put_cb_interest(op->net, op->cbi);
 	afs_put_serverlist(op->net, op->server_list);
-	afs_put_volume(op->net, op->volume);
+	afs_put_volume(op->net, op->volume, afs_volume_trace_put_put_op);
+	key_put(op->key);
 	kfree(op);
 	return ret;
 }

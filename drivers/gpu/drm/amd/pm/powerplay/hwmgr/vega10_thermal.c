@@ -367,25 +367,16 @@ static int vega10_thermal_set_temperature_range(struct pp_hwmgr *hwmgr,
 		(struct phm_ppt_v2_information *)(hwmgr->pptable);
 	struct phm_tdp_table *tdp_table = pp_table_info->tdp_table;
 	struct amdgpu_device *adev = hwmgr->adev;
-	int low = VEGA10_THERMAL_MINIMUM_ALERT_TEMP;
-	int high = VEGA10_THERMAL_MAXIMUM_ALERT_TEMP;
+	int low = VEGA10_THERMAL_MINIMUM_ALERT_TEMP *
+			PP_TEMPERATURE_UNITS_PER_CENTIGRADES;
+	int high = VEGA10_THERMAL_MAXIMUM_ALERT_TEMP *
+			PP_TEMPERATURE_UNITS_PER_CENTIGRADES;
 	uint32_t val;
 
-	/* compare them in unit celsius degree */
-	if (low < range->min / PP_TEMPERATURE_UNITS_PER_CENTIGRADES)
-		low = range->min / PP_TEMPERATURE_UNITS_PER_CENTIGRADES;
-
-	/*
-	 * As a common sense, usSoftwareShutdownTemp should be bigger
-	 * than ThotspotLimit. For any invalid usSoftwareShutdownTemp,
-	 * we will just use the max possible setting VEGA10_THERMAL_MAXIMUM_ALERT_TEMP
-	 * to avoid false alarms.
-	 */
-	if ((tdp_table->usSoftwareShutdownTemp >
-	     range->hotspot_crit_max / PP_TEMPERATURE_UNITS_PER_CENTIGRADES)) {
-		if (high > tdp_table->usSoftwareShutdownTemp)
-			high = tdp_table->usSoftwareShutdownTemp;
-	}
+	if (low < range->min)
+		low = range->min;
+	if (high > tdp_table->usSoftwareShutdownTemp)
+		high = tdp_table->usSoftwareShutdownTemp;
 
 	if (low > high)
 		return -EINVAL;
@@ -394,8 +385,8 @@ static int vega10_thermal_set_temperature_range(struct pp_hwmgr *hwmgr,
 
 	val = REG_SET_FIELD(val, THM_THERMAL_INT_CTRL, MAX_IH_CREDIT, 5);
 	val = REG_SET_FIELD(val, THM_THERMAL_INT_CTRL, THERM_IH_HW_ENA, 1);
-	val = REG_SET_FIELD(val, THM_THERMAL_INT_CTRL, DIG_THERM_INTH, high);
-	val = REG_SET_FIELD(val, THM_THERMAL_INT_CTRL, DIG_THERM_INTL, low);
+	val = REG_SET_FIELD(val, THM_THERMAL_INT_CTRL, DIG_THERM_INTH, (high / PP_TEMPERATURE_UNITS_PER_CENTIGRADES));
+	val = REG_SET_FIELD(val, THM_THERMAL_INT_CTRL, DIG_THERM_INTL, (low / PP_TEMPERATURE_UNITS_PER_CENTIGRADES));
 	val &= (~THM_THERMAL_INT_CTRL__THERM_TRIGGER_MASK_MASK) &
 			(~THM_THERMAL_INT_CTRL__THERM_INTH_MASK_MASK) &
 			(~THM_THERMAL_INT_CTRL__THERM_INTL_MASK_MASK);

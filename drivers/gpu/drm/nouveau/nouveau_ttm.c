@@ -64,8 +64,8 @@ nouveau_vram_manager_new(struct ttm_resource_manager *man,
 }
 
 const struct ttm_resource_manager_func nouveau_vram_manager = {
-	.get_node = nouveau_vram_manager_new,
-	.put_node = nouveau_manager_del,
+	.alloc = nouveau_vram_manager_new,
+	.free = nouveau_manager_del,
 };
 
 static int
@@ -87,8 +87,8 @@ nouveau_gart_manager_new(struct ttm_resource_manager *man,
 }
 
 const struct ttm_resource_manager_func nouveau_gart_manager = {
-	.get_node = nouveau_gart_manager_new,
-	.put_node = nouveau_manager_del,
+	.alloc = nouveau_gart_manager_new,
+	.free = nouveau_manager_del,
 };
 
 static int
@@ -119,8 +119,40 @@ nv04_gart_manager_new(struct ttm_resource_manager *man,
 }
 
 const struct ttm_resource_manager_func nv04_gart_manager = {
-	.get_node = nv04_gart_manager_new,
-	.put_node = nouveau_manager_del,
+	.alloc = nv04_gart_manager_new,
+	.free = nouveau_manager_del,
+};
+
+static vm_fault_t nouveau_ttm_fault(struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct ttm_buffer_object *bo = vma->vm_private_data;
+	pgprot_t prot;
+	vm_fault_t ret;
+
+	ret = ttm_bo_vm_reserve(bo, vmf);
+	if (ret)
+		return ret;
+
+	nouveau_bo_del_io_reserve_lru(bo);
+
+	prot = vm_get_page_prot(vma->vm_flags);
+	ret = ttm_bo_vm_fault_reserved(vmf, prot, TTM_BO_VM_NUM_PREFAULT, 1);
+	if (ret == VM_FAULT_RETRY && !(vmf->flags & FAULT_FLAG_RETRY_NOWAIT))
+		return ret;
+
+	nouveau_bo_add_io_reserve_lru(bo);
+
+	dma_resv_unlock(bo->base.resv);
+
+	return ret;
+}
+
+static struct vm_operations_struct nouveau_ttm_vm_ops = {
+	.fault = nouveau_ttm_fault,
+	.open = ttm_bo_vm_open,
+	.close = ttm_bo_vm_close,
+	.access = ttm_bo_vm_access
 };
 
 int
@@ -128,8 +160,14 @@ nouveau_ttm_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct drm_file *file_priv = filp->private_data;
 	struct nouveau_drm *drm = nouveau_drm(file_priv->minor->dev);
+	int ret;
 
-	return ttm_bo_mmap(filp, vma, &drm->ttm.bdev);
+	ret = ttm_bo_mmap(filp, vma, &drm->ttm.bdev);
+	if (ret)
+		return ret;
+
+	vma->vm_ops = &nouveau_ttm_vm_ops;
+	return 0;
 }
 
 static int
@@ -173,7 +211,6 @@ nouveau_ttm_init_vram(struct nouveau_drm *drm)
 		}
 
 		man->func = &nouveau_vram_manager;
-		man->use_io_reserve_lru = true;
 
 		ttm_resource_manager_init(man,
 					  drm->gem.vram_available >> PAGE_SHIFT);
@@ -338,6 +375,9 @@ nouveau_ttm_init(struct nouveau_drm *drm)
 		NV_ERROR(drm, "GART mm init failed, %d\n", ret);
 		return ret;
 	}
+
+	mutex_init(&drm->ttm.io_reserve_mutex);
+	INIT_LIST_HEAD(&drm->ttm.io_reserve_lru);
 
 	NV_INFO(drm, "VRAM: %d MiB\n", (u32)(drm->gem.vram_available >> 20));
 	NV_INFO(drm, "GART: %d MiB\n", (u32)(drm->gem.gart_available >> 20));

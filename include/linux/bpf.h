@@ -33,11 +33,13 @@ struct btf;
 struct btf_type;
 struct exception_table_entry;
 struct seq_operations;
+struct bpf_iter_aux_info;
 
 extern struct idr btf_idr;
 extern spinlock_t btf_idr_lock;
 
-typedef int (*bpf_iter_init_seq_priv_t)(void *private_data);
+typedef int (*bpf_iter_init_seq_priv_t)(void *private_data,
+					struct bpf_iter_aux_info *aux);
 typedef void (*bpf_iter_fini_seq_priv_t)(void *private_data);
 struct bpf_iter_seq_info {
 	const struct seq_operations *seq_ops;
@@ -105,6 +107,9 @@ struct bpf_map_ops {
 	/* BTF name and id of struct allocated by map_alloc */
 	const char * const map_btf_name;
 	int *map_btf_id;
+
+	/* bpf_iter info used to open a seq_file */
+	const struct bpf_iter_seq_info *iter_seq_info;
 };
 
 struct bpf_map_memory {
@@ -351,6 +356,10 @@ enum bpf_reg_type {
 	PTR_TO_BTF_ID_OR_NULL,	 /* reg points to kernel struct or NULL */
 	PTR_TO_MEM,		 /* reg points to valid memory region */
 	PTR_TO_MEM_OR_NULL,	 /* reg points to valid memory region or NULL */
+	PTR_TO_RDONLY_BUF,	 /* reg points to a readonly buffer */
+	PTR_TO_RDONLY_BUF_OR_NULL, /* reg points to a readonly buffer or NULL */
+	PTR_TO_RDWR_BUF,	 /* reg points to a read/write buffer */
+	PTR_TO_RDWR_BUF_OR_NULL, /* reg points to a read/write buffer or NULL */
 };
 
 /* The information passed from prog-specific *_is_valid_access
@@ -692,6 +701,8 @@ struct bpf_prog_aux {
 	u32 func_idx; /* 0 for non-func prog, the index in func array for func prog */
 	u32 attach_btf_id; /* in-kernel BTF type id to attach to */
 	u32 ctx_arg_info_size;
+	u32 max_rdonly_access;
+	u32 max_rdwr_access;
 	const struct bpf_ctx_arg_aux *ctx_arg_info;
 	struct bpf_prog *linked_prog;
 	bool verifier_zext; /* Zero extensions has been inserted by verifier. */
@@ -768,6 +779,33 @@ struct bpf_array_aux {
 	struct bpf_map *map;
 	struct mutex poke_mutex;
 	struct work_struct work;
+};
+
+struct bpf_link {
+	atomic64_t refcnt;
+	u32 id;
+	enum bpf_link_type type;
+	const struct bpf_link_ops *ops;
+	struct bpf_prog *prog;
+	struct work_struct work;
+};
+
+struct bpf_link_ops {
+	void (*release)(struct bpf_link *link);
+	void (*dealloc)(struct bpf_link *link);
+	int (*detach)(struct bpf_link *link);
+	int (*update_prog)(struct bpf_link *link, struct bpf_prog *new_prog,
+			   struct bpf_prog *old_prog);
+	void (*show_fdinfo)(const struct bpf_link *link, struct seq_file *seq);
+	int (*fill_link_info)(const struct bpf_link *link,
+			      struct bpf_link_info *info);
+};
+
+struct bpf_link_primer {
+	struct bpf_link *link;
+	struct file *file;
+	int fd;
+	u32 id;
 };
 
 struct bpf_struct_ops_value;
@@ -1153,32 +1191,6 @@ static inline bool bpf_bypass_spec_v4(void)
 int bpf_map_new_fd(struct bpf_map *map, int flags);
 int bpf_prog_new_fd(struct bpf_prog *prog);
 
-struct bpf_link {
-	atomic64_t refcnt;
-	u32 id;
-	enum bpf_link_type type;
-	const struct bpf_link_ops *ops;
-	struct bpf_prog *prog;
-	struct work_struct work;
-};
-
-struct bpf_link_primer {
-	struct bpf_link *link;
-	struct file *file;
-	int fd;
-	u32 id;
-};
-
-struct bpf_link_ops {
-	void (*release)(struct bpf_link *link);
-	void (*dealloc)(struct bpf_link *link);
-	int (*update_prog)(struct bpf_link *link, struct bpf_prog *new_prog,
-			   struct bpf_prog *old_prog);
-	void (*show_fdinfo)(const struct bpf_link *link, struct seq_file *seq);
-	int (*fill_link_info)(const struct bpf_link *link,
-			      struct bpf_link_info *info);
-};
-
 void bpf_link_init(struct bpf_link *link, enum bpf_link_type type,
 		   const struct bpf_link_ops *ops, struct bpf_prog *prog);
 int bpf_link_prime(struct bpf_link *link, struct bpf_link_primer *primer);
@@ -1198,9 +1210,26 @@ int bpf_obj_get_user(const char __user *pathname, int flags);
 	extern int bpf_iter_ ## target(args);			\
 	int __init bpf_iter_ ## target(args) { return 0; }
 
+struct bpf_iter_aux_info {
+	struct bpf_map *map;
+};
+
+typedef int (*bpf_iter_attach_target_t)(struct bpf_prog *prog,
+					union bpf_iter_link_info *linfo,
+					struct bpf_iter_aux_info *aux);
+typedef void (*bpf_iter_detach_target_t)(struct bpf_iter_aux_info *aux);
+typedef void (*bpf_iter_show_fdinfo_t) (const struct bpf_iter_aux_info *aux,
+					struct seq_file *seq);
+typedef int (*bpf_iter_fill_link_info_t)(const struct bpf_iter_aux_info *aux,
+					 struct bpf_link_info *info);
+
 #define BPF_ITER_CTX_ARG_MAX 2
 struct bpf_iter_reg {
 	const char *target;
+	bpf_iter_attach_target_t attach_target;
+	bpf_iter_detach_target_t detach_target;
+	bpf_iter_show_fdinfo_t show_fdinfo;
+	bpf_iter_fill_link_info_t fill_link_info;
 	u32 ctx_arg_info_size;
 	struct bpf_ctx_arg_aux ctx_arg_info[BPF_ITER_CTX_ARG_MAX];
 	const struct bpf_iter_seq_info *seq_info;
@@ -1210,6 +1239,13 @@ struct bpf_iter_meta {
 	__bpf_md_ptr(struct seq_file *, seq);
 	u64 session_id;
 	u64 seq_num;
+};
+
+struct bpf_iter__bpf_map_elem {
+	__bpf_md_ptr(struct bpf_iter_meta *, meta);
+	__bpf_md_ptr(struct bpf_map *, map);
+	__bpf_md_ptr(void *, key);
+	__bpf_md_ptr(void *, value);
 };
 
 int bpf_iter_reg_target(const struct bpf_iter_reg *reg_info);
@@ -1370,6 +1406,35 @@ static inline int __bpf_prog_charge(struct user_struct *user, u32 pages)
 }
 
 static inline void __bpf_prog_uncharge(struct user_struct *user, u32 pages)
+{
+}
+
+static inline void bpf_link_init(struct bpf_link *link, enum bpf_link_type type,
+				 const struct bpf_link_ops *ops,
+				 struct bpf_prog *prog)
+{
+}
+
+static inline int bpf_link_prime(struct bpf_link *link,
+				 struct bpf_link_primer *primer)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int bpf_link_settle(struct bpf_link_primer *primer)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void bpf_link_cleanup(struct bpf_link_primer *primer)
+{
+}
+
+static inline void bpf_link_inc(struct bpf_link *link)
+{
+}
+
+static inline void bpf_link_put(struct bpf_link *link)
 {
 }
 
@@ -1634,6 +1699,8 @@ extern const struct bpf_func_proto bpf_get_current_comm_proto;
 extern const struct bpf_func_proto bpf_get_stackid_proto;
 extern const struct bpf_func_proto bpf_get_stack_proto;
 extern const struct bpf_func_proto bpf_get_task_stack_proto;
+extern const struct bpf_func_proto bpf_get_stackid_proto_pe;
+extern const struct bpf_func_proto bpf_get_stack_proto_pe;
 extern const struct bpf_func_proto bpf_sock_map_update_proto;
 extern const struct bpf_func_proto bpf_sock_hash_update_proto;
 extern const struct bpf_func_proto bpf_get_current_cgroup_id_proto;

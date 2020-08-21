@@ -17,6 +17,7 @@ struct nouveau_bo {
 	bool force_coherent;
 	struct ttm_bo_kmap_obj kmap;
 	struct list_head head;
+	struct list_head io_reserve_lru;
 
 	/* protected by ttm_bo_reserve() */
 	struct drm_file *reserved_by;
@@ -95,6 +96,8 @@ int  nouveau_bo_validate(struct nouveau_bo *, bool interruptible,
 			 bool no_wait_gpu);
 void nouveau_bo_sync_for_device(struct nouveau_bo *nvbo);
 void nouveau_bo_sync_for_cpu(struct nouveau_bo *nvbo);
+void nouveau_bo_add_io_reserve_lru(struct ttm_buffer_object *bo);
+void nouveau_bo_del_io_reserve_lru(struct ttm_buffer_object *bo);
 
 /* TODO: submit equivalent to TTM generic API upstream? */
 static inline void __iomem *

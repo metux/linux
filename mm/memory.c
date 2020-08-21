@@ -437,7 +437,7 @@ int __pte_alloc(struct mm_struct *mm, pmd_t *pmd)
 	 * of a chain of data-dependent loads, meaning most CPUs (alpha
 	 * being the notable exception) will already guarantee loads are
 	 * seen in-order. See the alpha page table accessors for the
-	 * smp_rmb() barriers in page table walking code.
+	 * smp_read_barrier_depends() barriers in page table walking code.
 	 */
 	smp_wmb(); /* Could be smp_wmb__xxx(before|after)_spin_lock */
 
@@ -2205,7 +2205,7 @@ static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 {
 	pte_t *pte;
 	int err = 0;
-	spinlock_t *ptl;
+	spinlock_t *uninitialized_var(ptl);
 
 	if (create) {
 		pte = (mm == &init_mm) ?
@@ -2434,10 +2434,9 @@ static inline bool cow_user_page(struct page *dst, struct page *src,
 		if (!likely(pte_same(*vmf->pte, vmf->orig_pte))) {
 			/*
 			 * Other thread has already handled the fault
-			 * and we don't need to do anything. If it's
-			 * not the case, the fault will be triggered
-			 * again on the same address.
+			 * and update local tlb only
 			 */
+			update_mmu_tlb(vma, addr, vmf->pte);
 			ret = false;
 			goto pte_unlock;
 		}
@@ -2461,7 +2460,8 @@ static inline bool cow_user_page(struct page *dst, struct page *src,
 		vmf->pte = pte_offset_map_lock(mm, vmf->pmd, addr, &vmf->ptl);
 		locked = true;
 		if (!likely(pte_same(*vmf->pte, vmf->orig_pte))) {
-			/* The PTE changed under us. Retry page fault. */
+			/* The PTE changed under us, update local tlb */
+			update_mmu_tlb(vma, addr, vmf->pte);
 			ret = false;
 			goto pte_unlock;
 		}
@@ -2702,6 +2702,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		}
 		flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
 		entry = mk_pte(new_page, vma->vm_page_prot);
+		entry = pte_sw_mkyoung(entry);
 		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
 		/*
 		 * Clear the pte entry and flush it first, before updating the
@@ -2711,7 +2712,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		 */
 		ptep_clear_flush_notify(vma, vmf->address, vmf->pte);
 		page_add_new_anon_rmap(new_page, vma, vmf->address, false);
-		lru_cache_add_inactive_or_unevictable(new_page, vma);
+		lru_cache_add_active_or_unevictable(new_page, vma);
 		/*
 		 * We call the notify macro here because, when using secondary
 		 * mmu page tables (such as kvm shadow page tables), we want the
@@ -2748,6 +2749,8 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		/* Free the old page.. */
 		new_page = old_page;
 		page_copied = 1;
+	} else {
+		update_mmu_tlb(vma, vmf->address, vmf->pte);
 	}
 
 	if (new_page)
@@ -2807,6 +2810,7 @@ vm_fault_t finish_mkwrite_fault(struct vm_fault *vmf)
 	 * pte_offset_map_lock.
 	 */
 	if (!pte_same(*vmf->pte, vmf->orig_pte)) {
+		update_mmu_tlb(vmf->vma, vmf->address, vmf->pte);
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 		return VM_FAULT_NOPAGE;
 	}
@@ -2920,49 +2924,25 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 	 * not dirty accountable.
 	 */
 	if (PageAnon(vmf->page)) {
-		int total_map_swapcount;
-		if (PageKsm(vmf->page) && (PageSwapCache(vmf->page) ||
-					   page_count(vmf->page) != 1))
+		struct page *page = vmf->page;
+
+		/* PageKsm() doesn't necessarily raise the page refcount */
+		if (PageKsm(page) || page_count(page) != 1)
 			goto copy;
-		if (!trylock_page(vmf->page)) {
-			get_page(vmf->page);
-			pte_unmap_unlock(vmf->pte, vmf->ptl);
-			lock_page(vmf->page);
-			vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-					vmf->address, &vmf->ptl);
-			if (!pte_same(*vmf->pte, vmf->orig_pte)) {
-				unlock_page(vmf->page);
-				pte_unmap_unlock(vmf->pte, vmf->ptl);
-				put_page(vmf->page);
-				return 0;
-			}
-			put_page(vmf->page);
+		if (!trylock_page(page))
+			goto copy;
+		if (PageKsm(page) || page_mapcount(page) != 1 || page_count(page) != 1) {
+			unlock_page(page);
+			goto copy;
 		}
-		if (PageKsm(vmf->page)) {
-			bool reused = reuse_ksm_page(vmf->page, vmf->vma,
-						     vmf->address);
-			unlock_page(vmf->page);
-			if (!reused)
-				goto copy;
-			wp_page_reuse(vmf);
-			return VM_FAULT_WRITE;
-		}
-		if (reuse_swap_page(vmf->page, &total_map_swapcount)) {
-			if (total_map_swapcount == 1) {
-				/*
-				 * The page is all ours. Move it to
-				 * our anon_vma so the rmap code will
-				 * not search our parent or siblings.
-				 * Protected against the rmap code by
-				 * the page lock.
-				 */
-				page_move_anon_rmap(vmf->page, vma);
-			}
-			unlock_page(vmf->page);
-			wp_page_reuse(vmf);
-			return VM_FAULT_WRITE;
-		}
-		unlock_page(vmf->page);
+		/*
+		 * Ok, we've got the only map reference, and the only
+		 * page count reference, and the page is locked,
+		 * it's dark out, and we're wearing sunglasses. Hit it.
+		 */
+		wp_page_reuse(vmf);
+		unlock_page(page);
+		return VM_FAULT_WRITE;
 	} else if (unlikely((vma->vm_flags & (VM_WRITE|VM_SHARED)) ==
 					(VM_WRITE|VM_SHARED))) {
 		return wp_page_shared(vmf);
@@ -3258,9 +3238,10 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	/* ksm created a completely new copy */
 	if (unlikely(page != swapcache && swapcache)) {
 		page_add_new_anon_rmap(page, vma, vmf->address, false);
-		lru_cache_add_inactive_or_unevictable(page, vma);
+		lru_cache_add_active_or_unevictable(page, vma);
 	} else {
 		do_page_add_anon_rmap(page, vma, vmf->address, exclusive);
+		activate_page(page);
 	}
 
 	swap_free(entry);
@@ -3347,8 +3328,10 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 						vma->vm_page_prot));
 		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
 				vmf->address, &vmf->ptl);
-		if (!pte_none(*vmf->pte))
+		if (!pte_none(*vmf->pte)) {
+			update_mmu_tlb(vma, vmf->address, vmf->pte);
 			goto unlock;
+		}
 		ret = check_stable_address_space(vma->vm_mm);
 		if (ret)
 			goto unlock;
@@ -3379,13 +3362,16 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	__SetPageUptodate(page);
 
 	entry = mk_pte(page, vma->vm_page_prot);
+	entry = pte_sw_mkyoung(entry);
 	if (vma->vm_flags & VM_WRITE)
 		entry = pte_mkwrite(pte_mkdirty(entry));
 
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
 			&vmf->ptl);
-	if (!pte_none(*vmf->pte))
+	if (!pte_none(*vmf->pte)) {
+		update_mmu_cache(vma, vmf->address, vmf->pte);
 		goto release;
+	}
 
 	ret = check_stable_address_space(vma->vm_mm);
 	if (ret)
@@ -3400,7 +3386,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 
 	inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
 	page_add_new_anon_rmap(page, vma, vmf->address, false);
-	lru_cache_add_inactive_or_unevictable(page, vma);
+	lru_cache_add_active_or_unevictable(page, vma);
 setpte:
 	set_pte_at(vma->vm_mm, vmf->address, vmf->pte, entry);
 
@@ -3644,18 +3630,21 @@ vm_fault_t alloc_set_pte(struct vm_fault *vmf, struct page *page)
 	}
 
 	/* Re-check under ptl */
-	if (unlikely(!pte_none(*vmf->pte)))
+	if (unlikely(!pte_none(*vmf->pte))) {
+		update_mmu_tlb(vma, vmf->address, vmf->pte);
 		return VM_FAULT_NOPAGE;
+	}
 
 	flush_icache_page(vma, page);
 	entry = mk_pte(page, vma->vm_page_prot);
+	entry = pte_sw_mkyoung(entry);
 	if (write)
 		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
 	/* copy-on-write page */
 	if (write && !(vma->vm_flags & VM_SHARED)) {
 		inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
 		page_add_new_anon_rmap(page, vma, vmf->address, false);
-		lru_cache_add_inactive_or_unevictable(page, vma);
+		lru_cache_add_active_or_unevictable(page, vma);
 	} else {
 		inc_mm_counter_fast(vma->vm_mm, mm_counter_file(page));
 		page_add_file_rmap(page, false);
@@ -4220,8 +4209,10 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 	vmf->ptl = pte_lockptr(vmf->vma->vm_mm, vmf->pmd);
 	spin_lock(vmf->ptl);
 	entry = vmf->orig_pte;
-	if (unlikely(!pte_same(*vmf->pte, entry)))
+	if (unlikely(!pte_same(*vmf->pte, entry))) {
+		update_mmu_tlb(vmf->vma, vmf->address, vmf->pte);
 		goto unlock;
+	}
 	if (vmf->flags & FAULT_FLAG_WRITE) {
 		if (!pte_write(entry))
 			return do_wp_page(vmf);

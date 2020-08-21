@@ -46,6 +46,7 @@ Program types
    prog_cgroup_sysctl
    prog_flow_dissector
    bpf_lsm
+   prog_sk_lookup
 
 
 Map types

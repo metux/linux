@@ -4705,6 +4705,7 @@ bool rdma_dev_access_netns(const struct ib_device *device,
 			   const struct net *net);
 
 #define IB_ROCE_UDP_ENCAP_VALID_PORT_MIN (0xC000)
+#define IB_ROCE_UDP_ENCAP_VALID_PORT_MAX (0xFFFF)
 #define IB_GRH_FLOWLABEL_MASK (0x000FFFFF)
 
 /**

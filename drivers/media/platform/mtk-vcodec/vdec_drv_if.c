@@ -8,7 +8,6 @@
 #include "mtk_vcodec_dec.h"
 #include "vdec_drv_base.h"
 #include "mtk_vcodec_dec_pm.h"
-#include "mtk_vpu.h"
 
 const struct vdec_common_if *get_h264_dec_comm_if(void);
 const struct vdec_common_if *get_vp8_dec_comm_if(void);

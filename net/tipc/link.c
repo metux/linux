@@ -216,6 +216,11 @@ enum {
 #define TIPC_BC_RETR_LIM  (jiffies + msecs_to_jiffies(10))
 #define TIPC_UC_RETR_TIME (jiffies + msecs_to_jiffies(1))
 
+/*
+ * Interval between NACKs when packets arrive out of order
+ */
+#define TIPC_NACK_INTV (TIPC_MIN_LINK_WIN * 2)
+
 /* Link FSM states:
  */
 enum {
@@ -527,8 +532,7 @@ bool tipc_link_create(struct net *net, char *if_name, int bearer_id,
  * tipc_link_bc_create - create new link to be used for broadcast
  * @net: pointer to associated network namespace
  * @mtu: mtu to be used initially if no peers
- * @min_win: minimal send window to be used by link
- * @max_win: maximal send window to be used by link
+ * @window: send window to be used
  * @inputq: queue to put messages ready for delivery
  * @namedq: queue to put binding table update messages ready for delivery
  * @link: return value, pointer to put the created link
@@ -1251,11 +1255,6 @@ static bool tipc_data_input(struct tipc_link *l, struct sk_buff *skb,
 	case MSG_FRAGMENTER:
 	case BCAST_PROTOCOL:
 		return false;
-#ifdef CONFIG_TIPC_CRYPTO
-	case MSG_CRYPTO:
-		tipc_crypto_msg_rcv(l->net, skb);
-		return true;
-#endif
 	default:
 		pr_warn("Dropping received illegal msg type\n");
 		kfree_skb(skb);

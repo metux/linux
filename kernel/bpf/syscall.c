@@ -2029,7 +2029,7 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 	case BPF_PROG_TYPE_EXT:
 		if (expected_attach_type)
 			return -EINVAL;
-		/* fallthrough */
+		fallthrough;
 	default:
 		return 0;
 	}
@@ -2824,6 +2824,8 @@ attach_type_to_prog_type(enum bpf_attach_type attach_type)
 		return BPF_PROG_TYPE_TRACING;
 	case BPF_SK_LOOKUP:
 		return BPF_PROG_TYPE_SK_LOOKUP;
+	case BPF_XDP:
+		return BPF_PROG_TYPE_XDP;
 	default:
 		return BPF_PROG_TYPE_UNSPEC;
 	}
@@ -3876,7 +3878,7 @@ static int tracing_bpf_link_attach(const union bpf_attr *attr, struct bpf_prog *
 	return -EINVAL;
 }
 
-#define BPF_LINK_CREATE_LAST_FIELD link_create.flags
+#define BPF_LINK_CREATE_LAST_FIELD link_create.iter_info_len
 static int link_create(union bpf_attr *attr)
 {
 	enum bpf_prog_type ptype;
@@ -3916,6 +3918,11 @@ static int link_create(union bpf_attr *attr)
 	case BPF_PROG_TYPE_SK_LOOKUP:
 		ret = netns_bpf_link_create(attr, prog);
 		break;
+#ifdef CONFIG_NET
+	case BPF_PROG_TYPE_XDP:
+		ret = bpf_xdp_link_attach(attr, prog);
+		break;
+#endif
 	default:
 		ret = -EINVAL;
 	}
@@ -3975,6 +3982,29 @@ out_put_progs:
 	if (ret)
 		bpf_prog_put(new_prog);
 out_put_link:
+	bpf_link_put(link);
+	return ret;
+}
+
+#define BPF_LINK_DETACH_LAST_FIELD link_detach.link_fd
+
+static int link_detach(union bpf_attr *attr)
+{
+	struct bpf_link *link;
+	int ret;
+
+	if (CHECK_ATTR(BPF_LINK_DETACH))
+		return -EINVAL;
+
+	link = bpf_link_get_from_fd(attr->link_detach.link_fd);
+	if (IS_ERR(link))
+		return PTR_ERR(link);
+
+	if (link->ops->detach)
+		ret = link->ops->detach(link);
+	else
+		ret = -EOPNOTSUPP;
+
 	bpf_link_put(link);
 	return ret;
 }
@@ -4227,6 +4257,9 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 		break;
 	case BPF_ITER_CREATE:
 		err = bpf_iter_create(&attr);
+		break;
+	case BPF_LINK_DETACH:
+		err = link_detach(&attr);
 		break;
 	default:
 		err = -EINVAL;

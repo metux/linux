@@ -685,7 +685,7 @@ static s64 arm64_ftr_safe_value(const struct arm64_ftr_bits *ftrp, s64 new,
 	case FTR_HIGHER_OR_ZERO_SAFE:
 		if (!cur || !new)
 			break;
-		/* Fallthrough */
+		fallthrough;
 	case FTR_HIGHER_SAFE:
 		ret = new > cur ? new : cur;
 		break;
@@ -1890,6 +1890,16 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.field_pos = ID_AA64MMFR2_TTL_SHIFT,
 		.min_field_value = 1,
 		.matches = has_cpuid_feature,
+	},
+	{
+		.desc = "TLB range maintenance instructions",
+		.capability = ARM64_HAS_TLB_RANGE,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = has_cpuid_feature,
+		.sys_reg = SYS_ID_AA64ISAR0_EL1,
+		.field_pos = ID_AA64ISAR0_TLB_SHIFT,
+		.sign = FTR_UNSIGNED,
+		.min_field_value = ID_AA64ISAR0_TLB_RANGE,
 	},
 #ifdef CONFIG_ARM64_HW_AFDBM
 	{

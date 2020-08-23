@@ -579,9 +579,6 @@ int nfs_readdir_page_filler(nfs_readdir_descriptor_t *desc, struct nfs_entry *en
 	xdr_set_scratch_buffer(&stream, page_address(scratch), PAGE_SIZE);
 
 	do {
-		if (entry->label)
-			entry->label->len = NFS4_MAXLABELLEN;
-
 		status = xdr_decode(desc, entry, &stream);
 		if (status != 0) {
 			if (status == -EAGAIN)
@@ -955,6 +952,7 @@ out:
 
 static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence)
 {
+	struct inode *inode = file_inode(filp);
 	struct nfs_open_dir_context *dir_ctx = filp->private_data;
 
 	dfprintk(FILE, "NFS: llseek dir(%pD2, %lld, %d)\n",
@@ -966,15 +964,15 @@ static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence)
 	case SEEK_SET:
 		if (offset < 0)
 			return -EINVAL;
-		spin_lock(&filp->f_lock);
+		inode_lock(inode);
 		break;
 	case SEEK_CUR:
 		if (offset == 0)
 			return filp->f_pos;
-		spin_lock(&filp->f_lock);
+		inode_lock(inode);
 		offset += filp->f_pos;
 		if (offset < 0) {
-			spin_unlock(&filp->f_lock);
+			inode_unlock(inode);
 			return -EINVAL;
 		}
 	}
@@ -986,7 +984,7 @@ static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence)
 			dir_ctx->dir_cookie = 0;
 		dir_ctx->duped = 0;
 	}
-	spin_unlock(&filp->f_lock);
+	inode_unlock(inode);
 	return offset;
 }
 
@@ -997,9 +995,13 @@ static loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence)
 static int nfs_fsync_dir(struct file *filp, loff_t start, loff_t end,
 			 int datasync)
 {
+	struct inode *inode = file_inode(filp);
+
 	dfprintk(FILE, "NFS: fsync dir(%pD2) datasync %d\n", filp, datasync);
 
-	nfs_inc_stats(file_inode(filp), NFSIOS_VFSFSYNC);
+	inode_lock(inode);
+	nfs_inc_stats(inode, NFSIOS_VFSFSYNC);
+	inode_unlock(inode);
 	return 0;
 }
 

@@ -220,7 +220,6 @@ static int ad5592r_set_channel_modes(struct ad5592r_state *st)
 			break;
 
 		case CH_MODE_UNUSED:
-			/* fall-through */
 		default:
 			switch (st->channel_offstate[i]) {
 			case CH_OFFSTATE_OUT_TRISTATE:
@@ -237,7 +236,6 @@ static int ad5592r_set_channel_modes(struct ad5592r_state *st)
 				break;
 
 			case CH_OFFSTATE_PULLDOWN:
-				/* fall-through */
 			default:
 				pulldown |= BIT(i);
 				break;
@@ -413,7 +411,7 @@ static int ad5592r_read_raw(struct iio_dev *iio_dev,
 			s64 tmp = *val * (3767897513LL / 25LL);
 			*val = div_s64_rem(tmp, 1000000000LL, val2);
 
-			ret = IIO_VAL_INT_PLUS_MICRO;
+			return IIO_VAL_INT_PLUS_MICRO;
 		} else {
 			int mult;
 
@@ -444,7 +442,7 @@ static int ad5592r_read_raw(struct iio_dev *iio_dev,
 		ret =  IIO_VAL_INT;
 		break;
 	default:
-		ret = -EINVAL;
+		return -EINVAL;
 	}
 
 unlock:

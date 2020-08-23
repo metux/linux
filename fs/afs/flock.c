@@ -375,7 +375,8 @@ again:
 		afs_kill_lockers_enoent(vnode);
 		spin_unlock(&vnode->lock);
 		return;
-		/* Fall through */
+
+		fallthrough;
 	default:
 		/* Looks like a lock request was withdrawn. */
 		spin_unlock(&vnode->lock);

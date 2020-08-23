@@ -834,7 +834,6 @@ static void nvme_rdma_destroy_admin_queue(struct nvme_rdma_ctrl *ctrl,
 		blk_mq_free_tag_set(ctrl->ctrl.admin_tagset);
 	}
 	if (ctrl->async_event_sqe.data) {
-		cancel_work_sync(&ctrl->ctrl.async_event_work);
 		nvme_rdma_free_qe(ctrl->device->dev, &ctrl->async_event_sqe,
 				sizeof(struct nvme_command), DMA_TO_DEVICE);
 		ctrl->async_event_sqe.data = NULL;
@@ -976,15 +975,7 @@ static int nvme_rdma_configure_io_queues(struct nvme_rdma_ctrl *ctrl, bool new)
 
 	if (!new) {
 		nvme_start_queues(&ctrl->ctrl);
-		if (!nvme_wait_freeze_timeout(&ctrl->ctrl, NVME_IO_TIMEOUT)) {
-			/*
-			 * If we timed out waiting for freeze we are likely to
-			 * be stuck.  Fail the controller initialization just
-			 * to be safe.
-			 */
-			ret = -ENODEV;
-			goto out_wait_freeze_timed_out;
-		}
+		nvme_wait_freeze(&ctrl->ctrl);
 		blk_mq_update_nr_hw_queues(ctrl->ctrl.tagset,
 			ctrl->ctrl.queue_count - 1);
 		nvme_unfreeze(&ctrl->ctrl);
@@ -992,9 +983,6 @@ static int nvme_rdma_configure_io_queues(struct nvme_rdma_ctrl *ctrl, bool new)
 
 	return 0;
 
-out_wait_freeze_timed_out:
-	nvme_stop_queues(&ctrl->ctrl);
-	nvme_rdma_stop_io_queues(ctrl);
 out_cleanup_connect_q:
 	if (new)
 		blk_cleanup_queue(ctrl->ctrl.connect_q);
@@ -1010,7 +998,6 @@ static void nvme_rdma_teardown_admin_queue(struct nvme_rdma_ctrl *ctrl,
 		bool remove)
 {
 	blk_mq_quiesce_queue(ctrl->ctrl.admin_q);
-	blk_sync_queue(ctrl->ctrl.admin_q);
 	nvme_rdma_stop_queue(&ctrl->queues[0]);
 	if (ctrl->ctrl.admin_tagset) {
 		blk_mq_tagset_busy_iter(ctrl->ctrl.admin_tagset,
@@ -1028,7 +1015,6 @@ static void nvme_rdma_teardown_io_queues(struct nvme_rdma_ctrl *ctrl,
 	if (ctrl->ctrl.queue_count > 1) {
 		nvme_start_freeze(&ctrl->ctrl);
 		nvme_stop_queues(&ctrl->ctrl);
-		nvme_sync_io_queues(&ctrl->ctrl);
 		nvme_rdma_stop_io_queues(ctrl);
 		if (ctrl->ctrl.tagset) {
 			blk_mq_tagset_busy_iter(ctrl->ctrl.tagset,
@@ -1194,7 +1180,6 @@ static void nvme_rdma_error_recovery(struct nvme_rdma_ctrl *ctrl)
 	if (!nvme_change_ctrl_state(&ctrl->ctrl, NVME_CTRL_RESETTING))
 		return;
 
-	dev_warn(ctrl->ctrl.device, "starting error recovery\n");
 	queue_work(nvme_reset_wq, &ctrl->err_work);
 }
 
@@ -1204,7 +1189,7 @@ static void nvme_rdma_end_request(struct nvme_rdma_request *req)
 
 	if (!refcount_dec_and_test(&req->ref))
 		return;
-	if (!nvme_try_complete_req(rq, req->status, req->result))
+	if (!nvme_end_request(rq, req->status, req->result))
 		nvme_rdma_complete_rq(rq);
 }
 
@@ -1727,11 +1712,10 @@ static void nvme_rdma_process_nvme_rsp(struct nvme_rdma_queue *queue,
 	req->result = cqe->result;
 
 	if (wc->wc_flags & IB_WC_WITH_INVALIDATE) {
-		if (unlikely(!req->mr ||
-			     wc->ex.invalidate_rkey != req->mr->rkey)) {
+		if (unlikely(wc->ex.invalidate_rkey != req->mr->rkey)) {
 			dev_err(queue->ctrl->ctrl.device,
 				"Bogus remote invalidation for rkey %#x\n",
-				req->mr ? req->mr->rkey : 0);
+				req->mr->rkey);
 			nvme_rdma_error_recovery(queue->ctrl);
 		}
 	} else if (req->mr) {
@@ -1762,14 +1746,6 @@ static void nvme_rdma_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	if (unlikely(wc->status != IB_WC_SUCCESS)) {
 		nvme_rdma_wr_error(cq, wc, "RECV");
-		return;
-	}
-
-	/* sanity checking for received data length */
-	if (unlikely(wc->byte_len < len)) {
-		dev_err(queue->ctrl->ctrl.device,
-			"Unexpected nvme completion length(%d)\n", wc->byte_len);
-		nvme_rdma_error_recovery(queue->ctrl);
 		return;
 	}
 
@@ -1895,10 +1871,10 @@ static int nvme_rdma_route_resolved(struct nvme_rdma_queue *queue)
 		priv.hsqsize = cpu_to_le16(queue->ctrl->ctrl.sqsize);
 	}
 
-	ret = rdma_connect_locked(queue->cm_id, &param);
+	ret = rdma_connect(queue->cm_id, &param);
 	if (ret) {
 		dev_err(ctrl->ctrl.device,
-			"rdma_connect_locked failed (%d).\n", ret);
+			"rdma_connect failed (%d).\n", ret);
 		goto out_destroy_queue_ib;
 	}
 
@@ -1932,6 +1908,7 @@ static int nvme_rdma_cm_handler(struct rdma_cm_id *cm_id,
 		complete(&queue->cm_done);
 		return 0;
 	case RDMA_CM_EVENT_REJECTED:
+		nvme_rdma_destroy_queue_ib(queue);
 		cm_error = nvme_rdma_conn_rejected(queue, ev);
 		break;
 	case RDMA_CM_EVENT_ROUTE_ERROR:
@@ -1969,18 +1946,6 @@ static int nvme_rdma_cm_handler(struct rdma_cm_id *cm_id,
 	return 0;
 }
 
-static void nvme_rdma_complete_timed_out(struct request *rq)
-{
-	struct nvme_rdma_request *req = blk_mq_rq_to_pdu(rq);
-	struct nvme_rdma_queue *queue = req->queue;
-
-	nvme_rdma_stop_queue(queue);
-	if (blk_mq_request_started(rq) && !blk_mq_request_completed(rq)) {
-		nvme_req(rq)->status = NVME_SC_HOST_ABORTED_CMD;
-		blk_mq_complete_request(rq);
-	}
-}
-
 static enum blk_eh_timer_return
 nvme_rdma_timeout(struct request *rq, bool reserved)
 {
@@ -1991,29 +1956,29 @@ nvme_rdma_timeout(struct request *rq, bool reserved)
 	dev_warn(ctrl->ctrl.device, "I/O %d QID %d timeout\n",
 		 rq->tag, nvme_rdma_queue_idx(queue));
 
+	/*
+	 * Restart the timer if a controller reset is already scheduled. Any
+	 * timed out commands would be handled before entering the connecting
+	 * state.
+	 */
+	if (ctrl->ctrl.state == NVME_CTRL_RESETTING)
+		return BLK_EH_RESET_TIMER;
+
 	if (ctrl->ctrl.state != NVME_CTRL_LIVE) {
 		/*
-		 * If we are resetting, connecting or deleting we should
-		 * complete immediately because we may block controller
-		 * teardown or setup sequence
-		 * - ctrl disable/shutdown fabrics requests
-		 * - connect requests
-		 * - initialization admin requests
-		 * - I/O requests that entered after unquiescing and
-		 *   the controller stopped responding
-		 *
-		 * All other requests should be cancelled by the error
-		 * recovery work, so it's fine that we fail it here.
+		 * Teardown immediately if controller times out while starting
+		 * or we are already started error recovery. all outstanding
+		 * requests are completed on shutdown, so we return BLK_EH_DONE.
 		 */
-		nvme_rdma_complete_timed_out(rq);
+		flush_work(&ctrl->err_work);
+		nvme_rdma_teardown_io_queues(ctrl, false);
+		nvme_rdma_teardown_admin_queue(ctrl, false);
 		return BLK_EH_DONE;
 	}
 
-	/*
-	 * LIVE state should trigger the normal error recovery which will
-	 * handle completing this request.
-	 */
+	dev_warn(ctrl->ctrl.device, "starting error recovery\n");
 	nvme_rdma_error_recovery(ctrl);
+
 	return BLK_EH_RESET_TIMER;
 }
 

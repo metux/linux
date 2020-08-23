@@ -1143,6 +1143,10 @@ int phy_init_hw(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
+	ret = phy_disable_interrupts(phydev);
+	if (ret)
+		return ret;
+
 	if (phydev->drv->config_init)
 		ret = phydev->drv->config_init(phydev);
 
@@ -1419,10 +1423,6 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	if (err)
 		goto error;
 
-	err = phy_disable_interrupts(phydev);
-	if (err)
-		return err;
-
 	phy_resume(phydev);
 	phy_led_triggers_register(phydev);
 
@@ -1682,8 +1682,7 @@ void phy_detach(struct phy_device *phydev)
 
 	phy_led_triggers_unregister(phydev);
 
-	if (phydev->mdio.dev.driver)
-		module_put(phydev->mdio.dev.driver->owner);
+	module_put(phydev->mdio.dev.driver->owner);
 
 	/* If the device had no specific driver before (i.e. - it
 	 * was using the generic driver), we unbind the device

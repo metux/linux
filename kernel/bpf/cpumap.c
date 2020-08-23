@@ -79,6 +79,8 @@ struct bpf_cpu_map {
 
 static DEFINE_PER_CPU(struct list_head, cpu_map_flush_list);
 
+static int bq_flush_to_queue(struct xdp_bulk_queue *bq);
+
 static struct bpf_map *cpu_map_alloc(union bpf_attr *attr)
 {
 	u32 value_size = attr->value_size;
@@ -155,7 +157,8 @@ static void cpu_map_kthread_stop(struct work_struct *work)
 	kthread_stop(rcpu->kthread);
 }
 
-static struct sk_buff *cpu_map_build_skb(struct xdp_frame *xdpf,
+static struct sk_buff *cpu_map_build_skb(struct bpf_cpu_map_entry *rcpu,
+					 struct xdp_frame *xdpf,
 					 struct sk_buff *skb)
 {
 	unsigned int hard_start_headroom;
@@ -236,7 +239,7 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 	if (!rcpu->prog)
 		return n;
 
-	rcu_read_lock();
+	rcu_read_lock_bh();
 
 	xdp_set_return_frame_no_direct();
 	xdp.rxq = &rxq;
@@ -264,9 +267,19 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 				stats->pass++;
 			}
 			break;
+		case XDP_REDIRECT:
+			err = xdp_do_redirect(xdpf->dev_rx, &xdp,
+					      rcpu->prog);
+			if (unlikely(err)) {
+				xdp_return_frame(xdpf);
+				stats->drop++;
+			} else {
+				stats->redirect++;
+			}
+			break;
 		default:
 			bpf_warn_invalid_xdp_action(act);
-			/* fallthrough */
+			fallthrough;
 		case XDP_DROP:
 			xdp_return_frame(xdpf);
 			stats->drop++;
@@ -274,9 +287,12 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 		}
 	}
 
+	if (stats->redirect)
+		xdp_do_flush_map();
+
 	xdp_clear_return_frame_no_direct();
 
-	rcu_read_unlock();
+	rcu_read_unlock_bh(); /* resched point, may call do_softirq() */
 
 	return nframes;
 }
@@ -351,7 +367,7 @@ static int cpu_map_kthread_run(void *data)
 			struct sk_buff *skb = skbs[i];
 			int ret;
 
-			skb = cpu_map_build_skb(xdpf, skb);
+			skb = cpu_map_build_skb(rcpu, xdpf, skb);
 			if (!skb) {
 				xdp_return_frame(xdpf);
 				continue;
@@ -437,17 +453,17 @@ __cpu_map_entry_alloc(struct bpf_cpumap_val *value, u32 cpu, int map_id)
 	rcpu->map_id = map_id;
 	rcpu->value.qsize  = value->qsize;
 
+	if (fd > 0 && __cpu_map_load_bpf_program(rcpu, fd))
+		goto free_ptr_ring;
+
 	/* Setup kthread */
 	rcpu->kthread = kthread_create_on_node(cpu_map_kthread_run, rcpu, numa,
 					       "cpumap/%d/map:%d", cpu, map_id);
 	if (IS_ERR(rcpu->kthread))
-		goto free_ptr_ring;
+		goto free_prog;
 
 	get_cpu_map_entry(rcpu); /* 1-refcnt for being in cmap->cpu_map[] */
 	get_cpu_map_entry(rcpu); /* 1-refcnt for kthread */
-
-	if (fd > 0 && __cpu_map_load_bpf_program(rcpu, fd))
-		goto free_ptr_ring;
 
 	/* Make sure kthread runs on a single CPU */
 	kthread_bind(rcpu->kthread, cpu);
@@ -455,6 +471,9 @@ __cpu_map_entry_alloc(struct bpf_cpumap_val *value, u32 cpu, int map_id)
 
 	return rcpu;
 
+free_prog:
+	if (rcpu->prog)
+		bpf_prog_put(rcpu->prog);
 free_ptr_ring:
 	ptr_ring_cleanup(rcpu->queue, NULL);
 free_queue:
@@ -639,7 +658,6 @@ static int cpu_map_get_next_key(struct bpf_map *map, void *key, void *next_key)
 
 static int cpu_map_btf_id;
 const struct bpf_map_ops cpu_map_ops = {
-	.map_meta_equal		= bpf_map_meta_equal,
 	.map_alloc		= cpu_map_alloc,
 	.map_free		= cpu_map_free,
 	.map_delete_elem	= cpu_map_delete_elem,
@@ -651,7 +669,7 @@ const struct bpf_map_ops cpu_map_ops = {
 	.map_btf_id		= &cpu_map_btf_id,
 };
 
-static void bq_flush_to_queue(struct xdp_bulk_queue *bq)
+static int bq_flush_to_queue(struct xdp_bulk_queue *bq)
 {
 	struct bpf_cpu_map_entry *rcpu = bq->obj;
 	unsigned int processed = 0, drops = 0;
@@ -660,7 +678,7 @@ static void bq_flush_to_queue(struct xdp_bulk_queue *bq)
 	int i;
 
 	if (unlikely(!bq->count))
-		return;
+		return 0;
 
 	q = rcpu->queue;
 	spin_lock(&q->producer_lock);
@@ -683,12 +701,13 @@ static void bq_flush_to_queue(struct xdp_bulk_queue *bq)
 
 	/* Feedback loop via tracepoints */
 	trace_xdp_cpumap_enqueue(rcpu->map_id, processed, drops, to_cpu);
+	return 0;
 }
 
 /* Runs under RCU-read-side, plus in softirq under NAPI protection.
  * Thus, safe percpu variable access.
  */
-static void bq_enqueue(struct bpf_cpu_map_entry *rcpu, struct xdp_frame *xdpf)
+static int bq_enqueue(struct bpf_cpu_map_entry *rcpu, struct xdp_frame *xdpf)
 {
 	struct list_head *flush_list = this_cpu_ptr(&cpu_map_flush_list);
 	struct xdp_bulk_queue *bq = this_cpu_ptr(rcpu->bulkq);
@@ -709,6 +728,8 @@ static void bq_enqueue(struct bpf_cpu_map_entry *rcpu, struct xdp_frame *xdpf)
 
 	if (!bq->flush_node.prev)
 		list_add(&bq->flush_node, flush_list);
+
+	return 0;
 }
 
 int cpu_map_enqueue(struct bpf_cpu_map_entry *rcpu, struct xdp_buff *xdp,

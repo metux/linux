@@ -3066,19 +3066,11 @@ void vmx_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 	vmx->emulation_required = emulation_required(vcpu);
 }
 
-static int vmx_get_tdp_level(struct kvm_vcpu *vcpu)
+static int vmx_get_max_tdp_level(void)
 {
-	if (cpu_has_vmx_ept_5levels() && (cpuid_maxphyaddr(vcpu) > 48))
+	if (cpu_has_vmx_ept_5levels())
 		return 5;
 	return 4;
-}
-
-static int get_ept_level(struct kvm_vcpu *vcpu)
-{
-	if (is_guest_mode(vcpu) && nested_cpu_has_ept(get_vmcs12(vcpu)))
-		return vmx_eptp_page_walk_level(nested_ept_get_eptp(vcpu));
-
-	return vmx_get_tdp_level(vcpu);
 }
 
 u64 construct_eptp(struct kvm_vcpu *vcpu, unsigned long root_hpa,
@@ -3105,8 +3097,6 @@ static void vmx_load_mmu_pgd(struct kvm_vcpu *vcpu, unsigned long pgd,
 	u64 eptp;
 
 	if (enable_ept) {
-		WARN_ON(pgd_level != get_ept_level(vcpu));
-
 		eptp = construct_eptp(vcpu, pgd, pgd_level);
 		vmcs_write64(EPT_POINTER, eptp);
 
@@ -4664,7 +4654,7 @@ static bool rmode_exception(struct kvm_vcpu *vcpu, int vec)
 			vmcs_read32(VM_EXIT_INSTRUCTION_LEN);
 		if (vcpu->guest_debug & KVM_GUESTDBG_USE_SW_BP)
 			return false;
-		/* fall through */
+		fallthrough;
 	case DB_VECTOR:
 		return !(vcpu->guest_debug &
 			(KVM_GUESTDBG_SINGLESTEP | KVM_GUESTDBG_USE_HW_BP));
@@ -4837,7 +4827,7 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 		}
 		kvm_run->debug.arch.dr6 = dr6 | DR6_FIXED_1 | DR6_RTM;
 		kvm_run->debug.arch.dr7 = vmcs_readl(GUEST_DR7);
-		/* fall through */
+		fallthrough;
 	case BP_VECTOR:
 		/*
 		 * Update instruction length as we may reinject #BP from
@@ -5267,7 +5257,7 @@ static int handle_task_switch(struct kvm_vcpu *vcpu)
 				error_code =
 					vmcs_read32(IDT_VECTORING_ERROR_CODE);
 			}
-			/* fall through */
+			fallthrough;
 		case INTR_TYPE_SOFT_EXCEPTION:
 			kvm_clear_exception_queue(vcpu);
 			break;
@@ -5620,7 +5610,7 @@ static int handle_invpcid(struct kvm_vcpu *vcpu)
 		 * keeping track of global entries in shadow page tables.
 		 */
 
-		/* fall-through */
+		fallthrough;
 	case INVPCID_TYPE_ALL_INCL_GLOBAL:
 		kvm_mmu_unload(vcpu);
 		return kvm_skip_emulated_instruction(vcpu);
@@ -6588,7 +6578,7 @@ static void __vmx_complete_interrupts(struct kvm_vcpu *vcpu,
 		break;
 	case INTR_TYPE_SOFT_EXCEPTION:
 		vcpu->arch.event_exit_inst_len = vmcs_read32(instr_len_field);
-		/* fall through */
+		fallthrough;
 	case INTR_TYPE_HARD_EXCEPTION:
 		if (idt_vectoring_info & VECTORING_INFO_DELIVER_CODE_MASK) {
 			u32 err = vmcs_read32(error_code_field);
@@ -6598,7 +6588,7 @@ static void __vmx_complete_interrupts(struct kvm_vcpu *vcpu,
 		break;
 	case INTR_TYPE_SOFT_INTR:
 		vcpu->arch.event_exit_inst_len = vmcs_read32(instr_len_field);
-		/* fall through */
+		fallthrough;
 	case INTR_TYPE_EXT_INTR:
 		kvm_queue_interrupt(vcpu, vector, type == INTR_TYPE_SOFT_INTR);
 		break;
@@ -7968,7 +7958,6 @@ static struct kvm_x86_ops vmx_x86_ops __initdata = {
 
 	.set_tss_addr = vmx_set_tss_addr,
 	.set_identity_map_addr = vmx_set_identity_map_addr,
-	.get_tdp_level = vmx_get_tdp_level,
 	.get_mt_mask = vmx_get_mt_mask,
 
 	.get_exit_info = vmx_get_exit_info,
@@ -8119,7 +8108,7 @@ static __init int hardware_setup(void)
 		ept_lpage_level = PG_LEVEL_2M;
 	else
 		ept_lpage_level = PG_LEVEL_4K;
-	kvm_configure_mmu(enable_ept, ept_lpage_level);
+	kvm_configure_mmu(enable_ept, vmx_get_max_tdp_level(), ept_lpage_level);
 
 	/*
 	 * Only enable PML when hardware supports PML feature, and both EPT

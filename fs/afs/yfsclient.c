@@ -440,7 +440,7 @@ static int yfs_deliver_fs_fetch_data64(struct afs_call *call)
 		req->offset = req->pos & (PAGE_SIZE - 1);
 		afs_extract_to_tmp64(call);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the returned data length */
 	case 1:
@@ -468,7 +468,7 @@ static int yfs_deliver_fs_fetch_data64(struct afs_call *call)
 		call->bvec[0].bv_page = req->pages[req->index];
 		iov_iter_bvec(&call->def_iter, READ, call->bvec, 1, size);
 		ASSERTCMP(size, <=, PAGE_SIZE);
-		/* Fall through */
+		fallthrough;
 
 		/* extract the returned data */
 	case 2:
@@ -495,7 +495,7 @@ static int yfs_deliver_fs_fetch_data64(struct afs_call *call)
 		/* Discard any excess data the server gave us */
 		afs_extract_discard(call, req->actual_len - req->len);
 		call->unmarshall = 3;
-		/* Fall through */
+		fallthrough;
 
 	case 3:
 		_debug("extract discard %zu/%llu",
@@ -511,7 +511,7 @@ static int yfs_deliver_fs_fetch_data64(struct afs_call *call)
 				   sizeof(struct yfs_xdr_YFSFetchStatus) +
 				   sizeof(struct yfs_xdr_YFSCallBack) +
 				   sizeof(struct yfs_xdr_YFSVolSync));
-		/* Fall through */
+		fallthrough;
 
 		/* extract the metadata */
 	case 4:
@@ -528,7 +528,7 @@ static int yfs_deliver_fs_fetch_data64(struct afs_call *call)
 		req->file_size = vp->scb.status.size;
 
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 	case 5:
 		break;
@@ -1329,7 +1329,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 	case 0:
 		call->unmarshall++;
 		afs_extract_to_buf(call, sizeof(struct yfs_xdr_YFSFetchVolumeStatus));
-		/* Fall through */
+		fallthrough;
 
 		/* extract the returned status record */
 	case 1:
@@ -1342,7 +1342,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 		xdr_decode_YFSFetchVolumeStatus(&bp, &op->volstatus.vs);
 		call->unmarshall++;
 		afs_extract_to_tmp(call);
-		/* Fall through */
+		fallthrough;
 
 		/* extract the volume name length */
 	case 2:
@@ -1357,7 +1357,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 		size = (call->count + 3) & ~3; /* It's padded */
 		afs_extract_to_buf(call, size);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the volume name */
 	case 3:
@@ -1371,7 +1371,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 		_debug("volname '%s'", p);
 		afs_extract_to_tmp(call);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the offline message length */
 	case 4:
@@ -1386,7 +1386,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 		size = (call->count + 3) & ~3; /* It's padded */
 		afs_extract_to_buf(call, size);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the offline message */
 	case 5:
@@ -1401,7 +1401,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 
 		afs_extract_to_tmp(call);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the message of the day length */
 	case 6:
@@ -1416,7 +1416,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 		size = (call->count + 3) & ~3; /* It's padded */
 		afs_extract_to_buf(call, size);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the message of the day */
 	case 7:
@@ -1430,7 +1430,7 @@ static int yfs_deliver_fs_get_volume_status(struct afs_call *call)
 		_debug("motd '%s'", p);
 
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 	case 8:
 		break;
@@ -1665,7 +1665,7 @@ static int yfs_deliver_fs_inline_bulk_status(struct afs_call *call)
 	case 0:
 		afs_extract_to_tmp(call);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* Extract the file status count and array in two steps */
 	case 1:
@@ -1683,7 +1683,7 @@ static int yfs_deliver_fs_inline_bulk_status(struct afs_call *call)
 		call->unmarshall++;
 	more_counts:
 		afs_extract_to_buf(call, sizeof(struct yfs_xdr_YFSFetchStatus));
-		/* Fall through */
+		fallthrough;
 
 	case 2:
 		_debug("extract status array %u", call->count);
@@ -1713,7 +1713,7 @@ static int yfs_deliver_fs_inline_bulk_status(struct afs_call *call)
 		call->count = 0;
 		call->unmarshall++;
 		afs_extract_to_tmp(call);
-		/* Fall through */
+		fallthrough;
 
 		/* Extract the callback count and array in two steps */
 	case 3:
@@ -1730,7 +1730,7 @@ static int yfs_deliver_fs_inline_bulk_status(struct afs_call *call)
 		call->unmarshall++;
 	more_cbs:
 		afs_extract_to_buf(call, sizeof(struct yfs_xdr_YFSCallBack));
-		/* Fall through */
+		fallthrough;
 
 	case 4:
 		_debug("extract CB array");
@@ -1759,7 +1759,7 @@ static int yfs_deliver_fs_inline_bulk_status(struct afs_call *call)
 
 		afs_extract_to_buf(call, sizeof(struct yfs_xdr_YFSVolSync));
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 	case 5:
 		ret = afs_extract_data(call, false);
@@ -1770,7 +1770,7 @@ static int yfs_deliver_fs_inline_bulk_status(struct afs_call *call)
 		xdr_decode_YFSVolSync(&bp, &op->volsync);
 
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 	case 6:
 		break;
@@ -1847,7 +1847,7 @@ static int yfs_deliver_fs_fetch_opaque_acl(struct afs_call *call)
 	case 0:
 		afs_extract_to_tmp(call);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* Extract the file ACL length */
 	case 1:
@@ -1869,7 +1869,7 @@ static int yfs_deliver_fs_fetch_opaque_acl(struct afs_call *call)
 			afs_extract_discard(call, size);
 		}
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* Extract the file ACL */
 	case 2:
@@ -1879,7 +1879,7 @@ static int yfs_deliver_fs_fetch_opaque_acl(struct afs_call *call)
 
 		afs_extract_to_tmp(call);
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* Extract the volume ACL length */
 	case 3:
@@ -1901,7 +1901,7 @@ static int yfs_deliver_fs_fetch_opaque_acl(struct afs_call *call)
 			afs_extract_discard(call, size);
 		}
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* Extract the volume ACL */
 	case 4:
@@ -1914,7 +1914,7 @@ static int yfs_deliver_fs_fetch_opaque_acl(struct afs_call *call)
 				   sizeof(struct yfs_xdr_YFSFetchStatus) +
 				   sizeof(struct yfs_xdr_YFSVolSync));
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 		/* extract the metadata */
 	case 5:
@@ -1929,7 +1929,7 @@ static int yfs_deliver_fs_fetch_opaque_acl(struct afs_call *call)
 		xdr_decode_YFSVolSync(&bp, &op->volsync);
 
 		call->unmarshall++;
-		/* Fall through */
+		fallthrough;
 
 	case 6:
 		break;

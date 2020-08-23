@@ -818,7 +818,6 @@ int bnxt_qplib_create_qp1(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 	u16 cmd_flags = 0;
 	u32 qp_flags = 0;
 	u8 pg_sz_lvl;
-	u32 tbl_indx;
 	int rc;
 
 	RCFW_CMD_PREP(req, CREATE_QP1, cmd_flags);
@@ -908,9 +907,8 @@ int bnxt_qplib_create_qp1(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 		rq->dbinfo.db = qp->dpi->dbr;
 		rq->dbinfo.max_slot = bnxt_qplib_set_rq_max_slot(rq->wqe_size);
 	}
-	tbl_indx = map_qp_id_to_tbl_indx(qp->id, rcfw);
-	rcfw->qp_tbl[tbl_indx].qp_id = qp->id;
-	rcfw->qp_tbl[tbl_indx].qp_handle = (void *)qp;
+	rcfw->qp_tbl[qp->id].qp_id = qp->id;
+	rcfw->qp_tbl[qp->id].qp_handle = (void *)qp;
 
 	return 0;
 
@@ -937,10 +935,10 @@ static void bnxt_qplib_init_psn_ptr(struct bnxt_qplib_qp *qp, int size)
 
 	sq = &qp->sq;
 	hwq = &sq->hwq;
-	/* First psn entry */
 	fpsne = (u64)bnxt_qplib_get_qe(hwq, hwq->depth, &psn_pg);
 	if (!IS_ALIGNED(fpsne, PAGE_SIZE))
-		indx_pad = (fpsne & ~PAGE_MASK) / size;
+		indx_pad = ALIGN(fpsne, PAGE_SIZE) / size;
+
 	hwq->pad_pgofft = indx_pad;
 	hwq->pad_pg = (u64 *)psn_pg;
 	hwq->pad_stride = size;
@@ -961,7 +959,6 @@ int bnxt_qplib_create_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 	u16 cmd_flags = 0;
 	u32 qp_flags = 0;
 	u8 pg_sz_lvl;
-	u32 tbl_indx;
 	u16 nsge;
 
 	RCFW_CMD_PREP(req, CREATE_QP, cmd_flags);
@@ -1114,9 +1111,8 @@ int bnxt_qplib_create_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp)
 		rq->dbinfo.db = qp->dpi->dbr;
 		rq->dbinfo.max_slot = bnxt_qplib_set_rq_max_slot(rq->wqe_size);
 	}
-	tbl_indx = map_qp_id_to_tbl_indx(qp->id, rcfw);
-	rcfw->qp_tbl[tbl_indx].qp_id = qp->id;
-	rcfw->qp_tbl[tbl_indx].qp_handle = (void *)qp;
+	rcfw->qp_tbl[qp->id].qp_id = qp->id;
+	rcfw->qp_tbl[qp->id].qp_handle = (void *)qp;
 
 	return 0;
 fail:
@@ -1461,12 +1457,10 @@ int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
 	struct cmdq_destroy_qp req;
 	struct creq_destroy_qp_resp resp;
 	u16 cmd_flags = 0;
-	u32 tbl_indx;
 	int rc;
 
-	tbl_indx = map_qp_id_to_tbl_indx(qp->id, rcfw);
-	rcfw->qp_tbl[tbl_indx].qp_id = BNXT_QPLIB_QP_ID_INVALID;
-	rcfw->qp_tbl[tbl_indx].qp_handle = NULL;
+	rcfw->qp_tbl[qp->id].qp_id = BNXT_QPLIB_QP_ID_INVALID;
+	rcfw->qp_tbl[qp->id].qp_handle = NULL;
 
 	RCFW_CMD_PREP(req, DESTROY_QP, cmd_flags);
 
@@ -1474,8 +1468,8 @@ int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
 	rc = bnxt_qplib_rcfw_send_message(rcfw, (void *)&req,
 					  (void *)&resp, NULL, 0);
 	if (rc) {
-		rcfw->qp_tbl[tbl_indx].qp_id = qp->id;
-		rcfw->qp_tbl[tbl_indx].qp_handle = qp;
+		rcfw->qp_tbl[qp->id].qp_id = qp->id;
+		rcfw->qp_tbl[qp->id].qp_handle = qp;
 		return rc;
 	}
 

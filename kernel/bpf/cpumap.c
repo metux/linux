@@ -239,7 +239,7 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 	if (!rcpu->prog)
 		return n;
 
-	rcu_read_lock();
+	rcu_read_lock_bh();
 
 	xdp_set_return_frame_no_direct();
 	xdp.rxq = &rxq;
@@ -267,9 +267,19 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 				stats->pass++;
 			}
 			break;
+		case XDP_REDIRECT:
+			err = xdp_do_redirect(xdpf->dev_rx, &xdp,
+					      rcpu->prog);
+			if (unlikely(err)) {
+				xdp_return_frame(xdpf);
+				stats->drop++;
+			} else {
+				stats->redirect++;
+			}
+			break;
 		default:
 			bpf_warn_invalid_xdp_action(act);
-			/* fallthrough */
+			fallthrough;
 		case XDP_DROP:
 			xdp_return_frame(xdpf);
 			stats->drop++;
@@ -277,9 +287,12 @@ static int cpu_map_bpf_prog_run_xdp(struct bpf_cpu_map_entry *rcpu,
 		}
 	}
 
+	if (stats->redirect)
+		xdp_do_flush_map();
+
 	xdp_clear_return_frame_no_direct();
 
-	rcu_read_unlock();
+	rcu_read_unlock_bh(); /* resched point, may call do_softirq() */
 
 	return nframes;
 }
@@ -440,17 +453,17 @@ __cpu_map_entry_alloc(struct bpf_cpumap_val *value, u32 cpu, int map_id)
 	rcpu->map_id = map_id;
 	rcpu->value.qsize  = value->qsize;
 
+	if (fd > 0 && __cpu_map_load_bpf_program(rcpu, fd))
+		goto free_ptr_ring;
+
 	/* Setup kthread */
 	rcpu->kthread = kthread_create_on_node(cpu_map_kthread_run, rcpu, numa,
 					       "cpumap/%d/map:%d", cpu, map_id);
 	if (IS_ERR(rcpu->kthread))
-		goto free_ptr_ring;
+		goto free_prog;
 
 	get_cpu_map_entry(rcpu); /* 1-refcnt for being in cmap->cpu_map[] */
 	get_cpu_map_entry(rcpu); /* 1-refcnt for kthread */
-
-	if (fd > 0 && __cpu_map_load_bpf_program(rcpu, fd))
-		goto free_ptr_ring;
 
 	/* Make sure kthread runs on a single CPU */
 	kthread_bind(rcpu->kthread, cpu);
@@ -458,6 +471,9 @@ __cpu_map_entry_alloc(struct bpf_cpumap_val *value, u32 cpu, int map_id)
 
 	return rcpu;
 
+free_prog:
+	if (rcpu->prog)
+		bpf_prog_put(rcpu->prog);
 free_ptr_ring:
 	ptr_ring_cleanup(rcpu->queue, NULL);
 free_queue:

@@ -360,47 +360,28 @@ fail:
 }
 #endif				/* PEGASUS_WRITE_EEPROM */
 
-static inline int get_node_id(pegasus_t *pegasus, u8 *id)
+static inline void get_node_id(pegasus_t *pegasus, __u8 *id)
 {
-	int i, ret;
-	u16 w16;
+	int i;
+	__u16 w16;
 
 	for (i = 0; i < 3; i++) {
-		ret = read_eprom_word(pegasus, i, &w16);
-		if (ret < 0)
-			return ret;
+		read_eprom_word(pegasus, i, &w16);
 		((__le16 *) id)[i] = cpu_to_le16(w16);
 	}
-
-	return 0;
 }
 
 static void set_ethernet_addr(pegasus_t *pegasus)
 {
-	int ret;
-	u8 node_id[6];
+	__u8 node_id[6];
 
 	if (pegasus->features & PEGASUS_II) {
-		ret = get_registers(pegasus, 0x10, sizeof(node_id), node_id);
-		if (ret < 0)
-			goto err;
+		get_registers(pegasus, 0x10, sizeof(node_id), node_id);
 	} else {
-		ret = get_node_id(pegasus, node_id);
-		if (ret < 0)
-			goto err;
-		ret = set_registers(pegasus, EthID, sizeof(node_id), node_id);
-		if (ret < 0)
-			goto err;
+		get_node_id(pegasus, node_id);
+		set_registers(pegasus, EthID, sizeof(node_id), node_id);
 	}
-
 	memcpy(pegasus->net->dev_addr, node_id, sizeof(node_id));
-
-	return;
-err:
-	eth_hw_addr_random(pegasus->net);
-	dev_info(&pegasus->intf->dev, "software assigned MAC address.\n");
-
-	return;
 }
 
 static inline int reset_mac(pegasus_t *pegasus)

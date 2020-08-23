@@ -678,8 +678,7 @@ static int a6xx_hw_init(struct msm_gpu *gpu)
 			A6XX_PROTECT_RDONLY(0x980, 0x4));
 	gpu_write(gpu, REG_A6XX_CP_PROTECT(25), A6XX_PROTECT_RW(0xa630, 0x0));
 
-	/* Enable expanded apriv for targets that support it */
-	if (gpu->hw_apriv) {
+	if (adreno_is_a650(adreno_gpu)) {
 		gpu_write(gpu, REG_A6XX_CP_APRIV_CNTL,
 			(1 << 6) | (1 << 5) | (1 << 3) | (1 << 2) | (1 << 1));
 	}
@@ -694,13 +693,6 @@ static int a6xx_hw_init(struct msm_gpu *gpu)
 	ret = a6xx_ucode_init(gpu);
 	if (ret)
 		goto out;
-
-	/* Set the ringbuffer address */
-	gpu_write64(gpu, REG_A6XX_CP_RB_BASE, REG_A6XX_CP_RB_BASE_HI,
-		gpu->rb[0]->iova);
-
-	gpu_write(gpu, REG_A6XX_CP_RB_CNTL,
-		MSM_GPU_RB_CNTL_DEFAULT | AXXX_CP_RB_CNTL_NO_UPDATE);
 
 	/* Always come up on rb 0 */
 	a6xx_gpu->cur_ring = gpu->rb[0];
@@ -1063,9 +1055,6 @@ struct msm_gpu *a6xx_gpu_init(struct drm_device *dev)
 
 	adreno_gpu->registers = NULL;
 	adreno_gpu->reg_offsets = a6xx_register_offsets;
-
-	if (adreno_is_a650(adreno_gpu))
-		adreno_gpu->base.hw_apriv = true;
 
 	ret = adreno_gpu_init(dev, pdev, adreno_gpu, &funcs, 1);
 	if (ret) {

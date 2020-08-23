@@ -1586,7 +1586,7 @@ static int fanout_set_data(struct packet_sock *po, sockptr_t data,
 {
 	switch (po->fanout->type) {
 	case PACKET_FANOUT_CBPF:
-		return fanout_set_data_cbpf(po, USER_SOCKPTR(data), len);
+		return fanout_set_data_cbpf(po, data, len);
 	case PACKET_FANOUT_EBPF:
 		return fanout_set_data_ebpf(po, data, len);
 	default:
@@ -2170,8 +2170,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	int skb_len = skb->len;
 	unsigned int snaplen, res;
 	unsigned long status = TP_STATUS_USER;
-	unsigned short macoff, hdrlen;
-	unsigned int netoff;
+	unsigned short macoff, netoff, hdrlen;
 	struct sk_buff *copy_skb = NULL;
 	struct timespec64 ts;
 	__u32 ts_status;
@@ -2239,10 +2238,6 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 			do_vnet = true;
 		}
 		macoff = netoff - maclen;
-	}
-	if (netoff > USHRT_MAX) {
-		atomic_inc(&po->tp_drops);
-		goto drop_n_restore;
 	}
 	if (po->tp_version <= TPACKET_V2) {
 		if (macoff + snaplen > po->rx_ring.frame_size) {

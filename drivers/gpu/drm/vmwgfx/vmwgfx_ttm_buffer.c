@@ -530,7 +530,8 @@ const struct vmw_sg_table *vmw_bo_sg_table(struct ttm_buffer_object *bo)
 }
 
 
-static int vmw_ttm_bind(struct ttm_tt *ttm, struct ttm_resource *bo_mem)
+static int vmw_ttm_bind(struct ttm_bo_device *bdev,
+			struct ttm_tt *ttm, struct ttm_resource *bo_mem)
 {
 	struct vmw_ttm_tt *vmw_be =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -564,7 +565,8 @@ static int vmw_ttm_bind(struct ttm_tt *ttm, struct ttm_resource *bo_mem)
 	return 0;
 }
 
-static void vmw_ttm_unbind(struct ttm_tt *ttm)
+static void vmw_ttm_unbind(struct ttm_bo_device *bdev,
+			   struct ttm_tt *ttm)
 {
 	struct vmw_ttm_tt *vmw_be =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -585,7 +587,7 @@ static void vmw_ttm_unbind(struct ttm_tt *ttm)
 }
 
 
-static void vmw_ttm_destroy(struct ttm_tt *ttm)
+static void vmw_ttm_destroy(struct ttm_bo_device *bdev, struct ttm_tt *ttm)
 {
 	struct vmw_ttm_tt *vmw_be =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -603,7 +605,8 @@ static void vmw_ttm_destroy(struct ttm_tt *ttm)
 }
 
 
-static int vmw_ttm_populate(struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
+static int vmw_ttm_populate(struct ttm_bo_device *bdev,
+			    struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
 {
 	struct vmw_ttm_tt *vmw_tt =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -631,7 +634,8 @@ static int vmw_ttm_populate(struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
 	return ret;
 }
 
-static void vmw_ttm_unpopulate(struct ttm_tt *ttm)
+static void vmw_ttm_unpopulate(struct ttm_bo_device *bdev,
+			       struct ttm_tt *ttm)
 {
 	struct vmw_ttm_tt *vmw_tt = container_of(ttm, struct vmw_ttm_tt,
 						 dma_ttm.ttm);
@@ -787,7 +791,7 @@ int vmw_bo_create_and_populate(struct vmw_private *dev_priv,
 
 	ret = ttm_bo_reserve(bo, false, true, NULL);
 	BUG_ON(ret != 0);
-	ret = vmw_ttm_populate(bo->ttm, &ctx);
+	ret = vmw_ttm_populate(bo->bdev, bo->ttm, &ctx);
 	if (likely(ret == 0)) {
 		struct vmw_ttm_tt *vmw_tt =
 			container_of(bo->ttm, struct vmw_ttm_tt, dma_ttm.ttm);

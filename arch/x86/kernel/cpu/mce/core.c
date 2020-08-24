@@ -1190,6 +1190,7 @@ static void kill_me_maybe(struct callback_head *cb)
 
 	if (!memory_failure(p->mce_addr >> PAGE_SHIFT, flags)) {
 		set_mce_nospec(p->mce_addr >> PAGE_SHIFT, p->mce_whole_page);
+		sync_core();
 		return;
 	}
 
@@ -1330,12 +1331,8 @@ noinstr void do_machine_check(struct pt_regs *regs)
 	if (worst > 0)
 		irq_work_queue(&mce_irq_work);
 
-	mce_wrmsrl(MSR_IA32_MCG_STATUS, 0);
-
-	sync_core();
-
 	if (worst != MCE_AR_SEVERITY && !kill_it)
-		return;
+		goto out;
 
 	/* Fault was in user mode and we need to take some action */
 	if ((m.cs & 3) == 3) {
@@ -1363,6 +1360,8 @@ noinstr void do_machine_check(struct pt_regs *regs)
 		if (!fixup_exception(regs, X86_TRAP_MC, error_code, 0))
 			mce_panic("Failed kernel mode recovery", &m, msg);
 	}
+out:
+	mce_wrmsrl(MSR_IA32_MCG_STATUS, 0);
 }
 EXPORT_SYMBOL_GPL(do_machine_check);
 

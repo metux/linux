@@ -101,14 +101,18 @@ static int amdgpu_debugfs_autodump_open(struct inode *inode, struct file *file)
 
 	file->private_data = adev;
 
-	mutex_lock(&adev->lock_reset);
+	ret = down_read_killable(&adev->reset_sem);
+	if (ret)
+		return ret;
+
 	if (adev->autodump.dumping.done) {
 		reinit_completion(&adev->autodump.dumping);
 		ret = 0;
 	} else {
 		ret = -EBUSY;
 	}
-	mutex_unlock(&adev->lock_reset);
+
+	up_read(&adev->reset_sem);
 
 	return ret;
 }
@@ -127,7 +131,7 @@ static unsigned int amdgpu_debugfs_autodump_poll(struct file *file, struct poll_
 
 	poll_wait(file, &adev->autodump.gpu_hang, poll_table);
 
-	if (adev->in_gpu_reset)
+	if (amdgpu_in_reset(adev))
 		return POLLIN | POLLRDNORM | POLLWRNORM;
 
 	return 0;
@@ -1232,7 +1236,7 @@ static int amdgpu_debugfs_test_ib(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
 	struct drm_device *dev = node->minor->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	int r = 0, i;
 
 	r = pm_runtime_get_sync(dev->dev);
@@ -1242,7 +1246,9 @@ static int amdgpu_debugfs_test_ib(struct seq_file *m, void *data)
 	}
 
 	/* Avoid accidently unparking the sched thread during GPU reset */
-	mutex_lock(&adev->lock_reset);
+	r = down_read_killable(&adev->reset_sem);
+	if (r)
+		return r;
 
 	/* hold on the scheduler */
 	for (i = 0; i < AMDGPU_MAX_RINGS; i++) {
@@ -1269,7 +1275,7 @@ static int amdgpu_debugfs_test_ib(struct seq_file *m, void *data)
 		kthread_unpark(ring->sched.thread);
 	}
 
-	mutex_unlock(&adev->lock_reset);
+	up_read(&adev->reset_sem);
 
 	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
@@ -1281,7 +1287,7 @@ static int amdgpu_debugfs_get_vbios_dump(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
 	struct drm_device *dev = node->minor->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 
 	seq_write(m, adev->bios, adev->bios_size);
 	return 0;
@@ -1291,7 +1297,7 @@ static int amdgpu_debugfs_evict_vram(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *)m->private;
 	struct drm_device *dev = node->minor->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	int r;
 
 	r = pm_runtime_get_sync(dev->dev);
@@ -1312,7 +1318,7 @@ static int amdgpu_debugfs_evict_gtt(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *)m->private;
 	struct drm_device *dev = node->minor->dev;
-	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_device *adev = drm_to_adev(dev);
 	int r;
 
 	r = pm_runtime_get_sync(dev->dev);
@@ -1459,7 +1465,9 @@ static int amdgpu_debugfs_ib_preempt(void *data, u64 val)
 		return -ENOMEM;
 
 	/* Avoid accidently unparking the sched thread during GPU reset */
-	mutex_lock(&adev->lock_reset);
+	r = down_read_killable(&adev->reset_sem);
+	if (r)
+		goto pro_end;
 
 	/* stop the scheduler */
 	kthread_park(ring->sched.thread);
@@ -1500,13 +1508,14 @@ failure:
 	/* restart the scheduler */
 	kthread_unpark(ring->sched.thread);
 
-	mutex_unlock(&adev->lock_reset);
+	up_read(&adev->reset_sem);
 
 	ttm_bo_unlock_delayed_workqueue(&adev->mman.bdev, resched);
 
+pro_end:
 	kfree(fences);
 
-	return 0;
+	return r;
 }
 
 static int amdgpu_debugfs_sclk_set(void *data, u64 val)

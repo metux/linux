@@ -284,11 +284,11 @@ static void qeth_l2_stop_card(struct qeth_card *card)
 
 	if (card->state == CARD_STATE_SOFTSETUP) {
 		qeth_clear_ipacmd_list(card);
+		qeth_drain_output_queues(card);
 		card->state = CARD_STATE_DOWN;
 	}
 
 	qeth_qdio_clear_card(card, 0);
-	qeth_drain_output_queues(card);
 	qeth_clear_working_pool_list(card);
 	flush_workqueue(card->event_wq);
 	qeth_flush_local_addrs(card);
@@ -418,10 +418,14 @@ static void qeth_l2_set_promisc_mode(struct qeth_card *card)
 	if (card->info.promisc_mode == enable)
 		return;
 
-	if (qeth_adp_supported(card, IPA_SETADP_SET_PROMISC_MODE))
+	if (qeth_adp_supported(card, IPA_SETADP_SET_PROMISC_MODE)) {
 		qeth_setadp_promisc_mode(card, enable);
-	else if (card->options.sbp.reflect_promisc)
-		qeth_l2_promisc_to_bridge(card, enable);
+	} else {
+		mutex_lock(&card->sbp_lock);
+		if (card->options.sbp.reflect_promisc)
+			qeth_l2_promisc_to_bridge(card, enable);
+		mutex_unlock(&card->sbp_lock);
+	}
 }
 
 /* New MAC address is added to the hash table and marked to be written on card
@@ -484,7 +488,7 @@ static void qeth_l2_rx_mode_work(struct work_struct *work)
 				kfree(mac);
 				break;
 			}
-			fallthrough;
+			/* fall through */
 		default:
 			/* for next call to set_rx_mode(): */
 			mac->disp_flag = QETH_DISP_ADDR_DELETE;
@@ -588,6 +592,7 @@ static int qeth_l2_probe_device(struct ccwgroup_device *gdev)
 		dev_notice(&gdev->dev, "OSN support will be dropped in 2021\n");
 
 	qeth_l2_vnicc_set_defaults(card);
+	mutex_init(&card->sbp_lock);
 
 	if (gdev->dev.type == &qeth_generic_devtype) {
 		rc = qeth_l2_create_device_attributes(&gdev->dev);
@@ -822,6 +827,7 @@ static int qeth_l2_set_online(struct qeth_card *card)
 		goto out_remove;
 	}
 
+	mutex_lock(&card->sbp_lock);
 	qeth_bridgeport_query_support(card);
 	if (card->options.sbp.supported_funcs) {
 		qeth_l2_setup_bridgeport_attrs(card);
@@ -1101,12 +1107,6 @@ static void qeth_bridge_state_change_worker(struct work_struct *work)
 		NULL
 	};
 
-	/* Role should not change by itself, but if it did, */
-	/* information from the hardware is authoritative.  */
-	mutex_lock(&data->card->conf_mutex);
-	data->card->options.sbp.role = entry->role;
-	mutex_unlock(&data->card->conf_mutex);
-
 	snprintf(env_locrem, sizeof(env_locrem), "BRIDGEPORT=statechange");
 	snprintf(env_role, sizeof(env_role), "ROLE=%s",
 		(entry->role == QETH_SBP_ROLE_NONE) ? "none" :
@@ -1176,9 +1176,9 @@ static void qeth_addr_change_event_worker(struct work_struct *work)
 			: (data->ac_event.lost_event_mask == 0x02)
 			? "Bridge port state change"
 			: "Unknown reason");
-		mutex_lock(&data->card->conf_mutex);
+		mutex_lock(&data->card->sbp_lock);
 		data->card->options.sbp.hostnotification = 0;
-		mutex_unlock(&data->card->conf_mutex);
+		mutex_unlock(&data->card->sbp_lock);
 		qeth_bridge_emit_host_event(data->card, anev_abort,
 					    0, NULL, NULL);
 	} else

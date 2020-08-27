@@ -36,10 +36,14 @@ int monitored_pid = 0;
 int mprotect_count = 0;
 int bprm_count = 0;
 
-SEC("lsm/file_mprotect")
+SEC("lsm.s/file_mprotect")
 int BPF_PROG(test_int_hook, struct vm_area_struct *vma,
 	     unsigned long reqprot, unsigned long prot, int ret)
 {
+	char args[64];
+	__u32 key = 0;
+	__u64 *value;
+
 	if (ret != 0)
 		return ret;
 
@@ -48,6 +52,18 @@ int BPF_PROG(test_int_hook, struct vm_area_struct *vma,
 
 	is_stack = (vma->vm_start <= vma->vm_mm->start_stack &&
 		    vma->vm_end >= vma->vm_mm->start_stack);
+
+	bpf_copy_from_user(args, sizeof(args), (void *)vma->vm_mm->arg_start);
+
+	value = bpf_map_lookup_elem(&array, &key);
+	if (value)
+		*value = 0;
+	value = bpf_map_lookup_elem(&hash, &key);
+	if (value)
+		*value = 0;
+	value = bpf_map_lookup_elem(&lru_hash, &key);
+	if (value)
+		*value = 0;
 
 	if (is_stack && monitored_pid == pid) {
 		mprotect_count++;
@@ -81,6 +97,31 @@ int BPF_PROG(test_void_hook, struct linux_binprm *bprm)
 	if (value)
 		*value = 0;
 
+	return 0;
+}
+SEC("lsm/task_free") /* lsm/ is ok, lsm.s/ fails */
+int BPF_PROG(test_task_free, struct task_struct *task)
+{
+	return 0;
+}
+
+int copy_test = 0;
+
+SEC("fentry.s/__x64_sys_setdomainname")
+int BPF_PROG(test_sys_setdomainname, struct pt_regs *regs)
+{
+	void *ptr = (void *)PT_REGS_PARM1(regs);
+	int len = PT_REGS_PARM2(regs);
+	int buf = 0;
+	long ret;
+
+	ret = bpf_copy_from_user(&buf, sizeof(buf), ptr);
+	if (len == -2 && ret == 0 && buf == 1234)
+		copy_test++;
+	if (len == -3 && ret == -EFAULT)
+		copy_test++;
+	if (len == -4 && ret == -EFAULT)
+		copy_test++;
 	return 0;
 }
 SEC("lsm/task_free") /* lsm/ is ok, lsm.s/ fails */

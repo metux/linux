@@ -21,6 +21,7 @@
 #include <linux/ctype.h>
 #include <linux/error-injection.h>
 #include <linux/bpf_lsm.h>
+#include <linux/btf_ids.h>
 
 #include "disasm.h"
 
@@ -1232,14 +1233,14 @@ static void __reg_assign_32_into_64(struct bpf_reg_state *reg)
 	 * but must be positive otherwise set to worse case bounds
 	 * and refine later from tnum.
 	 */
-	if (reg->s32_min_value > 0)
-		reg->smin_value = reg->s32_min_value;
-	else
-		reg->smin_value = 0;
-	if (reg->s32_max_value > 0)
+	if (reg->s32_min_value >= 0 && reg->s32_max_value >= 0)
 		reg->smax_value = reg->s32_max_value;
 	else
 		reg->smax_value = U32_MAX;
+	if (reg->s32_min_value >= 0)
+		reg->smin_value = reg->s32_min_value;
+	else
+		reg->smin_value = 0;
 }
 
 static void __reg_combine_32_into_64(struct bpf_reg_state *reg)
@@ -5333,7 +5334,7 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 				off_reg == dst_reg ? dst : src);
 			return -EACCES;
 		}
-		fallthrough;
+		/* fall-through */
 	default:
 		break;
 	}
@@ -5764,8 +5765,8 @@ static void scalar32_min_max_or(struct bpf_reg_state *dst_reg,
 	bool src_known = tnum_subreg_is_const(src_reg->var_off);
 	bool dst_known = tnum_subreg_is_const(dst_reg->var_off);
 	struct tnum var32_off = tnum_subreg(dst_reg->var_off);
-	s32 smin_val = src_reg->s32_min_value;
-	u32 umin_val = src_reg->u32_min_value;
+	s32 smin_val = src_reg->smin_value;
+	u32 umin_val = src_reg->umin_value;
 
 	/* Assuming scalar64_min_max_or will be called so it is safe
 	 * to skip updating register for known case.
@@ -5788,8 +5789,8 @@ static void scalar32_min_max_or(struct bpf_reg_state *dst_reg,
 		/* ORing two positives gives a positive, so safe to
 		 * cast result into s64.
 		 */
-		dst_reg->s32_min_value = dst_reg->u32_min_value;
-		dst_reg->s32_max_value = dst_reg->u32_max_value;
+		dst_reg->s32_min_value = dst_reg->umin_value;
+		dst_reg->s32_max_value = dst_reg->umax_value;
 	}
 }
 
@@ -9367,6 +9368,23 @@ static int check_map_prog_compatibility(struct bpf_verifier_env *env,
 		return -EINVAL;
 	}
 
+	if (prog->aux->sleepable)
+		switch (map->map_type) {
+		case BPF_MAP_TYPE_HASH:
+		case BPF_MAP_TYPE_LRU_HASH:
+		case BPF_MAP_TYPE_ARRAY:
+			if (!is_preallocated_map(map)) {
+				verbose(env,
+					"Sleepable programs can only use preallocated hash maps\n");
+				return -EINVAL;
+			}
+			break;
+		default:
+			verbose(env,
+				"Sleepable programs can only use array and hash maps\n");
+			return -EINVAL;
+		}
+
 	return 0;
 }
 
@@ -10975,23 +10993,44 @@ static int check_struct_ops_btf_id(struct bpf_verifier_env *env)
 }
 #define SECURITY_PREFIX "security_"
 
-static int check_attach_modify_return(struct bpf_verifier_env *env)
+static int check_attach_modify_return(struct bpf_prog *prog, unsigned long addr)
 {
-	struct bpf_prog *prog = env->prog;
-	unsigned long addr = (unsigned long) prog->aux->trampoline->func.addr;
-
-	/* This is expected to be cleaned up in the future with the KRSI effort
-	 * introducing the LSM_HOOK macro for cleaning up lsm_hooks.h.
-	 */
 	if (within_error_injection_list(addr) ||
 	    !strncmp(SECURITY_PREFIX, prog->aux->attach_func_name,
 		     sizeof(SECURITY_PREFIX) - 1))
 		return 0;
 
-	verbose(env, "fmod_ret attach_btf_id %u (%s) is not modifiable\n",
-		prog->aux->attach_btf_id, prog->aux->attach_func_name);
-
 	return -EINVAL;
+}
+
+/* non exhaustive list of sleepable bpf_lsm_*() functions */
+BTF_SET_START(btf_sleepable_lsm_hooks)
+#ifdef CONFIG_BPF_LSM
+BTF_ID(func, bpf_lsm_file_mprotect)
+BTF_ID(func, bpf_lsm_bprm_committed_creds)
+#endif
+BTF_SET_END(btf_sleepable_lsm_hooks)
+
+static int check_sleepable_lsm_hook(u32 btf_id)
+{
+	return btf_id_set_contains(&btf_sleepable_lsm_hooks, btf_id);
+}
+
+/* list of non-sleepable functions that are otherwise on
+ * ALLOW_ERROR_INJECTION list
+ */
+BTF_SET_START(btf_non_sleepable_error_inject)
+/* Three functions below can be called from sleepable and non-sleepable context.
+ * Assume non-sleepable from bpf safety point of view.
+ */
+BTF_ID(func, __add_to_page_cache_locked)
+BTF_ID(func, should_fail_alloc_page)
+BTF_ID(func, should_failslab)
+BTF_SET_END(btf_non_sleepable_error_inject)
+
+static int check_non_sleepable_error_inject(u32 btf_id)
+{
+	return btf_id_set_contains(&btf_non_sleepable_error_inject, btf_id);
 }
 
 static int check_attach_btf_id(struct bpf_verifier_env *env)
@@ -11010,6 +11049,12 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 	struct btf *btf;
 	long addr;
 	u64 key;
+
+	if (prog->aux->sleepable && prog->type != BPF_PROG_TYPE_TRACING &&
+	    prog->type != BPF_PROG_TYPE_LSM) {
+		verbose(env, "Only fentry/fexit/fmod_ret and lsm programs can be sleepable\n");
+		return -EINVAL;
+	}
 
 	if (prog->type == BPF_PROG_TYPE_STRUCT_OPS)
 		return check_struct_ops_btf_id(env);
@@ -11162,7 +11207,7 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 	default:
 		if (!prog_extension)
 			return -EINVAL;
-		fallthrough;
+		/* fallthrough */
 	case BPF_MODIFY_RETURN:
 	case BPF_LSM_MAC:
 	case BPF_TRACE_FENTRY:
@@ -11218,11 +11263,41 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 				goto out;
 			}
 		}
+
+		if (prog->aux->sleepable) {
+			ret = -EINVAL;
+			switch (prog->type) {
+			case BPF_PROG_TYPE_TRACING:
+				/* fentry/fexit/fmod_ret progs can be sleepable only if they are
+				 * attached to ALLOW_ERROR_INJECTION and are not in denylist.
+				 */
+				if (!check_non_sleepable_error_inject(btf_id) &&
+				    within_error_injection_list(addr))
+					ret = 0;
+				break;
+			case BPF_PROG_TYPE_LSM:
+				/* LSM progs check that they are attached to bpf_lsm_*() funcs.
+				 * Only some of them are sleepable.
+				 */
+				if (check_sleepable_lsm_hook(btf_id))
+					ret = 0;
+				break;
+			default:
+				break;
+			}
+			if (ret)
+				verbose(env, "%s is not sleepable\n",
+					prog->aux->attach_func_name);
+		} else if (prog->expected_attach_type == BPF_MODIFY_RETURN) {
+			ret = check_attach_modify_return(prog, addr);
+			if (ret)
+				verbose(env, "%s() is not modifiable\n",
+					prog->aux->attach_func_name);
+		}
+		if (ret)
+			goto out;
 		tr->func.addr = (void *)addr;
 		prog->aux->trampoline = tr;
-
-		if (prog->expected_attach_type == BPF_MODIFY_RETURN)
-			ret = check_attach_modify_return(env);
 out:
 		mutex_unlock(&tr->mutex);
 		if (ret)

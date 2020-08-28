@@ -18,13 +18,16 @@
 #include <linux/semaphore.h>
 #include <linux/workqueue.h>
 #include <net/ip.h>
+#include <net/devlink.h>
 #include <linux/bitops.h>
 #include <linux/bitmap.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 
+#include "hinic_debugfs.h"
 #include "hinic_hw_qp.h"
 #include "hinic_hw_dev.h"
+#include "hinic_devlink.h"
 #include "hinic_port.h"
 #include "hinic_tx.h"
 #include "hinic_rx.h"
@@ -151,6 +154,8 @@ static int create_txqs(struct hinic_dev *nic_dev)
 	if (!nic_dev->txqs)
 		return -ENOMEM;
 
+	hinic_sq_dbgfs_init(nic_dev);
+
 	for (i = 0; i < num_txqs; i++) {
 		struct hinic_sq *sq = hinic_hwdev_get_sq(nic_dev->hwdev, i);
 
@@ -160,13 +165,27 @@ static int create_txqs(struct hinic_dev *nic_dev)
 				  "Failed to init Txq\n");
 			goto err_init_txq;
 		}
+
+		err = hinic_sq_debug_add(nic_dev, i);
+		if (err) {
+			netif_err(nic_dev, drv, netdev,
+				  "Failed to add SQ%d debug\n", i);
+			goto err_add_sq_dbg;
+		}
+
 	}
 
 	return 0;
 
+err_add_sq_dbg:
+	hinic_clean_txq(&nic_dev->txqs[i]);
 err_init_txq:
-	for (j = 0; j < i; j++)
+	for (j = 0; j < i; j++) {
+		hinic_sq_debug_rem(nic_dev->txqs[j].sq);
 		hinic_clean_txq(&nic_dev->txqs[j]);
+	}
+
+	hinic_sq_dbgfs_uninit(nic_dev);
 
 	devm_kfree(&netdev->dev, nic_dev->txqs);
 	return err;
@@ -202,8 +221,12 @@ static void free_txqs(struct hinic_dev *nic_dev)
 	if (!nic_dev->txqs)
 		return;
 
-	for (i = 0; i < num_txqs; i++)
+	for (i = 0; i < num_txqs; i++) {
+		hinic_sq_debug_rem(nic_dev->txqs[i].sq);
 		hinic_clean_txq(&nic_dev->txqs[i]);
+	}
+
+	hinic_sq_dbgfs_uninit(nic_dev);
 
 	devm_kfree(&netdev->dev, nic_dev->txqs);
 	nic_dev->txqs = NULL;
@@ -462,8 +485,11 @@ int hinic_open(struct net_device *netdev)
 	if (!HINIC_IS_VF(nic_dev->hwdev->hwif))
 		hinic_notify_all_vfs_link_changed(nic_dev->hwdev, link_state);
 
-	if (link_state == HINIC_LINK_STATE_UP)
+	if (link_state == HINIC_LINK_STATE_UP) {
 		nic_dev->flags |= HINIC_LINK_UP;
+		nic_dev->cable_unplugged = false;
+		nic_dev->module_unrecognized = false;
+	}
 
 	nic_dev->flags |= HINIC_INTF_UP;
 
@@ -969,6 +995,8 @@ static void link_status_event_handler(void *handle, void *buf_in, u16 in_size,
 		down(&nic_dev->mgmt_lock);
 
 		nic_dev->flags |= HINIC_LINK_UP;
+		nic_dev->cable_unplugged = false;
+		nic_dev->module_unrecognized = false;
 
 		if ((nic_dev->flags & (HINIC_LINK_UP | HINIC_INTF_UP)) ==
 		    (HINIC_LINK_UP | HINIC_INTF_UP)) {
@@ -1003,6 +1031,39 @@ static void link_status_event_handler(void *handle, void *buf_in, u16 in_size,
 	ret_link_status->status = 0;
 
 	*out_size = sizeof(*ret_link_status);
+}
+
+static void cable_plug_event(void *handle,
+			     void *buf_in, u16 in_size,
+			     void *buf_out, u16 *out_size)
+{
+	struct hinic_cable_plug_event *plug_event = buf_in;
+	struct hinic_dev *nic_dev = handle;
+
+	nic_dev->cable_unplugged = plug_event->plugged ? false : true;
+
+	*out_size = sizeof(*plug_event);
+	plug_event = buf_out;
+	plug_event->status = 0;
+}
+
+static void link_err_event(void *handle,
+			   void *buf_in, u16 in_size,
+			   void *buf_out, u16 *out_size)
+{
+	struct hinic_link_err_event *link_err = buf_in;
+	struct hinic_dev *nic_dev = handle;
+
+	if (link_err->err_type >= LINK_ERR_NUM)
+		netif_info(nic_dev, link, nic_dev->netdev,
+			   "Link failed, Unknown error type: 0x%x\n",
+			   link_err->err_type);
+	else
+		nic_dev->module_unrecognized = true;
+
+	*out_size = sizeof(*link_err);
+	link_err = buf_out;
+	link_err->status = 0;
 }
 
 static int set_features(struct hinic_dev *nic_dev,
@@ -1114,11 +1175,19 @@ static int nic_dev_init(struct pci_dev *pdev)
 	struct hinic_dev *nic_dev;
 	struct net_device *netdev;
 	struct hinic_hwdev *hwdev;
+	struct devlink *devlink;
 	int err, num_qps;
 
-	hwdev = hinic_init_hwdev(pdev);
+	devlink = hinic_devlink_alloc();
+	if (!devlink) {
+		dev_err(&pdev->dev, "Hinic devlink alloc failed\n");
+		return -ENOMEM;
+	}
+
+	hwdev = hinic_init_hwdev(pdev, devlink);
 	if (IS_ERR(hwdev)) {
 		dev_err(&pdev->dev, "Failed to initialize HW device\n");
+		hinic_devlink_free(devlink);
 		return PTR_ERR(hwdev);
 	}
 
@@ -1157,6 +1226,7 @@ static int nic_dev_init(struct pci_dev *pdev)
 	nic_dev->sriov_info.hwdev = hwdev;
 	nic_dev->sriov_info.pdev = pdev;
 	nic_dev->max_qps = num_qps;
+	nic_dev->devlink = devlink;
 
 	hinic_set_ethtool_ops(netdev);
 
@@ -1223,6 +1293,12 @@ static int nic_dev_init(struct pci_dev *pdev)
 
 	hinic_hwdev_cb_register(nic_dev->hwdev, HINIC_MGMT_MSG_CMD_LINK_STATUS,
 				nic_dev, link_status_event_handler);
+	hinic_hwdev_cb_register(nic_dev->hwdev,
+				HINIC_MGMT_MSG_CMD_CABLE_PLUG_EVENT,
+				nic_dev, cable_plug_event);
+	hinic_hwdev_cb_register(nic_dev->hwdev,
+				HINIC_MGMT_MSG_CMD_LINK_ERR_EVENT,
+				nic_dev, link_err_event);
 
 	err = set_features(nic_dev, 0, nic_dev->netdev->features, true);
 	if (err)
@@ -1241,6 +1317,8 @@ static int nic_dev_init(struct pci_dev *pdev)
 		goto err_init_intr;
 	}
 
+	hinic_dbg_init(nic_dev);
+
 	err = register_netdev(netdev);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to register netdev\n");
@@ -1250,20 +1328,25 @@ static int nic_dev_init(struct pci_dev *pdev)
 	return 0;
 
 err_reg_netdev:
+	hinic_dbg_uninit(nic_dev);
 	hinic_free_intr_coalesce(nic_dev);
 err_init_intr:
 err_set_pfc:
 err_set_features:
 	hinic_hwdev_cb_unregister(nic_dev->hwdev,
+				  HINIC_MGMT_MSG_CMD_LINK_ERR_EVENT);
+	hinic_hwdev_cb_unregister(nic_dev->hwdev,
+				  HINIC_MGMT_MSG_CMD_CABLE_PLUG_EVENT);
+	hinic_hwdev_cb_unregister(nic_dev->hwdev,
 				  HINIC_MGMT_MSG_CMD_LINK_STATUS);
 	cancel_work_sync(&rx_mode_work->work);
 
 err_set_mtu:
-err_get_mac:
+	hinic_port_del_mac(nic_dev, netdev->dev_addr, 0);
 err_add_mac:
+err_get_mac:
 	pci_set_drvdata(pdev, NULL);
 	destroy_workqueue(nic_dev->workq);
-
 err_workq:
 err_vlan_bitmap:
 	free_netdev(netdev);
@@ -1271,6 +1354,7 @@ err_vlan_bitmap:
 err_alloc_etherdev:
 err_num_qps:
 	hinic_free_hwdev(hwdev);
+	hinic_devlink_free(devlink);
 	return err;
 }
 
@@ -1357,6 +1441,7 @@ static void hinic_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
+	struct devlink *devlink = nic_dev->devlink;
 	struct hinic_rx_mode_work *rx_mode_work;
 
 	if (!HINIC_IS_VF(nic_dev->hwdev->hwif)) {
@@ -1366,10 +1451,16 @@ static void hinic_remove(struct pci_dev *pdev)
 
 	unregister_netdev(netdev);
 
+	hinic_dbg_uninit(nic_dev);
+
 	hinic_free_intr_coalesce(nic_dev);
 
 	hinic_port_del_mac(nic_dev, netdev->dev_addr, 0);
 
+	hinic_hwdev_cb_unregister(nic_dev->hwdev,
+				  HINIC_MGMT_MSG_CMD_LINK_ERR_EVENT);
+	hinic_hwdev_cb_unregister(nic_dev->hwdev,
+				  HINIC_MGMT_MSG_CMD_CABLE_PLUG_EVENT);
 	hinic_hwdev_cb_unregister(nic_dev->hwdev,
 				  HINIC_MGMT_MSG_CMD_LINK_STATUS);
 
@@ -1380,11 +1471,11 @@ static void hinic_remove(struct pci_dev *pdev)
 
 	destroy_workqueue(nic_dev->workq);
 
-	hinic_vf_func_free(nic_dev->hwdev);
-
 	hinic_free_hwdev(nic_dev->hwdev);
 
 	free_netdev(netdev);
+
+	hinic_devlink_free(devlink);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
@@ -1416,4 +1507,17 @@ static struct pci_driver hinic_driver = {
 	.sriov_configure = hinic_pci_sriov_configure,
 };
 
-module_pci_driver(hinic_driver);
+static int __init hinic_module_init(void)
+{
+	hinic_dbg_register_debugfs(HINIC_DRV_NAME);
+	return pci_register_driver(&hinic_driver);
+}
+
+static void __exit hinic_module_exit(void)
+{
+	pci_unregister_driver(&hinic_driver);
+	hinic_dbg_unregister_debugfs();
+}
+
+module_init(hinic_module_init);
+module_exit(hinic_module_exit);

@@ -51,8 +51,9 @@ void xdp_del_sk_umem(struct xdp_umem *umem, struct xdp_sock *xs)
  * not know if the device has more tx queues than rx, or the opposite.
  * This might also change during run time.
  */
-static int xdp_reg_umem_at_qid(struct net_device *dev, struct xdp_umem *umem,
-			       u16 queue_id)
+static int xdp_reg_xsk_pool_at_qid(struct net_device *dev,
+				   struct xsk_buff_pool *pool,
+				   u16 queue_id)
 {
 	if (queue_id >= max_t(unsigned int,
 			      dev->real_num_rx_queues,
@@ -60,31 +61,31 @@ static int xdp_reg_umem_at_qid(struct net_device *dev, struct xdp_umem *umem,
 		return -EINVAL;
 
 	if (queue_id < dev->real_num_rx_queues)
-		dev->_rx[queue_id].umem = umem;
+		dev->_rx[queue_id].pool = pool;
 	if (queue_id < dev->real_num_tx_queues)
-		dev->_tx[queue_id].umem = umem;
+		dev->_tx[queue_id].pool = pool;
 
 	return 0;
 }
 
-struct xdp_umem *xdp_get_umem_from_qid(struct net_device *dev,
-				       u16 queue_id)
+struct xsk_buff_pool *xdp_get_xsk_pool_from_qid(struct net_device *dev,
+						u16 queue_id)
 {
 	if (queue_id < dev->real_num_rx_queues)
-		return dev->_rx[queue_id].umem;
+		return dev->_rx[queue_id].pool;
 	if (queue_id < dev->real_num_tx_queues)
-		return dev->_tx[queue_id].umem;
+		return dev->_tx[queue_id].pool;
 
 	return NULL;
 }
-EXPORT_SYMBOL(xdp_get_umem_from_qid);
+EXPORT_SYMBOL(xdp_get_xsk_pool_from_qid);
 
-static void xdp_clear_umem_at_qid(struct net_device *dev, u16 queue_id)
+static void xdp_clear_xsk_pool_at_qid(struct net_device *dev, u16 queue_id)
 {
 	if (queue_id < dev->real_num_rx_queues)
-		dev->_rx[queue_id].umem = NULL;
+		dev->_rx[queue_id].pool = NULL;
 	if (queue_id < dev->real_num_tx_queues)
-		dev->_tx[queue_id].umem = NULL;
+		dev->_tx[queue_id].pool = NULL;
 }
 
 int xdp_umem_assign_dev(struct xdp_umem *umem, struct net_device *dev,
@@ -102,10 +103,10 @@ int xdp_umem_assign_dev(struct xdp_umem *umem, struct net_device *dev,
 	if (force_zc && force_copy)
 		return -EINVAL;
 
-	if (xdp_get_umem_from_qid(dev, queue_id))
+	if (xdp_get_xsk_pool_from_qid(dev, queue_id))
 		return -EBUSY;
 
-	err = xdp_reg_umem_at_qid(dev, umem, queue_id);
+	err = xdp_reg_xsk_pool_at_qid(dev, umem->pool, queue_id);
 	if (err)
 		return err;
 
@@ -132,8 +133,8 @@ int xdp_umem_assign_dev(struct xdp_umem *umem, struct net_device *dev,
 		goto err_unreg_umem;
 	}
 
-	bpf.command = XDP_SETUP_XSK_UMEM;
-	bpf.xsk.umem = umem;
+	bpf.command = XDP_SETUP_XSK_POOL;
+	bpf.xsk.pool = umem->pool;
 	bpf.xsk.queue_id = queue_id;
 
 	err = dev->netdev_ops->ndo_bpf(dev, &bpf);
@@ -147,7 +148,7 @@ err_unreg_umem:
 	if (!force_zc)
 		err = 0; /* fallback to copy mode */
 	if (err)
-		xdp_clear_umem_at_qid(dev, queue_id);
+		xdp_clear_xsk_pool_at_qid(dev, queue_id);
 	return err;
 }
 
@@ -162,8 +163,8 @@ void xdp_umem_clear_dev(struct xdp_umem *umem)
 		return;
 
 	if (umem->zc) {
-		bpf.command = XDP_SETUP_XSK_UMEM;
-		bpf.xsk.umem = NULL;
+		bpf.command = XDP_SETUP_XSK_POOL;
+		bpf.xsk.pool = NULL;
 		bpf.xsk.queue_id = umem->queue_id;
 
 		err = umem->dev->netdev_ops->ndo_bpf(umem->dev, &bpf);
@@ -172,42 +173,11 @@ void xdp_umem_clear_dev(struct xdp_umem *umem)
 			WARN(1, "failed to disable umem!\n");
 	}
 
-	xdp_clear_umem_at_qid(umem->dev, umem->queue_id);
+	xdp_clear_xsk_pool_at_qid(umem->dev, umem->queue_id);
 
 	dev_put(umem->dev);
 	umem->dev = NULL;
 	umem->zc = false;
-}
-
-static void xdp_umem_unmap_pages(struct xdp_umem *umem)
-{
-	unsigned int i;
-
-	for (i = 0; i < umem->npgs; i++)
-		if (PageHighMem(umem->pgs[i]))
-			vunmap(umem->pages[i].addr);
-}
-
-static int xdp_umem_map_pages(struct xdp_umem *umem)
-{
-	unsigned int i;
-	void *addr;
-
-	for (i = 0; i < umem->npgs; i++) {
-		if (PageHighMem(umem->pgs[i]))
-			addr = vmap(&umem->pgs[i], 1, VM_MAP, PAGE_KERNEL);
-		else
-			addr = page_address(umem->pgs[i]);
-
-		if (!addr) {
-			xdp_umem_unmap_pages(umem);
-			return -ENOMEM;
-		}
-
-		umem->pages[i].addr = addr;
-	}
-
-	return 0;
 }
 
 static void xdp_umem_unpin_pages(struct xdp_umem *umem)
@@ -244,13 +214,8 @@ static void xdp_umem_release(struct xdp_umem *umem)
 		umem->cq = NULL;
 	}
 
-	xsk_reuseq_destroy(umem);
 	xp_destroy(umem->pool);
-	xdp_umem_unmap_pages(umem);
 	xdp_umem_unpin_pages(umem);
-
-	kvfree(umem->pages);
-	umem->pages = NULL;
 
 	xdp_umem_unaccount_pages(umem);
 	kfree(umem);
@@ -339,10 +304,10 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 {
+	u32 npgs_rem, chunk_size = mr->chunk_size, headroom = mr->headroom;
 	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
-	u32 chunk_size = mr->chunk_size, headroom = mr->headroom;
 	u64 npgs, addr = mr->addr, size = mr->len;
-	unsigned int chunks, chunks_per_page;
+	unsigned int chunks, chunks_rem;
 	int err;
 
 	if (chunk_size < XDP_UMEM_MIN_CHUNK_SIZE || chunk_size > PAGE_SIZE) {
@@ -372,28 +337,24 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	if ((addr + size) < addr)
 		return -EINVAL;
 
-	npgs = size >> PAGE_SHIFT;
+	npgs = div_u64_rem(size, PAGE_SIZE, &npgs_rem);
+	if (npgs_rem)
+		npgs++;
 	if (npgs > U32_MAX)
 		return -EINVAL;
 
-	chunks = (unsigned int)div_u64(size, chunk_size);
+	chunks = (unsigned int)div_u64_rem(size, chunk_size, &chunks_rem);
 	if (chunks == 0)
 		return -EINVAL;
 
-	if (!unaligned_chunks) {
-		chunks_per_page = PAGE_SIZE / chunk_size;
-		if (chunks < chunks_per_page || chunks % chunks_per_page)
-			return -EINVAL;
-	}
+	if (!unaligned_chunks && chunks_rem)
+		return -EINVAL;
 
 	if (headroom >= chunk_size - XDP_PACKET_HEADROOM)
 		return -EINVAL;
 
-	umem->chunk_mask = unaligned_chunks ? XSK_UNALIGNED_BUF_ADDR_MASK
-					    : ~((u64)chunk_size - 1);
 	umem->size = size;
 	umem->headroom = headroom;
-	umem->chunk_size_nohr = chunk_size - headroom;
 	umem->chunk_size = chunk_size;
 	umem->npgs = (u32)npgs;
 	umem->pgs = NULL;
@@ -412,29 +373,14 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	if (err)
 		goto out_account;
 
-	umem->pages = kvcalloc(umem->npgs, sizeof(*umem->pages),
-			       GFP_KERNEL_ACCOUNT);
-	if (!umem->pages) {
+	umem->pool = xp_create(umem, chunks, chunk_size, headroom, size,
+			       unaligned_chunks);
+	if (!umem->pool) {
 		err = -ENOMEM;
 		goto out_pin;
 	}
-
-	err = xdp_umem_map_pages(umem);
-	if (err)
-		goto out_pages;
-
-	umem->pool = xp_create(umem->pgs, umem->npgs, chunks, chunk_size,
-			       headroom, size, unaligned_chunks);
-	if (!umem->pool) {
-		err = -ENOMEM;
-		goto out_unmap;
-	}
 	return 0;
 
-out_unmap:
-	xdp_umem_unmap_pages(umem);
-out_pages:
-	kvfree(umem->pages);
 out_pin:
 	xdp_umem_unpin_pages(umem);
 out_account:

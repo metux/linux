@@ -2,32 +2,14 @@
 
 #include <net/xsk_buff_pool.h>
 #include <net/xdp_sock.h>
+#include <net/xdp_sock_drv.h>
 #include <linux/dma-direct.h>
 #include <linux/dma-noncoherent.h>
 #include <linux/swiotlb.h>
 
 #include "xsk_queue.h"
-
-struct xsk_buff_pool {
-	struct xsk_queue *fq;
-	struct list_head free_list;
-	dma_addr_t *dma_pages;
-	struct xdp_buff_xsk *heads;
-	u64 chunk_mask;
-	u64 addrs_cnt;
-	u32 free_list_cnt;
-	u32 dma_pages_cnt;
-	u32 heads_cnt;
-	u32 free_heads_cnt;
-	u32 headroom;
-	u32 chunk_size;
-	u32 frame_len;
-	bool cheap_dma;
-	bool unaligned;
-	void *addrs;
-	struct device *dev;
-	struct xdp_buff_xsk *free_heads[];
-};
+#include "xdp_umem.h"
+#include "xsk.h"
 
 static void xp_addr_unmap(struct xsk_buff_pool *pool)
 {
@@ -53,39 +35,40 @@ void xp_destroy(struct xsk_buff_pool *pool)
 	kvfree(pool);
 }
 
-struct xsk_buff_pool *xp_create(struct xdp_umem *umem, u32 chunks,
-				u32 chunk_size, u32 headroom, u64 size,
-				bool unaligned)
+struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
+						struct xdp_umem *umem)
 {
 	struct xsk_buff_pool *pool;
 	struct xdp_buff_xsk *xskb;
 	int err;
 	u32 i;
 
-	pool = kvzalloc(struct_size(pool, free_heads, chunks), GFP_KERNEL);
+	pool = kvzalloc(struct_size(pool, free_heads, umem->chunks),
+			GFP_KERNEL);
 	if (!pool)
 		goto out;
 
-	pool->heads = kvcalloc(chunks, sizeof(*pool->heads), GFP_KERNEL);
+	pool->heads = kvcalloc(umem->chunks, sizeof(*pool->heads), GFP_KERNEL);
 	if (!pool->heads)
 		goto out;
 
-	pool->chunk_mask = ~((u64)chunk_size - 1);
-	pool->addrs_cnt = size;
-	pool->heads_cnt = chunks;
-	pool->free_heads_cnt = chunks;
-	pool->headroom = headroom;
-	pool->chunk_size = chunk_size;
-	pool->cheap_dma = true;
-	pool->unaligned = unaligned;
-	pool->frame_len = chunk_size - headroom - XDP_PACKET_HEADROOM;
+	pool->chunk_mask = ~((u64)umem->chunk_size - 1);
+	pool->addrs_cnt = umem->size;
+	pool->heads_cnt = umem->chunks;
+	pool->free_heads_cnt = umem->chunks;
+	pool->headroom = umem->headroom;
+	pool->chunk_size = umem->chunk_size;
+	pool->unaligned = umem->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
+	pool->frame_len = umem->chunk_size - umem->headroom -
+		XDP_PACKET_HEADROOM;
 	pool->umem = umem;
 	INIT_LIST_HEAD(&pool->free_list);
+	refcount_set(&pool->users, 1);
 
 	for (i = 0; i < pool->free_heads_cnt; i++) {
 		xskb = &pool->heads[i];
 		xskb->pool = pool;
-		xskb->xdp.frame_sz = chunk_size - headroom;
+		xskb->xdp.frame_sz = umem->chunk_size - umem->headroom;
 		pool->free_heads[i] = xskb;
 	}
 
@@ -111,6 +94,120 @@ void xp_set_rxq_info(struct xsk_buff_pool *pool, struct xdp_rxq_info *rxq)
 		pool->heads[i].xdp.rxq = rxq;
 }
 EXPORT_SYMBOL(xp_set_rxq_info);
+
+int xp_assign_dev(struct xsk_buff_pool *pool, struct net_device *dev,
+		  u16 queue_id, u16 flags)
+{
+	struct xdp_umem *umem = pool->umem;
+	bool force_zc, force_copy;
+	struct netdev_bpf bpf;
+	int err = 0;
+
+	ASSERT_RTNL();
+
+	force_zc = flags & XDP_ZEROCOPY;
+	force_copy = flags & XDP_COPY;
+
+	if (force_zc && force_copy)
+		return -EINVAL;
+
+	if (xsk_get_pool_from_qid(dev, queue_id))
+		return -EBUSY;
+
+	err = xsk_reg_pool_at_qid(dev, pool, queue_id);
+	if (err)
+		return err;
+
+	if (flags & XDP_USE_NEED_WAKEUP) {
+		umem->flags |= XDP_UMEM_USES_NEED_WAKEUP;
+		/* Tx needs to be explicitly woken up the first time.
+		 * Also for supporting drivers that do not implement this
+		 * feature. They will always have to call sendto().
+		 */
+		umem->need_wakeup = XDP_WAKEUP_TX;
+	}
+
+	if (force_copy)
+		/* For copy-mode, we are done. */
+		return 0;
+
+	if (!dev->netdev_ops->ndo_bpf || !dev->netdev_ops->ndo_xsk_wakeup) {
+		err = -EOPNOTSUPP;
+		goto err_unreg_pool;
+	}
+
+	bpf.command = XDP_SETUP_XSK_POOL;
+	bpf.xsk.pool = pool;
+	bpf.xsk.queue_id = queue_id;
+
+	err = dev->netdev_ops->ndo_bpf(dev, &bpf);
+	if (err)
+		goto err_unreg_pool;
+
+	umem->zc = true;
+	return 0;
+
+err_unreg_pool:
+	if (!force_zc)
+		err = 0; /* fallback to copy mode */
+	if (err)
+		xsk_clear_pool_at_qid(dev, queue_id);
+	return err;
+}
+
+void xp_clear_dev(struct xsk_buff_pool *pool)
+{
+	struct xdp_umem *umem = pool->umem;
+	struct netdev_bpf bpf;
+	int err;
+
+	ASSERT_RTNL();
+
+	if (!umem->dev)
+		return;
+
+	if (umem->zc) {
+		bpf.command = XDP_SETUP_XSK_POOL;
+		bpf.xsk.pool = NULL;
+		bpf.xsk.queue_id = umem->queue_id;
+
+		err = umem->dev->netdev_ops->ndo_bpf(umem->dev, &bpf);
+
+		if (err)
+			WARN(1, "failed to disable umem!\n");
+	}
+
+	xsk_clear_pool_at_qid(umem->dev, umem->queue_id);
+}
+
+static void xp_release_deferred(struct work_struct *work)
+{
+	struct xsk_buff_pool *pool = container_of(work, struct xsk_buff_pool,
+						  work);
+
+	rtnl_lock();
+	xp_clear_dev(pool);
+	rtnl_unlock();
+
+	xdp_put_umem(pool->umem);
+	xp_destroy(pool);
+}
+
+void xp_get_pool(struct xsk_buff_pool *pool)
+{
+	refcount_inc(&pool->users);
+}
+
+void xp_put_pool(struct xsk_buff_pool *pool)
+{
+	if (!pool)
+		return;
+
+	if (refcount_dec_and_test(&pool->users)) {
+		INIT_WORK(&pool->work, xp_release_deferred);
+		schedule_work(&pool->work);
+	}
+}
 
 void xp_dma_unmap(struct xsk_buff_pool *pool, unsigned long attrs)
 {
@@ -147,48 +244,6 @@ static void xp_check_dma_contiguity(struct xsk_buff_pool *pool)
 	}
 }
 
-static bool __maybe_unused xp_check_swiotlb_dma(struct xsk_buff_pool *pool)
-{
-#if defined(CONFIG_SWIOTLB)
-	phys_addr_t paddr;
-	u32 i;
-
-	for (i = 0; i < pool->dma_pages_cnt; i++) {
-		paddr = dma_to_phys(pool->dev, pool->dma_pages[i]);
-		if (is_swiotlb_buffer(paddr))
-			return false;
-	}
-#endif
-	return true;
-}
-
-static bool xp_check_cheap_dma(struct xsk_buff_pool *pool)
-{
-#if defined(CONFIG_HAS_DMA)
-	const struct dma_map_ops *ops = get_dma_ops(pool->dev);
-
-	if (ops) {
-		return !ops->sync_single_for_cpu &&
-			!ops->sync_single_for_device;
-	}
-
-	if (!dma_is_direct(ops))
-		return false;
-
-	if (!xp_check_swiotlb_dma(pool))
-		return false;
-
-	if (!dev_is_dma_coherent(pool->dev)) {
-#if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU) ||		\
-	defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL) ||	\
-	defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE)
-		return false;
-#endif
-	}
-#endif
-	return true;
-}
-
 int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 	       unsigned long attrs, struct page **pages, u32 nr_pages)
 {
@@ -202,6 +257,7 @@ int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 
 	pool->dev = dev;
 	pool->dma_pages_cnt = nr_pages;
+	pool->dma_need_sync = false;
 
 	for (i = 0; i < pool->dma_pages_cnt; i++) {
 		dma = dma_map_page_attrs(dev, pages[i], 0, PAGE_SIZE,
@@ -210,60 +266,21 @@ int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 			xp_dma_unmap(pool, attrs);
 			return -ENOMEM;
 		}
+		if (dma_need_sync(dev, dma))
+			pool->dma_need_sync = true;
 		pool->dma_pages[i] = dma;
 	}
 
 	if (pool->unaligned)
 		xp_check_dma_contiguity(pool);
-
-	pool->dev = dev;
-	pool->cheap_dma = xp_check_cheap_dma(pool);
 	return 0;
 }
 EXPORT_SYMBOL(xp_dma_map);
-
-static bool xp_desc_crosses_non_contig_pg(struct xsk_buff_pool *pool,
-					  u64 addr, u32 len)
-{
-	bool cross_pg = (addr & (PAGE_SIZE - 1)) + len > PAGE_SIZE;
-
-	if (pool->dma_pages_cnt && cross_pg) {
-		return !(pool->dma_pages[addr >> PAGE_SHIFT] &
-			 XSK_NEXT_PG_CONTIG_MASK);
-	}
-	return false;
-}
 
 static bool xp_addr_crosses_non_contig_pg(struct xsk_buff_pool *pool,
 					  u64 addr)
 {
 	return xp_desc_crosses_non_contig_pg(pool, addr, pool->chunk_size);
-}
-
-void xp_release(struct xdp_buff_xsk *xskb)
-{
-	xskb->pool->free_heads[xskb->pool->free_heads_cnt++] = xskb;
-}
-
-static u64 xp_aligned_extract_addr(struct xsk_buff_pool *pool, u64 addr)
-{
-	return addr & pool->chunk_mask;
-}
-
-static u64 xp_unaligned_extract_addr(u64 addr)
-{
-	return addr & XSK_UNALIGNED_BUF_ADDR_MASK;
-}
-
-static u64 xp_unaligned_extract_offset(u64 addr)
-{
-	return addr >> XSK_UNALIGNED_BUF_OFFSET_SHIFT;
-}
-
-static u64 xp_unaligned_add_offset_to_addr(u64 addr)
-{
-	return xp_unaligned_extract_addr(addr) +
-		xp_unaligned_extract_offset(addr);
 }
 
 static bool xp_check_unaligned(struct xsk_buff_pool *pool, u64 *addr)
@@ -341,7 +358,7 @@ struct xdp_buff *xp_alloc(struct xsk_buff_pool *pool)
 	xskb->xdp.data = xskb->xdp.data_hard_start + XDP_PACKET_HEADROOM;
 	xskb->xdp.data_meta = xskb->xdp.data;
 
-	if (!pool->cheap_dma) {
+	if (pool->dma_need_sync) {
 		dma_sync_single_range_for_device(pool->dev, xskb->dma, 0,
 						 pool->frame_len,
 						 DMA_BIDIRECTIONAL);
@@ -365,60 +382,6 @@ void xp_free(struct xdp_buff_xsk *xskb)
 }
 EXPORT_SYMBOL(xp_free);
 
-static bool xp_aligned_validate_desc(struct xsk_buff_pool *pool,
-				     struct xdp_desc *desc)
-{
-	u64 chunk, chunk_end;
-
-	chunk = xp_aligned_extract_addr(pool, desc->addr);
-	chunk_end = xp_aligned_extract_addr(pool, desc->addr + desc->len);
-	if (chunk != chunk_end)
-		return false;
-
-	if (chunk >= pool->addrs_cnt)
-		return false;
-
-	if (desc->options)
-		return false;
-	return true;
-}
-
-static bool xp_unaligned_validate_desc(struct xsk_buff_pool *pool,
-				       struct xdp_desc *desc)
-{
-	u64 addr, base_addr;
-
-	base_addr = xp_unaligned_extract_addr(desc->addr);
-	addr = xp_unaligned_add_offset_to_addr(desc->addr);
-
-	if (desc->len > pool->chunk_size)
-		return false;
-
-	if (base_addr >= pool->addrs_cnt || addr >= pool->addrs_cnt ||
-	    xp_desc_crosses_non_contig_pg(pool, addr, desc->len))
-		return false;
-
-	if (desc->options)
-		return false;
-	return true;
-}
-
-bool xp_validate_desc(struct xsk_buff_pool *pool, struct xdp_desc *desc)
-{
-	return pool->unaligned ? xp_unaligned_validate_desc(pool, desc) :
-		xp_aligned_validate_desc(pool, desc);
-}
-
-u64 xp_get_handle(struct xdp_buff_xsk *xskb)
-{
-	u64 offset = xskb->xdp.data - xskb->xdp.data_hard_start;
-
-	offset += xskb->pool->headroom;
-	if (!xskb->pool->unaligned)
-		return xskb->orig_addr + offset;
-	return xskb->orig_addr + (offset << XSK_UNALIGNED_BUF_OFFSET_SHIFT);
-}
-
 void *xp_raw_get_data(struct xsk_buff_pool *pool, u64 addr)
 {
 	addr = pool->unaligned ? xp_unaligned_add_offset_to_addr(addr) : addr;
@@ -435,35 +398,17 @@ dma_addr_t xp_raw_get_dma(struct xsk_buff_pool *pool, u64 addr)
 }
 EXPORT_SYMBOL(xp_raw_get_dma);
 
-dma_addr_t xp_get_dma(struct xdp_buff_xsk *xskb)
+void xp_dma_sync_for_cpu_slow(struct xdp_buff_xsk *xskb)
 {
-	return xskb->dma;
-}
-EXPORT_SYMBOL(xp_get_dma);
-
-dma_addr_t xp_get_frame_dma(struct xdp_buff_xsk *xskb)
-{
-	return xskb->frame_dma;
-}
-EXPORT_SYMBOL(xp_get_frame_dma);
-
-void xp_dma_sync_for_cpu(struct xdp_buff_xsk *xskb)
-{
-	if (xskb->pool->cheap_dma)
-		return;
-
 	dma_sync_single_range_for_cpu(xskb->pool->dev, xskb->dma, 0,
 				      xskb->pool->frame_len, DMA_BIDIRECTIONAL);
 }
-EXPORT_SYMBOL(xp_dma_sync_for_cpu);
+EXPORT_SYMBOL(xp_dma_sync_for_cpu_slow);
 
-void xp_dma_sync_for_device(struct xsk_buff_pool *pool, dma_addr_t dma,
-			    size_t size)
+void xp_dma_sync_for_device_slow(struct xsk_buff_pool *pool, dma_addr_t dma,
+				 size_t size)
 {
-	if (pool->cheap_dma)
-		return;
-
 	dma_sync_single_range_for_device(pool->dev, dma, 0,
 					 size, DMA_BIDIRECTIONAL);
 }
-EXPORT_SYMBOL(xp_dma_sync_for_device);
+EXPORT_SYMBOL(xp_dma_sync_for_device_slow);

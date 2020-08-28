@@ -53,7 +53,7 @@ void xp_destroy(struct xsk_buff_pool *pool)
 	kvfree(pool);
 }
 
-struct xsk_buff_pool *xp_create(struct page **pages, u32 nr_pages, u32 chunks,
+struct xsk_buff_pool *xp_create(struct xdp_umem *umem, u32 chunks,
 				u32 chunk_size, u32 headroom, u64 size,
 				bool unaligned)
 {
@@ -79,6 +79,7 @@ struct xsk_buff_pool *xp_create(struct page **pages, u32 nr_pages, u32 chunks,
 	pool->cheap_dma = true;
 	pool->unaligned = unaligned;
 	pool->frame_len = chunk_size - headroom - XDP_PACKET_HEADROOM;
+	pool->umem = umem;
 	INIT_LIST_HEAD(&pool->free_list);
 
 	for (i = 0; i < pool->free_heads_cnt; i++) {
@@ -88,7 +89,7 @@ struct xsk_buff_pool *xp_create(struct page **pages, u32 nr_pages, u32 chunks,
 		pool->free_heads[i] = xskb;
 	}
 
-	err = xp_addr_map(pool, pages, nr_pages);
+	err = xp_addr_map(pool, umem->pgs, umem->npgs);
 	if (!err)
 		return pool;
 

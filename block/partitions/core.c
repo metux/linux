@@ -324,8 +324,9 @@ int hd_ref_init(struct hd_struct *part)
  * Must be called either with bd_mutex held, before a disk can be opened or
  * after all disk users are gone.
  */
-void delete_partition(struct gendisk *disk, struct hd_struct *part)
+void delete_partition(struct hd_struct *part)
 {
+	struct gendisk *disk = part_to_disk(part);
 	struct disk_part_tbl *ptbl =
 		rcu_dereference_protected(disk->part_tbl, 1);
 
@@ -333,7 +334,7 @@ void delete_partition(struct gendisk *disk, struct hd_struct *part)
 	 * ->part_tbl is referenced in this part's release handler, so
 	 *  we have to hold the disk device
 	 */
-	get_device(disk_to_dev(part_to_disk(part)));
+	get_device(disk_to_dev(disk));
 	rcu_assign_pointer(ptbl->part[part->partno], NULL);
 	kobject_put(part->holder_dir);
 	device_del(part_to_dev(part));
@@ -534,19 +535,20 @@ int bdev_add_partition(struct block_device *bdev, int partno,
 int bdev_del_partition(struct block_device *bdev, int partno)
 {
 	struct block_device *bdevp;
-	struct hd_struct *part;
-	int ret = 0;
+	struct hd_struct *part = NULL;
+	int ret;
 
-	part = disk_get_part(bdev->bd_disk, partno);
-	if (!part)
+	bdevp = bdget_disk(bdev->bd_disk, partno);
+	if (!bdevp)
 		return -ENXIO;
 
-	ret = -ENOMEM;
-	bdevp = bdget(part_devt(part));
-	if (!bdevp)
-		goto out_put_part;
-
 	mutex_lock(&bdevp->bd_mutex);
+	mutex_lock_nested(&bdev->bd_mutex, 1);
+
+	ret = -ENXIO;
+	part = disk_get_part(bdev->bd_disk, partno);
+	if (!part)
+		goto out_unlock;
 
 	ret = -EBUSY;
 	if (bdevp->bd_openers)
@@ -555,16 +557,14 @@ int bdev_del_partition(struct block_device *bdev, int partno)
 	sync_blockdev(bdevp);
 	invalidate_bdev(bdevp);
 
-	mutex_lock_nested(&bdev->bd_mutex, 1);
-	delete_partition(bdev->bd_disk, part);
-	mutex_unlock(&bdev->bd_mutex);
-
+	delete_partition(part);
 	ret = 0;
 out_unlock:
+	mutex_unlock(&bdev->bd_mutex);
 	mutex_unlock(&bdevp->bd_mutex);
 	bdput(bdevp);
-out_put_part:
-	disk_put_part(part);
+	if (part)
+		disk_put_part(part);
 	return ret;
 }
 
@@ -629,8 +629,6 @@ int blk_drop_partitions(struct block_device *bdev)
 	struct disk_part_iter piter;
 	struct hd_struct *part;
 
-	if (!disk_part_scan_enabled(bdev->bd_disk))
-		return 0;
 	if (bdev->bd_part_count)
 		return -EBUSY;
 
@@ -639,7 +637,7 @@ int blk_drop_partitions(struct block_device *bdev)
 
 	disk_part_iter_init(&piter, bdev->bd_disk, DISK_PITER_INCL_EMPTY);
 	while ((part = disk_part_iter_next(&piter)))
-		delete_partition(bdev->bd_disk, part);
+		delete_partition(part);
 	disk_part_iter_exit(&piter);
 
 	return 0;

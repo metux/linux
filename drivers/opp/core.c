@@ -1968,6 +1968,9 @@ static void _opp_detach_genpd(struct opp_table *opp_table)
 {
 	int index;
 
+	if (!opp_table->genpd_virt_devs)
+		return;
+
 	for (index = 0; index < opp_table->required_opp_count; index++) {
 		if (!opp_table->genpd_virt_devs[index])
 			continue;
@@ -2012,6 +2015,9 @@ struct opp_table *dev_pm_opp_attach_genpd(struct device *dev,
 
 	opp_table = dev_pm_opp_get_opp_table(dev);
 	if (IS_ERR(opp_table))
+		return opp_table;
+
+	if (opp_table->genpd_virt_devs)
 		return opp_table;
 
 	/*

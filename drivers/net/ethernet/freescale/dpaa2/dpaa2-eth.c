@@ -11,11 +11,10 @@
 #include <linux/msi.h>
 #include <linux/kthread.h>
 #include <linux/iommu.h>
+#include <linux/net_tstamp.h>
 #include <linux/fsl/mc.h>
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
-#include <linux/fsl/ptp_qoriq.h>
-#include <linux/ptp_classify.h>
 #include <net/pkt_cls.h>
 #include <net/sock.h>
 
@@ -30,9 +29,6 @@
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Freescale Semiconductor, Inc");
 MODULE_DESCRIPTION("Freescale DPAA2 Ethernet Driver");
-
-struct ptp_qoriq *dpaa2_ptp;
-EXPORT_SYMBOL(dpaa2_ptp);
 
 static void *dpaa2_iova_to_virt(struct iommu_domain *domain,
 				dma_addr_t iova_addr)
@@ -509,58 +505,6 @@ err_frame_format:
 	percpu_stats->rx_dropped++;
 }
 
-/* Processing of Rx frames received on the error FQ
- * We check and print the error bits and then free the frame
- */
-static void dpaa2_eth_rx_err(struct dpaa2_eth_priv *priv,
-			     struct dpaa2_eth_channel *ch,
-			     const struct dpaa2_fd *fd,
-			     struct dpaa2_eth_fq *fq __always_unused)
-{
-	struct device *dev = priv->net_dev->dev.parent;
-	dma_addr_t addr = dpaa2_fd_get_addr(fd);
-	u8 fd_format = dpaa2_fd_get_format(fd);
-	struct rtnl_link_stats64 *percpu_stats;
-	struct dpaa2_eth_trap_item *trap_item;
-	struct dpaa2_fapr *fapr;
-	struct sk_buff *skb;
-	void *buf_data;
-	void *vaddr;
-
-	vaddr = dpaa2_iova_to_virt(priv->iommu_domain, addr);
-	dma_sync_single_for_cpu(dev, addr, priv->rx_buf_size,
-				DMA_BIDIRECTIONAL);
-
-	buf_data = vaddr + dpaa2_fd_get_offset(fd);
-
-	if (fd_format == dpaa2_fd_single) {
-		dma_unmap_page(dev, addr, priv->rx_buf_size,
-			       DMA_BIDIRECTIONAL);
-		skb = dpaa2_eth_build_linear_skb(ch, fd, vaddr);
-	} else if (fd_format == dpaa2_fd_sg) {
-		dma_unmap_page(dev, addr, priv->rx_buf_size,
-			       DMA_BIDIRECTIONAL);
-		skb = dpaa2_eth_build_frag_skb(priv, ch, buf_data);
-		free_pages((unsigned long)vaddr, 0);
-	} else {
-		/* We don't support any other format */
-		dpaa2_eth_free_rx_fd(priv, fd, vaddr);
-		goto err_frame_format;
-	}
-
-	fapr = dpaa2_get_fapr(vaddr, false);
-	trap_item = dpaa2_eth_dl_get_trap(priv, fapr);
-	if (trap_item)
-		devlink_trap_report(priv->devlink, skb, trap_item->trap_ctx,
-				    &priv->devlink_port, NULL);
-	consume_skb(skb);
-
-err_frame_format:
-	percpu_stats = this_cpu_ptr(priv->percpu_stats);
-	percpu_stats->rx_errors++;
-	ch->buf_count--;
-}
-
 /* Consume all frames pull-dequeued into the store. This is the simplest way to
  * make sure we don't accidentally issue another volatile dequeue which would
  * overwrite (leak) frames already in the store.
@@ -616,57 +560,11 @@ static int dpaa2_eth_consume_frames(struct dpaa2_eth_channel *ch,
 	return cleaned;
 }
 
-static int dpaa2_eth_ptp_parse(struct sk_buff *skb,
-			       u8 *msgtype, u8 *twostep, u8 *udp,
-			       u16 *correction_offset,
-			       u16 *origintimestamp_offset)
-{
-	unsigned int ptp_class;
-	struct ptp_header *hdr;
-	unsigned int type;
-	u8 *base;
-
-	ptp_class = ptp_classify_raw(skb);
-	if (ptp_class == PTP_CLASS_NONE)
-		return -EINVAL;
-
-	hdr = ptp_parse_header(skb, ptp_class);
-	if (!hdr)
-		return -EINVAL;
-
-	*msgtype = ptp_get_msgtype(hdr, ptp_class);
-	*twostep = hdr->flag_field[0] & 0x2;
-
-	type = ptp_class & PTP_CLASS_PMASK;
-	if (type == PTP_CLASS_IPV4 ||
-	    type == PTP_CLASS_IPV6)
-		*udp = 1;
-	else
-		*udp = 0;
-
-	base = skb_mac_header(skb);
-	*correction_offset = (u8 *)&hdr->correction - base;
-	*origintimestamp_offset = (u8 *)hdr + sizeof(struct ptp_header) - base;
-
-	return 0;
-}
-
 /* Configure the egress frame annotation for timestamp update */
-static void dpaa2_eth_enable_tx_tstamp(struct dpaa2_eth_priv *priv,
-				       struct dpaa2_fd *fd,
-				       void *buf_start,
-				       struct sk_buff *skb)
+static void dpaa2_eth_enable_tx_tstamp(struct dpaa2_fd *fd, void *buf_start)
 {
-	struct ptp_tstamp origin_timestamp;
-	struct dpni_single_step_cfg cfg;
-	u8 msgtype, twostep, udp;
 	struct dpaa2_faead *faead;
-	struct dpaa2_fas *fas;
-	struct timespec64 ts;
-	u16 offset1, offset2;
 	u32 ctrl, frc;
-	__le64 *ns;
-	u8 *data;
 
 	/* Mark the egress frame annotation area as valid */
 	frc = dpaa2_fd_get_frc(fd);
@@ -682,52 +580,12 @@ static void dpaa2_eth_enable_tx_tstamp(struct dpaa2_eth_priv *priv,
 	ctrl = DPAA2_FAEAD_A2V | DPAA2_FAEAD_UPDV | DPAA2_FAEAD_UPD;
 	faead = dpaa2_get_faead(buf_start, true);
 	faead->ctrl = cpu_to_le32(ctrl);
-
-	if (skb->cb[0] == TX_TSTAMP_ONESTEP_SYNC) {
-		if (dpaa2_eth_ptp_parse(skb, &msgtype, &twostep, &udp,
-					&offset1, &offset2) ||
-		    msgtype != 0 || twostep) {
-			WARN_ONCE(1, "Bad packet for one-step timestamping\n");
-			return;
-		}
-
-		/* Mark the frame annotation status as valid */
-		frc = dpaa2_fd_get_frc(fd);
-		dpaa2_fd_set_frc(fd, frc | DPAA2_FD_FRC_FASV);
-
-		/* Mark the PTP flag for one step timestamping */
-		fas = dpaa2_get_fas(buf_start, true);
-		fas->status = cpu_to_le32(DPAA2_FAS_PTP);
-
-		dpaa2_ptp->caps.gettime64(&dpaa2_ptp->caps, &ts);
-		ns = dpaa2_get_ts(buf_start, true);
-		*ns = cpu_to_le64(timespec64_to_ns(&ts) /
-				  DPAA2_PTP_CLK_PERIOD_NS);
-
-		/* Update current time to PTP message originTimestamp field */
-		ns_to_ptp_tstamp(&origin_timestamp, le64_to_cpup(ns));
-		data = skb_mac_header(skb);
-		*(__be16 *)(data + offset2) = htons(origin_timestamp.sec_msb);
-		*(__be32 *)(data + offset2 + 2) =
-			htonl(origin_timestamp.sec_lsb);
-		*(__be32 *)(data + offset2 + 6) = htonl(origin_timestamp.nsec);
-
-		cfg.en = 1;
-		cfg.ch_update = udp;
-		cfg.offset = offset1;
-		cfg.peer_delay = 0;
-
-		if (dpni_set_single_step_cfg(priv->mc_io, 0, priv->mc_token,
-					     &cfg))
-			WARN_ONCE(1, "Failed to set single step register");
-	}
 }
 
 /* Create a frame descriptor based on a fragmented skb */
 static int dpaa2_eth_build_sg_fd(struct dpaa2_eth_priv *priv,
 				 struct sk_buff *skb,
-				 struct dpaa2_fd *fd,
-				 void **swa_addr)
+				 struct dpaa2_fd *fd)
 {
 	struct device *dev = priv->net_dev->dev.parent;
 	void *sgt_buf = NULL;
@@ -749,7 +607,7 @@ static int dpaa2_eth_build_sg_fd(struct dpaa2_eth_priv *priv,
 	if (unlikely(PAGE_SIZE / sizeof(struct scatterlist) < nr_frags + 1))
 		return -EINVAL;
 
-	scl = kmalloc_array(nr_frags + 1, sizeof(struct scatterlist), GFP_ATOMIC);
+	scl = kcalloc(nr_frags + 1, sizeof(struct scatterlist), GFP_ATOMIC);
 	if (unlikely(!scl))
 		return -ENOMEM;
 
@@ -796,7 +654,6 @@ static int dpaa2_eth_build_sg_fd(struct dpaa2_eth_priv *priv,
 	 * skb backpointer in the software annotation area. We'll need
 	 * all of them on Tx Conf.
 	 */
-	*swa_addr = (void *)sgt_buf;
 	swa = (struct dpaa2_eth_swa *)sgt_buf;
 	swa->type = DPAA2_ETH_SWA_SG;
 	swa->sg.skb = skb;
@@ -815,6 +672,9 @@ static int dpaa2_eth_build_sg_fd(struct dpaa2_eth_priv *priv,
 	dpaa2_fd_set_addr(fd, addr);
 	dpaa2_fd_set_len(fd, skb->len);
 	dpaa2_fd_set_ctrl(fd, FD_CTRL_PTA);
+
+	if (priv->tx_tstamp && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
+		dpaa2_eth_enable_tx_tstamp(fd, sgt_buf);
 
 	return 0;
 
@@ -835,8 +695,7 @@ dma_map_sg_failed:
  */
 static int dpaa2_eth_build_sg_fd_single_buf(struct dpaa2_eth_priv *priv,
 					    struct sk_buff *skb,
-					    struct dpaa2_fd *fd,
-					    void **swa_addr)
+					    struct dpaa2_fd *fd)
 {
 	struct device *dev = priv->net_dev->dev.parent;
 	struct dpaa2_eth_sgt_cache *sgt_cache;
@@ -874,7 +733,6 @@ static int dpaa2_eth_build_sg_fd_single_buf(struct dpaa2_eth_priv *priv,
 	dpaa2_sg_set_final(sgt, true);
 
 	/* Store the skb backpointer in the SGT buffer */
-	*swa_addr = (void *)sgt_buf;
 	swa = (struct dpaa2_eth_swa *)sgt_buf;
 	swa->type = DPAA2_ETH_SWA_SINGLE;
 	swa->single.skb = skb;
@@ -893,6 +751,9 @@ static int dpaa2_eth_build_sg_fd_single_buf(struct dpaa2_eth_priv *priv,
 	dpaa2_fd_set_len(fd, skb->len);
 	dpaa2_fd_set_ctrl(fd, FD_CTRL_PTA);
 
+	if (priv->tx_tstamp && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
+		dpaa2_eth_enable_tx_tstamp(fd, sgt_buf);
+
 	return 0;
 
 sgt_map_failed:
@@ -909,15 +770,14 @@ data_map_failed:
 /* Create a frame descriptor based on a linear skb */
 static int dpaa2_eth_build_single_fd(struct dpaa2_eth_priv *priv,
 				     struct sk_buff *skb,
-				     struct dpaa2_fd *fd,
-				     void **swa_addr)
+				     struct dpaa2_fd *fd)
 {
 	struct device *dev = priv->net_dev->dev.parent;
 	u8 *buffer_start, *aligned_start;
 	struct dpaa2_eth_swa *swa;
 	dma_addr_t addr;
 
-	buffer_start = skb->data - dpaa2_eth_needed_headroom(skb);
+	buffer_start = skb->data - dpaa2_eth_needed_headroom(priv, skb);
 
 	/* If there's enough room to align the FD address, do it.
 	 * It will help hardware optimize accesses.
@@ -931,7 +791,6 @@ static int dpaa2_eth_build_single_fd(struct dpaa2_eth_priv *priv,
 	 * (in the private data area) such that we can release it
 	 * on Tx confirm
 	 */
-	*swa_addr = (void *)buffer_start;
 	swa = (struct dpaa2_eth_swa *)buffer_start;
 	swa->type = DPAA2_ETH_SWA_SINGLE;
 	swa->single.skb = skb;
@@ -948,6 +807,9 @@ static int dpaa2_eth_build_single_fd(struct dpaa2_eth_priv *priv,
 	dpaa2_fd_set_format(fd, dpaa2_fd_single);
 	dpaa2_fd_set_ctrl(fd, FD_CTRL_PTA);
 
+	if (priv->tx_tstamp && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)
+		dpaa2_eth_enable_tx_tstamp(fd, buffer_start);
+
 	return 0;
 }
 
@@ -958,7 +820,7 @@ static int dpaa2_eth_build_single_fd(struct dpaa2_eth_priv *priv,
  * This can be called either from dpaa2_eth_tx_conf() or on the error path of
  * dpaa2_eth_tx().
  */
-static void dpaa2_eth_free_tx_fd(struct dpaa2_eth_priv *priv,
+static void dpaa2_eth_free_tx_fd(const struct dpaa2_eth_priv *priv,
 				 struct dpaa2_eth_fq *fq,
 				 const struct dpaa2_fd *fd, bool in_napi)
 {
@@ -1031,7 +893,7 @@ static void dpaa2_eth_free_tx_fd(struct dpaa2_eth_priv *priv,
 	}
 
 	/* Get the timestamp value */
-	if (skb->cb[0] == TX_TSTAMP) {
+	if (priv->tx_tstamp && skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
 		struct skb_shared_hwtstamps shhwtstamps;
 		__le64 *ts = dpaa2_get_ts(buffer_start, true);
 		u64 ns;
@@ -1041,8 +903,6 @@ static void dpaa2_eth_free_tx_fd(struct dpaa2_eth_priv *priv,
 		ns = DPAA2_PTP_CLK_PERIOD_NS * le64_to_cpup(ts);
 		shhwtstamps.hwtstamp = ns_to_ktime(ns);
 		skb_tstamp_tx(skb, &shhwtstamps);
-	} else if (skb->cb[0] == TX_TSTAMP_ONESTEP_SYNC) {
-		mutex_unlock(&priv->onestep_tstamp_lock);
 	}
 
 	/* Free SGT buffer allocated on tx */
@@ -1062,8 +922,7 @@ static void dpaa2_eth_free_tx_fd(struct dpaa2_eth_priv *priv,
 	napi_consume_skb(skb, in_napi);
 }
 
-static netdev_tx_t __dpaa2_eth_tx(struct sk_buff *skb,
-				  struct net_device *net_dev)
+static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
 {
 	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
 	struct dpaa2_fd fd;
@@ -1076,12 +935,11 @@ static netdev_tx_t __dpaa2_eth_tx(struct sk_buff *skb,
 	u32 fd_len;
 	u8 prio = 0;
 	int err, i;
-	void *swa;
 
 	percpu_stats = this_cpu_ptr(priv->percpu_stats);
 	percpu_extras = this_cpu_ptr(priv->percpu_extras);
 
-	needed_headroom = dpaa2_eth_needed_headroom(skb);
+	needed_headroom = dpaa2_eth_needed_headroom(priv, skb);
 
 	/* We'll be holding a back-reference to the skb until Tx Confirmation;
 	 * we don't want that overwritten by a concurrent Tx with a cloned skb.
@@ -1097,26 +955,23 @@ static netdev_tx_t __dpaa2_eth_tx(struct sk_buff *skb,
 	memset(&fd, 0, sizeof(fd));
 
 	if (skb_is_nonlinear(skb)) {
-		err = dpaa2_eth_build_sg_fd(priv, skb, &fd, &swa);
+		err = dpaa2_eth_build_sg_fd(priv, skb, &fd);
 		percpu_extras->tx_sg_frames++;
 		percpu_extras->tx_sg_bytes += skb->len;
 	} else if (skb_headroom(skb) < needed_headroom) {
-		err = dpaa2_eth_build_sg_fd_single_buf(priv, skb, &fd, &swa);
+		err = dpaa2_eth_build_sg_fd_single_buf(priv, skb, &fd);
 		percpu_extras->tx_sg_frames++;
 		percpu_extras->tx_sg_bytes += skb->len;
 		percpu_extras->tx_converted_sg_frames++;
 		percpu_extras->tx_converted_sg_bytes += skb->len;
 	} else {
-		err = dpaa2_eth_build_single_fd(priv, skb, &fd, &swa);
+		err = dpaa2_eth_build_single_fd(priv, skb, &fd);
 	}
 
 	if (unlikely(err)) {
 		percpu_stats->tx_dropped++;
 		goto err_build_fd;
 	}
-
-	if (skb->cb[0])
-		dpaa2_eth_enable_tx_tstamp(priv, &fd, swa, skb);
 
 	/* Tracing point */
 	trace_dpaa2_tx_fd(net_dev, &fd);
@@ -1169,63 +1024,6 @@ err_build_fd:
 	dev_kfree_skb(skb);
 
 	return NETDEV_TX_OK;
-}
-
-static void dpaa2_eth_tx_onestep_tstamp(struct work_struct *work)
-{
-	struct dpaa2_eth_priv *priv = container_of(work, struct dpaa2_eth_priv,
-						   tx_onestep_tstamp);
-	struct sk_buff *skb;
-
-	while (true) {
-		skb = skb_dequeue(&priv->tx_skbs);
-		if (!skb)
-			return;
-
-		/* Lock just before TX one-step timestamping packet,
-		 * and release the lock in dpaa2_eth_free_tx_fd when
-		 * confirm the packet has been sent on hardware, or
-		 * when clean up during transmit failure.
-		 */
-		mutex_lock(&priv->onestep_tstamp_lock);
-		__dpaa2_eth_tx(skb, priv->net_dev);
-	}
-}
-
-static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
-{
-	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
-	u8 msgtype, twostep, udp;
-	u16 offset1, offset2;
-
-	/* Utilize skb->cb[0] for timestamping request per skb */
-	skb->cb[0] = 0;
-
-	if ((skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) && dpaa2_ptp) {
-		if (priv->tx_tstamp_type == HWTSTAMP_TX_ON)
-			skb->cb[0] = TX_TSTAMP;
-		else if (priv->tx_tstamp_type == HWTSTAMP_TX_ONESTEP_SYNC)
-			skb->cb[0] = TX_TSTAMP_ONESTEP_SYNC;
-	}
-
-	/* TX for one-step timestamping PTP Sync packet */
-	if (skb->cb[0] == TX_TSTAMP_ONESTEP_SYNC) {
-		if (!dpaa2_eth_ptp_parse(skb, &msgtype, &twostep, &udp,
-					 &offset1, &offset2))
-			if (msgtype == 0 && twostep == 0) {
-				skb_queue_tail(&priv->tx_skbs, skb);
-				queue_work(priv->dpaa2_ptp_wq,
-					   &priv->tx_onestep_tstamp);
-				return NETDEV_TX_OK;
-			}
-		/* Use two-step timestamping if not one-step timestamping
-		 * PTP Sync packet
-		 */
-		skb->cb[0] = TX_TSTAMP;
-	}
-
-	/* TX for other packets */
-	return __dpaa2_eth_tx(skb, net_dev);
 }
 
 /* Tx confirmation frame processing routine */
@@ -1396,7 +1194,7 @@ static int dpaa2_eth_seed_pool(struct dpaa2_eth_priv *priv, u16 bpid)
 	return 0;
 }
 
-/*
+/**
  * Drain the specified number of buffers from the DPNI's private buffer pool.
  * @count must not exceeed DPAA2_ETH_BUFS_PER_CMD
  */
@@ -1752,11 +1550,22 @@ static int dpaa2_eth_open(struct net_device *net_dev)
 		goto enable_err;
 	}
 
-	if (priv->mac)
+	if (!priv->mac) {
+		/* If the DPMAC object has already processed the link up
+		 * interrupt, we have to learn the link state ourselves.
+		 */
+		err = dpaa2_eth_link_state_update(priv);
+		if (err < 0) {
+			netdev_err(net_dev, "Can't update link state\n");
+			goto link_state_err;
+		}
+	} else {
 		phylink_start(priv->mac->phylink);
+	}
 
 	return 0;
 
+link_state_err:
 enable_err:
 	dpaa2_eth_disable_ch_napi(priv);
 	dpaa2_eth_drain_pool(priv);
@@ -2080,17 +1889,15 @@ static int dpaa2_eth_ts_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	struct dpaa2_eth_priv *priv = netdev_priv(dev);
 	struct hwtstamp_config config;
 
-	if (!dpaa2_ptp)
-		return -EINVAL;
-
 	if (copy_from_user(&config, rq->ifr_data, sizeof(config)))
 		return -EFAULT;
 
 	switch (config.tx_type) {
 	case HWTSTAMP_TX_OFF:
+		priv->tx_tstamp = false;
+		break;
 	case HWTSTAMP_TX_ON:
-	case HWTSTAMP_TX_ONESTEP_SYNC:
-		priv->tx_tstamp_type = config.tx_type;
+		priv->tx_tstamp = true;
 		break;
 	default:
 		return -ERANGE;
@@ -2285,6 +2092,7 @@ static int dpaa2_eth_xdp_create_fd(struct net_device *net_dev,
 				   struct xdp_frame *xdpf,
 				   struct dpaa2_fd *fd)
 {
+	struct dpaa2_eth_priv *priv = netdev_priv(net_dev);
 	struct device *dev = net_dev->dev.parent;
 	unsigned int needed_headroom;
 	struct dpaa2_eth_swa *swa;
@@ -2294,7 +2102,7 @@ static int dpaa2_eth_xdp_create_fd(struct net_device *net_dev,
 	/* We require a minimum headroom to be able to transmit the frame.
 	 * Otherwise return an error and let the original net_device handle it
 	 */
-	needed_headroom = dpaa2_eth_needed_headroom(NULL);
+	needed_headroom = dpaa2_eth_needed_headroom(priv, NULL);
 	if (xdpf->headroom < needed_headroom)
 		return -EINVAL;
 
@@ -2775,7 +2583,6 @@ static void dpaa2_eth_set_fq_affinity(struct dpaa2_eth_priv *priv)
 		fq = &priv->fq[i];
 		switch (fq->type) {
 		case DPAA2_RX_FQ:
-		case DPAA2_RX_ERR_FQ:
 			fq->target_cpu = rx_cpu;
 			rx_cpu = cpumask_next(rx_cpu, &priv->dpio_cpumask);
 			if (rx_cpu >= nr_cpu_ids)
@@ -2818,10 +2625,6 @@ static void dpaa2_eth_setup_fqs(struct dpaa2_eth_priv *priv)
 			priv->fq[priv->num_fqs++].flowid = (u16)i;
 		}
 	}
-
-	/* We have exactly one Rx error queue per DPNI */
-	priv->fq[priv->num_fqs].type = DPAA2_RX_ERR_FQ;
-	priv->fq[priv->num_fqs++].consume = dpaa2_eth_rx_err;
 
 	/* For each FQ, decide on which core to process incoming frames */
 	dpaa2_eth_set_fq_affinity(priv);
@@ -2920,10 +2723,8 @@ static int dpaa2_eth_set_buffer_layout(struct dpaa2_eth_priv *priv)
 	/* tx buffer */
 	buf_layout.private_data_size = DPAA2_ETH_SWA_SIZE;
 	buf_layout.pass_timestamp = true;
-	buf_layout.pass_frame_status = true;
 	buf_layout.options = DPNI_BUF_LAYOUT_OPT_PRIVATE_DATA_SIZE |
-			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP |
-			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS;
+			     DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
 	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
 				     DPNI_QUEUE_TX, &buf_layout);
 	if (err) {
@@ -2932,8 +2733,7 @@ static int dpaa2_eth_set_buffer_layout(struct dpaa2_eth_priv *priv)
 	}
 
 	/* tx-confirm buffer */
-	buf_layout.options = DPNI_BUF_LAYOUT_OPT_TIMESTAMP |
-			     DPNI_BUF_LAYOUT_OPT_FRAME_STATUS;
+	buf_layout.options = DPNI_BUF_LAYOUT_OPT_TIMESTAMP;
 	err = dpni_set_buffer_layout(priv->mc_io, 0, priv->mc_token,
 				     DPNI_QUEUE_TX_CONFIRM, &buf_layout);
 	if (err) {
@@ -3398,38 +3198,6 @@ static int dpaa2_eth_setup_tx_flow(struct dpaa2_eth_priv *priv,
 	return 0;
 }
 
-static int setup_rx_err_flow(struct dpaa2_eth_priv *priv,
-			     struct dpaa2_eth_fq *fq)
-{
-	struct device *dev = priv->net_dev->dev.parent;
-	struct dpni_queue q = { { 0 } };
-	struct dpni_queue_id qid;
-	u8 q_opt = DPNI_QUEUE_OPT_USER_CTX | DPNI_QUEUE_OPT_DEST;
-	int err;
-
-	err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
-			     DPNI_QUEUE_RX_ERR, 0, 0, &q, &qid);
-	if (err) {
-		dev_err(dev, "dpni_get_queue() failed (%d)\n", err);
-		return err;
-	}
-
-	fq->fqid = qid.fqid;
-
-	q.destination.id = fq->channel->dpcon_id;
-	q.destination.type = DPNI_DEST_DPCON;
-	q.destination.priority = 1;
-	q.user_context = (u64)(uintptr_t)fq;
-	err = dpni_set_queue(priv->mc_io, 0, priv->mc_token,
-			     DPNI_QUEUE_RX_ERR, 0, 0, q_opt, &q);
-	if (err) {
-		dev_err(dev, "dpni_set_queue() failed (%d)\n", err);
-		return err;
-	}
-
-	return 0;
-}
-
 /* Supported header fields for Rx hash distribution key */
 static const struct dpaa2_eth_dist_fields dist_fields[] = {
 	{
@@ -3543,12 +3311,6 @@ static int dpaa2_eth_config_hash_key(struct dpaa2_eth_priv *priv, dma_addr_t key
 			dev_err(dev, "dpni_set_rx_hash_dist failed\n");
 			break;
 		}
-
-		/* If the flow steering / hashing key is shared between all
-		 * traffic classes, install it just once
-		 */
-		if (priv->dpni_attrs.options & DPNI_OPT_SHARED_FS)
-			break;
 	}
 
 	return err;
@@ -3575,12 +3337,6 @@ static int dpaa2_eth_config_cls_key(struct dpaa2_eth_priv *priv, dma_addr_t key)
 			dev_err(dev, "dpni_set_rx_fs_dist failed\n");
 			break;
 		}
-
-		/* If the flow steering / hashing key is shared between all
-		 * traffic classes, install it just once
-		 */
-		if (priv->dpni_attrs.options & DPNI_OPT_SHARED_FS)
-			break;
 	}
 
 	return err;
@@ -3827,9 +3583,6 @@ static int dpaa2_eth_bind_dpni(struct dpaa2_eth_priv *priv)
 			break;
 		case DPAA2_TX_CONF_FQ:
 			err = dpaa2_eth_setup_tx_flow(priv, &priv->fq[i]);
-			break;
-		case DPAA2_RX_ERR_FQ:
-			err = setup_rx_err_flow(priv, &priv->fq[i]);
 			break;
 		default:
 			dev_err(dev, "Invalid FQ type %d\n", priv->fq[i].type);
@@ -4205,19 +3958,6 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 
 	priv->iommu_domain = iommu_get_domain_for_dev(dev);
 
-	priv->tx_tstamp_type = HWTSTAMP_TX_OFF;
-	priv->rx_tstamp = false;
-
-	priv->dpaa2_ptp_wq = alloc_workqueue("dpaa2_ptp_wq", 0, 0);
-	if (!priv->dpaa2_ptp_wq) {
-		err = -ENOMEM;
-		goto err_wq_alloc;
-	}
-
-	INIT_WORK(&priv->tx_onestep_tstamp, dpaa2_eth_tx_onestep_tstamp);
-
-	skb_queue_head_init(&priv->tx_skbs);
-
 	/* Obtain a MC portal */
 	err = fsl_mc_portal_allocate(dpni_dev, FSL_MC_IO_ATOMIC_CONTEXT_PORTAL,
 				     &priv->mc_io);
@@ -4315,18 +4055,6 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 	if (err)
 		goto err_connect_mac;
 
-	err = dpaa2_eth_dl_register(priv);
-	if (err)
-		goto err_dl_register;
-
-	err = dpaa2_eth_dl_traps_register(priv);
-	if (err)
-		goto err_dl_trap_register;
-
-	err = dpaa2_eth_dl_port_add(priv);
-	if (err)
-		goto err_dl_port_add;
-
 	err = register_netdev(net_dev);
 	if (err < 0) {
 		dev_err(dev, "register_netdev() failed\n");
@@ -4341,12 +4069,6 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 	return 0;
 
 err_netdev_reg:
-	dpaa2_eth_dl_port_del(priv);
-err_dl_port_add:
-	dpaa2_eth_dl_traps_unregister(priv);
-err_dl_trap_register:
-	dpaa2_eth_dl_unregister(priv);
-err_dl_register:
 	dpaa2_eth_disconnect_mac(priv);
 err_connect_mac:
 	if (priv->do_link_poll)
@@ -4374,8 +4096,6 @@ err_dpio_setup:
 err_dpni_setup:
 	fsl_mc_portal_free(priv->mc_io);
 err_portal_alloc:
-	destroy_workqueue(priv->dpaa2_ptp_wq);
-err_wq_alloc:
 	dev_set_drvdata(dev, NULL);
 	free_netdev(net_dev);
 
@@ -4400,10 +4120,6 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 	rtnl_unlock();
 
 	unregister_netdev(net_dev);
-
-	dpaa2_eth_dl_port_del(priv);
-	dpaa2_eth_dl_traps_unregister(priv);
-	dpaa2_eth_dl_unregister(priv);
 
 	if (priv->do_link_poll)
 		kthread_stop(priv->poll_thread);

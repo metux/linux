@@ -475,6 +475,7 @@ struct search {
 	unsigned int		read_dirty_data:1;
 	unsigned int		cache_missed:1;
 
+	struct hd_struct	*part;
 	unsigned long		start_time;
 
 	struct btree_op		op;
@@ -668,7 +669,9 @@ static void backing_request_endio(struct bio *bio)
 static void bio_complete(struct search *s)
 {
 	if (s->orig_bio) {
-		bio_end_io_acct(s->orig_bio, s->start_time);
+		/* Count on bcache device */
+		part_end_io_acct(s->part, s->orig_bio, s->start_time);
+
 		trace_bcache_request_end(s->d, s->orig_bio);
 		s->orig_bio->bi_status = s->iop.status;
 		bio_endio(s->orig_bio);
@@ -728,8 +731,8 @@ static inline struct search *search_alloc(struct bio *bio,
 	s->recoverable		= 1;
 	s->write		= op_is_write(bio_op(bio));
 	s->read_dirty_data	= 0;
-	s->start_time		= bio_start_io_acct(bio);
-
+	/* Count on the bcache device */
+	s->start_time		= part_start_io_acct(d->disk, &s->part, bio);
 	s->iop.c		= d->c;
 	s->iop.bio		= NULL;
 	s->iop.inode		= d->id;
@@ -1070,6 +1073,7 @@ struct detached_dev_io_private {
 	unsigned long		start_time;
 	bio_end_io_t		*bi_end_io;
 	void			*bi_private;
+	struct hd_struct	*part;
 };
 
 static void detached_dev_end_io(struct bio *bio)
@@ -1080,7 +1084,8 @@ static void detached_dev_end_io(struct bio *bio)
 	bio->bi_end_io = ddip->bi_end_io;
 	bio->bi_private = ddip->bi_private;
 
-	bio_end_io_acct(bio, ddip->start_time);
+	/* Count on the bcache device */
+	part_end_io_acct(ddip->part, bio, ddip->start_time);
 
 	if (bio->bi_status) {
 		struct cached_dev *dc = container_of(ddip->d,
@@ -1105,7 +1110,8 @@ static void detached_dev_do_request(struct bcache_device *d, struct bio *bio)
 	 */
 	ddip = kzalloc(sizeof(struct detached_dev_io_private), GFP_NOIO);
 	ddip->d = d;
-	ddip->start_time = bio_start_io_acct(bio);
+	/* Count on the bcache device */
+	ddip->start_time = part_start_io_acct(d->disk, &ddip->part, bio);
 	ddip->bi_end_io = bio->bi_end_io;
 	ddip->bi_private = bio->bi_private;
 	bio->bi_end_io = detached_dev_end_io;

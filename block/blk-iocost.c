@@ -179,6 +179,8 @@
 #include <linux/parser.h>
 #include <linux/sched/signal.h>
 #include <linux/blk-cgroup.h>
+#include <asm/local.h>
+#include <asm/local64.h>
 #include "blk-rq-qos.h"
 #include "blk-stat.h"
 #include "blk-wbt.h"
@@ -260,6 +262,7 @@ enum {
 	VTIME_PER_SEC_SHIFT	= 37,
 	VTIME_PER_SEC		= 1LLU << VTIME_PER_SEC_SHIFT,
 	VTIME_PER_USEC		= VTIME_PER_SEC / USEC_PER_SEC,
+	VTIME_PER_NSEC		= VTIME_PER_SEC / NSEC_PER_SEC,
 
 	/* bound vrate adjustments within two orders of magnitude */
 	VRATE_MIN_PPM		= 10000,	/* 1% */
@@ -372,8 +375,8 @@ struct ioc_params {
 };
 
 struct ioc_missed {
-	u32				nr_met;
-	u32				nr_missed;
+	local_t				nr_met;
+	local_t				nr_missed;
 	u32				last_met;
 	u32				last_missed;
 };
@@ -381,7 +384,7 @@ struct ioc_missed {
 struct ioc_pcpu_stat {
 	struct ioc_missed		missed[2];
 
-	u64				rq_wait_ns;
+	local64_t			rq_wait_ns;
 	u64				last_rq_wait_ns;
 };
 
@@ -1277,8 +1280,8 @@ static void ioc_lat_stat(struct ioc *ioc, u32 *missed_ppm_ar, u32 *rq_wait_pct_p
 		u64 this_rq_wait_ns;
 
 		for (rw = READ; rw <= WRITE; rw++) {
-			u32 this_met = READ_ONCE(stat->missed[rw].nr_met);
-			u32 this_missed = READ_ONCE(stat->missed[rw].nr_missed);
+			u32 this_met = local_read(&stat->missed[rw].nr_met);
+			u32 this_missed = local_read(&stat->missed[rw].nr_missed);
 
 			nr_met[rw] += this_met - stat->missed[rw].last_met;
 			nr_missed[rw] += this_missed - stat->missed[rw].last_missed;
@@ -1286,7 +1289,7 @@ static void ioc_lat_stat(struct ioc *ioc, u32 *missed_ppm_ar, u32 *rq_wait_pct_p
 			stat->missed[rw].last_missed = this_missed;
 		}
 
-		this_rq_wait_ns = READ_ONCE(stat->rq_wait_ns);
+		this_rq_wait_ns = local64_read(&stat->rq_wait_ns);
 		rq_wait_ns += this_rq_wait_ns - stat->last_rq_wait_ns;
 		stat->last_rq_wait_ns = this_rq_wait_ns;
 	}
@@ -1537,19 +1540,39 @@ skip_surplus_transfers:
 	if (rq_wait_pct > RQ_WAIT_BUSY_PCT ||
 	    missed_ppm[READ] > ppm_rthr ||
 	    missed_ppm[WRITE] > ppm_wthr) {
+		/* clearly missing QoS targets, slow down vrate */
 		ioc->busy_level = max(ioc->busy_level, 0);
 		ioc->busy_level++;
 	} else if (rq_wait_pct <= RQ_WAIT_BUSY_PCT * UNBUSY_THR_PCT / 100 &&
 		   missed_ppm[READ] <= ppm_rthr * UNBUSY_THR_PCT / 100 &&
 		   missed_ppm[WRITE] <= ppm_wthr * UNBUSY_THR_PCT / 100) {
-		/* take action iff there is contention */
-		if (nr_shortages && !nr_lagging) {
+		/* QoS targets are being met with >25% margin */
+		if (nr_shortages) {
+			/*
+			 * We're throttling while the device has spare
+			 * capacity.  If vrate was being slowed down, stop.
+			 */
 			ioc->busy_level = min(ioc->busy_level, 0);
-			/* redistribute surpluses first */
-			if (!nr_surpluses)
+
+			/*
+			 * If there are IOs spanning multiple periods, wait
+			 * them out before pushing the device harder.  If
+			 * there are surpluses, let redistribution work it
+			 * out first.
+			 */
+			if (!nr_lagging && !nr_surpluses)
 				ioc->busy_level--;
+		} else {
+			/*
+			 * Nobody is being throttled and the users aren't
+			 * issuing enough IOs to saturate the device.  We
+			 * simply don't know how close the device is to
+			 * saturation.  Coast.
+			 */
+			ioc->busy_level = 0;
 		}
 	} else {
+		/* inside the hysterisis margin, we're good */
 		ioc->busy_level = 0;
 	}
 
@@ -1669,6 +1692,31 @@ static u64 calc_vtime_cost(struct bio *bio, struct ioc_gq *iocg, bool is_merge)
 	u64 cost;
 
 	calc_vtime_cost_builtin(bio, iocg, is_merge, &cost);
+	return cost;
+}
+
+static void calc_size_vtime_cost_builtin(struct request *rq, struct ioc *ioc,
+					 u64 *costp)
+{
+	unsigned int pages = blk_rq_stats_sectors(rq) >> IOC_SECT_TO_PAGE_SHIFT;
+
+	switch (req_op(rq)) {
+	case REQ_OP_READ:
+		*costp = pages * ioc->params.lcoefs[LCOEF_RPAGE];
+		break;
+	case REQ_OP_WRITE:
+		*costp = pages * ioc->params.lcoefs[LCOEF_WPAGE];
+		break;
+	default:
+		*costp = 0;
+	}
+}
+
+static u64 calc_size_vtime_cost(struct request *rq, struct ioc *ioc)
+{
+	u64 cost;
+
+	calc_size_vtime_cost_builtin(rq, ioc, &cost);
 	return cost;
 }
 
@@ -1862,7 +1910,8 @@ static void ioc_rqos_done_bio(struct rq_qos *rqos, struct bio *bio)
 static void ioc_rqos_done(struct rq_qos *rqos, struct request *rq)
 {
 	struct ioc *ioc = rqos_to_ioc(rqos);
-	u64 on_q_ns, rq_wait_ns;
+	struct ioc_pcpu_stat *ccs;
+	u64 on_q_ns, rq_wait_ns, size_nsec;
 	int pidx, rw;
 
 	if (!ioc->enabled || !rq->alloc_time_ns || !rq->start_time_ns)
@@ -1883,13 +1932,19 @@ static void ioc_rqos_done(struct rq_qos *rqos, struct request *rq)
 
 	on_q_ns = ktime_get_ns() - rq->alloc_time_ns;
 	rq_wait_ns = rq->start_time_ns - rq->alloc_time_ns;
+	size_nsec = div64_u64(calc_size_vtime_cost(rq, ioc), VTIME_PER_NSEC);
 
-	if (on_q_ns <= ioc->params.qos[pidx] * NSEC_PER_USEC)
-		this_cpu_inc(ioc->pcpu_stat->missed[rw].nr_met);
+	ccs = get_cpu_ptr(ioc->pcpu_stat);
+
+	if (on_q_ns <= size_nsec ||
+	    on_q_ns - size_nsec <= ioc->params.qos[pidx] * NSEC_PER_USEC)
+		local_inc(&ccs->missed[rw].nr_met);
 	else
-		this_cpu_inc(ioc->pcpu_stat->missed[rw].nr_missed);
+		local_inc(&ccs->missed[rw].nr_missed);
 
-	this_cpu_add(ioc->pcpu_stat->rq_wait_ns, rq_wait_ns);
+	local64_add(rq_wait_ns, &ccs->rq_wait_ns);
+
+	put_cpu_ptr(ccs);
 }
 
 static void ioc_rqos_queue_depth_changed(struct rq_qos *rqos)
@@ -1929,7 +1984,7 @@ static int blk_iocost_init(struct request_queue *q)
 {
 	struct ioc *ioc;
 	struct rq_qos *rqos;
-	int ret;
+	int i, cpu, ret;
 
 	ioc = kzalloc(sizeof(*ioc), GFP_KERNEL);
 	if (!ioc)
@@ -1939,6 +1994,16 @@ static int blk_iocost_init(struct request_queue *q)
 	if (!ioc->pcpu_stat) {
 		kfree(ioc);
 		return -ENOMEM;
+	}
+
+	for_each_possible_cpu(cpu) {
+		struct ioc_pcpu_stat *ccs = per_cpu_ptr(ioc->pcpu_stat, cpu);
+
+		for (i = 0; i < ARRAY_SIZE(ccs->missed); i++) {
+			local_set(&ccs->missed[i].nr_met, 0);
+			local_set(&ccs->missed[i].nr_missed, 0);
+		}
+		local64_set(&ccs->rq_wait_ns, 0);
 	}
 
 	rqos = &ioc->rqos;
@@ -2291,6 +2356,7 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 	spin_lock_irq(&ioc->lock);
 
 	if (enable) {
+		blk_stat_enable_accounting(ioc->rqos.q);
 		blk_queue_flag_set(QUEUE_FLAG_RQ_ALLOC_TIME, ioc->rqos.q);
 		ioc->enabled = true;
 	} else {

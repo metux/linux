@@ -2585,6 +2585,10 @@ static int bcm_sysport_probe(struct platform_device *pdev)
 	if (!ret)
 		device_set_wakeup_capable(&pdev->dev, 1);
 
+	priv->wol_clk = devm_clk_get_optional(&pdev->dev, "sw_sysportwol");
+	if (IS_ERR(priv->wol_clk))
+		return PTR_ERR(priv->wol_clk);
+
 	/* Set the needed headroom once and for all */
 	BUILD_BUG_ON(sizeof(struct bcm_tsb) != 8);
 	dev->needed_headroom += sizeof(struct bcm_tsb);
@@ -2774,8 +2778,10 @@ static int __maybe_unused bcm_sysport_suspend(struct device *d)
 	bcm_sysport_fini_rx_ring(priv);
 
 	/* Get prepared for Wake-on-LAN */
-	if (device_may_wakeup(d) && priv->wolopts)
+	if (device_may_wakeup(d) && priv->wolopts) {
+		clk_prepare_enable(priv->wol_clk);
 		ret = bcm_sysport_suspend_to_wol(priv);
+	}
 
 	clk_disable_unprepare(priv->clk);
 
@@ -2793,6 +2799,8 @@ static int __maybe_unused bcm_sysport_resume(struct device *d)
 		return 0;
 
 	clk_prepare_enable(priv->clk);
+	if (priv->wolopts)
+		clk_disable_unprepare(priv->wol_clk);
 
 	umac_reset(priv);
 

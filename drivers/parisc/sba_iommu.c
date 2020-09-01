@@ -1085,6 +1085,8 @@ static const struct dma_map_ops sba_ops = {
 	.unmap_sg =		sba_unmap_sg,
 	.mmap =			dma_common_mmap,
 	.get_sgtable =		dma_common_get_sgtable,
+	.alloc_pages =		dma_common_alloc_pages,
+	.free_pages =		dma_common_free_pages,
 };
 
 

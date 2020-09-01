@@ -408,8 +408,8 @@ struct ioc {
 	enum ioc_running		running;
 	atomic64_t			vtime_rate;
 
-	seqcount_t			period_seqcount;
-	u32				period_at;	/* wallclock starttime */
+	seqcount_spinlock_t		period_seqcount;
+	u64				period_at;	/* wallclock starttime */
 	u64				period_at_vtime; /* vtime starttime */
 
 	atomic64_t			cur_period;	/* inc'd each period */
@@ -508,7 +508,7 @@ struct ioc_cgrp {
 
 struct ioc_now {
 	u64				now_ns;
-	u32				now;
+	u64				now;
 	u64				vnow;
 	u64				vrate;
 };
@@ -875,7 +875,6 @@ static void ioc_now(struct ioc *ioc, struct ioc_now *now)
 
 static void ioc_start_period(struct ioc *ioc, struct ioc_now *now)
 {
-	lockdep_assert_held(&ioc->lock);
 	WARN_ON_ONCE(ioc->running != IOC_RUNNING);
 
 	write_seqcount_begin(&ioc->period_seqcount);
@@ -2023,7 +2022,7 @@ static int blk_iocost_init(struct request_queue *q)
 
 	ioc->running = IOC_IDLE;
 	atomic64_set(&ioc->vtime_rate, VTIME_PER_USEC);
-	seqcount_init(&ioc->period_seqcount);
+	seqcount_spinlock_init(&ioc->period_seqcount, &ioc->lock);
 	ioc->period_at = ktime_to_us(ktime_get());
 	atomic64_set(&ioc->cur_period, 0);
 	atomic_set(&ioc->hweight_gen, 0);
@@ -2067,8 +2066,7 @@ static struct blkg_policy_data *ioc_pd_alloc(gfp_t gfp, struct request_queue *q,
 	int levels = blkcg->css.cgroup->level + 1;
 	struct ioc_gq *iocg;
 
-	iocg = kzalloc_node(sizeof(*iocg) + levels * sizeof(iocg->ancestors[0]),
-			    gfp, q->node);
+	iocg = kzalloc_node(struct_size(iocg, ancestors, levels), gfp, q->node);
 	if (!iocg)
 		return NULL;
 
@@ -2116,14 +2114,15 @@ static void ioc_pd_free(struct blkg_policy_data *pd)
 {
 	struct ioc_gq *iocg = pd_to_iocg(pd);
 	struct ioc *ioc = iocg->ioc;
+	unsigned long flags;
 
 	if (ioc) {
-		spin_lock(&ioc->lock);
+		spin_lock_irqsave(&ioc->lock, flags);
 		if (!list_empty(&iocg->active_list)) {
 			propagate_weights(iocg, 0, 0);
 			list_del_init(&iocg->active_list);
 		}
-		spin_unlock(&ioc->lock);
+		spin_unlock_irqrestore(&ioc->lock, flags);
 
 		hrtimer_cancel(&iocg->waitq_timer);
 		hrtimer_cancel(&iocg->delay_timer);

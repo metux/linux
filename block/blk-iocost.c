@@ -1229,6 +1229,8 @@ static void iocg_kick_waitq(struct ioc_gq *iocg, struct ioc_now *now)
 		atomic64_sub(abs_delta, &iocg->abs_vdebt);
 		if (WARN_ON_ONCE(atomic64_read(&iocg->abs_vdebt) < 0))
 			atomic64_set(&iocg->abs_vdebt, 0);
+
+		iocg_kick_delay(iocg, now);
 	}
 
 	/*
@@ -1387,7 +1389,6 @@ static void ioc_timer_fn(struct timer_list *timer)
 		    atomic64_read(&iocg->abs_vdebt)) {
 			/* might be oversleeping vtime / hweight changes, kick */
 			iocg_kick_waitq(iocg, &now);
-			iocg_kick_delay(iocg, &now);
 		} else if (iocg_is_idle(iocg)) {
 			/* no waiter and idle, deactivate */
 			iocg->last_inuse = iocg->inuse;

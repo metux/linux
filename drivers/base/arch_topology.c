@@ -22,6 +22,12 @@
 #include <linux/smp.h>
 #include <trace/hooks/topology.h>
 
+bool topology_scale_freq_invariant(void)
+{
+	return cpufreq_supports_freq_invariance() ||
+	       arch_freq_counters_available(cpu_online_mask);
+}
+
 __weak bool arch_freq_counters_available(const struct cpumask *cpus)
 {
 	return false;
@@ -33,6 +39,9 @@ void arch_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
 {
 	unsigned long scale;
 	int i;
+
+	if (WARN_ON_ONCE(!cur_freq || !max_freq))
+		return;
 
 	/*
 	 * If the use of counters for FIE is enabled, just return as we don't

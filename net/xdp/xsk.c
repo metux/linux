@@ -726,6 +726,7 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 						   dev, qid);
 			if (err) {
 				xp_destroy(xs->pool);
+				xs->pool = NULL;
 				sockfd_put(sock);
 				goto out_unlock;
 			}

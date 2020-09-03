@@ -4,23 +4,16 @@
 Interface statistics
 ====================
 
-Overview
-========
-
 This document is a guide to Linux network interface statistics.
 
-There are three main sources of interface statistics in Linux:
+There are two main sources of interface statistics in Linux:
 
  - standard interface statistics based on
-   :c:type:`struct rtnl_link_stats64 <rtnl_link_stats64>`;
- - protocol-specific statistics; and
+   :c:type:`struct rtnl_link_stats64 <rtnl_link_stats64>`; and
  - driver-defined statistics available via ethtool.
 
-Standard interface statistics
------------------------------
-
-There are multiple interfaces to reach the standard statistics.
-Most commonly used is the `ip` command from `iproute2`::
+There are multiple interfaces to reach the former. Most commonly used
+is the `ip` command from `iproute2`::
 
   $ ip -s -s link show dev ens4u1u1
   6: ens4u1u1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
@@ -41,26 +34,7 @@ If `-s` is specified once the detailed errors won't be shown.
 
 `ip` supports JSON formatting via the `-j` option.
 
-Protocol-specific statistics
-----------------------------
-
-Some of the interfaces used for configuring devices are also able
-to report related statistics. For example ethtool interface used
-to configure pause frames can report corresponding hardware counters::
-
-  $ ethtool --include-statistics -a eth0
-  Pause parameters for eth0:
-  Autonegotiate:	on
-  RX:			on
-  TX:			on
-  Statistics:
-    tx_pause_frames: 1
-    rx_pause_frames: 1
-
-Driver-defined statistics
--------------------------
-
-Driver-defined ethtool statistics can be dumped using `ethtool -S $ifc`, e.g.::
+Ethtool statistics can be dumped using `ethtool -S $ifc`, e.g.::
 
   $ ethtool -S ens4u1u1
   NIC statistics:
@@ -120,17 +94,6 @@ Identifiers via `ETHTOOL_GSTRINGS` with `string_set` set to `ETH_SS_STATS`,
 and values via `ETHTOOL_GSTATS`. User space should use `ETHTOOL_GDRVINFO`
 to retrieve the number of statistics (`.n_stats`).
 
-ethtool-netlink
----------------
-
-Ethtool netlink is a replacement for the older IOCTL interface.
-
-Protocol-related statistics can be requested in get commands by setting
-the `ETHTOOL_FLAG_STATS` flag in `ETHTOOL_A_HEADER_FLAGS`. Currently
-statistics are supported in the following commands:
-
-  - `ETHTOOL_MSG_PAUSE_GET`
-
 debugfs
 -------
 
@@ -167,12 +130,3 @@ user space trying to read them.
 
 Statistics must persist across routine operations like bringing the interface
 down and up.
-
-Kernel-internal data structures
--------------------------------
-
-The following structures are internal to the kernel, their members are
-translated to netlink attributes when dumped. Drivers must not overwrite
-the statistics they don't report with 0.
-
-- ethtool_pause_stats()

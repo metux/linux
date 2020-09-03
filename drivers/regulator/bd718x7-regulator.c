@@ -1398,6 +1398,9 @@ static int bd718xx_probe(struct platform_device *pdev)
 		}
 	}
 
+	config.dev = pdev->dev.parent;
+	config.regmap = mfd->chip.regmap;
+
 	for (i = 0; i < pmic_regulators[chip].r_amount; i++) {
 
 		const struct regulator_desc *desc;
@@ -1407,8 +1410,6 @@ static int bd718xx_probe(struct platform_device *pdev)
 		r = &pmic_regulators[chip].r_datas[i];
 		desc = &r->desc;
 
-		config.dev = pdev->dev.parent;
-		config.regmap = mfd->chip.regmap;
 
 		rdev = devm_regulator_register(&pdev->dev, desc, &config);
 		if (IS_ERR(rdev)) {

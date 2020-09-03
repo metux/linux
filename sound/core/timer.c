@@ -784,12 +784,12 @@ static void snd_timer_clear_callbacks(struct snd_timer *timer,
 }
 
 /*
- * timer tasklet
+ * timer work
  *
  */
-static void snd_timer_tasklet(struct tasklet_struct *t)
+static void snd_timer_work(struct work_struct *work)
 {
-	struct snd_timer *timer = from_tasklet(timer, t, task_queue);
+	struct snd_timer *timer = container_of(work, struct snd_timer, task_work);
 	unsigned long flags;
 
 	if (timer->card && timer->card->shutdown) {
@@ -814,7 +814,7 @@ void snd_timer_interrupt(struct snd_timer * timer, unsigned long ticks_left)
 	unsigned long resolution;
 	struct list_head *ack_list_head;
 	unsigned long flags;
-	int use_tasklet = 0;
+	bool use_work = false;
 
 	if (timer == NULL)
 		return;
@@ -855,7 +855,7 @@ void snd_timer_interrupt(struct snd_timer * timer, unsigned long ticks_left)
 			--timer->running;
 			list_del_init(&ti->active_list);
 		}
-		if ((timer->hw.flags & SNDRV_TIMER_HW_TASKLET) ||
+		if ((timer->hw.flags & SNDRV_TIMER_HW_WORK) ||
 		    (ti->flags & SNDRV_TIMER_IFLG_FAST))
 			ack_list_head = &timer->ack_list_head;
 		else
@@ -890,11 +890,11 @@ void snd_timer_interrupt(struct snd_timer * timer, unsigned long ticks_left)
 	snd_timer_process_callbacks(timer, &timer->ack_list_head);
 
 	/* do we have any slow callbacks? */
-	use_tasklet = !list_empty(&timer->sack_list_head);
+	use_work = !list_empty(&timer->sack_list_head);
 	spin_unlock_irqrestore(&timer->lock, flags);
 
-	if (use_tasklet)
-		tasklet_schedule(&timer->task_queue);
+	if (use_work)
+		queue_work(system_highpri_wq, &timer->task_work);
 }
 EXPORT_SYMBOL(snd_timer_interrupt);
 
@@ -938,7 +938,7 @@ int snd_timer_new(struct snd_card *card, char *id, struct snd_timer_id *tid,
 	INIT_LIST_HEAD(&timer->ack_list_head);
 	INIT_LIST_HEAD(&timer->sack_list_head);
 	spin_lock_init(&timer->lock);
-	tasklet_setup(&timer->task_queue, snd_timer_tasklet);
+	INIT_WORK(&timer->task_work, snd_timer_work);
 	timer->max_instances = 1000; /* default limit per timer */
 	if (card != NULL) {
 		timer->module = card->module;
@@ -1171,7 +1171,7 @@ static int snd_timer_s_close(struct snd_timer *timer)
 
 static struct snd_timer_hardware snd_timer_system =
 {
-	.flags =	SNDRV_TIMER_HW_FIRST | SNDRV_TIMER_HW_TASKLET,
+	.flags =	SNDRV_TIMER_HW_FIRST | SNDRV_TIMER_HW_WORK,
 	.resolution =	1000000000L / HZ,
 	.ticks =	10000000L,
 	.close =	snd_timer_s_close,

@@ -1011,7 +1011,7 @@ struct hdspm {
 	u32 settings_register;  /* cached value for AIO / RayDat (sync reference, master/slave) */
 
 	struct hdspm_midi midi[4];
-	struct tasklet_struct midi_tasklet;
+	struct work_struct midi_work;
 
 	size_t period_bytes;
 	unsigned char ss_in_channels;
@@ -2183,9 +2183,9 @@ static int snd_hdspm_create_midi(struct snd_card *card,
 }
 
 
-static void hdspm_midi_tasklet(struct tasklet_struct *t)
+static void hdspm_midi_work(struct work_struct *work)
 {
-	struct hdspm *hdspm = from_tasklet(hdspm, t, midi_tasklet);
+	struct hdspm *hdspm = container_of(work, struct hdspm, midi_work);
 	int i = 0;
 
 	while (i < hdspm->midiPorts) {
@@ -5463,7 +5463,7 @@ static irqreturn_t snd_hdspm_interrupt(int irq, void *dev_id)
 		}
 
 		if (schedule)
-			tasklet_hi_schedule(&hdspm->midi_tasklet);
+			queue_work(system_highpri_wq, &hdspm->midi_work);
 	}
 
 	return IRQ_HANDLED;
@@ -6552,6 +6552,7 @@ static int snd_hdspm_create(struct snd_card *card,
 	hdspm->card = card;
 
 	spin_lock_init(&hdspm->lock);
+	INIT_WORK(&hdspm->midi_work, hdspm_midi_work);
 
 	pci_read_config_word(hdspm->pci,
 			PCI_CLASS_REVISION, &hdspm->firmware_rev);
@@ -6850,9 +6851,6 @@ static int snd_hdspm_create(struct snd_card *card,
 
 	}
 
-	tasklet_setup(&hdspm->midi_tasklet, hdspm_midi_tasklet);
-
-
 	if (hdspm->io_type != MADIface) {
 		hdspm->serial = (hdspm_read(hdspm,
 				HDSPM_midiStatusIn0)>>8) & 0xFFFFFF;
@@ -6887,6 +6885,7 @@ static int snd_hdspm_free(struct hdspm * hdspm)
 {
 
 	if (hdspm->port) {
+		cancel_work_sync(&hdspm->midi_work);
 
 		/* stop th audio, and cancel all interrupts */
 		hdspm->control_register &=

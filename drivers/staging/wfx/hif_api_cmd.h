@@ -229,7 +229,7 @@ struct hif_cnf_tx {
 struct hif_cnf_multi_transmit {
 	u8     num_tx_confs;
 	u8     reserved[3];
-	struct hif_cnf_tx   tx_conf_payload[];
+	struct hif_cnf_tx tx_conf_payload[];
 } __packed;
 
 enum hif_ri_flags_encrypt {
@@ -352,7 +352,6 @@ struct hif_ind_set_pm_mode_cmpl {
 	u8     pm_mode;
 	u8     reserved[3];
 } __packed;
-
 
 struct hif_req_start {
 	u8     mode;
@@ -554,6 +553,5 @@ struct hif_ind_event {
 		__le32 peer_sta_set;
 	} event_data;
 } __packed;
-
 
 #endif

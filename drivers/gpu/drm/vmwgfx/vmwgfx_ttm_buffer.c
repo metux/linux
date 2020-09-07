@@ -362,8 +362,7 @@ static void vmw_ttm_unmap_from_dma(struct vmw_ttm_tt *vmw_tt)
 {
 	struct device *dev = vmw_tt->dev_priv->dev->dev;
 
-	dma_unmap_sg(dev, vmw_tt->sgt.sgl, vmw_tt->sgt.nents,
-		DMA_BIDIRECTIONAL);
+	dma_unmap_sgtable(dev, &vmw_tt->sgt, DMA_BIDIRECTIONAL, 0);
 	vmw_tt->sgt.nents = vmw_tt->sgt.orig_nents;
 }
 
@@ -383,16 +382,8 @@ static void vmw_ttm_unmap_from_dma(struct vmw_ttm_tt *vmw_tt)
 static int vmw_ttm_map_for_dma(struct vmw_ttm_tt *vmw_tt)
 {
 	struct device *dev = vmw_tt->dev_priv->dev->dev;
-	int ret;
 
-	ret = dma_map_sg(dev, vmw_tt->sgt.sgl, vmw_tt->sgt.orig_nents,
-			 DMA_BIDIRECTIONAL);
-	if (unlikely(ret == 0))
-		return -ENOMEM;
-
-	vmw_tt->sgt.nents = ret;
-
-	return 0;
+	return dma_map_sgtable(dev, &vmw_tt->sgt, DMA_BIDIRECTIONAL, 0);
 }
 
 /**
@@ -449,10 +440,10 @@ static int vmw_ttm_map_dma(struct vmw_ttm_tt *vmw_tt)
 		if (unlikely(ret != 0))
 			goto out_sg_alloc_fail;
 
-		if (vsgt->num_pages > vmw_tt->sgt.nents) {
+		if (vsgt->num_pages > vmw_tt->sgt.orig_nents) {
 			uint64_t over_alloc =
 				sgl_size * (vsgt->num_pages -
-					    vmw_tt->sgt.nents);
+					    vmw_tt->sgt.orig_nents);
 
 			ttm_mem_global_free(glob, over_alloc);
 			vmw_tt->sg_alloc_size -= over_alloc;
@@ -539,7 +530,8 @@ const struct vmw_sg_table *vmw_bo_sg_table(struct ttm_buffer_object *bo)
 }
 
 
-static int vmw_ttm_bind(struct ttm_tt *ttm, struct ttm_resource *bo_mem)
+static int vmw_ttm_bind(struct ttm_bo_device *bdev,
+			struct ttm_tt *ttm, struct ttm_resource *bo_mem)
 {
 	struct vmw_ttm_tt *vmw_be =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -573,7 +565,8 @@ static int vmw_ttm_bind(struct ttm_tt *ttm, struct ttm_resource *bo_mem)
 	return 0;
 }
 
-static void vmw_ttm_unbind(struct ttm_tt *ttm)
+static void vmw_ttm_unbind(struct ttm_bo_device *bdev,
+			   struct ttm_tt *ttm)
 {
 	struct vmw_ttm_tt *vmw_be =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -594,7 +587,7 @@ static void vmw_ttm_unbind(struct ttm_tt *ttm)
 }
 
 
-static void vmw_ttm_destroy(struct ttm_tt *ttm)
+static void vmw_ttm_destroy(struct ttm_bo_device *bdev, struct ttm_tt *ttm)
 {
 	struct vmw_ttm_tt *vmw_be =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -612,7 +605,8 @@ static void vmw_ttm_destroy(struct ttm_tt *ttm)
 }
 
 
-static int vmw_ttm_populate(struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
+static int vmw_ttm_populate(struct ttm_bo_device *bdev,
+			    struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
 {
 	struct vmw_ttm_tt *vmw_tt =
 		container_of(ttm, struct vmw_ttm_tt, dma_ttm.ttm);
@@ -640,7 +634,8 @@ static int vmw_ttm_populate(struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
 	return ret;
 }
 
-static void vmw_ttm_unpopulate(struct ttm_tt *ttm)
+static void vmw_ttm_unpopulate(struct ttm_bo_device *bdev,
+			       struct ttm_tt *ttm)
 {
 	struct vmw_ttm_tt *vmw_tt = container_of(ttm, struct vmw_ttm_tt,
 						 dma_ttm.ttm);
@@ -715,20 +710,14 @@ static int vmw_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_resourc
 {
 	struct vmw_private *dev_priv = container_of(bdev, struct vmw_private, bdev);
 
-	mem->bus.addr = NULL;
-	mem->bus.is_iomem = false;
-	mem->bus.offset = 0;
-	mem->bus.size = mem->num_pages << PAGE_SHIFT;
-	mem->bus.base = 0;
-
 	switch (mem->mem_type) {
 	case TTM_PL_SYSTEM:
 	case VMW_PL_GMR:
 	case VMW_PL_MOB:
 		return 0;
 	case TTM_PL_VRAM:
-		mem->bus.offset = mem->start << PAGE_SHIFT;
-		mem->bus.base = dev_priv->vram_start;
+		mem->bus.offset = (mem->start << PAGE_SHIFT) +
+			dev_priv->vram_start;
 		mem->bus.is_iomem = true;
 		break;
 	default:
@@ -802,7 +791,7 @@ int vmw_bo_create_and_populate(struct vmw_private *dev_priv,
 
 	ret = ttm_bo_reserve(bo, false, true, NULL);
 	BUG_ON(ret != 0);
-	ret = vmw_ttm_populate(bo->ttm, &ctx);
+	ret = vmw_ttm_populate(bo->bdev, bo->ttm, &ctx);
 	if (likely(ret == 0)) {
 		struct vmw_ttm_tt *vmw_tt =
 			container_of(bo->ttm, struct vmw_ttm_tt, dma_ttm.ttm);

@@ -791,7 +791,6 @@ static const struct net_device_ops efx_netdev_ops = {
 	.ndo_set_mac_address	= efx_set_mac_address,
 	.ndo_set_rx_mode	= efx_set_rx_mode,
 	.ndo_set_features	= efx_set_features,
-	.ndo_features_check	= efx_features_check,
 	.ndo_vlan_rx_add_vid	= efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= efx_vlan_rx_kill_vid,
 #ifdef CONFIG_SFC_SRIOV
@@ -1621,7 +1620,7 @@ static int __init efx_init_module(void)
 {
 	int rc;
 
-	printk(KERN_INFO "Solarflare NET driver\n");
+	printk(KERN_INFO "Solarflare NET driver v" EFX_DRIVER_VERSION "\n");
 
 	rc = register_netdevice_notifier(&efx_netdev_notifier);
 	if (rc)
@@ -1676,3 +1675,4 @@ MODULE_AUTHOR("Solarflare Communications and "
 MODULE_DESCRIPTION("Solarflare network driver");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, efx_pci_table);
+MODULE_VERSION(EFX_DRIVER_VERSION);

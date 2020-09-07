@@ -368,9 +368,9 @@ do {								\
 })
 
 
-extern unsigned long __must_check __asm_copy_to_user(void __user *to,
+unsigned long __must_check __asm_copy_to_user(void __user *to,
 	const void *from, unsigned long n);
-extern unsigned long __must_check __asm_copy_from_user(void *to,
+unsigned long __must_check __asm_copy_from_user(void *to,
 	const void __user *from, unsigned long n);
 
 static inline unsigned long

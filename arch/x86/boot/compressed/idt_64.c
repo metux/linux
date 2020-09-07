@@ -46,9 +46,5 @@ void load_stage2_idt(void)
 
 	set_idt_entry(X86_TRAP_PF, boot_page_fault);
 
-#ifdef CONFIG_AMD_MEM_ENCRYPT
-	set_idt_entry(X86_TRAP_VC, boot_stage2_vc);
-#endif
-
 	load_boot_idt(&boot_idt_desc);
 }

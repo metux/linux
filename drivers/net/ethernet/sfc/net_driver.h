@@ -38,6 +38,8 @@
  *
  **************************************************************************/
 
+#define EFX_DRIVER_VERSION	"4.1"
+
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
 #define EFX_WARN_ON_PARANOID(x) WARN_ON(x)
@@ -63,22 +65,16 @@
  * queues. */
 #define EFX_MAX_TX_TC		2
 #define EFX_MAX_CORE_TX_QUEUES	(EFX_MAX_TX_TC * EFX_MAX_CHANNELS)
-#define EFX_TXQ_TYPE_OUTER_CSUM	1	/* Outer checksum offload */
-#define EFX_TXQ_TYPE_INNER_CSUM	2	/* Inner checksum offload */
-#define EFX_TXQ_TYPE_HIGHPRI	4	/* High-priority (for TC) */
-#define EFX_TXQ_TYPES		8
-/* HIGHPRI is Siena-only, and INNER_CSUM is EF10, so no need for both */
-#define EFX_MAX_TXQ_PER_CHANNEL	4
-#define EFX_MAX_TX_QUEUES	(EFX_MAX_TXQ_PER_CHANNEL * EFX_MAX_CHANNELS)
+#define EFX_TXQ_TYPE_OFFLOAD	1	/* flag */
+#define EFX_TXQ_TYPE_HIGHPRI	2	/* flag */
+#define EFX_TXQ_TYPES		4
+#define EFX_MAX_TX_QUEUES	(EFX_TXQ_TYPES * EFX_MAX_CHANNELS)
 
 /* Maximum possible MTU the driver supports */
 #define EFX_MAX_MTU (9 * 1024)
 
 /* Minimum MTU, from RFC791 (IP) */
 #define EFX_MIN_MTU 68
-
-/* Maximum total header length for TSOv2 */
-#define EFX_TSO2_MAX_HDRLEN	208
 
 /* Size of an RX scatter buffer.  Small enough to pack 2 into a 4K page,
  * and should be a multiple of the cache line size.
@@ -196,9 +192,7 @@ struct efx_tx_buffer {
  * @queue: DMA queue number
  * @label: Label for TX completion events.
  *	Is our index within @channel->tx_queue array.
- * @type: configuration type of this TX queue.  A bitmask of %EFX_TXQ_TYPE_* flags.
  * @tso_version: Version of TSO in use for this queue.
- * @tso_encap: Is encapsulated TSO supported? Supported in TSOv2 on 8000 series.
  * @channel: The associated channel
  * @core_txq: The networking core TX queue structure
  * @buffer: The software buffer ring
@@ -212,6 +206,8 @@ struct efx_tx_buffer {
  * @initialised: Has hardware queue been initialised?
  * @timestamping: Is timestamping enabled for this channel?
  * @xdp_tx: Is this an XDP tx queue?
+ * @handle_tso: TSO xmit preparation handler.  Sets up the TSO metadata and
+ *	may also map tx data, depending on the nature of the TSO implementation.
  * @read_count: Current read pointer.
  *	This is the number of buffers that have been removed from both rings.
  * @old_write_count: The value of @write_count when last checked.
@@ -260,9 +256,7 @@ struct efx_tx_queue {
 	struct efx_nic *efx ____cacheline_aligned_in_smp;
 	unsigned int queue;
 	unsigned int label;
-	unsigned int type;
 	unsigned int tso_version;
-	bool tso_encap;
 	struct efx_channel *channel;
 	struct netdev_queue *core_txq;
 	struct efx_tx_buffer *buffer;
@@ -274,6 +268,9 @@ struct efx_tx_queue {
 	bool initialised;
 	bool timestamping;
 	bool xdp_tx;
+
+	/* Function pointers used in the fast path. */
+	int (*handle_tso)(struct efx_tx_queue*, struct sk_buff*, bool *);
 
 	/* Members used mainly on the completion path */
 	unsigned int read_count ____cacheline_aligned_in_smp;
@@ -458,7 +455,7 @@ enum efx_sync_events_state {
  *	were checked for expiry
  * @rfs_expire_index: next accelerated RFS filter ID to check for expiry
  * @n_rfs_succeeded: number of successful accelerated RFS filter insertions
- * @n_rfs_failed: number of failed accelerated RFS filter insertions
+ * @n_rfs_failed; number of failed accelerated RFS filter insertions
  * @filter_work: Work item for efx_filter_rfs_expire()
  * @rps_flow_id: Flow IDs of filters allocated for accelerated RFS,
  *      indexed by filter ID
@@ -484,7 +481,6 @@ enum efx_sync_events_state {
  * @rx_list: list of SKBs from current RX, awaiting processing
  * @rx_queue: RX queue for this channel
  * @tx_queue: TX queues for this channel
- * @tx_queue_by_type: pointers into @tx_queue, or %NULL, indexed by txq type
  * @sync_events_state: Current state of sync events on this channel
  * @sync_timestamp_major: Major part of the last ptp sync event
  * @sync_timestamp_minor: Minor part of the last ptp sync event
@@ -546,8 +542,7 @@ struct efx_channel {
 	struct list_head *rx_list;
 
 	struct efx_rx_queue rx_queue;
-	struct efx_tx_queue tx_queue[EFX_MAX_TXQ_PER_CHANNEL];
-	struct efx_tx_queue *tx_queue_by_type[EFX_TXQ_TYPES];
+	struct efx_tx_queue tx_queue[EFX_TXQ_TYPES];
 
 	enum efx_sync_events_state sync_events_state;
 	u32 sync_timestamp_major;
@@ -1172,9 +1167,6 @@ struct efx_udp_tunnel {
  * @describe_stats: Describe statistics for ethtool
  * @update_stats: Update statistics not provided by event handling.
  *	Either argument may be %NULL.
- * @update_stats_atomic: Update statistics while in atomic context, if that
- *	is more limiting than @update_stats.  Otherwise, leave %NULL and
- *	driver core will call @update_stats.
  * @start_stats: Start the regular fetching of statistics
  * @pull_stats: Pull stats from the NIC and wait until they arrive.
  * @stop_stats: Stop the regular fetching of statistics
@@ -1210,7 +1202,7 @@ struct efx_udp_tunnel {
  *	a pointer to the &struct efx_msi_context for the channel.
  * @irq_handle_legacy: Handle legacy interrupt.  The @dev_id argument
  *	is a pointer to the &struct efx_nic.
- * @tx_probe: Allocate resources for TX queue (and select TXQ type)
+ * @tx_probe: Allocate resources for TX queue
  * @tx_init: Initialise TX queue on the NIC
  * @tx_remove: Free resources for TX queue
  * @tx_write: Write TX descriptors and doorbell
@@ -1319,8 +1311,6 @@ struct efx_nic_type {
 	size_t (*describe_stats)(struct efx_nic *efx, u8 *names);
 	size_t (*update_stats)(struct efx_nic *efx, u64 *full_stats,
 			       struct rtnl_link_stats64 *core_stats);
-	size_t (*update_stats_atomic)(struct efx_nic *efx, u64 *full_stats,
-				      struct rtnl_link_stats64 *core_stats);
 	void (*start_stats)(struct efx_nic *efx);
 	void (*pull_stats)(struct efx_nic *efx);
 	void (*stop_stats)(struct efx_nic *efx);
@@ -1507,6 +1497,14 @@ efx_get_tx_channel(struct efx_nic *efx, unsigned int index)
 	return efx->channel[efx->tx_channel_offset + index];
 }
 
+static inline struct efx_tx_queue *
+efx_get_tx_queue(struct efx_nic *efx, unsigned index, unsigned type)
+{
+	EFX_WARN_ON_ONCE_PARANOID(index >= efx->n_tx_channels ||
+				  type >= efx->tx_queues_per_channel);
+	return &efx->channel[efx->tx_channel_offset + index]->tx_queue[type];
+}
+
 static inline struct efx_channel *
 efx_get_xdp_channel(struct efx_nic *efx, unsigned int index)
 {
@@ -1533,18 +1531,10 @@ static inline unsigned int efx_channel_num_tx_queues(struct efx_channel *channel
 }
 
 static inline struct efx_tx_queue *
-efx_channel_get_tx_queue(struct efx_channel *channel, unsigned int type)
+efx_channel_get_tx_queue(struct efx_channel *channel, unsigned type)
 {
-	EFX_WARN_ON_ONCE_PARANOID(type >= EFX_TXQ_TYPES);
-	return channel->tx_queue_by_type[type];
-}
-
-static inline struct efx_tx_queue *
-efx_get_tx_queue(struct efx_nic *efx, unsigned int index, unsigned int type)
-{
-	struct efx_channel *channel = efx_get_tx_channel(efx, index);
-
-	return efx_channel_get_tx_queue(channel, type);
+	EFX_WARN_ON_ONCE_PARANOID(type >= efx_channel_num_tx_queues(channel));
+	return &channel->tx_queue[type];
 }
 
 /* Iterate over all TX queues belonging to a channel */

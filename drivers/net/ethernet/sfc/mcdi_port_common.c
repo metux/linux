@@ -308,7 +308,7 @@ void efx_mcdi_phy_decode_link(struct efx_nic *efx,
  * Both RS and BASER (whether AUTO or not) means use FEC if cable and link
  * partner support it, preferring RS to BASER.
  */
-u32 ethtool_fec_caps_to_mcdi(u32 supported_cap, u32 ethtool_cap)
+u32 ethtool_fec_caps_to_mcdi(u32 ethtool_cap)
 {
 	u32 ret = 0;
 
@@ -316,21 +316,17 @@ u32 ethtool_fec_caps_to_mcdi(u32 supported_cap, u32 ethtool_cap)
 		return 0;
 
 	if (ethtool_cap & ETHTOOL_FEC_AUTO)
-		ret |= ((1 << MC_CMD_PHY_CAP_BASER_FEC_LBN) |
-			(1 << MC_CMD_PHY_CAP_25G_BASER_FEC_LBN) |
-			(1 << MC_CMD_PHY_CAP_RS_FEC_LBN)) & supported_cap;
-	if (ethtool_cap & ETHTOOL_FEC_RS &&
-	    supported_cap & (1 << MC_CMD_PHY_CAP_RS_FEC_LBN))
+		ret |= (1 << MC_CMD_PHY_CAP_BASER_FEC_LBN) |
+		       (1 << MC_CMD_PHY_CAP_25G_BASER_FEC_LBN) |
+		       (1 << MC_CMD_PHY_CAP_RS_FEC_LBN);
+	if (ethtool_cap & ETHTOOL_FEC_RS)
 		ret |= (1 << MC_CMD_PHY_CAP_RS_FEC_LBN) |
 		       (1 << MC_CMD_PHY_CAP_RS_FEC_REQUESTED_LBN);
-	if (ethtool_cap & ETHTOOL_FEC_BASER) {
-		if (supported_cap & (1 << MC_CMD_PHY_CAP_BASER_FEC_LBN))
-			ret |= (1 << MC_CMD_PHY_CAP_BASER_FEC_LBN) |
-			       (1 << MC_CMD_PHY_CAP_BASER_FEC_REQUESTED_LBN);
-		if (supported_cap & (1 << MC_CMD_PHY_CAP_25G_BASER_FEC_LBN))
-			ret |= (1 << MC_CMD_PHY_CAP_25G_BASER_FEC_LBN) |
-			       (1 << MC_CMD_PHY_CAP_25G_BASER_FEC_REQUESTED_LBN);
-	}
+	if (ethtool_cap & ETHTOOL_FEC_BASER)
+		ret |= (1 << MC_CMD_PHY_CAP_BASER_FEC_LBN) |
+		       (1 << MC_CMD_PHY_CAP_25G_BASER_FEC_LBN) |
+		       (1 << MC_CMD_PHY_CAP_BASER_FEC_REQUESTED_LBN) |
+		       (1 << MC_CMD_PHY_CAP_25G_BASER_FEC_REQUESTED_LBN);
 	return ret;
 }
 
@@ -484,15 +480,15 @@ int efx_mcdi_phy_probe(struct efx_nic *efx)
 	if (rc != 0)
 		goto fail;
 	/* The MC indicates that LOOPBACK_NONE is a valid loopback mode,
-	 * but by convention we don't
-	 */
+	 * but by convention we don't */
 	efx->loopback_modes &= ~(1 << LOOPBACK_NONE);
 
 	/* Set the initial link mode */
-	efx_mcdi_phy_decode_link(efx, &efx->link_state,
-				 MCDI_DWORD(outbuf, GET_LINK_OUT_LINK_SPEED),
-				 MCDI_DWORD(outbuf, GET_LINK_OUT_FLAGS),
-				 MCDI_DWORD(outbuf, GET_LINK_OUT_FCNTL));
+	efx_mcdi_phy_decode_link(
+		efx, &efx->link_state,
+		MCDI_DWORD(outbuf, GET_LINK_OUT_LINK_SPEED),
+		MCDI_DWORD(outbuf, GET_LINK_OUT_FLAGS),
+		MCDI_DWORD(outbuf, GET_LINK_OUT_FCNTL));
 
 	/* Record the initial FEC configuration (or nearest approximation
 	 * representable in the ethtool configuration space)
@@ -581,7 +577,7 @@ int efx_mcdi_phy_set_link_ksettings(struct efx_nic *efx, const struct ethtool_li
 		}
 	}
 
-	caps |= ethtool_fec_caps_to_mcdi(phy_cfg->supported_cap, efx->fec_config);
+	caps |= ethtool_fec_caps_to_mcdi(efx->fec_config);
 
 	rc = efx_mcdi_set_link(efx, caps, efx_get_mcdi_phy_flags(efx),
 			       efx->loopback_mode, 0);
@@ -649,29 +645,11 @@ int efx_mcdi_phy_get_fecparam(struct efx_nic *efx, struct ethtool_fecparam *fec)
 	return 0;
 }
 
-/* Basic validation to ensure that the caps we are going to attempt to set are
- * in fact supported by the adapter.  Note that 'no FEC' is always supported.
- */
-static int ethtool_fec_supported(u32 supported_cap, u32 ethtool_cap)
-{
-	if (ethtool_cap & ETHTOOL_FEC_OFF)
-		return 0;
-
-	if (ethtool_cap &&
-	    !ethtool_fec_caps_to_mcdi(supported_cap, ethtool_cap))
-		return -EINVAL;
-	return 0;
-}
-
 int efx_mcdi_phy_set_fecparam(struct efx_nic *efx, const struct ethtool_fecparam *fec)
 {
 	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
 	u32 caps;
 	int rc;
-
-	rc = ethtool_fec_supported(phy_cfg->supported_cap, fec->fec);
-	if (rc)
-		return rc;
 
 	/* Work out what efx_mcdi_phy_set_link_ksettings() would produce from
 	 * saved advertising bits
@@ -682,7 +660,7 @@ int efx_mcdi_phy_set_fecparam(struct efx_nic *efx, const struct ethtool_fecparam
 	else
 		caps = phy_cfg->forced_cap;
 
-	caps |= ethtool_fec_caps_to_mcdi(phy_cfg->supported_cap, fec->fec);
+	caps |= ethtool_fec_caps_to_mcdi(fec->fec);
 	rc = efx_mcdi_set_link(efx, caps, efx_get_mcdi_phy_flags(efx),
 			       efx->loopback_mode, 0);
 	if (rc)
@@ -721,7 +699,7 @@ int efx_mcdi_port_reconfigure(struct efx_nic *efx)
 		    ethtool_linkset_to_mcdi_cap(efx->link_advertising) :
 		    phy_cfg->forced_cap);
 
-	caps |= ethtool_fec_caps_to_mcdi(phy_cfg->supported_cap, efx->fec_config);
+	caps |= ethtool_fec_caps_to_mcdi(efx->fec_config);
 
 	return efx_mcdi_set_link(efx, caps, efx_get_mcdi_phy_flags(efx),
 				 efx->loopback_mode, 0);
@@ -798,7 +776,7 @@ out:
 	return rc;
 }
 
-int efx_mcdi_phy_run_tests(struct efx_nic *efx, int *results, unsigned int flags)
+int efx_mcdi_phy_run_tests(struct efx_nic *efx, int *results, unsigned flags)
 {
 	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
 	u32 mode;
@@ -813,8 +791,7 @@ int efx_mcdi_phy_run_tests(struct efx_nic *efx, int *results, unsigned int flags
 	}
 
 	/* If we support both LONG and SHORT, then run each in response to
-	 * break or not. Otherwise, run the one we support
-	 */
+	 * break or not. Otherwise, run the one we support */
 	mode = 0;
 	if (phy_cfg->flags & (1 << MC_CMD_GET_PHY_CFG_OUT_BIST_CABLE_SHORT_LBN)) {
 		if ((flags & ETH_TEST_FL_OFFLINE) &&
@@ -889,9 +866,9 @@ static int efx_mcdi_phy_get_module_eeprom_page(struct efx_nic *efx,
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_PHY_MEDIA_INFO_OUT_LENMAX);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_PHY_MEDIA_INFO_IN_LEN);
+	size_t outlen;
 	unsigned int payload_len;
 	unsigned int to_copy;
-	size_t outlen;
 	int rc;
 
 	if (offset > SFP_PAGE_SIZE)
@@ -926,8 +903,8 @@ static int efx_mcdi_phy_get_module_eeprom_byte(struct efx_nic *efx,
 					       unsigned int page,
 					       u8 byte)
 {
-	u8 data;
 	int rc;
+	u8 data;
 
 	rc = efx_mcdi_phy_get_module_eeprom_page(efx, page, &data, byte, 1);
 	if (rc == 1)
@@ -1050,7 +1027,7 @@ int efx_mcdi_phy_get_module_info(struct efx_nic *efx, struct ethtool_modinfo *mo
 		 */
 		diag_type = efx_mcdi_phy_diag_type(efx);
 
-		if (sff_8472_level == 0 ||
+		if ((sff_8472_level == 0) ||
 		    (diag_type & SFF_DIAG_ADDR_CHANGE)) {
 			modinfo->type = ETH_MODULE_SFF_8079;
 			modinfo->eeprom_len = ETH_MODULE_SFF_8079_LEN;

@@ -11,6 +11,7 @@
 
 #include <linux/context_tracking.h>
 #include <linux/init.h>
+#include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/kvm_para.h>
 #include <linux/cpu.h>
@@ -219,7 +220,7 @@ again:
 }
 EXPORT_SYMBOL_GPL(kvm_async_pf_task_wake);
 
-u32 kvm_read_and_reset_apf_flags(void)
+noinstr u32 kvm_read_and_reset_apf_flags(void)
 {
 	u32 flags = 0;
 
@@ -231,14 +232,17 @@ u32 kvm_read_and_reset_apf_flags(void)
 	return flags;
 }
 EXPORT_SYMBOL_GPL(kvm_read_and_reset_apf_flags);
-NOKPROBE_SYMBOL(kvm_read_and_reset_apf_flags);
 
-bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
+noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 {
 	u32 flags = kvm_read_and_reset_apf_flags();
+	irqentry_state_t state;
 
 	if (!flags)
 		return false;
+
+	state = irqentry_enter(regs);
+	instrumentation_begin();
 
 	/*
 	 * If the host managed to inject an async #PF into an interrupt
@@ -253,32 +257,30 @@ bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 			panic("Host injected async #PF in kernel mode\n");
 		/* Page is swapped out by the host. */
 		kvm_async_pf_task_wait_schedule(token);
-		return true;
+	} else {
+		WARN_ONCE(1, "Unexpected async PF flags: %x\n", flags);
 	}
 
-	WARN_ONCE(1, "Unexpected async PF flags: %x\n", flags);
+	instrumentation_end();
+	irqentry_exit(regs, state);
 	return true;
 }
-NOKPROBE_SYMBOL(__kvm_handle_async_pf);
 
-__visible void __irq_entry kvm_async_pf_intr(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_asyncpf_interrupt)
 {
+	struct pt_regs *old_regs = set_irq_regs(regs);
 	u32 token;
-
-	entering_ack_irq();
 
 	inc_irq_stat(irq_hv_callback_count);
 
 	if (__this_cpu_read(apf_reason.enabled)) {
 		token = __this_cpu_read(apf_reason.token);
-		rcu_irq_enter();
 		kvm_async_pf_task_wake(token);
-		rcu_irq_exit();
 		__this_cpu_write(apf_reason.token, 0);
 		wrmsrl(MSR_KVM_ASYNC_PF_ACK, 1);
 	}
 
-	exiting_irq();
+	set_irq_regs(old_regs);
 }
 
 static void __init paravirt_ops_setup(void)
@@ -665,7 +667,7 @@ static void __init kvm_guest_init(void)
 
 	if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF_INT) && kvmapf) {
 		static_branch_enable(&kvm_async_pf_enabled);
-		alloc_intr_gate(HYPERVISOR_CALLBACK_VECTOR, kvm_async_pf_vector);
+		alloc_intr_gate(HYPERVISOR_CALLBACK_VECTOR, asm_sysvec_kvm_asyncpf_interrupt);
 	}
 
 #ifdef CONFIG_SMP

@@ -10,9 +10,6 @@
 #include <linux/types.h>
 #include <asm/efi.h>
 
-/* error code which can't be mistaken for valid address */
-#define EFI_ERROR	(~0UL)
-
 /*
  * __init annotations should not be used in the EFI stub, since the code is
  * either included in the decompressor (x86, ARM) where they have no effect,
@@ -39,6 +36,9 @@ extern int efi_loglevel;
 extern bool efi_novamap;
 
 extern const efi_system_table_t *efi_system_table;
+
+efi_status_t __efiapi efi_pe_entry(efi_handle_t handle,
+				   efi_system_table_t *sys_table_arg);
 
 #ifndef ARCH_HAS_EFISTUB_WRAPPERS
 
@@ -141,8 +141,14 @@ typedef void (__efiapi *efi_event_notify_t)(efi_event_t, void *);
 #define EFI_EVT_NOTIFY_WAIT	0x00000100U
 #define EFI_EVT_NOTIFY_SIGNAL	0x00000200U
 
-/*
- * boottime->wait_for_event takes an array of events as input.
+/**
+ * efi_set_event_at() - add event to events array
+ *
+ * @events:	array of UEFI events
+ * @ids:	index where to put the event in the array
+ * @event:	event to add to the aray
+ *
+ * boottime->wait_for_event() takes an array of events as input.
  * Provide a helper to set it up correctly for mixed mode.
  */
 static inline
@@ -322,6 +328,8 @@ union efi_simple_text_input_protocol {
 		u32 wait_for_key;
 	} mixed_mode;
 };
+
+efi_status_t efi_wait_for_key(unsigned long usec, efi_input_key_t *key);
 
 union efi_simple_text_output_protocol {
 	struct {
@@ -706,8 +714,7 @@ __printf(1, 2) int efi_printk(char const *fmt, ...);
 
 void efi_free(unsigned long size, unsigned long addr);
 
-char *efi_convert_cmdline(efi_loaded_image_t *image, int *cmd_line_len,
-			  unsigned long max_addr);
+char *efi_convert_cmdline(efi_loaded_image_t *image, int *cmd_line_len);
 
 efi_status_t efi_get_memory_map(struct efi_boot_memmap *map);
 
@@ -756,6 +763,21 @@ efi_status_t efi_load_initrd(efi_loaded_image_t *image,
 			     unsigned long *load_size,
 			     unsigned long soft_limit,
 			     unsigned long hard_limit);
+/*
+ * This function handles the architcture specific differences between arm and
+ * arm64 regarding where the kernel image must be loaded and any memory that
+ * must be reserved. On failure it is required to free all
+ * all allocations it has made.
+ */
+efi_status_t handle_kernel_image(unsigned long *image_addr,
+				 unsigned long *image_size,
+				 unsigned long *reserve_addr,
+				 unsigned long *reserve_size,
+				 efi_loaded_image_t *image);
+
+asmlinkage void __noreturn efi_enter_kernel(unsigned long entrypoint,
+					    unsigned long fdt_addr,
+					    unsigned long fdt_size);
 
 void efi_handle_post_ebs_state(void);
 

@@ -113,7 +113,6 @@ int vmw_gmrid_man_init(struct vmw_private *dev_priv, int type)
 
 	man->func = &vmw_gmrid_manager_func;
 	man->available_caching = TTM_PL_FLAG_CACHED;
-	man->default_caching = TTM_PL_FLAG_CACHED;
 	/* TODO: This is most likely not correct */
 	man->use_tt = true;
 	ttm_resource_manager_init(man, 0);
@@ -156,6 +155,6 @@ void vmw_gmrid_man_fini(struct vmw_private *dev_priv, int type)
 }
 
 static const struct ttm_resource_manager_func vmw_gmrid_manager_func = {
-	.get_node = vmw_gmrid_man_get_node,
-	.put_node = vmw_gmrid_man_put_node,
+	.alloc = vmw_gmrid_man_get_node,
+	.free = vmw_gmrid_man_put_node,
 };

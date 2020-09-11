@@ -75,9 +75,6 @@ config ARCH_HAS_DMA_PREP_COHERENT
 config ARCH_HAS_FORCE_DMA_UNENCRYPTED
 	bool
 
-config DMA_NONCOHERENT_CACHE_SYNC
-	bool
-
 config DMA_VIRT_OPS
 	bool
 	depends on HAS_DMA
@@ -121,7 +118,7 @@ config DMA_CMA
 	  You can disable CMA by specifying "cma=0" on the kernel's command
 	  line.
 
-	  For more information see <include/linux/dma-contiguous.h>.
+	  For more information see <kernel/dma/contiguous.c>.
 	  If unsure, say "n".
 
 if  DMA_CMA
@@ -180,7 +177,7 @@ endchoice
 
 config CMA_ALIGNMENT
 	int "Maximum PAGE_SIZE order of alignment for contiguous buffers"
-	range 4 12
+	range 2 12
 	default 8
 	help
 	  DMA mapping framework by default aligns all buffers to the smallest

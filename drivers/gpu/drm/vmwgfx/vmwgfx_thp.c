@@ -132,7 +132,6 @@ int vmw_thp_init(struct vmw_private *dev_priv)
 
 	man = &rman->manager;
 	man->available_caching = TTM_PL_FLAG_CACHED;
-	man->default_caching = TTM_PL_FLAG_CACHED;
 
 	ttm_resource_manager_init(man,
 				  dev_priv->vram_size >> PAGE_SHIFT);
@@ -177,7 +176,7 @@ static void vmw_thp_debug(struct ttm_resource_manager *man,
 }
 
 const struct ttm_resource_manager_func vmw_thp_func = {
-	.get_node = vmw_thp_get_node,
-	.put_node = vmw_thp_put_node,
+	.alloc = vmw_thp_get_node,
+	.free = vmw_thp_put_node,
 	.debug = vmw_thp_debug
 };

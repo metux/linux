@@ -175,7 +175,7 @@ int hl_fw_unmask_irq_arr(struct hl_device *hdev, const u32 *irq_arr,
 	total_pkt_size = sizeof(struct cpucp_unmask_irq_arr_packet) +
 			irq_arr_size;
 
-	/* data should be aligned to 8 bytes in order to ArmCP to copy it */
+	/* data should be aligned to 8 bytes in order to CPU-CP to copy it */
 	total_pkt_size = (total_pkt_size + 0x7) & ~0x7;
 
 	/* total_pkt_size is casted to u16 later on */
@@ -283,7 +283,7 @@ int hl_fw_cpucp_info_get(struct hl_device *hdev)
 					&cpucp_info_dma_addr);
 	if (!cpucp_info_cpu_addr) {
 		dev_err(hdev->dev,
-			"Failed to allocate DMA memory for ArmCP info packet\n");
+			"Failed to allocate DMA memory for CPU-CP info packet\n");
 		return -ENOMEM;
 	}
 
@@ -298,7 +298,7 @@ int hl_fw_cpucp_info_get(struct hl_device *hdev)
 					HL_CPUCP_INFO_TIMEOUT_USEC, &result);
 	if (rc) {
 		dev_err(hdev->dev,
-			"Failed to handle ArmCP info pkt, error %d\n", rc);
+			"Failed to handle CPU-CP info pkt, error %d\n", rc);
 		goto out;
 	}
 
@@ -333,7 +333,7 @@ int hl_fw_get_eeprom_data(struct hl_device *hdev, void *data, size_t max_size)
 					max_size, &eeprom_info_dma_addr);
 	if (!eeprom_info_cpu_addr) {
 		dev_err(hdev->dev,
-			"Failed to allocate DMA memory for ArmCP EEPROM packet\n");
+			"Failed to allocate DMA memory for CPU-CP EEPROM packet\n");
 		return -ENOMEM;
 	}
 
@@ -349,7 +349,8 @@ int hl_fw_get_eeprom_data(struct hl_device *hdev, void *data, size_t max_size)
 
 	if (rc) {
 		dev_err(hdev->dev,
-			"Failed to handle ArmCP EEPROM packet, error %d\n", rc);
+			"Failed to handle CPU-CP EEPROM packet, error %d\n",
+			rc);
 		goto out;
 	}
 
@@ -379,7 +380,7 @@ int hl_fw_cpucp_pci_counters_get(struct hl_device *hdev,
 					HL_CPUCP_INFO_TIMEOUT_USEC, &result);
 	if (rc) {
 		dev_err(hdev->dev,
-			"Failed to handle ArmCP PCI info pkt, error %d\n", rc);
+			"Failed to handle CPU-CP PCI info pkt, error %d\n", rc);
 		return rc;
 	}
 	counters->rx_throughput = result;
@@ -390,7 +391,7 @@ int hl_fw_cpucp_pci_counters_get(struct hl_device *hdev,
 					HL_CPUCP_INFO_TIMEOUT_USEC, &result);
 	if (rc) {
 		dev_err(hdev->dev,
-			"Failed to handle ArmCP PCI info pkt, error %d\n", rc);
+			"Failed to handle CPU-CP PCI info pkt, error %d\n", rc);
 		return rc;
 	}
 	counters->tx_throughput = result;
@@ -403,7 +404,7 @@ int hl_fw_cpucp_pci_counters_get(struct hl_device *hdev,
 			HL_CPUCP_INFO_TIMEOUT_USEC, &result);
 	if (rc) {
 		dev_err(hdev->dev,
-			"Failed to handle ArmCP PCI info pkt, error %d\n", rc);
+			"Failed to handle CPU-CP PCI info pkt, error %d\n", rc);
 		return rc;
 	}
 	counters->replay_cnt = (u32) result;
@@ -473,8 +474,11 @@ static void fw_read_errors(struct hl_device *hdev, u32 boot_err0_reg)
 			"Device boot error - NIC F/W initialization failed\n");
 }
 
-static void hl_detect_cpu_boot_status(struct hl_device *hdev, u32 status)
+static void detect_cpu_boot_status(struct hl_device *hdev, u32 status)
 {
+	/* Some of the status codes below are deprecated in newer f/w
+	 * versions but we keep them here for backward compatibility
+	 */
 	switch (status) {
 	case CPU_BOOT_STATUS_NA:
 		dev_err(hdev->dev,
@@ -518,6 +522,48 @@ static void hl_detect_cpu_boot_status(struct hl_device *hdev, u32 status)
 			status);
 		break;
 	}
+}
+
+int hl_fw_read_preboot_ver(struct hl_device *hdev, u32 cpu_boot_status_reg,
+				u32 boot_err0_reg, u32 timeout)
+{
+	u32 status;
+	int rc;
+
+	if (!hdev->cpu_enable)
+		return 0;
+
+	/* Need to check two possible scenarios:
+	 *
+	 * CPU_BOOT_STATUS_WAITING_FOR_BOOT_FIT - for newer firmwares where
+	 * the preboot is waiting for the boot fit
+	 *
+	 * All other status values - for older firmwares where the uboot was
+	 * loaded from the FLASH
+	 */
+	rc = hl_poll_timeout(
+		hdev,
+		cpu_boot_status_reg,
+		status,
+		(status == CPU_BOOT_STATUS_IN_UBOOT) ||
+		(status == CPU_BOOT_STATUS_DRAM_RDY) ||
+		(status == CPU_BOOT_STATUS_NIC_FW_RDY) ||
+		(status == CPU_BOOT_STATUS_READY_TO_BOOT) ||
+		(status == CPU_BOOT_STATUS_SRAM_AVAIL) ||
+		(status == CPU_BOOT_STATUS_WAITING_FOR_BOOT_FIT),
+		10000,
+		timeout);
+
+	if (rc) {
+		dev_err(hdev->dev, "Failed to read preboot version\n");
+		detect_cpu_boot_status(hdev, status);
+		fw_read_errors(hdev, boot_err0_reg);
+		return -EIO;
+	}
+
+	hdev->asic_funcs->read_device_fw_version(hdev, FW_COMP_PREBOOT);
+
+	return 0;
 }
 
 int hl_fw_init_cpu(struct hl_device *hdev, u32 cpu_boot_status_reg,
@@ -585,15 +631,11 @@ int hl_fw_init_cpu(struct hl_device *hdev, u32 cpu_boot_status_reg,
 		10000,
 		cpu_timeout);
 
-	/* Read U-Boot, preboot versions now in case we will later fail */
+	/* Read U-Boot version now in case we will later fail */
 	hdev->asic_funcs->read_device_fw_version(hdev, FW_COMP_UBOOT);
-	hdev->asic_funcs->read_device_fw_version(hdev, FW_COMP_PREBOOT);
 
-	/* Some of the status codes below are deprecated in newer f/w
-	 * versions but we keep them here for backward compatibility
-	 */
 	if (rc) {
-		hl_detect_cpu_boot_status(hdev, status);
+		detect_cpu_boot_status(hdev, status);
 		rc = -EIO;
 		goto out;
 	}

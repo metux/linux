@@ -132,89 +132,83 @@ void notrace walk_stackframe(struct task_struct *tsk, struct stackframe *frame,
 }
 NOKPROBE_SYMBOL(walk_stackframe);
 
-static void dump_backtrace_entry(unsigned long where, const char *loglvl)
+#ifdef CONFIG_STACKTRACE
+struct stack_trace_data {
+	struct stack_trace *trace;
+	unsigned int no_sched_functions;
+	unsigned int skip;
+};
+
+static bool save_trace(void *d, unsigned long addr)
 {
-	printk("%s %pS\n", loglvl, (void *)where);
-}
+	struct stack_trace_data *data = d;
+	struct stack_trace *trace = data->trace;
 
-void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk,
-		    const char *loglvl)
-{
-	struct stackframe frame;
-	int skip = 0;
-
-	pr_debug("%s(regs = %p tsk = %p)\n", __func__, regs, tsk);
-
-	if (regs) {
-		if (user_mode(regs))
-			return;
-		skip = 1;
+	if (data->no_sched_functions && in_sched_functions(addr))
+		return false;
+	if (data->skip) {
+		data->skip--;
+		return false;
 	}
 
-	if (!tsk)
-		tsk = current;
+	trace->entries[trace->nr_entries++] = addr;
+
+	return trace->nr_entries >= trace->max_entries;
+}
+
+void save_stack_trace_regs(struct pt_regs *regs, struct stack_trace *trace)
+{
+	struct stack_trace_data data;
+	struct stackframe frame;
+
+	data.trace = trace;
+	data.skip = trace->skip;
+	data.no_sched_functions = 0;
+
+	start_backtrace(&frame, regs->regs[29], regs->pc);
+	walk_stackframe(current, &frame, save_trace, &data);
+}
+EXPORT_SYMBOL_GPL(save_stack_trace_regs);
+
+static noinline void __save_stack_trace(struct task_struct *tsk,
+	struct stack_trace *trace, unsigned int nosched)
+{
+	struct stack_trace_data data;
+	struct stackframe frame;
 
 	if (!try_get_task_stack(tsk))
 		return;
 
-	if (tsk == current) {
+	data.trace = trace;
+	data.skip = trace->skip;
+	data.no_sched_functions = nosched;
+
+	if (tsk != current) {
+		start_backtrace(&frame, thread_saved_fp(tsk),
+				thread_saved_pc(tsk));
+	} else {
+		/* We don't want this function nor the caller */
+		data.skip += 2;
 		start_backtrace(&frame,
 				(unsigned long)__builtin_frame_address(0),
-				(unsigned long)dump_backtrace);
-	} else {
-		/*
-		 * task blocked in __switch_to
-		 */
-		start_backtrace(&frame,
-				thread_saved_fp(tsk),
-				thread_saved_pc(tsk));
+				(unsigned long)__save_stack_trace);
 	}
 
-	printk("%sCall trace:\n", loglvl);
-	do {
-		/* skip until specified stack frame */
-		if (!skip) {
-			dump_backtrace_entry(frame.pc, loglvl);
-		} else if (frame.fp == regs->regs[29]) {
-			skip = 0;
-			/*
-			 * Mostly, this is the case where this function is
-			 * called in panic/abort. As exception handler's
-			 * stack frame does not contain the corresponding pc
-			 * at which an exception has taken place, use regs->pc
-			 * instead.
-			 */
-			dump_backtrace_entry(regs->pc, loglvl);
-		}
-	} while (!unwind_frame(tsk, &frame));
+	walk_stackframe(tsk, &frame, save_trace, &data);
 
 	put_task_stack(tsk);
 }
 
-void show_stack(struct task_struct *tsk, unsigned long *sp, const char *loglvl)
+void save_stack_trace_tsk(struct task_struct *tsk, struct stack_trace *trace)
 {
-	dump_backtrace(NULL, tsk, loglvl);
-	barrier();
+	__save_stack_trace(tsk, trace, 1);
+}
+EXPORT_SYMBOL_GPL(save_stack_trace_tsk);
+
+void save_stack_trace(struct stack_trace *trace)
+{
+	__save_stack_trace(current, trace, 0);
 }
 
-#ifdef CONFIG_STACKTRACE
-
-void arch_stack_walk(stack_trace_consume_fn consume_entry, void *cookie,
-		     struct task_struct *task, struct pt_regs *regs)
-{
-	struct stackframe frame;
-
-	if (regs)
-		start_backtrace(&frame, regs->regs[29], regs->pc);
-	else if (task == current)
-		start_backtrace(&frame,
-				(unsigned long)__builtin_frame_address(0),
-				(unsigned long)arch_stack_walk);
-	else
-		start_backtrace(&frame, thread_saved_fp(task),
-				thread_saved_pc(task));
-
-	walk_stackframe(task, &frame, consume_entry, cookie);
-}
-
+EXPORT_SYMBOL_GPL(save_stack_trace);
 #endif

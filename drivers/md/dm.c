@@ -1132,15 +1132,16 @@ static bool dm_dax_supported(struct dax_device *dax_dev, struct block_device *bd
 {
 	struct mapped_device *md = dax_get_private(dax_dev);
 	struct dm_table *map;
+	bool ret = false;
 	int srcu_idx;
-	bool ret;
 
 	map = dm_get_live_table(md, &srcu_idx);
 	if (!map)
-		return false;
+		goto out;
 
 	ret = dm_table_supports_dax(map, device_supports_dax, &blocksize);
 
+out:
 	dm_put_live_table(md, srcu_idx);
 
 	return ret;
@@ -1680,7 +1681,7 @@ static blk_qc_t __split_and_process_bio(struct mapped_device *md,
  * fact that targets that use it do _not_ have a need to split bios.
  */
 static blk_qc_t __process_bio(struct mapped_device *md, struct dm_table *map,
-			      struct bio *bio, struct dm_target *ti)
+			      struct bio *bio)
 {
 	struct clone_info ci;
 	blk_qc_t ret = BLK_QC_T_NONE;
@@ -1705,6 +1706,12 @@ static blk_qc_t __process_bio(struct mapped_device *md, struct dm_table *map,
 		/* dec_pending submits any data associated with flush */
 	} else {
 		struct dm_target_io *tio;
+		struct dm_target *ti = md->immutable_target;
+
+		if (WARN_ON_ONCE(!ti)) {
+			error = -EIO;
+			goto out;
+		}
 
 		ci.bio = bio;
 		ci.sector_count = bio_sectors(bio);
@@ -1720,58 +1727,32 @@ out:
 	return ret;
 }
 
-static void dm_queue_split(struct mapped_device *md, struct dm_target *ti, struct bio **bio)
-{
-	unsigned len, sector_count;
-
-	sector_count = bio_sectors(*bio);
-	len = min_t(sector_t, max_io_len((*bio)->bi_iter.bi_sector, ti), sector_count);
-
-	if (sector_count > len) {
-		struct bio *split = bio_split(*bio, len, GFP_NOIO, &md->queue->bio_split);
-
-		bio_chain(split, *bio);
-		trace_block_split(md->queue, split, (*bio)->bi_iter.bi_sector);
-		submit_bio_noacct(*bio);
-		*bio = split;
-	}
-}
-
 static blk_qc_t dm_process_bio(struct mapped_device *md,
 			       struct dm_table *map, struct bio *bio)
 {
 	blk_qc_t ret = BLK_QC_T_NONE;
-	struct dm_target *ti = md->immutable_target;
 
 	if (unlikely(!map)) {
 		bio_io_error(bio);
 		return ret;
 	}
 
-	if (!ti) {
-		ti = dm_table_find_target(map, bio->bi_iter.bi_sector);
-		if (unlikely(!ti)) {
-			bio_io_error(bio);
-			return ret;
-		}
-	}
-
 	/*
-	 * If in ->queue_bio we need to use blk_queue_split(), otherwise
+	 * If in ->submit_bio we need to use blk_queue_split(), otherwise
 	 * queue_limits for abnormal requests (e.g. discard, writesame, etc)
 	 * won't be imposed.
+	 * If called from dm_wq_work() for deferred bio processing, bio
+	 * was already handled by following code with previous ->submit_bio.
 	 */
 	if (current->bio_list) {
 		if (is_abnormal_io(bio))
 			blk_queue_split(&bio);
-		else
-			dm_queue_split(md, ti, &bio);
+		/* regular IO is split by __split_and_process_bio */
 	}
 
 	if (dm_get_md_type(md) == DM_TYPE_NVME_BIO_BASED)
-		return __process_bio(md, map, bio, ti);
-	else
-		return __split_and_process_bio(md, map, bio);
+		return __process_bio(md, map, bio);
+	return __split_and_process_bio(md, map, bio);
 }
 
 static blk_qc_t dm_submit_bio(struct bio *bio)
@@ -2137,8 +2118,7 @@ static struct dm_table *__bind(struct mapped_device *md, struct dm_table *t,
 		/*
 		 * Leverage the fact that request-based DM targets and
 		 * NVMe bio based targets are immutable singletons
-		 * - used to optimize both dm_request_fn and dm_mq_queue_rq;
-		 *   and __process_bio.
+		 * - used to optimize both __process_bio and dm_mq_queue_rq
 		 */
 		md->immutable_target = dm_table_get_immutable_target(t);
 	}

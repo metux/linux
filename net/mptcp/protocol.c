@@ -110,6 +110,22 @@ static int __mptcp_socket_create(struct mptcp_sock *msk)
 	return 0;
 }
 
+static bool mptcp_try_coalesce(struct sock *sk, struct sk_buff *to,
+			       struct sk_buff *from)
+{
+	bool fragstolen;
+	int delta;
+
+	if (MPTCP_SKB_CB(from)->offset ||
+	    !skb_try_coalesce(to, from, &fragstolen, &delta))
+		return false;
+
+	kfree_skb_partial(from, fragstolen);
+	atomic_add(delta, &sk->sk_rmem_alloc);
+	sk_mem_charge(sk, delta);
+	return true;
+}
+
 static void __mptcp_move_skb(struct mptcp_sock *msk, struct sock *ssk,
 			     struct sk_buff *skb,
 			     unsigned int offset, size_t copy_len)
@@ -121,24 +137,15 @@ static void __mptcp_move_skb(struct mptcp_sock *msk, struct sock *ssk,
 
 	skb_ext_reset(skb);
 	skb_orphan(skb);
-	WRITE_ONCE(msk->ack_seq, msk->ack_seq + copy_len);
+	MPTCP_SKB_CB(skb)->offset = offset;
+	msk->ack_seq += copy_len;
 
 	tail = skb_peek_tail(&sk->sk_receive_queue);
-	if (offset == 0 && tail) {
-		bool fragstolen;
-		int delta;
-
-		if (skb_try_coalesce(tail, skb, &fragstolen, &delta)) {
-			kfree_skb_partial(skb, fragstolen);
-			atomic_add(delta, &sk->sk_rmem_alloc);
-			sk_mem_charge(sk, delta);
-			return;
-		}
-	}
+	if (tail && mptcp_try_coalesce(sk, tail, skb))
+		return;
 
 	skb_set_owner_r(skb, sk);
 	__skb_queue_tail(&sk->sk_receive_queue, skb);
-	MPTCP_SKB_CB(skb)->offset = offset;
 }
 
 static void mptcp_stop_timer(struct sock *sk)
@@ -260,7 +267,7 @@ static void mptcp_check_data_fin(struct sock *sk)
 	if (mptcp_pending_data_fin(sk, &rcv_data_fin_seq)) {
 		struct mptcp_subflow_context *subflow;
 
-		WRITE_ONCE(msk->ack_seq, msk->ack_seq + 1);
+		msk->ack_seq++;
 		WRITE_ONCE(msk->rcv_data_fin, 0);
 
 		sk->sk_shutdown |= RCV_SHUTDOWN;
@@ -1769,7 +1776,7 @@ struct sock *mptcp_sk_clone(const struct sock *sk,
 		msk->remote_key = mp_opt->sndr_key;
 		mptcp_crypto_key_sha(msk->remote_key, NULL, &ack_seq);
 		ack_seq++;
-		WRITE_ONCE(msk->ack_seq, ack_seq);
+		msk->ack_seq = ack_seq;
 	}
 
 	sock_reset_flag(nsk, SOCK_RCU_FREE);
@@ -2121,7 +2128,7 @@ bool mptcp_finish_join(struct sock *sk)
 	parent_sock = READ_ONCE(parent->sk_socket);
 	if (parent_sock && !sk->sk_socket)
 		mptcp_sock_graft(sk, parent_sock);
-	subflow->map_seq = READ_ONCE(msk->ack_seq);
+	subflow->map_seq = msk->ack_seq;
 	return true;
 }
 

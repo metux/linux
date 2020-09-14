@@ -1406,7 +1406,11 @@ memdump:	mov	r12, r0
 __hyp_reentry_vectors:
 		W(b)	.			@ reset
 		W(b)	.			@ undef
+#ifdef CONFIG_EFI_STUB
+		W(b)	__enter_kernel_from_hyp	@ hvc from HYP
+#else
 		W(b)	.			@ svc
+#endif
 		W(b)	.			@ pabort
 		W(b)	.			@ dabort
 		W(b)	__enter_kernel		@ hyp
@@ -1425,11 +1429,18 @@ __enter_kernel:
 reloc_code_end:
 
 #ifdef CONFIG_EFI_STUB
+__enter_kernel_from_hyp:
+		mrc	p15, 4, r0, c1, c0, 0	@ read HSCTLR
+		bic	r0, r0, #0x5		@ disable MMU and caches
+		mcr	p15, 4, r0, c1, c0, 0	@ write HSCTLR
+		isb
+		b	__enter_kernel
+
 ENTRY(efi_enter_kernel)
 		mov	r4, r0			@ preserve image base
 		mov	r8, r1			@ preserve DT pointer
- ARM(		adrl	r0, call_cache_fn	)
- THUMB(		adr	r0, call_cache_fn	)
+
+		adr_l	r0, call_cache_fn
 		adr	r1, 0f			@ clean the region of code we
 		bl	cache_clean_flush	@ may run with the MMU off
 
@@ -1481,4 +1492,27 @@ ENTRY(efi_enter_kernel)
 		b	.Lefi_hyp
 .Lefi_svc:
 #endif
+		mrc	p15, 0, r0, c1, c0, 0	@ read SCTLR
+		tst	r0, #0x1		@ MMU enabled?
+		orreq	r4, r4, #1		@ set LSB if not
 
+.Lefi_hyp:
+		mov	r0, r8			@ DT start
+		add	r1, r8, r2		@ DT end
+		bl	cache_clean_flush
+
+		adr	r0, 0f			@ switch to our stack
+		ldr	sp, [r0]
+		add	sp, sp, r0
+
+		mov	r5, #0			@ appended DTB size
+		mov	r7, #0xFFFFFFFF		@ machine ID
+		b	wont_overwrite
+ENDPROC(efi_enter_kernel)
+0:		.long	.L_user_stack_end - .
+#endif
+
+		.align
+		.section ".stack", "aw", %nobits
+.L_user_stack:	.space	4096
+.L_user_stack_end:

@@ -410,7 +410,7 @@ exit:
 	return fn ? fn(regs, instr) : 1;
 }
 
-void force_signal_inject(int signal, int code, unsigned long address)
+void force_signal_inject(int signal, int code, unsigned long address, unsigned int err)
 {
 	const char *desc;
 	struct pt_regs *regs = current_pt_regs();
@@ -436,7 +436,7 @@ void force_signal_inject(int signal, int code, unsigned long address)
 		signal = SIGKILL;
 	}
 
-	arm64_notify_die(desc, regs, signal, code, (void __user *)address, 0);
+	arm64_notify_die(desc, regs, signal, code, (void __user *)address, err);
 }
 
 /*
@@ -453,7 +453,7 @@ void arm64_notify_segfault(unsigned long addr)
 		code = SEGV_ACCERR;
 	up_read(&current->mm->mmap_sem);
 
-	force_signal_inject(SIGSEGV, code, addr);
+	force_signal_inject(SIGSEGV, code, addr, 0);
 }
 
 asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
@@ -466,13 +466,13 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 		return;
 
 	BUG_ON(!user_mode(regs));
-	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc);
+	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 }
 
 void do_bti(struct pt_regs *regs)
 {
 	BUG_ON(!user_mode(regs));
-	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc);
+	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 }
 NOKPROBE_SYMBOL(do_bti);
 
@@ -525,7 +525,7 @@ static void user_cache_maint_handler(unsigned int esr, struct pt_regs *regs)
 		__user_cache_maint("ic ivau", address, ret);
 		break;
 	default:
-		force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc);
+		force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 		return;
 	}
 
@@ -572,7 +572,7 @@ static void mrs_handler(unsigned int esr, struct pt_regs *regs)
 	sysreg = esr_sys64_to_sysreg(esr);
 
 	if (do_emulate_mrs(regs, sysreg, rt) != 0)
-		force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc);
+		force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 }
 
 static void wfi_handler(unsigned int esr, struct pt_regs *regs)

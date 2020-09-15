@@ -17,7 +17,6 @@
 
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
-#include <asm/extable.h>
 #include <asm/kprobes.h>
 #include <asm/kvm_asm.h>
 #include <asm/kvm_emulate.h>
@@ -29,9 +28,6 @@
 #include <asm/thread_info.h>
 
 extern const char __hyp_panic_string[];
-
-extern struct exception_table_entry __start___kvm_ex_table;
-extern struct exception_table_entry __stop___kvm_ex_table;
 
 /* Check whether the FP regs were dirtied while in the host-side run loop: */
 static inline bool update_fp_enabled(struct kvm_vcpu *vcpu)
@@ -146,10 +142,10 @@ static inline bool __translate_far_to_hpfar(u64 far, u64 *hpfar)
 	 * saved the guest context yet, and we may return early...
 	 */
 	par = read_sysreg(par_el1);
-	if (!__kvm_at("s1e1r", far))
-		tmp = read_sysreg(par_el1);
-	else
-		tmp = SYS_PAR_EL1_F; /* back to the guest */
+	asm volatile("at s1e1r, %0" : : "r" (far));
+	isb();
+
+	tmp = read_sysreg(par_el1);
 	write_sysreg(par, par_el1);
 
 	if (unlikely(tmp & SYS_PAR_EL1_F))
@@ -203,7 +199,7 @@ static inline bool __populate_fault_info(struct kvm_vcpu *vcpu)
 static inline bool __hyp_handle_fpsimd(struct kvm_vcpu *vcpu)
 {
 	bool vhe, sve_guest, sve_host;
-	u8 hsr_ec;
+	u8 esr_ec;
 
 	if (!system_supports_fpsimd())
 		return false;
@@ -223,14 +219,14 @@ static inline bool __hyp_handle_fpsimd(struct kvm_vcpu *vcpu)
 		vhe = has_vhe();
 	}
 
-	hsr_ec = kvm_vcpu_trap_get_class(vcpu);
-	if (hsr_ec != ESR_ELx_EC_FP_ASIMD &&
-	    hsr_ec != ESR_ELx_EC_SVE)
+	esr_ec = kvm_vcpu_trap_get_class(vcpu);
+	if (esr_ec != ESR_ELx_EC_FP_ASIMD &&
+	    esr_ec != ESR_ELx_EC_SVE)
 		return false;
 
 	/* Don't handle SVE traps for non-SVE vcpus here: */
 	if (!sve_guest)
-		if (hsr_ec != ESR_ELx_EC_FP_ASIMD)
+		if (esr_ec != ESR_ELx_EC_FP_ASIMD)
 			return false;
 
 	/* Valid trap.  Switch the context: */
@@ -288,7 +284,7 @@ static inline bool __hyp_handle_fpsimd(struct kvm_vcpu *vcpu)
 
 static inline bool handle_tx2_tvm(struct kvm_vcpu *vcpu)
 {
-	u32 sysreg = esr_sys64_to_sysreg(kvm_vcpu_get_hsr(vcpu));
+	u32 sysreg = esr_sys64_to_sysreg(kvm_vcpu_get_esr(vcpu));
 	int rt = kvm_vcpu_sys_get_rt(vcpu);
 	u64 val = vcpu_get_reg(vcpu, rt);
 
@@ -383,7 +379,7 @@ static inline bool __hyp_handle_ptrauth(struct kvm_vcpu *vcpu)
 	u64 val;
 
 	if (!vcpu_has_ptrauth(vcpu) ||
-	    !esr_is_ptrauth_trap(kvm_vcpu_get_hsr(vcpu)))
+	    !esr_is_ptrauth_trap(kvm_vcpu_get_esr(vcpu)))
 		return false;
 
 	ctxt = &__hyp_this_cpu_ptr(kvm_host_data)->host_ctxt;
@@ -448,8 +444,8 @@ static inline bool fixup_guest_exit(struct kvm_vcpu *vcpu, u64 *exit_code)
 		valid = kvm_vcpu_trap_get_class(vcpu) == ESR_ELx_EC_DABT_LOW &&
 			kvm_vcpu_trap_get_fault_type(vcpu) == FSC_FAULT &&
 			kvm_vcpu_dabt_isvalid(vcpu) &&
-			!kvm_vcpu_dabt_isextabt(vcpu) &&
-			!kvm_vcpu_dabt_iss1tw(vcpu);
+			!kvm_vcpu_abt_issea(vcpu) &&
+			!kvm_vcpu_abt_iss1tw(vcpu);
 
 		if (valid) {
 			int ret = __vgic_v2_perform_cpuif_access(vcpu);
@@ -510,33 +506,6 @@ static inline void __set_host_arch_workaround_state(struct kvm_vcpu *vcpu)
 	    __hyp_this_cpu_read(arm64_ssbd_callback_required))
 		arm_smccc_1_1_smc(ARM_SMCCC_ARCH_WORKAROUND_2, 1, NULL);
 #endif
-}
-
-static inline void __kvm_unexpected_el2_exception(void)
-{
-	unsigned long addr, fixup;
-	struct kvm_cpu_context *host_ctxt;
-	struct exception_table_entry *entry, *end;
-	unsigned long elr_el2 = read_sysreg(elr_el2);
-
-	entry = hyp_symbol_addr(__start___kvm_ex_table);
-	end = hyp_symbol_addr(__stop___kvm_ex_table);
-	host_ctxt = &__hyp_this_cpu_ptr(kvm_host_data)->host_ctxt;
-
-	while (entry < end) {
-		addr = (unsigned long)&entry->insn + entry->insn;
-		fixup = (unsigned long)&entry->fixup + entry->fixup;
-
-		if (addr != elr_el2) {
-			entry++;
-			continue;
-		}
-
-		write_sysreg(fixup, elr_el2);
-		return;
-	}
-
-	hyp_panic(host_ctxt);
 }
 
 #endif /* __ARM64_KVM_HYP_SWITCH_H__ */

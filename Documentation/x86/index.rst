@@ -31,3 +31,4 @@ x86-specific Documentation
    i386/index
    x86_64/index
    mds
+   sva

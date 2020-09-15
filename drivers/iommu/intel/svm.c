@@ -19,7 +19,6 @@
 #include <linux/mm_types.h>
 #include <linux/ioasid.h>
 #include <asm/page.h>
-#include <asm/fpu/api.h>
 
 #include "pasid.h"
 
@@ -279,22 +278,14 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain, struct device *dev,
 	struct intel_iommu *iommu = device_to_iommu(dev, NULL, NULL);
 	struct intel_svm_dev *sdev = NULL;
 	struct dmar_domain *dmar_domain;
-	struct device_domain_info *info;
 	struct intel_svm *svm = NULL;
 	int ret = 0;
 
 	if (WARN_ON(!iommu) || !data)
 		return -EINVAL;
 
-	if (data->format != IOMMU_PASID_FORMAT_INTEL_VTD)
-		return -EINVAL;
-
-	/* IOMMU core ensures argsz is more than the start of the union */
-	if (data->argsz < offsetofend(struct iommu_gpasid_bind_data, vendor.vtd))
-		return -EINVAL;
-
-	/* Make sure no undefined flags are used in vendor data */
-	if (data->vendor.vtd.flags & ~(IOMMU_SVA_VTD_GPASID_LAST - 1))
+	if (data->version != IOMMU_GPASID_BIND_VERSION_1 ||
+	    data->format != IOMMU_PASID_FORMAT_INTEL_VTD)
 		return -EINVAL;
 
 	if (!dev_is_pci(dev))
@@ -309,10 +300,6 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain, struct device *dev,
 	 * guest PASID range.
 	 */
 	if (data->hpasid <= 0 || data->hpasid >= PASID_MAX)
-		return -EINVAL;
-
-	info = get_domain_info(dev);
-	if (!info)
 		return -EINVAL;
 
 	dmar_domain = to_dmar_domain(domain);
@@ -362,7 +349,6 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain, struct device *dev,
 		goto out;
 	}
 	sdev->dev = dev;
-	sdev->sid = PCI_DEVID(info->bus, info->devfn);
 
 	/* Only count users if device has aux domains */
 	if (iommu_dev_feature_enabled(dev, IOMMU_DEV_FEAT_AUX))
@@ -384,7 +370,7 @@ int intel_svm_bind_gpasid(struct iommu_domain *domain, struct device *dev,
 	spin_lock(&iommu->lock);
 	ret = intel_pasid_setup_nested(iommu, dev,
 				       (pgd_t *)(uintptr_t)data->gpgd,
-				       data->hpasid, &data->vendor.vtd, dmar_domain,
+				       data->hpasid, &data->vtd, dmar_domain,
 				       data->addr_width);
 	spin_unlock(&iommu->lock);
 	if (ret) {
@@ -458,28 +444,9 @@ out:
 	return ret;
 }
 
-static void _load_pasid(void *unused)
-{
-	update_pasid();
-}
-
-static void load_pasid(struct mm_struct *mm, u32 pasid)
-{
-	mutex_lock(&mm->context.lock);
-
-	/* Synchronize with READ_ONCE in update_pasid(). */
-	smp_store_release(&mm->pasid, pasid);
-
-	/* Update PASID MSR on all CPUs running the mm's tasks. */
-	on_each_cpu_mask(mm_cpumask(mm), _load_pasid, NULL, true);
-
-	mutex_unlock(&mm->context.lock);
-}
-
 /* Caller must hold pasid_mutex, mm reference */
 static int
-intel_svm_bind_mm(struct device *dev, unsigned int flags,
-		  struct svm_dev_ops *ops,
+intel_svm_bind_mm(struct device *dev, int flags, struct svm_dev_ops *ops,
 		  struct mm_struct *mm, struct intel_svm_dev **sd)
 {
 	struct intel_iommu *iommu = device_to_iommu(dev, NULL, NULL);
@@ -623,10 +590,6 @@ intel_svm_bind_mm(struct device *dev, unsigned int flags,
 		}
 
 		list_add_tail(&svm->list, &global_svm_list);
-		if (mm) {
-			/* The newly allocated pasid is loaded to the mm. */
-			load_pasid(mm, svm->pasid);
-		}
 	} else {
 		/*
 		 * Binding a new device with existing PASID, need to setup
@@ -690,11 +653,8 @@ static int intel_svm_unbind_mm(struct device *dev, u32 pasid)
 
 			if (list_empty(&svm->devs)) {
 				ioasid_free(svm->pasid);
-				if (svm->mm) {
+				if (svm->mm)
 					mmu_notifier_unregister(&svm->notifier, svm->mm);
-					/* Clear mm's pasid. */
-					load_pasid(svm->mm, PASID_DISABLED);
-				}
 				list_del(&svm->list);
 				/* We mandate that no page faults may be outstanding
 				 * for the PASID when intel_svm_unbind_mm() is called.
@@ -1035,7 +995,7 @@ no_pasid:
 			resp.qw0 = QI_PGRP_PASID(req->pasid) |
 				QI_PGRP_DID(req->rid) |
 				QI_PGRP_PASID_P(req->pasid_present) |
-				QI_PGRP_PDP(req->priv_data_present) |
+				QI_PGRP_PDP(req->pasid_present) |
 				QI_PGRP_RESP_CODE(result) |
 				QI_PGRP_RESP_TYPE;
 			resp.qw1 = QI_PGRP_IDX(req->prg_index) |
@@ -1073,7 +1033,7 @@ intel_svm_bind(struct device *dev, struct mm_struct *mm, void *drvdata)
 {
 	struct iommu_sva *sva = ERR_PTR(-EINVAL);
 	struct intel_svm_dev *sdev = NULL;
-	unsigned int flags = 0;
+	int flags = 0;
 	int ret;
 
 	/*
@@ -1082,7 +1042,7 @@ intel_svm_bind(struct device *dev, struct mm_struct *mm, void *drvdata)
 	 * and intel_svm etc.
 	 */
 	if (drvdata)
-		flags = *(unsigned int *)drvdata;
+		flags = *(int *)drvdata;
 	mutex_lock(&pasid_mutex);
 	ret = intel_svm_bind_mm(dev, flags, NULL, mm, &sdev);
 	if (ret)

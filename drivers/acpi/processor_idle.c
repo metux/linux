@@ -573,8 +573,6 @@ static DEFINE_RAW_SPINLOCK(c3_lock);
 static void acpi_idle_enter_bm(struct acpi_processor *pr,
 			       struct acpi_processor_cx *cx, bool timer_bc)
 {
-	acpi_unlazy_tlb(smp_processor_id());
-
 	/*
 	 * Must be done before busmaster disable as we might need to
 	 * access HPET !
@@ -687,12 +685,16 @@ static int acpi_processor_setup_cpuidle_cx(struct acpi_processor *pr,
 		max_cstate = 1;
 
 	for (i = 1; i < ACPI_PROCESSOR_MAX_POWER && i <= max_cstate; i++) {
+		state = &acpi_idle_driver.states[count];
 		cx = &pr->power.states[i];
 
 		if (!cx->valid)
 			continue;
 
 		per_cpu(acpi_cstate[count], dev->cpu) = cx;
+
+		if (cx->type == ACPI_STATE_C3)
+			state->flags |= CPUIDLE_FLAG_TLB_FLUSHED;
 
 		count++;
 		if (count == CPUIDLE_STATE_MAX)

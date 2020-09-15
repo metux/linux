@@ -169,8 +169,6 @@ static void install_bp_hardening_cb(bp_hardening_cb_t fn,
 }
 #endif	/* CONFIG_KVM_INDIRECT_VECTORS */
 
-#include <linux/arm-smccc.h>
-
 static void __maybe_unused call_smc_arch_workaround_1(void)
 {
 	arm_smccc_1_1_smc(ARM_SMCCC_ARCH_WORKAROUND_1, NULL);
@@ -234,14 +232,17 @@ static int detect_harden_bp_fw(void)
 		smccc_end = NULL;
 		break;
 
-#if IS_ENABLED(CONFIG_KVM)
 	case SMCCC_CONDUIT_SMC:
 		cb = call_smc_arch_workaround_1;
+#if IS_ENABLED(CONFIG_KVM)
 		smccc_start = __smccc_workaround_1_smc;
 		smccc_end = __smccc_workaround_1_smc +
 			__SMCCC_WORKAROUND_1_SMC_SZ;
-		break;
+#else
+		smccc_start = NULL;
+		smccc_end = NULL;
 #endif
+		break;
 
 	default:
 		return -1;
@@ -251,9 +252,7 @@ static int detect_harden_bp_fw(void)
 	    ((midr & MIDR_CPU_MODEL_MASK) == MIDR_QCOM_FALKOR_V1))
 		cb = qcom_link_stack_sanitization;
 
-	if (IS_ENABLED(CONFIG_HARDEN_BRANCH_PREDICTOR))
-		install_bp_hardening_cb(cb, smccc_start, smccc_end);
-
+	install_bp_hardening_cb(cb, smccc_start, smccc_end);
 	return 1;
 }
 
@@ -331,11 +330,6 @@ void __init arm64_enable_wa2_handling(struct alt_instr *alt,
 void arm64_set_ssbd_mitigation(bool state)
 {
 	int conduit;
-
-	if (!IS_ENABLED(CONFIG_ARM64_SSBD)) {
-		pr_info_once("SSBD disabled by kernel configuration\n");
-		return;
-	}
 
 	if (this_cpu_has_cap(ARM64_SSBS)) {
 		if (state)
@@ -452,6 +446,12 @@ out_printmsg:
 	}
 
 	return required;
+}
+
+static void cpu_enable_ssbd_mitigation(const struct arm64_cpu_capabilities *cap)
+{
+	if (ssbd_state != ARM64_SSBD_FORCE_DISABLE)
+		cap->matches(cap, SCOPE_LOCAL_CPU);
 }
 
 /* known invulnerable cores */
@@ -578,12 +578,6 @@ check_branch_predictor(const struct arm64_cpu_capabilities *entry, int scope)
 
 	__spectrev2_safe = false;
 
-	if (!IS_ENABLED(CONFIG_HARDEN_BRANCH_PREDICTOR)) {
-		pr_warn_once("spectrev2 mitigation disabled by kernel configuration\n");
-		__hardenbp_enab = false;
-		return false;
-	}
-
 	/* forced off */
 	if (__nospectre_v2 || cpu_mitigations_off()) {
 		pr_info_once("spectrev2 mitigation disabled by command line option\n");
@@ -597,6 +591,12 @@ check_branch_predictor(const struct arm64_cpu_capabilities *entry, int scope)
 	}
 
 	return (need_wa > 0);
+}
+
+static void
+cpu_enable_branch_predictor_hardening(const struct arm64_cpu_capabilities *cap)
+{
+	cap->matches(cap, SCOPE_LOCAL_CPU);
 }
 
 static const __maybe_unused struct midr_range tx2_family_cpus[] = {
@@ -876,9 +876,11 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 	},
 #endif
 	{
+		.desc = "Branch predictor hardening",
 		.capability = ARM64_HARDEN_BRANCH_PREDICTOR,
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = check_branch_predictor,
+		.cpu_enable = cpu_enable_branch_predictor_hardening,
 	},
 #ifdef CONFIG_RANDOMIZE_BASE
 	{
@@ -892,6 +894,7 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_SSBD,
 		.type = ARM64_CPUCAP_LOCAL_CPU_ERRATUM,
 		.matches = has_ssbd_mitigation,
+		.cpu_enable = cpu_enable_ssbd_mitigation,
 		.midr_range_list = arm64_ssb_cpus,
 	},
 #ifdef CONFIG_ARM64_ERRATUM_1418040
@@ -972,9 +975,7 @@ ssize_t cpu_show_spec_store_bypass(struct device *dev,
 	switch (ssbd_state) {
 	case ARM64_SSBD_KERNEL:
 	case ARM64_SSBD_FORCE_ENABLE:
-		if (IS_ENABLED(CONFIG_ARM64_SSBD))
-			return sprintf(buf,
-			    "Mitigation: Speculative Store Bypass disabled via prctl\n");
+		return sprintf(buf, "Mitigation: Speculative Store Bypass disabled via prctl\n");
 	}
 
 	return sprintf(buf, "Vulnerable\n");

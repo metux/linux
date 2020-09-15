@@ -358,7 +358,7 @@ static inline int cpucap_default_scope(const struct arm64_cpu_capabilities *cap)
 }
 
 /*
- * Generic helper for handling capabilties with multiple (match,enable) pairs
+ * Generic helper for handling capabilities with multiple (match,enable) pairs
  * of call backs, sharing the same capability bit.
  * Iterate over each entry to see if at least one matches.
  */
@@ -706,12 +706,8 @@ int get_spectre_v2_workaround_state(void);
 
 static inline int arm64_get_ssbd_state(void)
 {
-#ifdef CONFIG_ARM64_SSBD
 	extern int ssbd_state;
 	return ssbd_state;
-#else
-	return ARM64_SSBD_UNKNOWN;
-#endif
 }
 
 void arm64_set_ssbd_mitigation(bool state);

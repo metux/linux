@@ -692,11 +692,11 @@ static inline bool system_supports_bti(void)
 	return IS_ENABLED(CONFIG_ARM64_BTI) && cpus_have_const_cap(ARM64_BTI);
 }
 
-#define ARM64_BP_HARDEN_UNKNOWN		-1
-#define ARM64_BP_HARDEN_WA_NEEDED	0
-#define ARM64_BP_HARDEN_NOT_REQUIRED	1
-
-int get_spectre_v2_workaround_state(void);
+static inline bool system_supports_tlb_range(void)
+{
+	return IS_ENABLED(CONFIG_ARM64_TLB_RANGE) &&
+		cpus_have_const_cap(ARM64_HAS_TLB_RANGE);
+}
 
 #define ARM64_SSBD_UNKNOWN		-1
 #define ARM64_SSBD_FORCE_DISABLE	0

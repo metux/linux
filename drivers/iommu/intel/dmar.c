@@ -316,9 +316,6 @@ static int dmar_pci_bus_add_dev(struct dmar_pci_notify_info *info)
 	if (ret < 0 && dmar_dev_scope_status == 0)
 		dmar_dev_scope_status = ret;
 
-	if (ret >= 0)
-		intel_irq_remap_add_device(info);
-
 	return ret;
 }
 
@@ -333,13 +330,6 @@ static void  dmar_pci_bus_del_dev(struct dmar_pci_notify_info *info)
 	dmar_iommu_notify_scope_dev(info);
 }
 
-static inline void vf_inherit_msi_domain(struct pci_dev *pdev)
-{
-	struct pci_dev *physfn = pci_physfn(pdev);
-
-	dev_set_msi_domain(&pdev->dev, dev_get_msi_domain(&physfn->dev));
-}
-
 static int dmar_pci_bus_notifier(struct notifier_block *nb,
 				 unsigned long action, void *data)
 {
@@ -349,20 +339,8 @@ static int dmar_pci_bus_notifier(struct notifier_block *nb,
 	/* Only care about add/remove events for physical functions.
 	 * For VFs we actually do the lookup based on the corresponding
 	 * PF in device_to_iommu() anyway. */
-	if (pdev->is_virtfn) {
-		/*
-		 * Ensure that the VF device inherits the irq domain of the
-		 * PF device. Ideally the device would inherit the domain
-		 * from the bus, but DMAR can have multiple units per bus
-		 * which makes this impossible. The VF 'bus' could inherit
-		 * from the PF device, but that's yet another x86'sism to
-		 * inflict on everybody else.
-		 */
-		if (action == BUS_NOTIFY_ADD_DEVICE)
-			vf_inherit_msi_domain(pdev);
+	if (pdev->is_virtfn)
 		return NOTIFY_DONE;
-	}
-
 	if (action != BUS_NOTIFY_ADD_DEVICE &&
 	    action != BUS_NOTIFY_REMOVED_DEVICE)
 		return NOTIFY_DONE;
@@ -402,7 +380,7 @@ dmar_find_dmaru(struct acpi_dmar_hardware_unit *drhd)
 	return NULL;
 }
 
-/*
+/**
  * dmar_parse_one_drhd - parses exactly one DMA remapping hardware definition
  * structure which uniquely represent one DMA remapping hardware unit
  * present in the platform
@@ -495,7 +473,7 @@ static int dmar_parse_one_rhsa(struct acpi_dmar_header *header, void *arg)
 	rhsa = (struct acpi_dmar_rhsa *)header;
 	for_each_drhd_unit(drhd) {
 		if (drhd->reg_base_addr == rhsa->base_address) {
-			int node = pxm_to_node(rhsa->proximity_domain);
+			int node = acpi_map_pxm_to_node(rhsa->proximity_domain);
 
 			if (!node_online(node))
 				node = NUMA_NO_NODE;
@@ -986,8 +964,7 @@ static int map_iommu(struct intel_iommu *iommu, u64 phys_addr)
 		warn_invalid_dmar(phys_addr, " returns all ones");
 		goto unmap;
 	}
-	if (ecap_vcs(iommu->ecap))
-		iommu->vccap = dmar_readq(iommu->reg + DMAR_VCCAP_REG);
+	iommu->vccap = dmar_readq(iommu->reg + DMAR_VCCAP_REG);
 
 	/* the registers might be more than one page */
 	map_size = max_t(int, ecap_max_iotlb_offset(iommu->ecap),
@@ -1047,8 +1024,8 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 {
 	struct intel_iommu *iommu;
 	u32 ver, sts;
-	int agaw = -1;
-	int msagaw = -1;
+	int agaw = 0;
+	int msagaw = 0;
 	int err;
 
 	if (!drhd->reg_base_addr) {
@@ -1073,28 +1050,17 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	}
 
 	err = -EINVAL;
-	if (cap_sagaw(iommu->cap) == 0) {
-		pr_info("%s: No supported address widths. Not attempting DMA translation.\n",
-			iommu->name);
-		drhd->ignored = 1;
+	agaw = iommu_calculate_agaw(iommu);
+	if (agaw < 0) {
+		pr_err("Cannot get a valid agaw for iommu (seq_id = %d)\n",
+			iommu->seq_id);
+		goto err_unmap;
 	}
-
-	if (!drhd->ignored) {
-		agaw = iommu_calculate_agaw(iommu);
-		if (agaw < 0) {
-			pr_err("Cannot get a valid agaw for iommu (seq_id = %d)\n",
-			       iommu->seq_id);
-			drhd->ignored = 1;
-		}
-	}
-	if (!drhd->ignored) {
-		msagaw = iommu_calculate_max_sagaw(iommu);
-		if (msagaw < 0) {
-			pr_err("Cannot get a valid max agaw for iommu (seq_id = %d)\n",
-			       iommu->seq_id);
-			drhd->ignored = 1;
-			agaw = -1;
-		}
+	msagaw = iommu_calculate_max_sagaw(iommu);
+	if (msagaw < 0) {
+		pr_err("Cannot get a valid max agaw for iommu (seq_id = %d)\n",
+			iommu->seq_id);
+		goto err_unmap;
 	}
 	iommu->agaw = agaw;
 	iommu->msagaw = msagaw;
@@ -1121,12 +1087,7 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 
 	raw_spin_lock_init(&iommu->register_lock);
 
-	/*
-	 * This is only for hotplug; at boot time intel_iommu_enabled won't
-	 * be set yet. When intel_iommu_init() runs, it registers the units
-	 * present at boot time, then sets intel_iommu_enabled.
-	 */
-	if (intel_iommu_enabled && !drhd->ignored) {
+	if (intel_iommu_enabled) {
 		err = iommu_device_sysfs_add(&iommu->iommu, NULL,
 					     intel_iommu_groups,
 					     "%s", iommu->name);
@@ -1156,7 +1117,7 @@ error:
 
 static void free_iommu(struct intel_iommu *iommu)
 {
-	if (intel_iommu_enabled && !iommu->drhd->ignored) {
+	if (intel_iommu_enabled) {
 		iommu_device_unregister(&iommu->iommu);
 		iommu_device_sysfs_remove(&iommu->iommu);
 	}

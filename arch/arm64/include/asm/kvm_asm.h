@@ -57,10 +57,24 @@
 	DECLARE_KVM_VHE_SYM(sym);		\
 	DECLARE_KVM_NVHE_SYM(sym)
 
-#define CHOOSE_VHE_SYM(sym)	sym
-#define CHOOSE_NVHE_SYM(sym)	kvm_nvhe_sym(sym)
+#if defined(__KVM_NVHE_HYPERVISOR__)
 
-#ifndef __KVM_NVHE_HYPERVISOR__
+#define CHOOSE_HYP_SYM(sym)	CHOOSE_NVHE_SYM(sym)
+#define CHOOSE_NVHE_SYM(sym)	sym
+/* The nVHE hypervisor shouldn't even try to access VHE symbols */
+extern void *__nvhe_undefined_symbol;
+#define CHOOSE_VHE_SYM(sym)	__nvhe_undefined_symbol
+
+#elif defined(__KVM_VHE_HYPERVISOR)
+
+#define CHOOSE_HYP_SYM(sym)	CHOOSE_VHE_SYM(sym)
+#define CHOOSE_VHE_SYM(sym)	sym
+/* The VHE hypervisor shouldn't even try to access nVHE symbols */
+extern void *__vhe_undefined_symbol;
+#define CHOOSE_NVHE_SYM(sym)	__vhe_undefined_symbol
+
+#else
+
 /*
  * BIG FAT WARNINGS:
  *
@@ -74,10 +88,9 @@
  */
 #define CHOOSE_HYP_SYM(sym)	(is_kernel_in_hyp_mode() ? CHOOSE_VHE_SYM(sym) \
 					   : CHOOSE_NVHE_SYM(sym))
-#else
-/* The nVHE hypervisor shouldn't even try to access anything */
-extern void *__nvhe_undefined_symbol;
-#define CHOOSE_HYP_SYM(sym)	__nvhe_undefined_symbol
+#define CHOOSE_VHE_SYM(sym)	sym
+#define CHOOSE_NVHE_SYM(sym)	kvm_nvhe_sym(sym)
+
 #endif
 
 /* Translate a kernel address @ptr into its equivalent linear mapping */
@@ -95,15 +108,15 @@ struct kvm_vcpu;
 struct kvm_s2_mmu;
 
 DECLARE_KVM_NVHE_SYM(__kvm_hyp_init);
+DECLARE_KVM_NVHE_SYM(__kvm_hyp_host_vector);
 DECLARE_KVM_HYP_SYM(__kvm_hyp_vector);
 #define __kvm_hyp_init		CHOOSE_NVHE_SYM(__kvm_hyp_init)
+#define __kvm_hyp_host_vector	CHOOSE_NVHE_SYM(__kvm_hyp_host_vector)
 #define __kvm_hyp_vector	CHOOSE_HYP_SYM(__kvm_hyp_vector)
 
-#ifdef CONFIG_RANDOMIZE_BASE
 extern atomic_t arm64_el2_vector_last_slot;
 DECLARE_KVM_HYP_SYM(__bp_harden_hyp_vecs);
 #define __bp_harden_hyp_vecs	CHOOSE_HYP_SYM(__bp_harden_hyp_vecs)
-#endif
 
 extern void __kvm_flush_vm_context(void);
 extern void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa,

@@ -13,6 +13,8 @@
 #include <asm/kvm_mmu.h>
 #include <asm/sysreg.h>
 
+DECLARE_PER_CPU(unsigned long, kvm_hyp_vector);
+
 #define read_sysreg_elx(r,nvh,vh)					\
 	({								\
 		u64 reg;						\

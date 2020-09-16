@@ -400,8 +400,7 @@ static bool reg_type_not_null(enum bpf_reg_type type)
 	return type == PTR_TO_SOCKET ||
 		type == PTR_TO_TCP_SOCK ||
 		type == PTR_TO_MAP_VALUE ||
-		type == PTR_TO_SOCK_COMMON ||
-	        type == PTR_TO_BTF_ID;
+		type == PTR_TO_SOCK_COMMON;
 }
 
 static bool reg_type_may_be_null(enum bpf_reg_type type)
@@ -2984,8 +2983,10 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 	int depth = 0, frame = 0, idx = 0, i = 0, subprog_end;
 	struct bpf_subprog_info *subprog = env->subprog_info;
 	struct bpf_insn *insn = env->prog->insnsi;
+	bool tail_call_reachable = false;
 	int ret_insn[MAX_CALL_FRAMES];
 	int ret_prog[MAX_CALL_FRAMES];
+	int j;
 
 process_func:
 	/* protect against potential stack overflow that might happen when
@@ -3041,6 +3042,10 @@ continue_func:
 				  i);
 			return -EFAULT;
 		}
+
+		if (subprog[idx].has_tail_call)
+			tail_call_reachable = true;
+
 		frame++;
 		if (frame >= MAX_CALL_FRAMES) {
 			verbose(env, "the call stack of %d frames is too deep !\n",
@@ -3049,6 +3054,15 @@ continue_func:
 		}
 		goto process_func;
 	}
+	/* if tail call got detected across bpf2bpf calls then mark each of the
+	 * currently present subprog frames as tail call reachable subprogs;
+	 * this info will be utilized by JIT so that we will be preserving the
+	 * tail call counter throughout bpf2bpf calls combined with tailcalls
+	 */
+	if (tail_call_reachable)
+		for (j = 0; j < frame; j++)
+			subprog[ret_prog[j]].tail_call_reachable = true;
+
 	/* end of for() loop means the last insn of the 'subprog'
 	 * was reached. Doesn't matter whether it was JA or EXIT
 	 */
@@ -7934,7 +7948,7 @@ static int check_btf_func(struct bpf_verifier_env *env,
 	const struct btf *btf;
 	void __user *urecord;
 	u32 prev_offset = 0;
-	int ret = 0;
+	int ret = -ENOMEM;
 
 	nfuncs = attr->func_info_cnt;
 	if (!nfuncs)
@@ -10215,7 +10229,7 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 	struct bpf_map *map_ptr;
 	struct bpf_insn *insn;
 	void *old_bpf_func;
-	int err;
+	int err, num_exentries;
 
 	if (env->subprog_cnt <= 1)
 		return 0;
@@ -10315,6 +10329,15 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 		func[i]->aux->nr_linfo = prog->aux->nr_linfo;
 		func[i]->aux->jited_linfo = prog->aux->jited_linfo;
 		func[i]->aux->linfo_idx = env->subprog_info[i].linfo_idx;
+		num_exentries = 0;
+		insn = func[i]->insnsi;
+		for (j = 0; j < func[i]->len; j++, insn++) {
+			if (BPF_CLASS(insn->code) == BPF_LDX &&
+			    BPF_MODE(insn->code) == BPF_PROBE_MEM)
+				num_exentries++;
+		}
+		func[i]->aux->num_exentries = num_exentries;
+		func[i]->aux->tail_call_reachable = env->subprog_info[i].tail_call_reachable;
 		func[i] = bpf_int_jit_compile(func[i]);
 		if (!func[i]->jited) {
 			err = -ENOTSUPP;

@@ -395,7 +395,7 @@ static void nvmet_keep_alive_timer(struct work_struct *work)
 	nvmet_ctrl_fatal_error(ctrl);
 }
 
-static void nvmet_start_keep_alive_timer(struct nvmet_ctrl *ctrl)
+void nvmet_start_keep_alive_timer(struct nvmet_ctrl *ctrl)
 {
 	pr_debug("ctrl %d start keep-alive timer for %d secs\n",
 		ctrl->cntlid, ctrl->kato);
@@ -404,7 +404,7 @@ static void nvmet_start_keep_alive_timer(struct nvmet_ctrl *ctrl)
 	schedule_delayed_work(&ctrl->ka_work, ctrl->kato * HZ);
 }
 
-static void nvmet_stop_keep_alive_timer(struct nvmet_ctrl *ctrl)
+void nvmet_stop_keep_alive_timer(struct nvmet_ctrl *ctrl)
 {
 	pr_debug("ctrl %d stop keep-alive\n", ctrl->cntlid);
 

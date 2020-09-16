@@ -224,7 +224,7 @@ static int exynos7_ufs_post_pwr_change(struct exynos_ufs *ufs,
 	return 0;
 }
 
-/**
+/*
  * exynos_ufs_auto_ctrl_hcc - HCI core clock control by h/w
  * Control should be disabled in the below cases
  * - Before host controller S/W reset
@@ -264,7 +264,7 @@ static int exynos_ufs_get_clk_info(struct exynos_ufs *ufs)
 	u8 div = 0;
 	int ret = 0;
 
-	if (!head || list_empty(head))
+	if (list_empty(head))
 		goto out;
 
 	list_for_each_entry(clki, head, list) {
@@ -883,7 +883,7 @@ static int exynos_ufs_post_link(struct ufs_hba *hba)
 		if (attr->pa_granularity < 1 || attr->pa_granularity > 6) {
 			/* Valid range for granularity: 1 ~ 6 */
 			dev_warn(hba->dev,
-				"%s: pa_granularty %d is invalid, assuming backwards compatibility\n",
+				"%s: pa_granularity %d is invalid, assuming backwards compatibility\n",
 				__func__,
 				attr->pa_granularity);
 			attr->pa_granularity = 6;
@@ -940,7 +940,6 @@ static int exynos_ufs_init(struct ufs_hba *hba)
 	struct device *dev = hba->dev;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct exynos_ufs *ufs;
-	struct resource *res;
 	int ret;
 
 	ufs = devm_kzalloc(dev, sizeof(*ufs), GFP_KERNEL);
@@ -948,27 +947,24 @@ static int exynos_ufs_init(struct ufs_hba *hba)
 		return -ENOMEM;
 
 	/* exynos-specific hci */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "vs_hci");
-	ufs->reg_hci = devm_ioremap_resource(dev, res);
-	if (!ufs->reg_hci) {
+	ufs->reg_hci = devm_platform_ioremap_resource_byname(pdev, "vs_hci");
+	if (IS_ERR(ufs->reg_hci)) {
 		dev_err(dev, "cannot ioremap for hci vendor register\n");
-		return -ENOMEM;
+		return PTR_ERR(ufs->reg_hci);
 	}
 
 	/* unipro */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "unipro");
-	ufs->reg_unipro = devm_ioremap_resource(dev, res);
-	if (!ufs->reg_unipro) {
+	ufs->reg_unipro = devm_platform_ioremap_resource_byname(pdev, "unipro");
+	if (IS_ERR(ufs->reg_unipro)) {
 		dev_err(dev, "cannot ioremap for unipro register\n");
-		return -ENOMEM;
+		return PTR_ERR(ufs->reg_unipro);
 	}
 
 	/* ufs protector */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ufsp");
-	ufs->reg_ufsp = devm_ioremap_resource(dev, res);
-	if (!ufs->reg_ufsp) {
+	ufs->reg_ufsp = devm_platform_ioremap_resource_byname(pdev, "ufsp");
+	if (IS_ERR(ufs->reg_ufsp)) {
 		dev_err(dev, "cannot ioremap for ufs protector register\n");
-		return -ENOMEM;
+		return PTR_ERR(ufs->reg_ufsp);
 	}
 
 	ret = exynos_ufs_parse_dt(dev, ufs);
@@ -1291,3 +1287,8 @@ static struct platform_driver exynos_ufs_pltform = {
 	},
 };
 module_platform_driver(exynos_ufs_pltform);
+
+MODULE_AUTHOR("Alim Akhtar <alim.akhtar@samsung.com>");
+MODULE_AUTHOR("Seungwon Jeon  <essuuj@gmail.com>");
+MODULE_DESCRIPTION("Exynos UFS HCI Driver");
+MODULE_LICENSE("GPL v2");

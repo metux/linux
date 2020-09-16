@@ -25,7 +25,7 @@
 #include <linux/moduleloader.h>
 #include <linux/bpf.h>
 #include <linux/btf.h>
-#include <linux/frame.h>
+#include <linux/objtool.h>
 #include <linux/rbtree_latch.h>
 #include <linux/kallsyms.h>
 #include <linux/rcupdate.h>
@@ -775,7 +775,8 @@ int bpf_jit_add_poke_descriptor(struct bpf_prog *prog,
 
 	if (size > poke_tab_max)
 		return -ENOSPC;
-	if (poke->ip || poke->ip_stable || poke->adj_off)
+	if (poke->tailcall_target || poke->tailcall_target_stable ||
+	    poke->tailcall_bypass || poke->adj_off || poke->bypass_addr)
 		return -EINVAL;
 
 	switch (poke->reason) {

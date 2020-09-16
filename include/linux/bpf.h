@@ -34,6 +34,8 @@ struct btf_type;
 struct exception_table_entry;
 struct seq_operations;
 struct bpf_iter_aux_info;
+struct bpf_local_storage;
+struct bpf_local_storage_map;
 
 extern struct idr btf_idr;
 extern spinlock_t btf_idr_lock;
@@ -103,6 +105,25 @@ struct bpf_map_ops {
 	int (*map_mmap)(struct bpf_map *map, struct vm_area_struct *vma);
 	__poll_t (*map_poll)(struct bpf_map *map, struct file *filp,
 			     struct poll_table_struct *pts);
+
+	/* Functions called by bpf_local_storage maps */
+	int (*map_local_storage_charge)(struct bpf_local_storage_map *smap,
+					void *owner, u32 size);
+	void (*map_local_storage_uncharge)(struct bpf_local_storage_map *smap,
+					   void *owner, u32 size);
+	struct bpf_local_storage __rcu ** (*map_owner_storage_ptr)(void *owner);
+
+	/* map_meta_equal must be implemented for maps that can be
+	 * used as an inner map.  It is a runtime check to ensure
+	 * an inner map can be inserted to an outer map.
+	 *
+	 * Some properties of the inner map has been used during the
+	 * verification time.  When inserting an inner map at the runtime,
+	 * map_meta_equal has to ensure the inserting map has the same
+	 * properties that the verifier has used earlier.
+	 */
+	bool (*map_meta_equal)(const struct bpf_map *meta0,
+			       const struct bpf_map *meta1);
 
 	/* BTF name and id of struct allocated by map_alloc */
 	const char * const map_btf_name;
@@ -227,6 +248,9 @@ int map_check_no_btf(const struct bpf_map *map,
 		     const struct btf_type *key_type,
 		     const struct btf_type *value_type);
 
+bool bpf_map_meta_equal(const struct bpf_map *meta0,
+			const struct bpf_map *meta1);
+
 extern const struct bpf_map_ops bpf_map_offload_ops;
 
 /* function argument constraints */
@@ -309,6 +333,7 @@ struct bpf_func_proto {
 						    * for this argument.
 						    */
 	int *ret_btf_id; /* return value btf_id */
+	bool (*allowed)(const struct bpf_prog *prog);
 };
 
 /* bpf_context is intentionally undefined structure. Pointer to bpf_context is
@@ -672,14 +697,16 @@ enum bpf_jit_poke_reason {
 
 /* Descriptor of pokes pointing /into/ the JITed image. */
 struct bpf_jit_poke_descriptor {
-	void *ip;
+	void *tailcall_target;
+	void *tailcall_bypass;
+	void *bypass_addr;
 	union {
 		struct {
 			struct bpf_map *map;
 			u32 key;
 		} tail_call;
 	};
-	bool ip_stable;
+	bool tailcall_target_stable;
 	u8 adj_off;
 	u16 reason;
 	u32 insn_idx;
@@ -713,6 +740,7 @@ struct bpf_prog_aux {
 	bool attach_btf_trace; /* true if attaching to BTF-enabled raw tp */
 	bool func_proto_unreliable;
 	bool sleepable;
+	bool tail_call_reachable;
 	enum bpf_tramp_prog_type trampoline_prog_type;
 	struct bpf_trampoline *trampoline;
 	struct hlist_node tramp_hlist;
@@ -1355,6 +1383,8 @@ int btf_struct_access(struct bpf_verifier_log *log,
 		      const struct btf_type *t, int off, int size,
 		      enum bpf_access_type atype,
 		      u32 *next_btf_id);
+bool btf_struct_ids_match(struct bpf_verifier_log *log,
+			  int off, u32 id, u32 need_type_id);
 int btf_resolve_helper_id(struct bpf_verifier_log *log,
 			  const struct bpf_func_proto *fn, int);
 
@@ -1373,6 +1403,7 @@ int btf_check_type_match(struct bpf_verifier_env *env, struct bpf_prog *prog,
 			 struct btf *btf, const struct btf_type *t);
 
 struct bpf_prog *bpf_prog_by_id(u32 id);
+struct bpf_link *bpf_link_by_id(u32 id);
 
 const struct bpf_func_proto *bpf_base_func_proto(enum bpf_func_id func_id);
 #else /* !CONFIG_BPF_SYSCALL */
@@ -1758,6 +1789,7 @@ extern const struct bpf_func_proto bpf_skc_to_tcp_sock_proto;
 extern const struct bpf_func_proto bpf_skc_to_tcp_timewait_sock_proto;
 extern const struct bpf_func_proto bpf_skc_to_tcp_request_sock_proto;
 extern const struct bpf_func_proto bpf_skc_to_udp6_sock_proto;
+extern const struct bpf_func_proto bpf_copy_from_user_proto;
 
 const struct bpf_func_proto *bpf_tracing_func_proto(
 	enum bpf_func_id func_id, const struct bpf_prog *prog);
@@ -1871,5 +1903,8 @@ enum bpf_text_poke_type {
 
 int bpf_arch_text_poke(void *ip, enum bpf_text_poke_type t,
 		       void *addr1, void *addr2);
+
+struct btf_id_set;
+bool btf_id_set_contains(struct btf_id_set *set, u32 id);
 
 #endif /* _LINUX_BPF_H */

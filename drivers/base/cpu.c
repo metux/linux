@@ -139,11 +139,11 @@ EXPORT_SYMBOL_GPL(cpu_subsys);
 #ifdef CONFIG_KEXEC
 #include <linux/kexec.h>
 
-static ssize_t crash_notes_show(struct device *dev,
-				struct device_attribute *attr,
+static ssize_t show_crash_notes(struct device *dev, struct device_attribute *attr,
 				char *buf)
 {
 	struct cpu *cpu = container_of(dev, struct cpu, dev);
+	ssize_t rc;
 	unsigned long long addr;
 	int cpunum;
 
@@ -156,18 +156,21 @@ static ssize_t crash_notes_show(struct device *dev,
 	 * operation should be safe. No locking required.
 	 */
 	addr = per_cpu_ptr_to_phys(per_cpu_ptr(crash_notes, cpunum));
-
-	return sysfs_emit(buf, "%llx\n", addr);
+	rc = sysfs_emit(buf, "%Lx\n", addr);
+	return rc;
 }
-static DEVICE_ATTR_ADMIN_RO(crash_notes);
+static DEVICE_ATTR(crash_notes, 0400, show_crash_notes, NULL);
 
-static ssize_t crash_notes_size_show(struct device *dev,
+static ssize_t show_crash_notes_size(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
-	return sysfs_emit(buf, "%zu\n", sizeof(note_buf_t));
+	ssize_t rc;
+
+	rc = sysfs_emit(buf, "%zu\n", sizeof(note_buf_t));
+	return rc;
 }
-static DEVICE_ATTR_ADMIN_RO(crash_notes_size);
+static DEVICE_ATTR(crash_notes_size, 0400, show_crash_notes_size, NULL);
 
 static struct attribute *crash_note_cpu_attrs[] = {
 	&dev_attr_crash_notes.attr,
@@ -238,37 +241,37 @@ unsigned int total_cpus;
 static ssize_t print_cpus_offline(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	int len = 0;
+	int n = 0, len = PAGE_SIZE-2;
 	cpumask_var_t offline;
 
 	/* display offline cpus < nr_cpu_ids */
 	if (!alloc_cpumask_var(&offline, GFP_KERNEL))
 		return -ENOMEM;
 	cpumask_andnot(offline, cpu_possible_mask, cpu_online_mask);
-	len += sysfs_emit_at(buf, len, "%*pbl", cpumask_pr_args(offline));
+	n = scnprintf(buf, len, "%*pbl", cpumask_pr_args(offline));
 	free_cpumask_var(offline);
 
 	/* display offline cpus >= nr_cpu_ids */
 	if (total_cpus && nr_cpu_ids < total_cpus) {
-		len += sysfs_emit_at(buf, len, ",");
+		if (n && n < len)
+			buf[n++] = ',';
 
 		if (nr_cpu_ids == total_cpus-1)
-			len += sysfs_emit_at(buf, len, "%u", nr_cpu_ids);
+			n += scnprintf(&buf[n], len - n, "%u", nr_cpu_ids);
 		else
-			len += sysfs_emit_at(buf, len, "%u-%d",
-					     nr_cpu_ids, total_cpus - 1);
+			n += scnprintf(&buf[n], len - n, "%u-%d",
+						      nr_cpu_ids, total_cpus-1);
 	}
 
-	len += sysfs_emit_at(buf, len, "\n");
-
-	return len;
+	n += scnprintf(&buf[n], len - n, "\n");
+	return n;
 }
 static DEVICE_ATTR(offline, 0444, print_cpus_offline, NULL);
 
 static ssize_t print_cpus_isolated(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
-	int len;
+	int n;
 	cpumask_var_t isolated;
 
 	if (!alloc_cpumask_var(&isolated, GFP_KERNEL))
@@ -276,17 +279,17 @@ static ssize_t print_cpus_isolated(struct device *dev,
 
 	cpumask_andnot(isolated, cpu_possible_mask,
 		       housekeeping_cpumask(HK_FLAG_DOMAIN));
-	len = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(isolated));
+	n = sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(isolated));
 
 	free_cpumask_var(isolated);
 
-	return len;
+	return n;
 }
 static DEVICE_ATTR(isolated, 0444, print_cpus_isolated, NULL);
 
 #ifdef CONFIG_NO_HZ_FULL
 static ssize_t print_cpus_nohz_full(struct device *dev,
-				    struct device_attribute *attr, char *buf)
+				  struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(tick_nohz_full_mask));
 }
@@ -317,23 +320,22 @@ static ssize_t print_cpu_modalias(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
 {
-	int len = 0;
+	ssize_t n;
 	u32 i;
 
-	len += sysfs_emit_at(buf, len,
-			     "cpu:type:" CPU_FEATURE_TYPEFMT ":feature:",
-			     CPU_FEATURE_TYPEVAL);
+	n = sysfs_emit(buf, "cpu:type:" CPU_FEATURE_TYPEFMT ":feature:",
+		       CPU_FEATURE_TYPEVAL);
 
 	for (i = 0; i < MAX_CPU_FEATURES; i++)
 		if (cpu_have_feature(i)) {
-			if (len + sizeof(",XXXX\n") >= PAGE_SIZE) {
+			if (PAGE_SIZE < n + sizeof(",XXXX\n")) {
 				WARN(1, "CPU features overflow page\n");
 				break;
 			}
-			len += sysfs_emit_at(buf, len, ",%04X", i);
+			n += sprintf(&buf[n], ",%04X", i);
 		}
-	len += sysfs_emit_at(buf, len, "\n");
-	return len;
+	buf[n++] = '\n';
+	return n;
 }
 
 static int cpu_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -555,7 +557,7 @@ ssize_t __weak cpu_show_tsx_async_abort(struct device *dev,
 }
 
 ssize_t __weak cpu_show_itlb_multihit(struct device *dev,
-				      struct device_attribute *attr, char *buf)
+			    struct device_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "Not affected\n");
 }

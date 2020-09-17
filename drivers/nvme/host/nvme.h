@@ -37,6 +37,14 @@ extern unsigned int admin_timeout;
 #define  NVME_INLINE_METADATA_SG_CNT  1
 #endif
 
+/*
+ * Default to a 4K page size, with the intention to update this
+ * path in the future to accommodate architectures with differing
+ * kernel and IO page sizes.
+ */
+#define NVME_CTRL_PAGE_SHIFT	12
+#define NVME_CTRL_PAGE_SIZE	(1 << NVME_CTRL_PAGE_SHIFT)
+
 extern struct workqueue_struct *nvme_wq;
 extern struct workqueue_struct *nvme_reset_wq;
 extern struct workqueue_struct *nvme_delete_wq;
@@ -180,12 +188,32 @@ static inline u16 nvme_req_qid(struct request *req)
  */
 #define NVME_QUIRK_DELAY_AMOUNT		2300
 
+/*
+ * enum nvme_ctrl_state: Controller state
+ *
+ * @NVME_CTRL_NEW:		New controller just allocated, initial state
+ * @NVME_CTRL_LIVE:		Controller is connected and I/O capable
+ * @NVME_CTRL_RESETTING:	Controller is resetting (or scheduled reset)
+ * @NVME_CTRL_CONNECTING:	Controller is disconnected, now connecting the
+ *				transport
+ * @NVME_CTRL_DELETING:		Controller is deleting (or scheduled deletion)
+ * @NVME_CTRL_DELETING_NOIO:	Controller is deleting and I/O is not
+ *				disabled/failed immediately. This state comes
+ * 				after all async event processing took place and
+ * 				before ns removal and the controller deletion
+ * 				progress
+ * @NVME_CTRL_DEAD:		Controller is non-present/unresponsive during
+ *				shutdown or removal. In this case we forcibly
+ *				kill all inflight I/O as they have no chance to
+ *				complete
+ */
 enum nvme_ctrl_state {
 	NVME_CTRL_NEW,
 	NVME_CTRL_LIVE,
 	NVME_CTRL_RESETTING,
 	NVME_CTRL_CONNECTING,
 	NVME_CTRL_DELETING,
+	NVME_CTRL_DELETING_NOIO,
 	NVME_CTRL_DEAD,
 };
 
@@ -241,7 +269,6 @@ struct nvme_ctrl {
 	u32 queue_count;
 
 	u64 cap;
-	u32 page_size;
 	u32 max_hw_sectors;
 	u32 max_segments;
 	u32 max_integrity_segments;
@@ -280,7 +307,6 @@ struct nvme_ctrl {
 	struct nvme_command ka_cmd;
 	struct work_struct fw_act_work;
 	unsigned long events;
-	bool created;
 
 #ifdef CONFIG_NVME_MULTIPATH
 	/* asymmetric namespace access: */
@@ -496,7 +522,31 @@ static inline u32 nvme_bytes_to_numd(size_t len)
 	return (len >> 2) - 1;
 }
 
-static inline bool nvme_end_request(struct request *req, __le16 status,
+static inline bool nvme_is_ana_error(u16 status)
+{
+	switch (status & 0x7ff) {
+	case NVME_SC_ANA_TRANSITION:
+	case NVME_SC_ANA_INACCESSIBLE:
+	case NVME_SC_ANA_PERSISTENT_LOSS:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool nvme_is_path_error(u16 status)
+{
+	/* check for a status code type of 'path related status' */
+	return (status & 0x700) == 0x300;
+}
+
+/*
+ * Fill in the status and result information from the CQE, and then figure out
+ * if blk-mq will need to use IPI magic to complete the request, and if yes do
+ * so.  If not let the caller complete the request without an indirect function
+ * call.
+ */
+static inline bool nvme_try_complete_req(struct request *req, __le16 status,
 		union nvme_result result)
 {
 	struct nvme_request *rq = nvme_req(req);
@@ -554,7 +604,7 @@ void nvme_kill_queues(struct nvme_ctrl *ctrl);
 void nvme_sync_queues(struct nvme_ctrl *ctrl);
 void nvme_unfreeze(struct nvme_ctrl *ctrl);
 void nvme_wait_freeze(struct nvme_ctrl *ctrl);
-void nvme_wait_freeze_timeout(struct nvme_ctrl *ctrl, long timeout);
+int nvme_wait_freeze_timeout(struct nvme_ctrl *ctrl, long timeout);
 void nvme_start_freeze(struct nvme_ctrl *ctrl);
 
 #define NVME_QID_ANY -1
@@ -602,7 +652,7 @@ void nvme_mpath_wait_freeze(struct nvme_subsystem *subsys);
 void nvme_mpath_start_freeze(struct nvme_subsystem *subsys);
 void nvme_set_disk_name(char *disk_name, struct nvme_ns *ns,
 			struct nvme_ctrl *ctrl, int *flags);
-bool nvme_failover_req(struct request *req);
+void nvme_failover_req(struct request *req);
 void nvme_kick_requeue_lists(struct nvme_ctrl *ctrl);
 int nvme_mpath_alloc_disk(struct nvme_ctrl *ctrl,struct nvme_ns_head *head);
 void nvme_mpath_add_disk(struct nvme_ns *ns, struct nvme_id_ns *id);
@@ -661,9 +711,8 @@ static inline void nvme_set_disk_name(char *disk_name, struct nvme_ns *ns,
 	sprintf(disk_name, "nvme%dn%d", ctrl->instance, ns->head->instance);
 }
 
-static inline bool nvme_failover_req(struct request *req)
+static inline void nvme_failover_req(struct request *req)
 {
-	return false;
 }
 static inline void nvme_kick_requeue_lists(struct nvme_ctrl *ctrl)
 {
@@ -778,9 +827,19 @@ static inline struct nvme_ns *nvme_get_ns_from_dev(struct device *dev)
 }
 
 #ifdef CONFIG_NVME_HWMON
-void nvme_hwmon_init(struct nvme_ctrl *ctrl);
+int nvme_hwmon_init(struct nvme_ctrl *ctrl);
 #else
-static inline void nvme_hwmon_init(struct nvme_ctrl *ctrl) { }
+static inline int nvme_hwmon_init(struct nvme_ctrl *ctrl)
+{
+	return 0;
+}
 #endif
+
+u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
+			 u8 opcode);
+void nvme_execute_passthru_rq(struct request *rq);
+struct nvme_ctrl *nvme_ctrl_from_file(struct file *file);
+struct nvme_ns *nvme_find_get_ns(struct nvme_ctrl *ctrl, unsigned nsid);
+void nvme_put_ns(struct nvme_ns *ns);
 
 #endif /* _NVME_H */

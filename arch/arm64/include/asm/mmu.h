@@ -17,8 +17,14 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/refcount.h>
+
 typedef struct {
 	atomic64_t	id;
+#ifdef CONFIG_COMPAT
+	void		*sigpage;
+#endif
+	refcount_t	pinned;
 	void		*vdso;
 	unsigned long	flags;
 } mm_context_t;
@@ -41,11 +47,6 @@ struct bp_hardening_data {
 	int			hyp_vectors_slot;
 	bp_hardening_cb_t	fn;
 };
-
-#ifdef CONFIG_KVM_INDIRECT_VECTORS
-extern char __bp_harden_hyp_vecs[];
-extern atomic_t arm64_el2_vector_last_slot;
-#endif
 
 #ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
 DECLARE_PER_CPU_READ_MOSTLY(struct bp_hardening_data, bp_hardening_data);

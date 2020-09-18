@@ -435,14 +435,13 @@ static inline int kvm_write_guest_lock(struct kvm *kvm, gpa_t gpa,
  * EL2 vectors can be mapped and rerouted in a number of ways,
  * depending on the kernel configuration and CPU present:
  *
- * - If the CPU has the ARM64_HARDEN_BRANCH_PREDICTOR cap, the
- *   hardening sequence is placed in one of the vector slots, which is
- *   executed before jumping to the real vectors.
+ * - If the CPU is affected by Spectre-v2, the hardening sequence is
+ *   placed in one of the vector slots, which is executed before jumping
+ *   to the real vectors.
  *
- * - If the CPU has both the ARM64_HARDEN_EL2_VECTORS cap and the
- *   ARM64_HARDEN_BRANCH_PREDICTOR cap, the slot containing the
- *   hardening sequence is mapped next to the idmap page, and executed
- *   before jumping to the real vectors.
+ * - If the CPU also has the ARM64_HARDEN_EL2_VECTORS cap, the slot
+ *   containing the hardening sequence is mapped next to the idmap page,
+ *   and executed before jumping to the real vectors.
  *
  * - If the CPU only has the ARM64_HARDEN_EL2_VECTORS cap, then an
  *   empty slot is selected, mapped next to the idmap page, and
@@ -464,7 +463,7 @@ static inline void *kvm_get_hyp_vector(void)
 	void *vect = kern_hyp_va(kvm_ksym_ref(__kvm_hyp_vector));
 	int slot = -1;
 
-	if (cpus_have_const_cap(ARM64_HARDEN_BRANCH_PREDICTOR) && data->fn) {
+	if (cpus_have_const_cap(ARM64_SPECTRE_V2) && data->fn) {
 		vect = kern_hyp_va(kvm_ksym_ref(__bp_harden_hyp_vecs));
 		slot = data->hyp_vectors_slot;
 	}
@@ -485,15 +484,15 @@ static inline void *kvm_get_hyp_vector(void)
 static inline int kvm_map_vectors(void)
 {
 	/*
-	 * HBP  = ARM64_HARDEN_BRANCH_PREDICTOR
+	 * SV2  = ARM64_SPECTRE_V2
 	 * HEL2 = ARM64_HARDEN_EL2_VECTORS
 	 *
-	 * !HBP + !HEL2 -> use direct vectors
-	 *  HBP + !HEL2 -> use hardened vectors in place
-	 * !HBP +  HEL2 -> allocate one vector slot and use exec mapping
-	 *  HBP +  HEL2 -> use hardened vertors and use exec mapping
+	 * !SV2 + !HEL2 -> use direct vectors
+	 *  SV2 + !HEL2 -> use hardened vectors in place
+	 * !SV2 +  HEL2 -> allocate one vector slot and use exec mapping
+	 *  SV2 +  HEL2 -> use hardened vertors and use exec mapping
 	 */
-	if (cpus_have_const_cap(ARM64_HARDEN_BRANCH_PREDICTOR)) {
+	if (cpus_have_const_cap(ARM64_SPECTRE_V2)) {
 		__kvm_bp_vect_base = kvm_ksym_ref(__bp_harden_hyp_vecs);
 		__kvm_bp_vect_base = kern_hyp_va(__kvm_bp_vect_base);
 	}
@@ -526,23 +525,6 @@ static inline int kvm_map_vectors(void)
 	return 0;
 }
 #endif
-
-DECLARE_PER_CPU_READ_MOSTLY(u64, arm64_ssbd_callback_required);
-
-static inline int hyp_map_aux_data(void)
-{
-	int cpu, err;
-
-	for_each_possible_cpu(cpu) {
-		u64 *ptr;
-
-		ptr = per_cpu_ptr(&arm64_ssbd_callback_required, cpu);
-		err = create_hyp_mappings(ptr, ptr + 1, PAGE_HYP);
-		if (err)
-			return err;
-	}
-	return 0;
-}
 
 #define kvm_phys_to_vttbr(addr)		phys_to_ttbr(addr)
 

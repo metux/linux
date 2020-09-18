@@ -314,6 +314,9 @@ struct kfd_dev {
 	spinlock_t smi_lock;
 
 	uint32_t reset_seq_num;
+
+	struct ida doorbell_ida;
+	unsigned int max_doorbell_slices;
 };
 
 enum kfd_mempool {
@@ -699,6 +702,7 @@ struct kfd_process_device {
 	struct attribute attr_evict;
 
 	struct kobject *kobj_stats;
+	unsigned int doorbell_index;
 };
 
 #define qpd_to_pdd(x) container_of(x, struct kfd_process_device, qpd)
@@ -735,8 +739,7 @@ struct kfd_process {
 	/* We want to receive a notification when the mm_struct is destroyed */
 	struct mmu_notifier mmu_notifier;
 
-	u32 pasid;
-	unsigned int doorbell_index;
+	uint16_t pasid;
 
 	/*
 	 * List of kfd_process_device structures,
@@ -812,7 +815,7 @@ int kfd_process_create_wq(void);
 void kfd_process_destroy_wq(void);
 struct kfd_process *kfd_create_process(struct file *filep);
 struct kfd_process *kfd_get_process(const struct task_struct *);
-struct kfd_process *kfd_lookup_process_by_pasid(u32 pasid);
+struct kfd_process *kfd_lookup_process_by_pasid(unsigned int pasid);
 struct kfd_process *kfd_lookup_process_by_mm(const struct mm_struct *mm);
 void kfd_unref_process(struct kfd_process *p);
 int kfd_process_evict_queues(struct kfd_process *p);
@@ -853,8 +856,8 @@ int kfd_pasid_init(void);
 void kfd_pasid_exit(void);
 bool kfd_set_pasid_limit(unsigned int new_limit);
 unsigned int kfd_get_pasid_limit(void);
-u32 kfd_pasid_alloc(void);
-void kfd_pasid_free(u32 pasid);
+unsigned int kfd_pasid_alloc(void);
+void kfd_pasid_free(unsigned int pasid);
 
 /* Doorbells */
 size_t kfd_doorbell_process_slice(struct kfd_dev *kfd);
@@ -869,13 +872,13 @@ u32 read_kernel_doorbell(u32 __iomem *db);
 void write_kernel_doorbell(void __iomem *db, u32 value);
 void write_kernel_doorbell64(void __iomem *db, u64 value);
 unsigned int kfd_get_doorbell_dw_offset_in_bar(struct kfd_dev *kfd,
-					struct kfd_process *process,
+					struct kfd_process_device *pdd,
 					unsigned int doorbell_id);
-phys_addr_t kfd_get_process_doorbells(struct kfd_dev *dev,
-					struct kfd_process *process);
-int kfd_alloc_process_doorbells(struct kfd_process *process);
-void kfd_free_process_doorbells(struct kfd_process *process);
-
+phys_addr_t kfd_get_process_doorbells(struct kfd_process_device *pdd);
+int kfd_alloc_process_doorbells(struct kfd_dev *kfd,
+				unsigned int *doorbell_index);
+void kfd_free_process_doorbells(struct kfd_dev *kfd,
+				unsigned int doorbell_index);
 /* GTT Sub-Allocator */
 
 int kfd_gtt_sa_allocate(struct kfd_dev *kfd, unsigned int size,
@@ -940,7 +943,7 @@ void device_queue_manager_uninit(struct device_queue_manager *dqm);
 struct kernel_queue *kernel_queue_init(struct kfd_dev *dev,
 					enum kfd_queue_type type);
 void kernel_queue_uninit(struct kernel_queue *kq, bool hanging);
-int kfd_process_vm_fault(struct device_queue_manager *dqm, u32 pasid);
+int kfd_process_vm_fault(struct device_queue_manager *dqm, unsigned int pasid);
 
 /* Process Queue Manager */
 struct process_queue_node {
@@ -1062,12 +1065,12 @@ int kfd_wait_on_events(struct kfd_process *p,
 		       uint32_t num_events, void __user *data,
 		       bool all, uint32_t user_timeout_ms,
 		       uint32_t *wait_result);
-void kfd_signal_event_interrupt(u32 pasid, uint32_t partial_id,
+void kfd_signal_event_interrupt(unsigned int pasid, uint32_t partial_id,
 				uint32_t valid_id_bits);
 void kfd_signal_iommu_event(struct kfd_dev *dev,
-			    u32 pasid, unsigned long address,
-			    bool is_write_requested, bool is_execute_requested);
-void kfd_signal_hw_exception_event(u32 pasid);
+		unsigned int pasid, unsigned long address,
+		bool is_write_requested, bool is_execute_requested);
+void kfd_signal_hw_exception_event(unsigned int pasid);
 int kfd_set_event(struct kfd_process *p, uint32_t event_id);
 int kfd_reset_event(struct kfd_process *p, uint32_t event_id);
 int kfd_event_page_set(struct kfd_process *p, void *kernel_address,
@@ -1078,7 +1081,7 @@ int kfd_event_create(struct file *devkfd, struct kfd_process *p,
 		     uint64_t *event_page_offset, uint32_t *event_slot_index);
 int kfd_event_destroy(struct kfd_process *p, uint32_t event_id);
 
-void kfd_signal_vm_fault_event(struct kfd_dev *dev, u32 pasid,
+void kfd_signal_vm_fault_event(struct kfd_dev *dev, unsigned int pasid,
 				struct kfd_vm_fault_info *info);
 
 void kfd_signal_reset_event(struct kfd_dev *dev);

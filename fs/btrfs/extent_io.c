@@ -2823,8 +2823,6 @@ static void end_bio_extent_readpage(struct bio *bio)
 		struct page *page = bvec->bv_page;
 		struct inode *inode = page->mapping->host;
 		struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
-		bool data_inode = btrfs_ino(BTRFS_I(inode))
-			!= BTRFS_BTREE_INODE_OBJECTID;
 
 		btrfs_debug(fs_info,
 			"end_bio_extent_readpage: bi_sector=%llu, err=%d, mirror=%u",
@@ -2855,7 +2853,7 @@ static void end_bio_extent_readpage(struct bio *bio)
 
 		mirror = io_bio->mirror_num;
 		if (likely(uptodate)) {
-			if (data_inode)
+			if (is_data_inode(inode))
 				ret = btrfs_verify_data_csum(io_bio, offset, page,
 							     start, end, mirror);
 			else
@@ -2873,7 +2871,7 @@ static void end_bio_extent_readpage(struct bio *bio)
 		if (likely(uptodate))
 			goto readpage_ok;
 
-		if (data_inode) {
+		if (is_data_inode(inode)) {
 
 			/*
 			 * The generic bio_readpage_error handles errors the

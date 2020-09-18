@@ -119,12 +119,13 @@ static int felix_vlan_prepare(struct dsa_switch *ds, int port,
 	return 0;
 }
 
-static int felix_vlan_filtering(struct dsa_switch *ds, int port, bool enabled,
-				struct switchdev_trans *trans)
+static int felix_vlan_filtering(struct dsa_switch *ds, int port, bool enabled)
 {
 	struct ocelot *ocelot = ds->priv;
 
-	return ocelot_port_vlan_filtering(ocelot, port, enabled, trans);
+	ocelot_port_vlan_filtering(ocelot, port, enabled);
+
+	return 0;
 }
 
 static void felix_vlan_add(struct dsa_switch *ds, int port,
@@ -434,10 +435,10 @@ static int felix_init_structs(struct felix *felix, int num_phys_ports)
 	ocelot->num_stats	= felix->info->num_stats;
 	ocelot->shared_queue_sz	= felix->info->shared_queue_sz;
 	ocelot->num_mact_rows	= felix->info->num_mact_rows;
+	ocelot->vcap_is2_keys	= felix->info->vcap_is2_keys;
+	ocelot->vcap_is2_actions= felix->info->vcap_is2_actions;
 	ocelot->vcap		= felix->info->vcap;
 	ocelot->ops		= felix->info->ops;
-	ocelot->inj_prefix	= OCELOT_TAG_PREFIX_SHORT;
-	ocelot->xtr_prefix	= OCELOT_TAG_PREFIX_SHORT;
 
 	port_phy_modes = kcalloc(num_phys_ports, sizeof(phy_interface_t),
 				 GFP_KERNEL);
@@ -508,7 +509,7 @@ static int felix_init_structs(struct felix *felix, int num_phys_ports)
 			return PTR_ERR(target);
 		}
 
-		template = devm_kzalloc(ocelot->dev, OCELOT_TOTAL_TAG_LEN,
+		template = devm_kzalloc(ocelot->dev, OCELOT_TAG_LEN,
 					GFP_KERNEL);
 		if (!template) {
 			dev_err(ocelot->dev,
@@ -537,28 +538,6 @@ static int felix_init_structs(struct felix *felix, int num_phys_ports)
 	return 0;
 }
 
-/* The CPU port module is connected to the Node Processor Interface (NPI). This
- * is the mode through which frames can be injected from and extracted to an
- * external CPU, over Ethernet.
- */
-static void felix_npi_port_init(struct ocelot *ocelot, int port)
-{
-	ocelot->npi = port;
-
-	ocelot_write(ocelot, QSYS_EXT_CPU_CFG_EXT_CPUQ_MSK_M |
-		     QSYS_EXT_CPU_CFG_EXT_CPU_PORT(port),
-		     QSYS_EXT_CPU_CFG);
-
-	/* NPI port Injection/Extraction configuration */
-	ocelot_fields_write(ocelot, port, SYS_PORT_MODE_INCL_XTR_HDR,
-			    ocelot->xtr_prefix);
-	ocelot_fields_write(ocelot, port, SYS_PORT_MODE_INCL_INJ_HDR,
-			    ocelot->inj_prefix);
-
-	/* Disable transmission of pause frames */
-	ocelot_fields_write(ocelot, port, SYS_PAUSE_CFG_PAUSE_ENA, 0);
-}
-
 /* Hardware initialization done here so that we can allocate structures with
  * devm without fear of dsa_register_switch returning -EPROBE_DEFER and causing
  * us to allocate structures twice (leak memory) and map PCI memory twice
@@ -569,6 +548,7 @@ static int felix_setup(struct dsa_switch *ds)
 	struct ocelot *ocelot = ds->priv;
 	struct felix *felix = ocelot_to_felix(ocelot);
 	int port, err;
+	int tc;
 
 	err = felix_init_structs(felix, ds->num_ports);
 	if (err)
@@ -590,8 +570,11 @@ static int felix_setup(struct dsa_switch *ds)
 	for (port = 0; port < ds->num_ports; port++) {
 		ocelot_init_port(ocelot, port);
 
+		/* Bring up the CPU port module and configure the NPI port */
 		if (dsa_is_cpu_port(ds, port))
-			felix_npi_port_init(ocelot, port);
+			ocelot_configure_cpu(ocelot, port,
+					     OCELOT_TAG_PREFIX_NONE,
+					     OCELOT_TAG_PREFIX_LONG);
 
 		/* Set the default QoS Classification based on PCP and DEI
 		 * bits of vlan tag.
@@ -607,6 +590,12 @@ static int felix_setup(struct dsa_switch *ds)
 	ocelot_write_rix(ocelot,
 			 ANA_PGID_PGID_PGID(GENMASK(ocelot->num_phys_ports, 0)),
 			 ANA_PGID_PGID, PGID_UC);
+	/* Setup the per-traffic class flooding PGIDs */
+	for (tc = 0; tc < FELIX_NUM_TC; tc++)
+		ocelot_write_rix(ocelot, ANA_FLOODING_FLD_MULTICAST(PGID_MC) |
+				 ANA_FLOODING_FLD_BROADCAST(PGID_MC) |
+				 ANA_FLOODING_FLD_UNICAST(PGID_UC),
+				 ANA_FLOODING, tc);
 
 	ds->mtu_enforcement_ingress = true;
 	ds->configure_vlan_while_not_filtering = true;
@@ -680,11 +669,8 @@ static bool felix_txtstamp(struct dsa_switch *ds, int port,
 	struct ocelot *ocelot = ds->priv;
 	struct ocelot_port *ocelot_port = ocelot->ports[port];
 
-	if (ocelot->ptp && (skb_shinfo(clone)->tx_flags & SKBTX_HW_TSTAMP) &&
-	    ocelot_port->ptp_cmd == IFH_REW_OP_TWO_STEP_PTP) {
-		ocelot_port_add_txtstamp_skb(ocelot, port, clone);
+	if (!ocelot_port_add_txtstamp_skb(ocelot_port, clone))
 		return true;
-	}
 
 	return false;
 }
@@ -803,24 +789,28 @@ const struct dsa_switch_ops felix_switch_ops = {
 	.port_setup_tc		= felix_port_setup_tc,
 };
 
-struct net_device *felix_port_to_netdev(struct ocelot *ocelot, int port)
+static int __init felix_init(void)
 {
-	struct felix *felix = ocelot_to_felix(ocelot);
-	struct dsa_switch *ds = felix->ds;
+	int err;
 
-	if (!dsa_is_user_port(ds, port))
-		return NULL;
+	err = pci_register_driver(&felix_vsc9959_pci_driver);
+	if (err)
+		return err;
 
-	return dsa_to_port(ds, port)->slave;
+	err = platform_driver_register(&seville_vsc9953_driver);
+	if (err)
+		return err;
+
+	return 0;
 }
+module_init(felix_init);
 
-int felix_netdev_to_port(struct net_device *dev)
+static void __exit felix_exit(void)
 {
-	struct dsa_port *dp;
-
-	dp = dsa_port_from_netdev(dev);
-	if (IS_ERR(dp))
-		return -EINVAL;
-
-	return dp->index;
+	pci_unregister_driver(&felix_vsc9959_pci_driver);
+	platform_driver_unregister(&seville_vsc9953_driver);
 }
+module_exit(felix_exit);
+
+MODULE_DESCRIPTION("Felix Switch driver");
+MODULE_LICENSE("GPL v2");

@@ -17,8 +17,11 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/refcount.h>
+
 typedef struct {
 	atomic64_t	id;
+	refcount_t	pinned;
 	void		*vdso;
 	unsigned long	flags;
 } mm_context_t;

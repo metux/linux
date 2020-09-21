@@ -238,7 +238,6 @@ struct bpf_call_arg_meta {
 	u64 msize_max_value;
 	int ref_obj_id;
 	int func_id;
-	u32 btf_id;
 };
 
 struct btf *btf_vmlinux;
@@ -1494,6 +1493,9 @@ static int check_subprogs(struct bpf_verifier_env *env)
 		    insn[i].imm == BPF_FUNC_tail_call &&
 		    insn[i].src_reg != BPF_PSEUDO_CALL)
 			subprog[cur_subprog].has_tail_call = true;
+		if (BPF_CLASS(code) == BPF_LD &&
+		    (BPF_MODE(code) == BPF_ABS || BPF_MODE(code) == BPF_IND))
+			subprog[cur_subprog].has_ld_abs = true;
 		if (BPF_CLASS(code) != BPF_JMP && BPF_CLASS(code) != BPF_JMP32)
 			goto next;
 		if (BPF_OP(code) == BPF_EXIT || BPF_OP(code) == BPF_CALL)
@@ -3638,18 +3640,6 @@ static int check_stack_boundary(struct bpf_verifier_env *env, int regno,
 	struct bpf_func_state *state = func(env, reg);
 	int err, min_off, max_off, i, j, slot, spi;
 
-	if (reg->type != PTR_TO_STACK) {
-		/* Allow zero-byte read from NULL, regardless of pointer type */
-		if (zero_size_allowed && access_size == 0 &&
-		    register_is_null(reg))
-			return 0;
-
-		verbose(env, "R%d type=%s expected=%s\n", regno,
-			reg_type_str[reg->type],
-			reg_type_str[PTR_TO_STACK]);
-		return -EACCES;
-	}
-
 	if (tnum_is_const(reg->var_off)) {
 		min_off = max_off = reg->var_off.value + reg->off;
 		err = __check_stack_boundary(env, regno, min_off, access_size,
@@ -3794,9 +3784,19 @@ static int check_helper_mem_access(struct bpf_verifier_env *env, int regno,
 					   access_size, zero_size_allowed,
 					   "rdwr",
 					   &env->prog->aux->max_rdwr_access);
-	default: /* scalar_value|ptr_to_stack or invalid ptr */
+	case PTR_TO_STACK:
 		return check_stack_boundary(env, regno, access_size,
 					    zero_size_allowed, meta);
+	default: /* scalar_value or invalid ptr */
+		/* Allow zero-byte read from NULL, regardless of pointer type */
+		if (zero_size_allowed && access_size == 0 &&
+		    register_is_null(reg))
+			return 0;
+
+		verbose(env, "R%d type=%s expected=%s\n", regno,
+			reg_type_str[reg->type],
+			reg_type_str[PTR_TO_STACK]);
+		return -EACCES;
 	}
 }
 
@@ -4048,29 +4048,23 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg,
 				goto err_type;
 		}
 	} else if (arg_type == ARG_PTR_TO_BTF_ID) {
-		bool ids_match = false;
+		const u32 *btf_id = fn->arg_btf_id[arg];
 
 		expected_type = PTR_TO_BTF_ID;
 		if (type != expected_type)
 			goto err_type;
-		if (!fn->check_btf_id) {
-			if (reg->btf_id != meta->btf_id) {
-				ids_match = btf_struct_ids_match(&env->log, reg->off, reg->btf_id,
-								 meta->btf_id);
-				if (!ids_match) {
-					verbose(env, "Helper has type %s got %s in R%d\n",
-						kernel_type_name(meta->btf_id),
-						kernel_type_name(reg->btf_id), regno);
-					return -EACCES;
-				}
-			}
-		} else if (!fn->check_btf_id(reg->btf_id, arg)) {
-			verbose(env, "Helper does not support %s in R%d\n",
-				kernel_type_name(reg->btf_id), regno);
 
+		if (!btf_id) {
+			verbose(env, "verifier internal error: missing BTF ID\n");
+			return -EFAULT;
+		}
+
+		if (!btf_struct_ids_match(&env->log, reg->off, reg->btf_id, *btf_id)) {
+			verbose(env, "R%d is of type %s but %s is expected\n",
+				regno, kernel_type_name(reg->btf_id), kernel_type_name(*btf_id));
 			return -EACCES;
 		}
-		if ((reg->off && !ids_match) || !tnum_is_const(reg->var_off) || reg->var_off.value) {
+		if (!tnum_is_const(reg->var_off) || reg->var_off.value) {
 			verbose(env, "R%d is a pointer to in-kernel struct with non-zero offset\n",
 				regno);
 			return -EACCES;
@@ -4268,6 +4262,11 @@ static bool may_update_sockmap(struct bpf_verifier_env *env, int func_id)
 	return false;
 }
 
+static bool allow_tail_call_in_subprogs(struct bpf_verifier_env *env)
+{
+	return env->prog->jit_requested && IS_ENABLED(CONFIG_X86_64);
+}
+
 static int check_map_func_compatibility(struct bpf_verifier_env *env,
 					struct bpf_map *map, int func_id)
 {
@@ -4383,8 +4382,8 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
 	case BPF_FUNC_tail_call:
 		if (map->map_type != BPF_MAP_TYPE_PROG_ARRAY)
 			goto error;
-		if (env->subprog_cnt > 1) {
-			verbose(env, "tail_calls are not allowed in programs with bpf-to-bpf calls\n");
+		if (env->subprog_cnt > 1 && !allow_tail_call_in_subprogs(env)) {
+			verbose(env, "tail_calls are not allowed in non-JITed programs with bpf-to-bpf calls\n");
 			return -EINVAL;
 		}
 		break;
@@ -4539,10 +4538,22 @@ static bool check_refcount_ok(const struct bpf_func_proto *fn, int func_id)
 	return count <= 1;
 }
 
+static bool check_btf_id_ok(const struct bpf_func_proto *fn)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(fn->arg_type); i++)
+		if (fn->arg_type[i] == ARG_PTR_TO_BTF_ID && !fn->arg_btf_id[i])
+			return false;
+
+	return true;
+}
+
 static int check_func_proto(const struct bpf_func_proto *fn, int func_id)
 {
 	return check_raw_mode_ok(fn) &&
 	       check_arg_pair_ok(fn) &&
+	       check_btf_id_ok(fn) &&
 	       check_refcount_ok(fn, func_id) ? 0 : -EINVAL;
 }
 
@@ -4938,11 +4949,6 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 	meta.func_id = func_id;
 	/* check args */
 	for (i = 0; i < 5; i++) {
-		if (!fn->check_btf_id) {
-			err = btf_resolve_helper_id(&env->log, fn, i);
-			if (err > 0)
-				meta.btf_id = err;
-		}
 		err = check_func_arg(env, i, &meta, fn);
 		if (err)
 			return err;
@@ -7509,18 +7515,6 @@ static int check_ld_abs(struct bpf_verifier_env *env, struct bpf_insn *insn)
 		return -EINVAL;
 	}
 
-	if (env->subprog_cnt > 1) {
-		/* when program has LD_ABS insn JITs and interpreter assume
-		 * that r1 == ctx == skb which is not the case for callees
-		 * that can have arbitrary arguments. It's problematic
-		 * for main prog as well since JITs would need to analyze
-		 * all functions in order to make proper register save/restore
-		 * decisions in the main prog. Hence disallow LD_ABS with calls
-		 */
-		verbose(env, "BPF_LD_[ABS|IND] instructions cannot be mixed with bpf-to-bpf calls\n");
-		return -EINVAL;
-	}
-
 	if (insn->dst_reg != BPF_REG_0 || insn->off != 0 ||
 	    BPF_SIZE(insn->code) == BPF_DW ||
 	    (mode == BPF_ABS && insn->src_reg != BPF_REG_0)) {
@@ -7931,6 +7925,23 @@ err_free:
 	return ret;
 }
 
+static int check_abnormal_return(struct bpf_verifier_env *env)
+{
+	int i;
+
+	for (i = 1; i < env->subprog_cnt; i++) {
+		if (env->subprog_info[i].has_ld_abs) {
+			verbose(env, "LD_ABS is not allowed in subprogs without BTF\n");
+			return -EINVAL;
+		}
+		if (env->subprog_info[i].has_tail_call) {
+			verbose(env, "tail_call is not allowed in subprogs without BTF\n");
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
 /* The minimum supported BTF func info size */
 #define MIN_BPF_FUNCINFO_SIZE	8
 #define MAX_FUNCINFO_REC_SIZE	252
@@ -7939,20 +7950,24 @@ static int check_btf_func(struct bpf_verifier_env *env,
 			  const union bpf_attr *attr,
 			  union bpf_attr __user *uattr)
 {
+	const struct btf_type *type, *func_proto, *ret_type;
 	u32 i, nfuncs, urec_size, min_size;
 	u32 krec_size = sizeof(struct bpf_func_info);
 	struct bpf_func_info *krecord;
 	struct bpf_func_info_aux *info_aux = NULL;
-	const struct btf_type *type;
 	struct bpf_prog *prog;
 	const struct btf *btf;
 	void __user *urecord;
 	u32 prev_offset = 0;
+	bool scalar_return;
 	int ret = -ENOMEM;
 
 	nfuncs = attr->func_info_cnt;
-	if (!nfuncs)
+	if (!nfuncs) {
+		if (check_abnormal_return(env))
+			return -EINVAL;
 		return 0;
+	}
 
 	if (nfuncs != env->subprog_cnt) {
 		verbose(env, "number of funcs in func_info doesn't match number of subprogs\n");
@@ -8000,25 +8015,23 @@ static int check_btf_func(struct bpf_verifier_env *env,
 		}
 
 		/* check insn_off */
+		ret = -EINVAL;
 		if (i == 0) {
 			if (krecord[i].insn_off) {
 				verbose(env,
 					"nonzero insn_off %u for the first func info record",
 					krecord[i].insn_off);
-				ret = -EINVAL;
 				goto err_free;
 			}
 		} else if (krecord[i].insn_off <= prev_offset) {
 			verbose(env,
 				"same or smaller insn offset (%u) than previous func info record (%u)",
 				krecord[i].insn_off, prev_offset);
-			ret = -EINVAL;
 			goto err_free;
 		}
 
 		if (env->subprog_info[i].start != krecord[i].insn_off) {
 			verbose(env, "func_info BTF section doesn't match subprog layout in BPF program\n");
-			ret = -EINVAL;
 			goto err_free;
 		}
 
@@ -8027,10 +8040,26 @@ static int check_btf_func(struct bpf_verifier_env *env,
 		if (!type || !btf_type_is_func(type)) {
 			verbose(env, "invalid type id %d in func info",
 				krecord[i].type_id);
-			ret = -EINVAL;
 			goto err_free;
 		}
 		info_aux[i].linkage = BTF_INFO_VLEN(type->info);
+
+		func_proto = btf_type_by_id(btf, type->type);
+		if (unlikely(!func_proto || !btf_type_is_func_proto(func_proto)))
+			/* btf_func_check() already verified it during BTF load */
+			goto err_free;
+		ret_type = btf_type_skip_modifiers(btf, func_proto->type, NULL);
+		scalar_return =
+			btf_type_is_small_int(ret_type) || btf_type_is_enum(ret_type);
+		if (i && !scalar_return && env->subprog_info[i].has_ld_abs) {
+			verbose(env, "LD_ABS is only allowed in functions that return 'int'.\n");
+			goto err_free;
+		}
+		if (i && !scalar_return && env->subprog_info[i].has_tail_call) {
+			verbose(env, "tail_call is only allowed in functions that return 'int'.\n");
+			goto err_free;
+		}
+
 		prev_offset = krecord[i].insn_off;
 		urecord += urec_size;
 	}
@@ -8191,8 +8220,11 @@ static int check_btf_info(struct bpf_verifier_env *env,
 	struct btf *btf;
 	int err;
 
-	if (!attr->func_info_cnt && !attr->line_info_cnt)
+	if (!attr->func_info_cnt && !attr->line_info_cnt) {
+		if (check_abnormal_return(env))
+			return -EINVAL;
 		return 0;
+	}
 
 	btf = btf_get_by_fd(attr->prog_btf_fd);
 	if (IS_ERR(btf))
@@ -10469,6 +10501,13 @@ static int fixup_call_args(struct bpf_verifier_env *env)
 			return err;
 	}
 #ifndef CONFIG_BPF_JIT_ALWAYS_ON
+	if (env->subprog_cnt > 1 && env->prog->aux->tail_call_reachable) {
+		/* When JIT fails the progs with bpf2bpf calls and tail_calls
+		 * have to be rejected, since interpreter doesn't support them yet.
+		 */
+		verbose(env, "tail_calls are not allowed in non-JITed programs with bpf-to-bpf calls\n");
+		return -EINVAL;
+	}
 	for (i = 0; i < prog->len; i++, insn++) {
 		if (insn->code != (BPF_JMP | BPF_CALL) ||
 		    insn->src_reg != BPF_PSEUDO_CALL)
@@ -10632,8 +10671,9 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
 			 * the program array.
 			 */
 			prog->cb_access = 1;
-			env->prog->aux->stack_depth = MAX_BPF_STACK;
-			env->prog->aux->max_pkt_offset = MAX_PACKET_OFF;
+			if (!allow_tail_call_in_subprogs(env))
+				prog->aux->stack_depth = MAX_BPF_STACK;
+			prog->aux->max_pkt_offset = MAX_PACKET_OFF;
 
 			/* mark bpf_tail_call as different opcode to avoid
 			 * conditional branch in the interpeter for every normal

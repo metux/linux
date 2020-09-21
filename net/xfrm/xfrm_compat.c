@@ -234,7 +234,6 @@ static int xfrm_xlate64_attr(struct sk_buff *dst, const struct nlattr *src)
 	case XFRMA_PAD:
 		/* Ignore */
 		return 0;
-	case XFRMA_UNSPEC:
 	case XFRMA_ALG_AUTH:
 	case XFRMA_ALG_CRYPT:
 	case XFRMA_ALG_COMP:
@@ -388,7 +387,7 @@ static int xfrm_attr_cpy32(void *dst, size_t *pos, const struct nlattr *src,
 
 	memcpy(nla, src, nla_attr_size(copy_len));
 	nla->nla_len = nla_attr_size(payload);
-	*pos += nla_attr_size(copy_len);
+	*pos += nla_attr_size(payload);
 	nlmsg->nlmsg_len += nla->nla_len;
 
 	memset(dst + *pos, 0, payload - copy_len);
@@ -564,7 +563,7 @@ static struct nlmsghdr *xfrm_user_rcv_msg_compat(const struct nlmsghdr *h32,
 		return NULL;
 
 	len += NLMSG_HDRLEN;
-	h64 = kvmalloc(len, GFP_KERNEL);
+	h64 = kvmalloc(len, GFP_KERNEL | __GFP_ZERO);
 	if (!h64)
 		return ERR_PTR(-ENOMEM);
 
@@ -577,36 +576,10 @@ static struct nlmsghdr *xfrm_user_rcv_msg_compat(const struct nlmsghdr *h32,
 	return h64;
 }
 
-static int xfrm_user_policy_compat(u8 **pdata32, int optlen)
-{
-	struct compat_xfrm_userpolicy_info *p = (void *)*pdata32;
-	u8 *src_templates, *dst_templates;
-	u8 *data64;
-
-	if (optlen < sizeof(*p))
-		return -EINVAL;
-
-	data64 = kmalloc_track_caller(optlen + 4, GFP_USER | __GFP_NOWARN);
-	if (!data64)
-		return -ENOMEM;
-
-	memcpy(data64, *pdata32, sizeof(*p));
-	memset(data64 + sizeof(*p), 0, 4);
-
-	src_templates = *pdata32 + sizeof(*p);
-	dst_templates = data64 + sizeof(*p) + 4;
-	memcpy(dst_templates, src_templates, optlen - sizeof(*p));
-
-	kfree(*pdata32);
-	*pdata32 = data64;
-	return 0;
-}
-
 static struct xfrm_translator xfrm_translator = {
 	.owner				= THIS_MODULE,
 	.alloc_compat			= xfrm_alloc_compat,
 	.rcv_msg_compat			= xfrm_user_rcv_msg_compat,
-	.xlate_user_policy_sockptr	= xfrm_user_policy_compat,
 };
 
 static int __init xfrm_compat_init(void)

@@ -43,6 +43,16 @@
  *	HYP_VA_MIN = 1 << (VA_BITS - 1)
  * HYP_VA_MAX = HYP_VA_MIN + (1 << (VA_BITS - 1)) - 1
  *
+ * This of course assumes that the trampoline page exists within the
+ * VA_BITS range. If it doesn't, then it means we're in the odd case
+ * where the kernel idmap (as well as HYP) uses more levels than the
+ * kernel runtime page tables (as seen when the kernel is configured
+ * for 4k pages, 39bits VA, and yet memory lives just above that
+ * limit, forcing the idmap to use 4 levels of page tables while the
+ * kernel itself only uses 3). In this particular case, it doesn't
+ * matter which side of VA_BITS we use, as we're guaranteed not to
+ * conflict with anything.
+ *
  * When using VHE, there are no separate hyp mappings and all KVM
  * functionality is already mapped as part of the main kernel
  * mappings, and none of this applies in that case.
@@ -113,10 +123,9 @@ static inline bool kvm_page_empty(void *ptr)
 	return page_count(ptr_page) == 1;
 }
 
-#include <asm/kvm_pgtable.h>
 #include <asm/stage2_pgtable.h>
 
-int create_hyp_mappings(void *from, void *to, enum kvm_pgtable_prot prot);
+int create_hyp_mappings(void *from, void *to, pgprot_t prot);
 int create_hyp_io_mappings(phys_addr_t phys_addr, size_t size,
 			   void __iomem **kaddr,
 			   void __iomem **haddr);
@@ -132,9 +141,13 @@ int kvm_phys_addr_ioremap(struct kvm *kvm, phys_addr_t guest_ipa,
 
 int kvm_handle_guest_abort(struct kvm_vcpu *vcpu);
 
+void kvm_mmu_free_memory_caches(struct kvm_vcpu *vcpu);
+
 phys_addr_t kvm_mmu_get_httbr(void);
 phys_addr_t kvm_get_idmap_vector(void);
 int kvm_mmu_init(void);
+void kvm_clear_hyp_idmap(void);
+
 #define kvm_mk_pmd(ptep)					\
 	__pmd(__phys_to_pmd_val(__pa(ptep)) | PMD_TYPE_TABLE)
 #define kvm_mk_pud(pmdp)					\
@@ -252,6 +265,25 @@ static inline bool kvm_s2pud_young(pud_t pud)
 	return pud_young(pud);
 }
 
+#define hyp_pte_table_empty(ptep) kvm_page_empty(ptep)
+
+#ifdef __PAGETABLE_PMD_FOLDED
+#define hyp_pmd_table_empty(pmdp) (0)
+#else
+#define hyp_pmd_table_empty(pmdp) kvm_page_empty(pmdp)
+#endif
+
+#ifdef __PAGETABLE_PUD_FOLDED
+#define hyp_pud_table_empty(pudp) (0)
+#else
+#define hyp_pud_table_empty(pudp) kvm_page_empty(pudp)
+#endif
+
+#ifdef __PAGETABLE_P4D_FOLDED
+#define hyp_p4d_table_empty(p4dp) (0)
+#else
+#define hyp_p4d_table_empty(p4dp) kvm_page_empty(p4dp)
+#endif
 
 struct kvm;
 
@@ -320,6 +352,50 @@ static inline void __kvm_flush_dcache_pud(pud_t pud)
 void kvm_set_way_flush(struct kvm_vcpu *vcpu);
 void kvm_toggle_cache(struct kvm_vcpu *vcpu, bool was_enabled);
 
+static inline bool __kvm_cpu_uses_extended_idmap(void)
+{
+	return __cpu_uses_extended_idmap_level();
+}
+
+static inline unsigned long __kvm_idmap_ptrs_per_pgd(void)
+{
+	return idmap_ptrs_per_pgd;
+}
+
+/*
+ * Can't use pgd_populate here, because the extended idmap adds an extra level
+ * above CONFIG_PGTABLE_LEVELS (which is 2 or 3 if we're using the extended
+ * idmap), and pgd_populate is only available if CONFIG_PGTABLE_LEVELS = 4.
+ */
+static inline void __kvm_extend_hypmap(pgd_t *boot_hyp_pgd,
+				       pgd_t *hyp_pgd,
+				       pgd_t *merged_hyp_pgd,
+				       unsigned long hyp_idmap_start)
+{
+	int idmap_idx;
+	u64 pgd_addr;
+
+	/*
+	 * Use the first entry to access the HYP mappings. It is
+	 * guaranteed to be free, otherwise we wouldn't use an
+	 * extended idmap.
+	 */
+	VM_BUG_ON(pgd_val(merged_hyp_pgd[0]));
+	pgd_addr = __phys_to_pgd_val(__pa(hyp_pgd));
+	merged_hyp_pgd[0] = __pgd(pgd_addr | PMD_TYPE_TABLE);
+
+	/*
+	 * Create another extended level entry that points to the boot HYP map,
+	 * which contains an ID mapping of the HYP init code. We essentially
+	 * merge the boot and runtime HYP maps by doing so, but they don't
+	 * overlap anyway, so this is fine.
+	 */
+	idmap_idx = hyp_idmap_start >> VA_BITS;
+	VM_BUG_ON(pgd_val(merged_hyp_pgd[idmap_idx]));
+	pgd_addr = __phys_to_pgd_val(__pa(boot_hyp_pgd));
+	merged_hyp_pgd[idmap_idx] = __pgd(pgd_addr | PMD_TYPE_TABLE);
+}
+
 static inline unsigned int kvm_get_vmid_bits(void)
 {
 	int reg = read_sanitised_ftr_reg(SYS_ID_AA64MMFR1_EL1);
@@ -354,18 +430,19 @@ static inline int kvm_write_guest_lock(struct kvm *kvm, gpa_t gpa,
 	return ret;
 }
 
-#ifdef CONFIG_RANDOMIZE_BASE
+#ifdef CONFIG_KVM_INDIRECT_VECTORS
 /*
  * EL2 vectors can be mapped and rerouted in a number of ways,
  * depending on the kernel configuration and CPU present:
  *
- * - If the CPU is affected by Spectre-v2, the hardening sequence is
- *   placed in one of the vector slots, which is executed before jumping
- *   to the real vectors.
+ * - If the CPU has the ARM64_HARDEN_BRANCH_PREDICTOR cap, the
+ *   hardening sequence is placed in one of the vector slots, which is
+ *   executed before jumping to the real vectors.
  *
- * - If the CPU also has the ARM64_HARDEN_EL2_VECTORS cap, the slot
- *   containing the hardening sequence is mapped next to the idmap page,
- *   and executed before jumping to the real vectors.
+ * - If the CPU has both the ARM64_HARDEN_EL2_VECTORS cap and the
+ *   ARM64_HARDEN_BRANCH_PREDICTOR cap, the slot containing the
+ *   hardening sequence is mapped next to the idmap page, and executed
+ *   before jumping to the real vectors.
  *
  * - If the CPU only has the ARM64_HARDEN_EL2_VECTORS cap, then an
  *   empty slot is selected, mapped next to the idmap page, and
@@ -387,7 +464,7 @@ static inline void *kvm_get_hyp_vector(void)
 	void *vect = kern_hyp_va(kvm_ksym_ref(__kvm_hyp_vector));
 	int slot = -1;
 
-	if (cpus_have_const_cap(ARM64_SPECTRE_V2) && data->fn) {
+	if (cpus_have_const_cap(ARM64_HARDEN_BRANCH_PREDICTOR) && data->fn) {
 		vect = kern_hyp_va(kvm_ksym_ref(__bp_harden_hyp_vecs));
 		slot = data->hyp_vectors_slot;
 	}
@@ -408,15 +485,15 @@ static inline void *kvm_get_hyp_vector(void)
 static inline int kvm_map_vectors(void)
 {
 	/*
-	 * SV2  = ARM64_SPECTRE_V2
+	 * HBP  = ARM64_HARDEN_BRANCH_PREDICTOR
 	 * HEL2 = ARM64_HARDEN_EL2_VECTORS
 	 *
-	 * !SV2 + !HEL2 -> use direct vectors
-	 *  SV2 + !HEL2 -> use hardened vectors in place
-	 * !SV2 +  HEL2 -> allocate one vector slot and use exec mapping
-	 *  SV2 +  HEL2 -> use hardened vertors and use exec mapping
+	 * !HBP + !HEL2 -> use direct vectors
+	 *  HBP + !HEL2 -> use hardened vectors in place
+	 * !HBP +  HEL2 -> allocate one vector slot and use exec mapping
+	 *  HBP +  HEL2 -> use hardened vertors and use exec mapping
 	 */
-	if (cpus_have_const_cap(ARM64_SPECTRE_V2)) {
+	if (cpus_have_const_cap(ARM64_HARDEN_BRANCH_PREDICTOR)) {
 		__kvm_bp_vect_base = kvm_ksym_ref(__bp_harden_hyp_vecs);
 		__kvm_bp_vect_base = kern_hyp_va(__kvm_bp_vect_base);
 	}
@@ -448,6 +525,42 @@ static inline int kvm_map_vectors(void)
 {
 	return 0;
 }
+#endif
+
+#ifdef CONFIG_ARM64_SSBD
+DECLARE_PER_CPU_READ_MOSTLY(u64, arm64_ssbd_callback_required);
+DECLARE_KVM_NVHE_PER_CPU(u64, arm64_ssbd_callback_required);
+
+static inline int hyp_map_aux_data(void)
+{
+	int cpu, err;
+
+	for_each_possible_cpu(cpu) {
+		u64 *ptr;
+
+		ptr = per_cpu_ptr_nvhe_sym(arm64_ssbd_callback_required, cpu);
+		err = create_hyp_mappings(ptr, ptr + 1, PAGE_HYP);
+		if (err)
+			return err;
+	}
+	return 0;
+}
+
+static inline void hyp_init_aux_data(void)
+{
+	u64 *ptr;
+
+	/* Copy arm64_ssbd_callback_required value from kernel to hyp. */
+	ptr = this_cpu_ptr_nvhe_sym(arm64_ssbd_callback_required);
+	*ptr = __this_cpu_read(arm64_ssbd_callback_required);
+}
+#else
+static inline int hyp_map_aux_data(void)
+{
+	return 0;
+}
+
+static inline void hyp_init_aux_data(void) {}
 #endif
 
 #define kvm_phys_to_vttbr(addr)		phys_to_ttbr(addr)

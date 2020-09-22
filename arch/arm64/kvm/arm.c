@@ -147,6 +147,8 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 {
 	int i;
 
+	bitmap_free(kvm->arch.pmu_filter);
+
 	kvm_vgic_destroy(kvm);
 
 	for (i = 0; i < KVM_MAX_VCPUS; ++i) {
@@ -1338,6 +1340,9 @@ static void cpu_init_hyp_mode(void)
 	    arm64_get_spectre_v4_state() == SPECTRE_VULNERABLE) {
 		kvm_call_hyp_nvhe(__kvm_enable_ssbs);
 	}
+
+	/* Copy information whether SSBD callback is required to hyp. */
+	hyp_init_aux_data();
 }
 
 static void cpu_hyp_reset(void)

@@ -218,10 +218,11 @@ int ib_alloc_ucontext(struct uverbs_attr_bundle *attrs)
 	if (!ucontext)
 		return -ENOMEM;
 
-	ucontext->res.type = RDMA_RESTRACK_CTX;
 	ucontext->device = ib_dev;
 	ucontext->ufile = ufile;
 	xa_init_flags(&ucontext->mmap_xa, XA_FLAGS_ALLOC);
+
+	rdma_restrack_new(&ucontext->res, RDMA_RESTRACK_CTX);
 	attrs->context = ucontext;
 	return 0;
 }
@@ -313,6 +314,7 @@ static int ib_uverbs_get_context(struct uverbs_attr_bundle *attrs)
 err_uobj:
 	rdma_alloc_abort_uobject(uobj, attrs, false);
 err_ucontext:
+	rdma_restrack_put(&attrs->context->res);
 	kfree(attrs->context);
 	attrs->context = NULL;
 	return ret;
@@ -439,8 +441,8 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	pd->device  = ib_dev;
 	pd->uobject = uobj;
 	atomic_set(&pd->usecnt, 0);
-	pd->res.type = RDMA_RESTRACK_PD;
 
+	rdma_restrack_new(&pd->res, RDMA_RESTRACK_PD);
 	ret = ib_dev->ops.alloc_pd(pd, &attrs->driver_udata);
 	if (ret)
 		goto err_alloc;
@@ -453,6 +455,7 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
 err_alloc:
+	rdma_restrack_put(&pd->res);
 	kfree(pd);
 err:
 	uobj_alloc_abort(uobj, attrs);
@@ -605,17 +608,11 @@ static int ib_uverbs_open_xrcd(struct uverbs_attr_bundle *attrs)
 	}
 
 	if (!xrcd) {
-		xrcd = ib_dev->ops.alloc_xrcd(ib_dev, &attrs->driver_udata);
+		xrcd = ib_alloc_xrcd_user(ib_dev, inode, &attrs->driver_udata);
 		if (IS_ERR(xrcd)) {
 			ret = PTR_ERR(xrcd);
 			goto err;
 		}
-
-		xrcd->inode   = inode;
-		xrcd->device  = ib_dev;
-		atomic_set(&xrcd->usecnt, 0);
-		mutex_init(&xrcd->tgt_qp_mutex);
-		INIT_LIST_HEAD(&xrcd->tgt_qp_list);
 		new_xrcd = 1;
 	}
 
@@ -642,7 +639,7 @@ static int ib_uverbs_open_xrcd(struct uverbs_attr_bundle *attrs)
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
 err_dealloc_xrcd:
-	ib_dealloc_xrcd(xrcd, uverbs_get_cleared_udata(attrs));
+	ib_dealloc_xrcd_user(xrcd, uverbs_get_cleared_udata(attrs));
 
 err:
 	uobj_alloc_abort(&obj->uobject, attrs);
@@ -680,7 +677,7 @@ int ib_uverbs_dealloc_xrcd(struct ib_uobject *uobject, struct ib_xrcd *xrcd,
 	if (inode && !atomic_dec_and_test(&xrcd->usecnt))
 		return 0;
 
-	ret = ib_dealloc_xrcd(xrcd, &attrs->driver_udata);
+	ret = ib_dealloc_xrcd_user(xrcd, &attrs->driver_udata);
 
 	if (ib_is_destroy_retryable(ret, why, uobject)) {
 		atomic_inc(&xrcd->usecnt);
@@ -748,7 +745,9 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	mr->sig_attrs = NULL;
 	mr->uobject = uobj;
 	atomic_inc(&pd->usecnt);
-	mr->res.type = RDMA_RESTRACK_MR;
+	mr->iova = cmd.hca_va;
+
+	rdma_restrack_new(&mr->res, RDMA_RESTRACK_MR);
 	rdma_restrack_uadd(&mr->res);
 
 	uobj->object = mr;
@@ -828,6 +827,9 @@ static int ib_uverbs_rereg_mr(struct uverbs_attr_bundle *attrs)
 		mr->pd = pd;
 		atomic_dec(&old_pd->usecnt);
 	}
+
+	if (cmd.flags & IB_MR_REREG_TRANS)
+		mr->iova = cmd.hca_va;
 
 	memset(&resp, 0, sizeof(resp));
 	resp.lkey      = mr->lkey;
@@ -1004,8 +1006,8 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	cq->event_handler = ib_uverbs_cq_event_handler;
 	cq->cq_context    = ev_file ? &ev_file->ev_queue : NULL;
 	atomic_set(&cq->usecnt, 0);
-	cq->res.type = RDMA_RESTRACK_CQ;
 
+	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	ret = ib_dev->ops.create_cq(cq, &attr, &attrs->driver_udata);
 	if (ret)
 		goto err_free;
@@ -1023,6 +1025,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
 err_free:
+	rdma_restrack_put(&cq->res);
 	kfree(cq);
 err_file:
 	if (ev_file)
@@ -1907,7 +1910,7 @@ static int ib_uverbs_ex_modify_qp(struct uverbs_attr_bundle *attrs)
 	 * Last bit is reserved for extending the attr_mask by
 	 * using another field.
 	 */
-	BUILD_BUG_ON(IB_USER_LAST_QP_ATTR_MASK == (1 << 31));
+	BUILD_BUG_ON(IB_USER_LAST_QP_ATTR_MASK == (1ULL << 31));
 
 	if (cmd.base.attr_mask &
 	    ~((IB_USER_LAST_QP_ATTR_MASK << 1) - 1))

@@ -7,18 +7,7 @@
  */
 
 #include <asm/hyp_image.h>
-#include <asm-generic/vmlinux.lds.h>
-#include <asm/cache.h>
-#include <asm/memory.h>
 
 SECTIONS {
 	HYP_SECTION(.text)
-	/*
-	 * .hyp..data..percpu needs to be page aligned to maintain the same
-	 * alignment for when linking into vmlinux.
-	 */
-	. = ALIGN(PAGE_SIZE);
-	HYP_SECTION_NAME(.data..percpu) : {
-		PERCPU_INPUT(L1_CACHE_BYTES)
-	}
 }

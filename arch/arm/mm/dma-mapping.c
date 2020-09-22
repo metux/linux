@@ -16,6 +16,8 @@
 #include <linux/device.h>
 #include <linux/dma-direct.h>
 #include <linux/dma-map-ops.h>
+#include <linux/dma-noncoherent.h>
+#include <linux/dma-contiguous.h>
 #include <linux/highmem.h>
 #include <linux/memblock.h>
 #include <linux/slab.h>
@@ -33,6 +35,7 @@
 #include <asm/dma-iommu.h>
 #include <asm/mach/map.h>
 #include <asm/system_info.h>
+#include <asm/dma-contiguous.h>
 #include <xen/swiotlb-xen.h>
 
 #include "dma.h"

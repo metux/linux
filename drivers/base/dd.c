@@ -19,7 +19,7 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/delay.h>
-#include <linux/dma-mapping.h>
+#include <linux/dma-map-ops.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kthread.h>
@@ -494,6 +494,7 @@ static ssize_t state_synced_show(struct device *dev,
 	device_lock(dev);
 	val = dev->state_synced;
 	device_unlock(dev);
+
 	return sysfs_emit(buf, "%u\n", val);
 }
 static DEVICE_ATTR_RO(state_synced);

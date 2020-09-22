@@ -361,9 +361,13 @@ static inline struct ib_qp *_ib_create_qp(struct ib_device *dev,
 	 */
 	is_xrc = qp_type == IB_QPT_XRC_INI || qp_type == IB_QPT_XRC_TGT;
 	if ((qp_type < IB_QPT_MAX && !is_xrc) || qp_type == IB_QPT_DRIVER) {
-		rdma_restrack_parent_name(&qp->res, &pd->res);
-		rdma_restrack_add(&qp->res);
-	}
+		if (uobj)
+			rdma_restrack_uadd(&qp->res);
+		else
+			rdma_restrack_kadd(&qp->res);
+	} else
+		qp->res.valid = false;
+
 	return qp;
 }
 

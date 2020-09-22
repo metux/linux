@@ -6,6 +6,8 @@
  */
 #include <linux/dma-direct.h>
 #include <linux/dma-map-ops.h>
+#include <linux/dma-noncoherent.h>
+#include <linux/dma-contiguous.h>
 #include <linux/highmem.h>
 
 #include <asm/cache.h>

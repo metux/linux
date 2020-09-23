@@ -1104,6 +1104,17 @@ static int __maybe_unused mtk_iommu_runtime_suspend(struct device *dev)
 	return 0;
 }
 
+static int __maybe_unused mtk_iommu_suspend(struct device *dev)
+{
+	int ret = 0;
+	struct mtk_iommu_data *data = dev_get_drvdata(dev);
+
+	if (!data->plat_data->has_bclk)
+		ret = mtk_iommu_runtime_suspend(dev);
+
+	return ret;
+}
+
 static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
 {
 	struct mtk_iommu_data *data = dev_get_drvdata(dev);
@@ -1130,6 +1141,17 @@ static int __maybe_unused mtk_iommu_runtime_resume(struct device *dev)
 	writel_relaxed(reg->vld_pa_rng, base + REG_MMU_VLD_PA_RNG);
 	writel(m4u_dom->cfg.arm_v7s_cfg.ttbr & MMU_PT_ADDR_MASK, base + REG_MMU_PT_BASE_ADDR);
 	return 0;
+}
+
+static int __maybe_unused mtk_iommu_resume(struct device *dev)
+{
+	int ret = 0;
+	struct mtk_iommu_data *data = dev_get_drvdata(dev);
+
+	if (!data->plat_data->has_bclk)
+		ret = mtk_iommu_resume(dev);
+
+	return ret;
 }
 
 static const struct dev_pm_ops mtk_iommu_pm_ops = {

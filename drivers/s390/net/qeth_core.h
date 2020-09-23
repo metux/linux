@@ -177,8 +177,8 @@ struct qeth_vnicc_info {
 /**
  * some more defs
  */
-#define QETH_TX_TIMEOUT		(100 * HZ)
-#define QETH_RCD_TIMEOUT	(60 * HZ)
+#define QETH_TX_TIMEOUT		100 * HZ
+#define QETH_RCD_TIMEOUT	60 * HZ
 #define QETH_RECLAIM_WORK_TIME	HZ
 #define QETH_MAX_PORTNO		15
 
@@ -277,26 +277,6 @@ struct qeth_hdr {
 		struct qeth_hdr_osn    osn;
 	} hdr;
 } __attribute__ ((packed));
-
-#define QETH_QIB_PQUE_ORDER_RR		0
-#define QETH_QIB_PQUE_UNITS_SBAL	2
-#define QETH_QIB_PQUE_PRIO_DEFAULT	4
-
-struct qeth_qib_parms {
-	char pcit_magic[4];
-	u32 pcit_a;
-	u32 pcit_b;
-	u32 pcit_c;
-	char blkt_magic[4];
-	u32 blkt_total;
-	u32 blkt_inter_packet;
-	u32 blkt_inter_packet_jumbo;
-	char pque_magic[4];
-	u8 pque_order;
-	u8 pque_units;
-	u16 reserved;
-	u32 pque_priority[4];
-};
 
 /*TCP Segmentation Offload header*/
 struct qeth_hdr_ext_tso {
@@ -417,13 +397,10 @@ enum qeth_qdio_out_buffer_state {
 	QETH_QDIO_BUF_EMPTY,
 	/* Filled by driver; owned by hardware in order to be sent. */
 	QETH_QDIO_BUF_PRIMED,
-	/* Discovered by the TX completion code: */
+	/* Identified to be pending in TPQ. */
 	QETH_QDIO_BUF_PENDING,
-	/* Finished by the TX completion code: */
-	QETH_QDIO_BUF_NEED_QAOB,
-	/* Received QAOB notification on CQ: */
-	QETH_QDIO_BUF_QAOB_OK,
-	QETH_QDIO_BUF_QAOB_ERROR,
+	/* Found in completion queue. */
+	QETH_QDIO_BUF_IN_CQ,
 	/* Handled via transfer pending / completion queue. */
 	QETH_QDIO_BUF_HANDLED_DELAYED,
 };
@@ -504,7 +481,6 @@ struct qeth_qdio_out_q {
 	struct qdio_outbuf_state *bufstates; /* convenience pointer */
 	struct qeth_out_q_stats stats;
 	spinlock_t lock;
-	unsigned int priority;
 	u8 next_buf_to_fill;
 	u8 max_elements;
 	u8 queue_no;
@@ -562,7 +538,7 @@ struct qeth_qdio_info {
 	int in_buf_size;
 
 	/* output */
-	unsigned int no_out_queues;
+	int no_out_queues;
 	struct qeth_qdio_out_q *out_qs[QETH_MAX_OUT_QUEUES];
 	struct qdio_outbuf_state *out_bufstates;
 
@@ -777,7 +753,7 @@ struct qeth_discipline {
 	const struct device_type *devtype;
 	int (*setup) (struct ccwgroup_device *);
 	void (*remove) (struct ccwgroup_device *);
-	int (*set_online)(struct qeth_card *card, bool carrier_ok);
+	int (*set_online)(struct qeth_card *card);
 	void (*set_offline)(struct qeth_card *card);
 	int (*do_ioctl)(struct net_device *dev, struct ifreq *rq, int cmd);
 	int (*control_event_handler)(struct qeth_card *card,
@@ -812,7 +788,6 @@ struct qeth_switch_info {
 
 struct qeth_priv {
 	unsigned int rx_copybreak;
-	unsigned int tx_wanted_queues;
 	u32 brport_hw_features;
 	u32 brport_features;
 };
@@ -861,7 +836,7 @@ struct qeth_card {
 	struct qeth_qdio_info qdio;
 	int read_or_write_problem;
 	struct qeth_osn_info osn_info;
-	const struct qeth_discipline *discipline;
+	struct qeth_discipline *discipline;
 	atomic_t force_alloc_skb;
 	struct service_level qeth_service_level;
 	struct qdio_ssqd_desc ssqd;
@@ -895,20 +870,8 @@ struct qeth_trap_id {
 	__u16 devno;
 } __packed;
 
-static inline bool qeth_uses_tx_prio_queueing(struct qeth_card *card)
-{
-	return card->qdio.do_prio_queueing != QETH_NO_PRIO_QUEUEING;
-}
-
-static inline unsigned int qeth_tx_actual_queues(struct qeth_card *card)
-{
-	struct qeth_priv *priv = netdev_priv(card->dev);
-
-	if (qeth_uses_tx_prio_queueing(card))
-		return min(card->dev->num_tx_queues, card->qdio.no_out_queues);
-
-	return min(priv->tx_wanted_queues, card->qdio.no_out_queues);
-}
+/*some helper functions*/
+#define QETH_CARD_IFNAME(card) (((card)->dev)? (card)->dev->name : "")
 
 static inline u16 qeth_iqd_translate_txq(struct net_device *dev, u16 txq)
 {
@@ -1051,8 +1014,8 @@ static inline int qeth_send_simple_setassparms_v6(struct qeth_card *card,
 
 int qeth_get_priority_queue(struct qeth_card *card, struct sk_buff *skb);
 
-extern const struct qeth_discipline qeth_l2_discipline;
-extern const struct qeth_discipline qeth_l3_discipline;
+extern struct qeth_discipline qeth_l2_discipline;
+extern struct qeth_discipline qeth_l3_discipline;
 extern const struct ethtool_ops qeth_ethtool_ops;
 extern const struct ethtool_ops qeth_osn_ethtool_ops;
 extern const struct attribute_group *qeth_generic_attr_groups[];
@@ -1072,11 +1035,13 @@ extern struct qeth_dbf_info qeth_dbf[QETH_DBF_INFOS];
 
 struct net_device *qeth_clone_netdev(struct net_device *orig);
 struct qeth_card *qeth_get_card_by_busid(char *bus_id);
-void qeth_set_allowed_threads(struct qeth_card *card, unsigned long threads,
-			      int clear_start_mask);
+void qeth_set_allowed_threads(struct qeth_card *, unsigned long , int);
 int qeth_threads_running(struct qeth_card *, unsigned long);
+int qeth_core_hardsetup_card(struct qeth_card *card, bool *carrier_ok);
+int qeth_stop_channel(struct qeth_channel *channel);
 int qeth_set_offline(struct qeth_card *card, bool resetting);
 
+void qeth_print_status_message(struct qeth_card *);
 int qeth_send_ipa_cmd(struct qeth_card *, struct qeth_cmd_buffer *,
 		  int (*reply_cb)
 		  (struct qeth_card *, struct qeth_reply *, unsigned long),
@@ -1100,7 +1065,11 @@ void qeth_notify_cmd(struct qeth_cmd_buffer *iob, int reason);
 void qeth_put_cmd(struct qeth_cmd_buffer *iob);
 
 int qeth_schedule_recovery(struct qeth_card *card);
+void qeth_flush_local_addrs(struct qeth_card *card);
 int qeth_poll(struct napi_struct *napi, int budget);
+int qeth_qdio_clear_card(struct qeth_card *, int);
+void qeth_clear_working_pool_list(struct qeth_card *);
+void qeth_drain_output_queues(struct qeth_card *card);
 void qeth_setadp_promisc_mode(struct qeth_card *card, bool enable);
 int qeth_setadpparms_change_macaddr(struct qeth_card *);
 void qeth_tx_timeout(struct net_device *, unsigned int txqueue);
@@ -1124,7 +1093,9 @@ int qeth_do_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 void qeth_dbf_longtext(debug_info_t *id, int level, char *text, ...);
 int qeth_configure_cq(struct qeth_card *, enum qeth_cq);
 int qeth_hw_trap(struct qeth_card *, enum qeth_diags_trap_action);
+void qeth_trace_features(struct qeth_card *);
 int qeth_setassparms_cb(struct qeth_card *, struct qeth_reply *, unsigned long);
+int qeth_setup_netdev(struct qeth_card *card);
 int qeth_set_features(struct net_device *, netdev_features_t);
 void qeth_enable_hw_features(struct net_device *dev);
 netdev_features_t qeth_fix_features(struct net_device *, netdev_features_t);

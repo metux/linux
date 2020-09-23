@@ -315,13 +315,11 @@ static void qeth_l2_stop_card(struct qeth_card *card)
 	cancel_work_sync(&card->rx_mode_work);
 	qeth_l2_drain_rx_mode_cache(card);
 
-	if (card->state == CARD_STATE_SOFTSETUP) {
-		qeth_clear_ipacmd_list(card);
-		qeth_drain_output_queues(card);
+	if (card->state == CARD_STATE_SOFTSETUP)
 		card->state = CARD_STATE_DOWN;
-	}
 
 	qeth_qdio_clear_card(card, 0);
+	qeth_drain_output_queues(card);
 	qeth_clear_working_pool_list(card);
 	qeth_l2_set_pnso_mode(card, QETH_PNSO_NONE);
 	qeth_flush_local_addrs(card);
@@ -527,7 +525,7 @@ static void qeth_l2_rx_mode_work(struct work_struct *work)
 				kfree(mac);
 				break;
 			}
-			/* fall through */
+			fallthrough;
 		default:
 			/* for next call to set_rx_mode(): */
 			mac->disp_flag = QETH_DISP_ADDR_DELETE;

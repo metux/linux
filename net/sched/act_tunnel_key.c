@@ -527,9 +527,6 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 	spin_unlock_bh(&t->tcf_lock);
 	tunnel_key_release_params(params_new);
 
-	if (ret == ACT_P_CREATED)
-		tcf_idr_insert(tn, *a);
-
 	return ret;
 
 release_dst_cache:

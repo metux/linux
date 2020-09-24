@@ -150,7 +150,7 @@ module_param(allow_smaller_maxphyaddr, bool, S_IRUGO);
 	RTIT_STATUS_BYTECNT))
 
 #define MSR_IA32_RTIT_OUTPUT_BASE_MASK \
-	(~((1UL << cpuid_query_maxphyaddr(vcpu)) - 1) | 0x7f)
+	(~((1UL << cpuid_maxphyaddr(vcpu)) - 1) | 0x7f)
 
 /*
  * These 2 parameters are used to config the controls for Pause-Loop Exiting:

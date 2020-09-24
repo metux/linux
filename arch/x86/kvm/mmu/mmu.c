@@ -521,7 +521,7 @@ static gpa_t translate_gpa(struct kvm_vcpu *vcpu, gpa_t gpa, u32 access,
                                   struct x86_exception *exception)
 {
 	/* Check if guest physical address doesn't exceed guest maximum */
-	if (kvm_mmu_is_illegal_gpa(vcpu, gpa)) {
+	if (kvm_vcpu_is_illegal_gpa(vcpu, gpa)) {
 		exception->error_code |= PFERR_RSVD_MASK;
 		return UNMAPPED_GVA;
 	}
@@ -2469,7 +2469,7 @@ static struct kvm_mmu_page *kvm_mmu_get_page(struct kvm_vcpu *vcpu,
 		}
 
 		if (sp->unsync_children)
-			kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
+			kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
 
 		__clear_sp_write_flooding_count(sp);
 

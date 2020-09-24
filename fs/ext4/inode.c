@@ -4398,7 +4398,7 @@ make_io:
 			if (end > table)
 				end = table;
 			while (b <= end)
-				sb_breadahead_unmovable(sb, b++);
+				ext4_sb_breadahead_unmovable(sb, b++);
 		}
 
 		/*

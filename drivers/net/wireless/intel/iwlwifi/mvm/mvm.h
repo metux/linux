@@ -855,7 +855,6 @@ struct iwl_mvm {
 
 	bool hw_registered;
 	bool rfkill_safe_init_done;
-	bool support_umac_log;
 
 	u32 ampdu_ref;
 	bool ampdu_toggle;

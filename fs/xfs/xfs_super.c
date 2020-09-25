@@ -1204,24 +1204,11 @@ xfs_fc_parse_param(
 	case Opt_nouuid:
 		mp->m_flags |= XFS_MOUNT_NOUUID;
 		return 0;
-	case Opt_ikeep:
-		mp->m_flags |= XFS_MOUNT_IKEEP;
-		return 0;
-	case Opt_noikeep:
-		mp->m_flags &= ~XFS_MOUNT_IKEEP;
-		return 0;
 	case Opt_largeio:
 		mp->m_flags |= XFS_MOUNT_LARGEIO;
 		return 0;
 	case Opt_nolargeio:
 		mp->m_flags &= ~XFS_MOUNT_LARGEIO;
-		return 0;
-	case Opt_attr2:
-		mp->m_flags |= XFS_MOUNT_ATTR2;
-		return 0;
-	case Opt_noattr2:
-		mp->m_flags &= ~XFS_MOUNT_ATTR2;
-		mp->m_flags |= XFS_MOUNT_NOATTR2;
 		return 0;
 	case Opt_filestreams:
 		mp->m_flags |= XFS_MOUNT_FILESTREAMS;
@@ -1271,6 +1258,24 @@ xfs_fc_parse_param(
 		mp->m_flags |= XFS_MOUNT_DAX_ALWAYS;
 		return 0;
 #endif
+	/* Following mount options will be removed in September 2025 */
+	case Opt_ikeep:
+		xfs_warn(mp, "%s mount option is deprecated.", param->key);
+		mp->m_flags |= XFS_MOUNT_IKEEP;
+		return 0;
+	case Opt_noikeep:
+		xfs_warn(mp, "%s mount option is deprecated.", param->key);
+		mp->m_flags &= ~XFS_MOUNT_IKEEP;
+		return 0;
+	case Opt_attr2:
+		xfs_warn(mp, "%s mount option is deprecated.", param->key);
+		mp->m_flags |= XFS_MOUNT_ATTR2;
+		return 0;
+	case Opt_noattr2:
+		xfs_warn(mp, "%s mount option is deprecated.", param->key);
+		mp->m_flags &= ~XFS_MOUNT_ATTR2;
+		mp->m_flags |= XFS_MOUNT_NOATTR2;
+		return 0;
 	default:
 		xfs_warn(mp, "unknown mount option [%s].", param->key);
 		return -EINVAL;

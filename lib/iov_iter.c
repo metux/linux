@@ -2,7 +2,6 @@
 #include <crypto/hash.h>
 #include <linux/export.h>
 #include <linux/bvec.h>
-#include <linux/fault-inject-usercopy.h>
 #include <linux/uio.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
@@ -141,8 +140,6 @@
 
 static int copyout(void __user *to, const void *from, size_t n)
 {
-	if (should_fail_usercopy())
-		return n;
 	if (access_ok(to, n)) {
 		instrument_copy_to_user(to, from, n);
 		n = raw_copy_to_user(to, from, n);
@@ -152,8 +149,6 @@ static int copyout(void __user *to, const void *from, size_t n)
 
 static int copyin(void *to, const void __user *from, size_t n)
 {
-	if (should_fail_usercopy())
-		return n;
 	if (access_ok(from, n)) {
 		instrument_copy_from_user(to, from, n);
 		n = raw_copy_from_user(to, from, n);
@@ -1806,10 +1801,20 @@ ssize_t import_iovec(int type, const struct iovec __user *uvec,
 		 unsigned nr_segs, unsigned fast_segs,
 		 struct iovec **iovp, struct iov_iter *i)
 {
-	return __import_iovec(type, uvec, nr_segs, fast_segs, iovp, i,
-			      in_compat_syscall());
+	return __import_iovec(type, uvec, nr_segs, fast_segs, iovp, i, false);
 }
 EXPORT_SYMBOL(import_iovec);
+
+#ifdef CONFIG_COMPAT
+ssize_t compat_import_iovec(int type, const struct compat_iovec __user *uvec,
+		unsigned nr_segs, unsigned fast_segs, struct iovec **iovp,
+		struct iov_iter *i)
+{
+	return __import_iovec(type, (const struct iovec __user *)uvec, nr_segs,
+			     fast_segs, iovp, i, true);
+}
+EXPORT_SYMBOL(compat_import_iovec);
+#endif
 
 int import_single_range(int rw, void __user *buf, size_t len,
 		 struct iovec *iov, struct iov_iter *i)

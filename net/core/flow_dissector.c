@@ -900,8 +900,8 @@ bool __skb_flow_dissect(const struct net *net,
 			int offset;
 
 			ops = skb->dev->dsa_ptr->tag_ops;
-			if (ops->flow_dissect &&
-			    !ops->flow_dissect(skb, &proto, &offset)) {
+			if (ops->flow_dissect) {
+				ops->flow_dissect(skb, &proto, &offset);
 				hlen -= offset;
 				nhoff += offset;
 			}

@@ -1392,6 +1392,8 @@ void regmap_exit(struct regmap *map)
 	}
 	if (map->hwlock)
 		hwspin_lock_free(map->hwlock);
+	if (map->lock == regmap_lock_mutex)
+		mutex_destroy(&map->mutex);
 	kfree_const(map->name);
 	kfree(map->patch);
 	kfree(map);

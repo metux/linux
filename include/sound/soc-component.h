@@ -2,7 +2,8 @@
  *
  * soc-component.h
  *
- * Copyright (c) 2019 Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
+ * Copyright (C) 2019 Renesas Electronics Corp.
+ * Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
  */
 #ifndef __SOC_COMPONENT_H
 #define __SOC_COMPONENT_H
@@ -216,6 +217,10 @@ struct snd_soc_component {
 	/* machine specific init */
 	int (*init)(struct snd_soc_component *component);
 
+	/* function mark */
+	struct snd_pcm_substream *mark_module;
+	struct snd_pcm_substream *mark_open;
+
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_root;
 	const char *debugfs_prefix;
@@ -324,14 +329,12 @@ static inline int snd_soc_component_cache_sync(
 	return regcache_sync(component->regmap);
 }
 
-int snd_soc_component_initialize(struct snd_soc_component *component,
-				 const struct snd_soc_component_driver *driver,
-				 struct device *dev, const char *name);
+void snd_soc_component_set_aux(struct snd_soc_component *component,
+			       struct snd_soc_aux_dev *aux);
+int snd_soc_component_init(struct snd_soc_component *component);
 
 /* component IO */
-int snd_soc_component_read(struct snd_soc_component *component,
-			   unsigned int reg, unsigned int *val);
-unsigned int snd_soc_component_read32(struct snd_soc_component *component,
+unsigned int snd_soc_component_read(struct snd_soc_component *component,
 				      unsigned int reg);
 int snd_soc_component_write(struct snd_soc_component *component,
 			    unsigned int reg, unsigned int val);
@@ -371,17 +374,19 @@ void snd_soc_component_exit_regmap(struct snd_soc_component *component);
 #endif
 
 #define snd_soc_component_module_get_when_probe(component)\
-	snd_soc_component_module_get(component, 0)
-#define snd_soc_component_module_get_when_open(component)	\
-	snd_soc_component_module_get(component, 1)
+	snd_soc_component_module_get(component, NULL, 0)
+#define snd_soc_component_module_get_when_open(component, substream)	\
+	snd_soc_component_module_get(component, substream, 1)
 int snd_soc_component_module_get(struct snd_soc_component *component,
+				 struct snd_pcm_substream *substream,
 				 int upon_open);
 #define snd_soc_component_module_put_when_remove(component)	\
-	snd_soc_component_module_put(component, 0)
-#define snd_soc_component_module_put_when_close(component)	\
-	snd_soc_component_module_put(component, 1)
+	snd_soc_component_module_put(component, NULL, 0, 0)
+#define snd_soc_component_module_put_when_close(component, substream, rollback) \
+	snd_soc_component_module_put(component, substream, 1, rollback)
 void snd_soc_component_module_put(struct snd_soc_component *component,
-				  int upon_open);
+				  struct snd_pcm_substream *substream,
+				  int upon_open, int rollback);
 
 static inline void snd_soc_component_set_drvdata(struct snd_soc_component *c,
 						 void *data)
@@ -425,7 +430,8 @@ int snd_soc_component_force_enable_pin_unlocked(
 int snd_soc_component_open(struct snd_soc_component *component,
 			   struct snd_pcm_substream *substream);
 int snd_soc_component_close(struct snd_soc_component *component,
-			    struct snd_pcm_substream *substream);
+			    struct snd_pcm_substream *substream,
+			    int rollback);
 void snd_soc_component_suspend(struct snd_soc_component *component);
 void snd_soc_component_resume(struct snd_soc_component *component);
 int snd_soc_component_is_suspended(struct snd_soc_component *component);

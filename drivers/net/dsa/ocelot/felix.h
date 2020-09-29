@@ -21,9 +21,7 @@ struct felix_info {
 	unsigned int			num_stats;
 	int				num_ports;
 	int				num_tx_queues;
-	struct vcap_field		*vcap_is2_keys;
-	struct vcap_field		*vcap_is2_actions;
-	const struct vcap_props		*vcap;
+	struct vcap_props		*vcap;
 	int				switch_pci_bar;
 	int				imdio_pci_bar;
 	const struct ptp_clock_info	*ptp_caps;
@@ -42,8 +40,6 @@ struct felix_info {
 };
 
 extern const struct dsa_switch_ops felix_switch_ops;
-extern struct pci_driver felix_vsc9959_pci_driver;
-extern struct platform_driver seville_vsc9953_driver;
 
 /* DSA glue / front-end for struct ocelot */
 struct felix {

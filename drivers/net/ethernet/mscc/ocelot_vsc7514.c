@@ -19,6 +19,10 @@
 #include "ocelot.h"
 
 #define IFH_EXTRACT_BITFIELD64(x, o, w) (((x) >> (o)) & GENMASK_ULL((w) - 1, 0))
+#define VSC7514_VCAP_IS2_CNT 64
+#define VSC7514_VCAP_IS2_ENTRY_WIDTH 376
+#define VSC7514_VCAP_IS2_ACTION_WIDTH 99
+#define VSC7514_VCAP_PORT_CNT 11
 
 static const u32 ocelot_ana_regmap[] = {
 	REG(ANA_ADVLEARN,				0x009000),
@@ -320,8 +324,6 @@ static const u32 *ocelot_regmap[TARGET_MAX] = {
 	[QSYS] = ocelot_qsys_regmap,
 	[REW] = ocelot_rew_regmap,
 	[SYS] = ocelot_sys_regmap,
-	[S0] = ocelot_vcap_regmap,
-	[S1] = ocelot_vcap_regmap,
 	[S2] = ocelot_vcap_regmap,
 	[PTP] = ocelot_ptp_regmap,
 	[DEV_GMII] = ocelot_dev_gmii_regmap,
@@ -767,8 +769,6 @@ static u16 ocelot_wm_enc(u16 value)
 static const struct ocelot_ops ocelot_ops = {
 	.reset			= ocelot_reset,
 	.wm_enc			= ocelot_wm_enc,
-	.port_to_netdev		= ocelot_port_to_netdev,
-	.netdev_to_port		= ocelot_netdev_to_port,
 };
 
 static const struct vcap_field vsc7514_vcap_es0_keys[] = {
@@ -1002,6 +1002,13 @@ static struct vcap_props vsc7514_vcap_props[] = {
 		.actions = vsc7514_vcap_is1_actions,
 	},
 	[VCAP_IS2] = {
+		.tg_width = 2,
+		.sw_count = 4,
+		.entry_count = VSC7514_VCAP_IS2_CNT,
+		.entry_width = VSC7514_VCAP_IS2_ENTRY_WIDTH,
+		.action_count = VSC7514_VCAP_IS2_CNT +
+				VSC7514_VCAP_PORT_CNT + 2,
+		.action_width = 99,
 		.action_type_width = 1,
 		.action_table = {
 			[IS2_ACTION_TYPE_NORMAL] = {
@@ -1013,6 +1020,8 @@ static struct vcap_props vsc7514_vcap_props[] = {
 				.count = 4
 			},
 		},
+		.counter_words = 4,
+		.counter_width = 32,
 		.target = S2,
 		.keys = vsc7514_vcap_is2_keys,
 		.actions = vsc7514_vcap_is2_actions,
@@ -1254,7 +1263,6 @@ static int mscc_ocelot_probe(struct platform_device *pdev)
 	}
 
 	ocelot->num_phys_ports = of_get_child_count(ports);
-	ocelot->num_flooding_pgids = 1;
 
 	ocelot->vcap = vsc7514_vcap_props;
 	ocelot->inj_prefix = OCELOT_TAG_PREFIX_NONE;

@@ -1401,6 +1401,7 @@ static inline void __cpu_enable_hw_dbm(void)
 
 	write_sysreg(tcr, tcr_el1);
 	isb();
+	local_flush_tlb_all();
 }
 
 static bool cpu_has_broken_dbm(void)

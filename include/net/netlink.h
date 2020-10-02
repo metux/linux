@@ -200,7 +200,6 @@ enum nla_policy_validation {
 	NLA_VALIDATE_RANGE_WARN_TOO_LONG,
 	NLA_VALIDATE_MIN,
 	NLA_VALIDATE_MAX,
-	NLA_VALIDATE_MASK,
 	NLA_VALIDATE_RANGE_PTR,
 	NLA_VALIDATE_FUNCTION,
 };
@@ -318,7 +317,6 @@ struct nla_policy {
 	u16		len;
 	union {
 		const u32 bitfield32_valid;
-		const u32 mask;
 		const char *reject_message;
 		const struct nla_policy *nested_policy;
 		struct netlink_range_validation *range;
@@ -364,23 +362,20 @@ struct nla_policy {
 #define NLA_POLICY_BITFIELD32(valid) \
 	{ .type = NLA_BITFIELD32, .bitfield32_valid = valid }
 
-#define __NLA_IS_UINT_TYPE(tp)						\
-	(tp == NLA_U8 || tp == NLA_U16 || tp == NLA_U32 || tp == NLA_U64)
-#define __NLA_IS_SINT_TYPE(tp)						\
-	(tp == NLA_S8 || tp == NLA_S16 || tp == NLA_S32 || tp == NLA_S64)
-
 #define __NLA_ENSURE(condition) BUILD_BUG_ON_ZERO(!(condition))
-#define NLA_ENSURE_UINT_TYPE(tp)			\
-	(__NLA_ENSURE(__NLA_IS_UINT_TYPE(tp)) + tp)
 #define NLA_ENSURE_UINT_OR_BINARY_TYPE(tp)		\
-	(__NLA_ENSURE(__NLA_IS_UINT_TYPE(tp) ||	\
+	(__NLA_ENSURE(tp == NLA_U8 || tp == NLA_U16 ||	\
+		      tp == NLA_U32 || tp == NLA_U64 ||	\
 		      tp == NLA_MSECS ||		\
 		      tp == NLA_BINARY) + tp)
 #define NLA_ENSURE_SINT_TYPE(tp)			\
-	(__NLA_ENSURE(__NLA_IS_SINT_TYPE(tp)) + tp)
+	(__NLA_ENSURE(tp == NLA_S8 || tp == NLA_S16  ||	\
+		      tp == NLA_S32 || tp == NLA_S64) + tp)
 #define NLA_ENSURE_INT_OR_BINARY_TYPE(tp)		\
-	(__NLA_ENSURE(__NLA_IS_UINT_TYPE(tp) ||		\
-		      __NLA_IS_SINT_TYPE(tp) ||		\
+	(__NLA_ENSURE(tp == NLA_S8 || tp == NLA_U8 ||	\
+		      tp == NLA_S16 || tp == NLA_U16 ||	\
+		      tp == NLA_S32 || tp == NLA_U32 ||	\
+		      tp == NLA_S64 || tp == NLA_U64 ||	\
 		      tp == NLA_MSECS ||		\
 		      tp == NLA_BINARY) + tp)
 #define NLA_ENSURE_NO_VALIDATION_PTR(tp)		\
@@ -418,12 +413,6 @@ struct nla_policy {
 	.type = NLA_ENSURE_INT_OR_BINARY_TYPE(tp),	\
 	.validation_type = NLA_VALIDATE_MAX,		\
 	.max = _max,					\
-}
-
-#define NLA_POLICY_MASK(tp, _mask) {			\
-	.type = NLA_ENSURE_UINT_TYPE(tp),		\
-	.validation_type = NLA_VALIDATE_MASK,		\
-	.mask = _mask,					\
 }
 
 #define NLA_POLICY_VALIDATE_FN(tp, fn, ...) {		\
@@ -1948,19 +1937,12 @@ void nla_get_range_signed(const struct nla_policy *pt,
 
 struct netlink_policy_dump_state;
 
-int netlink_policy_dump_add_policy(struct netlink_policy_dump_state **pstate,
-				   const struct nla_policy *policy,
-				   unsigned int maxtype);
-int netlink_policy_dump_get_policy_idx(struct netlink_policy_dump_state *state,
-				       const struct nla_policy *policy,
-				       unsigned int maxtype);
+int netlink_policy_dump_start(const struct nla_policy *policy,
+			      unsigned int maxtype,
+			      struct netlink_policy_dump_state **state);
 bool netlink_policy_dump_loop(struct netlink_policy_dump_state *state);
 int netlink_policy_dump_write(struct sk_buff *skb,
 			      struct netlink_policy_dump_state *state);
-int netlink_policy_dump_attr_size_estimate(const struct nla_policy *pt);
-int netlink_policy_dump_write_attr(struct sk_buff *skb,
-				   const struct nla_policy *pt,
-				   int nestattr);
 void netlink_policy_dump_free(struct netlink_policy_dump_state *state);
 
 #endif

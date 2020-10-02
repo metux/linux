@@ -116,14 +116,9 @@ static void genl_op_from_full(const struct genl_family *family,
 			      unsigned int i, struct genl_ops *op)
 {
 	*op = family->ops[i];
-
-	if (!op->maxattr)
-		op->maxattr = family->maxattr;
-	if (!op->policy)
-		op->policy = family->policy;
 }
 
-static int genl_get_cmd_full(u32 cmd, const struct genl_family *family,
+static int genl_get_cmd_full(u8 cmd, const struct genl_family *family,
 			     struct genl_ops *op)
 {
 	int i;
@@ -147,12 +142,9 @@ static void genl_op_from_small(const struct genl_family *family,
 	op->internal_flags = family->small_ops[i].internal_flags;
 	op->flags	= family->small_ops[i].flags;
 	op->validate	= family->small_ops[i].validate;
-
-	op->maxattr = family->maxattr;
-	op->policy = family->policy;
 }
 
-static int genl_get_cmd_small(u32 cmd, const struct genl_family *family,
+static int genl_get_cmd_small(u8 cmd, const struct genl_family *family,
 			      struct genl_ops *op)
 {
 	int i;
@@ -166,7 +158,7 @@ static int genl_get_cmd_small(u32 cmd, const struct genl_family *family,
 	return -ENOENT;
 }
 
-static int genl_get_cmd(u32 cmd, const struct genl_family *family,
+static int genl_get_cmd(u8 cmd, const struct genl_family *family,
 			struct genl_ops *op)
 {
 	if (!genl_get_cmd_full(cmd, family, op))
@@ -537,16 +529,16 @@ genl_family_rcv_msg_attrs_parse(const struct genl_family *family,
 	struct nlattr **attrbuf;
 	int err;
 
-	if (!ops->maxattr)
+	if (!family->maxattr)
 		return NULL;
 
-	attrbuf = kmalloc_array(ops->maxattr + 1,
+	attrbuf = kmalloc_array(family->maxattr + 1,
 				sizeof(struct nlattr *), GFP_KERNEL);
 	if (!attrbuf)
 		return ERR_PTR(-ENOMEM);
 
-	err = __nlmsg_parse(nlh, hdrlen, attrbuf, ops->maxattr, ops->policy,
-			    validate, extack);
+	err = __nlmsg_parse(nlh, hdrlen, attrbuf, family->maxattr,
+			    family->policy, validate, extack);
 	if (err) {
 		kfree(attrbuf);
 		return ERR_PTR(err);
@@ -853,7 +845,7 @@ static int ctrl_fill_info(const struct genl_family *family, u32 portid, u32 seq,
 				op_flags |= GENL_CMD_CAP_DUMP;
 			if (op.doit)
 				op_flags |= GENL_CMD_CAP_DO;
-			if (op.policy)
+			if (family->policy)
 				op_flags |= GENL_CMD_CAP_HASPOL;
 
 			nest = nla_nest_start_noflag(skb, i + 1);
@@ -1016,7 +1008,7 @@ ctrl_build_mcgrp_msg(const struct genl_family *family,
 	return skb;
 }
 
-static const struct nla_policy ctrl_policy_family[] = {
+static const struct nla_policy ctrl_policy[CTRL_ATTR_MAX+1] = {
 	[CTRL_ATTR_FAMILY_ID]	= { .type = NLA_U16 },
 	[CTRL_ATTR_FAMILY_NAME]	= { .type = NLA_NUL_STRING,
 				    .len = GENL_NAMSIZ - 1 },
@@ -1112,190 +1104,62 @@ static int genl_ctrl_event(int event, const struct genl_family *family,
 
 struct ctrl_dump_policy_ctx {
 	struct netlink_policy_dump_state *state;
-	const struct genl_family *rt;
-	unsigned int opidx;
-	u32 op;
 	u16 fam_id;
-	u8 policies:1,
-	   single_op:1;
 };
 
-static const struct nla_policy ctrl_policy_policy[] = {
-	[CTRL_ATTR_FAMILY_ID]	= { .type = NLA_U16 },
-	[CTRL_ATTR_FAMILY_NAME]	= { .type = NLA_NUL_STRING,
-				    .len = GENL_NAMSIZ - 1 },
-	[CTRL_ATTR_OP]		= { .type = NLA_U32 },
-};
-
-static int ctrl_dumppolicy_start(struct netlink_callback *cb)
+static int ctrl_dumppolicy(struct sk_buff *skb, struct netlink_callback *cb)
 {
-	const struct genl_dumpit_info *info = genl_dumpit_info(cb);
 	struct ctrl_dump_policy_ctx *ctx = (void *)cb->ctx;
-	struct nlattr **tb = info->attrs;
 	const struct genl_family *rt;
-	struct genl_ops op;
-	int err, i;
+	int err;
 
 	BUILD_BUG_ON(sizeof(*ctx) > sizeof(cb->ctx));
 
-	if (!tb[CTRL_ATTR_FAMILY_ID] && !tb[CTRL_ATTR_FAMILY_NAME])
-		return -EINVAL;
+	if (!ctx->fam_id) {
+		struct nlattr *tb[CTRL_ATTR_MAX + 1];
 
-	if (tb[CTRL_ATTR_FAMILY_ID]) {
-		ctx->fam_id = nla_get_u16(tb[CTRL_ATTR_FAMILY_ID]);
-	} else {
-		rt = genl_family_find_byname(
-			nla_data(tb[CTRL_ATTR_FAMILY_NAME]));
-		if (!rt)
-			return -ENOENT;
-		ctx->fam_id = rt->id;
+		err = genlmsg_parse(cb->nlh, &genl_ctrl, tb,
+				    genl_ctrl.maxattr,
+				    genl_ctrl.policy, cb->extack);
+		if (err)
+			return err;
+
+		if (!tb[CTRL_ATTR_FAMILY_ID] && !tb[CTRL_ATTR_FAMILY_NAME])
+			return -EINVAL;
+
+		if (tb[CTRL_ATTR_FAMILY_ID]) {
+			ctx->fam_id = nla_get_u16(tb[CTRL_ATTR_FAMILY_ID]);
+		} else {
+			rt = genl_family_find_byname(
+				nla_data(tb[CTRL_ATTR_FAMILY_NAME]));
+			if (!rt)
+				return -ENOENT;
+			ctx->fam_id = rt->id;
+		}
 	}
 
 	rt = genl_family_find_byid(ctx->fam_id);
 	if (!rt)
 		return -ENOENT;
 
-	ctx->rt = rt;
-
-	if (tb[CTRL_ATTR_OP]) {
-		ctx->single_op = true;
-		ctx->op = nla_get_u32(tb[CTRL_ATTR_OP]);
-
-		err = genl_get_cmd(ctx->op, rt, &op);
-		if (err) {
-			NL_SET_BAD_ATTR(cb->extack, tb[CTRL_ATTR_OP]);
-			return err;
-		}
-
-		if (!op.policy)
-			return -ENODATA;
-
-		return netlink_policy_dump_add_policy(&ctx->state, op.policy,
-						      op.maxattr);
-	}
-
-	for (i = 0; i < genl_get_cmd_cnt(rt); i++) {
-		genl_get_cmd_by_index(i, rt, &op);
-
-		if (op.policy) {
-			err = netlink_policy_dump_add_policy(&ctx->state,
-							     op.policy,
-							     op.maxattr);
-			if (err)
-				return err;
-		}
-	}
-
-	if (!ctx->state)
+	if (!rt->policy)
 		return -ENODATA;
-	return 0;
-}
 
-static void *ctrl_dumppolicy_prep(struct sk_buff *skb,
-				  struct netlink_callback *cb)
-{
-	struct ctrl_dump_policy_ctx *ctx = (void *)cb->ctx;
-	void *hdr;
-
-	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
-			  cb->nlh->nlmsg_seq, &genl_ctrl,
-			  NLM_F_MULTI, CTRL_CMD_GETPOLICY);
-	if (!hdr)
-		return NULL;
-
-	if (nla_put_u16(skb, CTRL_ATTR_FAMILY_ID, ctx->fam_id))
-		return NULL;
-
-	return hdr;
-}
-
-static int ctrl_dumppolicy_put_op(struct sk_buff *skb,
-				  struct netlink_callback *cb,
-			          struct genl_ops *op)
-{
-	struct ctrl_dump_policy_ctx *ctx = (void *)cb->ctx;
-	struct nlattr *nest_pol, *nest_op;
-	void *hdr;
-	int idx;
-
-	/* skip if we have nothing to show */
-	if (!op->policy)
-		return 0;
-	if (!op->doit &&
-	    (!op->dumpit || op->validate & GENL_DONT_VALIDATE_DUMP))
-		return 0;
-
-	hdr = ctrl_dumppolicy_prep(skb, cb);
-	if (!hdr)
-		return -ENOBUFS;
-
-	nest_pol = nla_nest_start(skb, CTRL_ATTR_OP_POLICY);
-	if (!nest_pol)
-		goto err;
-
-	nest_op = nla_nest_start(skb, op->cmd);
-	if (!nest_op)
-		goto err;
-
-	/* for now both do/dump are always the same */
-	idx = netlink_policy_dump_get_policy_idx(ctx->state,
-						 op->policy,
-						 op->maxattr);
-
-	if (op->doit && nla_put_u32(skb, CTRL_ATTR_POLICY_DO, idx))
-		goto err;
-
-	if (op->dumpit && !(op->validate & GENL_DONT_VALIDATE_DUMP) &&
-	    nla_put_u32(skb, CTRL_ATTR_POLICY_DUMP, idx))
-		goto err;
-
-	nla_nest_end(skb, nest_op);
-	nla_nest_end(skb, nest_pol);
-	genlmsg_end(skb, hdr);
-
-	return 0;
-err:
-	genlmsg_cancel(skb, hdr);
-	return -ENOBUFS;
-}
-
-static int ctrl_dumppolicy(struct sk_buff *skb, struct netlink_callback *cb)
-{
-	struct ctrl_dump_policy_ctx *ctx = (void *)cb->ctx;
-	void *hdr;
-
-	if (!ctx->policies) {
-		while (ctx->opidx < genl_get_cmd_cnt(ctx->rt)) {
-			struct genl_ops op;
-
-			if (ctx->single_op) {
-				int err;
-
-				err = genl_get_cmd(ctx->op, ctx->rt, &op);
-				if (WARN_ON(err))
-					return skb->len;
-
-				/* break out of the loop after this one */
-				ctx->opidx = genl_get_cmd_cnt(ctx->rt);
-			} else {
-				genl_get_cmd_by_index(ctx->opidx, ctx->rt, &op);
-			}
-
-			if (ctrl_dumppolicy_put_op(skb, cb, &op))
-				return skb->len;
-
-			ctx->opidx++;
-		}
-
-		/* completed with the per-op policy index list */
-		ctx->policies = true;
-	}
+	err = netlink_policy_dump_start(rt->policy, rt->maxattr, &ctx->state);
+	if (err)
+		return err;
 
 	while (netlink_policy_dump_loop(ctx->state)) {
+		void *hdr;
 		struct nlattr *nest;
 
-		hdr = ctrl_dumppolicy_prep(skb, cb);
+		hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+				  cb->nlh->nlmsg_seq, &genl_ctrl,
+				  NLM_F_MULTI, CTRL_CMD_GETPOLICY);
 		if (!hdr)
+			goto nla_put_failure;
+
+		if (nla_put_u16(skb, CTRL_ATTR_FAMILY_ID, rt->id))
 			goto nla_put_failure;
 
 		nest = nla_nest_start(skb, CTRL_ATTR_POLICY);
@@ -1308,12 +1172,13 @@ static int ctrl_dumppolicy(struct sk_buff *skb, struct netlink_callback *cb)
 		nla_nest_end(skb, nest);
 
 		genlmsg_end(skb, hdr);
-	}
-
-	return skb->len;
+		continue;
 
 nla_put_failure:
-	genlmsg_cancel(skb, hdr);
+		genlmsg_cancel(skb, hdr);
+		break;
+	}
+
 	return skb->len;
 }
 
@@ -1329,16 +1194,11 @@ static const struct genl_ops genl_ctrl_ops[] = {
 	{
 		.cmd		= CTRL_CMD_GETFAMILY,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.policy		= ctrl_policy_family,
-		.maxattr	= ARRAY_SIZE(ctrl_policy_family) - 1,
 		.doit		= ctrl_getfamily,
 		.dumpit		= ctrl_dumpfamily,
 	},
 	{
 		.cmd		= CTRL_CMD_GETPOLICY,
-		.policy		= ctrl_policy_policy,
-		.maxattr	= ARRAY_SIZE(ctrl_policy_policy) - 1,
-		.start		= ctrl_dumppolicy_start,
 		.dumpit		= ctrl_dumppolicy,
 		.done		= ctrl_dumppolicy_done,
 	},
@@ -1357,6 +1217,8 @@ static struct genl_family genl_ctrl __ro_after_init = {
 	.id = GENL_ID_CTRL,
 	.name = "nlctrl",
 	.version = 0x2,
+	.maxattr = CTRL_ATTR_MAX,
+	.policy = ctrl_policy,
 	.netnsok = true,
 };
 

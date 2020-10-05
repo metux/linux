@@ -777,15 +777,6 @@ static void scsi_io_completion_action(struct scsi_cmnd *cmd, int result)
 			/* See SSC3rXX or current. */
 			action = ACTION_FAIL;
 			break;
-		case DATA_PROTECT:
-			action = ACTION_FAIL;
-			if ((sshdr.asc == 0x0C && sshdr.ascq == 0x12) ||
-			    (sshdr.asc == 0x55 &&
-			     (sshdr.ascq == 0x0E || sshdr.ascq == 0x0F))) {
-				/* Insufficient zone resources */
-				blk_stat = BLK_STS_ZONE_OPEN_RESOURCE;
-			}
-			break;
 		default:
 			action = ACTION_FAIL;
 			break;
@@ -1199,6 +1190,38 @@ static blk_status_t scsi_setup_scsi_cmnd(struct scsi_device *sdev,
 	return BLK_STS_OK;
 }
 
+/*
+ * Setup a normal block command.  These are simple request from filesystems
+ * that still need to be translated to SCSI CDBs from the ULD.
+ */
+static blk_status_t scsi_setup_fs_cmnd(struct scsi_device *sdev,
+		struct request *req)
+{
+	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(req);
+
+	if (unlikely(sdev->handler && sdev->handler->prep_fn)) {
+		blk_status_t ret = sdev->handler->prep_fn(sdev, req);
+		if (ret != BLK_STS_OK)
+			return ret;
+	}
+
+	cmd->cmnd = scsi_req(req)->cmd = scsi_req(req)->__cmd;
+	memset(cmd->cmnd, 0, BLK_MAX_CDB);
+	return scsi_cmd_to_driver(cmd)->init_command(cmd);
+}
+
+static blk_status_t scsi_setup_cmnd(struct scsi_device *sdev,
+		struct request *req)
+{
+	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(req);
+
+	cmd->sc_data_direction = rq_dma_dir(req);
+
+	if (blk_rq_is_scsi(req))
+		return scsi_setup_scsi_cmnd(sdev, req);
+	return scsi_setup_fs_cmnd(sdev, req);
+}
+
 static blk_status_t
 scsi_device_state_check(struct scsi_device *sdev, struct request *req)
 {
@@ -1554,10 +1577,6 @@ static blk_status_t scsi_prepare_cmd(struct request *req)
 	cmd->request = req;
 	cmd->tag = req->tag;
 	cmd->prot_op = SCSI_PROT_NORMAL;
-	if (blk_rq_bytes(req))
-		cmd->sc_data_direction = rq_dma_dir(req);
-	else
-		cmd->sc_data_direction = DMA_NONE;
 
 	sg = (void *)cmd + sizeof(struct scsi_cmnd) + shost->hostt->cmd_size;
 	cmd->sdb.table.sgl = sg;
@@ -1569,23 +1588,9 @@ static blk_status_t scsi_prepare_cmd(struct request *req)
 			(struct scatterlist *)(cmd->prot_sdb + 1);
 	}
 
-	/*
-	 * Special handling for passthrough commands, which don't go to the ULP
-	 * at all:
-	 */
-	if (blk_rq_is_scsi(req))
-		return scsi_setup_scsi_cmnd(sdev, req);
+	blk_mq_start_request(req);
 
-	if (sdev->handler && sdev->handler->prep_fn) {
-		blk_status_t ret = sdev->handler->prep_fn(sdev, req);
-
-		if (ret != BLK_STS_OK)
-			return ret;
-	}
-
-	cmd->cmnd = scsi_req(req)->cmd = scsi_req(req)->__cmd;
-	memset(cmd->cmnd, 0, BLK_MAX_CDB);
-	return scsi_cmd_to_driver(cmd)->init_command(cmd);
+	return scsi_setup_cmnd(sdev, req);
 }
 
 static void scsi_mq_done(struct scsi_cmnd *cmd)
@@ -1669,6 +1674,7 @@ static blk_status_t scsi_queue_rq(struct blk_mq_hw_ctx *hctx,
 		req->rq_flags |= RQF_DONTPREP;
 	} else {
 		clear_bit(SCMD_STATE_COMPLETE, &cmd->state);
+		blk_mq_start_request(req);
 	}
 
 	cmd->flags &= SCMD_PRESERVED_FLAGS;
@@ -1681,7 +1687,6 @@ static blk_status_t scsi_queue_rq(struct blk_mq_hw_ctx *hctx,
 	memset(cmd->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
 	cmd->scsi_done = scsi_mq_done;
 
-	blk_mq_start_request(req);
 	reason = scsi_dispatch_cmd(cmd);
 	if (reason) {
 		scsi_set_blocked(cmd, reason);
@@ -1703,7 +1708,8 @@ out_put_budget:
 		break;
 	case BLK_STS_RESOURCE:
 	case BLK_STS_ZONE_RESOURCE:
-		if (scsi_device_blocked(sdev))
+		if (atomic_read(&sdev->device_busy) ||
+		    scsi_device_blocked(sdev))
 			ret = BLK_STS_DEV_RESOURCE;
 		break;
 	default:

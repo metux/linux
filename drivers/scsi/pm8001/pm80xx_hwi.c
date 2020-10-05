@@ -4479,8 +4479,7 @@ static int pm80xx_chip_ssp_io_req(struct pm8001_hba_info *pm8001_ha,
 		if (task->num_scatter > 1) {
 			pm8001_chip_make_sg(task->scatter,
 						ccb->n_elem, ccb->buf_prd);
-			phys_addr = ccb->ccb_dma_handle +
-				offsetof(struct pm8001_ccb_info, buf_prd[0]);
+			phys_addr = ccb->ccb_dma_handle;
 			ssp_cmd.enc_addr_low =
 				cpu_to_le32(lower_32_bits(phys_addr));
 			ssp_cmd.enc_addr_high =
@@ -4509,9 +4508,7 @@ static int pm80xx_chip_ssp_io_req(struct pm8001_hba_info *pm8001_ha,
 						end_addr_high, end_addr_low));
 				pm8001_chip_make_sg(task->scatter, 1,
 					ccb->buf_prd);
-				phys_addr = ccb->ccb_dma_handle +
-					offsetof(struct pm8001_ccb_info,
-						buf_prd[0]);
+				phys_addr = ccb->ccb_dma_handle;
 				ssp_cmd.enc_addr_low =
 					cpu_to_le32(lower_32_bits(phys_addr));
 				ssp_cmd.enc_addr_high =
@@ -4539,8 +4536,7 @@ static int pm80xx_chip_ssp_io_req(struct pm8001_hba_info *pm8001_ha,
 		if (task->num_scatter > 1) {
 			pm8001_chip_make_sg(task->scatter, ccb->n_elem,
 					ccb->buf_prd);
-			phys_addr = ccb->ccb_dma_handle +
-				offsetof(struct pm8001_ccb_info, buf_prd[0]);
+			phys_addr = ccb->ccb_dma_handle;
 			ssp_cmd.addr_low =
 				cpu_to_le32(lower_32_bits(phys_addr));
 			ssp_cmd.addr_high =
@@ -4568,9 +4564,7 @@ static int pm80xx_chip_ssp_io_req(struct pm8001_hba_info *pm8001_ha,
 						 end_addr_high, end_addr_low));
 				pm8001_chip_make_sg(task->scatter, 1,
 					ccb->buf_prd);
-				phys_addr = ccb->ccb_dma_handle +
-					offsetof(struct pm8001_ccb_info,
-						 buf_prd[0]);
+				phys_addr = ccb->ccb_dma_handle;
 				ssp_cmd.addr_low =
 					cpu_to_le32(lower_32_bits(phys_addr));
 				ssp_cmd.addr_high =
@@ -4662,8 +4656,7 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 		if (task->num_scatter > 1) {
 			pm8001_chip_make_sg(task->scatter,
 						ccb->n_elem, ccb->buf_prd);
-			phys_addr = ccb->ccb_dma_handle +
-				offsetof(struct pm8001_ccb_info, buf_prd[0]);
+			phys_addr = ccb->ccb_dma_handle;
 			sata_cmd.enc_addr_low = lower_32_bits(phys_addr);
 			sata_cmd.enc_addr_high = upper_32_bits(phys_addr);
 			sata_cmd.enc_esgl = cpu_to_le32(1 << 31);
@@ -4688,9 +4681,7 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 						end_addr_high, end_addr_low));
 				pm8001_chip_make_sg(task->scatter, 1,
 					ccb->buf_prd);
-				phys_addr = ccb->ccb_dma_handle +
-						offsetof(struct pm8001_ccb_info,
-						buf_prd[0]);
+				phys_addr = ccb->ccb_dma_handle;
 				sata_cmd.enc_addr_low =
 					lower_32_bits(phys_addr);
 				sata_cmd.enc_addr_high =
@@ -4728,8 +4719,7 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 		if (task->num_scatter > 1) {
 			pm8001_chip_make_sg(task->scatter,
 					ccb->n_elem, ccb->buf_prd);
-			phys_addr = ccb->ccb_dma_handle +
-				offsetof(struct pm8001_ccb_info, buf_prd[0]);
+			phys_addr = ccb->ccb_dma_handle;
 			sata_cmd.addr_low = lower_32_bits(phys_addr);
 			sata_cmd.addr_high = upper_32_bits(phys_addr);
 			sata_cmd.esgl = cpu_to_le32(1 << 31);
@@ -4754,9 +4744,7 @@ static int pm80xx_chip_sata_req(struct pm8001_hba_info *pm8001_ha,
 						end_addr_high, end_addr_low));
 				pm8001_chip_make_sg(task->scatter, 1,
 					ccb->buf_prd);
-				phys_addr = ccb->ccb_dma_handle +
-					offsetof(struct pm8001_ccb_info,
-					buf_prd[0]);
+				phys_addr = ccb->ccb_dma_handle;
 				sata_cmd.addr_low =
 					lower_32_bits(phys_addr);
 				sata_cmd.addr_high =

@@ -534,4 +534,7 @@ properties:
         items:
           - const: zkmagic,a95x-z2
           - const: rockchip,rk3318
+
+additionalProperties: true
+
 ...

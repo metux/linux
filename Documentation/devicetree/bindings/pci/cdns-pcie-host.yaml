@@ -34,3 +34,5 @@ properties:
     deprecated: true
 
   msi-parent: true
+
+additionalProperties: true

@@ -1260,6 +1260,21 @@ static void kill_me_maybe(struct callback_head *cb)
 	kill_me_now(cb);
 }
 
+static void queue_task_work(struct mce *m, int kill_it)
+{
+	current->mce_addr = m->addr;
+	current->mce_kflags = m->kflags;
+	current->mce_ripv = !!(m->mcgstatus & MCG_STATUS_RIPV);
+	current->mce_whole_page = whole_page(m);
+
+	if (kill_it)
+		current->mce_kill_me.func = kill_me_now;
+	else
+		current->mce_kill_me.func = kill_me_maybe;
+
+	task_work_add(current, &current->mce_kill_me, true);
+}
+
 /*
  * The actual machine check handler. This only handles real
  * exceptions when something got corrupted coming in through int 18.
@@ -1401,26 +1416,25 @@ noinstr void do_machine_check(struct pt_regs *regs)
 		/* If this triggers there is no way to recover. Die hard. */
 		BUG_ON(!on_thread_stack() || !user_mode(regs));
 
-		current->mce_addr = m.addr;
-		current->mce_ripv = !!(m.mcgstatus & MCG_STATUS_RIPV);
-		current->mce_whole_page = whole_page(&m);
-		current->mce_kill_me.func = kill_me_maybe;
-		if (kill_it)
-			current->mce_kill_me.func = kill_me_now;
-		task_work_add(current, &current->mce_kill_me, true);
+		queue_task_work(&m, kill_it);
+
 	} else {
-	/*
-	 * Handle an MCE which has happened in kernel space but from
-	 * which the kernel can recover: ex_has_fault_handler() has
-	 * already verified that the rIP at which the error happened is
-	 * a rIP from which the kernel can recover (by jumping to
-	 * recovery code specified in _ASM_EXTABLE_FAULT()) and the
-	 * corresponding exception handler which would do that is the
-	 * proper one.
-	 */
-	if (m.kflags & MCE_IN_KERNEL_RECOV) {
-		if (!fixup_exception(regs, X86_TRAP_MC, error_code, 0))
-			mce_panic("Failed kernel mode recovery", &m, msg);
+		/*
+		 * Handle an MCE which has happened in kernel space but from
+		 * which the kernel can recover: ex_has_fault_handler() has
+		 * already verified that the rIP at which the error happened is
+		 * a rIP from which the kernel can recover (by jumping to
+		 * recovery code specified in _ASM_EXTABLE_FAULT()) and the
+		 * corresponding exception handler which would do that is the
+		 * proper one.
+		 */
+		if (m.kflags & MCE_IN_KERNEL_RECOV) {
+			if (!fixup_exception(regs, X86_TRAP_MC, error_code, 0))
+				mce_panic("Failed kernel mode recovery", &m, msg);
+
+			if (m.kflags & MCE_IN_KERNEL_COPYIN)
+				queue_task_work(&m, kill_it);
+		}
 	}
 out:
 	mce_wrmsrl(MSR_IA32_MCG_STATUS, 0);

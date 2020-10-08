@@ -1467,6 +1467,11 @@ S:	Odd Fixes
 F:	drivers/amba/
 F:	include/linux/amba/bus.h
 
+ARM PRIMECELL CLCD PL110 DRIVER
+M:	Russell King <linux@armlinux.org.uk>
+S:	Odd Fixes
+F:	drivers/video/fbdev/amba-clcd.*
+
 ARM PRIMECELL KMI PL050 DRIVER
 M:	Russell King <linux@armlinux.org.uk>
 S:	Odd Fixes
@@ -1632,7 +1637,7 @@ N:	meson
 
 ARM/Annapurna Labs ALPINE ARCHITECTURE
 M:	Tsahee Zidenberg <tsahee@annapurnalabs.com>
-M:	Antoine Tenart <antoine.tenart@bootlin.com>
+M:	Antoine Tenart <atenart@kernel.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	arch/arm/boot/dts/alpine*
@@ -3213,6 +3218,7 @@ S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/axboe/linux-block.git
 F:	block/
 F:	drivers/block/
+F:	include/linux/blk*
 F:	kernel/trace/blktrace.c
 F:	lib/sbitmap.c
 
@@ -3396,6 +3402,7 @@ M:	Florian Fainelli <f.fainelli@gmail.com>
 L:	netdev@vger.kernel.org
 L:	openwrt-devel@lists.openwrt.org (subscribers-only)
 S:	Supported
+F:	Documentation/devicetree/bindings/net/dsa/b53.txt
 F:	drivers/net/dsa/b53/*
 F:	include/linux/platform_data/b53.h
 
@@ -3581,13 +3588,28 @@ L:	bcm-kernel-feedback-list@broadcom.com
 S:	Maintained
 F:	drivers/phy/broadcom/phy-brcm-usb*
 
+BROADCOM ETHERNET PHY DRIVERS
+M:	Florian Fainelli <f.fainelli@gmail.com>
+L:	bcm-kernel-feedback-list@broadcom.com
+L:	netdev@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/net/broadcom-bcm87xx.txt
+F:	drivers/net/phy/bcm*.[ch]
+F:	drivers/net/phy/broadcom.c
+F:	include/linux/brcmphy.h
+
 BROADCOM GENET ETHERNET DRIVER
 M:	Doug Berger <opendmb@gmail.com>
 M:	Florian Fainelli <f.fainelli@gmail.com>
 L:	bcm-kernel-feedback-list@broadcom.com
 L:	netdev@vger.kernel.org
 S:	Supported
+F:	Documentation/devicetree/bindings/net/brcm,bcmgenet.txt
+F:	Documentation/devicetree/bindings/net/brcm,unimac-mdio.txt
 F:	drivers/net/ethernet/broadcom/genet/
+F:	drivers/net/mdio/mdio-bcm-unimac.c
+F:	include/linux/platform_data/bcmgenet.h
+F:	include/linux/platform_data/mdio-bcm-unimac.h
 
 BROADCOM IPROC ARM ARCHITECTURE
 M:	Ray Jui <rjui@broadcom.com>
@@ -5243,6 +5265,7 @@ DOCUMENTATION
 M:	Jonathan Corbet <corbet@lwn.net>
 L:	linux-doc@vger.kernel.org
 S:	Maintained
+P:	Documentation/doc-guide/maintainer-profile.rst
 T:	git git://git.lwn.net/linux.git docs-next
 F:	Documentation/
 F:	scripts/documentation-file-ref-check
@@ -6497,7 +6520,6 @@ F:	net/bridge/
 
 ETHERNET PHY LIBRARY
 M:	Andrew Lunn <andrew@lunn.ch>
-M:	Florian Fainelli <f.fainelli@gmail.com>
 M:	Heiner Kallweit <hkallweit1@gmail.com>
 R:	Russell King <linux@armlinux.org.uk>
 L:	netdev@vger.kernel.org
@@ -8315,8 +8337,9 @@ S:	Supported
 F:	drivers/pci/hotplug/rpaphp*
 
 IBM Power SRIOV Virtual NIC Device Driver
-M:	Thomas Falcon <tlfalcon@linux.ibm.com>
-M:	John Allen <jallen@linux.ibm.com>
+M:	Dany Madden <drt@linux.ibm.com>
+M:	Lijun Pan <ljp@linux.ibm.com>
+M:	Sukadev Bhattiprolu <sukadev@linux.ibm.com>
 L:	netdev@vger.kernel.org
 S:	Supported
 F:	drivers/net/ethernet/ibm/ibmvnic.*
@@ -8330,7 +8353,7 @@ F:	arch/powerpc/platforms/powernv/copy-paste.h
 F:	arch/powerpc/platforms/powernv/vas*
 
 IBM Power Virtual Ethernet Device Driver
-M:	Thomas Falcon <tlfalcon@linux.ibm.com>
+M:	Cristobal Forno <cforno12@linux.ibm.com>
 L:	netdev@vger.kernel.org
 S:	Supported
 F:	drivers/net/ethernet/ibm/ibmveth.*
@@ -8664,7 +8687,7 @@ F:	drivers/input/input-mt.c
 K:	\b(ABS|SYN)_MT_
 
 INSIDE SECURE CRYPTO DRIVER
-M:	Antoine Tenart <antoine.tenart@bootlin.com>
+M:	Antoine Tenart <atenart@kernel.org>
 L:	linux-crypto@vger.kernel.org
 S:	Maintained
 F:	drivers/crypto/inside-secure/
@@ -8743,7 +8766,8 @@ F:	include/drm/i915*
 F:	include/uapi/drm/i915_drm.h
 
 INTEL ETHERNET DRIVERS
-M:	Jeff Kirsher <jeffrey.t.kirsher@intel.com>
+M:	Jesse Brandeburg <jesse.brandeburg@intel.com>
+M:	Tony Nguyen <anthony.l.nguyen@intel.com>
 L:	intel-wired-lan@lists.osuosl.org (moderated for non-subscribers)
 S:	Supported
 W:	http://www.intel.com/support/feedback.htm
@@ -11019,6 +11043,7 @@ F:	drivers/char/hw_random/mtk-rng.c
 
 MEDIATEK SWITCH DRIVER
 M:	Sean Wang <sean.wang@mediatek.com>
+M:	Landen Chao <Landen.Chao@mediatek.com>
 L:	netdev@vger.kernel.org
 S:	Maintained
 F:	drivers/net/dsa/mt7530.*
@@ -12064,6 +12089,7 @@ NETWORKING [DSA]
 M:	Andrew Lunn <andrew@lunn.ch>
 M:	Vivien Didelot <vivien.didelot@gmail.com>
 M:	Florian Fainelli <f.fainelli@gmail.com>
+M:	Vladimir Oltean <olteanv@gmail.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/net/dsa/
 F:	drivers/net/dsa/
@@ -13174,6 +13200,7 @@ F:	drivers/firmware/pcdp.*
 
 PCI DRIVER FOR AARDVARK (Marvell Armada 3700)
 M:	Thomas Petazzoni <thomas.petazzoni@bootlin.com>
+M:	Pali Rohár <pali@kernel.org>
 L:	linux-pci@vger.kernel.org
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
@@ -13583,12 +13610,18 @@ F:	kernel/events/*
 F:	tools/lib/perf/
 F:	tools/perf/
 
-PERFORMANCE EVENTS SUBSYSTEM ARM64 PMU EVENTS
+PERFORMANCE EVENTS TOOLING ARM64
 R:	John Garry <john.garry@huawei.com>
 R:	Will Deacon <will@kernel.org>
+R:	Mathieu Poirier <mathieu.poirier@linaro.org>
+R:	Leo Yan <leo.yan@linaro.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Supported
+F:	tools/build/feature/test-libopencsd.c
+F:	tools/perf/arch/arm*/
 F:	tools/perf/pmu-events/arch/arm64/
+F:	tools/perf/util/arm-spe*
+F:	tools/perf/util/cs-etm*
 
 PERSONALITY HANDLING
 M:	Christoph Hellwig <hch@infradead.org>
@@ -16145,7 +16178,7 @@ M:	Leon Luo <leonl@leopardimaging.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media_tree.git
-F:	Documentation/devicetree/bindings/media/i2c/imx274.txt
+F:	Documentation/devicetree/bindings/media/i2c/sony,imx274.yaml
 F:	drivers/media/i2c/imx274.c
 
 SONY IMX290 SENSOR DRIVER
@@ -16715,6 +16748,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/gpio/snps,dw-apb-gpio.yaml
 F:	drivers/gpio/gpio-dwapb.c
 
+SYNOPSYS DESIGNWARE APB SSI DRIVER
+M:	Serge Semin <fancer.lancer@gmail.com>
+L:	linux-spi@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/spi/snps,dw-apb-ssi.yaml
+F:	drivers/spi/spi-dw*
+
 SYNOPSYS DESIGNWARE AXI DMAC DRIVER
 M:	Eugeniy Paltsev <Eugeniy.Paltsev@synopsys.com>
 S:	Maintained
@@ -17136,8 +17176,8 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/arm/keystone/ti,k3-sci-common.yaml
 F:	Documentation/devicetree/bindings/arm/keystone/ti,sci.txt
 F:	Documentation/devicetree/bindings/clock/ti,sci-clk.txt
-F:	Documentation/devicetree/bindings/interrupt-controller/ti,sci-inta.txt
-F:	Documentation/devicetree/bindings/interrupt-controller/ti,sci-intr.txt
+F:	Documentation/devicetree/bindings/interrupt-controller/ti,sci-inta.yaml
+F:	Documentation/devicetree/bindings/interrupt-controller/ti,sci-intr.yaml
 F:	Documentation/devicetree/bindings/reset/ti,sci-reset.txt
 F:	Documentation/devicetree/bindings/soc/ti/sci-pm-domain.txt
 F:	drivers/clk/keystone/sci-clk.c
@@ -18265,7 +18305,8 @@ F:	drivers/gpu/vga/vga_switcheroo.c
 F:	include/linux/vga_switcheroo.h
 
 VIA RHINE NETWORK DRIVER
-S:	Orphan
+S:	Maintained
+M:	Kevin Brace <kevinbrace@bracecomputerlab.com>
 F:	drivers/net/ethernet/via/via-rhine.c
 
 VIA SD/MMC CARD CONTROLLER DRIVER
@@ -18876,11 +18917,11 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git x86/mm
 F:	arch/x86/mm/
 
 X86 PLATFORM DRIVERS
-M:	Darren Hart <dvhart@infradead.org>
-M:	Andy Shevchenko <andy@infradead.org>
+M:	Hans de Goede <hdegoede@redhat.com>
+M:	Mark Gross <mgross@linux.intel.com>
 L:	platform-driver-x86@vger.kernel.org
-S:	Odd Fixes
-T:	git git://git.infradead.org/linux-platform-drivers-x86.git
+S:	Maintained
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/pdx86/platform-drivers-x86.git
 F:	drivers/platform/olpc/
 F:	drivers/platform/x86/
 
@@ -18892,6 +18933,15 @@ L:	x86@kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git x86/core
 F:	arch/x86/platform
+
+X86 PLATFORM UV HPE SUPERDOME FLEX
+M:	Steve Wahl <steve.wahl@hpe.com>
+R:	Dimitri Sivanich <dimitri.sivanich@hpe.com>
+R:	Russ Anderson <russ.anderson@hpe.com>
+S:	Supported
+F:	arch/x86/include/asm/uv/
+F:	arch/x86/kernel/apic/x2apic_uv_x.c
+F:	arch/x86/platform/uv/
 
 X86 VDSO
 M:	Andy Lutomirski <luto@kernel.org>

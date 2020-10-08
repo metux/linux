@@ -10,7 +10,6 @@ x86-specific Documentation
 
    boot
    booting-dt
-   cpuinfo
    topology
    exception-tables
    kernel-stacks
@@ -32,4 +31,3 @@ x86-specific Documentation
    usb-legacy-support
    i386/index
    x86_64/index
-   sva

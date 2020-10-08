@@ -9,7 +9,7 @@ x86-specific Documentation
    :numbered:
 
    boot
-   cpuinfo
+   booting-dt
    topology
    exception-tables
    kernel-stacks
@@ -24,11 +24,10 @@ x86-specific Documentation
    intel_txt
    amd-memory-encryption
    pti
+   mds
    microcode
    resctrl_ui
    tsx_async_abort
    usb-legacy-support
    i386/index
    x86_64/index
-   mds
-   sva

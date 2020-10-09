@@ -106,6 +106,7 @@ Contents:
    skfp
    strparser
    switchdev
+   sysfs-tagging
    tc-actions-env-rules
    tcp-thin
    team

@@ -268,9 +268,6 @@ struct mtk_i2c {
 	bool ignore_restart_irq;
 	struct mtk_i2c_ac_timing ac_timing;
 	const struct mtk_i2c_compatible *dev_comp;
-	spinlock_t cg_lock;
-	int cg_cnt;
-	bool suspended;
 };
 
 /**
@@ -460,7 +457,7 @@ static void mtk_i2c_writew(struct mtk_i2c *i2c, u16 val,
 
 static int mtk_i2c_clock_enable(struct mtk_i2c *i2c)
 {
-	int ret = 0;
+	int ret;
 
 	ret = clk_prepare_enable(i2c->clk_dma);
 	if (ret)
@@ -482,14 +479,7 @@ static int mtk_i2c_clock_enable(struct mtk_i2c *i2c)
 			goto err_arb;
 	}
 
-	spin_lock(&i2c->cg_lock);
-	if (i2c->suspended)
-		ret = -EIO;
-	else
-		i2c->cg_cnt++;
-	spin_unlock(&i2c->cg_lock);
-
-	return ret;
+	return 0;
 
 err_arb:
 	if (i2c->have_pmic)
@@ -512,11 +502,6 @@ static void mtk_i2c_clock_disable(struct mtk_i2c *i2c)
 
 	clk_disable_unprepare(i2c->clk_main);
 	clk_disable_unprepare(i2c->clk_dma);
-	spin_lock(&i2c->cg_lock);
-	i2c->cg_cnt--;
-	if (i2c->cg_cnt < 0)
-		pr_err("%s: cg_cnt=%d\n", __func__, i2c->cg_cnt);
-	spin_unlock(&i2c->cg_lock);
 }
 
 static void mtk_i2c_init_hw(struct mtk_i2c *i2c)
@@ -1382,7 +1367,6 @@ static int mtk_i2c_probe(struct platform_device *pdev)
 	i2c->adap.quirks = i2c->dev_comp->quirks;
 	i2c->adap.timeout = 2 * HZ;
 	i2c->adap.retries = 1;
-	spin_lock_init(&i2c->cg_lock);
 
 	ret = mtk_i2c_parse_dt(pdev->dev.of_node, i2c);
 	if (ret)
@@ -1480,40 +1464,20 @@ static int mtk_i2c_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int mtk_i2c_suspend_noirq(struct device *dev)
+static int mtk_i2c_resume(struct device *dev)
 {
+	int ret;
 	struct mtk_i2c *i2c = dev_get_drvdata(dev);
 
-	i2c_mark_adapter_suspended(&i2c->adap);
+	ret = mtk_i2c_clock_enable(i2c);
+	if (ret) {
+		dev_err(dev, "clock enable failed!\n");
+		return ret;
+	}
 
-	return 0;
-}
+	mtk_i2c_init_hw(i2c);
 
-static int mtk_i2c_resume_noirq(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct mtk_i2c *i2c = platform_get_drvdata(pdev);
-	int ret = 0;
-
-	spin_lock(&i2c->cg_lock);
-	if (i2c->cg_cnt > 0) {
-		ret = -EBUSY;
-		dev_info(i2c->dev, "%s(%d) busy\n", __func__, i2c->cg_cnt);
-	} else
-		i2c->suspended = true;
-	spin_unlock(&i2c->cg_lock);
-
-	return ret;
-}
-
-static int mtk_i2c_resume_noirq(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct mtk_i2c *i2c = platform_get_drvdata(pdev);
-
-	spin_lock(&i2c->cg_lock);
-	i2c->suspended = false;
-	spin_unlock(&i2c->cg_lock);
+	mtk_i2c_clock_disable(i2c);
 
 	i2c_mark_adapter_resumed(&i2c->adap);
 

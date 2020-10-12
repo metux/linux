@@ -1464,7 +1464,15 @@ static int mtk_i2c_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int mtk_i2c_resume(struct device *dev)
+static int mtk_i2c_suspend_no_irq(struct device *dev)
+{
+	struct mtk_i2c *i2c = dev_get_drvdata(dev);
+
+	i2c_mark_adapter_suspended(&i2c->adap);
+
+	return 0;
+}
+static int mtk_i2c_resume_no_irq(struct device *dev)
 {
 	int ret;
 	struct mtk_i2c *i2c = dev_get_drvdata(dev);
@@ -1486,8 +1494,8 @@ static int mtk_i2c_resume(struct device *dev)
 #endif
 
 static const struct dev_pm_ops mtk_i2c_pm = {
-	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_i2c_suspend_noirq,
-				      mtk_i2c_resume_noirq)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_i2c_suspend_no_irq,
+				      mtk_i2c_resume_no_irq)
 };
 
 static struct platform_driver mtk_i2c_driver = {

@@ -75,9 +75,9 @@ static const struct amd_fch_gpio_pdata board_apu2 = {
 /* GPIO LEDs device */
 
 static const struct gpio_led apu2_leds[] = {
-	{ .name = "apu:green:1" },
-	{ .name = "apu:green:2" },
-	{ .name = "apu:green:3" },
+	{ .name = "apu:green:1", default_state = LEDS_GPIO_DEFSTATE_KEEP },
+	{ .name = "apu:green:2", default_state = LEDS_GPIO_DEFSTATE_KEEP },
+	{ .name = "apu:green:3", default_state = LEDS_GPIO_DEFSTATE_KEEP },
 };
 
 static const struct gpio_led_platform_data apu2_leds_pdata = {

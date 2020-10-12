@@ -79,12 +79,12 @@ static int add_dso(const char *fpath, const struct stat *sb __maybe_unused,
 		   int typeflag, struct FTW *ftwbuf __maybe_unused)
 {
 	struct bench_dso *dso = &dsos[nr_dsos];
-	struct build_id bid;
+	unsigned char build_id[BUILD_ID_SIZE];
 
 	if (typeflag == FTW_D || typeflag == FTW_SL)
 		return 0;
 
-	if (filename__read_build_id(fpath, &bid) < 0)
+	if (filename__read_build_id(fpath, build_id, BUILD_ID_SIZE) < 0)
 		return 0;
 
 	dso->name = realpath(fpath, NULL);
@@ -271,7 +271,7 @@ static void *data_reader(void *arg)
 	return NULL;
 }
 
-static int setup_injection(struct bench_data *data, bool build_id_all)
+static int setup_injection(struct bench_data *data)
 {
 	int ready_pipe[2];
 	int dev_null_fd;
@@ -292,7 +292,6 @@ static int setup_injection(struct bench_data *data, bool build_id_all)
 
 	if (data->pid == 0) {
 		const char **inject_argv;
-		int inject_argc = 2;
 
 		close(data->input_pipe[1]);
 		close(data->output_pipe[0]);
@@ -309,22 +308,17 @@ static int setup_injection(struct bench_data *data, bool build_id_all)
 
 		dup2(dev_null_fd, STDERR_FILENO);
 
-		if (build_id_all)
-			inject_argc++;
-
-		inject_argv = calloc(inject_argc + 1, sizeof(*inject_argv));
+		inject_argv = calloc(3, sizeof(*inject_argv));
 		if (inject_argv == NULL)
 			exit(1);
 
 		inject_argv[0] = strdup("inject");
 		inject_argv[1] = strdup("-b");
-		if (build_id_all)
-			inject_argv[2] = strdup("--buildid-all");
 
 		/* signal that we're ready to go */
 		close(ready_pipe[1]);
 
-		cmd_inject(inject_argc, inject_argv);
+		cmd_inject(2, inject_argv);
 
 		exit(0);
 	}
@@ -383,17 +377,27 @@ static int inject_build_id(struct bench_data *data, u64 *max_rss)
 	return 0;
 }
 
-static void do_inject_loop(struct bench_data *data, bool build_id_all)
+static int do_inject_loop(struct bench_data *data)
 {
 	unsigned int i;
 	struct stats time_stats, mem_stats;
 	double time_average, time_stddev;
 	double mem_average, mem_stddev;
 
+	srand(time(NULL));
 	init_stats(&time_stats);
 	init_stats(&mem_stats);
+	symbol__init(NULL);
 
-	pr_debug("  Build-id%s injection benchmark\n", build_id_all ? "-all" : "");
+	bench_sample_type  = PERF_SAMPLE_IDENTIFIER | PERF_SAMPLE_IP;
+	bench_sample_type |= PERF_SAMPLE_TID | PERF_SAMPLE_TIME;
+	bench_id_hdr_size  = 32;
+
+	collect_dso();
+	if (nr_dsos == 0) {
+		printf("  Cannot collect DSOs for injection\n");
+		return -1;
+	}
 
 	for (i = 0; i < iterations; i++) {
 		struct timeval start, end, diff;
@@ -401,7 +405,7 @@ static void do_inject_loop(struct bench_data *data, bool build_id_all)
 
 		pr_debug("  Iteration #%d\n", i+1);
 
-		if (setup_injection(data, build_id_all) < 0) {
+		if (setup_injection(data) < 0) {
 			printf("  Build-id injection setup failed\n");
 			break;
 		}
@@ -423,8 +427,8 @@ static void do_inject_loop(struct bench_data *data, bool build_id_all)
 
 	time_average = avg_stats(&time_stats) / USEC_PER_MSEC;
 	time_stddev = stddev_stats(&time_stats) / USEC_PER_MSEC;
-	printf("  Average build-id%s injection took: %.3f msec (+- %.3f msec)\n",
-	       build_id_all ? "-all" : "", time_average, time_stddev);
+	printf("  Average build-id injection took: %.3f msec (+- %.3f msec)\n",
+		time_average, time_stddev);
 
 	/* each iteration, it processes MMAP2 + BUILD_ID + nr_samples * SAMPLE */
 	time_average = avg_stats(&time_stats) / (nr_mmaps * (nr_samples + 2));
@@ -436,26 +440,6 @@ static void do_inject_loop(struct bench_data *data, bool build_id_all)
 	mem_stddev = stddev_stats(&mem_stats);
 	printf("  Average memory usage: %.0f KB (+- %.0f KB)\n",
 		mem_average, mem_stddev);
-}
-
-static int do_inject_loops(struct bench_data *data)
-{
-
-	srand(time(NULL));
-	symbol__init(NULL);
-
-	bench_sample_type  = PERF_SAMPLE_IDENTIFIER | PERF_SAMPLE_IP;
-	bench_sample_type |= PERF_SAMPLE_TID | PERF_SAMPLE_TIME;
-	bench_id_hdr_size  = 32;
-
-	collect_dso();
-	if (nr_dsos == 0) {
-		printf("  Cannot collect DSOs for injection\n");
-		return -1;
-	}
-
-	do_inject_loop(data, false);
-	do_inject_loop(data, true);
 
 	release_dso();
 	return 0;
@@ -471,6 +455,6 @@ int bench_inject_build_id(int argc, const char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	return do_inject_loops(&data);
+	return do_inject_loop(&data);
 }
 

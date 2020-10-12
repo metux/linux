@@ -23,7 +23,7 @@ endif
 CC_COMPAT ?= $(CC)
 CC_COMPAT += $(CC_COMPAT_CLANG_FLAGS)
 
-ifneq ($(LLVM),)
+ifeq ($(LLVM),1)
 LD_COMPAT ?= $(LD)
 else
 LD_COMPAT ?= $(CROSS_COMPILE_COMPAT)ld
@@ -95,9 +95,9 @@ VDSO_CFLAGS  += -O2
 # Some useful compiler-dependent flags from top-level Makefile
 VDSO_CFLAGS += $(call cc32-option,-Wdeclaration-after-statement,)
 VDSO_CFLAGS += $(call cc32-option,-Wno-pointer-sign)
-VDSO_CFLAGS += -fno-strict-overflow
+VDSO_CFLAGS += $(call cc32-option,-fno-strict-overflow)
 VDSO_CFLAGS += $(call cc32-option,-Werror=strict-prototypes)
-VDSO_CFLAGS += -Werror=date-time
+VDSO_CFLAGS += $(call cc32-option,-Werror=date-time)
 VDSO_CFLAGS += $(call cc32-option,-Werror=incompatible-pointer-types)
 
 # The 32-bit compiler does not provide 128-bit integers, which are used in
@@ -130,7 +130,7 @@ VDSO_AFLAGS += $(dmbinstr)
 # From arm vDSO Makefile
 VDSO_LDFLAGS += -Bsymbolic --no-undefined -soname=linux-vdso.so.1
 VDSO_LDFLAGS += -z max-page-size=4096 -z common-page-size=4096
-VDSO_LDFLAGS += -nostdlib -shared --hash-style=sysv --build-id=sha1
+VDSO_LDFLAGS += -nostdlib -shared --hash-style=sysv --build-id
 
 
 # Borrow vdsomunge.c from the arm vDSO
@@ -156,7 +156,7 @@ asm-obj-vdso := $(addprefix $(obj)/, $(asm-obj-vdso))
 obj-vdso := $(c-obj-vdso) $(c-obj-vdso-gettimeofday) $(asm-obj-vdso)
 
 obj-y += vdso.o
-targets += vdso.lds
+extra-y += vdso.lds
 CPPFLAGS_vdso.lds += -P -C -U$(ARCH)
 
 # Force dependency (vdso.s includes vdso.so through incbin)

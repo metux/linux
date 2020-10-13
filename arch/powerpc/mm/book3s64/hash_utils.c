@@ -260,12 +260,8 @@ int htab_bolt_mapping(unsigned long vstart, unsigned long vend,
 	DBG("htab_bolt_mapping(%lx..%lx -> %lx (%lx,%d,%d)\n",
 	    vstart, vend, pstart, prot, psize, ssize);
 
-	/* Carefully map only the possible range */
-	vaddr = ALIGN(vstart, step);
-	paddr = ALIGN(pstart, step);
-	vend  = ALIGN_DOWN(vend, step);
-
-	for (; vaddr < vend; vaddr += step, paddr += step) {
+	for (vaddr = vstart, paddr = pstart; vaddr < vend;
+	     vaddr += step, paddr += step) {
 		unsigned long hash, hpteg;
 		unsigned long vsid = get_kernel_vsid(vaddr, ssize);
 		unsigned long vpn  = hpt_vpn(vaddr, vsid, ssize);
@@ -347,9 +343,7 @@ int htab_remove_mapping(unsigned long vstart, unsigned long vend,
 	if (!mmu_hash_ops.hpte_removebolted)
 		return -ENODEV;
 
-	/* Unmap the full range specificied */
-	vaddr = ALIGN_DOWN(vstart, step);
-	for (;vaddr < vend; vaddr += step) {
+	for (vaddr = vstart; vaddr < vend; vaddr += step) {
 		rc = mmu_hash_ops.hpte_removebolted(vaddr, psize, ssize);
 		if (rc == -ENOENT) {
 			ret = -ENOENT;

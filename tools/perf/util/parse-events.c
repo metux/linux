@@ -1781,6 +1781,7 @@ struct event_modifier {
 	int sample_read;
 	int pinned;
 	int weak;
+	int exclusive;
 };
 
 static int get_event_modifier(struct event_modifier *mod, char *str,
@@ -1796,6 +1797,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	int precise_max = 0;
 	int sample_read = 0;
 	int pinned = evsel ? evsel->core.attr.pinned : 0;
+	int exclusive = evsel ? evsel->core.attr.exclusive : 0;
 
 	int exclude = eu | ek | eh;
 	int exclude_GH = evsel ? evsel->exclude_GH : 0;
@@ -1839,6 +1841,8 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 			sample_read = 1;
 		} else if (*str == 'D') {
 			pinned = 1;
+		} else if (*str == 'e') {
+			exclusive = 1;
 		} else if (*str == 'W') {
 			weak = 1;
 		} else
@@ -1872,6 +1876,7 @@ static int get_event_modifier(struct event_modifier *mod, char *str,
 	mod->sample_read = sample_read;
 	mod->pinned = pinned;
 	mod->weak = weak;
+	mod->exclusive = exclusive;
 
 	return 0;
 }
@@ -1885,7 +1890,7 @@ static int check_modifier(char *str)
 	char *p = str;
 
 	/* The sizeof includes 0 byte as well. */
-	if (strlen(str) > (sizeof("ukhGHpppPSDIW") - 1))
+	if (strlen(str) > (sizeof("ukhGHpppPSDIWe") - 1))
 		return -1;
 
 	while (*p) {
@@ -1927,8 +1932,10 @@ int parse_events__modifier_event(struct list_head *list, char *str, bool add)
 		evsel->precise_max         = mod.precise_max;
 		evsel->weak_group	   = mod.weak;
 
-		if (evsel__is_group_leader(evsel))
+		if (evsel__is_group_leader(evsel)) {
 			evsel->core.attr.pinned = mod.pinned;
+			evsel->core.attr.exclusive = mod.exclusive;
+		}
 	}
 
 	return 0;

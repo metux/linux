@@ -100,12 +100,11 @@ TRACE_DEFINE_ENUM(ES_REFERENCED_B);
 		{ EXT4_FC_REASON_XATTR,		"XATTR"},		\
 		{ EXT4_FC_REASON_CROSS_RENAME,	"CROSS_RENAME"},	\
 		{ EXT4_FC_REASON_JOURNAL_FLAG_CHANGE, "JOURNAL_FLAG_CHANGE"}, \
-		{ EXT4_FC_REASON_NOMEM,	"NO_MEM"},			\
+		{ EXT4_FC_REASON_MEM,	"NO_MEM"},			\
 		{ EXT4_FC_REASON_SWAP_BOOT,	"SWAP_BOOT"},		\
 		{ EXT4_FC_REASON_RESIZE,	"RESIZE"},		\
 		{ EXT4_FC_REASON_RENAME_DIR,	"RENAME_DIR"},		\
-		{ EXT4_FC_REASON_FALLOC_RANGE,	"FALLOC_RANGE"},	\
-		{ EXT4_FC_REASON_INODE_JOURNAL_DATA,	"INODE_JOURNAL_DATA"})
+		{ EXT4_FC_REASON_FALLOC_RANGE,	"FALLOC_RANGE"})
 
 TRACE_EVENT(ext4_other_inode_update_time,
 	TP_PROTO(struct inode *inode, ino_t orig_ino),
@@ -1777,9 +1776,9 @@ TRACE_EVENT(ext4_ext_load_extent,
 );
 
 TRACE_EVENT(ext4_load_inode,
-	TP_PROTO(struct super_block *sb, unsigned long ino),
+	TP_PROTO(struct inode *inode),
 
-	TP_ARGS(sb, ino),
+	TP_ARGS(inode),
 
 	TP_STRUCT__entry(
 		__field(	dev_t,	dev		)
@@ -1787,8 +1786,8 @@ TRACE_EVENT(ext4_load_inode,
 	),
 
 	TP_fast_assign(
-		__entry->dev		= sb->s_dev;
-		__entry->ino		= ino;
+		__entry->dev		= inode->i_sb->s_dev;
+		__entry->ino		= inode->i_ino;
 	),
 
 	TP_printk("dev %d,%d ino %ld",
@@ -2802,54 +2801,6 @@ TRACE_EVENT(ext4_lazy_itable_init,
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->group)
 );
 
-TRACE_EVENT(ext4_fc_replay_scan,
-	TP_PROTO(struct super_block *sb, int error, int off),
-
-	TP_ARGS(sb, error, off),
-
-	TP_STRUCT__entry(
-		__field(dev_t, dev)
-		__field(int, error)
-		__field(int, off)
-	),
-
-	TP_fast_assign(
-		__entry->dev = sb->s_dev;
-		__entry->error = error;
-		__entry->off = off;
-	),
-
-	TP_printk("FC scan pass on dev %d,%d: error %d, off %d",
-		  MAJOR(__entry->dev), MINOR(__entry->dev),
-		  __entry->error, __entry->off)
-);
-
-TRACE_EVENT(ext4_fc_replay,
-	TP_PROTO(struct super_block *sb, int tag, int ino, int priv1, int priv2),
-
-	TP_ARGS(sb, tag, ino, priv1, priv2),
-
-	TP_STRUCT__entry(
-		__field(dev_t, dev)
-		__field(int, tag)
-		__field(int, ino)
-		__field(int, priv1)
-		__field(int, priv2)
-	),
-
-	TP_fast_assign(
-		__entry->dev = sb->s_dev;
-		__entry->tag = tag;
-		__entry->ino = ino;
-		__entry->priv1 = priv1;
-		__entry->priv2 = priv2;
-	),
-
-	TP_printk("FC Replay %d,%d: tag %d, ino %d, data1 %d, data2 %d",
-		  MAJOR(__entry->dev), MINOR(__entry->dev),
-		  __entry->tag, __entry->ino, __entry->priv1, __entry->priv2)
-);
-
 TRACE_EVENT(ext4_fc_commit_start,
 	TP_PROTO(struct super_block *sb),
 
@@ -2918,18 +2869,17 @@ TRACE_EVENT(ext4_fc_stats,
 		    ),
 
 	    TP_printk("dev %d:%d fc ineligible reasons:\n"
-		      "%s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s:%d; "
+		      "%s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s:%d, %s,%d; "
 		      "num_commits:%ld, ineligible: %ld, numblks: %ld",
 		      MAJOR(__entry->dev), MINOR(__entry->dev),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_XATTR),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_CROSS_RENAME),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_JOURNAL_FLAG_CHANGE),
-		      FC_REASON_NAME_STAT(EXT4_FC_REASON_NOMEM),
+		      FC_REASON_NAME_STAT(EXT4_FC_REASON_MEM),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_SWAP_BOOT),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_RESIZE),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_RENAME_DIR),
 		      FC_REASON_NAME_STAT(EXT4_FC_REASON_FALLOC_RANGE),
-		      FC_REASON_NAME_STAT(EXT4_FC_REASON_INODE_JOURNAL_DATA),
 		      __entry->sbi->s_fc_stats.fc_num_commits,
 		      __entry->sbi->s_fc_stats.fc_ineligible_commits,
 		      __entry->sbi->s_fc_stats.fc_numblks)

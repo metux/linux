@@ -451,7 +451,7 @@ struct flex_groups {
 					 EXT4_VERITY_FL | \
 					 EXT4_INLINE_DATA_FL)
 
-/* Flags we can manipulate with through EXT4_IOC_FSSETXATTR */
+/* Flags we can manipulate with through FS_IOC_FSSETXATTR */
 #define EXT4_FL_XFLAG_VISIBLE		(EXT4_SYNC_FL | \
 					 EXT4_IMMUTABLE_FL | \
 					 EXT4_APPEND_FL | \
@@ -682,8 +682,6 @@ enum {
 /*
  * ioctl commands
  */
-#define	EXT4_IOC_GETFLAGS		FS_IOC_GETFLAGS
-#define	EXT4_IOC_SETFLAGS		FS_IOC_SETFLAGS
 #define	EXT4_IOC_GETVERSION		_IOR('f', 3, long)
 #define	EXT4_IOC_SETVERSION		_IOW('f', 4, long)
 #define	EXT4_IOC_GETVERSION_OLD		FS_IOC_GETVERSION
@@ -700,16 +698,10 @@ enum {
 #define EXT4_IOC_RESIZE_FS		_IOW('f', 16, __u64)
 #define EXT4_IOC_SWAP_BOOT		_IO('f', 17)
 #define EXT4_IOC_PRECACHE_EXTENTS	_IO('f', 18)
-#define EXT4_IOC_SET_ENCRYPTION_POLICY	FS_IOC_SET_ENCRYPTION_POLICY
-#define EXT4_IOC_GET_ENCRYPTION_PWSALT	FS_IOC_GET_ENCRYPTION_PWSALT
-#define EXT4_IOC_GET_ENCRYPTION_POLICY	FS_IOC_GET_ENCRYPTION_POLICY
 /* ioctl codes 19--39 are reserved for fscrypt */
 #define EXT4_IOC_CLEAR_ES_CACHE		_IO('f', 40)
 #define EXT4_IOC_GETSTATE		_IOW('f', 41, __u32)
 #define EXT4_IOC_GET_ES_CACHE		_IOWR('f', 42, struct fiemap)
-
-#define EXT4_IOC_FSGETXATTR		FS_IOC_FSGETXATTR
-#define EXT4_IOC_FSSETXATTR		FS_IOC_FSSETXATTR
 
 #define EXT4_IOC_SHUTDOWN _IOR ('X', 125, __u32)
 
@@ -735,8 +727,6 @@ enum {
 /*
  * ioctl commands in 32 bit emulation
  */
-#define EXT4_IOC32_GETFLAGS		FS_IOC32_GETFLAGS
-#define EXT4_IOC32_SETFLAGS		FS_IOC32_SETFLAGS
 #define EXT4_IOC32_GETVERSION		_IOR('f', 3, int)
 #define EXT4_IOC32_SETVERSION		_IOW('f', 4, int)
 #define EXT4_IOC32_GETRSVSZ		_IOR('f', 5, int)
@@ -1019,6 +1009,31 @@ struct ext4_inode_info {
 
 	struct list_head i_orphan;	/* unlinked but open inodes */
 
+	/* Fast commit related info */
+
+	struct list_head i_fc_list;	/*
+					 * inodes that need fast commit
+					 * protected by sbi->s_fc_lock.
+					 */
+
+	/* Fast commit subtid when this inode was committed */
+	unsigned int i_fc_committed_subtid;
+
+	/* Start of lblk range that needs to be committed in this fast commit */
+	ext4_lblk_t i_fc_lblk_start;
+
+	/* End of lblk range that needs to be committed in this fast commit */
+	ext4_lblk_t i_fc_lblk_len;
+
+	/* Number of ongoing updates on this inode */
+	atomic_t  i_fc_updates;
+
+	/* Fast commit wait queue for this inode */
+	wait_queue_head_t i_fc_wait;
+
+	/* Protect concurrent accesses on i_fc_lblk_start, i_fc_lblk_len */
+	struct mutex i_fc_lock;
+
 	/*
 	 * i_disksize keeps track of what the inode size is ON DISK, not
 	 * in memory.  During truncate, i_size is set to the new size by
@@ -1068,6 +1083,7 @@ struct ext4_inode_info {
 	struct timespec64 i_crtime;
 
 	/* mballoc */
+	atomic_t i_prealloc_active;
 	struct list_head i_prealloc_list;
 	spinlock_t i_prealloc_lock;
 
@@ -1138,6 +1154,10 @@ struct ext4_inode_info {
 #define	EXT4_VALID_FS			0x0001	/* Unmounted cleanly */
 #define	EXT4_ERROR_FS			0x0002	/* Errors detected */
 #define	EXT4_ORPHAN_FS			0x0004	/* Orphans being recovered */
+#define EXT4_FC_INELIGIBLE		0x0008	/* Fast commit ineligible */
+#define EXT4_FC_COMMITTING		0x0010	/* File system underoing a fast
+						 * commit.
+						 */
 
 /*
  * Misc. filesystem flags
@@ -1504,10 +1524,13 @@ struct ext4_sb_info {
 	unsigned int s_mb_stats;
 	unsigned int s_mb_order2_reqs;
 	unsigned int s_mb_group_prealloc;
+	unsigned int s_mb_max_inode_prealloc;
 	unsigned int s_max_dir_size_kb;
 	/* where last allocation was done - for stream allocation */
 	unsigned long s_mb_last_group;
 	unsigned long s_mb_last_start;
+	unsigned int s_mb_prefetch;
+	unsigned int s_mb_prefetch_limit;
 
 	/* stats for buddy allocator */
 	atomic_t s_bal_reqs;	/* number of reqs with len > 1 */
@@ -1575,6 +1598,8 @@ struct ext4_sb_info {
 	struct ratelimit_state s_err_ratelimit_state;
 	struct ratelimit_state s_warning_ratelimit_state;
 	struct ratelimit_state s_msg_ratelimit_state;
+	atomic_t s_warning_count;
+	atomic_t s_msg_count;
 
 	/* Encryption policy for '-o test_dummy_encryption' */
 	struct fscrypt_dummy_policy s_dummy_enc_policy;
@@ -1588,6 +1613,33 @@ struct ext4_sb_info {
 #ifdef CONFIG_EXT4_DEBUG
 	unsigned long s_simulate_fail;
 #endif
+	/* Record the errseq of the backing block device */
+	errseq_t s_bdev_wb_err;
+	spinlock_t s_bdev_wb_lock;
+
+	/* Ext4 fast commit stuff */
+	atomic_t s_fc_subtid;
+	atomic_t s_fc_ineligible_updates;
+	/*
+	 * After commit starts, the main queue gets locked, and the further
+	 * updates get added in the staging queue.
+	 */
+#define FC_Q_MAIN	0
+#define FC_Q_STAGING	1
+	struct list_head s_fc_q[2];	/* Inodes staged for fast commit
+					 * that have data changes in them.
+					 */
+	struct list_head s_fc_dentry_q[2];	/* directory entry updates */
+	unsigned int s_fc_bytes;
+	/*
+	 * Main fast commit lock. This lock protects accesses to the
+	 * following fields:
+	 * ei->i_fc_list, s_fc_dentry_q, s_fc_q, s_fc_bytes, s_fc_bh.
+	 */
+	spinlock_t s_fc_lock;
+	struct buffer_head *s_fc_bh;
+	struct ext4_fc_stats s_fc_stats;
+	u64 s_fc_avg_commit_time;
 };
 
 static inline struct ext4_sb_info *EXT4_SB(struct super_block *sb)
@@ -1698,6 +1750,7 @@ enum {
 	EXT4_STATE_EXT_PRECACHED,	/* extents have been precached */
 	EXT4_STATE_LUSTRE_EA_INODE,	/* Lustre-style ea_inode */
 	EXT4_STATE_VERITY_IN_PROGRESS,	/* building fs-verity Merkle tree */
+	EXT4_STATE_FC_COMMITTING,	/* Fast commit ongoing */
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\
@@ -2499,7 +2552,8 @@ extern struct ext4_group_desc * ext4_get_group_desc(struct super_block * sb,
 extern int ext4_should_retry_alloc(struct super_block *sb, int *retries);
 
 extern struct buffer_head *ext4_read_block_bitmap_nowait(struct super_block *sb,
-						ext4_group_t block_group);
+						ext4_group_t block_group,
+						bool ignore_locked);
 extern int ext4_wait_block_bitmap(struct super_block *sb,
 				  ext4_group_t block_group,
 				  struct buffer_head *bh);
@@ -2700,6 +2754,22 @@ extern void ext4_end_bitmap_read(struct buffer_head *bh, int uptodate);
 /* fast_commit.c */
 
 void ext4_fc_init(struct super_block *sb, journal_t *journal);
+void ext4_fc_init_inode(struct inode *inode);
+void ext4_fc_track_range(struct inode *inode, ext4_lblk_t start,
+			 ext4_lblk_t end);
+void ext4_fc_track_unlink(struct inode *inode, struct dentry *dentry);
+void ext4_fc_track_link(struct inode *inode, struct dentry *dentry);
+void ext4_fc_track_create(struct inode *inode, struct dentry *dentry);
+void ext4_fc_track_inode(struct inode *inode);
+void ext4_fc_mark_ineligible(struct super_block *sb, int reason);
+void ext4_fc_start_ineligible(struct super_block *sb, int reason);
+void ext4_fc_stop_ineligible(struct super_block *sb);
+void ext4_fc_start_update(struct inode *inode);
+void ext4_fc_stop_update(struct inode *inode);
+void ext4_fc_del(struct inode *inode);
+int ext4_fc_commit(journal_t *journal, tid_t commit_tid);
+int __init ext4_fc_init_dentry_cache(void);
+
 /* mballoc.c */
 extern const struct seq_operations ext4_mb_seq_groups_ops;
 extern long ext4_mb_stats;
@@ -2709,7 +2779,7 @@ extern int ext4_mb_release(struct super_block *);
 extern ext4_fsblk_t ext4_mb_new_blocks(handle_t *,
 				struct ext4_allocation_request *, int *);
 extern int ext4_mb_reserve_blocks(struct super_block *, int);
-extern void ext4_discard_preallocations(struct inode *);
+extern void ext4_discard_preallocations(struct inode *, unsigned int);
 extern int __init ext4_init_mballoc(void);
 extern void ext4_exit_mballoc(void);
 extern ext4_group_t ext4_mb_prefetch(struct super_block *sb,
@@ -2996,12 +3066,6 @@ do {									\
 
 #endif
 
-extern int ext4_update_compat_feature(handle_t *handle, struct super_block *sb,
-					__u32 compat);
-extern int ext4_update_rocompat_feature(handle_t *handle,
-					struct super_block *sb,	__u32 rocompat);
-extern int ext4_update_incompat_feature(handle_t *handle,
-					struct super_block *sb,	__u32 incompat);
 extern ext4_fsblk_t ext4_block_bitmap(struct super_block *sb,
 				      struct ext4_group_desc *bg);
 extern ext4_fsblk_t ext4_inode_bitmap(struct super_block *sb,
@@ -3222,6 +3286,7 @@ struct ext4_group_info {
 	(1 << EXT4_GROUP_INFO_BBITMAP_CORRUPT_BIT)
 #define EXT4_GROUP_INFO_IBITMAP_CORRUPT		\
 	(1 << EXT4_GROUP_INFO_IBITMAP_CORRUPT_BIT)
+#define EXT4_GROUP_INFO_BBITMAP_READ_BIT	4
 
 #define EXT4_MB_GRP_NEED_INIT(grp)	\
 	(test_bit(EXT4_GROUP_INFO_NEED_INIT_BIT, &((grp)->bb_state)))
@@ -3236,6 +3301,8 @@ struct ext4_group_info {
 	(set_bit(EXT4_GROUP_INFO_WAS_TRIMMED_BIT, &((grp)->bb_state)))
 #define EXT4_MB_GRP_CLEAR_TRIMMED(grp)	\
 	(clear_bit(EXT4_GROUP_INFO_WAS_TRIMMED_BIT, &((grp)->bb_state)))
+#define EXT4_MB_GRP_TEST_AND_SET_READ(grp)	\
+	(test_and_set_bit(EXT4_GROUP_INFO_BBITMAP_READ_BIT, &((grp)->bb_state)))
 
 #define EXT4_MAX_CONTENTION		8
 #define EXT4_CONTENTION_THRESHOLD	2
@@ -3437,9 +3504,9 @@ extern void ext4_release_system_zone(struct super_block *sb);
 extern int ext4_setup_system_zone(struct super_block *sb);
 extern int __init ext4_init_system_zone(void);
 extern void ext4_exit_system_zone(void);
-extern int ext4_data_block_valid(struct ext4_sb_info *sbi,
-				 ext4_fsblk_t start_blk,
-				 unsigned int count);
+extern int ext4_inode_block_valid(struct inode *inode,
+				  ext4_fsblk_t start_blk,
+				  unsigned int count);
 extern int ext4_check_blockref(const char *, unsigned int,
 			       struct inode *, __le32 *, unsigned int);
 

@@ -844,7 +844,7 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 		 * at a time to get the lock ordering right. Typically there
 		 * will only be one mm, so no big deal.
 		 */
-down_read(&mm->mmap_sem);
+		mmap_read_lock(mm);
 		mutex_lock(&ufile->umap_lock);
 		list_for_each_entry_safe (priv, next_priv, &ufile->umaps,
 					  list) {
@@ -863,7 +863,7 @@ down_read(&mm->mmap_sem);
 			}
 		}
 		mutex_unlock(&ufile->umap_lock);
-up_read(&mm->mmap_sem);
+		mmap_read_unlock(mm);
 		mmput(mm);
 	}
 }

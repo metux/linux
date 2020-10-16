@@ -344,9 +344,9 @@ static inline struct page *find_get_page_flags(struct address_space *mapping,
 /**
  * find_lock_page - locate, pin and lock a pagecache page
  * @mapping: the address_space to search
- * @index: the page index
+ * @offset: the page index
  *
- * Looks up the page cache entry at @mapping & @index.  If there is a
+ * Looks up the page cache entry at @mapping & @offset.  If there is a
  * page cache page, it is returned locked and with an increased
  * refcount.
  *
@@ -363,9 +363,9 @@ static inline struct page *find_lock_page(struct address_space *mapping,
 /**
  * find_lock_head - Locate, pin and lock a pagecache page.
  * @mapping: The address_space to search.
- * @index: The page index.
+ * @offset: The page index.
  *
- * Looks up the page cache entry at @mapping & @index.  If there is a
+ * Looks up the page cache entry at @mapping & @offset.  If there is a
  * page cache page, its head page is returned locked and with an increased
  * refcount.
  *
@@ -761,6 +761,16 @@ int replace_page_cache_page(struct page *old, struct page *new, gfp_t gfp_mask);
 void delete_from_page_cache_batch(struct address_space *mapping,
 				  struct pagevec *pvec);
 
+#define VM_READAHEAD_PAGES	(SZ_128K / PAGE_SIZE)
+
+void page_cache_sync_readahead(struct address_space *, struct file_ra_state *,
+		struct file *, pgoff_t index, unsigned long req_count);
+void page_cache_async_readahead(struct address_space *, struct file_ra_state *,
+		struct file *, struct page *, pgoff_t index,
+		unsigned long req_count);
+void page_cache_ra_unbounded(struct readahead_control *,
+		unsigned long nr_to_read, unsigned long lookahead_count);
+
 /*
  * Like add_to_page_cache_locked, but used to add newly allocated pages:
  * the page is new, so we can just run __SetPageLocked() against it.
@@ -808,60 +818,6 @@ struct readahead_control {
 		._index = i,						\
 	}
 
-#define VM_READAHEAD_PAGES	(SZ_128K / PAGE_SIZE)
-
-void page_cache_ra_unbounded(struct readahead_control *,
-		unsigned long nr_to_read, unsigned long lookahead_count);
-void page_cache_sync_ra(struct readahead_control *, struct file_ra_state *,
-		unsigned long req_count);
-void page_cache_async_ra(struct readahead_control *, struct file_ra_state *,
-		struct page *, unsigned long req_count);
-
-/**
- * page_cache_sync_readahead - generic file readahead
- * @mapping: address_space which holds the pagecache and I/O vectors
- * @ra: file_ra_state which holds the readahead state
- * @file: Used by the filesystem for authentication.
- * @index: Index of first page to be read.
- * @req_count: Total number of pages being read by the caller.
- *
- * page_cache_sync_readahead() should be called when a cache miss happened:
- * it will submit the read.  The readahead logic may decide to piggyback more
- * pages onto the read request if access patterns suggest it will improve
- * performance.
- */
-static inline
-void page_cache_sync_readahead(struct address_space *mapping,
-		struct file_ra_state *ra, struct file *file, pgoff_t index,
-		unsigned long req_count)
-{
-	DEFINE_READAHEAD(ractl, file, mapping, index);
-	page_cache_sync_ra(&ractl, ra, req_count);
-}
-
-/**
- * page_cache_async_readahead - file readahead for marked pages
- * @mapping: address_space which holds the pagecache and I/O vectors
- * @ra: file_ra_state which holds the readahead state
- * @file: Used by the filesystem for authentication.
- * @page: The page at @index which triggered the readahead call.
- * @index: Index of first page to be read.
- * @req_count: Total number of pages being read by the caller.
- *
- * page_cache_async_readahead() should be called when a page is used which
- * is marked as PageReadahead; this is a marker to suggest that the application
- * has used up enough of the readahead window that we should start pulling in
- * more pages.
- */
-static inline
-void page_cache_async_readahead(struct address_space *mapping,
-		struct file_ra_state *ra, struct file *file,
-		struct page *page, pgoff_t index, unsigned long req_count)
-{
-	DEFINE_READAHEAD(ractl, file, mapping, index);
-	page_cache_async_ra(&ractl, ra, page, req_count);
-}
-
 /**
  * readahead_page - Get the next page to read.
  * @rac: The current readahead request.
@@ -906,8 +862,6 @@ static inline unsigned int __readahead_batch(struct readahead_control *rac,
 	xas_set(&xas, rac->_index);
 	rcu_read_lock();
 	xas_for_each(&xas, page, rac->_index + rac->_nr_pages - 1) {
-		if (xas_retry(&xas, page))
-			continue;
 		VM_BUG_ON_PAGE(!PageLocked(page), page);
 		VM_BUG_ON_PAGE(PageTail(page), page);
 		array[i++] = page;

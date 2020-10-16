@@ -2742,7 +2742,7 @@ tgl_dkl_phy_ddi_vswing_sequence(struct intel_encoder *encoder, int link_clock,
 	u32 n_entries, val, ln, dpcnt_mask, dpcnt_val;
 	int rate = 0;
 
-	if (type == INTEL_OUTPUT_HDMI) {
+	if (type != INTEL_OUTPUT_HDMI) {
 		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 
 		rate = intel_dp->link_rate;
@@ -3387,7 +3387,7 @@ static void tgl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	intel_ddi_init_dp_buf_reg(encoder);
 
 	if (!is_mst)
-		intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
+		intel_dp_set_power(intel_dp, DP_SET_POWER_D0);
 
 	intel_dp_sink_set_decompression_state(intel_dp, crtc_state, true);
 	/*
@@ -3469,7 +3469,8 @@ static void hsw_ddi_pre_enable_dp(struct intel_atomic_state *state,
 
 	intel_ddi_init_dp_buf_reg(encoder);
 	if (!is_mst)
-		intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
+		intel_dp_set_power(intel_dp, DP_SET_POWER_D0);
+	intel_dp_configure_protocol_converter(intel_dp);
 	intel_dp_sink_set_decompression_state(intel_dp, crtc_state,
 					      true);
 	intel_dp_sink_set_fec_ready(intel_dp, crtc_state);
@@ -3581,19 +3582,17 @@ static void intel_ddi_pre_enable(struct intel_atomic_state *state,
 		intel_ddi_pre_enable_hdmi(state, encoder, crtc_state,
 					  conn_state);
 	} else {
-		struct intel_lspcon *lspcon =
-				enc_to_intel_lspcon(encoder);
+		struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 
 		intel_ddi_pre_enable_dp(state, encoder, crtc_state,
 					conn_state);
-		if (lspcon->active) {
-			struct intel_digital_port *dig_port =
-					enc_to_dig_port(encoder);
 
+		/* FIXME precompute everything properly */
+		/* FIXME how do we turn infoframes off again? */
+		if (dig_port->lspcon.active && dig_port->dp.has_hdmi_sink)
 			dig_port->set_infoframes(encoder,
 						 crtc_state->has_infoframe,
 						 crtc_state, conn_state);
-		}
 	}
 }
 
@@ -3648,7 +3647,7 @@ static void intel_ddi_post_disable_dp(struct intel_atomic_state *state,
 	 * Power down sink before disabling the port, otherwise we end
 	 * up getting interrupts from the sink on detecting link loss.
 	 */
-	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_OFF);
+	intel_dp_set_power(intel_dp, DP_SET_POWER_D3);
 
 	if (INTEL_GEN(dev_priv) >= 12) {
 		if (is_mst) {

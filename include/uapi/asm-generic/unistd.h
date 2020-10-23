@@ -140,7 +140,7 @@ __SYSCALL(__NR_renameat, sys_renameat)
 #define __NR_umount2 39
 __SYSCALL(__NR_umount2, sys_umount)
 #define __NR_mount 40
-__SYSCALL(__NR_mount, sys_mount)
+__SC_COMP(__NR_mount, sys_mount, compat_sys_mount)
 #define __NR_pivot_root 41
 __SYSCALL(__NR_pivot_root, sys_pivot_root)
 
@@ -727,9 +727,11 @@ __SYSCALL(__NR_setns, sys_setns)
 #define __NR_sendmmsg 269
 __SC_COMP(__NR_sendmmsg, sys_sendmmsg, compat_sys_sendmmsg)
 #define __NR_process_vm_readv 270
-__SYSCALL(__NR_process_vm_readv, sys_process_vm_readv)
+__SC_COMP(__NR_process_vm_readv, sys_process_vm_readv, \
+          compat_sys_process_vm_readv)
 #define __NR_process_vm_writev 271
-__SYSCALL(__NR_process_vm_writev, sys_process_vm_writev)
+__SC_COMP(__NR_process_vm_writev, sys_process_vm_writev, \
+          compat_sys_process_vm_writev)
 #define __NR_kcmp 272
 __SYSCALL(__NR_kcmp, sys_kcmp)
 #define __NR_finit_module 273
@@ -857,11 +859,9 @@ __SYSCALL(__NR_openat2, sys_openat2)
 __SYSCALL(__NR_pidfd_getfd, sys_pidfd_getfd)
 #define __NR_faccessat2 439
 __SYSCALL(__NR_faccessat2, sys_faccessat2)
-#define __NR_process_madvise 440
-__SYSCALL(__NR_process_madvise, sys_process_madvise)
 
 #undef __NR_syscalls
-#define __NR_syscalls 441
+#define __NR_syscalls 440
 
 /*
  * 32 bit systems traditionally used different

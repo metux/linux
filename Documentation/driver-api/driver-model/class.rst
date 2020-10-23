@@ -32,9 +32,9 @@ See the kerneldoc for the struct class.
 A typical device class definition would look like::
 
   struct device_class input_devclass = {
-        .name		= "input",
-        .add_device	= input_add_device,
-	.remove_device	= input_remove_device,
+        .name           = "input",
+        .add_device     = input_add_device,
+        .remove_device  = input_remove_device,
   };
 
 Each device class structure should be exported in a header file so it

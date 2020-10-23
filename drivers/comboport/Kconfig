@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Comboport devices
+#
+
+config COMBOPORT
+	tristate "Combined port support (experimental)"
+	help
+	  Support for combined ports, that carry different (possibly optional)
+	  bus types, eg. pcie, usb, sata, sim. An example are the combined
+	  mpcie ports, found on tiny boards.
+
+	  Even though standard bus channels like pcie or usb are already
+	  supported by their own subsystems, there may be additional functions
+	  (eg. card reset, sim channel switch, etc) and the relationship between
+	  enumerated bus devices and physical cards is not clear.
+
+	  Another typical use case are backplane cards from industrial/embedded
+	  area, using different bus types altogether for one combined function.
+	  Drivers or userland need to know, which logical bus devices belong to
+	  one physical device.
+
+	  Say N, unless you know you need it.
+
+if COMBOPORT
+
+config COMBOPORT_GENERIC
+	tristate "Generic comboport platform device"
+	help
+	  ...
+
+config COMBOPORT_DUMMY
+	tristate "Dummy Comboport device"
+	select COMBOPORT_GENERIC
+	help
+	  A trivial dummy comboport device driver. Just for development.
+
+endif

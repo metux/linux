@@ -53,7 +53,7 @@ __SYSCALL(__NR_lseek, compat_sys_lseek)
 #define __NR_getpid 20
 __SYSCALL(__NR_getpid, sys_getpid)
 #define __NR_mount 21
-__SYSCALL(__NR_mount, sys_mount)
+__SYSCALL(__NR_mount, compat_sys_mount)
 			/* 22 was sys_umount */
 __SYSCALL(22, sys_ni_syscall)
 #define __NR_setuid 23
@@ -763,9 +763,9 @@ __SYSCALL(__NR_sendmmsg, compat_sys_sendmmsg)
 #define __NR_setns 375
 __SYSCALL(__NR_setns, sys_setns)
 #define __NR_process_vm_readv 376
-__SYSCALL(__NR_process_vm_readv, sys_process_vm_readv)
+__SYSCALL(__NR_process_vm_readv, compat_sys_process_vm_readv)
 #define __NR_process_vm_writev 377
-__SYSCALL(__NR_process_vm_writev, sys_process_vm_writev)
+__SYSCALL(__NR_process_vm_writev, compat_sys_process_vm_writev)
 #define __NR_kcmp 378
 __SYSCALL(__NR_kcmp, sys_kcmp)
 #define __NR_finit_module 379
@@ -887,8 +887,6 @@ __SYSCALL(__NR_openat2, sys_openat2)
 __SYSCALL(__NR_pidfd_getfd, sys_pidfd_getfd)
 #define __NR_faccessat2 439
 __SYSCALL(__NR_faccessat2, sys_faccessat2)
-#define __NR_process_madvise 440
-__SYSCALL(__NR_process_madvise, sys_process_madvise)
 
 /*
  * Please add new compat syscalls above this comment and update

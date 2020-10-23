@@ -3717,8 +3717,10 @@ device_create_groups_vargs(struct class *class, struct device *parent,
 	struct device *dev = NULL;
 	int retval = -ENODEV;
 
-	if (class == NULL || IS_ERR(class))
+	if (class == NULL || IS_ERR(class)) {
+		pr_err("device_create_groups_vargs() no or broken class\n");
 		goto error;
+	}
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
@@ -3735,12 +3737,16 @@ device_create_groups_vargs(struct class *class, struct device *parent,
 	dev_set_drvdata(dev, drvdata);
 
 	retval = kobject_set_name_vargs(&dev->kobj, fmt, args);
-	if (retval)
+	if (retval) {
+		pr_err("device_create_groups_vargs() kobject_set_name_vargs() failed\n");
 		goto error;
+	}
 
 	retval = device_add(dev);
-	if (retval)
+	if (retval) {
+		pr_err("device_add() failed\n");
 		goto error;
+	}
 
 	return dev;
 

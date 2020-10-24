@@ -13,8 +13,6 @@
 	.text
 
 SYM_FUNC_START(__host_exit)
-	stp	x0, x1, [sp, #-16]!
-
 	get_host_ctxt	x0, x1
 
 	ALTERNATIVE(nop, SET_PSTATE_PAN(1), ARM64_HAS_PAN, CONFIG_ARM64_PAN)
@@ -101,13 +99,15 @@ SYM_FUNC_END(__hyp_do_panic)
 	mrs	x0, esr_el2
 	lsr	x0, x0, #ESR_ELx_EC_SHIFT
 	cmp	x0, #ESR_ELx_EC_HVC64
-	ldp	x0, x1, [sp], #16
 	b.ne	__host_exit
+
+	ldp	x0, x1, [sp]		// Don't fixup the stack yet
 
 	/* Check for a stub HVC call */
 	cmp	x0, #HVC_STUB_HCALL_NR
 	b.hs	__host_exit
 
+	add	sp, sp, #16
 	/*
 	 * Compute the idmap address of __kvm_handle_stub_hvc and
 	 * jump there. Since we use kimage_voffset, do not use the

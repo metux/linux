@@ -867,10 +867,9 @@ static int mr_cache_max_order(struct mlx5_ib_dev *dev)
 	return MLX5_MAX_UMR_SHIFT;
 }
 
-static int mr_umem_get(struct mlx5_ib_dev *dev, struct ib_udata *udata,
-		       u64 start, u64 length, int access_flags,
-		       struct ib_umem **umem, int *npages, int *page_shift,
-		       int *ncont, int *order)
+static int mr_umem_get(struct mlx5_ib_dev *dev, u64 start, u64 length,
+		       int access_flags, struct ib_umem **umem, int *npages,
+		       int *page_shift, int *ncont, int *order)
 {
 	struct ib_umem *u;
 
@@ -879,7 +878,7 @@ static int mr_umem_get(struct mlx5_ib_dev *dev, struct ib_udata *udata,
 	if (access_flags & IB_ACCESS_ON_DEMAND) {
 		struct ib_umem_odp *odp;
 
-		odp = ib_umem_odp_get(udata, start, length, access_flags,
+		odp = ib_umem_odp_get(&dev->ib_dev, start, length, access_flags,
 				      &mlx5_mn_ops);
 		if (IS_ERR(odp)) {
 			mlx5_ib_dbg(dev, "umem get failed (%ld)\n",
@@ -895,7 +894,7 @@ static int mr_umem_get(struct mlx5_ib_dev *dev, struct ib_udata *udata,
 		if (order)
 			*order = ilog2(roundup_pow_of_two(*ncont));
 	} else {
-		u = ib_umem_get(udata, start, length, access_flags);
+		u = ib_umem_get(&dev->ib_dev, start, length, access_flags);
 		if (IS_ERR(u)) {
 			mlx5_ib_dbg(dev, "umem get failed (%ld)\n", PTR_ERR(u));
 			return PTR_ERR(u);
@@ -1248,10 +1247,8 @@ err_1:
 }
 
 static void set_mr_fields(struct mlx5_ib_dev *dev, struct mlx5_ib_mr *mr,
-			  int npages, u64 length, int access_flags)
+			  u64 length, int access_flags)
 {
-	mr->npages = npages;
-	atomic_add(npages, &dev->mdev->priv.reg_pages);
 	mr->ibmr.lkey = mr->mmkey.key;
 	mr->ibmr.rkey = mr->mmkey.key;
 	mr->ibmr.length = length;
@@ -1291,8 +1288,7 @@ static struct ib_mr *mlx5_ib_get_dm_mr(struct ib_pd *pd, u64 start_addr,
 
 	kfree(in);
 
-	mr->umem = NULL;
-	set_mr_fields(dev, mr, 0, length, acc);
+	set_mr_fields(dev, mr, length, acc);
 
 	return &mr->ibmr;
 
@@ -1380,6 +1376,8 @@ struct ib_mr *mlx5_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 
 	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING) && !start &&
 	    length == U64_MAX) {
+		if (virt_addr != start)
+			return ERR_PTR(-EINVAL);
 		if (!(access_flags & IB_ACCESS_ON_DEMAND) ||
 		    !(dev->odp_caps.general_caps & IB_ODP_SUPPORT_IMPLICIT))
 			return ERR_PTR(-EINVAL);
@@ -1390,7 +1388,7 @@ struct ib_mr *mlx5_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 		return &mr->ibmr;
 	}
 
-	err = mr_umem_get(dev, udata, start, length, access_flags, &umem,
+	err = mr_umem_get(dev, start, length, access_flags, &umem,
 			  &npages, &page_shift, &ncont, &order);
 
 	if (err < 0)
@@ -1418,7 +1416,9 @@ struct ib_mr *mlx5_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	mlx5_ib_dbg(dev, "mkey 0x%x\n", mr->mmkey.key);
 
 	mr->umem = umem;
-	set_mr_fields(dev, mr, npages, length, access_flags);
+	mr->npages = npages;
+	atomic_add(mr->npages, &dev->mdev->priv.reg_pages);
+	set_mr_fields(dev, mr, length, access_flags);
 
 	if (xlt_with_umr && !(access_flags & IB_ACCESS_ON_DEMAND)) {
 		/*
@@ -1530,8 +1530,6 @@ int mlx5_ib_rereg_user_mr(struct ib_mr *ib_mr, int flags, u64 start,
 	mlx5_ib_dbg(dev, "start 0x%llx, virt_addr 0x%llx, length 0x%llx, access_flags 0x%x\n",
 		    start, virt_addr, length, access_flags);
 
-	atomic_sub(mr->npages, &dev->mdev->priv.reg_pages);
-
 	if (!mr->umem)
 		return -EINVAL;
 
@@ -1552,13 +1550,17 @@ int mlx5_ib_rereg_user_mr(struct ib_mr *ib_mr, int flags, u64 start,
 		 * used.
 		 */
 		flags |= IB_MR_REREG_TRANS;
+		atomic_sub(mr->npages, &dev->mdev->priv.reg_pages);
+		mr->npages = 0;
 		ib_umem_release(mr->umem);
 		mr->umem = NULL;
-		err = mr_umem_get(dev, udata, addr, len, access_flags,
-				  &mr->umem, &npages, &page_shift, &ncont,
-				  &order);
+
+		err = mr_umem_get(dev, addr, len, access_flags, &mr->umem,
+				  &npages, &page_shift, &ncont, &order);
 		if (err)
 			goto err;
+		mr->npages = ncont;
+		atomic_add(mr->npages, &dev->mdev->priv.reg_pages);
 	}
 
 	if (!mlx5_ib_can_reconfig_with_umr(dev, mr->access_flags,
@@ -1609,7 +1611,7 @@ int mlx5_ib_rereg_user_mr(struct ib_mr *ib_mr, int flags, u64 start,
 			goto err;
 	}
 
-	set_mr_fields(dev, mr, npages, len, access_flags);
+	set_mr_fields(dev, mr, len, access_flags);
 
 	return 0;
 

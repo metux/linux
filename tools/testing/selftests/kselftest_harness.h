@@ -429,7 +429,7 @@
  */
 
 /**
- * ASSERT_EQ(expected, seen)
+ * ASSERT_EQ()
  *
  * @expected: expected value
  * @seen: measured value
@@ -440,7 +440,7 @@
 	__EXPECT(expected, #expected, seen, #seen, ==, 1)
 
 /**
- * ASSERT_NE(expected, seen)
+ * ASSERT_NE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -451,7 +451,7 @@
 	__EXPECT(expected, #expected, seen, #seen, !=, 1)
 
 /**
- * ASSERT_LT(expected, seen)
+ * ASSERT_LT()
  *
  * @expected: expected value
  * @seen: measured value
@@ -462,7 +462,7 @@
 	__EXPECT(expected, #expected, seen, #seen, <, 1)
 
 /**
- * ASSERT_LE(expected, seen)
+ * ASSERT_LE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -473,7 +473,7 @@
 	__EXPECT(expected, #expected, seen, #seen, <=, 1)
 
 /**
- * ASSERT_GT(expected, seen)
+ * ASSERT_GT()
  *
  * @expected: expected value
  * @seen: measured value
@@ -484,7 +484,7 @@
 	__EXPECT(expected, #expected, seen, #seen, >, 1)
 
 /**
- * ASSERT_GE(expected, seen)
+ * ASSERT_GE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -495,7 +495,7 @@
 	__EXPECT(expected, #expected, seen, #seen, >=, 1)
 
 /**
- * ASSERT_NULL(seen)
+ * ASSERT_NULL()
  *
  * @seen: measured value
  *
@@ -505,7 +505,7 @@
 	__EXPECT(NULL, "NULL", seen, #seen, ==, 1)
 
 /**
- * ASSERT_TRUE(seen)
+ * ASSERT_TRUE()
  *
  * @seen: measured value
  *
@@ -515,7 +515,7 @@
 	__EXPECT(0, "0", seen, #seen, !=, 1)
 
 /**
- * ASSERT_FALSE(seen)
+ * ASSERT_FALSE()
  *
  * @seen: measured value
  *
@@ -525,7 +525,7 @@
 	__EXPECT(0, "0", seen, #seen, ==, 1)
 
 /**
- * ASSERT_STREQ(expected, seen)
+ * ASSERT_STREQ()
  *
  * @expected: expected value
  * @seen: measured value
@@ -536,7 +536,7 @@
 	__EXPECT_STR(expected, seen, ==, 1)
 
 /**
- * ASSERT_STRNE(expected, seen)
+ * ASSERT_STRNE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -547,7 +547,7 @@
 	__EXPECT_STR(expected, seen, !=, 1)
 
 /**
- * EXPECT_EQ(expected, seen)
+ * EXPECT_EQ()
  *
  * @expected: expected value
  * @seen: measured value
@@ -558,7 +558,7 @@
 	__EXPECT(expected, #expected, seen, #seen, ==, 0)
 
 /**
- * EXPECT_NE(expected, seen)
+ * EXPECT_NE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -569,7 +569,7 @@
 	__EXPECT(expected, #expected, seen, #seen, !=, 0)
 
 /**
- * EXPECT_LT(expected, seen)
+ * EXPECT_LT()
  *
  * @expected: expected value
  * @seen: measured value
@@ -580,7 +580,7 @@
 	__EXPECT(expected, #expected, seen, #seen, <, 0)
 
 /**
- * EXPECT_LE(expected, seen)
+ * EXPECT_LE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -591,7 +591,7 @@
 	__EXPECT(expected, #expected, seen, #seen, <=, 0)
 
 /**
- * EXPECT_GT(expected, seen)
+ * EXPECT_GT()
  *
  * @expected: expected value
  * @seen: measured value
@@ -602,7 +602,7 @@
 	__EXPECT(expected, #expected, seen, #seen, >, 0)
 
 /**
- * EXPECT_GE(expected, seen)
+ * EXPECT_GE()
  *
  * @expected: expected value
  * @seen: measured value
@@ -613,7 +613,7 @@
 	__EXPECT(expected, #expected, seen, #seen, >=, 0)
 
 /**
- * EXPECT_NULL(seen)
+ * EXPECT_NULL()
  *
  * @seen: measured value
  *
@@ -623,7 +623,7 @@
 	__EXPECT(NULL, "NULL", seen, #seen, ==, 0)
 
 /**
- * EXPECT_TRUE(seen)
+ * EXPECT_TRUE()
  *
  * @seen: measured value
  *
@@ -633,7 +633,7 @@
 	__EXPECT(0, "0", seen, #seen, !=, 0)
 
 /**
- * EXPECT_FALSE(seen)
+ * EXPECT_FALSE()
  *
  * @seen: measured value
  *
@@ -643,7 +643,7 @@
 	__EXPECT(0, "0", seen, #seen, ==, 0)
 
 /**
- * EXPECT_STREQ(expected, seen)
+ * EXPECT_STREQ()
  *
  * @expected: expected value
  * @seen: measured value
@@ -654,7 +654,7 @@
 	__EXPECT_STR(expected, seen, ==, 0)
 
 /**
- * EXPECT_STRNE(expected, seen)
+ * EXPECT_STRNE()
  *
  * @expected: expected value
  * @seen: measured value

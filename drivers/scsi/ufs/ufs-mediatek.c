@@ -13,27 +13,20 @@
 #include <linux/of_device.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
-#include <linux/pm_qos.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
-#include <linux/tracepoint.h>
 
-#include "mtk_blocktag.h"
 #include "ufshcd.h"
 #include "ufshcd-crypto.h"
 #include "ufshcd-pltfrm.h"
 #include "ufs_quirks.h"
 #include "unipro.h"
 #include "ufs-mediatek.h"
-#include "ufs-mediatek-dbg.h"
 
 #define ufs_mtk_smc(cmd, val, res) \
 	arm_smccc_smc(MTK_SIP_UFS_CONTROL, \
 		      cmd, val, 0, 0, 0, 0, 0, &(res))
-
-#define ufs_mtk_va09_pwr_ctrl(res, on) \
-	ufs_mtk_smc(UFS_MTK_SIP_VA09_PWR_CTRL, on, res)
 
 #define ufs_mtk_crypto_ctrl(res, enable) \
 	ufs_mtk_smc(UFS_MTK_SIP_CRYPTO_CTRL, enable, res)
@@ -52,8 +45,18 @@ static struct ufs_dev_fix ufs_mtk_dev_fixups[] = {
 	END_FIX
 };
 
+static const struct ufs_mtk_host_cfg ufs_mtk_mt8192_cfg = {
+	.caps = UFS_MTK_CAP_BOOST_CRYPT_ENGINE,
+};
+
 static const struct of_device_id ufs_mtk_of_match[] = {
-	{ .compatible = "mediatek,mt8183-ufshci" },
+	{
+		.compatible = "mediatek,mt8183-ufshci",
+	},
+	{
+		.compatible = "mediatek,mt8192-ufshci",
+		.data = &ufs_mtk_mt8192_cfg
+	},
 	{},
 };
 
@@ -61,14 +64,7 @@ static bool ufs_mtk_is_boost_crypt_enabled(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
-	return !!(host->caps & UFS_MTK_CAP_BOOST_CRYPT_ENGINE);
-}
-
-static bool ufs_mtk_is_va09_supported(struct ufs_hba *hba)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-
-	return !!(host->caps & UFS_MTK_CAP_VA09_PWR_CTRL);
+	return (host->caps & UFS_MTK_CAP_BOOST_CRYPT_ENGINE);
 }
 
 static void ufs_mtk_cfg_unipro_cg(struct ufs_hba *hba, bool enable)
@@ -162,7 +158,6 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 				     enum ufs_notify_change_status status)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	unsigned long flags;
 
 	if (status == PRE_CHANGE) {
 		if (host->unipro_lpm) {
@@ -174,17 +169,6 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 
 		if (hba->caps & UFSHCD_CAP_CRYPTO)
 			ufs_mtk_crypto_enable(hba);
-
-		if (host->caps & UFS_MTK_CAP_DISABLE_AH8) {
-			spin_lock_irqsave(hba->host->host_lock, flags);
-			ufshcd_writel(hba, 0,
-				      REG_AUTO_HIBERNATE_IDLE_TIMER);
-			spin_unlock_irqrestore(hba->host->host_lock,
-					       flags);
-
-			hba->capabilities &= ~MASK_AUTO_HIBERN8_SUPPORT;
-			hba->ahit = 0;
-		}
 	}
 
 	return 0;
@@ -316,61 +300,21 @@ static int ufs_mtk_wait_link_state(struct ufs_hba *hba, u32 state,
 	return -ETIMEDOUT;
 }
 
-static void ufs_mtk_pm_qos(struct ufs_hba *hba, bool qos_en)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-
-	if (host && host->pm_qos_init) {
-		if (qos_en)
-			cpu_latency_qos_update_request(
-				&host->pm_qos_req, 0);
-		else
-			cpu_latency_qos_update_request(
-				&host->pm_qos_req,
-				PM_QOS_DEFAULT_VALUE);
-	}
-}
-
-static int ufs_mtk_mphy_power_on(struct ufs_hba *hba, bool on)
+static void ufs_mtk_mphy_power_on(struct ufs_hba *hba, bool on)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 	struct phy *mphy = host->mphy;
-	struct arm_smccc_res res;
-	int ret = 0;
 
-	if (!mphy || !(on ^ host->mphy_powered_on))
-		return 0;
+	if (!mphy)
+		return;
 
-	if (on) {
-		if (ufs_mtk_is_va09_supported(hba)) {
-			ret = regulator_enable(host->reg_va09);
-			if (ret < 0)
-				goto out;
-			/* wait 200 us to stablize VA09 */
-			usleep_range(200, 210);
-			ufs_mtk_va09_pwr_ctrl(res, 1);
-		}
+	if (on && !host->mphy_powered_on)
 		phy_power_on(mphy);
-	} else {
+	else if (!on && host->mphy_powered_on)
 		phy_power_off(mphy);
-		if (ufs_mtk_is_va09_supported(hba)) {
-			ufs_mtk_va09_pwr_ctrl(res, 0);
-			ret = regulator_disable(host->reg_va09);
-			if (ret < 0)
-				goto out;
-		}
-	}
-out:
-	if (ret) {
-		dev_info(hba->dev,
-			 "failed to %s va09: %d\n",
-			 on ? "enable" : "disable",
-			 ret);
-	} else {
-		host->mphy_powered_on = on;
-	}
-
-	return ret;
+	else
+		return;
+	host->mphy_powered_on = on;
 }
 
 static int ufs_mtk_get_host_clk(struct device *dev, const char *name,
@@ -458,13 +402,18 @@ static int ufs_mtk_init_host_clk(struct ufs_hba *hba, const char *name,
 	return ret;
 }
 
-static void ufs_mtk_init_boost_crypt(struct ufs_hba *hba)
+static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 	struct ufs_mtk_crypt_cfg *cfg;
 	struct device *dev = hba->dev;
 	struct regulator *reg;
 	u32 volt;
+
+	host->caps = host->cfg->caps;
+
+	if (!ufs_mtk_is_boost_crypt_enabled(hba))
+		return;
 
 	host->crypt = devm_kzalloc(dev, sizeof(*(host->crypt)),
 				   GFP_KERNEL);
@@ -499,56 +448,11 @@ static void ufs_mtk_init_boost_crypt(struct ufs_hba *hba)
 
 	cfg->reg_vcore = reg;
 	cfg->vcore_volt = volt;
-	host->caps |= UFS_MTK_CAP_BOOST_CRYPT_ENGINE;
+	dev_info(dev, "caps: boost-crypt");
+	return;
 
 disable_caps:
-	return;
-}
-
-static void ufs_mtk_init_va09_pwr_ctrl(struct ufs_hba *hba)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-
-	host->reg_va09 = regulator_get(hba->dev, "va09");
-	if (!host->reg_va09)
-		dev_info(hba->dev, "failed to get va09");
-	else
-		host->caps |= UFS_MTK_CAP_VA09_PWR_CTRL;
-}
-
-static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	struct device_node *np = hba->dev->of_node;
-	struct device_node *boot_node = NULL;
-	struct tag_bootmode *tag = NULL;
-
-	if (of_property_read_bool(np, "mediatek,ufs-boost-crypt"))
-		ufs_mtk_init_boost_crypt(hba);
-
-	if (of_property_read_bool(np, "mediatek,ufs-support-va09"))
-		ufs_mtk_init_va09_pwr_ctrl(hba);
-
-	if (of_property_read_bool(np, "mediatek,ufs-disable-ah8"))
-		host->caps |= UFS_MTK_CAP_DISABLE_AH8;
-
-	if (of_property_read_bool(np, "mediatek,ufs-qos"))
-		host->qos_enabled = host->qos_allowed = true;
-
-	dev_info(hba->dev, "caps: 0x%x", host->caps);
-
-	boot_node = of_parse_phandle(np, "bootmode", 0);
-
-	if (!boot_node)
-		dev_info(hba->dev, "failed to get bootmode phandle\n");
-	else {
-		tag = (struct tag_bootmode *)of_get_property(boot_node,
-							"atag,boot", NULL);
-		if (!tag)
-			dev_info(hba->dev, "failed to get atag,boot\n");
-		else if (tag->boottype == BOOTDEV_UFS)
-			host->boot_device = true;
-	}
+	host->caps &= ~UFS_MTK_CAP_BOOST_CRYPT_ENGINE;
 }
 
 /**
@@ -563,8 +467,8 @@ static int ufs_mtk_setup_clocks(struct ufs_hba *hba, bool on,
 				enum ufs_notify_change_status status)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	bool clk_pwr_off = false;
 	int ret = 0;
+	bool clk_pwr_off = false;
 
 	/*
 	 * In case ufs_mtk_init() is not yet done, simply ignore.
@@ -593,121 +497,17 @@ static int ufs_mtk_setup_clocks(struct ufs_hba *hba, bool on,
 		}
 
 		if (clk_pwr_off) {
-			ufs_mtk_pm_qos(hba, on);
 			ufs_mtk_boost_crypt(hba, on);
 			ufs_mtk_setup_ref_clk(hba, on);
-			phy_power_off(host->mphy);
-			if (host->qos_enabled)
-				ufs_mtk_biolog_clk_gating(on);
+			ufs_mtk_mphy_power_on(hba, on);
 		}
 	} else if (on && status == POST_CHANGE) {
-		phy_power_on(host->mphy);
+		ufs_mtk_mphy_power_on(hba, on);
 		ufs_mtk_setup_ref_clk(hba, on);
 		ufs_mtk_boost_crypt(hba, on);
-		ufs_mtk_pm_qos(hba, on);
-		if (host->qos_enabled)
-			ufs_mtk_biolog_clk_gating(on);
 	}
 
 	return ret;
-}
-
-static bool ufs_mtk_is_data_cmd(struct scsi_cmnd *cmd)
-{
-	char cmd_op = cmd->cmnd[0];
-
-	if (cmd_op == WRITE_10 || cmd_op == READ_10 ||
-	    cmd_op == WRITE_16 || cmd_op == READ_16 ||
-	    cmd_op == WRITE_6 || cmd_op == READ_6)
-		return true;
-
-	return false;
-}
-
-struct tracepoints_table {
-	const char *name;
-	void *func;
-	struct tracepoint *tp;
-	bool init;
-};
-
-static void ufs_mtk_trace_android_vh_ufs_compl_command(void *data,
-				struct ufs_hba *hba,
-				struct ufshcd_lrb *lrbp)
-{
-	struct scsi_cmnd *cmd = lrbp->cmd;
-	int tag = lrbp->task_tag;
-	unsigned long req_mask;
-
-	if (!cmd)
-		return;
-
-	if (!ufs_mtk_is_data_cmd(cmd))
-		return;
-
-	req_mask = hba->outstanding_reqs & ~(1 << tag);
-	ufs_mtk_biolog_transfer_req_compl(tag, req_mask);
-	ufs_mtk_biolog_check(req_mask);
-}
-
-static struct tracepoints_table interests[] = {
-	{
-		.name = "android_vh_ufs_compl_command",
-		.func = ufs_mtk_trace_android_vh_ufs_compl_command
-	},
-};
-
-#define FOR_EACH_INTEREST(i) \
-	for (i = 0; i < sizeof(interests) / sizeof(struct tracepoints_table); \
-	i++)
-
-static void ufs_mtk_lookup_tracepoints(struct tracepoint *tp,
-				       void *ignore)
-{
-	int i;
-
-	FOR_EACH_INTEREST(i) {
-		if (strcmp(interests[i].name, tp->name) == 0)
-			interests[i].tp = tp;
-	}
-}
-
-static void ufs_mtk_uninstall_tracepoints(void)
-{
-	int i;
-
-	FOR_EACH_INTEREST(i) {
-		if (interests[i].init) {
-			tracepoint_probe_unregister(interests[i].tp,
-						    interests[i].func,
-						    NULL);
-		}
-	}
-}
-
-static int ufs_mtk_install_tracepoints(void)
-{
-	int i;
-
-	/* Install the tracepoints */
-	for_each_kernel_tracepoint(ufs_mtk_lookup_tracepoints, NULL);
-
-	FOR_EACH_INTEREST(i) {
-		if (interests[i].tp == NULL) {
-			pr_info("Error: %s not found\n",
-				interests[i].name);
-			/* Unload previously loaded */
-			ufs_mtk_uninstall_tracepoints();
-			return -EINVAL;
-		}
-
-		tracepoint_probe_register(interests[i].tp,
-					  interests[i].func,
-					  NULL);
-		interests[i].init = true;
-	}
-
-	return 0;
 }
 
 static void ufs_mtk_get_controller_version(struct ufs_hba *hba)
@@ -755,14 +555,17 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	host->hba = hba;
 	ufshcd_set_variant(hba, host);
 
+	/* Get host capability and platform data */
 	id = of_match_device(ufs_mtk_of_match, dev);
 	if (!id) {
 		err = -EINVAL;
 		goto out;
 	}
 
-	/* Initialize host capability */
-	ufs_mtk_init_host_caps(hba);
+	if (id->data) {
+		host->cfg = (struct ufs_mtk_host_cfg *)id->data;
+		ufs_mtk_init_host_caps(hba);
+	}
 
 	err = ufs_mtk_bind_mphy(hba);
 	if (err)
@@ -784,30 +587,14 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	hba->quirks |= UFSHCI_QUIRK_SKIP_MANUAL_WB_FLUSH_CTRL;
 	hba->vps->wb_flush_threshold = UFS_WB_BUF_REMAIN_PERCENT(80);
 
-	if (host->caps & UFS_MTK_CAP_DISABLE_AH8)
-		hba->caps |= UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
-
 	/*
 	 * ufshcd_vops_init() is invoked after
 	 * ufshcd_setup_clock(true) in ufshcd_hba_init() thus
 	 * phy clock setup is skipped.
 	 *
-	 * Enable phy power and clocks specifically here.
+	 * Enable phy clocks specifically here.
 	 */
-	ufs_mtk_mphy_power_on(hba, true);
 	ufs_mtk_setup_clocks(hba, true, POST_CHANGE);
-
-
-	cpu_latency_qos_add_request(&host->pm_qos_req,
-	     	   PM_QOS_DEFAULT_VALUE);
-	host->pm_qos_init = true;
-
-	ufs_mtk_biolog_init(host->qos_allowed, host->boot_device);
-	ufs_mtk_install_tracepoints();
-
-#if IS_ENABLED(CONFIG_SCSI_UFS_MEDIATEK_DBG)
-	ufs_mtk_dbg_register(hba);
-#endif
 
 	goto out;
 
@@ -883,14 +670,14 @@ static int ufs_mtk_pwr_change_notify(struct ufs_hba *hba,
 	return ret;
 }
 
-static int ufs_mtk_unipro_set_lpm(struct ufs_hba *hba, bool lpm)
+static int ufs_mtk_unipro_set_pm(struct ufs_hba *hba, bool lpm)
 {
 	int ret;
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
 	ret = ufshcd_dme_set(hba,
 			     UIC_ARG_MIB_SEL(VS_UNIPROPOWERDOWNCONTROL, 0),
-			     lpm ? 1 : 0);
+			     lpm);
 	if (!ret || !lpm) {
 		/*
 		 * Forcibly set as non-LPM mode if UIC commands is failed
@@ -910,7 +697,7 @@ static int ufs_mtk_pre_link(struct ufs_hba *hba)
 
 	ufs_mtk_get_controller_version(hba);
 
-	ret = ufs_mtk_unipro_set_lpm(hba, false);
+	ret = ufs_mtk_unipro_set_pm(hba, false);
 	if (ret)
 		return ret;
 
@@ -1022,7 +809,7 @@ static int ufs_mtk_link_set_hpm(struct ufs_hba *hba)
 	if (err)
 		return err;
 
-	err = ufs_mtk_unipro_set_lpm(hba, false);
+	err = ufs_mtk_unipro_set_pm(hba, false);
 	if (err)
 		return err;
 
@@ -1043,10 +830,10 @@ static int ufs_mtk_link_set_lpm(struct ufs_hba *hba)
 {
 	int err;
 
-	err = ufs_mtk_unipro_set_lpm(hba, true);
+	err = ufs_mtk_unipro_set_pm(hba, true);
 	if (err) {
 		/* Resume UniPro state for following error recovery */
-		ufs_mtk_unipro_set_lpm(hba, false);
+		ufs_mtk_unipro_set_pm(hba, false);
 		return err;
 	}
 
@@ -1072,52 +859,40 @@ static int ufs_mtk_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	if (ufshcd_is_link_hibern8(hba)) {
 		err = ufs_mtk_link_set_lpm(hba);
-		if (err)
-			goto fail;
-	}
-
-	if (!ufshcd_is_link_active(hba)) {
+		if (err) {
+			/*
+			 * Set link as off state enforcedly to trigger
+			 * ufshcd_host_reset_and_restore() in ufshcd_suspend()
+			 * for completed host reset.
+			 */
+			ufshcd_set_link_off(hba);
+			return -EAGAIN;
+		}
 		/*
 		 * Make sure no error will be returned to prevent
 		 * ufshcd_suspend() re-enabling regulators while vreg is still
 		 * in low-power mode.
 		 */
 		ufs_mtk_vreg_set_lpm(hba, true);
-		err = ufs_mtk_mphy_power_on(hba, false);
-		if (err)
-			goto fail;
 	}
 
 	return 0;
-fail:
-	/*
-	 * Set link as off state enforcedly to trigger
-	 * ufshcd_host_reset_and_restore() in ufshcd_suspend()
-	 * for completed host reset.
-	 */
-	ufshcd_set_link_off(hba);
-	return -EAGAIN;
 }
 
 static int ufs_mtk_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	int err;
 
-	err = ufs_mtk_mphy_power_on(hba, true);
-	if (err)
-		goto fail;
-
-	ufs_mtk_vreg_set_lpm(hba, false);
-
 	if (ufshcd_is_link_hibern8(hba)) {
+		ufs_mtk_vreg_set_lpm(hba, false);
 		err = ufs_mtk_link_set_hpm(hba);
-		if (err)
-			goto fail;
+		if (err) {
+			err = ufshcd_link_recovery(hba);
+			return err;
+		}
 	}
 
 	return 0;
-fail:
-	return ufshcd_link_recovery(hba);
 }
 
 static void ufs_mtk_dbg_register_dump(struct ufs_hba *hba)
@@ -1163,24 +938,6 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 	ufshcd_fixup_dev_quirks(hba, ufs_mtk_dev_fixups);
 }
 
-static void ufs_mtk_setup_xfer_req(struct ufs_hba *hba, int tag,
-				   bool is_scsi)
-{
-	struct ufshcd_lrb *lrbp;
-	struct scsi_cmnd *cmd;
-
-	if (is_scsi) {
-		lrbp = &hba->lrb[tag];
-		cmd = lrbp->cmd;
-
-		if (!ufs_mtk_is_data_cmd(cmd))
-			return;
-
-		ufs_mtk_biolog_send_command(tag, cmd);
-		ufs_mtk_biolog_check(hba->outstanding_reqs | (1 << tag));
-	}
-}
-
 /*
  * struct ufs_hba_mtk_vops - UFS MTK specific variant operations
  *
@@ -1194,7 +951,6 @@ static const struct ufs_hba_variant_ops ufs_hba_mtk_vops = {
 	.hce_enable_notify   = ufs_mtk_hce_enable_notify,
 	.link_startup_notify = ufs_mtk_link_startup_notify,
 	.pwr_change_notify   = ufs_mtk_pwr_change_notify,
-	.setup_xfer_req      = ufs_mtk_setup_xfer_req,
 	.apply_dev_quirks    = ufs_mtk_apply_dev_quirks,
 	.fixup_dev_quirks    = ufs_mtk_fixup_dev_quirks,
 	.suspend             = ufs_mtk_suspend,
@@ -1234,8 +990,6 @@ static int ufs_mtk_remove(struct platform_device *pdev)
 
 	pm_runtime_get_sync(&(pdev)->dev);
 	ufshcd_remove(hba);
-	ufs_mtk_biolog_exit();
-	ufs_mtk_uninstall_tracepoints();
 	return 0;
 }
 

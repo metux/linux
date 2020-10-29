@@ -52,23 +52,8 @@ static struct ufs_dev_fix ufs_mtk_dev_fixups[] = {
 	END_FIX
 };
 
-static const struct ufs_mtk_host_cfg ufs_mtk_mt8183_cfg = {
-	.caps = UFS_MTK_CAP_VA09_PWR_CTRL,
-};
-
-static const struct ufs_mtk_host_cfg ufs_mtk_mt8192_cfg = {
-	.caps = UFS_MTK_CAP_BOOST_CRYPT_ENGINE,
-};
-
 static const struct of_device_id ufs_mtk_of_match[] = {
-	{
-		.compatible = "mediatek,mt8183-ufshci",
-		.data = &ufs_mtk_mt8183_cfg
-	},
-	{
-		.compatible = "mediatek,mt8192-ufshci",
-		.data = &ufs_mtk_mt8192_cfg
-	},
+	{ .compatible = "mediatek,mt8183-ufshci" },
 	{},
 };
 

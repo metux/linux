@@ -48,8 +48,23 @@ static struct ufs_dev_fix ufs_mtk_dev_fixups[] = {
 	END_FIX
 };
 
+static const struct ufs_mtk_host_cfg ufs_mtk_mt8183_cfg = {
+	.caps = UFS_MTK_CAP_VA09_PWR_CTRL,
+};
+
+static const struct ufs_mtk_host_cfg ufs_mtk_mt8192_cfg = {
+	.caps = UFS_MTK_CAP_BOOST_CRYPT_ENGINE,
+};
+
 static const struct of_device_id ufs_mtk_of_match[] = {
-	{ .compatible = "mediatek,mt8183-ufshci" },
+	{
+		.compatible = "mediatek,mt8183-ufshci",
+		.data = &ufs_mtk_mt8183_cfg
+	},
+	{
+		.compatible = "mediatek,mt8192-ufshci",
+		.data = &ufs_mtk_mt8192_cfg
+	},
 	{},
 };
 
@@ -57,14 +72,14 @@ static bool ufs_mtk_is_boost_crypt_enabled(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
-	return !!(host->caps & UFS_MTK_CAP_BOOST_CRYPT_ENGINE);
+	return (host->caps & UFS_MTK_CAP_BOOST_CRYPT_ENGINE);
 }
 
 static bool ufs_mtk_is_va09_supported(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
-	return !!(host->caps & UFS_MTK_CAP_VA09_PWR_CTRL);
+	return (host->caps & UFS_MTK_CAP_VA09_PWR_CTRL);
 }
 
 static void ufs_mtk_cfg_unipro_cg(struct ufs_hba *hba, bool enable)
@@ -158,7 +173,6 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 				     enum ufs_notify_change_status status)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	unsigned long flags;
 
 	if (status == PRE_CHANGE) {
 		if (host->unipro_lpm) {
@@ -170,17 +184,6 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 
 		if (hba->caps & UFSHCD_CAP_CRYPTO)
 			ufs_mtk_crypto_enable(hba);
-
-		if (host->caps & UFS_MTK_CAP_DISABLE_AH8) {
-			spin_lock_irqsave(hba->host->host_lock, flags);
-			ufshcd_writel(hba, 0,
-				      REG_AUTO_HIBERNATE_IDLE_TIMER);
-			spin_unlock_irqrestore(hba->host->host_lock,
-					       flags);
-
-			hba->capabilities &= ~MASK_AUTO_HIBERN8_SUPPORT;
-			hba->ahit = 0;
-		}
 	}
 
 	return 0;
@@ -323,7 +326,7 @@ static int ufs_mtk_mphy_power_on(struct ufs_hba *hba, bool on)
 		return 0;
 
 	if (on) {
-		if (ufs_mtk_is_va09_supported(hba)) {
+		if (host->reg_va09) {
 			ret = regulator_enable(host->reg_va09);
 			if (ret < 0)
 				goto out;
@@ -334,7 +337,7 @@ static int ufs_mtk_mphy_power_on(struct ufs_hba *hba, bool on)
 		phy_power_on(mphy);
 	} else {
 		phy_power_off(mphy);
-		if (ufs_mtk_is_va09_supported(hba)) {
+		if (host->reg_va09) {
 			ufs_mtk_va09_pwr_ctrl(res, 0);
 			ret = regulator_disable(host->reg_va09);
 			if (ret < 0)
@@ -480,10 +483,10 @@ static void ufs_mtk_init_boost_crypt(struct ufs_hba *hba)
 
 	cfg->reg_vcore = reg;
 	cfg->vcore_volt = volt;
-	host->caps |= UFS_MTK_CAP_BOOST_CRYPT_ENGINE;
+	return;
 
 disable_caps:
-	return;
+	host->caps &= ~UFS_MTK_CAP_BOOST_CRYPT_ENGINE;
 }
 
 static void ufs_mtk_init_va09_pwr_ctrl(struct ufs_hba *hba)
@@ -491,25 +494,23 @@ static void ufs_mtk_init_va09_pwr_ctrl(struct ufs_hba *hba)
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
 	host->reg_va09 = regulator_get(hba->dev, "va09");
-	if (!host->reg_va09)
+	if (!host->reg_va09) {
 		dev_info(hba->dev, "failed to get va09");
-	else
-		host->caps |= UFS_MTK_CAP_VA09_PWR_CTRL;
+		host->caps &= ~UFS_MTK_CAP_VA09_PWR_CTRL;
+	}
 }
 
 static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	struct device_node *np = hba->dev->of_node;
 
-	if (of_property_read_bool(np, "mediatek,ufs-boost-crypt"))
+	host->caps = host->cfg->caps;
+
+	if (ufs_mtk_is_boost_crypt_enabled(hba))
 		ufs_mtk_init_boost_crypt(hba);
 
-	if (of_property_read_bool(np, "mediatek,ufs-support-va09"))
+	if (ufs_mtk_is_va09_supported(hba))
 		ufs_mtk_init_va09_pwr_ctrl(hba);
-
-	if (of_property_read_bool(np, "mediatek,ufs-disable-ah8"))
-		host->caps |= UFS_MTK_CAP_DISABLE_AH8;
 
 	dev_info(hba->dev, "caps: 0x%x", host->caps);
 }
@@ -614,14 +615,17 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	host->hba = hba;
 	ufshcd_set_variant(hba, host);
 
+	/* Get host capability and platform data */
 	id = of_match_device(ufs_mtk_of_match, dev);
 	if (!id) {
 		err = -EINVAL;
 		goto out;
 	}
 
-	/* Initialize host capability */
-	ufs_mtk_init_host_caps(hba);
+	if (id->data) {
+		host->cfg = (struct ufs_mtk_host_cfg *)id->data;
+		ufs_mtk_init_host_caps(hba);
+	}
 
 	err = ufs_mtk_bind_mphy(hba);
 	if (err)
@@ -642,9 +646,6 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	hba->caps |= UFSHCD_CAP_WB_EN;
 	hba->quirks |= UFSHCI_QUIRK_SKIP_MANUAL_WB_FLUSH_CTRL;
 	hba->vps->wb_flush_threshold = UFS_WB_BUF_REMAIN_PERCENT(80);
-
-	if (host->caps & UFS_MTK_CAP_DISABLE_AH8)
-		hba->caps |= UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
 
 	/*
 	 * ufshcd_vops_init() is invoked after
@@ -916,7 +917,6 @@ static void ufs_mtk_vreg_set_lpm(struct ufs_hba *hba, bool lpm)
 static int ufs_mtk_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	int err;
-	struct arm_smccc_res res;
 
 	if (ufshcd_is_link_hibern8(hba)) {
 		err = ufs_mtk_link_set_lpm(hba);
@@ -935,9 +935,6 @@ static int ufs_mtk_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		if (err)
 			goto fail;
 	}
-
-	if (ufshcd_is_link_off(hba))
-		ufs_mtk_device_reset_ctrl(0, res);
 
 	return 0;
 fail:
@@ -1045,38 +1042,9 @@ static int ufs_mtk_probe(struct platform_device *pdev)
 {
 	int err;
 	struct device *dev = &pdev->dev;
-	struct device_node *reset_node;
-	struct platform_device *reset_pdev;
-	struct device_link *link;
 
-	reset_node = of_find_compatible_node(NULL, NULL,
-					     "ti,syscon-reset");
-	if (!reset_node) {
-		dev_notice(dev, "find ti,syscon-reset fail\n");
-		goto skip_reset;
-	}
-	reset_pdev = of_find_device_by_node(reset_node);
-	if (!reset_pdev) {
-		dev_notice(dev, "find reset_pdev fail\n");
-		goto skip_reset;
-	}
-	link = device_link_add(dev, &reset_pdev->dev,
-		DL_FLAG_AUTOPROBE_CONSUMER);
-	if (!link) {
-		dev_notice(dev, "add reset device_link fail\n");
-		goto skip_reset;
-	}
-	/* supplier is not probed */
-	if (link->status == DL_STATE_DORMANT) {
-		err = -EPROBE_DEFER;
-		goto out;
-	}
-
-skip_reset:
 	/* perform generic probe */
 	err = ufshcd_pltfrm_init(pdev, &ufs_hba_mtk_vops);
-
-out:
 	if (err)
 		dev_info(dev, "probe failed %d\n", err);
 
@@ -1091,34 +1059,11 @@ out:
  */
 static int ufs_mtk_remove(struct platform_device *pdev)
 {
-	struct ufs_hba *hba = platform_get_drvdata(pdev);
+	struct ufs_hba *hba =  platform_get_drvdata(pdev);
 
 	pm_runtime_get_sync(&(pdev)->dev);
 	ufshcd_remove(hba);
 	return 0;
-}
-
-void ufshcd_mtk_shutdown(struct platform_device *pdev)
-{
-	struct ufs_hba *hba = platform_get_drvdata(pdev);
-	struct scsi_device *sdev;
-
-	/*
-	 * Quiesce all SCSI devices to prevent any non-PM requests sending
-	 * from block layer during and after shutdown.
-	 *
-	 * Note. Using scsi_autopm_get_device() instead of pm_runtime_disable()
-	 * is to prevent noisy message by below checking,
-	 * WARN_ON_ONCE(sdev->quiesced_by && sdev->quiesced_by != current);
-	 * This warning shows up if we try to quiesce a runtime-suspended
-	 * SCSI device. This is possible during our new shutdown flow.
-	 * Using scsi_autopm_get_device() to resume all SCSI devices first
-	 * can prevent it.
-	 */
-	shost_for_each_device(sdev, hba->host)
-		scsi_device_quiesce(sdev);
-
-	ufshcd_shutdown(hba);
 }
 
 static const struct dev_pm_ops ufs_mtk_pm_ops = {
@@ -1132,7 +1077,7 @@ static const struct dev_pm_ops ufs_mtk_pm_ops = {
 static struct platform_driver ufs_mtk_pltform = {
 	.probe      = ufs_mtk_probe,
 	.remove     = ufs_mtk_remove,
-	.shutdown   = ufshcd_mtk_shutdown,
+	.shutdown   = ufshcd_pltfrm_shutdown,
 	.driver = {
 		.name   = "ufshcd-mtk",
 		.pm     = &ufs_mtk_pm_ops,

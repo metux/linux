@@ -580,6 +580,9 @@ static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
 	if (of_property_read_bool(np, "mediatek,ufs-support-va09"))
 		ufs_mtk_init_va09_pwr_ctrl(hba);
 
+	if (of_property_read_bool(np, "mediatek,ufs-disable-ah8"))
+		host->caps |= UFS_MTK_CAP_DISABLE_AH8;
+
 	dev_info(hba->dev, "caps: 0x%x", host->caps);
 }
 

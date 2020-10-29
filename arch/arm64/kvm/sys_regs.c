@@ -2171,7 +2171,6 @@ static int kvm_handle_cp_64(struct kvm_vcpu *vcpu,
 	int Rt2 = (esr >> 10) & 0x1f;
 
 	params.is_aarch32 = true;
-	params.is_32bit = false;
 	params.CRm = (esr >> 1) & 0xf;
 	params.is_write = ((esr & 1) == 0);
 
@@ -2222,7 +2221,6 @@ static int kvm_handle_cp_32(struct kvm_vcpu *vcpu,
 	int Rt  = kvm_vcpu_sys_get_rt(vcpu);
 
 	params.is_aarch32 = true;
-	params.is_32bit = true;
 	params.CRm = (esr >> 1) & 0xf;
 	params.regval = vcpu_get_reg(vcpu, Rt);
 	params.is_write = ((esr & 1) == 0);
@@ -2317,7 +2315,6 @@ int kvm_handle_sys_reg(struct kvm_vcpu *vcpu)
 	trace_kvm_handle_sys_reg(esr);
 
 	params.is_aarch32 = false;
-	params.is_32bit = false;
 	params.Op0 = (esr >> 20) & 3;
 	params.Op1 = (esr >> 14) & 0x7;
 	params.CRn = (esr >> 10) & 0xf;

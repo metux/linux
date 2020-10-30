@@ -43,7 +43,9 @@ Date:		May 2007
 Contact:	linux-pm@vger.kernel.org
 Description:
 		Fine grain representation of battery capacity.
+
 		Access: Read
+
 		Valid values: 0 - 100 (percent)
 
 What:		/sys/class/power_supply/<supply_name>/capacity_alert_max
@@ -58,6 +60,7 @@ Description:
 		low).
 
 		Access: Read, Write
+
 		Valid values: 0 - 100 (percent)
 
 What:		/sys/class/power_supply/<supply_name>/capacity_alert_min
@@ -75,6 +78,25 @@ Description:
 
 		Valid values: 0 - 100 (percent)
 
+<<<<<<< HEAD
+=======
+What:		/sys/class/power_supply/<supply_name>/capacity_level
+Date:		April 2019
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Battery capacity measurement becomes unreliable without
+		recalibration. This values provides the maximum error
+		margin expected to exist by the fuel gauge in percent.
+		Values close to 0% will be returned after (re-)calibration
+		has happened. Over time the error margin will increase.
+		100% means, that the capacity related values are basically
+		completely useless.
+
+		Access: Read
+
+		Valid values: 0 - 100 (percent)
+
+>>>>>>> f038b084b4015 (docs: ABI: cleanup several ABI documents)
 What:		/sys/class/power_supply/<supply_name>/capacity_level
 Date:		June 2009
 Contact:	linux-pm@vger.kernel.org
@@ -96,6 +118,7 @@ Description:
 		which they average readings to smooth out the reported value.
 
 		Access: Read
+
 		Valid values: Represented in microamps. Negative values are used
 		for discharging batteries, positive values for charging batteries.
 
@@ -116,6 +139,7 @@ Description:
 		This value is not averaged/smoothed.
 
 		Access: Read
+
 		Valid values: Represented in microamps. Negative values are used
 		for discharging batteries, positive values for charging batteries.
 
@@ -368,7 +392,7 @@ Description:
 
 **USB Properties**
 
-What: 		/sys/class/power_supply/<supply_name>/current_avg
+What:		/sys/class/power_supply/<supply_name>/current_avg
 Date:		May 2007
 Contact:	linux-pm@vger.kernel.org
 Description:
@@ -434,6 +458,7 @@ Description:
 		solved using power limit use input_voltage_limit.
 
 		Access: Read, Write
+
 		Valid values: Represented in microvolts
 
 What:		/sys/class/power_supply/<supply_name>/input_power_limit
@@ -447,6 +472,7 @@ Description:
 		limit only for problems that can be solved using power limit.
 
 		Access: Read, Write
+
 		Valid values: Represented in microwatts
 
 What:		/sys/class/power_supply/<supply_name>/online,
@@ -723,3 +749,36 @@ Description:
 
 		- 1: enabled
 		- 0: disabled
+<<<<<<< HEAD
+=======
+
+What:		/sys/class/power_supply/<supply_name>/manufacture_year
+Date:		January 2020
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Reports the year (following Gregorian calendar) when the device has been
+		manufactured.
+
+		Access: Read
+
+		Valid values: Reported as integer
+
+What:		/sys/class/power_supply/<supply_name>/manufacture_month
+Date:		January 2020
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Reports the month when the device has been manufactured.
+
+		Access: Read
+
+		Valid values: 1-12
+
+What:		/sys/class/power_supply/<supply_name>/manufacture_day
+Date:		January 2020
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Reports the day of month when the device has been manufactured.
+
+		Access: Read
+		Valid values: 1-31
+>>>>>>> f038b084b4015 (docs: ABI: cleanup several ABI documents)

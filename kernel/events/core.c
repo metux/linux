@@ -7187,6 +7187,7 @@ __perf_event_output(struct perf_event *event,
 		    struct perf_sample_data *data,
 		    struct pt_regs *regs,
 		    int (*output_begin)(struct perf_output_handle *,
+					struct perf_sample_data *,
 					struct perf_event *,
 					unsigned int))
 {
@@ -7199,7 +7200,7 @@ __perf_event_output(struct perf_event *event,
 
 	perf_prepare_sample(&header, data, event, regs);
 
-	err = output_begin(&handle, event, header.size);
+	err = output_begin(&handle, data, event, header.size);
 	if (err)
 		goto exit;
 
@@ -7265,7 +7266,7 @@ perf_event_read_event(struct perf_event *event,
 	int ret;
 
 	perf_event_header__init_id(&read_event.header, &sample, event);
-	ret = perf_output_begin(&handle, event, read_event.header.size);
+	ret = perf_output_begin(&handle, &sample, event, read_event.header.size);
 	if (ret)
 		return;
 
@@ -7534,7 +7535,7 @@ static void perf_event_task_output(struct perf_event *event,
 
 	perf_event_header__init_id(&task_event->event_id.header, &sample, event);
 
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				task_event->event_id.header.size);
 	if (ret)
 		goto out;
@@ -7637,7 +7638,7 @@ static void perf_event_comm_output(struct perf_event *event,
 		return;
 
 	perf_event_header__init_id(&comm_event->event_id.header, &sample, event);
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				comm_event->event_id.header.size);
 
 	if (ret)
@@ -7737,7 +7738,7 @@ static void perf_event_namespaces_output(struct perf_event *event,
 
 	perf_event_header__init_id(&namespaces_event->event_id.header,
 				   &sample, event);
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				namespaces_event->event_id.header.size);
 	if (ret)
 		goto out;
@@ -7864,7 +7865,7 @@ static void perf_event_cgroup_output(struct perf_event *event, void *data)
 
 	perf_event_header__init_id(&cgroup_event->event_id.header,
 				   &sample, event);
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				cgroup_event->event_id.header.size);
 	if (ret)
 		goto out;
@@ -7990,7 +7991,7 @@ static void perf_event_mmap_output(struct perf_event *event,
 	}
 
 	perf_event_header__init_id(&mmap_event->event_id.header, &sample, event);
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				mmap_event->event_id.header.size);
 	if (ret)
 		goto out;
@@ -8300,7 +8301,7 @@ void perf_event_aux_event(struct perf_event *event, unsigned long head,
 	int ret;
 
 	perf_event_header__init_id(&rec.header, &sample, event);
-	ret = perf_output_begin(&handle, event, rec.header.size);
+	ret = perf_output_begin(&handle, &sample, event, rec.header.size);
 
 	if (ret)
 		return;
@@ -8334,7 +8335,7 @@ void perf_log_lost_samples(struct perf_event *event, u64 lost)
 
 	perf_event_header__init_id(&lost_samples_event.header, &sample, event);
 
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				lost_samples_event.header.size);
 	if (ret)
 		return;
@@ -8389,7 +8390,7 @@ static void perf_event_switch_output(struct perf_event *event, void *data)
 
 	perf_event_header__init_id(&se->event_id.header, &sample, event);
 
-	ret = perf_output_begin(&handle, event, se->event_id.header.size);
+	ret = perf_output_begin(&handle, &sample, event, se->event_id.header.size);
 	if (ret)
 		return;
 
@@ -8464,7 +8465,7 @@ static void perf_log_throttle(struct perf_event *event, int enable)
 
 	perf_event_header__init_id(&throttle_event.header, &sample, event);
 
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				throttle_event.header.size);
 	if (ret)
 		return;
@@ -8507,7 +8508,7 @@ static void perf_event_ksymbol_output(struct perf_event *event, void *data)
 
 	perf_event_header__init_id(&ksymbol_event->event_id.header,
 				   &sample, event);
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, &sample, event,
 				ksymbol_event->event_id.header.size);
 	if (ret)
 		return;
@@ -8597,7 +8598,7 @@ static void perf_event_bpf_output(struct perf_event *event, void *data)
 
 	perf_event_header__init_id(&bpf_event->event_id.header,
 				   &sample, event);
-	ret = perf_output_begin(&handle, event,
+	ret = perf_output_begin(&handle, data, event,
 				bpf_event->event_id.header.size);
 	if (ret)
 		return;
@@ -8706,7 +8707,8 @@ static void perf_event_text_poke_output(struct perf_event *event, void *data)
 
 	perf_event_header__init_id(&text_poke_event->event_id.header, &sample, event);
 
-	ret = perf_output_begin(&handle, event, text_poke_event->event_id.header.size);
+	ret = perf_output_begin(&handle, &sample, event,
+				text_poke_event->event_id.header.size);
 	if (ret)
 		return;
 
@@ -8787,7 +8789,7 @@ static void perf_log_itrace_start(struct perf_event *event)
 	rec.tid	= perf_event_tid(event, current);
 
 	perf_event_header__init_id(&rec.header, &sample, event);
-	ret = perf_output_begin(&handle, event, rec.header.size);
+	ret = perf_output_begin(&handle, &sample, event, rec.header.size);
 
 	if (ret)
 		return;

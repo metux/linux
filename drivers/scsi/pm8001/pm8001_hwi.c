@@ -1581,7 +1581,7 @@ void pm8001_work_fn(struct work_struct *work)
 		ts->stat = SAS_QUEUE_FULL;
 		pm8001_dev = ccb->device;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		spin_lock_irqsave(&t->task_state_lock, flags1);
 		t->task_state_flags &= ~SAS_TASK_STATE_PENDING;
 		t->task_state_flags &= ~SAS_TASK_AT_INITIATOR;
@@ -1936,7 +1936,7 @@ mpi_ssp_completion(struct pm8001_hba_info *pm8001_ha , void *piomb)
 			sas_ssp_task_response(pm8001_ha->dev, t, iu);
 		}
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_ABORTED:
 		PM8001_IO_DBG(pm8001_ha,
@@ -1952,7 +1952,7 @@ mpi_ssp_completion(struct pm8001_hba_info *pm8001_ha , void *piomb)
 		ts->stat = SAS_DATA_UNDERRUN;
 		ts->residual = param;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_NO_DEVICE:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2166,7 +2166,7 @@ static void mpi_ssp_event(struct pm8001_hba_info *pm8001_ha , void *piomb)
 		ts->stat = SAS_DATA_OVERRUN;
 		ts->residual = 0;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_BREAK:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2481,7 +2481,7 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 					pm8001_printk("response to large\n"));
 		}
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_ABORTED:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2489,7 +2489,7 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_ABORTED_TASK;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 		/* following cases are to do cases */
 	case IO_UNDERFLOW:
@@ -2500,19 +2500,23 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->stat = SAS_DATA_UNDERRUN;
 		ts->residual =  param;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_NO_DEVICE:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_NO_DEVICE\n"));
 		ts->resp = SAS_TASK_UNDELIVERED;
 		ts->stat = SAS_PHY_DOWN;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_BREAK:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_ERROR_BREAK\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_INTERRUPTED;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_PHY_NOT_READY:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2520,6 +2524,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_RSVD_RETRY;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_OPEN_CNX_ERROR_PROTOCOL_NOT_SUPPORTED:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2528,6 +2534,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_EPROTO;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_OPEN_CNX_ERROR_ZONE_VIOLATION:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2535,6 +2543,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_UNKNOWN;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_OPEN_CNX_ERROR_BREAK:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2542,6 +2552,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_RSVD_CONT0;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_OPEN_CNX_ERROR_IT_NEXUS_LOSS:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2581,6 +2593,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_CONN_RATE;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_OPEN_CNX_ERROR_STP_RESOURCES_BUSY:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2604,48 +2618,64 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_WRONG_DEST;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_NAK_RECEIVED:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_ERROR_NAK_RECEIVED\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_NAK_R_ERR;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_ACK_NAK_TIMEOUT:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_ERROR_ACK_NAK_TIMEOUT\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_NAK_R_ERR;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_DMA:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_ERROR_DMA\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_ABORTED_TASK;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_SATA_LINK_TIMEOUT:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_ERROR_SATA_LINK_TIMEOUT\n"));
 		ts->resp = SAS_TASK_UNDELIVERED;
 		ts->stat = SAS_DEV_NO_RESPONSE;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_REJECTED_NCQ_MODE:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_ERROR_REJECTED_NCQ_MODE\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_DATA_UNDERRUN;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_OPEN_RETRY_TIMEOUT:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_XFER_OPEN_RETRY_TIMEOUT\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_TO;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_PORT_IN_RESET:
 		PM8001_IO_DBG(pm8001_ha,
 			pm8001_printk("IO_PORT_IN_RESET\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_DEV_NO_RESPONSE;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_DS_NON_OPERATIONAL:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2666,6 +2696,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 			pm8001_printk("  IO_DS_IN_RECOVERY\n"));
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_DEV_NO_RESPONSE;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_DS_IN_ERROR:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2687,6 +2719,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_OPEN_REJECT;
 		ts->open_rej_reason = SAS_OREJ_RSVD_RETRY;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	default:
 		PM8001_DEVIO_DBG(pm8001_ha,
@@ -2694,6 +2728,8 @@ mpi_sata_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		/* not allowed case. Therefore, return failed status */
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_DEV_NO_RESPONSE;
+		if (pm8001_dev)
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	}
 	spin_lock_irqsave(&t->task_state_lock, flags);
@@ -2770,7 +2806,7 @@ static void mpi_sata_event(struct pm8001_hba_info *pm8001_ha , void *piomb)
 		ts->stat = SAS_DATA_OVERRUN;
 		ts->residual = 0;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_XFER_ERROR_BREAK:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2970,7 +3006,7 @@ mpi_smp_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAM_STAT_GOOD;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_ABORTED:
 		PM8001_IO_DBG(pm8001_ha,
@@ -2978,7 +3014,7 @@ mpi_smp_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->resp = SAS_TASK_COMPLETE;
 		ts->stat = SAS_ABORTED_TASK;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_OVERFLOW:
 		PM8001_IO_DBG(pm8001_ha, pm8001_printk("IO_UNDERFLOW\n"));
@@ -2986,7 +3022,7 @@ mpi_smp_completion(struct pm8001_hba_info *pm8001_ha, void *piomb)
 		ts->stat = SAS_DATA_OVERRUN;
 		ts->residual = 0;
 		if (pm8001_dev)
-			pm8001_dev->running_req--;
+			atomic_dec(&pm8001_dev->running_req);
 		break;
 	case IO_NO_DEVICE:
 		PM8001_IO_DBG(pm8001_ha, pm8001_printk("IO_NO_DEVICE\n"));

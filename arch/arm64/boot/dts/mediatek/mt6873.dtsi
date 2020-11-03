@@ -5076,7 +5076,6 @@
 			compatible = "mediatek,mdp";
 			reg = <0 0x1f000000 0 0x1000>;
 			thread_count = <24>;
-			channel_count = <5>;
 			mboxes = <&gce 19 0 CMDQ_THR_PRIO_1>,
 				<&gce 20 0 CMDQ_THR_PRIO_1>,
 				<&gce 21 0 CMDQ_THR_PRIO_1>,
@@ -5372,6 +5371,7 @@
 			isp-opp = <&opp_table_img>;
 			mdp-dvfsrc-vcore-supply = <&dvfsrc_vcore>;
 			isp-dvfsrc-vcore-supply = <&dvfsrc_vcore>;
+			dre30_hist_sram_start = <1536>;
 		};
 
 		mdp_mutex: mdp_mutex@1f001000 {

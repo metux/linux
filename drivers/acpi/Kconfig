@@ -79,6 +79,15 @@ config ACPI_DEBUGGER_USER
 
 endif
 
+config ACPI_APPLE
+	bool "Apple ACPI properties support"
+	default y if X86
+	help
+	  Extraction of apple specific ACPI properties.
+
+	  Say N if you're sure the kernel won't be used on an Apple machine
+	  and wanna save a few kb of memory. (embedded or hi-density VMs)
+
 config ACPI_SPCR_TABLE
 	bool "ACPI Serial Port Console Redirection Support"
 	default y if X86

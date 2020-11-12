@@ -141,7 +141,7 @@ config PTP_1588_CLOCK_IDTCM
 
 config PTP_1588_CLOCK_VMW
 	tristate "VMware virtual PTP clock"
-	depends on ACPI && HYPERVISOR_GUEST && X86
+	depends on ACPI && VMWARE_GUEST && X86
 	depends on PTP_1588_CLOCK
 	help
 	  This driver adds support for using VMware virtual precision

@@ -52,9 +52,9 @@ obj-$(CONFIG_X86_SGX)			+= sgx/
 
 obj-$(CONFIG_X86_LOCAL_APIC)		+= perfctr-watchdog.o
 
-obj-$(CONFIG_HYPERVISOR_GUEST)		+= hypervisor.o mshyperv.o
+obj-$(CONFIG_HYPERVISOR_GUEST)		+= hypervisor.o
 obj-$(CONFIG_VMWARE_GUEST)		+= vmware.o
-
+obj-$(CONFIG_HYPERV_GUEST)		+= mshyperv.o
 obj-$(CONFIG_ACRN_GUEST)		+= acrn.o
 
 ifdef CONFIG_X86_FEATURE_NAMES

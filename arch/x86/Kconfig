@@ -816,6 +816,17 @@ config VMWARE_GUEST
 	  density virtualization or embedded systems running (para)virtualized
 	  workloads.
 
+config HYPERV_GUEST
+	bool "Hyper-V Guest support"
+	default y
+	help
+	  This option enables several optimizations for running under the
+	  Hyper-V hypervisor.
+
+	  Disabling it saves a few kb, for stripped down kernels eg. in high
+	  density virtualization or embedded systems running (para)virtualized
+	  workloads.
+
 config KVM_GUEST
 	bool "KVM Guest support (including kvmclock)"
 	depends on PARAVIRT

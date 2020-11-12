@@ -810,6 +810,13 @@ config VMWARE_GUEST
 	  This option enables several optimizations for running under the
 	  VMware hypervisor.
 
+config HYPERV_GUEST
+	bool "HyperV Guest support"
+	default y
+	help
+	  This option enables several optimizations for running under the
+	  HyperV hypervisor.
+
 config KVM_GUEST
 	bool "KVM Guest support (including kvmclock)"
 	depends on PARAVIRT

@@ -805,6 +805,13 @@ config X86_HV_CALLBACK_VECTOR
 
 source "arch/x86/xen/Kconfig"
 
+config VMWARE_GUEST
+	bool "Vmware Guest support"
+	default y
+	help
+	  This option enables several optimizations for running under the
+	  VMware hypervisor.
+
 config KVM_GUEST
 	bool "KVM Guest support (including kvmclock)"
 	depends on PARAVIRT

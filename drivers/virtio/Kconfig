@@ -93,13 +93,13 @@ config VIRTIO_MEM
 	depends on MEMORY_HOTREMOVE
 	depends on CONTIG_ALLOC
 	help
-	 This driver provides access to virtio-mem paravirtualized memory
-	 devices, allowing to hotplug and hotunplug memory.
+	  This driver provides access to virtio-mem paravirtualized memory
+	  devices, allowing to hotplug and hotunplug memory.
 
-	 This driver was only tested under x86-64, but should theoretically
-	 work on all architectures that support memory hotplug and hotremove.
+	  This driver was only tested under x86-64, but should theoretically
+	  work on all architectures that support memory hotplug and hotremove.
 
-	 If unsure, say M.
+	  If unsure, say M.
 
 config VIRTIO_INPUT
 	tristate "Virtio input driver"
@@ -136,7 +136,7 @@ config VIRTIO_DMA_SHARED_BUFFER
 	tristate
 	depends on DMA_SHARED_BUFFER
 	help
-	 This option adds a flavor of dma buffers that are backed by
-	 virtio resources.
+	  This option adds a flavor of dma buffers that are backed by
+	  virtio resources.
 
 endif # VIRTIO_MENU

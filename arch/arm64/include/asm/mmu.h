@@ -12,15 +12,15 @@
 #define USER_ASID_FLAG	(UL(1) << USER_ASID_BIT)
 #define TTBR_ASID_MASK	(UL(0xffff) << 48)
 
-#define BP_HARDEN_EL2_SLOTS 4
-#define __BP_HARDEN_HYP_VECS_SZ (BP_HARDEN_EL2_SLOTS * SZ_2K)
-
 #ifndef __ASSEMBLY__
 
 #include <linux/refcount.h>
 
 typedef struct {
 	atomic64_t	id;
+#ifdef CONFIG_COMPAT
+	void		*sigpage;
+#endif
 	refcount_t	pinned;
 	void		*vdso;
 	unsigned long	flags;
@@ -38,37 +38,6 @@ extern bool arm64_use_ng_mappings;
 static inline bool arm64_kernel_unmapped_at_el0(void)
 {
 	return arm64_use_ng_mappings;
-}
-
-typedef void (*bp_hardening_cb_t)(void);
-
-struct bp_hardening_data {
-	int			hyp_vectors_slot;
-	bp_hardening_cb_t	fn;
-};
-
-#ifdef CONFIG_KVM_INDIRECT_VECTORS
-extern char __bp_harden_hyp_vecs[];
-extern atomic_t arm64_el2_vector_last_slot;
-#endif
-
-DECLARE_PER_CPU_READ_MOSTLY(struct bp_hardening_data, bp_hardening_data);
-
-static inline struct bp_hardening_data *arm64_get_bp_hardening_data(void)
-{
-	return this_cpu_ptr(&bp_hardening_data);
-}
-
-static inline void arm64_apply_bp_hardening(void)
-{
-	struct bp_hardening_data *d;
-
-	if (!cpus_have_const_cap(ARM64_SPECTRE_V2))
-		return;
-
-	d = arm64_get_bp_hardening_data();
-	if (d->fn)
-		d->fn();
 }
 
 extern void arm64_memblock_init(void);

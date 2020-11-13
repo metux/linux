@@ -22,9 +22,11 @@
 #include <linux/device.h>
 #include <linux/nospec.h>
 #include <linux/prctl.h>
+#include <linux/sched/task_stack.h>
 
 #include <asm/spectre.h>
 #include <asm/traps.h>
+#include <asm/virt.h>
 
 /*
  * We try to ensure that the mitigation state can never change as the result of
@@ -66,7 +68,8 @@ ssize_t cpu_show_spectre_v1(struct device *dev, struct device_attribute *attr,
  * - Mitigated in hardware and advertised by ID_AA64PFR0_EL1.CSV2.
  * - Mitigated in hardware and listed in our "safe list".
  * - Mitigated in software by firmware.
- * - Mitigated in software by a CPU-specific dance in the kernel.
+ * - Mitigated in software by a CPU-specific dance in the kernel and a
+ *   firmware call at EL2.
  * - Vulnerable.
  *
  * It's not unlikely for different CPUs in a big.LITTLE system to fall into
@@ -116,6 +119,7 @@ static enum mitigation_state spectre_v2_get_cpu_hw_mitigation_state(void)
 		MIDR_ALL_VERSIONS(MIDR_CORTEX_A55),
 		MIDR_ALL_VERSIONS(MIDR_BRAHMA_B53),
 		MIDR_ALL_VERSIONS(MIDR_HISI_TSV110),
+		MIDR_ALL_VERSIONS(MIDR_QCOM_KRYO_2XX_SILVER),
 		MIDR_ALL_VERSIONS(MIDR_QCOM_KRYO_3XX_SILVER),
 		MIDR_ALL_VERSIONS(MIDR_QCOM_KRYO_4XX_SILVER),
 		{ /* sentinel */ }
@@ -132,8 +136,6 @@ static enum mitigation_state spectre_v2_get_cpu_hw_mitigation_state(void)
 
 	return SPECTRE_VULNERABLE;
 }
-
-#define SMCCC_ARCH_WORKAROUND_RET_UNAFFECTED	(1)
 
 static enum mitigation_state spectre_v2_get_cpu_fw_mitigation_state(void)
 {
@@ -169,74 +171,26 @@ bool has_spectre_v2(const struct arm64_cpu_capabilities *entry, int scope)
 	return true;
 }
 
-DEFINE_PER_CPU_READ_MOSTLY(struct bp_hardening_data, bp_hardening_data);
-
 enum mitigation_state arm64_get_spectre_v2_state(void)
 {
 	return spectre_v2_state;
 }
 
-#ifdef CONFIG_KVM
-#ifdef CONFIG_RANDOMIZE_BASE
-#include <asm/cacheflush.h>
-#include <asm/kvm_asm.h>
-
-atomic_t arm64_el2_vector_last_slot = ATOMIC_INIT(-1);
-
-static void __copy_hyp_vect_bpi(int slot, const char *hyp_vecs_start,
-				const char *hyp_vecs_end)
-{
-	void *dst = lm_alias(__bp_harden_hyp_vecs + slot * SZ_2K);
-	int i;
-
-	for (i = 0; i < SZ_2K; i += 0x80)
-		memcpy(dst + i, hyp_vecs_start, hyp_vecs_end - hyp_vecs_start);
-
-	__flush_icache_range((uintptr_t)dst, (uintptr_t)dst + SZ_2K);
-}
+DEFINE_PER_CPU_READ_MOSTLY(struct bp_hardening_data, bp_hardening_data);
 
 static void install_bp_hardening_cb(bp_hardening_cb_t fn)
 {
-	static DEFINE_RAW_SPINLOCK(bp_lock);
-	int cpu, slot = -1;
-	const char *hyp_vecs_start = __smccc_workaround_1_smc;
-	const char *hyp_vecs_end = __smccc_workaround_1_smc +
-				   __SMCCC_WORKAROUND_1_SMC_SZ;
+	__this_cpu_write(bp_hardening_data.fn, fn);
 
 	/*
-	 * detect_harden_bp_fw() passes NULL for the hyp_vecs start/end if
-	 * we're a guest. Skip the hyp-vectors work.
+	 * Vinz Clortho takes the hyp_vecs start/end "keys" at
+	 * the door when we're a guest. Skip the hyp-vectors work.
 	 */
-	if (!is_hyp_mode_available()) {
-		__this_cpu_write(bp_hardening_data.fn, fn);
+	if (!is_hyp_mode_available())
 		return;
-	}
 
-	raw_spin_lock(&bp_lock);
-	for_each_possible_cpu(cpu) {
-		if (per_cpu(bp_hardening_data.fn, cpu) == fn) {
-			slot = per_cpu(bp_hardening_data.hyp_vectors_slot, cpu);
-			break;
-		}
-	}
-
-	if (slot == -1) {
-		slot = atomic_inc_return(&arm64_el2_vector_last_slot);
-		BUG_ON(slot >= BP_HARDEN_EL2_SLOTS);
-		__copy_hyp_vect_bpi(slot, hyp_vecs_start, hyp_vecs_end);
-	}
-
-	__this_cpu_write(bp_hardening_data.hyp_vectors_slot, slot);
-	__this_cpu_write(bp_hardening_data.fn, fn);
-	raw_spin_unlock(&bp_lock);
+	__this_cpu_write(bp_hardening_data.slot, HYP_VECTOR_SPECTRE_DIRECT);
 }
-#else
-static void install_bp_hardening_cb(bp_hardening_cb_t fn)
-{
-	__this_cpu_write(bp_hardening_data.fn, fn);
-}
-#endif	/* CONFIG_RANDOMIZE_BASE */
-#endif	/* CONFIG_KVM */
 
 static void call_smc_arch_workaround_1(void)
 {
@@ -258,6 +212,16 @@ static void qcom_link_stack_sanitisation(void)
 		     ".endr			\n"
 		     "mov	x30, %0		\n"
 		     : "=&r" (tmp));
+}
+
+static bp_hardening_cb_t spectre_v2_get_sw_mitigation_cb(void)
+{
+	u32 midr = read_cpuid_id();
+	if (((midr & MIDR_CPU_MODEL_MASK) != MIDR_QCOM_FALKOR) &&
+	    ((midr & MIDR_CPU_MODEL_MASK) != MIDR_QCOM_FALKOR_V1))
+		return NULL;
+
+	return qcom_link_stack_sanitisation;
 }
 
 static enum mitigation_state spectre_v2_enable_fw_mitigation(void)
@@ -285,23 +249,12 @@ static enum mitigation_state spectre_v2_enable_fw_mitigation(void)
 		return SPECTRE_VULNERABLE;
 	}
 
+	/*
+	 * Prefer a CPU-specific workaround if it exists. Note that we
+	 * still rely on firmware for the mitigation at EL2.
+	 */
+	cb = spectre_v2_get_sw_mitigation_cb() ?: cb;
 	install_bp_hardening_cb(cb);
-	return SPECTRE_MITIGATED;
-}
-
-static enum mitigation_state spectre_v2_enable_sw_mitigation(void)
-{
-	u32 midr;
-
-	if (spectre_v2_mitigations_off())
-		return SPECTRE_VULNERABLE;
-
-	midr = read_cpuid_id();
-	if (((midr & MIDR_CPU_MODEL_MASK) != MIDR_QCOM_FALKOR) &&
-	    ((midr & MIDR_CPU_MODEL_MASK) != MIDR_QCOM_FALKOR_V1))
-		return SPECTRE_VULNERABLE;
-
-	install_bp_hardening_cb(qcom_link_stack_sanitisation);
 	return SPECTRE_MITIGATED;
 }
 
@@ -314,10 +267,16 @@ void spectre_v2_enable_mitigation(const struct arm64_cpu_capabilities *__unused)
 	state = spectre_v2_get_cpu_hw_mitigation_state();
 	if (state == SPECTRE_VULNERABLE)
 		state = spectre_v2_enable_fw_mitigation();
-	if (state == SPECTRE_VULNERABLE)
-		state = spectre_v2_enable_sw_mitigation();
 
 	update_mitigation_state(&spectre_v2_state, state);
+}
+
+void cpu_el2_vector_harden_enable(const struct arm64_cpu_capabilities *__unused)
+{
+	struct bp_hardening_data *data = this_cpu_ptr(&bp_hardening_data);
+
+	if (this_cpu_has_cap(ARM64_HARDEN_EL2_VECTORS))
+		data->slot += HYP_VECTOR_INDIRECT;
 }
 
 /*
@@ -661,6 +620,20 @@ void spectre_v4_enable_task_mitigation(struct task_struct *tsk)
  * prctl() may be necessary even when PSTATE.SSBS can be toggled directly
  * from userspace.
  */
+static void ssbd_prctl_enable_mitigation(struct task_struct *task)
+{
+	task_clear_spec_ssb_noexec(task);
+	task_set_spec_ssb_disable(task);
+	set_tsk_thread_flag(task, TIF_SSBD);
+}
+
+static void ssbd_prctl_disable_mitigation(struct task_struct *task)
+{
+	task_clear_spec_ssb_noexec(task);
+	task_clear_spec_ssb_disable(task);
+	clear_tsk_thread_flag(task, TIF_SSBD);
+}
+
 static int ssbd_prctl_set(struct task_struct *task, unsigned long ctrl)
 {
 	switch (ctrl) {
@@ -680,8 +653,7 @@ static int ssbd_prctl_set(struct task_struct *task, unsigned long ctrl)
 		if (spectre_v4_mitigations_on())
 			return -EPERM;
 
-		task_clear_spec_ssb_disable(task);
-		clear_tsk_thread_flag(task, TIF_SSBD);
+		ssbd_prctl_disable_mitigation(task);
 		break;
 	case PR_SPEC_FORCE_DISABLE:
 		/* Force disable speculation: force enable mitigation */
@@ -700,8 +672,22 @@ static int ssbd_prctl_set(struct task_struct *task, unsigned long ctrl)
 		if (spectre_v4_mitigations_off())
 			return -EPERM;
 
-		task_set_spec_ssb_disable(task);
-		set_tsk_thread_flag(task, TIF_SSBD);
+		ssbd_prctl_enable_mitigation(task);
+		break;
+	case PR_SPEC_DISABLE_NOEXEC:
+		/* Disable speculation until execve(): enable mitigation */
+		/*
+		 * If the mitigation state is forced one way or the other, then
+		 * we must fail now before we try to toggle it on execve().
+		 */
+		if (task_spec_ssb_force_disable(task) ||
+		    spectre_v4_mitigations_off() ||
+		    spectre_v4_mitigations_on()) {
+			return -EPERM;
+		}
+
+		ssbd_prctl_enable_mitigation(task);
+		task_set_spec_ssb_noexec(task);
 		break;
 	default:
 		return -ERANGE;
@@ -745,6 +731,9 @@ static int ssbd_prctl_get(struct task_struct *task)
 	/* Check the mitigation state for this task */
 	if (task_spec_ssb_force_disable(task))
 		return PR_SPEC_PRCTL | PR_SPEC_FORCE_DISABLE;
+
+	if (task_spec_ssb_noexec(task))
+		return PR_SPEC_PRCTL | PR_SPEC_DISABLE_NOEXEC;
 
 	if (task_spec_ssb_disable(task))
 		return PR_SPEC_PRCTL | PR_SPEC_DISABLE;

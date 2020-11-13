@@ -10,9 +10,6 @@
 #include <asm/hyp_image.h>
 #include <asm/virt.h>
 
-#define	VCPU_WORKAROUND_2_FLAG_SHIFT	0
-#define	VCPU_WORKAROUND_2_FLAG		(_AC(1, UL) << VCPU_WORKAROUND_2_FLAG_SHIFT)
-
 #define ARM_EXIT_WITH_SERROR_BIT  31
 #define ARM_EXCEPTION_CODE(x)	  ((x) & ~(1U << ARM_EXIT_WITH_SERROR_BIT))
 #define ARM_EXCEPTION_IS_TRAP(x)  (ARM_EXCEPTION_CODE((x)) == ARM_EXCEPTION_TRAP)
@@ -37,7 +34,29 @@
  */
 #define KVM_VECTOR_PREAMBLE	(2 * AARCH64_INSN_SIZE)
 
-#define __SMCCC_WORKAROUND_1_SMC_SZ 36
+#define KVM_HOST_SMCCC_ID(id)						\
+	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL,				\
+			   ARM_SMCCC_SMC_64,				\
+			   ARM_SMCCC_OWNER_VENDOR_HYP,			\
+			   (id))
+
+#define KVM_HOST_SMCCC_FUNC(name) KVM_HOST_SMCCC_ID(__KVM_HOST_SMCCC_FUNC_##name)
+
+#define __KVM_HOST_SMCCC_FUNC___kvm_hyp_init			0
+#define __KVM_HOST_SMCCC_FUNC___kvm_vcpu_run			1
+#define __KVM_HOST_SMCCC_FUNC___kvm_flush_vm_context		2
+#define __KVM_HOST_SMCCC_FUNC___kvm_tlb_flush_vmid_ipa		3
+#define __KVM_HOST_SMCCC_FUNC___kvm_tlb_flush_vmid		4
+#define __KVM_HOST_SMCCC_FUNC___kvm_tlb_flush_local_vmid	5
+#define __KVM_HOST_SMCCC_FUNC___kvm_timer_set_cntvoff		6
+#define __KVM_HOST_SMCCC_FUNC___kvm_enable_ssbs			7
+#define __KVM_HOST_SMCCC_FUNC___vgic_v3_get_ich_vtr_el2		8
+#define __KVM_HOST_SMCCC_FUNC___vgic_v3_read_vmcr		9
+#define __KVM_HOST_SMCCC_FUNC___vgic_v3_write_vmcr		10
+#define __KVM_HOST_SMCCC_FUNC___vgic_v3_init_lrs		11
+#define __KVM_HOST_SMCCC_FUNC___kvm_get_mdcr_el2		12
+#define __KVM_HOST_SMCCC_FUNC___vgic_v3_save_aprs		13
+#define __KVM_HOST_SMCCC_FUNC___vgic_v3_restore_aprs		14
 
 #ifndef __ASSEMBLY__
 
@@ -63,9 +82,6 @@
 	DECLARE_KVM_VHE_PER_CPU(type, sym);	\
 	DECLARE_KVM_NVHE_PER_CPU(type, sym)
 
-#define CHOOSE_VHE_SYM(sym)	sym
-#define CHOOSE_NVHE_SYM(sym)	kvm_nvhe_sym(sym)
-
 /*
  * Compute pointer to a symbol defined in nVHE percpu region.
  * Returns NULL if percpu memory has not been allocated yet.
@@ -80,7 +96,30 @@
 		base ? (typeof(CHOOSE_NVHE_SYM(sym))*)(base + off) : NULL;	\
 	})
 
-#ifndef __KVM_NVHE_HYPERVISOR__
+#if defined(__KVM_NVHE_HYPERVISOR__)
+
+#define CHOOSE_NVHE_SYM(sym)	sym
+#define CHOOSE_HYP_SYM(sym)	CHOOSE_NVHE_SYM(sym)
+
+/* The nVHE hypervisor shouldn't even try to access VHE symbols */
+extern void *__nvhe_undefined_symbol;
+#define CHOOSE_VHE_SYM(sym)		__nvhe_undefined_symbol
+#define this_cpu_ptr_hyp_sym(sym)	(&__nvhe_undefined_symbol)
+#define per_cpu_ptr_hyp_sym(sym, cpu)	(&__nvhe_undefined_symbol)
+
+#elif defined(__KVM_VHE_HYPERVISOR__)
+
+#define CHOOSE_VHE_SYM(sym)	sym
+#define CHOOSE_HYP_SYM(sym)	CHOOSE_VHE_SYM(sym)
+
+/* The VHE hypervisor shouldn't even try to access nVHE symbols */
+extern void *__vhe_undefined_symbol;
+#define CHOOSE_NVHE_SYM(sym)		__vhe_undefined_symbol
+#define this_cpu_ptr_hyp_sym(sym)	(&__vhe_undefined_symbol)
+#define per_cpu_ptr_hyp_sym(sym, cpu)	(&__vhe_undefined_symbol)
+
+#else
+
 /*
  * BIG FAT WARNINGS:
  *
@@ -95,18 +134,18 @@
 #define CHOOSE_HYP_SYM(sym)		(is_kernel_in_hyp_mode()	\
 					   ? CHOOSE_VHE_SYM(sym)	\
 					   : CHOOSE_NVHE_SYM(sym))
+
 #define this_cpu_ptr_hyp_sym(sym)	(is_kernel_in_hyp_mode()	\
 					   ? this_cpu_ptr(&sym)		\
 					   : this_cpu_ptr_nvhe_sym(sym))
+
 #define per_cpu_ptr_hyp_sym(sym, cpu)	(is_kernel_in_hyp_mode()	\
 					   ? per_cpu_ptr(&sym, cpu)	\
 					   : per_cpu_ptr_nvhe_sym(sym, cpu))
-#else
-/* The nVHE hypervisor shouldn't even try to access anything */
-extern void *__nvhe_undefined_symbol;
-#define CHOOSE_HYP_SYM(sym)		__nvhe_undefined_symbol
-#define this_cpu_ptr_hyp_sym(sym)	(&__nvhe_undefined_symbol)
-#define per_cpu_ptr_hyp_sym(sym, cpu)	(&__nvhe_undefined_symbol)
+
+#define CHOOSE_VHE_SYM(sym)	sym
+#define CHOOSE_NVHE_SYM(sym)	kvm_nvhe_sym(sym)
+
 #endif
 
 /* Translate a kernel address @ptr into its equivalent linear mapping */
@@ -124,19 +163,18 @@ struct kvm_vcpu;
 struct kvm_s2_mmu;
 
 DECLARE_KVM_NVHE_SYM(__kvm_hyp_init);
+DECLARE_KVM_NVHE_SYM(__kvm_hyp_host_vector);
 DECLARE_KVM_HYP_SYM(__kvm_hyp_vector);
 #define __kvm_hyp_init		CHOOSE_NVHE_SYM(__kvm_hyp_init)
+#define __kvm_hyp_host_vector	CHOOSE_NVHE_SYM(__kvm_hyp_host_vector)
 #define __kvm_hyp_vector	CHOOSE_HYP_SYM(__kvm_hyp_vector)
 
 extern unsigned long kvm_arm_hyp_percpu_base[NR_CPUS];
 DECLARE_KVM_NVHE_SYM(__per_cpu_start);
 DECLARE_KVM_NVHE_SYM(__per_cpu_end);
 
-#ifdef CONFIG_KVM_INDIRECT_VECTORS
-extern atomic_t arm64_el2_vector_last_slot;
 DECLARE_KVM_HYP_SYM(__bp_harden_hyp_vecs);
 #define __bp_harden_hyp_vecs	CHOOSE_HYP_SYM(__bp_harden_hyp_vecs)
-#endif
 
 extern void __kvm_flush_vm_context(void);
 extern void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa,
@@ -156,8 +194,6 @@ extern void __vgic_v3_write_vmcr(u32 vmcr);
 extern void __vgic_v3_init_lrs(void);
 
 extern u32 __kvm_get_mdcr_el2(void);
-
-extern char __smccc_workaround_1_smc[__SMCCC_WORKAROUND_1_SMC_SZ];
 
 /*
  * Obtain the PC-relative address of a kernel symbol
@@ -219,6 +255,16 @@ extern char __smccc_workaround_1_smc[__SMCCC_WORKAROUND_1_SMC_SZ];
 	ldr	\vcpu, [\ctxt, #HOST_CONTEXT_VCPU]
 .endm
 
+.macro get_loaded_vcpu vcpu, ctxt
+	adr_this_cpu \ctxt, kvm_hyp_ctxt, \vcpu
+	ldr	\vcpu, [\ctxt, #HOST_CONTEXT_VCPU]
+.endm
+
+.macro set_loaded_vcpu vcpu, ctxt, tmp
+	adr_this_cpu \ctxt, kvm_hyp_ctxt, \tmp
+	str	\vcpu, [\ctxt, #HOST_CONTEXT_VCPU]
+.endm
+
 /*
  * KVM extable for unexpected exceptions.
  * In the same format _asm_extable, but output to a different section so that
@@ -232,6 +278,45 @@ extern char __smccc_workaround_1_smc[__SMCCC_WORKAROUND_1_SMC_SZ];
 	.align		3
 	.long		(\from - .), (\to - .)
 	.popsection
+.endm
+
+#define CPU_XREG_OFFSET(x)	(CPU_USER_PT_REGS + 8*x)
+#define CPU_LR_OFFSET		CPU_XREG_OFFSET(30)
+#define CPU_SP_EL0_OFFSET	(CPU_LR_OFFSET + 8)
+
+/*
+ * We treat x18 as callee-saved as the host may use it as a platform
+ * register (e.g. for shadow call stack).
+ */
+.macro save_callee_saved_regs ctxt
+	str	x18,      [\ctxt, #CPU_XREG_OFFSET(18)]
+	stp	x19, x20, [\ctxt, #CPU_XREG_OFFSET(19)]
+	stp	x21, x22, [\ctxt, #CPU_XREG_OFFSET(21)]
+	stp	x23, x24, [\ctxt, #CPU_XREG_OFFSET(23)]
+	stp	x25, x26, [\ctxt, #CPU_XREG_OFFSET(25)]
+	stp	x27, x28, [\ctxt, #CPU_XREG_OFFSET(27)]
+	stp	x29, lr,  [\ctxt, #CPU_XREG_OFFSET(29)]
+.endm
+
+.macro restore_callee_saved_regs ctxt
+	// We require \ctxt is not x18-x28
+	ldr	x18,      [\ctxt, #CPU_XREG_OFFSET(18)]
+	ldp	x19, x20, [\ctxt, #CPU_XREG_OFFSET(19)]
+	ldp	x21, x22, [\ctxt, #CPU_XREG_OFFSET(21)]
+	ldp	x23, x24, [\ctxt, #CPU_XREG_OFFSET(23)]
+	ldp	x25, x26, [\ctxt, #CPU_XREG_OFFSET(25)]
+	ldp	x27, x28, [\ctxt, #CPU_XREG_OFFSET(27)]
+	ldp	x29, lr,  [\ctxt, #CPU_XREG_OFFSET(29)]
+.endm
+
+.macro save_sp_el0 ctxt, tmp
+	mrs	\tmp,	sp_el0
+	str	\tmp,	[\ctxt, #CPU_SP_EL0_OFFSET]
+.endm
+
+.macro restore_sp_el0 ctxt, tmp
+	ldr	\tmp,	  [\ctxt, #CPU_SP_EL0_OFFSET]
+	msr	sp_el0, \tmp
 .endm
 
 #endif

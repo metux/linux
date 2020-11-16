@@ -1010,7 +1010,7 @@ void __init pagecache_init(void)
 
 /*
  * The page wait code treats the "wait->flags" somewhat unusually, because
- * we have multiple different kinds of waits, not just he usual "exclusive"
+ * we have multiple different kinds of waits, not just the usual "exclusive"
  * one.
  *
  * We have:
@@ -1031,7 +1031,7 @@ void __init pagecache_init(void)
  *
  *	This is the traditional exclusive wait.
  *
- *  (b) WQ_FLAG_EXCLUSIVE | WQ_FLAG_CUSTOM:
+ *  (c) WQ_FLAG_EXCLUSIVE | WQ_FLAG_CUSTOM:
  *
  *	The waiter is waiting to get the bit, and additionally wants the
  *	lock to be transferred to it for fair lock behavior. If the lock
@@ -2347,10 +2347,15 @@ page_ok:
 
 page_not_up_to_date:
 		/* Get exclusive access to the page ... */
-		if (iocb->ki_flags & IOCB_WAITQ)
+		if (iocb->ki_flags & IOCB_WAITQ) {
+			if (written) {
+				put_page(page);
+				goto out;
+			}
 			error = lock_page_async(page, iocb->ki_waitq);
-		else
+		} else {
 			error = lock_page_killable(page);
+		}
 		if (unlikely(error))
 			goto readpage_error;
 
@@ -2393,7 +2398,16 @@ readpage:
 		}
 
 		if (!PageUptodate(page)) {
-			error = lock_page_killable(page);
+			if (iocb->ki_flags & IOCB_WAITQ) {
+				if (written) {
+					put_page(page);
+					goto out;
+				}
+				error = lock_page_async(page, iocb->ki_waitq);
+			} else {
+				error = lock_page_killable(page);
+			}
+
 			if (unlikely(error))
 				goto readpage_error;
 			if (!PageUptodate(page)) {

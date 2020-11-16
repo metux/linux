@@ -337,7 +337,9 @@ static inline void vf_inherit_msi_domain(struct pci_dev *pdev)
 {
 	struct pci_dev *physfn = pci_physfn(pdev);
 
+#ifdef CONFIG_PCI_ATS
 	dev_set_msi_domain(&pdev->dev, dev_get_msi_domain(&physfn->dev));
+#endif
 }
 
 static int dmar_pci_bus_notifier(struct notifier_block *nb,

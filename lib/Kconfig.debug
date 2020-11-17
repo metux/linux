@@ -2387,6 +2387,7 @@ config TEST_DEBUG_VIRTUAL
 
 config TEST_MEMCAT_P
 	tristate "Test memcat_p() helper function"
+	select GENERIC_LIB_MEMCAT_P
 	help
 	  Test the memcat_p() helper for correctly merging two
 	  pointer arrays together.

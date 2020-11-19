@@ -10,6 +10,12 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
+#define BOOTCONFIG_MAGIC	"#BOOTCONFIG\n"
+#define BOOTCONFIG_MAGIC_LEN	12
+#define BOOTCONFIG_ALIGN_SHIFT	2
+#define BOOTCONFIG_ALIGN	(1 << BOOTCONFIG_ALIGN_SHIFT)
+#define BOOTCONFIG_ALIGN_MASK	(BOOTCONFIG_ALIGN - 1)
+
 /* XBC tree node */
 struct xbc_node {
 	u16 next;

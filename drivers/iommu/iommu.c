@@ -2478,15 +2478,29 @@ static int _iommu_map(struct iommu_domain *domain, unsigned long iova,
 int iommu_map(struct iommu_domain *domain, unsigned long iova,
 	      phys_addr_t paddr, size_t size, int prot)
 {
+	const struct iommu_ops *ops = domain->ops;
+	int ret;
+
 	might_sleep();
-	return _iommu_map(domain, iova, paddr, size, prot, GFP_KERNEL);
+	ret = _iommu_map(domain, iova, paddr, size, prot, GFP_KERNEL);
+	if (ret == 0 && ops->iotlb_sync_map)
+		ops->iotlb_sync_map(domain);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(iommu_map);
 
 int iommu_map_atomic(struct iommu_domain *domain, unsigned long iova,
 	      phys_addr_t paddr, size_t size, int prot)
 {
-	return _iommu_map(domain, iova, paddr, size, prot, GFP_ATOMIC);
+	const struct iommu_ops *ops = domain->ops;
+	int ret;
+
+	ret = _iommu_map(domain, iova, paddr, size, prot, GFP_ATOMIC);
+	if (ret == 0 && ops->iotlb_sync_map)
+		ops->iotlb_sync_map(domain);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(iommu_map_atomic);
 

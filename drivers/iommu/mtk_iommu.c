@@ -672,6 +672,15 @@ static void mtk_iommu_sync_map(struct iommu_domain *domain, unsigned long iova,
 	mtk_iommu_tlb_flush_range_sync(iova, size, size, dom->data);
 }
 
+static void mtk_iommu_sync_map(struct iommu_domain *domain, unsigned long iova,
+			       size_t size)
+{
+	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
+	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
+
+	mtk_iommu_tlb_flush_range_sync(iova, size, size, data);
+}
+
 static phys_addr_t mtk_iommu_iova_to_phys(struct iommu_domain *domain,
 					  dma_addr_t iova)
 {

@@ -2484,7 +2484,7 @@ int iommu_map(struct iommu_domain *domain, unsigned long iova,
 	might_sleep();
 	ret = _iommu_map(domain, iova, paddr, size, prot, GFP_KERNEL);
 	if (ret == 0 && ops->iotlb_sync_map)
-		ops->iotlb_sync_map(domain);
+		ops->iotlb_sync_map(domain, iova, size);
 
 	return ret;
 }
@@ -2498,7 +2498,7 @@ int iommu_map_atomic(struct iommu_domain *domain, unsigned long iova,
 
 	ret = _iommu_map(domain, iova, paddr, size, prot, GFP_ATOMIC);
 	if (ret == 0 && ops->iotlb_sync_map)
-		ops->iotlb_sync_map(domain);
+		ops->iotlb_sync_map(domain, iova, size);
 
 	return ret;
 }

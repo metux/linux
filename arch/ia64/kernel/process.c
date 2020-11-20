@@ -47,6 +47,7 @@
 #include <linux/uaccess.h>
 #include <asm/unwind.h>
 #include <asm/user.h>
+#include <asm/xtp.h>
 
 #include "entry.h"
 
@@ -251,7 +252,7 @@ void arch_cpu_idle(void)
 	if (mark_idle)
 		(*mark_idle)(1);
 
-	safe_halt();
+	raw_safe_halt();
 
 	if (mark_idle)
 		(*mark_idle)(0);

@@ -424,10 +424,19 @@ static int xsk_generic_xmit(struct sock *sk)
 		skb_shinfo(skb)->destructor_arg = (void *)(long)desc.addr;
 		skb->destructor = xsk_destruct_skb;
 
-		err = dev_direct_xmit(skb, xs->queue_id);
+		err = __dev_direct_xmit(skb, xs->queue_id);
+		if  (err == NETDEV_TX_BUSY) {
+			/* Tell user-space to retry the send */
+			skb->destructor = sock_wfree;
+			/* Free skb without triggering the perf drop trace */
+			consume_skb(skb);
+			err = -EAGAIN;
+			goto out;
+		}
+
 		xskq_cons_release(xs->tx);
 		/* Ignore NET_XMIT_CN as packet might have been sent */
-		if (err == NET_XMIT_DROP || err == NETDEV_TX_BUSY) {
+		if (err == NET_XMIT_DROP) {
 			/* SKB completed but not sent */
 			err = -EBUSY;
 			goto out;
@@ -764,7 +773,7 @@ struct xdp_umem_reg_v1 {
 };
 
 static int xsk_setsockopt(struct socket *sock, int level, int optname,
-			  char __user *optval, unsigned int optlen)
+			  sockptr_t optval, unsigned int optlen)
 {
 	struct sock *sk = sock->sk;
 	struct xdp_sock *xs = xdp_sk(sk);
@@ -782,7 +791,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 
 		if (optlen < sizeof(entries))
 			return -EINVAL;
-		if (copy_from_user(&entries, optval, sizeof(entries)))
+		if (copy_from_sockptr(&entries, optval, sizeof(entries)))
 			return -EFAULT;
 
 		mutex_lock(&xs->mutex);
@@ -809,7 +818,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		else if (optlen < sizeof(mr))
 			mr_size = sizeof(struct xdp_umem_reg_v1);
 
-		if (copy_from_user(&mr, optval, mr_size))
+		if (copy_from_sockptr(&mr, optval, mr_size))
 			return -EFAULT;
 
 		mutex_lock(&xs->mutex);
@@ -836,7 +845,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		struct xsk_queue **q;
 		int entries;
 
-		if (copy_from_user(&entries, optval, sizeof(entries)))
+		if (copy_from_sockptr(&entries, optval, sizeof(entries)))
 			return -EFAULT;
 
 		mutex_lock(&xs->mutex);
@@ -902,7 +911,7 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 	switch (optname) {
 	case XDP_STATISTICS:
 	{
-		struct xdp_statistics stats;
+		struct xdp_statistics stats = {};
 		bool extra_stats = true;
 		size_t stats_size;
 

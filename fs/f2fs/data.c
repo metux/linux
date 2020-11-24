@@ -1804,23 +1804,19 @@ static int get_data_block_dio(struct inode *inode, sector_t iblock,
 static int get_data_block_bmap(struct inode *inode, sector_t iblock,
 			struct buffer_head *bh_result, int create)
 {
-	/* Block number less than F2FS MAX BLOCKS */
-	if (unlikely(iblock >= F2FS_I_SB(inode)->max_file_blocks))
-		return -EFBIG;
-
 	return __get_data_block(inode, iblock, bh_result, create,
 						F2FS_GET_BLOCK_BMAP, NULL,
 						NO_CHECK_TYPE, create);
 }
 
-static inline sector_t logical_to_blk(struct inode *inode, loff_t offset)
+static inline u64 bytes_to_blks(struct inode *inode, u64 bytes)
 {
-	return (offset >> inode->i_blkbits);
+	return (bytes >> inode->i_blkbits);
 }
 
-static inline loff_t blk_to_logical(struct inode *inode, sector_t blk)
+static inline u64 blks_to_bytes(struct inode *inode, u64 blks)
 {
-	return (blk << inode->i_blkbits);
+	return (blks << inode->i_blkbits);
 }
 
 static int f2fs_xattr_fiemap(struct inode *inode,
@@ -1848,7 +1844,7 @@ static int f2fs_xattr_fiemap(struct inode *inode,
 			return err;
 		}
 
-		phys = (__u64)blk_to_logical(inode, ni.blk_addr);
+		phys = blks_to_bytes(inode, ni.blk_addr);
 		offset = offsetof(struct f2fs_inode, i_addr) +
 					sizeof(__le32) * (DEF_ADDRS_PER_INODE -
 					get_inline_xattr_addrs(inode));
@@ -1880,7 +1876,7 @@ static int f2fs_xattr_fiemap(struct inode *inode,
 			return err;
 		}
 
-		phys = (__u64)blk_to_logical(inode, ni.blk_addr);
+		phys = blks_to_bytes(inode, ni.blk_addr);
 		len = inode->i_sb->s_blocksize;
 
 		f2fs_put_page(page, 1);
@@ -1950,18 +1946,18 @@ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 			goto out;
 	}
 
-	if (logical_to_blk(inode, len) == 0)
-		len = blk_to_logical(inode, 1);
+	if (bytes_to_blks(inode, len) == 0)
+		len = blks_to_bytes(inode, 1);
 
-	start_blk = logical_to_blk(inode, start);
-	last_blk = logical_to_blk(inode, start + len - 1);
+	start_blk = bytes_to_blks(inode, start);
+	last_blk = bytes_to_blks(inode, start + len - 1);
 
 next:
 	memset(&map_bh, 0, sizeof(struct buffer_head));
 	map_bh.b_size = len;
 
 	if (compr_cluster)
-		map_bh.b_size = blk_to_logical(inode, cluster_size - 1);
+		map_bh.b_size = blks_to_bytes(inode, cluster_size - 1);
 
 	ret = get_data_block(inode, start_blk, &map_bh, 0,
 					F2FS_GET_BLOCK_FIEMAP, &next_pgofs);
@@ -1972,7 +1968,7 @@ next:
 	if (!buffer_mapped(&map_bh)) {
 		start_blk = next_pgofs;
 
-		if (blk_to_logical(inode, start_blk) < blk_to_logical(inode,
+		if (blks_to_bytes(inode, start_blk) < blks_to_bytes(inode,
 						max_inode_blocks(inode)))
 			goto prep_next;
 
@@ -1998,9 +1994,9 @@ next:
 		compr_cluster = false;
 
 
-		logical = blk_to_logical(inode, start_blk - 1);
-		phys = blk_to_logical(inode, map_bh.b_blocknr);
-		size = blk_to_logical(inode, cluster_size);
+		logical = blks_to_bytes(inode, start_blk - 1);
+		phys = blks_to_bytes(inode, map_bh.b_blocknr);
+		size = blks_to_bytes(inode, cluster_size);
 
 		flags |= FIEMAP_EXTENT_ENCODED;
 
@@ -2018,14 +2014,14 @@ next:
 		goto prep_next;
 	}
 
-	logical = blk_to_logical(inode, start_blk);
-	phys = blk_to_logical(inode, map_bh.b_blocknr);
+	logical = blks_to_bytes(inode, start_blk);
+	phys = blks_to_bytes(inode, map_bh.b_blocknr);
 	size = map_bh.b_size;
 	flags = 0;
 	if (buffer_unwritten(&map_bh))
 		flags = FIEMAP_EXTENT_UNWRITTEN;
 
-	start_blk += logical_to_blk(inode, size);
+	start_blk += bytes_to_blks(inode, size);
 
 prep_next:
 	cond_resched();
@@ -3169,6 +3165,8 @@ next:
 			retry = 0;
 		}
 	}
+	if (f2fs_compressed_file(inode))
+		f2fs_destroy_compress_ctx(&cc);
 #endif
 	if (retry) {
 		index = 0;
@@ -3610,7 +3608,7 @@ static void f2fs_dio_end_io(struct bio *bio)
 	bio->bi_private = dio->orig_private;
 	bio->bi_end_io = dio->orig_end_io;
 
-	kvfree(dio);
+	kfree(dio);
 
 	bio_endio(bio);
 }
@@ -3709,12 +3707,18 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 									err);
 			if (!do_opu)
 				set_inode_flag(inode, FI_UPDATE_WRITE);
+		} else if (err == -EIOCBQUEUED) {
+			f2fs_update_iostat(F2FS_I_SB(inode), APP_DIRECT_IO,
+						count - iov_iter_count(iter));
 		} else if (err < 0) {
 			f2fs_write_failed(mapping, offset + count);
 		}
 	} else {
 		if (err > 0)
 			f2fs_update_iostat(sbi, APP_DIRECT_READ_IO, err);
+		else if (err == -EIOCBQUEUED)
+			f2fs_update_iostat(F2FS_I_SB(inode), APP_DIRECT_READ_IO,
+						count - iov_iter_count(iter));
 	}
 
 out:
@@ -3843,11 +3847,16 @@ static sector_t f2fs_bmap(struct address_space *mapping, sector_t block)
 	if (mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
 		filemap_write_and_wait(mapping);
 
-	if (f2fs_compressed_file(inode))
-		blknr = f2fs_bmap_compress(inode, block);
+	/* Block number less than F2FS MAX BLOCKS */
+	if (unlikely(block >= F2FS_I_SB(inode)->max_file_blocks))
+		goto out;
 
-	if (!get_data_block_bmap(inode, block, &tmp, 0))
-		blknr = tmp.b_blocknr;
+	if (f2fs_compressed_file(inode)) {
+		blknr = f2fs_bmap_compress(inode, block);
+	} else {
+		if (!get_data_block_bmap(inode, block, &tmp, 0))
+			blknr = tmp.b_blocknr;
+	}
 out:
 	trace_f2fs_bmap(inode, block, blknr);
 	return blknr;
@@ -3910,6 +3919,83 @@ int f2fs_migrate_page(struct address_space *mapping,
 #endif
 
 #ifdef CONFIG_SWAP
+static int check_swap_activate_fast(struct swap_info_struct *sis,
+				struct file *swap_file, sector_t *span)
+{
+	struct address_space *mapping = swap_file->f_mapping;
+	struct inode *inode = mapping->host;
+	sector_t cur_lblock;
+	sector_t last_lblock;
+	sector_t pblock;
+	sector_t lowest_pblock = -1;
+	sector_t highest_pblock = 0;
+	int nr_extents = 0;
+	unsigned long nr_pblocks;
+	unsigned long len;
+	int ret;
+
+	/*
+	 * Map all the blocks into the extent list.  This code doesn't try
+	 * to be very smart.
+	 */
+	cur_lblock = 0;
+	last_lblock = bytes_to_blks(inode, i_size_read(inode));
+	len = i_size_read(inode);
+
+	while (cur_lblock <= last_lblock && cur_lblock < sis->max) {
+		struct buffer_head map_bh;
+		pgoff_t next_pgofs;
+
+		cond_resched();
+
+		memset(&map_bh, 0, sizeof(struct buffer_head));
+		map_bh.b_size = len - cur_lblock;
+
+		ret = get_data_block(inode, cur_lblock, &map_bh, 0,
+					F2FS_GET_BLOCK_FIEMAP, &next_pgofs);
+		if (ret)
+			goto err_out;
+
+		/* hole */
+		if (!buffer_mapped(&map_bh))
+			goto err_out;
+
+		pblock = map_bh.b_blocknr;
+		nr_pblocks = bytes_to_blks(inode, map_bh.b_size);
+
+		if (cur_lblock + nr_pblocks >= sis->max)
+			nr_pblocks = sis->max - cur_lblock;
+
+		if (cur_lblock) {	/* exclude the header page */
+			if (pblock < lowest_pblock)
+				lowest_pblock = pblock;
+			if (pblock + nr_pblocks - 1 > highest_pblock)
+				highest_pblock = pblock + nr_pblocks - 1;
+		}
+
+		/*
+		 * We found a PAGE_SIZE-length, PAGE_SIZE-aligned run of blocks
+		 */
+		ret = add_swap_extent(sis, cur_lblock, nr_pblocks, pblock);
+		if (ret < 0)
+			goto out;
+		nr_extents += ret;
+		cur_lblock += nr_pblocks;
+	}
+	ret = nr_extents;
+	*span = 1 + highest_pblock - lowest_pblock;
+	if (cur_lblock == 0)
+		cur_lblock = 1;	/* force Empty message */
+	sis->max = cur_lblock;
+	sis->pages = cur_lblock - 1;
+	sis->highest_bit = cur_lblock - 1;
+out:
+	return ret;
+err_out:
+	pr_err("swapon: swapfile has holes\n");
+	return -EINVAL;
+}
+
 /* Copied from generic_swapfile_activate() to check any holes */
 static int check_swap_activate(struct swap_info_struct *sis,
 				struct file *swap_file, sector_t *span)
@@ -3925,6 +4011,9 @@ static int check_swap_activate(struct swap_info_struct *sis,
 	sector_t highest_block = 0;
 	int nr_extents = 0;
 	int ret;
+
+	if (PAGE_SIZE == F2FS_BLKSIZE)
+		return check_swap_activate_fast(sis, swap_file, span);
 
 	blkbits = inode->i_blkbits;
 	blocks_per_page = PAGE_SIZE >> blkbits;
@@ -4025,7 +4114,7 @@ static int f2fs_swap_activate(struct swap_info_struct *sis, struct file *file,
 	if (ret)
 		return ret;
 
-	if (f2fs_disable_compressed_file(inode))
+	if (!f2fs_disable_compressed_file(inode))
 		return -EINVAL;
 
 	ret = check_swap_activate(sis, file, span);

@@ -377,29 +377,6 @@ static void sym_update_namespace(const char *symname, const char *namespace)
  * Add an exported symbol - it may have already been added without a
  * CRC, in this case just update the CRC
  **/
-static struct symbol *sym_add_exported(const char *name, struct module *mod,
-				       enum export export)
-{
-	struct symbol *s = find_symbol(name);
-
-	if (!s) {
-		s = new_symbol(name, mod, export);
-	} else if (!external_module || is_vmlinux(s->module->name) ||
-		   s->module == mod) {
-		warn("%s: '%s' exported twice. Previous export was in %s%s\n",
-		     mod->name, name, s->module->name,
-		     is_vmlinux(s->module->name) ? "" : ".ko");
-		return s;
-	}
-
-	s->module = mod;
-	s->vmlinux   = is_vmlinux(mod->name);
-	s->kernel    = 0;
-	s->export    = export;
-	return s;
-}
-
-static void sym_set_crc(const char *name, unsigned int crc)
 {
 	struct symbol *s = find_symbol(name);
 

@@ -230,7 +230,6 @@ static void mtk_iommu_tlb_flush_range_sync(unsigned long iova, size_t size,
 static const struct iommu_gather_ops mtk_iommu_gather_ops = {
 	.tlb_flush_all = mtk_iommu_tlb_flush_all,
 	.tlb_flush_walk = mtk_iommu_tlb_flush_range_sync,
-	.tlb_flush_leaf = mtk_iommu_tlb_flush_range_sync,
 	.tlb_add_page = mtk_iommu_tlb_flush_page_nosync,
 	.tlb_flush_leaf = mtk_iommu_tlb_flush_walk,
 	.tlb_sync = mtk_iommu_tlb_sync,

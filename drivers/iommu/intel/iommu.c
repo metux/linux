@@ -1841,7 +1841,7 @@ static void free_dmar_iommu(struct intel_iommu *iommu)
 		if (ecap_prs(iommu->ecap))
 			intel_svm_finish_prq(iommu);
 	}
-	if (ecap_vcs(iommu->ecap) && vccap_pasid(iommu->vccap))
+	if (vccap_pasid(iommu->vccap))
 		ioasid_unregister_allocator(&iommu->pasid_allocator);
 
 #endif
@@ -3220,7 +3220,7 @@ static void register_pasid_allocator(struct intel_iommu *iommu)
 	 * is active. All vIOMMU allocators will eventually be calling the same
 	 * host allocator.
 	 */
-	if (!ecap_vcs(iommu->ecap) || !vccap_pasid(iommu->vccap))
+	if (!vccap_pasid(iommu->vccap))
 		return;
 
 	pr_info("Register custom PASID allocator\n");

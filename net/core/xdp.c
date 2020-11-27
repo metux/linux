@@ -362,7 +362,7 @@ EXPORT_SYMBOL_GPL(xdp_rxq_info_reg_mem_model);
  * of xdp_frames/pages in those cases.
  */
 static void __xdp_return(void *data, struct xdp_mem_info *mem, bool napi_direct,
-			 unsigned long handle, struct xdp_buff *xdp)
+			 struct xdp_buff *xdp)
 {
 	struct xdp_mem_allocator *xa;
 	struct page *page;
@@ -384,19 +384,32 @@ static void __xdp_return(void *data, struct xdp_mem_info *mem, bool napi_direct,
 		page = virt_to_page(data); /* Assumes order0 page*/
 		put_page(page);
 		break;
+	default:
 	case MEM_TYPE_ZERO_COPY:
 		/* NB! Only valid from an xdp_buff! */
-		rcu_read_lock();
-		/* mem->id is valid, checked in xdp_rxq_info_reg_mem_model() */
-		xa = rhashtable_lookup(mem_id_ht, &mem->id, mem_id_rht_params);
-		xa->zc_alloc->free(xa->zc_alloc, handle);
-		rcu_read_unlock();
+		if (xdp) {
+			rcu_read_lock();
+			xa = rhashtable_lookup(mem_id_ht, &mem->id, mem_id_rht_params);
+			xa->zc_alloc->free(xa->zc_alloc, xdp->handle);
+			rcu_read_unlock();
+		} else {
+			/* Should not happen */
+			pr_err_once("%s: MEM_TYPE_ZERO_COPY with NULL xdp_buff\n", __func__);
+		}
 		break;
 	case MEM_TYPE_XSK_BUFF_POOL:
 		/* NB! Only valid from an xdp_buff! */
-		xsk_buff_free(xdp);
+		if (xdp) {
+			xsk_buff_free(xdp);
+		} else {
+			/* Should not happen */
+			pr_err_once("%s: MEM_TYPE_XSK_BUFF_POOL with NULL xdp_buff\n", __func__);
+		}
 		break;
 	default:
+		/* Not possible, checked in xdp_rxq_info_reg_mem_model() */
+		WARN(1, "Incorrect XDP memory type (%d) usage", mem->type);
+		break;
 		/* Not possible, checked in xdp_rxq_info_reg_mem_model() */
 		break;
 	}
@@ -404,19 +417,23 @@ static void __xdp_return(void *data, struct xdp_mem_info *mem, bool napi_direct,
 
 void xdp_return_frame(struct xdp_frame *xdpf)
 {
-	__xdp_return(xdpf->data, &xdpf->mem, false, 0, NULL);
+	__xdp_return(xdpf->data, &xdpf->mem, false, NULL);
 }
 EXPORT_SYMBOL_GPL(xdp_return_frame);
 
 void xdp_return_frame_rx_napi(struct xdp_frame *xdpf)
 {
-	__xdp_return(xdpf->data, &xdpf->mem, true, 0, NULL);
+	__xdp_return(xdpf->data, &xdpf->mem, true, NULL);
 }
 EXPORT_SYMBOL_GPL(xdp_return_frame_rx_napi);
 
 void xdp_return_buff(struct xdp_buff *xdp)
 {
+<<<<<<< ours
 	__xdp_return(xdp->data, &xdp->rxq->mem, true, xdp->handle, xdp);
+=======
+	__xdp_return(xdp->data, &xdp->rxq->mem, true, xdp);
+>>>>>>> theirs
 }
 EXPORT_SYMBOL_GPL(xdp_return_buff);
 

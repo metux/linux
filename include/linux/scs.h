@@ -23,7 +23,7 @@
 #define SCS_END_MAGIC		(0x5f6UL + POISON_POINTER_DELTA)
 
 #define task_scs(tsk)		(task_thread_info(tsk)->scs_base)
-#define task_scs_offset(tsk)	(task_thread_info(tsk)->scs_offset)
+#define task_scs_sp(tsk)	(task_thread_info(tsk)->scs_sp)
 
 void *scs_alloc(int node);
 void scs_free(void *s);
@@ -37,7 +37,7 @@ static inline void scs_task_reset(struct task_struct *tsk)
 	 * Reset the shadow stack to the base address in case the task
 	 * is reused.
 	 */
-	task_scs_offset(tsk) = 0;
+	task_scs_sp(tsk) = task_scs(tsk);
 }
 
 static inline unsigned long *__scs_magic(void *s)
@@ -45,12 +45,12 @@ static inline unsigned long *__scs_magic(void *s)
 	return (unsigned long *)(s + SCS_SIZE) - 1;
 }
 
-static inline bool scs_corrupted(struct task_struct *tsk)
+static inline bool task_scs_end_corrupted(struct task_struct *tsk)
 {
 	unsigned long *magic = __scs_magic(task_scs(tsk));
+	unsigned long sz = task_scs_sp(tsk) - task_scs(tsk);
 
-	return (task_scs_offset(tsk) >= SCS_SIZE - 1 ||
-		READ_ONCE_NOCHECK(*magic) != SCS_END_MAGIC);
+	return sz >= SCS_SIZE - 1 || READ_ONCE_NOCHECK(*magic) != SCS_END_MAGIC;
 }
 
 #else /* CONFIG_SHADOW_CALL_STACK */
@@ -60,8 +60,8 @@ static inline void scs_free(void *s) {}
 static inline void scs_init(void) {}
 static inline void scs_task_reset(struct task_struct *tsk) {}
 static inline int scs_prepare(struct task_struct *tsk, int node) { return 0; }
-static inline bool scs_corrupted(struct task_struct *tsk) { return false; }
 static inline void scs_release(struct task_struct *tsk) {}
+static inline bool task_scs_end_corrupted(struct task_struct *tsk) { return false; }
 
 #endif /* CONFIG_SHADOW_CALL_STACK */
 

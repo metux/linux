@@ -127,8 +127,10 @@ alternative_else_nop_endif
 	add	\dst, \dst, #(\sym - .entry.tramp.text)
 	.endm
 
-	// This macro corrupts x0-x3. It is the caller's duty
-	// to save/restore them if required.
+	/*
+	 * This macro corrupts x0-x3. It is the caller's duty  to save/restore
+	 * them if required.
+	 */
 	.macro	apply_ssbd, state, tmp1, tmp2
 alternative_cb	spectre_v4_patch_fw_mitigation_enable
 	b	.L__asm_ssbd_skip\@		// Patched to NOP
@@ -197,8 +199,10 @@ alternative_else_nop_endif
 	ldr_this_cpu	tsk, __entry_task, x20
 	msr	sp_el0, tsk
 
-	// Ensure MDSCR_EL1.SS is clear, since we can unmask debug exceptions
-	// when scheduling.
+	/*
+	 * Ensure MDSCR_EL1.SS is clear, since we can unmask debug exceptions
+	 * when scheduling.
+	 */
 	ldr	x19, [tsk, #TSK_TI_FLAGS]
 	disable_step_tsk x19, x20
 
@@ -318,21 +322,6 @@ alternative_if ARM64_WORKAROUND_845719
 alternative_else_nop_endif
 #endif
 3:
-#ifdef CONFIG_ARM64_ERRATUM_1418040
-alternative_if_not ARM64_WORKAROUND_1418040
-	b	4f
-alternative_else_nop_endif
-	/*
-	 * if (x22.mode32 == cntkctl_el1.el0vcten)
-	 *     cntkctl_el1.el0vcten = ~cntkctl_el1.el0vcten
-	 */
-	mrs	x1, cntkctl_el1
-	eon	x0, x1, x22, lsr #3
-	tbz	x0, #1, 4f
-	eor	x1, x1, #2	// ARCH_TIMER_USR_VCT_ACCESS_EN
-	msr	cntkctl_el1, x1
-4:
-#endif
 	scs_save tsk, x0
 
 	/* No kernel C function calls after this as user keys are set. */
@@ -364,11 +353,11 @@ alternative_else_nop_endif
 	.if	\el == 0
 alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-	bne	5f
+	bne	4f
 	msr	far_el1, x30
 	tramp_alias	x30, tramp_exit_native
 	br	x30
-5:
+4:
 	tramp_alias	x30, tramp_exit_compat
 	br	x30
 #endif
@@ -427,7 +416,7 @@ SYM_CODE_END(__swpan_exit_el0)
 	.macro	irq_stack_entry
 	mov	x19, sp			// preserve the original sp
 #ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x24, x18		// preserve the original shadow stack
+	mov	x24, scs_sp		// preserve the original shadow stack
 #endif
 
 	/*
@@ -449,7 +438,7 @@ SYM_CODE_END(__swpan_exit_el0)
 
 #ifdef CONFIG_SHADOW_CALL_STACK
 	/* also switch to the irq shadow stack */
-	adr_this_cpu x18, irq_shadow_call_stack, x26
+	ldr_this_cpu scs_sp, irq_shadow_call_stack_ptr, x26
 #endif
 
 9998:
@@ -463,7 +452,7 @@ SYM_CODE_END(__swpan_exit_el0)
 	.macro	irq_stack_exit
 	mov	sp, x19
 #ifdef CONFIG_SHADOW_CALL_STACK
-	mov	x18, x24
+	mov	scs_sp, x24
 #endif
 	.endm
 
@@ -1052,13 +1041,16 @@ SYM_CODE_START(__sdei_asm_handler)
 
 	mov	x19, x1
 
+#if defined(CONFIG_VMAP_STACK) || defined(CONFIG_SHADOW_CALL_STACK)
+	ldrb	w4, [x19, #SDEI_EVENT_PRIORITY]
+#endif
+
 #ifdef CONFIG_VMAP_STACK
 	/*
 	 * entry.S may have been using sp as a scratch register, find whether
 	 * this is a normal or critical event and switch to the appropriate
 	 * stack for this CPU.
 	 */
-	ldrb	w4, [x19, #SDEI_EVENT_PRIORITY]
 	cbnz	w4, 1f
 	ldr_this_cpu dst=x5, sym=sdei_stack_normal_ptr, tmp=x6
 	b	2f
@@ -1066,6 +1058,15 @@ SYM_CODE_START(__sdei_asm_handler)
 2:	mov	x6, #SDEI_STACK_SIZE
 	add	x5, x5, x6
 	mov	sp, x5
+#endif
+
+#ifdef CONFIG_SHADOW_CALL_STACK
+	/* Use a separate shadow call stack for normal and critical events */
+	cbnz	w4, 3f
+	ldr_this_cpu dst=scs_sp, sym=sdei_shadow_call_stack_normal_ptr, tmp=x6
+	b	4f
+3:	ldr_this_cpu dst=scs_sp, sym=sdei_shadow_call_stack_critical_ptr, tmp=x6
+4:
 #endif
 
 	/*

@@ -205,7 +205,7 @@ alternative_else_nop_endif
 	check_mte_async_tcf x19, x22
 	apply_ssbd 1, x22, x23
 
-	ptrauth_keys_install_kernel tsk, 1, x20, x22, x23
+	ptrauth_keys_install_kernel tsk, x20, x22, x23
 
 	scs_load tsk, x20
 	.else
@@ -780,34 +780,36 @@ el0_error_naked:
 SYM_CODE_END(el0_error)
 
 /*
- * Ok, we need to do extra processing, enter the slow path.
- */
-work_pending:
-	mov	x0, sp				// 'regs'
-	bl	do_notify_resume
-#ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_on		// enabled while in userspace
-#endif
-	ldr	x1, [tsk, #TSK_TI_FLAGS]	// re-check for single-step
-	b	finish_ret_to_user
-/*
  * "slow" syscall return path.
  */
-ret_to_user:
+SYM_CODE_START_LOCAL(ret_to_user)
 	disable_daif
 	gic_prio_kentry_setup tmp=x3
-	ldr	x1, [tsk, #TSK_TI_FLAGS]
-	and	x2, x1, #_TIF_WORK_MASK
+	ldr	x19, [tsk, #TSK_TI_FLAGS]
+	and	x2, x19, #_TIF_WORK_MASK
 	cbnz	x2, work_pending
 finish_ret_to_user:
 	/* Ignore asynchronous tag check faults in the uaccess routines */
 	clear_mte_async_tcf
-	enable_step_tsk x1, x2
+	enable_step_tsk x19, x2
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	bl	stackleak_erase
 #endif
 	kernel_exit 0
-ENDPROC(ret_to_user)
+
+/*
+ * Ok, we need to do extra processing, enter the slow path.
+ */
+work_pending:
+	mov	x0, sp				// 'regs'
+	mov	x1, x19
+	bl	do_notify_resume
+#ifdef CONFIG_TRACE_IRQFLAGS
+	bl	trace_hardirqs_on		// enabled while in userspace
+#endif
+	ldr	x19, [tsk, #TSK_TI_FLAGS]	// re-check for single-step
+	b	finish_ret_to_user
+SYM_CODE_END(ret_to_user)
 
 	.popsection				// .entry.text
 
@@ -954,7 +956,7 @@ SYM_FUNC_START(cpu_switch_to)
 	ldr	lr, [x8]
 	mov	sp, x9
 	msr	sp_el0, x1
-	ptrauth_keys_install_kernel x1, 1, x8, x9, x10
+	ptrauth_keys_install_kernel x1, x8, x9, x10
 	scs_save x0, x8
 	scs_load x1, x8
 	ret

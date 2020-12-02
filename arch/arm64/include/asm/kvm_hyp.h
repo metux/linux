@@ -15,6 +15,7 @@
 
 DECLARE_PER_CPU(struct kvm_cpu_context, kvm_hyp_ctxt);
 DECLARE_PER_CPU(unsigned long, kvm_hyp_vector);
+DECLARE_PER_CPU(struct kvm_nvhe_init_params, kvm_init_params);
 
 #define read_sysreg_elx(r,nvh,vh)					\
 	({								\
@@ -116,4 +117,3 @@ static __always_inline void __hyp_text __load_guest_stage2(struct kvm *kvm)
 }
 
 #endif /* __ARM64_KVM_HYP_H__ */
-

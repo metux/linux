@@ -47,25 +47,35 @@ __invalid:
 
 	/*
 	 * x0: SMCCC function ID
-	 * x1: HYP pgd
-	 * x2: per-CPU offset
-	 * x3: HYP stack
+	 * x1: struct kvm_nvhe_init_params PA
 	 */
 __do_hyp_init:
 	/* Check for a stub HVC call */
 	cmp	x0, #HVC_STUB_HCALL_NR
 	b.lo	__kvm_handle_stub_hvc
 
-	/* Set tpidr_el2 for use by HYP to free a register */
-	msr	tpidr_el2, x2
+	// We only actively check bits [24:31], and everything
+	// else has to be zero, which we check at build time.
+#if (KVM_HOST_SMCCC_FUNC(__kvm_hyp_init) & 0xFFFFFFFF00FFFFFF)
+#error Unexpected __KVM_HOST_SMCCC_FUNC___kvm_hyp_init value
+#endif
 
-	mov	x2, #KVM_HOST_SMCCC_FUNC(__kvm_hyp_init)
-	cmp	x0, x2
-	b.eq	1f
+	ror	x0, x0, #24
+	eor	x0, x0, #((KVM_HOST_SMCCC_FUNC(__kvm_hyp_init) >> 24) & 0xF)
+	ror	x0, x0, #4
+	eor	x0, x0, #((KVM_HOST_SMCCC_FUNC(__kvm_hyp_init) >> 28) & 0xF)
+	cbz	x0, 1f
 	mov	x0, #SMCCC_RET_NOT_SUPPORTED
 	eret
 
-1:	phys_to_ttbr x0, x1
+1:	ldr	x0, [x1, #NVHE_INIT_TPIDR_EL2]
+	msr	tpidr_el2, x0
+
+	ldr	x0, [x1, #NVHE_INIT_STACK_HYP_VA]
+	mov	sp, x0
+
+	ldr	x1, [x1, #NVHE_INIT_PGD_PA]
+	phys_to_ttbr x0, x1
 alternative_if ARM64_HAS_CNP
 	orr	x0, x0, #TTBR_CNP_BIT
 alternative_else_nop_endif
@@ -123,9 +133,6 @@ alternative_if ARM64_HAS_ADDRESS_AUTH
 alternative_else_nop_endif
 	msr	sctlr_el2, x0
 	isb
-
-	/* Set the stack */
-	mov	sp, x3
 
 	/* Set the host vector */
 	ldr	x0, =__kvm_hyp_host_vector

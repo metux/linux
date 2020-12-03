@@ -479,7 +479,7 @@ static int init_freecom(struct us_data *us)
 
 static int usb_stor_freecom_reset(struct us_data *us)
 {
-	printk (KERN_CRIT "freecom reset called\n");
+	pr_crit("freecom reset called\n");
 
 	/* We don't really have this feature. */
 	return FAILED;

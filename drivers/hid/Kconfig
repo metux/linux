@@ -74,7 +74,7 @@ config UHID
 	  If unsure, say N.
 
 	  To compile this driver as a module, choose M here: the
-	 module will be called uhid.
+	  module will be called uhid.
 
 config HID_GENERIC
 	tristate "Generic HID driver"

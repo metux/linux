@@ -396,16 +396,12 @@ static int tiadc_iio_buffered_hardware_setup(struct iio_dev *indio_dev,
 	ret = request_threaded_irq(irq,	pollfunc_th, pollfunc_bh,
 				flags, indio_dev->name, indio_dev);
 	if (ret)
-		goto error_kfifo_free;
+		return ret;
 
 	indio_dev->setup_ops = setup_ops;
 	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;
 
 	return 0;
-
-error_kfifo_free:
-	iio_kfifo_free(indio_dev->buffer);
-	return ret;
 }
 
 static void tiadc_iio_buffered_hardware_remove(struct iio_dev *indio_dev)

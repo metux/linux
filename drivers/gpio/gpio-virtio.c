@@ -248,11 +248,16 @@ static void virtio_gpio_data_rx(struct virtqueue *vq)
 	devm_kfree(&priv->vdev->dev, data);
 }
 
+static void virtio_gpio_data_tx(struct virtqueue *vq)
+{
+	dev_warn(&vq->vdev->dev, "virtio_gpio_data_tx() should not receive anything here\n");
+}
+
 static int virtio_gpio_alloc_vq(struct virtio_gpio_priv *priv)
 {
 	struct virtqueue *vqs[2];
 	vq_callback_t *cbs[] = {
-		NULL,
+		virtio_gpio_data_tx,
 		virtio_gpio_data_rx,
 	};
 	static const char * const names[] = { "in", "out", };

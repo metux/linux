@@ -8,6 +8,8 @@
  *
  */
 
+// TODO: add error codes to protocol, dont use errno
+
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
 #include <linux/io.h>
@@ -39,6 +41,30 @@ struct virtio_gpio_priv {
 	struct mutex rpc_mutex;
 };
 
+static const char* op_str(int op)
+{
+	switch (op & ~VIRTIO_GPIO_MSG_REPLY)
+	{
+		case VIRTIO_GPIO_MSG_GUEST_DIRECTION_INPUT:
+			return "direction_input";
+		case VIRTIO_GPIO_MSG_GUEST_DIRECTION_OUTPUT:
+			return "direction_output";
+		case VIRTIO_GPIO_MSG_GUEST_GET_DIRECTION:
+			return "get_direction";
+		case VIRTIO_GPIO_MSG_GUEST_SET_VALUE:
+			return "set";
+		case VIRTIO_GPIO_MSG_GUEST_GET_VALUE:
+			return "get";
+		case VIRTIO_GPIO_MSG_GUEST_REQUEST:
+			return "request";
+		case VIRTIO_GPIO_MSG_HOST_LEVEL:
+			return "LEVEL";
+		default:
+			return "XXX";
+	}
+	return "***";
+}
+
 static int virtio_gpio_prepare_inbuf(struct virtio_gpio_priv *priv)
 {
 	struct scatterlist rcv_sg;
@@ -67,6 +93,9 @@ static int virtio_gpio_xmit(struct virtio_gpio_priv *priv, int type,
 	ev->type = type;
 	ev->pin = pin;
 	ev->value = value;
+
+	dev_info(&priv->vdev->dev, "virtio_gpio_xmit() type=%s pin=%d value=%d\n",
+		 op_str(type), pin, value);
 
 	sg_init_one(&xmit_sg, ev, MSG_BUF_SZ);
 	spin_lock_irqsave(&priv->vq_lock, flags);
@@ -98,6 +127,7 @@ static inline void clear_event(struct virtio_gpio_priv *priv, int id)
 	clear_bit(id, &priv->reply_wait);
 }
 
+/* emit a request to host and wait for reply */
 static int virtio_gpio_rpc(struct virtio_gpio_priv *priv, int type,
 			   int pin, int value)
 {
@@ -117,6 +147,7 @@ static int virtio_gpio_rpc(struct virtio_gpio_priv *priv, int type,
 
 	wait_event_interruptible(priv->waitq, check_event(priv, type));
 	ret = priv->last.value;
+	dev_info(&priv->vdev->dev, "XMIT woke up\n");
 
 out:
 	mutex_unlock(&priv->rpc_mutex);
@@ -173,6 +204,9 @@ static void virtio_gpio_signal(struct virtio_gpio_priv *priv, int event,
 {
 	int mapped_irq = irq_find_mapping(priv->gc.irq.domain, pin);
 
+	dev_info(&priv->vdev->dev, "IRQ: event=%d pin=%d value=%d mapped_irq=%d\n",
+		 event, pin, value, mapped_irq);
+
 	if ((pin < priv->num_gpios) && test_bit(pin, priv->irq_mask))
 		generic_handle_irq(mapped_irq);
 }
@@ -184,6 +218,8 @@ static void virtio_gpio_data_rx(struct virtqueue *vq)
 	unsigned int len;
 	struct virtio_gpio_msg *ev;
 
+	/* disable interrupts, will be enabled again from in the interrupt handler */
+//	virtqueue_disable_cb(priv->vq_rx);
 	data = virtqueue_get_buf(priv->vq_rx, &len);
 	if (!data || !len) {
 		dev_warn(&vq->vdev->dev, "RX received no data ! %d\n", len);
@@ -192,6 +228,7 @@ static void virtio_gpio_data_rx(struct virtqueue *vq)
 
 	ev = data;
 
+	dev_info(&vq->vdev->dev, "RECEIVED type=%d pin=%d value=%d %s\n", ev->type, ev->pin, ev->value, op_str(ev->type));
 	memcpy(&priv->last, data, MSG_BUF_SZ);
 
 	switch (ev->type) {
@@ -200,12 +237,14 @@ static void virtio_gpio_data_rx(struct virtqueue *vq)
 		virtio_gpio_signal(priv, ev->type, ev->pin, ev->value);
 		break;
 	default:
+		dev_info(&vq->vdev->dev, "Other signal ... wakeup");
 		wakeup_event(priv, ev->type & ~VIRTIO_GPIO_MSG_REPLY);
 		break;
 	}
 
 	wake_up_all(&priv->waitq);
 
+	// FIXME: instead of copying to one static buffer, we should hand over the bufptr
 	devm_kfree(&priv->vdev->dev, data);
 }
 
@@ -246,6 +285,7 @@ static void virtio_gpio_irq_unmask(struct irq_data *irq)
 	int hwirq = irqd_to_hwirq(irq);
 	struct virtio_gpio_priv *priv
 		= gpiochip_get_data(irq_data_get_irq_chip_data(irq));
+	pr_info("virtio_gpio_unmask: hwirq=%ld\n", irqd_to_hwirq(irq));
 	if (hwirq < CONFIG_VIRTIO_GPIO_MAX_IRQ)
 		set_bit(hwirq, priv->irq_mask);
 }
@@ -255,6 +295,7 @@ static void virtio_gpio_irq_mask(struct irq_data *irq)
 	int hwirq = irqd_to_hwirq(irq);
 	struct virtio_gpio_priv *priv
 		= gpiochip_get_data(irq_data_get_irq_chip_data(irq));
+	pr_info("virtio_gpio_mask: hwirq=%ld\n", irqd_to_hwirq(irq));
 	if (hwirq < CONFIG_VIRTIO_GPIO_MAX_IRQ)
 		clear_bit(hwirq, priv->irq_mask);
 }
@@ -294,9 +335,14 @@ static int virtio_gpio_probe(struct virtio_device *vdev)
 
 	priv->num_gpios = cf.num_gpios;
 
+	dev_info(dev, "gpio name: \"%s\" num_gpios=%d\n", priv->name,
+		 priv->num_gpios);
+
 	if (cf.names_size) {
 		char *bufwalk;
 		int idx = 0;
+
+		dev_info(dev, "gpio name buffer size: %d\n",cf.names_size);
 
 		name_buffer = devm_kzalloc(&vdev->dev, cf.names_size,
 					   GFP_KERNEL)+1;
@@ -310,6 +356,10 @@ static int virtio_gpio_probe(struct virtio_device *vdev)
 
 		while (idx < priv->num_gpios &&
 		       bufwalk < (name_buffer+cf.names_size)) {
+
+			dev_info(dev, "xx got name #%d: \"%s\"\n", idx,
+				 bufwalk);
+
 			gpio_names[idx] = (strlen(bufwalk) ? bufwalk : NULL);
 			bufwalk += strlen(bufwalk)+1;
 			idx++;

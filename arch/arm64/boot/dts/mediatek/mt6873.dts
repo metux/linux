@@ -902,12 +902,6 @@
 	typec_mux_switch: typec_mux_switch {
 		compatible = "mediatek,typec_mux_switch";
 		status = "okay";
-		orientation-switch;
-		port {
-			ssusb_mux: endpoint@0 {
-				remote-endpoint = <&tcpc_typec_usb>;
-			};
-		};
 	};
 
 	fusb304: fusb304 {
@@ -1221,11 +1215,6 @@
 				pin_assignment,mode_d;
 				pin_assignment,mode_e;
 				pin_assignment,mode_f;
-			};
-		};
-		port {
-			tcpc_typec_usb: endpoint@0 {
-				remote-endpoint = <&ssusb_mux>;
 			};
 		};
 	};

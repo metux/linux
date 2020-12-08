@@ -370,6 +370,16 @@ config USB_ISP116X_HCD
 	  To compile this driver as a module, choose M here: the
 	  module will be called isp116x-hcd.
 
+if USB_ISP116X_HCD
+
+config USB_ISP116X_HCD_PTD_TRACE
+	bool "Enable PTD Trace"
+
+config USB_ISP116X_HCD_URB_TRACE
+	bool "Enable URB Trace"
+
+endif
+
 config USB_ISP1362_HCD
 	tristate "ISP1362 HCD support"
 	depends on HAS_IOMEM

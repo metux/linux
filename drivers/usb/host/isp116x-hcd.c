@@ -46,11 +46,6 @@
 */
 #define USE_PLATFORM_DELAY
 
-/* Transfer descriptors. See dump_ptd() for printout format  */
-//#define PTD_TRACE
-/* enqueuing/finishing log of urbs */
-//#define URB_TRACE
-
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/debugfs.h>

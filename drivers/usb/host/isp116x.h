@@ -490,7 +490,7 @@ static inline void isp116x_show_regs_log(struct isp116x *isp116x)
 	isp116x_show_regs(isp116x, log, NULL);
 }
 
-#if defined(URB_TRACE)
+#if defined(USB_ISP116X_HCD_URB_TRACE)
 
 #define PIPETYPE(pipe)  ({ char *__s;			\
 	if (usb_pipecontrol(pipe))	__s = "ctrl";	\
@@ -522,9 +522,9 @@ static void urb_dbg(struct urb *urb, char *msg)
 
 #define  urb_dbg(urb,msg)   do{}while(0)
 
-#endif				/* ! defined(URB_TRACE) */
+#endif				/* ! defined(USB_ISP116X_HCD_URB_TRACE) */
 
-#if defined(PTD_TRACE)
+#if defined(CONFIG_USB_ISP116X_HCD_PTD_TRACE)
 
 #define PTD_DIR_STR(ptd)  ({char __c;		\
 	switch(PTD_GET_DIR(ptd)){		\
@@ -579,4 +579,4 @@ static inline void dump_ptd_in_data(struct ptd *ptd, u8 * buf)
 #define dump_ptd_in_data(ptd,buf)   do{}while(0)
 #define dump_ptd_out_data(ptd,buf)  do{}while(0)
 
-#endif				/* ! defined(PTD_TRACE) */
+#endif				/* ! defined(CONFIG_USB_ISP116X_HCD_PTD_TRACE) */

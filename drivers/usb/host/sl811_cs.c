@@ -30,17 +30,6 @@ MODULE_AUTHOR("Botond Botyanszki");
 MODULE_DESCRIPTION("REX-CFU1U PCMCIA driver for 2.6");
 MODULE_LICENSE("GPL");
 
-
-/*====================================================================*/
-/* MACROS                                                             */
-/*====================================================================*/
-
-#define INFO(args...) printk(KERN_INFO "sl811_cs: " args)
-
-/*====================================================================*/
-/* VARIABLES                                                          */
-/*====================================================================*/
-
 typedef struct local_info_t {
 	struct pcmcia_device	*p_dev;
 } local_info_t;

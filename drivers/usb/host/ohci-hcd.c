@@ -21,6 +21,8 @@
  * This file is licenced under the GPL.
  */
 
+#define pr_fmt(fmt) "ohci-hcd: "
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/pci.h>
@@ -1278,8 +1280,8 @@ static int __init ohci_hcd_mod_init(void)
 	if (usb_disabled())
 		return -ENODEV;
 
-	printk(KERN_INFO "%s: " DRIVER_DESC "\n", hcd_name);
-	pr_debug ("%s: block sizes: ed %zd td %zd\n", hcd_name,
+	pr_info(DRIVER_DESC "\n");
+	pr_debug ("block sizes: ed %zd td %zd\n",
 		sizeof (struct ed), sizeof (struct td));
 	set_bit(USB_OHCI_LOADED, &usb_hcds_loaded);
 

@@ -16,6 +16,9 @@
  *
  * 2005-2006 (c) MontaVista Software, Inc.
  */
+
+#define pr_fmt(fmt) "ohci-nxp: " fmt
+
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
@@ -46,7 +49,6 @@
 
 #define DRIVER_DESC "OHCI NXP driver"
 
-static const char hcd_name[] = "ohci-nxp";
 static struct hc_driver __read_mostly ohci_nxp_hc_driver;
 
 static struct i2c_client *isp1301_i2c_client;
@@ -91,12 +93,12 @@ static void isp1301_configure_lpc32xx(void)
 	i2c_smbus_write_byte_data(isp1301_i2c_client,
 		ISP1301_I2C_INTERRUPT_RISING | ISP1301_I2C_REG_CLEAR_ADDR, ~0);
 
-	printk(KERN_INFO "ISP1301 Vendor ID  : 0x%04x\n",
-	      i2c_smbus_read_word_data(isp1301_i2c_client, 0x00));
-	printk(KERN_INFO "ISP1301 Product ID : 0x%04x\n",
-	      i2c_smbus_read_word_data(isp1301_i2c_client, 0x02));
-	printk(KERN_INFO "ISP1301 Version ID : 0x%04x\n",
-	      i2c_smbus_read_word_data(isp1301_i2c_client, 0x14));
+	pr_info("ISP1301 Vendor ID  : 0x%04x\n",
+		i2c_smbus_read_word_data(isp1301_i2c_client, 0x00));
+	pr_info("ISP1301 Product ID : 0x%04x\n",
+		i2c_smbus_read_word_data(isp1301_i2c_client, 0x02));
+	pr_info("ISP1301 Version ID : 0x%04x\n",
+		i2c_smbus_read_word_data(isp1301_i2c_client, 0x14));
 }
 
 static void isp1301_configure(void)
@@ -171,7 +173,7 @@ static int ohci_hcd_nxp_probe(struct platform_device *pdev)
 	if (ret)
 		goto fail_disable;
 
-	dev_dbg(&pdev->dev, "%s: " DRIVER_DESC " (nxp)\n", hcd_name);
+	dev_dbg(&pdev->dev, DRIVER_DESC " (nxp)\n");
 	if (usb_disabled()) {
 		dev_err(&pdev->dev, "USB is disabled\n");
 		ret = -ENODEV;
@@ -274,7 +276,7 @@ static int __init ohci_nxp_init(void)
 	if (usb_disabled())
 		return -ENODEV;
 
-	pr_info("%s: " DRIVER_DESC "\n", hcd_name);
+	pr_info(DRIVER_DESC "\n");
 
 	ohci_init_driver(&ohci_nxp_hc_driver, NULL);
 	return platform_driver_register(&ohci_hcd_nxp_driver);

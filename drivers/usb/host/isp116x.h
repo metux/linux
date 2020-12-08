@@ -324,20 +324,6 @@ struct isp116x_ep {
 	struct list_head schedule;
 };
 
-/*-------------------------------------------------------------------------*/
-
-#define DBG(stuff...)		pr_debug("116x: " stuff)
-
-#ifdef VERBOSE
-#    define VDBG		DBG
-#else
-#    define VDBG(stuff...)	do{}while(0)
-#endif
-
-#define ERR(stuff...)		printk(KERN_ERR "116x: " stuff)
-#define WARNING(stuff...)	printk(KERN_WARNING "116x: " stuff)
-#define INFO(stuff...)		printk(KERN_INFO "116x: " stuff)
-
 /* ------------------------------------------------- */
 
 #if defined(USE_PLATFORM_DELAY)
@@ -441,10 +427,10 @@ static void isp116x_write_reg32(struct isp116x *isp116x, unsigned reg,
 
 #define isp116x_show_reg_log(d,r,s) {				\
 	if ((r) < 0x20) {			                \
-		DBG("%-12s[%02x]: %08x\n", #r,			\
+		pr_debug("%-12s[%02x]: %08x\n", #r,		\
 			r, isp116x_read_reg32(d, r));		\
 	} else {						\
-		DBG("%-12s[%02x]:     %04x\n", #r,		\
+		pr_debug("%-12s[%02x]:     %04x\n", #r,		\
 			r, isp116x_read_reg16(d, r));	    	\
 	}							\
 }
@@ -522,11 +508,11 @@ static void urb_dbg(struct urb *urb, char *msg)
 	unsigned int pipe;
 
 	if (!urb) {
-		DBG("%s: zero urb\n", msg);
+		pr_debug("%s: zero urb\n", msg);
 		return;
 	}
 	pipe = urb->pipe;
-	DBG("%s: FA %d ep%d%s %s: len %d/%d %s\n", msg,
+	pr_debug("%s: FA %d ep%d%s %s: len %d/%d %s\n", msg,
 	    usb_pipedevice(pipe), usb_pipeendpoint(pipe),
 	    PIPEDIR(pipe), PIPETYPE(pipe),
 	    urb->transfer_buffer_length, urb->actual_length, URB_NOTSHORT(urb));
@@ -553,7 +539,7 @@ static void urb_dbg(struct urb *urb, char *msg)
 */
 static inline void dump_ptd(struct ptd *ptd)
 {
-	printk(KERN_WARNING "td: %x %d%c%d %d,%d,%d  %x %x%x%x\n",
+	pr_warn("td: %x %d%c%d %d,%d,%d  %x %x%x%x\n",
 	       PTD_GET_CC(ptd), PTD_GET_FA(ptd),
 	       PTD_DIR_STR(ptd), PTD_GET_EP(ptd),
 	       PTD_GET_COUNT(ptd), PTD_GET_LEN(ptd), PTD_GET_MPS(ptd),
@@ -566,7 +552,7 @@ static inline void dump_ptd_out_data(struct ptd *ptd, u8 * buf)
 	int k;
 
 	if (PTD_GET_DIR(ptd) != PTD_DIR_IN && PTD_GET_LEN(ptd)) {
-		printk(KERN_WARNING "-> ");
+		pr_warn("-> ");
 		for (k = 0; k < PTD_GET_LEN(ptd); ++k)
 			printk("%02x ", ((u8 *) buf)[k]);
 		printk("\n");
@@ -578,13 +564,13 @@ static inline void dump_ptd_in_data(struct ptd *ptd, u8 * buf)
 	int k;
 
 	if (PTD_GET_DIR(ptd) == PTD_DIR_IN && PTD_GET_COUNT(ptd)) {
-		printk(KERN_WARNING "<- ");
+		pr_warn("<- ");
 		for (k = 0; k < PTD_GET_COUNT(ptd); ++k)
 			printk("%02x ", ((u8 *) buf)[k]);
 		printk("\n");
 	}
 	if (PTD_GET_LAST(ptd))
-		printk(KERN_WARNING "-\n");
+		pr_warn("-\n");
 }
 
 #else

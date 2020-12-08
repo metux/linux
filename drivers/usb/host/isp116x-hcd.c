@@ -43,14 +43,9 @@
   memory controllers line LH7A400 SMC need this. Also,
   uncomment for that to work the following
   USE_PLATFORM_DELAY macro.
-  3. Use ndelay (easiest, poorest). For that, uncomment
-  the following USE_NDELAY macro.
 */
 #define USE_PLATFORM_DELAY
-//#define USE_NDELAY
 
-//#define DEBUG
-//#define VERBOSE
 /* Transfer descriptors. See dump_ptd() for printout format  */
 //#define PTD_TRACE
 /* enqueuing/finishing log of urbs */
@@ -76,6 +71,8 @@
 
 #define DRIVER_VERSION	"03 Nov 2005"
 #define DRIVER_DESC	"ISP116x USB Host Controller Driver"
+
+#define pr_fmt(fmt)	"116x: " fmt
 
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL");
@@ -267,7 +264,7 @@ static void preproc_atl_queue(struct isp116x *isp116x)
 			    ? PTD_DIR_OUT : PTD_DIR_IN;
 			break;
 		default:
-			ERR("%s %d: ep->nextpid %d\n", __func__, __LINE__,
+			pr_err("%s %d: ep->nextpid %d\n", __func__, __LINE__,
 			    ep->nextpid);
 			BUG();
 		}
@@ -320,7 +317,7 @@ __releases(isp116x->lock) __acquires(isp116x->lock)
 	}
 
 	/* periodic deschedule */
-	DBG("deschedule qh%d/%p branch %d\n", ep->period, ep, ep->branch);
+	pr_debug("deschedule qh%d/%p branch %d\n", ep->period, ep, ep->branch);
 	for (i = ep->branch; i < PERIODIC_SIZE; i += ep->period) {
 		struct isp116x_ep *temp;
 		struct isp116x_ep **prev = &isp116x->periodic[i];
@@ -373,7 +370,7 @@ static void postproc_atl_queue(struct isp116x *isp116x)
 		if (cc == TD_DATAUNDERRUN) {
 			if (!(urb->transfer_flags & URB_SHORT_NOT_OK) ||
 					usb_pipecontrol(urb->pipe)) {
-				DBG("Allowed or control data underrun\n");
+				pr_debug("Allowed or control data underrun\n");
 				cc = TD_CC_NOERROR;
 				short_not_ok = 0;
 			} else {
@@ -432,7 +429,7 @@ static void postproc_atl_queue(struct isp116x *isp116x)
 				if (urb->transfer_flags & URB_ZERO_PACKET
 				    && ep->nextpid == USB_PID_OUT
 				    && !(PTD_GET_COUNT(ptd) % ep->maxpacket)) {
-					DBG("Zero packet requested\n");
+					pr_debug("Zero packet requested\n");
 					break;
 				}
 			}
@@ -608,7 +605,7 @@ static irqreturn_t isp116x_irq(struct usb_hcd *hcd)
 		u32 intstat = isp116x_read_reg32(isp116x, HCINTSTAT);
 		isp116x_write_reg32(isp116x, HCINTSTAT, intstat);
 		if (intstat & HCINT_UE) {
-			ERR("Unrecoverable error, HC is dead!\n");
+			pr_err("Unrecoverable error, HC is dead!\n");
 			/* IRQ's are off, we do no DMA,
 			   perfectly ready to die ... */
 			hcd->state = HC_STATE_HALT;
@@ -623,7 +620,7 @@ static irqreturn_t isp116x_irq(struct usb_hcd *hcd)
 			mod_timer(&hcd->rh_timer, jiffies
 				  + msecs_to_jiffies(20) + 1);
 		if (intstat & HCINT_RD) {
-			DBG("---- remote wakeup\n");
+			pr_debug("---- remote wakeup\n");
 			usb_hcd_resume_root_hub(hcd);
 		}
 		irqstat &= ~HCuPINT_OPR;
@@ -697,7 +694,7 @@ static int isp116x_urb_enqueue(struct usb_hcd *hcd,
 	urb_dbg(urb, "Enqueue");
 
 	if (type == PIPE_ISOCHRONOUS) {
-		ERR("Isochronous transfers not supported\n");
+		pr_err("Isochronous transfers not supported\n");
 		urb_dbg(urb, "Refused to enqueue");
 		return -ENXIO;
 	}
@@ -792,7 +789,7 @@ static int isp116x_urb_enqueue(struct usb_hcd *hcd,
 		/* sort each schedule branch by period (slow before fast)
 		   to share the faster parts of the tree without needing
 		   dummy/placeholder nodes */
-		DBG("schedule qh%d/%p branch %d\n", ep->period, ep, ep->branch);
+		pr_debug("schedule qh%d/%p branch %d\n", ep->period, ep, ep->branch);
 		for (i = ep->branch; i < PERIODIC_SIZE; i += ep->period) {
 			struct isp116x_ep **prev = &isp116x->periodic[i];
 			struct isp116x_ep *here = *prev;
@@ -858,7 +855,7 @@ static int isp116x_urb_dequeue(struct usb_hcd *hcd, struct urb *urb,
 		for (ep_act = isp116x->atl_active; ep_act;
 		     ep_act = ep_act->active)
 			if (ep_act == ep) {
-				VDBG("dequeue, urb %p active; wait for irq\n",
+				pr_debug("dequeue, urb %p active; wait for irq\n",
 				     urb);
 				urb = NULL;
 				break;
@@ -884,7 +881,7 @@ static void isp116x_endpoint_disable(struct usb_hcd *hcd,
 	for (i = 0; i < 100 && !list_empty(&hep->urb_list); i++)
 		msleep(3);
 	if (!list_empty(&hep->urb_list))
-		WARNING("ep %p not empty?\n", ep);
+		pr_warn("ep %p not empty?\n", ep);
 
 	kfree(ep);
 	hep->hcpriv = NULL;
@@ -1012,88 +1009,88 @@ static int isp116x_hub_control(struct usb_hcd *hcd,
 
 	switch (typeReq) {
 	case ClearHubFeature:
-		DBG("ClearHubFeature: ");
+		pr_debug("ClearHubFeature: ");
 		switch (wValue) {
 		case C_HUB_OVER_CURRENT:
-			DBG("C_HUB_OVER_CURRENT\n");
+			pr_debug("C_HUB_OVER_CURRENT\n");
 			spin_lock_irqsave(&isp116x->lock, flags);
 			isp116x_write_reg32(isp116x, HCRHSTATUS, RH_HS_OCIC);
 			spin_unlock_irqrestore(&isp116x->lock, flags);
 			fallthrough;
 		case C_HUB_LOCAL_POWER:
-			DBG("C_HUB_LOCAL_POWER\n");
+			pr_debug("C_HUB_LOCAL_POWER\n");
 			break;
 		default:
 			goto error;
 		}
 		break;
 	case SetHubFeature:
-		DBG("SetHubFeature: ");
+		pr_debug("SetHubFeature: ");
 		switch (wValue) {
 		case C_HUB_OVER_CURRENT:
 		case C_HUB_LOCAL_POWER:
-			DBG("C_HUB_OVER_CURRENT or C_HUB_LOCAL_POWER\n");
+			pr_debug("C_HUB_OVER_CURRENT or C_HUB_LOCAL_POWER\n");
 			break;
 		default:
 			goto error;
 		}
 		break;
 	case GetHubDescriptor:
-		DBG("GetHubDescriptor\n");
+		pr_debug("GetHubDescriptor\n");
 		isp116x_hub_descriptor(isp116x,
 				       (struct usb_hub_descriptor *)buf);
 		break;
 	case GetHubStatus:
-		DBG("GetHubStatus\n");
+		pr_debug("GetHubStatus\n");
 		*(__le32 *) buf = 0;
 		break;
 	case GetPortStatus:
-		DBG("GetPortStatus\n");
+		pr_debug("GetPortStatus\n");
 		if (!wIndex || wIndex > ports)
 			goto error;
 		spin_lock_irqsave(&isp116x->lock, flags);
 		tmp = isp116x_read_reg32(isp116x, (--wIndex) ? HCRHPORT2 : HCRHPORT1);
 		spin_unlock_irqrestore(&isp116x->lock, flags);
 		*(__le32 *) buf = cpu_to_le32(tmp);
-		DBG("GetPortStatus: port[%d]  %08x\n", wIndex + 1, tmp);
+		pr_debug("GetPortStatus: port[%d]  %08x\n", wIndex + 1, tmp);
 		break;
 	case ClearPortFeature:
-		DBG("ClearPortFeature: ");
+		pr_debug("ClearPortFeature: ");
 		if (!wIndex || wIndex > ports)
 			goto error;
 		wIndex--;
 
 		switch (wValue) {
 		case USB_PORT_FEAT_ENABLE:
-			DBG("USB_PORT_FEAT_ENABLE\n");
+			pr_debug("USB_PORT_FEAT_ENABLE\n");
 			tmp = RH_PS_CCS;
 			break;
 		case USB_PORT_FEAT_C_ENABLE:
-			DBG("USB_PORT_FEAT_C_ENABLE\n");
+			pr_debug("USB_PORT_FEAT_C_ENABLE\n");
 			tmp = RH_PS_PESC;
 			break;
 		case USB_PORT_FEAT_SUSPEND:
-			DBG("USB_PORT_FEAT_SUSPEND\n");
+			pr_debug("USB_PORT_FEAT_SUSPEND\n");
 			tmp = RH_PS_POCI;
 			break;
 		case USB_PORT_FEAT_C_SUSPEND:
-			DBG("USB_PORT_FEAT_C_SUSPEND\n");
+			pr_debug("USB_PORT_FEAT_C_SUSPEND\n");
 			tmp = RH_PS_PSSC;
 			break;
 		case USB_PORT_FEAT_POWER:
-			DBG("USB_PORT_FEAT_POWER\n");
+			pr_debug("USB_PORT_FEAT_POWER\n");
 			tmp = RH_PS_LSDA;
 			break;
 		case USB_PORT_FEAT_C_CONNECTION:
-			DBG("USB_PORT_FEAT_C_CONNECTION\n");
+			pr_debug("USB_PORT_FEAT_C_CONNECTION\n");
 			tmp = RH_PS_CSC;
 			break;
 		case USB_PORT_FEAT_C_OVER_CURRENT:
-			DBG("USB_PORT_FEAT_C_OVER_CURRENT\n");
+			pr_debug("USB_PORT_FEAT_C_OVER_CURRENT\n");
 			tmp = RH_PS_OCIC;
 			break;
 		case USB_PORT_FEAT_C_RESET:
-			DBG("USB_PORT_FEAT_C_RESET\n");
+			pr_debug("USB_PORT_FEAT_C_RESET\n");
 			tmp = RH_PS_PRSC;
 			break;
 		default:
@@ -1105,27 +1102,27 @@ static int isp116x_hub_control(struct usb_hcd *hcd,
 		spin_unlock_irqrestore(&isp116x->lock, flags);
 		break;
 	case SetPortFeature:
-		DBG("SetPortFeature: ");
+		pr_debug("SetPortFeature: ");
 		if (!wIndex || wIndex > ports)
 			goto error;
 		wIndex--;
 		switch (wValue) {
 		case USB_PORT_FEAT_SUSPEND:
-			DBG("USB_PORT_FEAT_SUSPEND\n");
+			pr_debug("USB_PORT_FEAT_SUSPEND\n");
 			spin_lock_irqsave(&isp116x->lock, flags);
 			isp116x_write_reg32(isp116x, wIndex
 					    ? HCRHPORT2 : HCRHPORT1, RH_PS_PSS);
 			spin_unlock_irqrestore(&isp116x->lock, flags);
 			break;
 		case USB_PORT_FEAT_POWER:
-			DBG("USB_PORT_FEAT_POWER\n");
+			pr_debug("USB_PORT_FEAT_POWER\n");
 			spin_lock_irqsave(&isp116x->lock, flags);
 			isp116x_write_reg32(isp116x, wIndex
 					    ? HCRHPORT2 : HCRHPORT1, RH_PS_PPS);
 			spin_unlock_irqrestore(&isp116x->lock, flags);
 			break;
 		case USB_PORT_FEAT_RESET:
-			DBG("USB_PORT_FEAT_RESET\n");
+			pr_debug("USB_PORT_FEAT_RESET\n");
 			root_port_reset(isp116x, wIndex);
 			break;
 		default:
@@ -1136,7 +1133,7 @@ static int isp116x_hub_control(struct usb_hcd *hcd,
 	default:
 	      error:
 		/* "protocol stall" on error */
-		DBG("PROTOCOL STALL\n");
+		pr_debug("PROTOCOL STALL\n");
 		ret = -EPIPE;
 	}
 	return ret;
@@ -1238,7 +1235,7 @@ static int isp116x_sw_reset(struct isp116x *isp116x)
 			break;
 	}
 	if (!retries) {
-		ERR("Software reset timeout\n");
+		pr_err("Software reset timeout\n");
 		ret = -ETIME;
 	}
 	spin_unlock_irqrestore(&isp116x->lock, flags);
@@ -1266,10 +1263,10 @@ static int isp116x_reset(struct usb_hcd *hcd)
 			break;
 	}
 	if (!clkrdy) {
-		ERR("Clock not ready after %dms\n", timeout);
+		pr_err("Clock not ready after %dms\n", timeout);
 		/* After sw_reset the clock won't report to be ready, if
 		   H_WAKEUP pin is high. */
-		ERR("Please make sure that the H_WAKEUP pin is pulled low!\n");
+		pr_err("Please make sure that the H_WAKEUP pin is pulled low!\n");
 		ret = -ENODEV;
 	}
 	return ret;
@@ -1313,7 +1310,7 @@ static int isp116x_start(struct usb_hcd *hcd)
 
 	val = isp116x_read_reg16(isp116x, HCCHIPID);
 	if ((val & HCCHIPID_MASK) != HCCHIPID_MAGIC) {
-		ERR("Invalid chip ID %04x\n", val);
+		pr_err("Invalid chip ID %04x\n", val);
 		spin_unlock_irqrestore(&isp116x->lock, flags);
 		return -ENODEV;
 	}
@@ -1457,7 +1454,7 @@ static int isp116x_bus_resume(struct usb_hcd *hcd)
 		/* HCCONTROL_USB_RESET: this may happen, when during
 		   suspension the HC lost power. Reinitialize completely */
 		spin_unlock_irq(&isp116x->lock);
-		DBG("Chip has been reset while suspended. Reinit from scratch.\n");
+		pr_debug("Chip has been reset while suspended. Reinit from scratch.\n");
 		isp116x_reset(hcd);
 		isp116x_start(hcd);
 		isp116x_hub_control(hcd, SetPortFeature,
@@ -1475,7 +1472,7 @@ static int isp116x_bus_resume(struct usb_hcd *hcd)
 		/* force global, not selective, resume */
 		if (!(stat & RH_PS_PSS))
 			continue;
-		DBG("%s: Resuming port %d\n", __func__, val);
+		pr_debug("%s: Resuming port %d\n", __func__, val);
 		isp116x_write_reg32(isp116x, RH_PS_POCI, val
 				    ? HCRHPORT2 : HCRHPORT1);
 	}
@@ -1617,14 +1614,14 @@ static int isp116x_probe(struct platform_device *pdev)
 	isp116x->board = dev_get_platdata(&pdev->dev);
 
 	if (!isp116x->board) {
-		ERR("Platform data structure not initialized\n");
+		pr_err("Platform data structure not initialized\n");
 		ret = -ENODEV;
 		goto err6;
 	}
 	if (isp116x_check_platform_delay(isp116x)) {
-		ERR("USE_PLATFORM_DELAY defined, but delay function not "
+		pr_err("USE_PLATFORM_DELAY defined, but delay function not "
 		    "implemented.\n");
-		ERR("See comments in drivers/usb/host/isp116x-hcd.c\n");
+		pr_err("See comments in drivers/usb/host/isp116x-hcd.c\n");
 		ret = -ENODEV;
 		goto err6;
 	}
@@ -1650,7 +1647,7 @@ static int isp116x_probe(struct platform_device *pdev)
       err2:
 	release_mem_region(addr->start, 2);
       err1:
-	ERR("init error, %d\n", ret);
+	pr_err("init error, %d\n", ret);
 	return ret;
 }
 
@@ -1660,7 +1657,7 @@ static int isp116x_probe(struct platform_device *pdev)
 */
 static int isp116x_suspend(struct platform_device *dev, pm_message_t state)
 {
-	VDBG("%s: state %x\n", __func__, state.event);
+	pr_debug("%s: state %x\n", __func__, state.event);
 	return 0;
 }
 
@@ -1669,7 +1666,7 @@ static int isp116x_suspend(struct platform_device *dev, pm_message_t state)
 */
 static int isp116x_resume(struct platform_device *dev)
 {
-	VDBG("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	return 0;
 }
 

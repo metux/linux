@@ -42,9 +42,6 @@
 
 unsigned int vlan_net_id __read_mostly;
 
-const char vlan_fullname[] = "802.1Q VLAN Support";
-const char vlan_version[] = DRV_VERSION;
-
 /* End of global variables definitions. */
 
 static int vlan_group_prealloc_vid(struct vlan_group *vg,
@@ -685,8 +682,6 @@ static struct pernet_operations vlan_net_ops = {
 static int __init vlan_proto_init(void)
 {
 	int err;
-
-	pr_info("%s v%s\n", vlan_fullname, vlan_version);
 
 	err = register_pernet_subsys(&vlan_net_ops);
 	if (err < 0)

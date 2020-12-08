@@ -156,7 +156,7 @@ static int sl811_cs_config(struct pcmcia_device *link)
 	if (sl811_hc_init(parent, link->resource[0]->start, link->irq)
 			< 0) {
 failed:
-		printk(KERN_WARNING "sl811_cs_config failed\n");
+		dev_warn(&link->dev, "hc init failed\n");
 		sl811_cs_release(link);
 		return  -ENODEV;
 	}

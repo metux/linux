@@ -198,7 +198,7 @@ config USB_EHCI_HCD_PMC_MSP
 
 config XPS_USB_HCD_XILINX
 	bool "Use Xilinx usb host EHCI controller core"
-	depends on (PPC32 || MICROBLAZE)
+	depends on (PPC32 || MICROBLAZE || COMPILE_TEST)
 	select USB_EHCI_BIG_ENDIAN_DESC
 	select USB_EHCI_BIG_ENDIAN_MMIO
 	help

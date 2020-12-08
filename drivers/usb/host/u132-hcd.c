@@ -3193,7 +3193,6 @@ static int __init u132_hcd_init(void)
 	mutex_init(&u132_module_lock);
 	if (usb_disabled())
 		return -ENODEV;
-	printk(KERN_INFO "driver %s\n", hcd_name);
 	workqueue = create_singlethread_workqueue("u132");
 	if (!workqueue)
 		return -ENOMEM;
@@ -3212,7 +3211,6 @@ static void __exit u132_hcd_exit(void)
 	u132_exiting += 1;
 	mutex_unlock(&u132_module_lock);
 	platform_driver_unregister(&u132_platform_driver);
-	printk(KERN_INFO "u132-hcd driver deregistered\n");
 	wait_event(u132_hcd_wait, u132_instances == 0);
 	flush_workqueue(workqueue);
 	destroy_workqueue(workqueue);

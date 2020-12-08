@@ -628,12 +628,8 @@ static void zynq_gpio_handle_bank_irq(struct zynq_gpio *gpio,
 	if (!pending)
 		return;
 
-	for_each_set_bit(offset, &pending, 32) {
-		unsigned int gpio_irq;
-
-		gpio_irq = irq_find_mapping(irqdomain, offset + bank_offset);
-		generic_handle_irq(gpio_irq);
-	}
+	for_each_set_bit(offset, &pending, 32)
+		gpiochip_handle_irq(&gpio->chip, offset + bank_offset);
 }
 
 /**

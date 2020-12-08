@@ -532,9 +532,7 @@ static void sprd_eic_handle_one_type(struct gpio_chip *chip)
 		for_each_set_bit(n, &reg, SPRD_EIC_PER_BANK_NR) {
 			u32 offset = bank * SPRD_EIC_PER_BANK_NR + n;
 
-			girq = irq_find_mapping(chip->irq.domain, offset);
-
-			generic_handle_irq(girq);
+			gpiochip_handle_irq(chip, offset);
 			sprd_eic_toggle_trigger(chip, girq, offset);
 		}
 	}

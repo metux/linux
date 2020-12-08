@@ -4492,3 +4492,26 @@ static int __init gpiolib_debugfs_init(void)
 subsys_initcall(gpiolib_debugfs_init);
 
 #endif	/* DEBUG_FS */
+
+#ifdef CONFIG_GPIOLIB_IRQCHIP
+
+/**
+ * gpiochip_handle_irq() - raise an IRQ corresponding to an GPIO pin.
+ * @gc: the chip
+ * @offset: index number of the GPIO whose IRQ shall be raised
+ *
+ * Helper for drivers using the builtin irqchip functionality. Retrieves the
+ * IRQ number corresponding to given GPIO pin and calls generic IRQ handling.
+ */
+void gpiochip_handle_irq(struct gpio_chip *gc, unsigned int offset)
+{
+	int irq = irq_find_mapping(gc->irq.domain, offset);
+	if (!irq) {
+		dev_warn(gc->parent, "pin %d not mapped to IRQ\n", offset);
+		return;
+	}
+	generic_handle_irq(irq);
+}
+EXPORT_SYMBOL_GPL(gpiochip_handle_irq);
+
+#endif /* CONFIG_GPIOLIB_IRQCHIP */

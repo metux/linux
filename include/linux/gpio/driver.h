@@ -788,4 +788,14 @@ static inline void gpiochip_unlock_as_irq(struct gpio_chip *gc,
 }
 #endif /* CONFIG_GPIOLIB */
 
+#ifdef CONFIG_GPIOLIB_IRQCHIP
+void gpiochip_handle_irq(struct gpio_chip *gc, unsigned int offset);
+#else
+static inline void gpiochip_handle_irq(struct gpio_chip *gc,
+				      unsigned int offset)
+{
+	WARN_ON(1);
+}
+#endif /* CONFIG_GPIOLIB_IRQCHIP */
+
 #endif /* __LINUX_GPIO_DRIVER_H */

@@ -122,13 +122,11 @@ static void ep93xx_gpio_ab_irq_handler(struct irq_desc *desc)
 	 */
 	stat = readb(epg->base + EP93XX_GPIO_A_INT_STATUS);
 	for_each_set_bit(offset, &stat, 8)
-		generic_handle_irq(irq_find_mapping(epg->gc[0].irq.domain,
-						    offset));
+		gpiochip_handle_irq(&epg->gc[0], offset);
 
 	stat = readb(epg->base + EP93XX_GPIO_B_INT_STATUS);
 	for_each_set_bit(offset, &stat, 8)
-		generic_handle_irq(irq_find_mapping(epg->gc[1].irq.domain,
-						    offset));
+		gpiochip_handle_irq(&epg->gc[1], offset);
 
 	chained_irq_exit(irqchip, desc);
 }

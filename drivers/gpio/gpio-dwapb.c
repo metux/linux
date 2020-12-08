@@ -200,7 +200,7 @@ static u32 dwapb_do_irq(struct dwapb_gpio *gpio)
 		int gpio_irq = irq_find_mapping(gc->irq.domain, hwirq);
 		u32 irq_type = irq_get_trigger_type(gpio_irq);
 
-		generic_handle_irq(gpio_irq);
+		gpiochip_handle_irq(gc, hwirq);
 
 		if ((irq_type & IRQ_TYPE_SENSE_MASK) == IRQ_TYPE_EDGE_BOTH)
 			dwapb_toggle_trigger(gpio, hwirq);

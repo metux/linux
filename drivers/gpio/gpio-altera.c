@@ -186,14 +186,12 @@ static void altera_gpio_irq_edge_handler(struct irq_desc *desc)
 	struct altera_gpio_chip *altera_gc;
 	struct irq_chip *chip;
 	struct of_mm_gpio_chip *mm_gc;
-	struct irq_domain *irqdomain;
 	unsigned long status;
 	int i;
 
 	altera_gc = gpiochip_get_data(irq_desc_get_handler_data(desc));
 	chip = irq_desc_get_chip(desc);
 	mm_gc = &altera_gc->mmchip;
-	irqdomain = altera_gc->mmchip.gc.irq.domain;
 
 	chained_irq_enter(chip, desc);
 
@@ -201,9 +199,8 @@ static void altera_gpio_irq_edge_handler(struct irq_desc *desc)
 	      (readl(mm_gc->regs + ALTERA_GPIO_EDGE_CAP) &
 	      readl(mm_gc->regs + ALTERA_GPIO_IRQ_MASK)))) {
 		writel(status, mm_gc->regs + ALTERA_GPIO_EDGE_CAP);
-		for_each_set_bit(i, &status, mm_gc->gc.ngpio) {
-			generic_handle_irq(irq_find_mapping(irqdomain, i));
-		}
+		for_each_set_bit(i, &status, mm_gc->gc.ngpio)
+			gpiochip_handle_irq(&altera_gc->mmchip.gc, i);
 	}
 
 	chained_irq_exit(chip, desc);
@@ -214,23 +211,21 @@ static void altera_gpio_irq_leveL_high_handler(struct irq_desc *desc)
 	struct altera_gpio_chip *altera_gc;
 	struct irq_chip *chip;
 	struct of_mm_gpio_chip *mm_gc;
-	struct irq_domain *irqdomain;
 	unsigned long status;
 	int i;
 
 	altera_gc = gpiochip_get_data(irq_desc_get_handler_data(desc));
 	chip = irq_desc_get_chip(desc);
 	mm_gc = &altera_gc->mmchip;
-	irqdomain = altera_gc->mmchip.gc.irq.domain;
 
 	chained_irq_enter(chip, desc);
 
 	status = readl(mm_gc->regs + ALTERA_GPIO_DATA);
 	status &= readl(mm_gc->regs + ALTERA_GPIO_IRQ_MASK);
 
-	for_each_set_bit(i, &status, mm_gc->gc.ngpio) {
-		generic_handle_irq(irq_find_mapping(irqdomain, i));
-	}
+	for_each_set_bit(i, &status, mm_gc->gc.ngpio)
+		gpiochip_handle_irq(&altera_gc->mmchip.gc, i);
+
 	chained_irq_exit(chip, desc);
 }
 

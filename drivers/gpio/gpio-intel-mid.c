@@ -285,8 +285,7 @@ static void intel_mid_irq_handler(struct irq_desc *desc)
 			mask = BIT(gpio);
 			/* Clear before handling so we can't lose an edge */
 			writel(mask, gedr);
-			generic_handle_irq(irq_find_mapping(gc->irq.domain,
-							    base + gpio));
+			gpiochip_handle_irq(gc, base + gpio);
 		}
 	}
 

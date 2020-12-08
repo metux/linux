@@ -2234,7 +2234,8 @@ static int u132_urb_enqueue(struct usb_hcd *hcd, struct urb *urb,
 	struct u132 *u132 = hcd_to_u132(hcd);
 	if (irqs_disabled()) {
 		if (gfpflags_allow_blocking(mem_flags)) {
-			printk(KERN_ERR "invalid context for function that might sleep\n");
+			dev_err(&u132->platform_dev->dev,
+				"invalid context for function that might sleep\n");
 			return -EINVAL;
 		}
 	}
@@ -2986,8 +2987,9 @@ static int u132_remove(struct platform_device *pdev)
 					u132_endp_cancel_work(u132, endp);
 			}
 			u132->going += 1;
-			printk(KERN_INFO "removing device u132.%d\n",
-				u132->sequence_num);
+			dev_info(&u132->platform_dev->dev,
+				 "removing device u132.%d\n",
+				 u132->sequence_num);
 			mutex_unlock(&u132->sw_lock);
 			usb_remove_hcd(hcd);
 			u132_u132_put_kref(u132);
@@ -3077,8 +3079,8 @@ static int u132_probe(struct platform_device *pdev)
 
 	hcd = usb_create_hcd(&u132_hc_driver, &pdev->dev, dev_name(&pdev->dev));
 	if (!hcd) {
-		printk(KERN_ERR "failed to create the usb hcd struct for U132\n"
-			);
+		dev_err(&pdev->dev,
+			"failed to create the usb hcd struct for U132\n");
 		ftdi_elan_gone_away(pdev);
 		return -ENOMEM;
 	} else {

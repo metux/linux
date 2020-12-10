@@ -469,10 +469,13 @@ struct fsl_ep {
 #define EP_DIR_IN	1
 #define EP_DIR_OUT	0
 
+struct platform_device;
+
 struct fsl_udc {
 	struct usb_gadget gadget;
 	struct usb_gadget_driver *driver;
 	struct fsl_usb2_platform_data *pdata;
+	struct platform_device *pdev;
 	struct completion *done;	/* to make sure release() is done */
 	struct fsl_ep *eps;
 	unsigned int max_ep;

@@ -2363,6 +2363,8 @@ static int fsl_udc_probe(struct platform_device *pdev)
 	if (udc_controller == NULL)
 		return -ENOMEM;
 
+	udc_controller->pdev = pdev;
+
 	pdata = dev_get_platdata(&pdev->dev);
 	udc_controller->pdata = pdata;
 	spin_lock_init(&udc_controller->lock);

@@ -378,7 +378,7 @@ static int mt7615_mac_fill_rx(struct mt7615_dev *dev, struct sk_buff *skb)
 		switch (FIELD_GET(MT_RXV1_TX_MODE, rxdg0)) {
 		case MT_PHY_TYPE_CCK:
 			cck = true;
-			/* fall through */
+			fallthrough;
 		case MT_PHY_TYPE_OFDM:
 			i = mt76_get_rate(&dev->mt76, sband, i, cck);
 			break;
@@ -1273,7 +1273,7 @@ out:
 	switch (FIELD_GET(MT_TX_RATE_MODE, final_rate)) {
 	case MT_PHY_TYPE_CCK:
 		cck = true;
-		/* fall through */
+		fallthrough;
 	case MT_PHY_TYPE_OFDM:
 		mphy = &dev->mphy;
 		if (sta->wcid.ext_phy && dev->mt76.phy2)
@@ -1402,6 +1402,9 @@ mt7615_mac_tx_free_token(struct mt7615_dev *dev, u16 token)
 {
 	struct mt76_dev *mdev = &dev->mt76;
 	struct mt76_txwi_cache *txwi;
+	__le32 *txwi_data;
+	u32 val;
+	u8 wcid;
 
 	trace_mac_tx_free(dev, token);
 
@@ -1412,9 +1415,13 @@ mt7615_mac_tx_free_token(struct mt7615_dev *dev, u16 token)
 	if (!txwi)
 		return;
 
+	txwi_data = (__le32 *)mt76_get_txwi_ptr(mdev, txwi);
+	val = le32_to_cpu(txwi_data[1]);
+	wcid = FIELD_GET(MT_TXD1_WLAN_IDX, val);
+
 	mt7615_txp_skb_unmap(mdev, txwi);
 	if (txwi->skb) {
-		mt76_tx_complete_skb(mdev, txwi->skb);
+		mt76_tx_complete_skb(mdev, wcid, txwi->skb);
 		txwi->skb = NULL;
 	}
 
@@ -1425,6 +1432,14 @@ static void mt7615_mac_tx_free(struct mt7615_dev *dev, struct sk_buff *skb)
 {
 	struct mt7615_tx_free *free = (struct mt7615_tx_free *)skb->data;
 	u8 i, count;
+
+	mt76_queue_tx_cleanup(dev, MT_TXQ_PSD, false);
+	if (is_mt7615(&dev->mt76)) {
+		mt76_queue_tx_cleanup(dev, MT_TXQ_BE, false);
+	} else {
+		for (i = 0; i < IEEE80211_NUM_ACS; i++)
+			mt76_queue_tx_cleanup(dev, i, false);
+	}
 
 	count = FIELD_GET(MT_TX_FREE_MSDU_ID_CNT, le16_to_cpu(free->ctrl));
 	if (is_mt7615(&dev->mt76)) {
@@ -1441,11 +1456,15 @@ static void mt7615_mac_tx_free(struct mt7615_dev *dev, struct sk_buff *skb)
 
 	dev_kfree_skb(skb);
 
+	if (test_bit(MT76_STATE_PM, &dev->phy.mt76->state))
+		return;
+
 	rcu_read_lock();
 	mt7615_mac_sta_poll(dev);
 	rcu_read_unlock();
 
-	tasklet_schedule(&dev->mt76.tx_tasklet);
+	mt7615_pm_power_save_sched(dev);
+	mt76_worker_schedule(&dev->mt76.tx_worker);
 }
 
 void mt7615_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
@@ -1480,7 +1499,7 @@ void mt7615_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 			mt76_rx(&dev->mt76, q, skb);
 			return;
 		}
-		/* fall through */
+		fallthrough;
 	default:
 		dev_kfree_skb(skb);
 		break;
@@ -1855,12 +1874,13 @@ void mt7615_pm_wake_work(struct work_struct *work)
 	spin_lock_bh(&dev->pm.txq_lock);
 	for (i = 0; i < IEEE80211_NUM_ACS; i++) {
 		struct mt7615_sta *msta = dev->pm.tx_q[i].msta;
-		struct mt76_wcid *wcid = msta ? &msta->wcid : NULL;
 		struct ieee80211_sta *sta = NULL;
+		struct mt76_wcid *wcid;
 
 		if (!dev->pm.tx_q[i].skb)
 			continue;
 
+		wcid = msta ? &msta->wcid : &dev->mt76.global_wcid;
 		if (msta && wcid->sta)
 			sta = container_of((void *)msta, struct ieee80211_sta,
 					   drv_priv);
@@ -1870,7 +1890,7 @@ void mt7615_pm_wake_work(struct work_struct *work)
 	}
 	spin_unlock_bh(&dev->pm.txq_lock);
 
-	tasklet_schedule(&dev->mt76.tx_tasklet);
+	mt76_worker_schedule(&dev->mt76.tx_worker);
 
 out:
 	ieee80211_wake_queues(mphy->hw);
@@ -2078,6 +2098,23 @@ void mt7615_dma_reset(struct mt7615_dev *dev)
 }
 EXPORT_SYMBOL_GPL(mt7615_dma_reset);
 
+void mt7615_tx_token_put(struct mt7615_dev *dev)
+{
+	struct mt76_txwi_cache *txwi;
+	int id;
+
+	spin_lock_bh(&dev->token_lock);
+	idr_for_each_entry(&dev->token, txwi, id) {
+		mt7615_txp_skb_unmap(&dev->mt76, txwi);
+		if (txwi->skb)
+			dev_kfree_skb_any(txwi->skb);
+		mt76_put_txwi(&dev->mt76, txwi);
+	}
+	spin_unlock_bh(&dev->token_lock);
+	idr_destroy(&dev->token);
+}
+EXPORT_SYMBOL_GPL(mt7615_tx_token_put);
+
 void mt7615_mac_reset_work(struct work_struct *work)
 {
 	struct mt7615_phy *phy2;
@@ -2112,7 +2149,7 @@ void mt7615_mac_reset_work(struct work_struct *work)
 	if (ext_phy)
 		mt76_txq_schedule_all(ext_phy);
 
-	tasklet_disable(&dev->mt76.tx_tasklet);
+	mt76_worker_disable(&dev->mt76.tx_worker);
 	napi_disable(&dev->mt76.napi[0]);
 	napi_disable(&dev->mt76.napi[1]);
 	napi_disable(&dev->mt76.tx_napi);
@@ -2120,6 +2157,9 @@ void mt7615_mac_reset_work(struct work_struct *work)
 	mt7615_mutex_acquire(dev);
 
 	mt76_wr(dev, MT_MCU_INT_EVENT, MT_MCU_INT_EVENT_PDMA_STOPPED);
+
+	mt7615_tx_token_put(dev);
+	idr_init(&dev->token);
 
 	if (mt7615_wait_reset_state(dev, MT_MCU_CMD_RESET_DONE)) {
 		mt7615_dma_reset(dev);
@@ -2133,7 +2173,7 @@ void mt7615_mac_reset_work(struct work_struct *work)
 	clear_bit(MT76_MCU_RESET, &dev->mphy.state);
 	clear_bit(MT76_RESET, &dev->mphy.state);
 
-	tasklet_enable(&dev->mt76.tx_tasklet);
+	mt76_worker_enable(&dev->mt76.tx_worker);
 	napi_enable(&dev->mt76.tx_napi);
 	napi_schedule(&dev->mt76.tx_napi);
 

@@ -509,27 +509,6 @@ struct fsl_udc {
 	u8 device_address;	/* Device USB address */
 };
 
-/*-------------------------------------------------------------------------*/
-
-#ifdef DEBUG
-#define DBG(fmt, args...) 	printk(KERN_DEBUG "[%s]  " fmt "\n", \
-				__func__, ## args)
-#else
-#define DBG(fmt, args...)	do{}while(0)
-#endif
-
-#ifdef VERBOSE
-#define VDBG		DBG
-#else
-#define VDBG(stuff...)	do{}while(0)
-#endif
-
-#define ERR(stuff...)		pr_err("udc: " stuff)
-#define WARNING(stuff...)	pr_warn("udc: " stuff)
-#define INFO(stuff...)		pr_info("udc: " stuff)
-
-/*-------------------------------------------------------------------------*/
-
 /* ### Add board specific defines here
  */
 

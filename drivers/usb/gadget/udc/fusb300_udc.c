@@ -1416,8 +1416,8 @@ static int fusb300_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, fusb300);
 
+	fusb300->pdev = pdev;
 	fusb300->gadget.ops = &fusb300_gadget_ops;
-
 	fusb300->gadget.max_speed = USB_SPEED_HIGH;
 	fusb300->gadget.name = udc_name;
 	fusb300->reg = reg;

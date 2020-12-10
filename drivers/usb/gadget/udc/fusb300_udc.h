@@ -649,10 +649,13 @@ struct fusb300_ep {
 	unsigned char		type;
 };
 
+struct platform_device;
+
 struct fusb300 {
 	spinlock_t		lock;
 	void __iomem		*reg;
 
+	struct platform_device	*pdev;
 	unsigned long		irq_trigger;
 
 	struct usb_gadget		gadget;

@@ -944,7 +944,6 @@ static int at91_vbus_session(struct usb_gadget *gadget, int is_active)
 	struct at91_udc	*udc = to_udc(gadget);
 	unsigned long	flags;
 
-	/* VDBG("vbus %s\n", is_active ? "on" : "off"); */
 	spin_lock_irqsave(&udc->lock, flags);
 	udc->vbus = (is_active != 0);
 	if (udc->driver)
@@ -1443,7 +1442,6 @@ static irqreturn_t at91_udc_irq (int irq, void *_udc)
 			at91_udp_write(udc, AT91_UDP_IDR, AT91_UDP_RXSUSP);
 			at91_udp_write(udc, AT91_UDP_IER, AT91_UDP_RXRSM);
 			at91_udp_write(udc, AT91_UDP_ICR, AT91_UDP_RXSUSP);
-			/* VDBG("bus suspend\n"); */
 			if (udc->suspended)
 				continue;
 			udc->suspended = 1;
@@ -1465,7 +1463,6 @@ static irqreturn_t at91_udc_irq (int irq, void *_udc)
 			at91_udp_write(udc, AT91_UDP_IDR, AT91_UDP_RXRSM);
 			at91_udp_write(udc, AT91_UDP_IER, AT91_UDP_RXSUSP);
 			at91_udp_write(udc, AT91_UDP_ICR, AT91_UDP_RXRSM);
-			/* VDBG("bus resume\n"); */
 			if (!udc->suspended)
 				continue;
 			udc->suspended = 0;

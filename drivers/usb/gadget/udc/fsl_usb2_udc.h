@@ -515,34 +515,6 @@ struct fsl_udc {
 #define DBG(fmt, args...)	do{}while(0)
 #endif
 
-#if 0
-static void dump_msg(const char *label, const u8 * buf, unsigned int length)
-{
-	unsigned int start, num, i;
-	char line[52], *p;
-
-	if (length >= 512)
-		return;
-	DBG("%s, length %u:\n", label, length);
-	start = 0;
-	while (length > 0) {
-		num = min(length, 16u);
-		p = line;
-		for (i = 0; i < num; ++i) {
-			if (i == 8)
-				*p++ = ' ';
-			sprintf(p, " %02x", buf[i]);
-			p += 3;
-		}
-		*p = 0;
-		printk(KERN_DEBUG "%6x: %s\n", start, line);
-		buf += num;
-		start += num;
-		length -= num;
-	}
-}
-#endif
-
 #ifdef VERBOSE
 #define VDBG		DBG
 #else

@@ -387,12 +387,6 @@ static int write_fifo(struct goku_ep *ep, struct goku_request *req)
 		else
 			is_last = 1;
 	}
-#if 0		/* printk seemed to trash is_last...*/
-//#ifdef USB_TRACE
-	VDBG(dev, "wrote %s %u bytes%s IN %u left %p\n",
-		ep->ep.name, count, is_last ? "/last" : "",
-		req->req.length - req->req.actual, req);
-#endif
 
 	/* requests complete when all IN data is in the FIFO,
 	 * or sometimes later, if a zlp was needed.

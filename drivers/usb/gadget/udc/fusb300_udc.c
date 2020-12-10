@@ -598,8 +598,8 @@ static void fusb300_rdcxf(struct fusb300 *fusb300,
 }
 
 static void fusb300_rdfifo(struct fusb300_ep *ep,
-			  struct fusb300_request *req,
-			  u32 length)
+			   struct fusb300_request *req,
+			   u32 length)
 {
 	int i = 0;
 	u8 *tmp;
@@ -936,12 +936,12 @@ IDMA_RESET:
 }
 
 static void fusb300_set_idma(struct fusb300_ep *ep,
-			struct fusb300_request *req)
+			     struct fusb300_request *req)
 {
 	int ret;
 
-	ret = usb_gadget_map_request(&ep->fusb300->gadget,
-			&req->req, DMA_TO_DEVICE);
+	ret = usb_gadget_map_request(&ep->fusb300->gadget, &req->req,
+				     DMA_TO_DEVICE);
 	if (ret)
 		return;
 
@@ -952,14 +952,15 @@ static void fusb300_set_idma(struct fusb300_ep *ep,
 	/* check idma is done */
 	fusb300_wait_idma_finished(ep);
 
-	usb_gadget_unmap_request(&ep->fusb300->gadget,
-			&req->req, DMA_TO_DEVICE);
+	usb_gadget_unmap_request(&ep->fusb300->gadget, &req->req,
+				 DMA_TO_DEVICE);
 }
 
 static void in_ep_fifo_handler(struct fusb300_ep *ep)
 {
 	struct fusb300_request *req = list_entry(ep->queue.next,
-					struct fusb300_request, queue);
+						 struct fusb300_request,
+						 queue);
 
 	if (req->req.length)
 		fusb300_set_idma(ep, req);
@@ -1306,7 +1307,7 @@ static void init_controller(struct fusb300 *fusb300)
 }
 /*------------------------------------------------------------------------*/
 static int fusb300_udc_start(struct usb_gadget *g,
-		struct usb_gadget_driver *driver)
+			     struct usb_gadget_driver *driver)
 {
 	struct fusb300 *fusb300 = to_fusb300(g);
 
@@ -1467,8 +1468,7 @@ static int fusb300_probe(struct platform_device *pdev)
 	fusb300->gadget.ep0 = &fusb300->ep[0]->ep;
 	INIT_LIST_HEAD(&fusb300->gadget.ep0->ep_list);
 
-	fusb300->ep0_req = fusb300_alloc_request(&fusb300->ep[0]->ep,
-				GFP_KERNEL);
+	fusb300->ep0_req = fusb300_alloc_request(&fusb300->ep[0]->ep, GFP_KERNEL);
 	if (fusb300->ep0_req == NULL) {
 		ret = -ENOMEM;
 		goto clean_up3;

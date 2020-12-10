@@ -82,7 +82,7 @@ fail:
  * L/l: last transaction/not last transaction
  */
 static ssize_t queue_dbg_read(struct file *file, char __user *buf,
-		size_t nbytes, loff_t *ppos)
+			      size_t nbytes, loff_t *ppos)
 {
 	struct list_head *queue = file->private_data;
 	struct usba_request *req, *tmp_req;
@@ -165,7 +165,7 @@ out:
 }
 
 static ssize_t regs_dbg_read(struct file *file, char __user *buf,
-		size_t nbytes, loff_t *ppos)
+			     size_t nbytes, loff_t *ppos)
 {
 	struct inode *inode = file_inode(file);
 	int ret;
@@ -202,7 +202,7 @@ static const struct file_operations regs_dbg_fops = {
 };
 
 static void usba_ep_init_debugfs(struct usba_udc *udc,
-		struct usba_ep *ep)
+				 struct usba_ep *ep)
 {
 	struct dentry *ep_root;
 
@@ -231,7 +231,7 @@ static void usba_init_debugfs(struct usba_udc *udc)
 	udc->debugfs_root = root;
 
 	regs_resource = platform_get_resource(udc->pdev, IORESOURCE_MEM,
-				CTRL_IOMEM_ID);
+					      CTRL_IOMEM_ID);
 
 	if (regs_resource) {
 		debugfs_create_file_size("regs", 0400, root, udc,
@@ -247,28 +247,27 @@ static void usba_cleanup_debugfs(struct usba_udc *udc)
 	usba_ep_cleanup_debugfs(to_usba_ep(udc->gadget.ep0));
 	debugfs_remove_recursive(udc->debugfs_root);
 }
-#else
-static inline void usba_ep_init_debugfs(struct usba_udc *udc,
-					 struct usba_ep *ep)
-{
 
+#else /* CONFIG_USB_GADGET_DEBUG_FS */
+
+static inline void usba_ep_init_debugfs(struct usba_udc *udc,
+					struct usba_ep *ep)
+{
 }
 
 static inline void usba_ep_cleanup_debugfs(struct usba_ep *ep)
 {
-
 }
 
 static inline void usba_init_debugfs(struct usba_udc *udc)
 {
-
 }
 
 static inline void usba_cleanup_debugfs(struct usba_udc *udc)
 {
-
 }
-#endif
+
+#endif /* CONFIG_USB_GADGET_DEBUG_FS */
 
 static ushort fifo_mode;
 
@@ -1572,10 +1571,6 @@ restart:
 		/* Free up one bank in the FIFO so that we can
 		 * generate or receive a reply right away. */
 		usba_ep_writel(ep, CLR_STA, USBA_RX_SETUP);
-
-		/* printk(KERN_DEBUG "setup: %d: %02x.%02x\n",
-			ep->state, crq.crq.bRequestType,
-			crq.crq.bRequest); */
 
 		if (crq.crq.bRequestType & USB_DIR_IN) {
 			/*

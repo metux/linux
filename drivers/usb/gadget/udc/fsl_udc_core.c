@@ -723,9 +723,6 @@ static void fsl_queue_td(struct fsl_ep *ep, struct fsl_req *req)
 {
 	u32 temp, bitmask, tmp_stat;
 
-	/* VDBG("QH addr Register 0x%8x", dr_regs->endpointlistaddr);
-	VDBG("ep_qh[%d] addr is 0x%8x", i, (u32)&(ep->udc->ep_qh[i])); */
-
 	bitmask = ep_is_in(ep)
 		? (1 << (ep_index(ep) + 16))
 		: (1 << (ep_index(ep)));
@@ -1872,8 +1869,6 @@ static irqreturn_t fsl_udc_irq(int irq, void *_udc)
 	irq_src = fsl_readl(&dr_regs->usbsts) & fsl_readl(&dr_regs->usbintr);
 	/* Clear notification bits */
 	fsl_writel(irq_src, &dr_regs->usbsts);
-
-	/* VDBG("irq_src [0x%8x]", irq_src); */
 
 	/* Need to resume? */
 	if (udc->usb_state == USB_STATE_SUSPENDED)

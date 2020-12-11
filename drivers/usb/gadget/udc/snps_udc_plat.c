@@ -15,7 +15,9 @@
 #include <linux/dmapool.h>
 #include <linux/interrupt.h>
 #include <linux/moduleparam.h>
+#include <linux/pci.h>
 #include "amd5536udc.h"
+#include "udc-debug.h"
 
 /* description */
 #define UDC_MOD_DESCRIPTION     "Synopsys UDC platform driver"
@@ -23,7 +25,7 @@
 static void start_udc(struct udc *udc)
 {
 	if (udc->driver) {
-		dev_info(udc->dev, "Connecting...\n");
+		udc_info(udc, "Connecting...\n");
 		udc_enable_dev_setup_interrupts(udc);
 		udc_basic_init(udc);
 		udc->connected = 1;
@@ -45,7 +47,7 @@ static void stop_udc(struct udc *udc)
 	reg = readl(&udc->regs->ctl);
 	reg &= ~(AMD_BIT(UDC_DEVCTL_SRX_FLUSH));
 	writel(reg, &udc->regs->ctl);
-	dev_dbg(udc->dev, "ep rx queue flushed\n");
+	udc_dbg(udc, "ep rx queue flushed\n");
 
 	/* Mask interrupts. Required more so when the
 	 * UDC is connected to a DRD phy.
@@ -65,7 +67,7 @@ static void stop_udc(struct udc *udc)
 	udc->connected = 0;
 
 	spin_unlock(&udc->lock);
-	dev_info(udc->dev, "Device disconnected\n");
+	udc_info(udc, "Device disconnected\n");
 }
 
 static void udc_drd_work(struct work_struct *work)
@@ -76,10 +78,10 @@ static void udc_drd_work(struct work_struct *work)
 			   struct udc, drd_work);
 
 	if (udc->conn_type) {
-		dev_dbg(udc->dev, "idle -> device\n");
+		udc_dbg(udc, "idle -> device\n");
 		start_udc(udc);
 	} else {
-		dev_dbg(udc->dev, "device -> idle\n");
+		udc_dbg(udc, "device -> idle\n");
 		stop_udc(udc);
 	}
 }
@@ -89,7 +91,7 @@ static int usbd_connect_notify(struct notifier_block *self,
 {
 	struct udc *udc = container_of(self, struct udc, nb);
 
-	dev_dbg(udc->dev, "%s: event: %lu\n", __func__, event);
+	udc_dbg(udc, "%s: event: %lu\n", __func__, event);
 
 	udc->conn_type = event;
 
@@ -134,25 +136,25 @@ static int udc_plat_probe(struct platform_device *pdev)
 
 	udc->irq = irq_of_parse_and_map(dev->of_node, 0);
 	if (udc->irq <= 0) {
-		dev_err(dev, "Can't parse and map interrupt\n");
+		udc_err(udc, "Can't parse and map interrupt\n");
 		return -EINVAL;
 	}
 
 	udc->udc_phy = devm_of_phy_get_by_index(dev, dev->of_node, 0);
 	if (IS_ERR(udc->udc_phy)) {
-		dev_err(dev, "Failed to obtain phy from device tree\n");
+		udc_err(udc, "Failed to obtain phy from device tree\n");
 		return PTR_ERR(udc->udc_phy);
 	}
 
 	ret = phy_init(udc->udc_phy);
 	if (ret) {
-		dev_err(dev, "UDC phy init failed");
+		udc_err(udc, "UDC phy init failed");
 		return ret;
 	}
 
 	ret = phy_power_on(udc->udc_phy);
 	if (ret) {
-		dev_err(dev, "UDC phy power on failed");
+		udc_err(udc, "UDC phy power on failed");
 		phy_exit(udc->udc_phy);
 		return ret;
 	}
@@ -163,7 +165,7 @@ static int udc_plat_probe(struct platform_device *pdev)
 		if (IS_ERR(udc->edev)) {
 			if (PTR_ERR(udc->edev) == -EPROBE_DEFER)
 				return -EPROBE_DEFER;
-			dev_err(dev, "Invalid or missing extcon\n");
+			udc_err(udc, "Invalid or missing extcon\n");
 			ret = PTR_ERR(udc->edev);
 			goto exit_phy;
 		}
@@ -172,13 +174,13 @@ static int udc_plat_probe(struct platform_device *pdev)
 		ret = extcon_register_notifier(udc->edev, EXTCON_USB,
 					       &udc->nb);
 		if (ret < 0) {
-			dev_err(dev, "Can't register extcon device\n");
+			udc_err(udc, "Can't register extcon device\n");
 			goto exit_phy;
 		}
 
 		ret = extcon_get_state(udc->edev, EXTCON_USB);
 		if (ret < 0) {
-			dev_err(dev, "Can't get cable state\n");
+			udc_err(udc, "Can't get cable state\n");
 			goto exit_extcon;
 		} else if (ret) {
 			udc->conn_type = ret;
@@ -196,7 +198,7 @@ static int udc_plat_probe(struct platform_device *pdev)
 	ret = devm_request_irq(dev, udc->irq, udc_irq, IRQF_SHARED,
 			       "snps-udc", udc);
 	if (ret < 0) {
-		dev_err(dev, "Request irq %d failed for UDC\n", udc->irq);
+		udc_err(udc, "Request irq %d failed for UDC\n", udc->irq);
 		goto exit_dma;
 	}
 
@@ -207,7 +209,7 @@ static int udc_plat_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		goto exit_dma;
 	}
-	dev_info(dev, "Synopsys UDC platform driver probe successful\n");
+	udc_info(udc, "Synopsys UDC platform driver probe successful\n");
 
 	return 0;
 
@@ -266,7 +268,7 @@ static int udc_plat_suspend(struct device *dev)
 	stop_udc(udc);
 
 	if (extcon_get_state(udc->edev, EXTCON_USB) > 0) {
-		dev_dbg(udc->dev, "device -> idle\n");
+		udc_dbg(udc, "device -> idle\n");
 		stop_udc(udc);
 	}
 	phy_power_off(udc->udc_phy);
@@ -284,19 +286,19 @@ static int udc_plat_resume(struct device *dev)
 
 	ret = phy_init(udc->udc_phy);
 	if (ret) {
-		dev_err(udc->dev, "UDC phy init failure");
+		udc_err(udc, "UDC phy init failure");
 		return ret;
 	}
 
 	ret = phy_power_on(udc->udc_phy);
 	if (ret) {
-		dev_err(udc->dev, "UDC phy power on failure");
+		udc_err(udc, "UDC phy power on failure");
 		phy_exit(udc->udc_phy);
 		return ret;
 	}
 
 	if (extcon_get_state(udc->edev, EXTCON_USB) > 0) {
-		dev_dbg(udc->dev, "idle -> device\n");
+		udc_dbg(udc, "idle -> device\n");
 		start_udc(udc);
 	}
 

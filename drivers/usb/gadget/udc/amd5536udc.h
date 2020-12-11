@@ -578,6 +578,9 @@ struct udc {
 
 #define to_amd5536_udc(g)	(container_of((g), struct udc, gadget))
 
+#define ep_to_dev(ep)		(&(ep->dev->pdev->dev))
+#define udc_to_dev(udc)		(&(udc->pdev->dev))
+
 /* setup request data */
 union udc_setup_data {
 	u32			data[2];
@@ -648,15 +651,5 @@ MODULE_PARM_DESC(use_fullspeed, "true for fullspeed only");
 #define AMD_BIT(bit_stub_name) (1 << bit_stub_name)
 #define AMD_UNMASK_BIT(bit_stub_name) (~AMD_BIT(bit_stub_name))
 #define AMD_CLEAR_BIT(bit_stub_name) (~AMD_BIT(bit_stub_name))
-
-/* debug macros ------------------------------------------------------------*/
-
-#define DBG(udc , args...)	dev_dbg(udc->dev, args)
-
-#ifdef UDC_VERBOSE
-#define VDBG			DBG
-#else
-#define VDBG(udc , args...)	do {} while (0)
-#endif
 
 #endif /* #ifdef AMD5536UDC_H */

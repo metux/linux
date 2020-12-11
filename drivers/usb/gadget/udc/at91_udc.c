@@ -306,6 +306,11 @@ static void done(struct at91_ep *ep, struct at91_request *req, int status)
 #define	CLR_FX	(RX_DATA_READY | AT91_UDP_RXSETUP \
 		| AT91_UDP_STALLSENT | AT91_UDP_TXCOMP)
 
+// FIXME:
+//#ifdef COMPILE_TEST
+//#define __raw_readsb(a,b,c)
+//#endif
+
 /* pull OUT packet data from the endpoint's fifo */
 static int read_fifo (struct at91_ep *ep, struct at91_request *req)
 {
@@ -335,7 +340,7 @@ rescan:
 		req->req.status = -EOVERFLOW;
 		count = bufferspace;
 	}
-	__raw_readsb(dreg, buf, count);
+	readsb(dreg, buf, count);
 
 	/* release and swap pingpong mem bank */
 	csr |= CLR_FX;
@@ -437,7 +442,7 @@ static int write_fifo(struct at91_ep *ep, struct at91_request *req)
 	 * recover when the actual bytecount matters (e.g. for USB Test
 	 * and Measurement Class devices).
 	 */
-	__raw_writesb(dreg, buf, count);
+	writesb(dreg, buf, count);
 	csr &= ~SET_FX;
 	csr |= CLR_FX | AT91_UDP_TXPKTRDY;
 	__raw_writel(csr, creg);

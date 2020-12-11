@@ -1679,13 +1679,6 @@ done:
 
 /*-------------------------------------------------------------------------*/
 
-static void gadget_release(struct device *_dev)
-{
-	struct goku_udc	*dev = dev_get_drvdata(_dev);
-
-	kfree(dev);
-}
-
 /* tear down the binding between this driver and the pci device */
 
 static void goku_remove(struct pci_dev *pdev)
@@ -1736,7 +1729,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	/* alloc, and start init */
-	dev = kzalloc (sizeof *dev, GFP_KERNEL);
+	dev = devm_kzalloc (&pdev->dev, sizeof *dev, GFP_KERNEL);
 	if (!dev) {
 		retval = -ENOMEM;
 		goto err;
@@ -1798,8 +1791,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	proc_create_single_data(proc_node_name, 0, NULL, udc_proc_read, dev);
 #endif
 
-	retval = usb_add_gadget_udc_release(&pdev->dev, &dev->gadget,
-			gadget_release);
+	retval = usb_add_gadget_udc_release(&pdev->dev, &dev->gadget, NULL);
 	if (retval)
 		goto err;
 
@@ -1808,8 +1800,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 err:
 	if (dev)
 		goku_remove (pdev);
-	/* gadget_release is not registered yet, kfree explicitly */
-	kfree(dev);
+
 	return retval;
 }
 

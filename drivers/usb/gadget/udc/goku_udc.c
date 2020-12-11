@@ -17,8 +17,8 @@
  *  - DMA works with ep1 (OUT transfers) and ep2 (IN transfers).
  */
 
-// #define	VERBOSE		/* extra debug messages (success too) */
-// #define	USB_TRACE	/* packet-level success messages */
+// #define	VERBOSE_DEBUG	/* extra debug messages (success too) */
+// #define	PACKET_TRACE	/* packet-level success messages */
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -42,7 +42,7 @@
 #include <asm/irq.h>
 #include <asm/unaligned.h>
 
-
+#include "udc-debug.h"
 #include "goku_udc.h"
 
 #define	DRIVER_DESC		"TC86C001 USB Device Controller"
@@ -151,8 +151,7 @@ goku_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 	} else {
 		ep->dma = (use_dma == 2) && (ep->num == UDC_MSTWR_ENDPOINT);
 		if (ep->dma)
-			DBG(dev, "%s out-dma hides short packets\n",
-				ep->ep.name);
+			ep_dbg(ep, "out-dma hides short packets\n");
 	}
 
 	spin_lock_irqsave(&ep->dev->lock, flags);
@@ -181,7 +180,7 @@ goku_ep_enable(struct usb_ep *_ep, const struct usb_endpoint_descriptor *desc)
 	ep->ep.desc = desc;
 	spin_unlock_irqrestore(&ep->dev->lock, flags);
 
-	DBG(dev, "enable %s %s %s maxpacket %u\n", ep->ep.name,
+	ep_dbg(ep, "enable %s %s maxpacket %u\n",
 		ep->is_in ? "IN" : "OUT",
 		ep->dma ? "dma" : "pio",
 		max);
@@ -254,7 +253,7 @@ static int goku_ep_disable(struct usb_ep *_ep)
 	if (dev->ep0state == EP0_SUSPEND)
 		return -EBUSY;
 
-	VDBG(dev, "disable %s\n", _ep->name);
+	ep_vdbg(dev, "disable %s\n", _ep->name);
 
 	spin_lock_irqsave(&dev->lock, flags);
 	nuke(ep, -ESHUTDOWN);
@@ -314,11 +313,11 @@ done(struct goku_ep *ep, struct goku_request *req, int status)
 	if (ep->dma)
 		usb_gadget_unmap_request(&dev->gadget, &req->req, ep->is_in);
 
-#ifndef USB_TRACE
+#ifndef PACKET_TRACE
 	if (status && status != -ESHUTDOWN)
 #endif
-		VDBG(dev, "complete %s req %p stat %d len %u/%u\n",
-			ep->ep.name, &req->req, status,
+		ep_vdbg(ep, "complete req %p stat %d len %u/%u\n",
+			&req->req, status,
 			req->req.actual, req->req.length);
 
 	/* don't modify queue heads during completion callback */
@@ -442,11 +441,9 @@ top:
 		/* read all bytes from this packet */
 		req->req.actual += size;
 		is_short = (size < ep->ep.maxpacket);
-#ifdef USB_TRACE
-		VDBG(ep->dev, "read %s %u bytes%s OUT req %p %u/%u\n",
-			ep->ep.name, size, is_short ? "/S" : "",
+		ep_trace(ep, "read %u bytes%s OUT req %p %u/%u\n",
+			size, is_short ? "/S" : "",
 			req, req->req.actual, req->req.length);
-#endif
 		while (likely(size-- != 0)) {
 			u8	byte = (u8) readl(ep->reg_fifo);
 
@@ -456,8 +453,7 @@ top:
 				 * discard the extra data in this packet.
 				 */
 				if (req->req.status != -EOVERFLOW)
-					DBG(ep->dev, "%s overflow %u\n",
-						ep->ep.name, size);
+					ep_dbg(ep, "overflow %u\n", size);
 				req->req.status = -EOVERFLOW;
 			} else {
 				*buf++ = byte;
@@ -617,11 +613,10 @@ stop:
 	req->req.actual -= req->req.dma;
 	req->req.actual++;
 
-#ifdef USB_TRACE
-	VDBG(dev, "done %s %s dma, %u/%u bytes, req %p\n",
-		ep->ep.name, ep->is_in ? "IN" : "OUT",
+	ep_trace(ep, "done %s dma, %u/%u bytes, req %p\n",
+		ep->is_in ? "IN" : "OUT",
 		req->req.actual, req->req.length, req);
-#endif
+
 	done(ep, req, 0);
 	if (list_empty(&ep->queue))
 		goto stop;
@@ -664,7 +659,7 @@ static void abort_dma(struct goku_ep *ep, int status)
 		writel(master, &regs->dma_master);
 
 		if (readl(&regs->dma_master) & MST_RD_ENA)
-			DBG(ep->dev, "IN dma active after reset!\n");
+			ep_dbg(ep, "IN dma active after reset!\n");
 
 	} else {
 		if (unlikely((readl(&regs->dma_master) & MST_WR_ENA) == 0))
@@ -679,12 +674,12 @@ static void abort_dma(struct goku_ep *ep, int status)
 		writel(master, &regs->dma_master);
 
 		if (readl(&regs->dma_master) & MST_WR_ENA)
-			DBG(ep->dev, "OUT dma active after reset!\n");
+			ep_dbg(ep, "OUT dma active after reset!\n");
 	}
 	req->req.actual = (curr - req->req.dma) + 1;
 	req->req.status = status;
 
-	VDBG(ep->dev, "%s %s %s %d/%d\n", __func__, ep->ep.name,
+	ep_vdbg(ep, "%s %s %d/%d\n", __func__,
 		ep->is_in ? "IN" : "OUT",
 		req->req.actual, req->req.length);
 
@@ -734,10 +729,8 @@ goku_queue(struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 			return status;
 	}
 
-#ifdef USB_TRACE
-	VDBG(dev, "%s queue req %p, len %u buf %p\n",
+	ep_trace(ep, "%s queue req %p, len %u buf %p\n",
 			_ep->name, _req, _req->length, _req->buf);
-#endif
 
 	spin_lock_irqsave(&dev->lock, flags);
 
@@ -819,7 +812,7 @@ static int goku_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 	if (dev->ep0state == EP0_SUSPEND)
 		return -EBUSY;
 
-	VDBG(dev, "%s %s %s %s %p\n", __func__, _ep->name,
+	ep_vdbg(ep, "%s %s %s %p\n", __func__,
 		ep->is_in ? "IN" : "OUT",
 		ep->dma ? "dma" : "pio",
 		_req);
@@ -853,8 +846,7 @@ static int goku_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 
 static void goku_clear_halt(struct goku_ep *ep)
 {
-	// assert (ep->num !=0)
-	VDBG(ep->dev, "%s clear halt\n", ep->ep.name);
+	ep_vdbg(ep, , "clear halt\n");
 	command(ep->dev->regs, COMMAND_SETDATA0, ep->num);
 	command(ep->dev->regs, COMMAND_STALL_CLEAR, ep->num);
 	if (ep->stopped) {
@@ -891,7 +883,7 @@ static int goku_set_halt(struct usb_ep *_ep, int value)
 
 	/* don't change EPxSTATUS_EP_INVALID to READY */
 	} else if (!ep->ep.desc) {
-		DBG(ep->dev, "%s %s inactive?\n", __func__, ep->ep.name);
+		ep_dbg(ep, "%s inactive?\n", __func__);
 		return -EINVAL;
 	}
 
@@ -907,7 +899,7 @@ static int goku_set_halt(struct usb_ep *_ep, int value)
 		goku_clear_halt(ep);
 	else {
 		ep->stopped = 1;
-		VDBG(ep->dev, "%s set halt\n", ep->ep.name);
+		ep_vdbg(ep, "set halt\n");
 		command(ep->dev->regs, COMMAND_STALL, ep->num);
 		readl(ep->reg_status);
 	}
@@ -933,7 +925,7 @@ static int goku_fifo_status(struct usb_ep *_ep)
 	regs = ep->dev->regs;
 	size = readl(&regs->EPxSizeLA[ep->num]) & DATASIZE;
 	size += readl(&regs->EPxSizeLB[ep->num]) & DATASIZE;
-	VDBG(ep->dev, "%s %s %u\n", __func__, ep->ep.name, size);
+	ep_vdbg(ep, "%s %u\n", __func__, size);
 	return size;
 }
 
@@ -946,11 +938,11 @@ static void goku_fifo_flush(struct usb_ep *_ep)
 	if (!_ep)
 		return;
 	ep = container_of(_ep, struct goku_ep, ep);
-	VDBG(ep->dev, "%s %s\n", __func__, ep->ep.name);
+	ep_vdbg(ep, "%s\n", __func__);
 
 	/* don't change EPxSTATUS_EP_INVALID to READY */
 	if (!ep->ep.desc && ep->num != 0) {
-		DBG(ep->dev, "%s %s inactive?\n", __func__, ep->ep.name);
+		ep_dbg(ep, "%s inactive?\n", __func__);
 		return;
 	}
 
@@ -1306,7 +1298,7 @@ static void ep0_start(struct goku_udc *dev)
 	struct goku_udc_regs __iomem	*regs = dev->regs;
 	unsigned			i;
 
-	VDBG(dev, "%s\n", __func__);
+	udc_vdbg(dev, "%s\n", __func__);
 
 	udc_reset(dev);
 	udc_reinit (dev);
@@ -1342,7 +1334,7 @@ static void udc_enable(struct goku_udc *dev)
 	if (readl(&dev->regs->power_detect) & PW_DETECT)
 		ep0_start(dev);
 	else {
-		DBG(dev, "%s\n", __func__);
+		udc_dbg(dev, "%s\n", __func__);
 		dev->int_enable = INT_PWRDETECT;
 		writel(dev->int_enable, &dev->regs->int_enable);
 	}
@@ -1473,7 +1465,7 @@ succeed:
 				/* device remote wakeup: always clear */
 				if (ctrl.wValue != cpu_to_le16(1))
 					goto stall;
-				VDBG(dev, "clear dev remote wakeup\n");
+				udc_vdbg(dev, "clear dev remote wakeup\n");
 				goto succeed;
 			case USB_RECIP_INTERFACE:
 				goto stall;
@@ -1486,12 +1478,10 @@ succeed:
 		}
 	}
 
-#ifdef USB_TRACE
-	VDBG(dev, "SETUP %02x.%02x v%04x i%04x l%04x\n",
+	udc_trace(dev, "SETUP %02x.%02x v%04x i%04x l%04x\n",
 		ctrl.bRequestType, ctrl.bRequest,
 		le16_to_cpu(ctrl.wValue), le16_to_cpu(ctrl.wIndex),
 		le16_to_cpu(ctrl.wLength));
-#endif
 
 	/* hw wants to know when we're configured (or not) */
 	dev->req_config = (ctrl.bRequest == USB_REQ_SET_CONFIGURATION
@@ -1507,10 +1497,8 @@ succeed:
 	spin_lock (&dev->lock);
 	if (unlikely(tmp < 0)) {
 stall:
-#ifdef USB_TRACE
-		VDBG(dev, "req %02x.%02x protocol STALL; err %d\n",
+		udc_trace(dev, "req %02x.%02x protocol STALL; err %d\n",
 				ctrl.bRequestType, ctrl.bRequest, tmp);
-#endif
 		command(regs, COMMAND_STALL, 0);
 		dev->ep[0].stopped = 1;
 		dev->ep0state = EP0_STALL;
@@ -1544,7 +1532,7 @@ rescan:
 	/* device-wide irqs */
 	if (unlikely(stat & INT_DEVWIDE)) {
 		if (stat & INT_SYSERROR) {
-			ERROR(dev, "system error\n");
+			udc_err(dev, "system error\n");
 			stop_activity(dev);
 			stat = 0;
 			handled = 1;
@@ -1555,10 +1543,10 @@ rescan:
 		if (stat & INT_PWRDETECT) {
 			writel(~stat, &regs->int_status);
 			if (readl(&dev->regs->power_detect) & PW_DETECT) {
-				VDBG(dev, "connect\n");
+				udc_vdbg(dev, "connect\n");
 				ep0_start(dev);
 			} else {
-				DBG(dev, "disconnect\n");
+				udc_dbg(dev, "disconnect\n");
 				if (dev->gadget.speed == USB_SPEED_FULL)
 					stop_activity(dev);
 				dev->ep0state = EP0_DISCONNECT;
@@ -1579,7 +1567,7 @@ rescan:
 				default:
 					break;
 				}
-				DBG(dev, "USB suspend\n");
+				udc_dbg(dev, "USB suspend\n");
 				dev->ep0state = EP0_SUSPEND;
 				if (dev->gadget.speed != USB_SPEED_UNKNOWN
 						&& dev->driver
@@ -1590,11 +1578,11 @@ rescan:
 				}
 			} else {
 				if (dev->ep0state != EP0_SUSPEND) {
-					DBG(dev, "bogus USB resume %d\n",
+					udc_dbg(dev, "bogus USB resume %d\n",
 						dev->ep0state);
 					goto pm_next;
 				}
-				DBG(dev, "USB resume\n");
+				udc_dbg(dev, "USB resume\n");
 				dev->ep0state = EP0_IDLE;
 				if (dev->gadget.speed != USB_SPEED_UNKNOWN
 						&& dev->driver
@@ -1608,7 +1596,7 @@ rescan:
 pm_next:
 		if (stat & INT_USBRESET) {		/* hub reset done */
 			ACK(INT_USBRESET);
-			INFO(dev, "USB reset done, gadget %s\n",
+			udc_info(dev, "USB reset done, gadget %s\n",
 				dev->driver->driver.name);
 		}
 		// and INT_ERR on some endpoint's crc/bitstuff/... problem
@@ -1656,7 +1644,7 @@ pm_next:
 		ACK(INT_MSTWRTMOUT);
 		ep = &dev->ep[UDC_MSTWR_ENDPOINT];
 		ep->irqs++;
-		ERROR(dev, "%s write timeout ?\n", ep->ep.name);
+		udc_err(dev, "%s write timeout ?\n", ep->ep.name);
 		// reset dma? then dma_advance()
         }
 
@@ -1682,7 +1670,7 @@ done:
 	(void)readl(&regs->int_enable);
 	spin_unlock(&dev->lock);
 	if (stat)
-		DBG(dev, "unhandled irq status: %05x (%05x, %05x)\n", stat,
+		udc_dbg(dev, "unhandled irq status: %05x (%05x, %05x)\n", stat,
 				readl(&regs->int_status), dev->int_enable);
 	return IRQ_RETVAL(handled);
 }
@@ -1704,7 +1692,7 @@ static void goku_remove(struct pci_dev *pdev)
 {
 	struct goku_udc		*dev = pci_get_drvdata(pdev);
 
-	DBG(dev, "%s\n", __func__);
+	udc_dbg(dev, "%s\n", __func__);
 
 	usb_del_gadget_udc(&dev->gadget);
 
@@ -1727,7 +1715,7 @@ static void goku_remove(struct pci_dev *pdev)
 
 	dev->regs = NULL;
 
-	INFO(dev, "unbind\n");
+	udc_info(dev, "unbind\n");
 }
 
 /* wrap this driver around the specified pci device, but
@@ -1742,7 +1730,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	int			retval;
 
 	if (!pdev->irq) {
-		printk(KERN_ERR "Check PCI %s IRQ setup!\n", pci_name(pdev));
+		dev_err(&pdev->dev, "Check PCI IRQ setup failed\n");
 		retval = -ENODEV;
 		goto err;
 	}
@@ -1766,7 +1754,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* now all the pci goodies ... */
 	retval = pci_enable_device(pdev);
 	if (retval < 0) {
-		DBG(dev, "can't enable, %d\n", retval);
+		udc_dbg(dev, "can't enable, %d\n", retval);
 		goto err;
 	}
 	dev->enabled = 1;
@@ -1774,7 +1762,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	resource = pci_resource_start(pdev, 0);
 	len = pci_resource_len(pdev, 0);
 	if (!request_mem_region(resource, len, driver_name)) {
-		DBG(dev, "controller already in use\n");
+		udc_dbg(dev, "controller already in use\n");
 		retval = -EBUSY;
 		goto err;
 	}
@@ -1782,22 +1770,22 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	base = ioremap(resource, len);
 	if (base == NULL) {
-		DBG(dev, "can't map memory\n");
+		udc_dbg(dev, "can't map memory\n");
 		retval = -EFAULT;
 		goto err;
 	}
 	dev->regs = (struct goku_udc_regs __iomem *) base;
 
-	INFO(dev, "%s\n", driver_desc);
-	INFO(dev, "version: " DRIVER_VERSION " %s\n", dmastr());
-	INFO(dev, "irq %d, pci mem %p\n", pdev->irq, base);
+	udc_info(dev, "%s\n", driver_desc);
+	udc_info(dev, "version: " DRIVER_VERSION " %s\n", dmastr());
+	udc_info(dev, "irq %d, pci mem %p\n", pdev->irq, base);
 
 	/* init to known state, then setup irqs */
 	udc_reset(dev);
 	udc_reinit (dev);
 	if (request_irq(pdev->irq, goku_irq, IRQF_SHARED,
 			driver_name, dev) != 0) {
-		DBG(dev, "request interrupt %d failed\n", pdev->irq);
+		udc_dbg(dev, "request interrupt %d failed\n", pdev->irq);
 		retval = -EBUSY;
 		goto err;
 	}

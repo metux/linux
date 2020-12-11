@@ -258,32 +258,3 @@ struct goku_udc {
 	unsigned long			irqs;
 };
 #define to_goku_udc(g)		(container_of((g), struct goku_udc, gadget))
-
-/*-------------------------------------------------------------------------*/
-
-#define xprintk(dev,level,fmt,args...) \
-	printk(level "%s %s: " fmt , driver_name , \
-			pci_name(dev->pdev) , ## args)
-
-#ifdef DEBUG
-#define DBG(dev,fmt,args...) \
-	xprintk(dev , KERN_DEBUG , fmt , ## args)
-#else
-#define DBG(dev,fmt,args...) \
-	do { } while (0)
-#endif /* DEBUG */
-
-#ifdef VERBOSE
-#define VDBG DBG
-#else
-#define VDBG(dev,fmt,args...) \
-	do { } while (0)
-#endif	/* VERBOSE */
-
-#define ERROR(dev,fmt,args...) \
-	xprintk(dev , KERN_ERR , fmt , ## args)
-#define WARNING(dev,fmt,args...) \
-	xprintk(dev , KERN_WARNING , fmt , ## args)
-#define INFO(dev,fmt,args...) \
-	xprintk(dev , KERN_INFO , fmt , ## args)
-

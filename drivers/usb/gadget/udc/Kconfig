@@ -259,7 +259,7 @@ config USB_MV_U3D
 	  controller, which support super speed USB peripheral.
 
 config USB_SNP_CORE
-	depends on (USB_AMD5536UDC || USB_SNP_UDC_PLAT)
+	depends on (USB_AMD5536UDC || USB_SNP_UDC_PLAT || COMPILE_TEST)
 	depends on HAS_DMA
 	tristate
 	help

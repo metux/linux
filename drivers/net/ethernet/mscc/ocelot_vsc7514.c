@@ -1275,7 +1275,7 @@ static int mscc_ocelot_probe(struct platform_device *pdev)
 
 	err = mscc_ocelot_init_ports(pdev, ports);
 	if (err)
-		goto out_put_ports;
+		goto out_ocelot_deinit;
 
 	if (ocelot->ptp) {
 		err = ocelot_init_timestamp(ocelot, &ocelot_ptp_clock_info);
@@ -1290,8 +1290,14 @@ static int mscc_ocelot_probe(struct platform_device *pdev)
 	register_switchdev_notifier(&ocelot_switchdev_nb);
 	register_switchdev_blocking_notifier(&ocelot_switchdev_blocking_nb);
 
+	of_node_put(ports);
+
 	dev_info(&pdev->dev, "Ocelot switch probed\n");
 
+	return 0;
+
+out_ocelot_deinit:
+	ocelot_deinit(ocelot);
 out_put_ports:
 	of_node_put(ports);
 	return err;

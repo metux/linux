@@ -6373,6 +6373,7 @@ device_initcall(binder_init);
 
 #define CREATE_TRACE_POINTS
 #include "binder_trace.h"
+EXPORT_TRACEPOINT_SYMBOL_GPL(binder_transaction_received);
 
 #if IS_ENABLED(CONFIG_BINDER_TRANSACTION_LATENCY_TRACKING)
 EXPORT_TRACEPOINT_SYMBOL(binder_txn_latency_alloc);

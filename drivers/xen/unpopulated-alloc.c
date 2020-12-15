@@ -39,10 +39,8 @@ static int fill_list(unsigned int nr_pages)
 	}
 
 	pgmap = kzalloc(sizeof(*pgmap), GFP_KERNEL);
-	if (!pgmap) {
-		ret = -ENOMEM;
+	if (!pgmap)
 		goto err_pgmap;
-	}
 
 	pgmap->type = MEMORY_DEVICE_GENERIC;
 	pgmap->range = (struct range) {

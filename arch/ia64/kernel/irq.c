@@ -28,15 +28,6 @@
 #include <asm/xtp.h>
 
 /*
- * 'what should we do if we get a hw irq event on an illegal vector'.
- * each architecture has to answer this themselves.
- */
-void ack_bad_irq(unsigned int irq)
-{
-	printk(KERN_ERR "Unexpected irq vector 0x%x on CPU %u!\n", irq, smp_processor_id());
-}
-
-/*
  * Interrupt statistics:
  */
 

@@ -12,12 +12,7 @@ typedef struct {
 #include <linux/irq_cpustat.h>	/* Standard mappings for irq_cpustat_t above */
 #include <linux/irq.h>
 
-#ifndef ack_bad_irq
-static inline void ack_bad_irq(unsigned int irq)
-{
-	printk(KERN_CRIT "unexpected IRQ trap at vector 0x%02x\n", irq);
-}
-#endif
+#define ack_bad_irq(irq)
 
 #define __ARCH_IRQ_EXIT_IRQS_DISABLED 1
 

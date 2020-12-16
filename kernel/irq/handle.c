@@ -13,10 +13,13 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
+#include <asm-generic/irq-err.h>
 
 #include <trace/events/irq.h>
 
 #include "internals.h"
+
+atomic_t irq_err_counter;
 
 #ifdef CONFIG_GENERIC_IRQ_MULTI_HANDLER
 void (*handle_arch_irq)(struct pt_regs *) __ro_after_init;
@@ -34,6 +37,7 @@ void handle_bad_irq(struct irq_desc *desc)
 
 	print_irq_desc(irq, desc);
 	kstat_incr_irqs_this_cpu(desc);
+	irq_err_inc();
 	ack_bad_irq(irq);
 }
 EXPORT_SYMBOL_GPL(handle_bad_irq);

@@ -16,6 +16,7 @@
 #include <linux/bitmap.h>
 #include <linux/irqdomain.h>
 #include <linux/sysfs.h>
+#include <asm-generic/irq-err.h>
 
 #include "internals.h"
 
@@ -684,6 +685,7 @@ int __handle_domain_irq(struct irq_domain *domain, unsigned int hwirq,
 		if (printk_ratelimit())
 			pr_warn("spurious IRQ: irq=%d hwirq=%d nr_irqs=%d\n",
 				irq, hwirq, nr_irqs);
+		irq_err_inc();
 		ack_bad_irq(irq);
 		ret = -EINVAL;
 	} else {

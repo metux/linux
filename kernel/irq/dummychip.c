@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/export.h>
+#include <asm-generic/irq-err.h>
 
 #include "internals.h"
 
@@ -20,6 +21,7 @@ static void ack_bad(struct irq_data *data)
 	struct irq_desc *desc = irq_data_to_desc(data);
 
 	print_irq_desc(data->irq, desc);
+	irq_err_inc();
 	ack_bad_irq(data->irq);
 }
 

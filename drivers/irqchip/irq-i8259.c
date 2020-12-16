@@ -22,6 +22,7 @@
 
 #include <asm/i8259.h>
 #include <asm/io.h>
+#include <asm-generic/irq-err.h>
 
 /*
  * This is the 'legacy' 8259A Programmable Interrupt Controller,
@@ -192,7 +193,7 @@ spurious_8259A_irq:
 			printk(KERN_DEBUG "spurious 8259A interrupt: IRQ%d.\n", irq);
 			spurious_irq_mask |= irqmask;
 		}
-		atomic_inc(&irq_err_count);
+		irq_err_inc();
 		/*
 		 * Theoretically we do not have to handle this IRQ,
 		 * but in Linux this does not cause problems and is

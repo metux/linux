@@ -59,6 +59,7 @@
 #include <asm/cpu_device_id.h>
 #include <asm/intel-family.h>
 #include <asm/irq_regs.h>
+#include <asm-generic/irq-err.h>
 
 unsigned int num_processors;
 
@@ -2208,7 +2209,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_error_interrupt)
 		apic_write(APIC_ESR, 0);
 	v = apic_read(APIC_ESR);
 	ack_APIC_irq();
-	atomic_inc(&irq_err_count);
+	irq_err_inc();
 
 	apic_printk(APIC_DEBUG, KERN_DEBUG "APIC error on CPU%d: %02x",
 		    smp_processor_id(), v);

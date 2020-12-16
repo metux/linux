@@ -21,14 +21,13 @@
 #include <asm/hw_irq.h>
 #include <asm/desc.h>
 #include <asm/traps.h>
+#include <asm-generic/irq-err.h>
 
 #define CREATE_TRACE_POINTS
 #include <asm/trace/irq_vectors.h>
 
 DEFINE_PER_CPU_SHARED_ALIGNED(irq_cpustat_t, irq_stat);
 EXPORT_PER_CPU_SYMBOL(irq_stat);
-
-atomic_t irq_err_count;
 
 /*
  * 'what should we do if we get a hw irq event on an illegal vector'.
@@ -156,7 +155,7 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 		seq_puts(p, "  Hyper-V stimer0 interrupts\n");
 	}
 #endif
-	seq_printf(p, "%*s: %10u\n", prec, "ERR", atomic_read(&irq_err_count));
+	seq_printf(p, "%*s: %10u\n", prec, "ERR", irq_err_get());
 #if defined(CONFIG_X86_IO_APIC)
 	seq_printf(p, "%*s: %10u\n", prec, "MIS", atomic_read(&irq_mis_count));
 #endif
@@ -216,7 +215,7 @@ u64 arch_irq_stat_cpu(unsigned int cpu)
 
 u64 arch_irq_stat(void)
 {
-	u64 sum = atomic_read(&irq_err_count);
+	u64 sum = irq_err_get();
 	return sum;
 }
 

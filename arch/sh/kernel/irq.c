@@ -31,7 +31,6 @@ atomic_t irq_err_count;
 void ack_bad_irq(unsigned int irq)
 {
 	atomic_inc(&irq_err_count);
-	printk("unexpected IRQ trap at vector %02x\n", irq);
 }
 
 #if defined(CONFIG_PROC_FS)

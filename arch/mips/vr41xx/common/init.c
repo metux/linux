@@ -8,10 +8,9 @@
 #include <linux/ioport.h>
 #include <linux/irq.h>
 #include <linux/string.h>
-
+#include <linux/irqchip/vr41xx.h>
 #include <asm/bootinfo.h>
 #include <asm/time.h>
-#include <asm/vr41xx/irq.h>
 #include <asm/vr41xx/vr41xx.h>
 
 #define IO_MEM_RESOURCE_START	0UL

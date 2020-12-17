@@ -22,10 +22,10 @@
 #include <linux/irq.h>
 #include <linux/smp.h>
 #include <linux/types.h>
+#include <linux/irqchip/vr41xx.h>
 
 #include <asm/cpu.h>
 #include <asm/io.h>
-#include <asm/vr41xx/irq.h>
 #include <asm/vr41xx/vr41xx.h>
 #include <asm-generic/irq-err.h>
 

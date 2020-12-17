@@ -10,7 +10,7 @@
 #ifndef __TANBAC_TB0219_H
 #define __TANBAC_TB0219_H
 
-#include <asm/vr41xx/irq.h>
+#include <linux/irqchip/vr41xx.h>
 
 /*
  * General-Purpose I/O Pin Number

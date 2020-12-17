@@ -7,9 +7,8 @@
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-
+#include <linux/irqchip/vr41xx.h>
 #include <asm/irq_cpu.h>
-#include <asm/vr41xx/irq.h>
 #include <asm-generic/irq-err.h>
 
 typedef struct irq_cascade {

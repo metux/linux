@@ -4,9 +4,6 @@
 
 #include <linux/init.h>
 #include <linux/sh_intc.h>
-#include <linux/atomic.h>
-
-extern atomic_t irq_err_count;
 
 struct ipr_data {
 	unsigned char irq;

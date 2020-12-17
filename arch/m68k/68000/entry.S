@@ -19,6 +19,7 @@
 #include <asm/traps.h>
 #include <asm/asm-offsets.h>
 #include <asm/entry.h>
+#include <asm-generic/irq-err.h>
 
 .text
 
@@ -219,7 +220,7 @@ inthandler:
  * Handler for uninitialized and spurious interrupts.
  */
 ENTRY(bad_interrupt)
-	addql	#1,irq_err_count
+	addql	#1,irq_err_counter
 	rte
 
 /*

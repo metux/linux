@@ -13,7 +13,8 @@
 #include <asm/kvm_arm.h>
 #include <asm/sysreg.h>
 
-#define ack_bad_irq ack_bad_irq
+#define ack_bad_irq(irq)
+
 #include <asm-generic/hardirq.h>
 
 #define __ARCH_IRQ_EXIT_IRQS_DISABLED	1
@@ -84,11 +85,5 @@ do {									\
 	if (!___ctx->cnt && !(___hcr & HCR_TGE))			\
 		write_sysreg(___hcr, hcr_el2);				\
 } while (0)
-
-static inline void ack_bad_irq(unsigned int irq)
-{
-	extern unsigned long irq_err_count;
-	irq_err_count++;
-}
 
 #endif /* __ASM_HARDIRQ_H */

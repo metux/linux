@@ -13,6 +13,7 @@
 #include <asm/dma.h>
 #include <asm/perf_event.h>
 #include <asm/mce.h>
+#include <asm-generic/irq-err.h>
 
 #include "proto.h"
 #include "irq_impl.h"
@@ -30,7 +31,7 @@ EXPORT_SYMBOL(__min_ipl);
 static void
 dummy_perf(unsigned long vector, struct pt_regs *regs)
 {
-	irq_err_count++;
+	irq_err_inc();
 	printk(KERN_CRIT "Performance counter interrupt!\n");
 }
 
@@ -60,7 +61,7 @@ do_entInt(unsigned long type, unsigned long vector,
 		handle_ipi(regs);
 		return;
 #else
-		irq_err_count++;
+		irq_err_inc();
 		printk(KERN_CRIT "Interprocessor interrupt? "
 		       "You must be kidding!\n");
 #endif

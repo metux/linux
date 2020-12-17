@@ -25,17 +25,11 @@
 #include <linux/seq_file.h>
 #include <linux/profile.h>
 #include <linux/bitops.h>
-
+#include <asm-generic/irq-err.h>
 #include <asm/io.h>
 #include <linux/uaccess.h>
 
-volatile unsigned long irq_err_count;
 DEFINE_PER_CPU(unsigned long, irq_pmi_count);
-
-void ack_bad_irq(unsigned int irq)
-{
-	irq_err_count++;
-}
 
 #ifdef CONFIG_SMP 
 static char irq_user_affinity[NR_IRQS];
@@ -79,7 +73,7 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 	for_each_online_cpu(j)
 		seq_printf(p, "%10lu ", per_cpu(irq_pmi_count, j));
 	seq_puts(p, "          Performance Monitoring\n");
-	seq_printf(p, "ERR: %10lu\n", irq_err_count);
+	seq_printf(p, "ERR: %10lu\n", irq_err_get());
 	return 0;
 }
 
@@ -109,7 +103,7 @@ handle_irq(int irq)
 	
 	if (!desc || ((unsigned) irq > ACTUAL_NR_IRQS &&
 	    illegal_count < MAX_ILLEGAL_IRQS)) {
-		irq_err_count++;
+		irq_err_inc();
 		illegal_count++;
 		printk(KERN_CRIT "device_interrupt: invalid interrupt %d\n",
 		       irq);

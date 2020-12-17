@@ -75,6 +75,5 @@ extern unsigned int irq_canonicalize(unsigned int irq);
 #endif /* !(CONFIG_M68020 || CONFIG_M68030 || CONFIG_M68040 || CONFIG_M68060) */
 
 asmlinkage void do_IRQ(int irq, struct pt_regs *regs);
-extern atomic_t irq_err_count;
 
 #endif /* _M68K_IRQ_H_ */

@@ -21,6 +21,7 @@
 #include <asm/machdep.h>
 #include <asm/cacheflush.h>
 #include <asm/irq_regs.h>
+#include <asm-generic/irq-err.h>
 
 #ifdef CONFIG_Q40
 #include <asm/q40ints.h>
@@ -164,6 +165,6 @@ EXPORT_SYMBOL(irq_canonicalize);
 
 asmlinkage void handle_badint(struct pt_regs *regs)
 {
-	atomic_inc(&irq_err_count);
+	irq_err_inc();
 	pr_warn("unexpected interrupt from %u\n", regs->vector);
 }

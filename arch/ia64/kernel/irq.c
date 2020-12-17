@@ -23,22 +23,16 @@
 #include <linux/seq_file.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
-
+#include <asm-generic/irq-err.h>
 #include <asm/mca.h>
 #include <asm/xtp.h>
-
-/*
- * Interrupt statistics:
- */
-
-atomic_t irq_err_count;
 
 /*
  * /proc/interrupts printing:
  */
 int arch_show_interrupts(struct seq_file *p, int prec)
 {
-	seq_printf(p, "ERR: %10u\n", atomic_read(&irq_err_count));
+	seq_printf(p, "ERR: %10u\n", irq_err_get());
 	return 0;
 }
 

@@ -21,7 +21,7 @@
 #include <linux/gpio/vr41xx.h>
 #include <linux/irqchip/vr41xx.h>
 #include <asm-generic/irq-err.h>
-#include <asm/vr41xx/vr41xx.h>
+//#include <asm/vr41xx/vr41xx.h>
 
 MODULE_AUTHOR("Yoichi Yuasa <yuasa@linux-mips.org>");
 MODULE_DESCRIPTION("NEC VR4100 series General-purpose I/O Unit driver");

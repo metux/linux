@@ -633,7 +633,7 @@ config GPIO_VF610
 
 config GPIO_VR41XX
 	tristate "NEC VR4100 series General-purpose I/O Uint support"
-	depends on CPU_VR41XX
+	depends on CPU_VR41XX || COMPILE_TEST
 	help
 	  Say yes here to support the NEC VR4100 series General-purpose I/O Uint
 

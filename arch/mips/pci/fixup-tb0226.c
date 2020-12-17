@@ -6,8 +6,7 @@
  */
 #include <linux/init.h>
 #include <linux/pci.h>
-
-#include <asm/vr41xx/giu.h>
+#include <linux/gpio/vr41xx.h>
 #include <asm/vr41xx/tb0226.h>
 
 int pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)

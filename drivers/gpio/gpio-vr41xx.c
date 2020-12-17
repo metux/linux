@@ -18,8 +18,8 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/gpio/vr41xx.h>
 #include <asm-generic/irq-err.h>
-#include <asm/vr41xx/giu.h>
 #include <asm/vr41xx/irq.h>
 #include <asm/vr41xx/vr41xx.h>
 

@@ -9,9 +9,8 @@
 #include <linux/smp.h>
 #include <linux/ioport.h>
 #include <linux/platform_device.h>
-
+#include <linux/gpio/vr41xx.h>
 #include <asm/cpu.h>
-#include <asm/vr41xx/giu.h>
 #include <asm/vr41xx/irq.h>
 
 static struct resource giu_50pins_pullupdown_resource[] __initdata = {

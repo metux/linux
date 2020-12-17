@@ -9,10 +9,9 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
-
+#include <linux/gpio/vr41xx.h>
 #include <asm/io.h>
 #include <asm/reboot.h>
-#include <asm/vr41xx/giu.h>
 #include <asm/vr41xx/tb0219.h>
 
 MODULE_AUTHOR("Yoichi Yuasa <yuasa@linux-mips.org>");

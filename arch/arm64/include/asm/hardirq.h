@@ -85,10 +85,6 @@ do {									\
 		write_sysreg(___hcr, hcr_el2);				\
 } while (0)
 
-static inline void ack_bad_irq(unsigned int irq)
-{
-	extern unsigned long irq_err_count;
-	irq_err_count++;
-}
+#define ack_bad_irq(irq)
 
 #endif /* __ASM_HARDIRQ_H */

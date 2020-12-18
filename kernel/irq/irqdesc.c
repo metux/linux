@@ -731,8 +731,8 @@ int handle_domain_nmi(struct irq_domain *domain, unsigned int hwirq,
 	set_irq_regs(old_regs);
 	return ret;
 }
-#endif
-#endif
+#endif /* CONFIG_IRQ_DOMAIN */
+#endif /* CONFIG_HANDLE_DOMAIN_IRQ */
 
 /* Dynamic interrupt handling */
 

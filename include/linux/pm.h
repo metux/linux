@@ -22,6 +22,26 @@
 extern void (*pm_power_off)(void);
 extern void (*pm_power_off_prepare)(void);
 
+#define POWEROFF_PRIO_ARCH	2000
+#define POWEROFF_PRIO_MACH	3000
+#define POWEROFF_PRIO_FIRMWARE	4000
+#define POWEROFF_PRIO_BOARD	5000
+#define POWEROFF_PRIO_APP	6000
+
+struct notifier_block;
+
+extern int register_pm_power_off_prepare(struct notifier_block *nb);
+extern int unregister_pm_power_off_prepare(struct notifier_block *nb);
+extern int devm_register_pm_power_off_prepare(struct device *dev,
+					      struct notifier_block *nb);
+extern int pm_call_power_off_prepare(void);
+
+extern int register_pm_power_off(struct notifier_block *nb);
+extern int unregister_pm_power_off(struct notifier_block *nb);
+extern int devm_register_pm_power_off(struct device *dev,
+				      struct notifier_block *nb);
+extern int pm_call_power_off(void);
+
 struct device; /* we have a circular dep with device.h */
 #ifdef CONFIG_VT_CONSOLE_SLEEP
 extern void pm_vt_switch_required(struct device *dev, bool required);

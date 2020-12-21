@@ -114,6 +114,7 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
+	call_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 

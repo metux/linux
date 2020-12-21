@@ -747,11 +747,14 @@ static void native_machine_halt(void)
 
 static void native_machine_power_off(void)
 {
-	if (pm_power_off) {
-		if (!reboot_force)
-			machine_shutdown();
+	if (!reboot_force)
+		machine_shutdown();
+
+	call_pm_power_off();
+
+	if (pm_power_off)
 		pm_power_off();
-	}
+
 	/* A fallback in case there is no PM info available */
 	tboot_shutdown(TB_SHUTDOWN_HALT);
 }

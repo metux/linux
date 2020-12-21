@@ -23,10 +23,12 @@ void machine_restart(char *cmd)
 
 void machine_halt(void)
 {
+	call_pm_power_off();
 	pm_power_off();
 }
 
 void machine_power_off(void)
 {
+	call_pm_power_off();
 	pm_power_off();
 }

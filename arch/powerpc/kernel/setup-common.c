@@ -163,6 +163,7 @@ void machine_restart(char *cmd)
 void machine_power_off(void)
 {
 	machine_shutdown();
+	call_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 

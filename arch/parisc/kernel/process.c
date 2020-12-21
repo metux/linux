@@ -117,6 +117,7 @@ void machine_power_off(void)
 	pdc_chassis_send_status(PDC_CHASSIS_DIRECT_SHUTDOWN);
 
 	/* ipmi_poweroff may have been installed. */
+	call_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 		

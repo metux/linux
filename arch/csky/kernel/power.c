@@ -9,6 +9,7 @@ EXPORT_SYMBOL(pm_power_off);
 void machine_power_off(void)
 {
 	local_irq_disable();
+	call_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 	asm volatile ("bkpt");
@@ -17,6 +18,7 @@ void machine_power_off(void)
 void machine_halt(void)
 {
 	local_irq_disable();
+	call_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 	asm volatile ("bkpt");

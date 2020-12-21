@@ -26,6 +26,7 @@ Power Management
     swsusp
     video
     tricks
+    poweroff
 
     userland-swsusp
 

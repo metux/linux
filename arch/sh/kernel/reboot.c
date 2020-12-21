@@ -46,6 +46,7 @@ static void native_machine_shutdown(void)
 
 static void native_machine_power_off(void)
 {
+	call_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 }

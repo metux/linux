@@ -1084,6 +1084,7 @@ static void xen_machine_halt(void)
 
 static void xen_machine_power_off(void)
 {
+	cal_pm_power_off();
 	if (pm_power_off)
 		pm_power_off();
 	xen_reboot(SHUTDOWN_poweroff);

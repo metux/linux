@@ -6,8 +6,6 @@
 #include <linux/efi.h>
 #include <linux/reboot.h>
 
-static void (*orig_pm_power_off)(void);
-
 int efi_reboot_quirk_mode = -1;
 
 void efi_reboot(enum reboot_mode reboot_mode, const char *__unused)
@@ -51,16 +49,21 @@ bool __weak efi_poweroff_required(void)
 	return false;
 }
 
-static void efi_power_off(void)
+static int efi_power_off(struct notifier_block *nb, unsigned long action,
+			 void *data)
 {
 	efi.reset_system(EFI_RESET_SHUTDOWN, EFI_SUCCESS, 0, NULL);
 	/*
 	 * The above call should not return, if it does fall back to
 	 * the original power off method (typically ACPI poweroff).
 	 */
-	if (orig_pm_power_off)
-		orig_pm_power_off();
+	return NOTIFY_OK;
 }
+
+static struct notifier_block efi_power_off_nb = {
+	.notifier_call = efi_power_off,
+	.priority = POWEROFF_PRIO_FIRMWARE+10,	// shall be above ACPI
+};
 
 static int __init efi_shutdown_init(void)
 {

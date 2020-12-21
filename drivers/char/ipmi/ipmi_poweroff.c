@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/notifier.h>
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/completion.h>
@@ -551,6 +552,11 @@ static void ipmi_poweroff_function(void)
 	specific_poweroff_func(ipmi_user);
 }
 
+static struct notifier_block ipmi_power_off_nb = {
+	.notifier_call = ipmi_poweroff_function,
+	.priority = POWEROFF_PRIO_BOARD,
+};
+
 /* Wait for an IPMI interface to be installed, the first one installed
    will be grabbed by this code and used to perform the powerdown. */
 static void ipmi_po_new_smi(int if_num, struct device *device)
@@ -626,8 +632,7 @@ static void ipmi_po_new_smi(int if_num, struct device *device)
 	pr_info("Found a %s style poweroff function\n",
 		poweroff_functions[i].platform_type);
 	specific_poweroff_func = poweroff_functions[i].poweroff_func;
-	old_poweroff_func = pm_power_off;
-	pm_power_off = ipmi_poweroff_function;
+	register_pm_power_off(&ipmi_power_off_nb);
 	ready = 1;
 }
 
@@ -641,7 +646,7 @@ static void ipmi_po_smi_gone(int if_num)
 
 	ready = 0;
 	ipmi_destroy_user(ipmi_user);
-	pm_power_off = old_poweroff_func;
+	unregister_pm_power_off(&impi_power_off_nb);
 }
 
 static struct ipmi_smi_watcher smi_watcher = {
@@ -730,7 +735,7 @@ static void __exit ipmi_poweroff_cleanup(void)
 		rv = ipmi_destroy_user(ipmi_user);
 		if (rv)
 			pr_err("could not cleanup the IPMI user: 0x%x\n", rv);
-		pm_power_off = old_poweroff_func;
+		unregister_pm_power_off(&ipmi_power_off_nb);
 	}
 }
 module_exit(ipmi_poweroff_cleanup);

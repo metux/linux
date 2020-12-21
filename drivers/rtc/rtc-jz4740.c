@@ -8,9 +8,11 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/notifier.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/pm_wakeirq.h>
 #include <linux/reboot.h>
 #include <linux/rtc.h>
@@ -306,6 +308,11 @@ static void jz4740_rtc_set_wakeup_params(struct jz4740_rtc *rtc,
 	jz4740_rtc_reg_write(rtc, JZ_REG_RTC_RESET_COUNTER, reset_ticks);
 }
 
+static struct notifier_block jz4740_power_off_nb = {
+	.notifier_call = jz4740_rtc_power_off,
+	.priority = POWEROFF_PRIO_BOARD,
+};
+
 static int jz4740_rtc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -388,11 +395,7 @@ static int jz4740_rtc_probe(struct platform_device *pdev)
 
 	if (of_device_is_system_power_controller(np)) {
 		dev_for_power_off = dev;
-
-		if (!pm_power_off)
-			pm_power_off = jz4740_rtc_power_off;
-		else
-			dev_warn(dev, "Poweroff handler already present!\n");
+		devm_register_pm_power_off(dev, &jz4740_power_off_nb);
 	}
 
 	return 0;

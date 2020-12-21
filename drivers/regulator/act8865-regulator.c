@@ -11,7 +11,9 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/err.h>
+#include <linux/notifier.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/act8865.h>
 #include <linux/of.h>
@@ -651,6 +653,11 @@ static int act8600_charger_probe(struct device *dev, struct regmap *regmap)
 	return PTR_ERR_OR_ZERO(charger);
 }
 
+static struct notifier_block act8865_power_off_nb = {
+	.notifier_call = act8865_power_off,
+	.priority = POWEROFF_PRIO_BOARD,
+};
+
 static int act8865_pmic_probe(struct i2c_client *client,
 			      const struct i2c_device_id *i2c_id)
 {
@@ -725,11 +732,11 @@ static int act8865_pmic_probe(struct i2c_client *client,
 	}
 
 	if (of_device_is_system_power_controller(dev->of_node)) {
-		if (!pm_power_off && (off_reg > 0)) {
+		if (off_reg > 0) {
 			act8865_i2c_client = client;
 			act8865->off_reg = off_reg;
 			act8865->off_mask = off_mask;
-			pm_power_off = act8865_power_off;
+			devm_register_pm_power_off(dev, &act8865_power_off_nb);
 		} else {
 			dev_err(dev, "Failed to set poweroff capability, already defined\n");
 		}

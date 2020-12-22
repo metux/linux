@@ -443,9 +443,7 @@ SYM_FUNC_START_LOCAL(__primary_switched)
 	bl	__pi_memset
 	dsb	ishst				// Make zero page visible to PTW
 
-	bl	init_this_cpu_offset
-
-#ifdef CONFIG_KASAN
+#if defined(CONFIG_KASAN_GENERIC) || defined(CONFIG_KASAN_SW_TAGS)
 	bl	kasan_early_init
 #endif
 #ifdef CONFIG_RANDOMIZE_BASE
@@ -751,7 +749,6 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	ptrauth_keys_init_cpu x2, x3, x4, x5
 #endif
 
-	bl	init_this_cpu_offset
 	b	secondary_start_kernel
 SYM_FUNC_END(__secondary_switched)
 

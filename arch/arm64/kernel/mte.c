@@ -4,25 +4,49 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/prctl.h>
 #include <linux/sched.h>
+#include <linux/sched/mm.h>
 #include <linux/string.h>
+#include <linux/swap.h>
+#include <linux/swapops.h>
 #include <linux/thread_info.h>
+#include <linux/types.h>
+#include <linux/uio.h>
 
+#include <asm/barrier.h>
 #include <asm/cpufeature.h>
 #include <asm/mte.h>
+#include <asm/mte-kasan.h>
+#include <asm/ptrace.h>
 #include <asm/sysreg.h>
+
+static void mte_sync_page_tags(struct page *page, pte_t *ptep, bool check_swap)
+{
+	pte_t old_pte = READ_ONCE(*ptep);
+
+	if (check_swap && is_swap_pte(old_pte)) {
+		swp_entry_t entry = pte_to_swp_entry(old_pte);
+
+		if (!non_swap_entry(entry) && mte_restore_tags(entry, page))
+			return;
+	}
+
+	mte_clear_page_tags(page_address(page));
+}
 
 void mte_sync_tags(pte_t *ptep, pte_t pte)
 {
 	struct page *page = pte_page(pte);
 	long i, nr_pages = compound_nr(page);
+	bool check_swap = nr_pages == 1;
 
 	/* if PG_mte_tagged is set, tags have already been initialised */
 	for (i = 0; i < nr_pages; i++, page++) {
 		if (!test_and_set_bit(PG_mte_tagged, &page->flags))
-			mte_clear_page_tags(page_address(page));
+			mte_sync_page_tags(page, ptep, check_swap);
 	}
 }
 
@@ -51,6 +75,51 @@ int memcmp_pages(struct page *page1, struct page *page2)
 	return ret;
 }
 
+u8 mte_get_mem_tag(void *addr)
+{
+	if (!system_supports_mte())
+		return 0xFF;
+
+	asm(__MTE_PREAMBLE "ldg %0, [%0]"
+	    : "+r" (addr));
+
+	return mte_get_ptr_tag(addr);
+}
+
+u8 mte_get_random_tag(void)
+{
+	void *addr;
+
+	if (!system_supports_mte())
+		return 0xFF;
+
+	asm(__MTE_PREAMBLE "irg %0, %0"
+	    : "+r" (addr));
+
+	return mte_get_ptr_tag(addr);
+}
+
+void *mte_set_mem_tag_range(void *addr, size_t size, u8 tag)
+{
+	void *ptr = addr;
+
+	if ((!system_supports_mte()) || (size == 0))
+		return addr;
+
+	/* Make sure that size is MTE granule aligned. */
+	WARN_ON(size & (MTE_GRANULE_SIZE - 1));
+
+	/* Make sure that the address is MTE granule aligned. */
+	WARN_ON((u64)addr & (MTE_GRANULE_SIZE - 1));
+
+	tag = 0xF0 | tag;
+	ptr = (void *)__tag_set(ptr, tag);
+
+	mte_assign_mem_tag_range(ptr, size);
+
+	return ptr;
+}
+
 static void update_sctlr_el1_tcf0(u64 tcf0)
 {
 	/* ISB required for the kernel uaccess routines */
@@ -71,6 +140,25 @@ static void set_sctlr_el1_tcf0(u64 tcf0)
 	preempt_enable();
 }
 
+static void update_gcr_el1_excl(u64 incl)
+{
+	u64 excl = ~incl & SYS_GCR_EL1_EXCL_MASK;
+
+	/*
+	 * Note that 'incl' is an include mask (controlled by the user via
+	 * prctl()) while GCR_EL1 accepts an exclude mask.
+	 * No need for ISB since this only affects EL0 currently, implicit
+	 * with ERET.
+	 */
+	sysreg_clear_set_s(SYS_GCR_EL1, SYS_GCR_EL1_EXCL_MASK, excl);
+}
+
+static void set_gcr_el1_excl(u64 incl)
+{
+	current->thread.gcr_user_incl = incl;
+	update_gcr_el1_excl(incl);
+}
+
 void flush_mte_state(void)
 {
 	if (!system_supports_mte())
@@ -82,6 +170,8 @@ void flush_mte_state(void)
 	clear_thread_flag(TIF_MTE_ASYNC_FAULT);
 	/* disable tag checking */
 	set_sctlr_el1_tcf0(SCTLR_EL1_TCF0_NONE);
+	/* reset tag generation mask */
+	set_gcr_el1_excl(0);
 }
 
 void mte_thread_switch(struct task_struct *next)
@@ -92,6 +182,7 @@ void mte_thread_switch(struct task_struct *next)
 	/* avoid expensive SCTLR_EL1 accesses if no change */
 	if (current->thread.sctlr_tcf0 != next->thread.sctlr_tcf0)
 		update_sctlr_el1_tcf0(next->thread.sctlr_tcf0);
+	update_gcr_el1_excl(next->thread.gcr_user_incl);
 }
 
 void mte_suspend_exit(void)
@@ -102,9 +193,10 @@ void mte_suspend_exit(void)
 	update_gcr_el1_excl(current->thread.gcr_user_incl);
 }
 
-long set_mte_ctrl(unsigned long arg)
+long set_mte_ctrl(struct task_struct *task, unsigned long arg)
 {
 	u64 tcf0;
+	u64 gcr_incl = (arg & PR_MTE_TAG_MASK) >> PR_MTE_TAG_SHIFT;
 
 	if (!system_supports_mte())
 		return 0;
@@ -123,25 +215,171 @@ long set_mte_ctrl(unsigned long arg)
 		return -EINVAL;
 	}
 
-	set_sctlr_el1_tcf0(tcf0);
+	if (task != current) {
+		task->thread.sctlr_tcf0 = tcf0;
+		task->thread.gcr_user_incl = gcr_incl;
+	} else {
+		set_sctlr_el1_tcf0(tcf0);
+		set_gcr_el1_excl(gcr_incl);
+	}
 
 	return 0;
 }
 
-long get_mte_ctrl(void)
+long get_mte_ctrl(struct task_struct *task)
 {
+	unsigned long ret;
+
 	if (!system_supports_mte())
 		return 0;
 
-	switch (current->thread.sctlr_tcf0) {
+	ret = task->thread.gcr_user_incl << PR_MTE_TAG_SHIFT;
+
+	switch (task->thread.sctlr_tcf0) {
 	case SCTLR_EL1_TCF0_NONE:
 		ret |= PR_MTE_TCF_NONE;
 		break;
 	case SCTLR_EL1_TCF0_SYNC:
-		return PR_MTE_TCF_SYNC;
+		ret |= PR_MTE_TCF_SYNC;
+		break;
 	case SCTLR_EL1_TCF0_ASYNC:
-		return PR_MTE_TCF_ASYNC;
+		ret |= PR_MTE_TCF_ASYNC;
+		break;
+	}
+
+	return ret;
+}
+
+/*
+ * Access MTE tags in another process' address space as given in mm. Update
+ * the number of tags copied. Return 0 if any tags copied, error otherwise.
+ * Inspired by __access_remote_vm().
+ */
+static int __access_remote_tags(struct mm_struct *mm, unsigned long addr,
+				struct iovec *kiov, unsigned int gup_flags)
+{
+	struct vm_area_struct *vma;
+	void __user *buf = kiov->iov_base;
+	size_t len = kiov->iov_len;
+	int ret;
+	int write = gup_flags & FOLL_WRITE;
+
+	if (!access_ok(buf, len))
+		return -EFAULT;
+
+	if (mmap_read_lock_killable(mm))
+		return -EIO;
+
+	while (len) {
+		unsigned long tags, offset;
+		void *maddr;
+		struct page *page = NULL;
+
+		ret = get_user_pages_remote(mm, addr, 1, gup_flags, &page,
+					    &vma, NULL);
+		if (ret <= 0)
+			break;
+
+		/*
+		 * Only copy tags if the page has been mapped as PROT_MTE
+		 * (PG_mte_tagged set). Otherwise the tags are not valid and
+		 * not accessible to user. Moreover, an mprotect(PROT_MTE)
+		 * would cause the existing tags to be cleared if the page
+		 * was never mapped with PROT_MTE.
+		 */
+		if (!test_bit(PG_mte_tagged, &page->flags)) {
+			ret = -EOPNOTSUPP;
+			put_page(page);
+			break;
+		}
+
+		/* limit access to the end of the page */
+		offset = offset_in_page(addr);
+		tags = min(len, (PAGE_SIZE - offset) / MTE_GRANULE_SIZE);
+
+		maddr = page_address(page);
+		if (write) {
+			tags = mte_copy_tags_from_user(maddr + offset, buf, tags);
+			set_page_dirty_lock(page);
+		} else {
+			tags = mte_copy_tags_to_user(buf, maddr + offset, tags);
+		}
+		put_page(page);
+
+		/* error accessing the tracer's buffer */
+		if (!tags)
+			break;
+
+		len -= tags;
+		buf += tags;
+		addr += tags * MTE_GRANULE_SIZE;
+	}
+	mmap_read_unlock(mm);
+
+	/* return an error if no tags copied */
+	kiov->iov_len = buf - kiov->iov_base;
+	if (!kiov->iov_len) {
+		/* check for error accessing the tracee's address space */
+		if (ret <= 0)
+			return -EIO;
+		else
+			return -EFAULT;
 	}
 
 	return 0;
+}
+
+/*
+ * Copy MTE tags in another process' address space at 'addr' to/from tracer's
+ * iovec buffer. Return 0 on success. Inspired by ptrace_access_vm().
+ */
+static int access_remote_tags(struct task_struct *tsk, unsigned long addr,
+			      struct iovec *kiov, unsigned int gup_flags)
+{
+	struct mm_struct *mm;
+	int ret;
+
+	mm = get_task_mm(tsk);
+	if (!mm)
+		return -EPERM;
+
+	if (!tsk->ptrace || (current != tsk->parent) ||
+	    ((get_dumpable(mm) != SUID_DUMP_USER) &&
+	     !ptracer_capable(tsk, mm->user_ns))) {
+		mmput(mm);
+		return -EPERM;
+	}
+
+	ret = __access_remote_tags(mm, addr, kiov, gup_flags);
+	mmput(mm);
+
+	return ret;
+}
+
+int mte_ptrace_copy_tags(struct task_struct *child, long request,
+			 unsigned long addr, unsigned long data)
+{
+	int ret;
+	struct iovec kiov;
+	struct iovec __user *uiov = (void __user *)data;
+	unsigned int gup_flags = FOLL_FORCE;
+
+	if (!system_supports_mte())
+		return -EIO;
+
+	if (get_user(kiov.iov_base, &uiov->iov_base) ||
+	    get_user(kiov.iov_len, &uiov->iov_len))
+		return -EFAULT;
+
+	if (request == PTRACE_POKEMTETAGS)
+		gup_flags |= FOLL_WRITE;
+
+	/* align addr to the MTE tag granule */
+	addr &= MTE_GRANULE_MASK;
+
+	ret = access_remote_tags(child, addr, &kiov, gup_flags);
+	if (!ret)
+		ret = put_user(kiov.iov_len, &uiov->iov_len);
+
+	return ret;
 }

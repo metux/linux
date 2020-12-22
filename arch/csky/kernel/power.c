@@ -2,23 +2,19 @@
 // Copyright (C) 2018 Hangzhou C-SKY Microsystems co.,ltd.
 
 #include <linux/reboot.h>
-
-void (*pm_power_off)(void);
-EXPORT_SYMBOL(pm_power_off);
+#include <linux/pm.h>
 
 void machine_power_off(void)
 {
 	local_irq_disable();
-	if (pm_power_off)
-		pm_power_off();
+	do_power_off();
 	asm volatile ("bkpt");
 }
 
 void machine_halt(void)
 {
 	local_irq_disable();
-	if (pm_power_off)
-		pm_power_off();
+	do_power_off();
 	asm volatile ("bkpt");
 }
 

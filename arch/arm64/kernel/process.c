@@ -67,9 +67,6 @@ EXPORT_SYMBOL(__stack_chk_guard);
 /*
  * Function pointers to optional machine specific functions
  */
-void (*pm_power_off)(void);
-EXPORT_SYMBOL_GPL(pm_power_off);
-
 void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
 
 static void noinstr __cpu_do_idle(void)
@@ -172,8 +169,7 @@ void machine_power_off(void)
 {
 	local_irq_disable();
 	smp_send_stop();
-	if (pm_power_off)
-		pm_power_off();
+	do_power_off();
 }
 
 /*

@@ -53,6 +53,16 @@ int reboot_force;
 void (*pm_power_off_prepare)(void);
 EXPORT_SYMBOL_GPL(pm_power_off_prepare);
 
+void (*pm_power_off)(void);
+EXPORT_SYMBOL_GPL(pm_power_off);
+
+void do_power_off(void)
+{
+	if (pm_power_off)
+		pm_power_off();
+}
+EXPORT_SYMBOL_GPL(do_power_off);
+
 /**
  *	emergency_restart - reboot the system
  *

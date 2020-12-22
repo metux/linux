@@ -32,6 +32,7 @@
 #include <linux/of_platform.h>
 #include <linux/hugetlb.h>
 #include <linux/pgtable.h>
+#include <linux/pm.h>
 #include <asm/debugfs.h>
 #include <asm/io.h>
 #include <asm/paca.h>
@@ -163,17 +164,12 @@ void machine_restart(char *cmd)
 void machine_power_off(void)
 {
 	machine_shutdown();
-	if (pm_power_off)
-		pm_power_off();
-
+	do_power_off();
 	smp_send_stop();
 	machine_hang();
 }
 /* Used by the G5 thermal driver */
 EXPORT_SYMBOL_GPL(machine_power_off);
-
-void (*pm_power_off)(void);
-EXPORT_SYMBOL_GPL(pm_power_off);
 
 void machine_halt(void)
 {

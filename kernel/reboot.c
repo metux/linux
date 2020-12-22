@@ -56,8 +56,75 @@ EXPORT_SYMBOL_GPL(pm_power_off_prepare);
 void (*pm_power_off)(void);
 EXPORT_SYMBOL_GPL(pm_power_off);
 
+struct power_off_handler {
+	power_off_level_t level;
+	power_off_proc_t proc;
+	void *data;
+};
+
+struct power_off_handler power_off_handlers[POWER_OFF_LEVEL_NUM];
+
+int power_off_register(power_off_level_t level, power_off_proc_t proc,
+		       void *data)
+{
+	BUG_ON(level >= POWER_OFF_LEVEL_NUM);
+	if (power_off_handlers[level].proc != NULL)
+		pr_info("overwriting power off proc level %d\n", level);
+	power_off_handlers[level].proc = proc;
+	power_off_handlers[level].data = data;
+	return 0;
+}
+
+int power_off_unregister(power_off_level_t level, power_off_proc_t proc,
+			 void *data)
+{
+	BUG_ON(level >= POWER_OFF_LEVEL_NUM);
+	if ((power_off_handlers[level].proc == proc) &&
+	    (power_off_handlers[level].data == data))
+	{
+		power_off_handlers[level].proc = NULL;
+		power_off_handlers[level].data = NULL;
+	}
+	return 0;
+}
+
+static void devm_power_off_release(struct device *dev, void *res)
+{
+	struct power_off_handler *this = res;
+	power_off_unregister(this->level, this->proc, this->data);
+}
+
+int devm_power_off_register(struct device *dev, power_off_level_t level,
+			    power_off_proc_t proc, void *data)
+{
+	int ret;
+	struct power_off_handler *ptr;
+
+	ptr = devres_alloc(devm_power_off_release, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return -ENOMEM;
+
+	ret = power_off_register(level, proc, data);
+	if (ret) {
+		devres_free(ptr);
+		return ret;
+	}
+
+	ptr->proc = proc;
+	ptr->data = data;
+	ptr->level = level;
+	devres_add(dev, ptr);
+
+	return 0;
+}
+
 void do_power_off(void)
 {
+	int x;
+	for (x=0; x<POWER_OFF_LEVEL_NUM; x++)
+		if (power_off_handlers[x].proc)
+			power_off_handlers[x].proc(power_off_handlers[x].data);
+
 	if (pm_power_off)
 		pm_power_off();
 }

@@ -24,6 +24,20 @@ extern void (*pm_power_off_prepare)(void);
 
 extern void do_power_off(void);
 
+typedef enum {
+	POWER_OFF_LEVEL_DEVICE = 0,
+	POWER_OFF_LEVEL_NUM = 1,
+} power_off_level_t;
+
+typedef int(*power_off_proc_t)(void *data);
+
+extern int power_off_register(power_off_level_t level, power_off_proc_t proc,
+			      void *data);
+extern int power_off_unregister(power_off_level_t level, power_off_proc_t proc,
+				void *data);
+extern int devm_power_off_register(struct device *dev, power_off_level_t level,
+				   power_off_proc_t proc, void *data);
+
 struct device; /* we have a circular dep with device.h */
 #ifdef CONFIG_VT_CONSOLE_SLEEP
 extern void pm_vt_switch_required(struct device *dev, bool required);

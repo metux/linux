@@ -29,15 +29,13 @@ static int restart_poweroff_probe(struct platform_device *pdev)
 		return -EBUSY;
 	}
 
-	pm_power_off = &restart_poweroff_do_poweroff;
+	install_pm_power_off(restart_poweroff_do_poweroff, true);
 	return 0;
 }
 
 static int restart_poweroff_remove(struct platform_device *pdev)
 {
-	if (pm_power_off == &restart_poweroff_do_poweroff)
-		pm_power_off = NULL;
-
+	remove_pm_power_off(restart_poweroff_do_poweroff);
 	return 0;
 }
 

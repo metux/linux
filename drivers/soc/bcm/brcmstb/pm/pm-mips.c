@@ -432,7 +432,7 @@ static int brcmstb_pm_init(void)
 	ctrl.timers_base = base;
 
 	/* s3 cold boot aka s5 */
-	pm_power_off = brcmstb_pm_s5;
+	install_pm_power_off(brcmstb_pm_s5);
 
 	suspend_set_ops(&brcmstb_pm_ops);
 

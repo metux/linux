@@ -78,7 +78,7 @@ static int piix4_poweroff_probe(struct pci_dev *dev,
 
 	pm_dev = dev;
 	io_offset = pci_resource_start(dev, piix4_pm_io_region);
-	pm_power_off = piix4_poweroff;
+	install_pm_power_off(piix4_poweroff, true);
 
 	return 0;
 }

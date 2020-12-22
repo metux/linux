@@ -634,7 +634,7 @@ static int imx6_pm_stby_poweroff_probe(void)
 		return -EBUSY;
 	}
 
-	pm_power_off = imx6_pm_stby_poweroff;
+	install_pm_power_off(imx6_pm_stby_poweroff);
 	return 0;
 }
 

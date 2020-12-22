@@ -199,7 +199,7 @@ static void __init glantank_init_machine(void)
 	i2c_register_board_info(0, glantank_i2c_devices,
 		ARRAY_SIZE(glantank_i2c_devices));
 
-	pm_power_off = glantank_power_off;
+	install_pm_power_off(glantank_power_off);
 }
 
 MACHINE_START(GLANTANK, "GLAN Tank")

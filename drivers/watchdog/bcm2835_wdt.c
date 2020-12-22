@@ -15,6 +15,7 @@
 #include <linux/mfd/bcm2835-pm.h>
 #include <linux/module.h>
 #include <linux/io.h>
+#include <linux/pm.h>
 #include <linux/watchdog.h>
 #include <linux/platform_device.h>
 #include <linux/of_address.h>
@@ -205,10 +206,8 @@ static int bcm2835_wdt_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
-	if (pm_power_off == NULL) {
-		pm_power_off = bcm2835_power_off;
-		bcm2835_power_off_wdt = wdt;
-	}
+	install_pm_power_off(bcm2835_power_off);
+	bcm2835_power_off_wdt = wdt;
 
 	dev_info(dev, "Broadcom BCM2835 watchdog timer");
 	return 0;
@@ -216,9 +215,7 @@ static int bcm2835_wdt_probe(struct platform_device *pdev)
 
 static int bcm2835_wdt_remove(struct platform_device *pdev)
 {
-	if (pm_power_off == bcm2835_power_off)
-		pm_power_off = NULL;
-
+	remove_pm_power_off(bcm2835_power_off);
 	return 0;
 }
 

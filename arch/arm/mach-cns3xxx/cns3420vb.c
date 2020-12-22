@@ -221,7 +221,7 @@ static void __init cns3420_init(void)
 	cns3xxx_ahci_init();
 	cns3xxx_sdhci_init();
 
-	pm_power_off = cns3xxx_power_off;
+	install_pm_power_off(cns3xxx_power_off);
 }
 
 static struct map_desc cns3420_io_desc[] __initdata = {

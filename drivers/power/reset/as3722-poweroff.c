@@ -56,16 +56,14 @@ static int as3722_poweroff_probe(struct platform_device *pdev)
 	as3722_poweroff->as3722 = dev_get_drvdata(pdev->dev.parent);
 	as3722_poweroff->dev = &pdev->dev;
 	as3722_pm_poweroff = as3722_poweroff;
-	if (!pm_power_off)
-		pm_power_off = as3722_pm_power_off;
+	install_pm_power_off(as3722_pm_power_off, false);
 
 	return 0;
 }
 
 static int as3722_poweroff_remove(struct platform_device *pdev)
 {
-	if (pm_power_off == as3722_pm_power_off)
-		pm_power_off = NULL;
+	remove_pm_power_off(as3722_pm_power_off);
 	as3722_pm_poweroff = NULL;
 
 	return 0;

@@ -74,15 +74,13 @@ static int gpio_poweroff_probe(struct platform_device *pdev)
 	if (IS_ERR(reset_gpio))
 		return PTR_ERR(reset_gpio);
 
-	pm_power_off = &gpio_poweroff_do_poweroff;
+	install_pm_power_off(gpio_poweroff_do_poweroff, true);
 	return 0;
 }
 
 static int gpio_poweroff_remove(struct platform_device *pdev)
 {
-	if (pm_power_off == &gpio_poweroff_do_poweroff)
-		pm_power_off = NULL;
-
+	remove_pm_power_off(gpio_poweroff_do_poweroff);
 	return 0;
 }
 

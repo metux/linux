@@ -895,7 +895,7 @@ static int omap_rtc_probe(struct platform_device *pdev)
 	if (rtc->is_pmic_controller) {
 		if (!pm_power_off) {
 			omap_rtc_power_off_rtc = rtc;
-			pm_power_off = omap_rtc_power_off;
+			install_pm_power_off(omap_rtc_power_off);
 		}
 	}
 
@@ -916,9 +916,8 @@ static int omap_rtc_remove(struct platform_device *pdev)
 	struct omap_rtc *rtc = platform_get_drvdata(pdev);
 	u8 reg;
 
-	if (pm_power_off == omap_rtc_power_off &&
-			omap_rtc_power_off_rtc == rtc) {
-		pm_power_off = NULL;
+	if (omap_rtc_power_off_rtc == rtc) {
+		uninstall_pm_power_off(omap_rtc_power_off);
 		omap_rtc_power_off_rtc = NULL;
 	}
 

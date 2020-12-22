@@ -848,7 +848,7 @@ static int tegra_nvec_probe(struct platform_device *pdev)
 	nvec_register_notifier(nvec, &nvec->nvec_status_notifier, 0);
 
 	nvec_power_handle = nvec;
-	pm_power_off = nvec_power_off;
+	install_pm_power_off(nvec_power_off);
 
 	/* Get Firmware Version */
 	err = nvec_write_sync(nvec, get_firmware_version, 2, &msg);
@@ -890,8 +890,7 @@ static int tegra_nvec_remove(struct platform_device *pdev)
 	nvec_unregister_notifier(nvec, &nvec->nvec_status_notifier);
 	cancel_work_sync(&nvec->rx_work);
 	cancel_work_sync(&nvec->tx_work);
-	/* FIXME: needs check whether nvec is responsible for power off */
-	pm_power_off = NULL;
+	uninstall_pm_power_off(nvec_power_off);
 
 	return 0;
 }

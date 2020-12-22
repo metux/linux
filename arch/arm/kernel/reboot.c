@@ -19,8 +19,6 @@ typedef void (*phys_reset_t)(unsigned long, bool);
  * Function pointers to optional machine specific functions
  */
 void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
-void (*pm_power_off)(void);
-EXPORT_SYMBOL(pm_power_off);
 
 /*
  * A temporary stack to use for CPU reset. This is static so that we
@@ -118,8 +116,7 @@ void machine_power_off(void)
 	local_irq_disable();
 	smp_send_stop();
 
-	if (pm_power_off)
-		pm_power_off();
+	do_pm_power_off();
 }
 
 /*

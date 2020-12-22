@@ -389,9 +389,7 @@ static int jz4740_rtc_probe(struct platform_device *pdev)
 	if (of_device_is_system_power_controller(np)) {
 		dev_for_power_off = dev;
 
-		if (!pm_power_off)
-			pm_power_off = jz4740_rtc_power_off;
-		else
+		if (!install_pm_power_off(jz4740_rtc_power_off, false))
 			dev_warn(dev, "Poweroff handler already present!\n");
 	}
 

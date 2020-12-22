@@ -369,7 +369,7 @@ static int __init at91_shdwc_probe(struct platform_device *pdev)
 		goto unmap;
 	}
 
-	pm_power_off = at91_poweroff;
+	install_pm_power_off(at91_poweroff, true);
 
 	ddr_type = readl(at91_shdwc->mpddrc_base + AT91_DDRSDRC_MDR) &
 			 AT91_DDRSDRC_MD;

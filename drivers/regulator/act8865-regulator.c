@@ -725,11 +725,11 @@ static int act8865_pmic_probe(struct i2c_client *client,
 	}
 
 	if (of_device_is_system_power_controller(dev->of_node)) {
-		if (!pm_power_off && (off_reg > 0)) {
+		if (off_reg > 0) {
 			act8865_i2c_client = client;
 			act8865->off_reg = off_reg;
 			act8865->off_mask = off_mask;
-			pm_power_off = act8865_power_off;
+			install_pm_power_off(act8865_power_off, false);
 		} else {
 			dev_err(dev, "Failed to set poweroff capability, already defined\n");
 		}

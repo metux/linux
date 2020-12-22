@@ -150,7 +150,7 @@ static int gemini_poweroff_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	pm_power_off = gemini_poweroff;
+	install_pm_power_off(gemini_poweroff, true);
 	gpw_poweroff = gpw;
 
 	dev_info(dev, "Gemini poweroff driver registered\n");

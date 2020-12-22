@@ -195,7 +195,7 @@ static int __init at91_poweroff_probe(struct platform_device *pdev)
 		}
 	}
 
-	pm_power_off = at91_poweroff;
+	install_pm_power_off(at91_poweroff, true);
 
 	return 0;
 

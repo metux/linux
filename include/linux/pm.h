@@ -19,8 +19,15 @@
 /*
  * Callbacks for platform drivers to implement.
  */
-extern void (*pm_power_off)(void);
-extern void (*pm_power_off_prepare)(void);
+
+typedef void (*pm_power_off_proc_t)(void);
+
+extern pm_power_off_proc_t pm_power_off;
+extern pm_power_off_proc_t pm_power_off_prepare;
+
+extern void do_pm_power_off(void);
+extern int install_pm_power_off(pm_power_off_proc_t proc, bool force);
+extern int remove_pm_poewr_off(pm_power_off_proc_t proc);
 
 struct device; /* we have a circular dep with device.h */
 #ifdef CONFIG_VT_CONSOLE_SLEEP

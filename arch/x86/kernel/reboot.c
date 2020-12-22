@@ -34,12 +34,6 @@
 #include <asm/efi.h>
 
 /*
- * Power off function, if any
- */
-void (*pm_power_off)(void);
-EXPORT_SYMBOL(pm_power_off);
-
-/*
  * This is set if we need to go through the 'emergency' path.
  * When machine_emergency_restart() is called, we may be on
  * an inconsistent state and won't be able to do a clean cleanup
@@ -747,11 +741,10 @@ static void native_machine_halt(void)
 
 static void native_machine_power_off(void)
 {
-	if (pm_power_off) {
-		if (!reboot_force)
-			machine_shutdown();
-		pm_power_off();
-	}
+	if (!reboot_force)
+		machine_shutdown();
+	do_power_off();
+
 	/* A fallback in case there is no PM info available */
 	tboot_shutdown(TB_SHUTDOWN_HALT);
 }

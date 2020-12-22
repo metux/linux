@@ -15,6 +15,7 @@
 #include <linux/reboot.h>
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
+#include <linux/pm.h>
 
 #include <asm/syscalls.h>
 
@@ -24,12 +25,6 @@ void	(*c6x_halt)(void);
 
 extern asmlinkage void ret_from_fork(void);
 extern asmlinkage void ret_from_kernel_thread(void);
-
-/*
- * power off function, if any
- */
-void (*pm_power_off)(void);
-EXPORT_SYMBOL(pm_power_off);
 
 void arch_cpu_idle(void)
 {
@@ -71,8 +66,7 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
-	if (pm_power_off)
-		pm_power_off();
+	do_power_off();
 	halt_loop();
 }
 

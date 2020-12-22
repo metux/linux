@@ -12,6 +12,7 @@
 #include <asm/fpu.h>
 #include <linux/ptrace.h>
 #include <linux/reboot.h>
+#include <linux/pm.h>
 
 #if IS_ENABLED(CONFIG_LAZY_FPU)
 struct task_struct *last_task_used_math;
@@ -26,9 +27,6 @@ extern inline void arch_reset(char mode)
 		cpu_reset(0);
 	}
 }
-
-void (*pm_power_off) (void);
-EXPORT_SYMBOL(pm_power_off);
 
 static char reboot_mode_nds32 = 'h';
 
@@ -54,8 +52,7 @@ EXPORT_SYMBOL(machine_halt);
 
 void machine_power_off(void)
 {
-	if (pm_power_off)
-		pm_power_off();
+	do_power_off();
 }
 
 EXPORT_SYMBOL(machine_power_off);

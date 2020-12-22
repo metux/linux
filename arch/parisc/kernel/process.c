@@ -41,6 +41,7 @@
 #include <linux/rcupdate.h>
 #include <linux/random.h>
 #include <linux/nmi.h>
+#include <linux/pm.h>
 
 #include <asm/io.h>
 #include <asm/asm-offsets.h>
@@ -117,9 +118,8 @@ void machine_power_off(void)
 	pdc_chassis_send_status(PDC_CHASSIS_DIRECT_SHUTDOWN);
 
 	/* ipmi_poweroff may have been installed. */
-	if (pm_power_off)
-		pm_power_off();
-		
+	do_power_off();
+
 	/* It seems we have no way to power the system off via
 	 * software. The user has to press the button himself. */
 
@@ -131,9 +131,6 @@ void machine_power_off(void)
 	lockup_detector_soft_poweroff();
 	for (;;);
 }
-
-void (*pm_power_off)(void);
-EXPORT_SYMBOL(pm_power_off);
 
 void machine_halt(void)
 {

@@ -10,9 +10,6 @@
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
 
-void (*pm_power_off)(void);
-EXPORT_SYMBOL(pm_power_off);
-
 static void watchdog_trigger_immediate(void)
 {
 	sh_wdt_write_cnt(0xFF);
@@ -46,8 +43,7 @@ static void native_machine_shutdown(void)
 
 static void native_machine_power_off(void)
 {
-	if (pm_power_off)
-		pm_power_off();
+	do_power_off();
 }
 
 static void native_machine_halt(void)

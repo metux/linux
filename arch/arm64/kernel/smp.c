@@ -87,9 +87,9 @@ static int nr_ipi __read_mostly = NR_IPI;
 static struct irq_desc *ipi_desc[NR_IPI] __read_mostly;
 
 static void ipi_setup(int cpu);
-static void ipi_teardown(int cpu);
 
 #ifdef CONFIG_HOTPLUG_CPU
+static void ipi_teardown(int cpu);
 static int op_cpu_kill(unsigned int cpu);
 #else
 static inline int op_cpu_kill(unsigned int cpu)
@@ -256,7 +256,10 @@ asmlinkage notrace void secondary_start_kernel(void)
 	u64 mpidr = read_cpuid_mpidr() & MPIDR_HWID_BITMASK;
 	struct mm_struct *mm = &init_mm;
 	const struct cpu_operations *ops;
-	unsigned int cpu = smp_processor_id();
+	unsigned int cpu;
+
+	cpu = task_cpu(current);
+	set_my_cpu_offset(per_cpu_offset(cpu));
 
 	/*
 	 * All kernel threads share the same mm context; grab a
@@ -274,6 +277,7 @@ asmlinkage notrace void secondary_start_kernel(void)
 	if (system_uses_irq_prio_masking())
 		init_gic_priority_masking();
 
+	rcu_cpu_starting(cpu);
 	preempt_disable();
 	trace_hardirqs_off();
 
@@ -474,6 +478,7 @@ void cpu_die_early(void)
 
 	/* Mark this CPU absent */
 	set_cpu_present(cpu, 0);
+	rcu_report_dead(cpu);
 
 	if (IS_ENABLED(CONFIG_HOTPLUG_CPU)) {
 		update_cpu_boot_status(CPU_KILL_ME);
@@ -509,13 +514,7 @@ void __init smp_cpus_done(unsigned int max_cpus)
 
 void __init smp_prepare_boot_cpu(void)
 {
-	/*
-	 * Now that setup_per_cpu_areas() has allocated the runtime per-cpu
-	 * areas it is only safe to read the CPU0 boot-time area, and we must
-	 * reinitialize the offset to point to the runtime area.
-	 */
-	init_this_cpu_offset();
-
+	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
 	cpuinfo_store_boot_cpu();
 
 	/*
@@ -528,6 +527,8 @@ void __init smp_prepare_boot_cpu(void)
 	/* Conditionally switch to GIC PMR for interrupt masking */
 	if (system_uses_irq_prio_masking())
 		init_gic_priority_masking();
+
+	kasan_init_hw_tags();
 }
 
 static u64 __init of_get_cpu_mpidr(struct device_node *dn)
@@ -1040,6 +1041,7 @@ static void ipi_setup(int cpu)
 		enable_percpu_irq(ipi_irq_base + i, 0);
 }
 
+#ifdef CONFIG_HOTPLUG_CPU
 static void ipi_teardown(int cpu)
 {
 	int i;
@@ -1050,6 +1052,7 @@ static void ipi_teardown(int cpu)
 	for (i = 0; i < nr_ipi; i++)
 		disable_percpu_irq(ipi_irq_base + i);
 }
+#endif
 
 void __init set_smp_ipi_range(int ipi_base, int n)
 {

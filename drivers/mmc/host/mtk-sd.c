@@ -1903,7 +1903,7 @@ static struct msdc_delay_phase get_best_delay(struct msdc_host *host, u32 delay)
 		final_phase = (start_final + len_final / 3) % PAD_DELAY_MAX;
 	else
 		final_phase = (start_final + len_final / 2) % PAD_DELAY_MAX;
-	dev_info(host->dev, "phase: [map:%x] [maxlen:%d] [final:%d]\n",
+	dev_err(host->dev, "phase: [map:%x] [maxlen:%d] [final:%d]\n",
 		 delay, len_final, final_phase);
 
 	delay_phase.maxlen = len_final;
@@ -2709,6 +2709,8 @@ static int __maybe_unused msdc_runtime_suspend(struct device *dev)
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msdc_host *host = mmc_priv(mmc);
 
+	if (mmc->caps2 & MMC_CAP2_CQE)
+		cqhci_suspend(mmc);
 	msdc_save_reg(host);
 	msdc_gate_clock(host);
 	return 0;
@@ -2719,6 +2721,8 @@ static int __maybe_unused msdc_runtime_resume(struct device *dev)
 	struct mmc_host *mmc = dev_get_drvdata(dev);
 	struct msdc_host *host = mmc_priv(mmc);
 
+	if (mmc->caps2 & MMC_CAP2_CQE)
+		cqhci_resume(mmc);
 	msdc_ungate_clock(host);
 	msdc_restore_reg(host);
 	return 0;

@@ -747,15 +747,13 @@ static void native_machine_halt(void)
 
 static void native_machine_power_off(void)
 {
-	if (!reboot_force)
-		machine_shutdown();
-
-	if (pm_power_off)
+	if (pm_power_off) {
+		if (!reboot_force)
+			machine_shutdown();
 		pm_power_off();
-
+	}
 	/* A fallback in case there is no PM info available */
-	pr_warn("No power off method, machine halted\n");
-	native_machine_halt();
+	tboot_shutdown(TB_SHUTDOWN_HALT);
 }
 
 struct machine_ops machine_ops __ro_after_init = {

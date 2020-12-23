@@ -72,9 +72,6 @@ void machine_power_off(void)
 	for (;;);
 }
 
-void (*pm_power_off)(void) = machine_power_off;
-EXPORT_SYMBOL(pm_power_off);
-
 void show_regs(struct pt_regs * regs)
 {
 	pr_info("Format %02x  Vector: %04x  PC: %08lx  Status: %04x    %s\n",

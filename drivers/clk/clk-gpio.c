@@ -43,7 +43,7 @@
  * is used.
  */
 struct clk_gpio {
-	struct clk_hw	hw;
+	struct clk_hw hw;
 	struct gpio_desc *gpiod;
 };
 
@@ -150,7 +150,7 @@ static struct clk_hw *clk_register_gpio(struct device *dev, u8 num_parents,
 		{ .index = 1 },
 	};
 
-	clk_gpio = devm_kzalloc(dev, sizeof(*clk_gpio),	GFP_KERNEL);
+	clk_gpio = devm_kzalloc(dev, sizeof(*clk_gpio), GFP_KERNEL);
 	if (!clk_gpio)
 		return ERR_PTR(-ENOMEM);
 

@@ -174,6 +174,7 @@ void machine_power_off(void)
 	smp_send_stop();
 	if (pm_power_off)
 		pm_power_off();
+	machine_halt();
 }
 
 /*

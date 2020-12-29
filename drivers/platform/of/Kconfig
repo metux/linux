@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# X86 Platform Specific Drivers
+#
+
+menuconfig PLATFORM_OF_DRV
+	tristate "Platform support via device tree"
+	select OF
+	select OF_FLATTREE
+	help
+	  Say Y here to get to see options for board support that's initialized
+	  via compiled-in flattened device trees.
+
+	  This is entirely independent from traditional DT-based booting (or DT
+	  overlays) and meant for additional devices on non-OF-based (eg. APCI)
+	  boards or composite devices behind probing-capable busses (eg. PCI).
+
+	  Instead of writing individual drivers for just the initialization of
+	  subdevices, this option provides a generic mechanism for describing
+	  these devices via device tree.
+
+	  If you say N, all options in this submenu will be skipped and disabled.
+
+if PLATFORM_OF_DRV
+
+config PLATFORM_OF_DRV_SYSFS_DTB
+	bool "Expose device tree binaries in sysfs"
+	default y
+	depends on SYSFS
+	help
+	  Say Y here to enable exposing device tree binaries at /sys/firmware.
+
+config PLATFORM_OF_DRV_SYSFS_DT
+	bool "Expose parsed device tree in sysfs"
+	default y
+	depends on SYSFS
+	help
+	  Say Y here to enable exposing device tree nodes at
+	  /sys/firmware/devicetree.
+
+endif # PLATFORM_OF_DRV

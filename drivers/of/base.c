@@ -1187,13 +1187,15 @@ int of_modalias_node(struct device_node *node, char *modalias, int len)
 EXPORT_SYMBOL_GPL(of_modalias_node);
 
 /**
- * of_find_node_by_phandle - Find a node given a phandle
+ * of_find_node_by_phandle_from - Find a node given a phandle
+ * @root:	root of the tree (on NULL default to of_root)
  * @handle:	phandle of the node to find
  *
  * Returns a node pointer with refcount incremented, use
  * of_node_put() on it when done.
  */
-struct device_node *of_find_node_by_phandle(phandle handle)
+struct device_node *of_find_node_by_phandle_from(struct device_node *root,
+						 phandle handle)
 {
 	struct device_node *np = NULL;
 	unsigned long flags;
@@ -1211,19 +1213,21 @@ struct device_node *of_find_node_by_phandle(phandle handle)
 		np = phandle_cache[handle_hash];
 
 	if (!np) {
-		for_each_of_allnodes(np)
+		for_each_of_allnodes_from(root, np) {
 			if (np->phandle == handle &&
 			    !of_node_check_flag(np, OF_DETACHED)) {
-				phandle_cache[handle_hash] = np;
+				if (!root)
+					phandle_cache[handle_hash] = np;
 				break;
 			}
+		}
 	}
 
 	of_node_get(np);
 	raw_spin_unlock_irqrestore(&devtree_lock, flags);
 	return np;
 }
-EXPORT_SYMBOL(of_find_node_by_phandle);
+EXPORT_SYMBOL(of_find_node_by_phandle_from);
 
 void of_print_phandle_args(const char *msg, const struct of_phandle_args *args)
 {

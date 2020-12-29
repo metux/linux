@@ -1249,6 +1249,7 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 {
 	const __be32 *list;
 	int size;
+	struct device_node *walk;
 
 	memset(it, 0, sizeof(*it));
 
@@ -1269,6 +1270,16 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	it->list_end = list + size / sizeof(*list);
 	it->phandle_end = list;
 	it->cur = list;
+
+	/*
+	 * find the root of our tree and record it, if we're dealing with an
+	 * detached oftree - in non-detached case, we record NULL, for clear
+	 * distinction between these two cases.
+	 */
+	for (walk=(struct device_node*)np;
+	     walk->parent;
+	     walk=(struct device_node*)walk->parent);
+	it->root = ((walk == of_root) ? NULL : walk);
 
 	return 0;
 }
@@ -1297,7 +1308,7 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 		 * Find the provider node and parse the #*-cells property to
 		 * determine the argument length.
 		 */
-		it->node = of_find_node_by_phandle(it->phandle);
+		it->node = of_find_node_by_phandle_from(it->root, it->phandle);
 
 		if (it->cells_name) {
 			if (!it->node) {

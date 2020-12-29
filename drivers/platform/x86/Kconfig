@@ -967,6 +967,8 @@ config PCENGINES_APU2
 	select GPIO_AMD_FCH
 	select KEYBOARD_GPIO_POLLED
 	select LEDS_GPIO
+	select OF_FLATTREE
+	select OF_OVERLAY
 	help
 	  This driver provides support for the front button and LEDs on
 	  PC Engines APUv2/APUv3 board.

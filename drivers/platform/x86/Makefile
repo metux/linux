@@ -97,7 +97,8 @@ obj-$(CONFIG_XO15_EBOOK)	+= xo15-ebook.o
 obj-$(CONFIG_XO1_RFKILL)	+= xo1-rfkill.o
 
 # PC Engines
-obj-$(CONFIG_PCENGINES_APU2)	+= pcengines-apuv2.o
+pce-y := pcengines-apuv2.o pcengines-apuv2.dtb.o
+obj-$(CONFIG_PCENGINES_APU2)	+= pce.o
 
 # Samsung
 obj-$(CONFIG_SAMSUNG_LAPTOP)	+= samsung-laptop.o

@@ -20,6 +20,121 @@
 #include <linux/gpio/machine.h>
 #include <linux/input.h>
 #include <linux/platform_data/gpio/gpio-amd-fch.h>
+#include <linux/of.h>
+#include <linux/of_fdt.h>
+#include <linux/libfdt.h>
+#include <linux/memblock.h>
+#include <linux/of_platform.h>
+#include <linux/slab.h>
+
+#include "../../of/of_private.h"
+
+#define FDT_EXTERN(name) \
+	extern char __dtb_##name##_begin[]; \
+	extern char __dtb_##name##_end[];
+
+struct fdt_image {
+	char *begin;
+	char *end;
+	const char *name;
+	const char *compatible;
+};
+
+#define FDT_IMAGE_ENT(n,compat)		\
+	{ .name = #n,			\
+	  .compatible = compat,		\
+	  .begin = __dtb_##n##_begin,	\
+	  .end = __dtb_##n##_end }
+
+FDT_EXTERN(pcengines_apuv2);
+
+struct fdt_image fdt[] = {
+	FDT_IMAGE_ENT(pcengines_apuv2,"")
+};
+
+void *dtalloc(u64 sz, u64 align)
+{
+	pr_info("dtalloc: sz=%ld align=%ld\n", sz, align);
+	return kzalloc(sz, GFP_KERNEL);
+}
+
+struct device_node* of_fdt_parse(struct fdt_image *image)
+{
+	struct device_node* root;
+	size_t sz = fdt_totalsize(image->begin);
+	__unflatten_device_tree(image->begin, NULL, &root, dtalloc, true);
+	return root;
+}
+
+int of_prop_match(struct device_node *node, const char* name, const char* value)
+{
+	struct property *prop;
+	const char *walk;
+
+	if (!name || !value)
+		return 0;
+
+	prop = of_find_property(node, name, NULL);
+	if (!prop) {
+		pr_warn("could not find property: \"%s\"\n", name);
+	}
+
+	for (walk=of_prop_next_string(prop, NULL); walk;
+	     walk=of_prop_next_string(prop, walk)) {
+		pr_info("trying: \"%s\"\n", walk);
+		if (strcmp(walk, value)==0)
+			return 1;
+	}
+	return 0;
+}
+
+int ofdmi_board_probe(struct device_node *node)
+{
+	struct device_node *devs;
+	const char *board = dmi_get_system_info(DMI_BOARD_NAME);
+	const char *vendor = dmi_get_system_info(DMI_SYS_VENDOR);
+	pr_info("dmi: vendor=\"%s\" board=\"%s\"\n", vendor, board);
+	if (!of_prop_match(node, "dmi-sys-vendor", vendor)) {
+		pr_info("vendor does not match\n");
+		return 0;
+	}
+	if (!of_prop_match(node, "dmi-board-name", board)) {
+		pr_info("board name does not match\n");
+		return 0;
+	}
+	pr_info("vendor and board matching\n");
+	devs = of_get_child_by_name(node, "devices");
+	if (IS_ERR_OR_NULL(devs)) {
+		pr_warn("board has no devices\n");
+		return 0;
+	}
+	return of_platform_populate(devs, NULL, NULL, NULL);
+}
+
+int ofdmi_init_image(struct fdt_image *image)
+{
+	struct device_node *node = of_fdt_parse(image);
+	struct device_node *child;
+	if (IS_ERR_OR_NULL(node)) {
+		pr_warn(" failed parsing fdt image %s\n", image->name);
+		return PTR_ERR(node);
+	}
+	pr_info("parsed fdt\n");
+	for_each_child_of_node(node, child) {
+		pr_info("probing child\n");
+		ofdmi_board_probe(child);
+	}
+	return 0;
+}
+
+int ofdmi_init(void)
+{
+	int x;
+	for (x=0; x<ARRAY_SIZE(fdt); x++)
+		ofdmi_init_image(&fdt[x]);
+
+	return 0;
+}
 
 /*
  * NOTE: this driver only supports APUv2/3 - not APUv1, as this one
@@ -245,6 +360,9 @@ static int __init apu_board_init(void)
 {
 	const struct dmi_system_id *id;
 
+	ofdmi_init();
+
+#if 0
 	id = dmi_first_match(apu_gpio_dmi_table);
 	if (!id) {
 		pr_err("failed to detect APU board via DMI\n");
@@ -268,6 +386,7 @@ static int __init apu_board_init(void)
 		"gpio-keys-polled",
 		&apu2_keys_pdata,
 		sizeof(apu2_keys_pdata));
+#endif
 
 	return 0;
 }

@@ -1,0 +1,82 @@
+/dts-v1/;
+
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/gpio/amd-fch-gpio.h>
+
+/ {
+  apu2 {
+    compatible = "virtual,dmi-board";
+    dmi-sys-vendor = "PC engines";
+    dmi-board-name =
+      "APU2",
+      "apu2",
+      "PC engines apu2",
+      "APU3",
+      "apu3",
+      "PC engines apu3",
+      "APU4",
+      "apu4",
+      "PC engines apu4";
+    acpi-blacklist = "PNP0076";
+    devices {
+      gpio1: fch-gpio {
+        compatible = "amd,fch-gpio";
+        gpio-controller;
+        status = "okay";
+        ngpios=<7>;
+        #gpio-cells=<2>;
+        gpio-regs = <
+          AMD_FCH_GPIO_REG_GPIO57 // led1
+          AMD_FCH_GPIO_REG_GPIO58 // led2
+          AMD_FCH_GPIO_REG_GPIO59_DEVSLP1 // led3
+          AMD_FCH_GPIO_REG_GPIO32_GE1 // modesw
+          AMD_FCH_GPIO_REG_GPIO33_GE2 // simawap
+          AMD_FCH_GPIO_REG_GPIO55_DEVSLP0 // mpcie2
+          AMD_FCH_GPIO_REG_GPIO51 // mpcie3
+        >;
+        gpio-line-names =
+          "front-led1",
+          "front-led2",
+          "front-led3",
+          "front-button",
+          "simswap",
+          "mpcie2_reset",
+          "mpcie3_reset";
+      };
+      front-leds {
+        compatible = "gpio-leds";
+        led@0 {
+          gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+          color = <LED_COLOR_ID_GREEN>;
+          default-state = "keep";
+          label = "apu:green:1";
+        };
+        led@1 {
+          gpios = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+          color = <LED_COLOR_ID_GREEN>;
+          default-state = "keep";
+          label = "apu:green:2";
+        };
+        led@2 {
+          gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+          color = <LED_COLOR_ID_GREEN>;
+          default-state = "keep";
+          label = "apu:green:3";
+        };
+      };
+      front-keys {
+        compatible = "gpio-keys";
+        address-cells = <1>;
+        size-cells = <0>;
+        poll-interval = <100>;
+        button@1 {
+          linux,code = <KEY_RESTART>;
+          label = "front button";
+          debounce-interval = <10>;
+        };
+      };
+    };
+  };
+};

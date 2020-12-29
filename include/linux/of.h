@@ -282,7 +282,12 @@ static inline struct device_node *of_find_node_by_path(const char *path)
 	return of_find_node_opts_by_path(path, NULL);
 }
 
-extern struct device_node *of_find_node_by_phandle(phandle handle);
+extern struct device_node *of_find_node_by_phandle_from(
+	struct device_node* root, phandle handle);
+static inline struct device_node *of_find_node_by_phandle(phandle handle)
+{
+	return of_find_node_by_phandle_from(NULL, handle);
+}
 extern struct device_node *of_get_parent(const struct device_node *node);
 extern struct device_node *of_get_next_parent(struct device_node *node);
 extern struct device_node *of_get_next_child(const struct device_node *node,

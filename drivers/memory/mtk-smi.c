@@ -218,9 +218,10 @@ int mtk_smi_larb_get(struct device *larbdev)
 {
 	int ret = pm_runtime_resume_and_get(larbdev);
 	struct mtk_smi_larb *larb = dev_get_drvdata(larbdev);
+	int ret;
 
 	larb->larb_ref_count[larb->larbid]++;
-	int ret = pm_runtime_get_sync(larbdev);
+	ret = pm_runtime_get_sync(larbdev);
 	if (ret < 0)
 		larb->larb_ref_count[larb->larbid]--;
 

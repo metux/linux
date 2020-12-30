@@ -573,7 +573,7 @@ static u8 intel_dp_dsc_get_slice_count(struct intel_dp *intel_dp,
 		return 0;
 	}
 	/* Also take into account max slice width */
-	min_slice_count = min_t(u8, min_slice_count,
+	min_slice_count = max_t(u8, min_slice_count,
 				DIV_ROUND_UP(mode_hdisplay,
 					     max_slice_width));
 
@@ -1411,7 +1411,7 @@ intel_dp_aux_xfer(struct intel_dp *intel_dp,
 	 * lowest possible wakeup latency and so prevent the cpu from going into
 	 * deep sleep states.
 	 */
-	cpu_latency_qos_update_request(&i915->pm_qos, 0);
+	cpu_latency_qos_update_request(&intel_dp->pm_qos, 0);
 
 	intel_dp_check_edp(intel_dp);
 
@@ -1544,7 +1544,7 @@ done:
 
 	ret = recv_bytes;
 out:
-	cpu_latency_qos_update_request(&i915->pm_qos, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_update_request(&intel_dp->pm_qos, PM_QOS_DEFAULT_VALUE);
 
 	if (vdd)
 		edp_panel_vdd_off(intel_dp, false);
@@ -1776,6 +1776,9 @@ static i915_reg_t skl_aux_data_reg(struct intel_dp *intel_dp, int index)
 static void
 intel_dp_aux_fini(struct intel_dp *intel_dp)
 {
+	if (cpu_latency_qos_request_active(&intel_dp->pm_qos))
+		cpu_latency_qos_remove_request(&intel_dp->pm_qos);
+
 	kfree(intel_dp->aux.name);
 }
 
@@ -1818,6 +1821,7 @@ intel_dp_aux_init(struct intel_dp *intel_dp)
 				       aux_ch_name(dig_port->aux_ch),
 				       port_name(encoder->port));
 	intel_dp->aux.transfer = intel_dp_aux_transfer;
+	cpu_latency_qos_add_request(&intel_dp->pm_qos, PM_QOS_DEFAULT_VALUE);
 }
 
 bool intel_dp_source_supports_hbr2(struct intel_dp *intel_dp)
@@ -1980,7 +1984,9 @@ static bool intel_dp_supports_dsc(struct intel_dp *intel_dp,
 static bool intel_dp_hdmi_ycbcr420(struct intel_dp *intel_dp,
 				   const struct intel_crtc_state *crtc_state)
 {
-	return crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420;
+	return crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420 ||
+		(crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR444 &&
+		 intel_dp->dfp.ycbcr_444_to_420);
 }
 
 static int intel_dp_hdmi_tmds_clock(struct intel_dp *intel_dp,
@@ -2014,9 +2020,10 @@ static bool intel_dp_hdmi_deep_color_possible(struct intel_dp *intel_dp,
 					      const struct intel_crtc_state *crtc_state,
 					      int bpc)
 {
-	bool has_hdmi_sink = intel_dp->has_hdmi_sink;
 
-	return intel_hdmi_deep_color_possible(crtc_state, bpc, has_hdmi_sink) &&
+	return intel_hdmi_deep_color_possible(crtc_state, bpc,
+					      intel_dp->has_hdmi_sink,
+					      intel_dp_hdmi_ycbcr420(intel_dp, crtc_state)) &&
 		intel_dp_hdmi_tmds_clock_valid(intel_dp, crtc_state, bpc);
 }
 
@@ -2436,10 +2443,16 @@ intel_dp_ycbcr420_config(struct intel_dp *intel_dp,
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 
-	if (!drm_mode_is_420_only(info, adjusted_mode) ||
-	    !intel_dp_get_colorimetry_status(intel_dp) ||
-	    !connector->ycbcr_420_allowed)
+	if (!connector->ycbcr_420_allowed)
 		return 0;
+
+	if (!drm_mode_is_420_only(info, adjusted_mode))
+		return 0;
+
+	if (intel_dp->dfp.ycbcr_444_to_420) {
+		crtc_state->output_format = INTEL_OUTPUT_FORMAT_YCBCR444;
+		return 0;
+	}
 
 	crtc_state->output_format = INTEL_OUTPUT_FORMAT_YCBCR420;
 
@@ -3858,11 +3871,26 @@ void intel_dp_configure_protocol_converter(struct intel_dp *intel_dp)
 		DP_HDMI_DVI_OUTPUT_CONFIG : 0;
 
 	if (drm_dp_dpcd_writeb(&intel_dp->aux,
-			       DP_PROTOCOL_CONVERTER_CONTROL_0, tmp) <= 0)
+			       DP_PROTOCOL_CONVERTER_CONTROL_0, tmp) != 1)
 		drm_dbg_kms(&i915->drm, "Failed to set protocol converter HDMI mode to %s\n",
 			    enableddisabled(intel_dp->has_hdmi_sink));
 
-	/* TODO: configure YCbCr 4:2:2/4:2:0 conversion */
+	tmp = intel_dp->dfp.ycbcr_444_to_420 ?
+		DP_CONVERSION_TO_YCBCR420_ENABLE : 0;
+
+	if (drm_dp_dpcd_writeb(&intel_dp->aux,
+			       DP_PROTOCOL_CONVERTER_CONTROL_1, tmp) != 1)
+		drm_dbg_kms(&i915->drm,
+			    "Failed to set protocol converter YCbCr 4:2:0 conversion mode to %s\n",
+			    enableddisabled(intel_dp->dfp.ycbcr_444_to_420));
+
+	tmp = 0;
+
+	if (drm_dp_dpcd_writeb(&intel_dp->aux,
+			       DP_PROTOCOL_CONVERTER_CONTROL_2, tmp) <= 0)
+		drm_dbg_kms(&i915->drm,
+			    "Failed to set protocol converter YCbCr 4:2:2 conversion mode to %s\n",
+			    enableddisabled(false));
 }
 
 static void intel_enable_dp(struct intel_atomic_state *state,
@@ -6142,15 +6170,11 @@ intel_dp_get_edid(struct intel_dp *intel_dp)
 }
 
 static void
-intel_dp_set_edid(struct intel_dp *intel_dp)
+intel_dp_update_dfp(struct intel_dp *intel_dp,
+		    const struct edid *edid)
 {
 	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	struct intel_connector *connector = intel_dp->attached_connector;
-	struct edid *edid;
-
-	intel_dp_unset_edid(intel_dp);
-	edid = intel_dp_get_edid(intel_dp);
-	connector->detect_edid = edid;
 
 	intel_dp->dfp.max_bpc =
 		drm_dp_downstream_max_bpc(intel_dp->dpcd,
@@ -6176,6 +6200,67 @@ intel_dp_set_edid(struct intel_dp *intel_dp)
 		    intel_dp->dfp.max_dotclock,
 		    intel_dp->dfp.min_tmds_clock,
 		    intel_dp->dfp.max_tmds_clock);
+}
+
+static void
+intel_dp_update_420(struct intel_dp *intel_dp)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+	struct intel_connector *connector = intel_dp->attached_connector;
+	bool is_branch, ycbcr_420_passthrough, ycbcr_444_to_420;
+
+	/* No YCbCr output support on gmch platforms */
+	if (HAS_GMCH(i915))
+		return;
+
+	/*
+	 * ILK doesn't seem capable of DP YCbCr output. The
+	 * displayed image is severly corrupted. SNB+ is fine.
+	 */
+	if (IS_GEN(i915, 5))
+		return;
+
+	is_branch = drm_dp_is_branch(intel_dp->dpcd);
+	ycbcr_420_passthrough =
+		drm_dp_downstream_420_passthrough(intel_dp->dpcd,
+						  intel_dp->downstream_ports);
+	ycbcr_444_to_420 =
+		drm_dp_downstream_444_to_420_conversion(intel_dp->dpcd,
+							intel_dp->downstream_ports);
+
+	if (INTEL_GEN(i915) >= 11) {
+		/* Prefer 4:2:0 passthrough over 4:4:4->4:2:0 conversion */
+		intel_dp->dfp.ycbcr_444_to_420 =
+			ycbcr_444_to_420 && !ycbcr_420_passthrough;
+
+		connector->base.ycbcr_420_allowed =
+			!is_branch || ycbcr_444_to_420 || ycbcr_420_passthrough;
+	} else {
+		/* 4:4:4->4:2:0 conversion is the only way */
+		intel_dp->dfp.ycbcr_444_to_420 = ycbcr_444_to_420;
+
+		connector->base.ycbcr_420_allowed = ycbcr_444_to_420;
+	}
+
+	drm_dbg_kms(&i915->drm,
+		    "[CONNECTOR:%d:%s] YCbCr 4:2:0 allowed? %s, YCbCr 4:4:4->4:2:0 conversion? %s\n",
+		    connector->base.base.id, connector->base.name,
+		    yesno(connector->base.ycbcr_420_allowed),
+		    yesno(intel_dp->dfp.ycbcr_444_to_420));
+}
+
+static void
+intel_dp_set_edid(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+	struct edid *edid;
+
+	intel_dp_unset_edid(intel_dp);
+	edid = intel_dp_get_edid(intel_dp);
+	connector->detect_edid = edid;
+
+	intel_dp_update_dfp(intel_dp, edid);
+	intel_dp_update_420(intel_dp);
 
 	if (edid && edid->input & DRM_EDID_INPUT_DIGITAL) {
 		intel_dp->has_hdmi_sink = drm_detect_hdmi_monitor(edid);
@@ -6189,11 +6274,11 @@ intel_dp_set_edid(struct intel_dp *intel_dp)
 static void
 intel_dp_unset_edid(struct intel_dp *intel_dp)
 {
-	struct intel_connector *intel_connector = intel_dp->attached_connector;
+	struct intel_connector *connector = intel_dp->attached_connector;
 
 	drm_dp_cec_unset_edid(&intel_dp->aux);
-	kfree(intel_connector->detect_edid);
-	intel_connector->detect_edid = NULL;
+	kfree(connector->detect_edid);
+	connector->detect_edid = NULL;
 
 	intel_dp->has_hdmi_sink = false;
 	intel_dp->has_audio = false;
@@ -6203,6 +6288,9 @@ intel_dp_unset_edid(struct intel_dp *intel_dp)
 	intel_dp->dfp.max_dotclock = 0;
 	intel_dp->dfp.min_tmds_clock = 0;
 	intel_dp->dfp.max_tmds_clock = 0;
+
+	intel_dp->dfp.ycbcr_444_to_420 = false;
+	connector->base.ycbcr_420_allowed = false;
 }
 
 static int
@@ -7728,9 +7816,6 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 	if (!HAS_GMCH(dev_priv))
 		connector->interlace_allowed = true;
 	connector->doublescan_allowed = 0;
-
-	if (INTEL_GEN(dev_priv) >= 11)
-		connector->ycbcr_420_allowed = true;
 
 	intel_connector->polled = DRM_CONNECTOR_POLL_HPD;
 

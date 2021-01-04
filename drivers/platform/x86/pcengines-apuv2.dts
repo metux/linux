@@ -45,7 +45,6 @@
           "mpcie2_reset",
           "mpcie3_reset";
       };
-/*
       front-leds {
         compatible = "gpio-leds";
         led@0 {
@@ -67,8 +66,6 @@
           label = "apu:green:3";
         };
       };
-*/
-/*
       front-keys {
         compatible = "gpio-keys";
         address-cells = <1>;
@@ -80,7 +77,6 @@
           debounce-interval = <10>;
         };
       };
-*/
     };
   };
 };

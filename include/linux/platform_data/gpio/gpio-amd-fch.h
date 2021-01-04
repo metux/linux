@@ -23,7 +23,7 @@
  */
 struct amd_fch_gpio_pdata {
 	int			gpio_num;
-	int			*gpio_reg;
+	u32			*gpio_reg;
 	const char * const	*gpio_names;
 };
 

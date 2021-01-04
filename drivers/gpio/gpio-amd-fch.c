@@ -136,12 +136,62 @@ static int amd_fch_gpio_request(struct gpio_chip *chip,
 	return 0;
 }
 
+static struct amd_fch_gpio_pdata *load_pdata(struct device *dev)
+{
+	struct amd_fch_gpio_pdata *pdata;
+	int ret;
+
+//fixme: check mem
+
+	pdata = devm_kzalloc(dev, sizeof(struct amd_fch_gpio_pdata), GFP_KERNEL);
+	if (!pdata)
+		goto nomem;
+
+	pdata->gpio_num = of_property_count_elems_of_size(dev->of_node, "gpio-regs", sizeof(u32));
+	dev_info(dev, "elems=%d\n", pdata->gpio_num);
+	pdata->gpio_reg = devm_kzalloc(dev, sizeof(int)*pdata->gpio_num, GFP_KERNEL);
+	if (!pdata->gpio_reg)
+		goto nomem;
+
+	pdata->gpio_names = devm_kzalloc(dev, sizeof(char*)*pdata->gpio_num, GFP_KERNEL);
+	if (!pdata->gpio_names)
+		goto nomem;
+
+	ret = of_property_read_variable_u32_array(dev->of_node, "gpio-regs", pdata->gpio_reg, pdata->gpio_num, pdata->gpio_num);
+	if (ret != pdata->gpio_num) {
+		dev_err(dev, "failed reading gpio-regs from DT: %d\n", ret);
+		return NULL;
+	}
+
+	dev_info(dev, "ret=%d\n", ret);
+
+	ret = of_property_read_string_array(dev->of_node, "gpio-line-names", pdata->gpio_names, pdata->gpio_num);
+	if (ret != pdata->gpio_num) {
+		dev_err(dev, "failed reading gpio-names from DT: %d\n", ret);
+		return NULL;
+	}
+
+	dev_info(dev, "fetched pdata from DT\n");
+
+	return pdata;
+
+nomem:
+	dev_err(dev, "failed allocating memory\n");
+	return NULL;
+}
+
 static int amd_fch_gpio_probe(struct platform_device *pdev)
 {
 	struct amd_fch_gpio_priv *priv;
 	struct amd_fch_gpio_pdata *pdata;
+	int ret;
 
 	pdata = dev_get_platdata(&pdev->dev);
+	if (!pdata) {
+		dev_info(&pdev->dev, "loading platform data from oftree\n");
+		pdata = load_pdata(&pdev->dev);
+	}
+
 	if (!pdata) {
 		dev_err(&pdev->dev, "no platform_data\n");
 		return -ENOENT;
@@ -165,6 +215,9 @@ static int amd_fch_gpio_probe(struct platform_device *pdev)
 	priv->gc.get_direction		= amd_fch_gpio_get_direction;
 	priv->gc.get			= amd_fch_gpio_get;
 	priv->gc.set			= amd_fch_gpio_set;
+#ifdef CONFIG_OF_GPIO
+	priv->gc.of_node		= pdev->dev.of_node;
+#endif
 
 	spin_lock_init(&priv->lock);
 
@@ -174,7 +227,9 @@ static int amd_fch_gpio_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, priv);
 
-	return devm_gpiochip_add_data(&pdev->dev, &priv->gc, priv);
+	ret = devm_gpiochip_add_data(&pdev->dev, &priv->gc, priv);
+	dev_info(&pdev->dev, "registered gpio: %d\n", ret);
+	return ret;
 }
 
 static const struct of_device_id amd_fch_gpio_of_match[] = {

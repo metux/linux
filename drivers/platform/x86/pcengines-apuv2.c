@@ -61,8 +61,15 @@ void *dtalloc(u64 sz, u64 align)
 struct device_node* of_fdt_parse(struct fdt_image *image)
 {
 	struct device_node* root;
-	size_t sz = fdt_totalsize(image->begin);
-	__unflatten_device_tree(image->begin, NULL, &root, dtalloc, true);
+	void *new_fdt;
+	size_t size = fdt_totalsize(image->begin);
+//	__unflatten_device_tree(image->begin, NULL, &root, dtalloc, true);
+	new_fdt = kmemdup(image->begin, size, GFP_KERNEL);
+	of_fdt_unflatten_tree(new_fdt, NULL, &root);
+	if (!root) {
+		pr_warn("cant unflatten fdt\n");
+	}
+
 	return root;
 }
 

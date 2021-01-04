@@ -177,9 +177,15 @@ static int amd_fch_gpio_probe(struct platform_device *pdev)
 	return devm_gpiochip_add_data(&pdev->dev, &priv->gc, priv);
 }
 
+static const struct of_device_id amd_fch_gpio_of_match[] = {
+	{ .compatible = "amd,fch-gpio" },
+	{}
+};
+
 static struct platform_driver amd_fch_gpio_driver = {
 	.driver = {
 		.name = AMD_FCH_GPIO_DRIVER_NAME,
+		.of_match_table = amd_fch_gpio_of_match,
 	},
 	.probe = amd_fch_gpio_probe,
 };

@@ -21,7 +21,7 @@
       "PC engines apu4";
     acpi-blacklist = "PNP0076";
     devices {
-      gpio1: fch-gpio {
+      gpio1: gpio1 {
         compatible = "amd,fch-gpio";
         gpio-controller;
         status = "okay";

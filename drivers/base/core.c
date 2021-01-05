@@ -239,27 +239,35 @@ void device_pm_move_to_tail(struct device *dev)
 #define to_devlink(dev)	container_of((dev), struct device_link, link_dev)
 
 static ssize_t status_show(struct device *dev,
-			  struct device_attribute *attr, char *buf)
+			   struct device_attribute *attr, char *buf)
 {
-	char *status;
+	const char *output;
 
 	switch (to_devlink(dev)->status) {
 	case DL_STATE_NONE:
-		status = "not tracked"; break;
+		output = "not tracked";
+		break;
 	case DL_STATE_DORMANT:
-		status = "dormant"; break;
+		output = "dormant";
+		break;
 	case DL_STATE_AVAILABLE:
-		status = "available"; break;
+		output = "available";
+		break;
 	case DL_STATE_CONSUMER_PROBE:
-		status = "consumer probing"; break;
+		output = "consumer probing";
+		break;
 	case DL_STATE_ACTIVE:
-		status = "active"; break;
+		output = "active";
+		break;
 	case DL_STATE_SUPPLIER_UNBIND:
-		status = "supplier unbinding"; break;
+		output = "supplier unbinding";
+		break;
 	default:
-		status = "unknown"; break;
+		output = "unknown";
+		break;
 	}
-	return sysfs_emit(buf, "%s\n", status);
+
+	return sysfs_emit(buf, "%s\n", output);
 }
 static DEVICE_ATTR_RO(status);
 
@@ -267,16 +275,16 @@ static ssize_t auto_remove_on_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
-	char *str;
+	const char *output;
 
 	if (link->flags & DL_FLAG_AUTOREMOVE_SUPPLIER)
-		str = "supplier unbind";
+		output = "supplier unbind";
 	else if (link->flags & DL_FLAG_AUTOREMOVE_CONSUMER)
-		str = "consumer unbind";
+		output = "consumer unbind";
 	else
-		str = "never";
+		output = "never";
 
-	return sysfs_emit(buf, "%s\n", str);
+	return sysfs_emit(buf, "%s\n", output);
 }
 static DEVICE_ATTR_RO(auto_remove_on);
 
@@ -762,8 +770,7 @@ static void __device_link_del(struct kref *kref)
 	dev_dbg(link->consumer, "Dropping the link to %s\n",
 		dev_name(link->supplier));
 
-	if (link->flags & DL_FLAG_PM_RUNTIME)
-		pm_runtime_drop_link(link->consumer);
+	pm_runtime_drop_link(link);
 
 	list_del_rcu(&link->s_node);
 	list_del_rcu(&link->c_node);
@@ -777,8 +784,7 @@ static void __device_link_del(struct kref *kref)
 	dev_info(link->consumer, "Dropping the link to %s\n",
 		 dev_name(link->supplier));
 
-	if (link->flags & DL_FLAG_PM_RUNTIME)
-		pm_runtime_drop_link(link->consumer);
+	pm_runtime_drop_link(link);
 
 	list_del(&link->s_node);
 	list_del(&link->c_node);
@@ -1731,6 +1737,8 @@ static void device_release(struct kobject *kobj)
 	 */
 	devres_release_all(dev);
 
+	kfree(dev->dma_range_map);
+
 	if (dev->release)
 		dev->release(dev);
 	else if (dev->type && dev->type->release)
@@ -1875,7 +1883,7 @@ static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
 	struct kset *kset;
 	struct kobj_uevent_env *env = NULL;
 	int i;
-	size_t count = 0;
+	int len = 0;
 	int retval;
 
 	/* search the kset, the device belongs to */
@@ -1905,10 +1913,10 @@ static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
 
 	/* copy keys to file */
 	for (i = 0; i < env->envp_idx; i++)
-		count += sprintf(&buf[count], "%s\n", env->envp[i]);
+		len += sysfs_emit_at(buf, len, "%s\n", env->envp[i]);
 out:
 	kfree(env);
-	return count;
+	return len;
 }
 
 static ssize_t uevent_store(struct device *dev, struct device_attribute *attr,
@@ -4180,13 +4188,16 @@ define_dev_printk_level(_dev_info, KERN_INFO);
  * -EPROBE_DEFER and propagate error upwards.
  * In case of -EPROBE_DEFER it sets also defer probe reason, which can be
  * checked later by reading devices_deferred debugfs attribute.
- * It replaces code sequence:
+ * It replaces code sequence::
+ *
  * 	if (err != -EPROBE_DEFER)
  * 		dev_err(dev, ...);
  * 	else
  * 		dev_dbg(dev, ...);
  * 	return err;
- * with
+ *
+ * with::
+ *
  * 	return dev_err_probe(dev, err, ...);
  *
  * Returns @err.
@@ -4229,6 +4240,7 @@ static inline bool fwnode_is_primary(struct fwnode_handle *fwnode)
  */
 void set_primary_fwnode(struct device *dev, struct fwnode_handle *fwnode)
 {
+	struct device *parent = dev->parent;
 	struct fwnode_handle *fn = dev->fwnode;
 
 	if (fwnode) {
@@ -4243,7 +4255,8 @@ void set_primary_fwnode(struct device *dev, struct fwnode_handle *fwnode)
 	} else {
 		if (fwnode_is_primary(fn)) {
 			dev->fwnode = fn->secondary;
-			fn->secondary = NULL;
+			if (!(parent && fn == parent->fwnode))
+				fn->secondary = NULL;
 		} else {
 			dev->fwnode = NULL;
 		}

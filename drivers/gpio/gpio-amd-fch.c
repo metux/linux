@@ -103,6 +103,8 @@ static void amd_fch_gpio_set(struct gpio_chip *gc,
 	void __iomem *ptr = amd_fch_gpio_addr(priv, gpio);
 	u32 mask;
 
+	pr_info("amd_fch_gpio_set(): gpio=%d value=%d\n", gpio, value);
+
 	spin_lock_irqsave(&priv->lock, flags);
 
 	mask = readl_relaxed(ptr);

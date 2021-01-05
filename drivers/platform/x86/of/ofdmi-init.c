@@ -85,7 +85,6 @@ static int ofdmi_board_probe(struct device_node *node)
 	struct device_node *devs;
 	const char *board = dmi_get_system_info(DMI_BOARD_NAME);
 	const char *vendor = dmi_get_system_info(DMI_SYS_VENDOR);
-	pr_info("dmi: vendor=\"%s\" board=\"%s\"\n", vendor, board);
 
 	if (!of_prop_match(node, "dmi-sys-vendor", vendor))
 		return 0;
@@ -93,7 +92,7 @@ static int ofdmi_board_probe(struct device_node *node)
 	if (!of_prop_match(node, "dmi-board-name", board))
 		return 0;
 
-	pr_info("vendor and board matching\n");
+	pr_info("matched dmi: vendor=\"%s\" board=\"%s\"\n", vendor, board);
 	devs = of_get_child_by_name(node, "devices");
 	if (IS_ERR_OR_NULL(devs)) {
 		pr_err("board has no devices\n");

@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# X86 Platform Specific Drivers
+#
+
+menuconfig X86_PLATFORM_FDT
+	tristate "Device tree based board support"
+	depends on X86
+	help
+	  Say Y here to get to see options for board support that's initialized
+	  via compiled-in flattened device trees.
+
+	  This is entirely independent from traditional DT-based booting (or DT
+	  overlays) and meant for additional devices on non-OF-based (eg. APCI)
+	  boards or composite devices behind probing-capable busses (eg. PCI).
+
+	  Instead of writing individual drivers for just the initialization of
+	  subdevices, this option provides a generic mechanism for describing
+	  these devices via device tree.
+
+	  If you say N, all options in this submenu will be skipped and disabled.
+
+if X86_PLATFORM_FDT
+
+config X86_PLATFORM_FDT_PCENGINES_APU2
+	tristate "Support PC Engines APU2/3/4 mainboards"
+	depends on INPUT && INPUT_KEYBOARD && GPIOLIB
+	depends on LEDS_CLASS
+	depends on ACPI
+	select GPIO_AMD_FCH
+	select KEYBOARD_GPIO_POLLED
+	select LEDS_GPIO
+	select OF_FLATTREE
+	select OF_OVERLAY
+	help
+	  Say Y to enable devicetree based support for PC Engines APU2/3/4
+	  mainboards. This supersedes the older pcengines-apu2 driver.
+
+	  Supporst Gpios, front panel LEDs and front button.
+
+endif # X86_PLATFORM_FDT

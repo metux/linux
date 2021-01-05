@@ -1286,6 +1286,7 @@ config INTEL_SMARTCONNECT
 	  Connect enabled, and if so disables it.
 
 source "drivers/platform/x86/intel_speed_select_if/Kconfig"
+source "drivers/platform/x86/of/Kconfig"
 
 config INTEL_TURBO_MAX_3
 	bool "Intel Turbo Boost Max Technology 3.0 enumeration driver"

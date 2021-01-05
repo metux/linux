@@ -6,7 +6,7 @@
 #include <dt-bindings/gpio/amd-fch-gpio.h>
 
 / {
-    apu2 {
+    apu2x {
         compatible = "virtual,dmi-board";
         dmi-sys-vendor = "PC engines";
         dmi-board-name =
@@ -67,7 +67,7 @@
                 };
             };
             front-keys {
-                compatible = "gpio-keys";
+                compatible = "gpio-keys-polled";
                 address-cells = <1>;
                 size-cells = <0>;
                 poll-interval = <100>;

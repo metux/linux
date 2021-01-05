@@ -840,7 +840,7 @@ out_unlock:
 	return res;
 }
 
-static struct file *ovl_dir_open_realfile(struct file *file,
+static struct file *ovl_dir_open_realfile(const struct file *file,
 					  struct path *realpath)
 {
 	struct file *res;
@@ -853,49 +853,62 @@ static struct file *ovl_dir_open_realfile(struct file *file,
 	return res;
 }
 
-static int ovl_dir_fsync(struct file *file, loff_t start, loff_t end,
-			 int datasync)
+/*
+ * Like ovl_real_fdget(), returns upperfile if dir was copied up since open.
+ * Unlike ovl_real_fdget(), this caches upperfile in file->private_data.
+ *
+ * TODO: use same abstract type for file->private_data of dir and file so
+ * upperfile could also be cached for files as well.
+ */
+struct file *ovl_dir_real_file(const struct file *file, bool want_upper)
 {
+
 	struct ovl_dir_file *od = file->private_data;
 	struct dentry *dentry = file->f_path.dentry;
-	struct file *realfile = od->realfile;
+	struct file *old, *realfile = od->realfile;
 
-	/* Nothing to sync for lower */
 	if (!OVL_TYPE_UPPER(ovl_path_type(dentry)))
-		return 0;
-
-	if (!ovl_should_sync(OVL_FS(dentry->d_sb)))
-		return 0;
+		return want_upper ? NULL : realfile;
 
 	/*
 	 * Need to check if we started out being a lower dir, but got copied up
 	 */
 	if (!od->is_upper) {
-		struct inode *inode = file_inode(file);
-
 		realfile = READ_ONCE(od->upperfile);
 		if (!realfile) {
 			struct path upperpath;
 
 			ovl_path_upper(dentry, &upperpath);
 			realfile = ovl_dir_open_realfile(file, &upperpath);
+			if (IS_ERR(realfile))
+				return realfile;
 
-			inode_lock(inode);
-			if (!od->upperfile) {
-				if (IS_ERR(realfile)) {
-					inode_unlock(inode);
-					return PTR_ERR(realfile);
-				}
-				smp_store_release(&od->upperfile, realfile);
-			} else {
-				/* somebody has beaten us to it */
-				if (!IS_ERR(realfile))
-					fput(realfile);
-				realfile = od->upperfile;
+			old = cmpxchg_release(&od->upperfile, NULL, realfile);
+			if (old) {
+				fput(realfile);
+				realfile = old;
 			}
-			inode_unlock(inode);
 		}
 	}
+
+	return realfile;
+}
+
+static int ovl_dir_fsync(struct file *file, loff_t start, loff_t end,
+			 int datasync)
+{
+	struct file *realfile;
+	int err;
+
+	if (!ovl_should_sync(OVL_FS(file->f_path.dentry->d_sb)))
+		return 0;
+
+	realfile = ovl_dir_real_file(file, true);
+	err = PTR_ERR_OR_ZERO(realfile);
+
+	/* Nothing to sync for lower */
+	if (!realfile || err)
+		return err;
 
 	return vfs_fsync_range(realfile, start, end, datasync);
 }
@@ -949,6 +962,10 @@ const struct file_operations ovl_dir_operations = {
 	.llseek		= ovl_dir_llseek,
 	.fsync		= ovl_dir_fsync,
 	.release	= ovl_dir_release,
+	.unlocked_ioctl	= ovl_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= ovl_compat_ioctl,
+#endif
 };
 
 int ovl_check_empty_dir(struct dentry *dentry, struct list_head *list)

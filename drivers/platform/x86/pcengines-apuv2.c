@@ -20,14 +20,6 @@
 #include <linux/gpio/machine.h>
 #include <linux/input.h>
 #include <linux/platform_data/gpio/gpio-amd-fch.h>
-#include <linux/of.h>
-#include <linux/of_fdt.h>
-#include <linux/libfdt.h>
-#include <linux/memblock.h>
-#include <linux/of_platform.h>
-#include <linux/slab.h>
-
-#include "../../of/of_private.h"
 
 /*
  * NOTE: this driver only supports APUv2/3 - not APUv1, as this one

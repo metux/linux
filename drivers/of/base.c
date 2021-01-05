@@ -1252,6 +1252,8 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	const __be32 *list;
 	int size;
 
+	pr_info("of_phandle_iterator_init() list_name=%s cells_name=%s\n", list_name, cells_name);
+
 	memset(it, 0, sizeof(*it));
 
 	/*
@@ -1272,6 +1274,7 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	it->phandle_end = list;
 	it->cur = list;
 
+	pr_info("of_phandle_iterator_init() OK\n");
 	return 0;
 }
 EXPORT_SYMBOL_GPL(of_phandle_iterator_init);
@@ -1285,8 +1288,17 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 		it->node = NULL;
 	}
 
-	if (!it->cur || it->phandle_end >= it->list_end)
+	if (!it->cur)
+		pr_info("iterator: cur==NULL\n");
+	else
+		pr_info("iterator: cur != NULL\n");
+
+	pr_info("it->phandle_end=%d it->list_end=%d\n", it->phandle_end, it->list_end);
+
+	if (!it->cur || it->phandle_end >= it->list_end) {
+		pr_info("of_phandle_iterator_next() -ENOENT\n");
 		return -ENOENT;
+	}
 
 	it->cur = it->phandle_end;
 
@@ -1295,11 +1307,16 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 
 	if (it->phandle) {
 
+		pr_info("iterator_next: now calling of_find_node_by_phandle ... handle=%d\n", it->phandle);
 		/*
 		 * Find the provider node and parse the #*-cells property to
 		 * determine the argument length.
 		 */
 		it->node = of_find_node_by_phandle(it->phandle);
+		if (it->node)
+			pr_info("--> found node for phandle\n");
+		else
+			pr_info("--> no node for phandle\n");
 
 		if (it->cells_name) {
 			if (!it->node) {
@@ -1340,9 +1357,13 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 			goto err;
 		}
 	}
+	else
+		pr_info("iterator_next: phandle is 0\n");
 
 	it->phandle_end = it->cur + count;
 	it->cur_count = count;
+
+	pr_info("of_phandle_iterator_next() OK\n");
 
 	return 0;
 

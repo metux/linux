@@ -1206,7 +1206,7 @@ struct device_node *of_find_node_by_phandle_from(struct device_node *root,
 
 	handle_hash = of_phandle_cache_hash(handle);
 
-	pr_info("of_find_node_by_phandle(): handle=%d hash=%d\n", handle, handle_hash);
+	pr_info("of_find_node_by_phandle_from(): handle=%d hash=%d\n", handle, handle_hash);
 	WARN_ON(1);
 
 	raw_spin_lock_irqsave(&devtree_lock, flags);
@@ -1216,13 +1216,17 @@ struct device_node *of_find_node_by_phandle_from(struct device_node *root,
 		np = phandle_cache[handle_hash];
 
 	if (!np) {
-		for_each_of_allnodes_from(root, np)
+		pr_info("not in cache ... doing scan\n");
+		pr_info("root=%ld\n", root);
+		for_each_of_allnodes_from(root, np) {
+			pr_info(" --> loop\n");
 			if (np->phandle == handle &&
 			    !of_node_check_flag(np, OF_DETACHED)) {
 				if (!root)
 					phandle_cache[handle_hash] = np;
 				break;
 			}
+		}
 	}
 
 	of_node_get(np);
@@ -1276,17 +1280,13 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	it->cur = list;
 
 	/* find the root of our tree */
-	for (walk=np; walk->parent; walk=walk->parent);
-
-	if (walk == of_root) {
-		pr_info("walked to the global root\n");
-		it->root = NULL;
-	} else {
-		pr_info("dangling root\n");
-		it->root = walk;
+	for (walk=np; walk->parent; walk=walk->parent)
+	{
+		pr_info("parent scan: %ld\n", walk);
 	}
+	it->root = ((walk == of_root) ? NULL : walk);
 
-	pr_info("of_phandle_iterator_init() OK\n");
+	pr_info("of_phandle_iterator_init() OK 2: walk=%ld root=%ld\n", walk, it->root);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(of_phandle_iterator_init);
@@ -1324,7 +1324,7 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 		 * Find the provider node and parse the #*-cells property to
 		 * determine the argument length.
 		 */
-		it->node = of_find_node_by_phandle(it->phandle);
+		it->node = of_find_node_by_phandle_from(it->root, it->phandle);
 		if (it->node)
 			pr_info("--> found node for phandle\n");
 		else

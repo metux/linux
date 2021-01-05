@@ -52,22 +52,14 @@ struct fdt_image fdt[] = {
 	FDT_IMAGE_ENT(pcengines_apuv2,"")
 };
 
-void *dtalloc(u64 sz, u64 align)
-{
-	pr_info("dtalloc: sz=%ld align=%ld\n", sz, align);
-	return kzalloc(sz, GFP_KERNEL);
-}
-
 struct device_node* of_fdt_parse(struct fdt_image *image)
 {
 	struct device_node* root;
 	void *new_fdt;
+
 	size_t size = fdt_totalsize(image->begin);
 	new_fdt = kmemdup(image->begin, size, GFP_KERNEL);
 	of_fdt_unflatten_tree(new_fdt, NULL, &root);
-	if (!root) {
-		pr_warn("cant unflatten fdt\n");
-	}
 
 	return root;
 }

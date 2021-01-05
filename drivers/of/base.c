@@ -1207,7 +1207,6 @@ struct device_node *of_find_node_by_phandle_from(struct device_node *root,
 	handle_hash = of_phandle_cache_hash(handle);
 
 	pr_info("of_find_node_by_phandle_from(): handle=%d hash=%d\n", handle, handle_hash);
-	WARN_ON(1);
 
 	raw_spin_lock_irqsave(&devtree_lock, flags);
 
@@ -1216,8 +1215,7 @@ struct device_node *of_find_node_by_phandle_from(struct device_node *root,
 		np = phandle_cache[handle_hash];
 
 	if (!np) {
-		pr_info("not in cache ... doing scan\n");
-		pr_info("root=%ld\n", root);
+		pr_info("not in cache ... doing scan root=%ld\n", root);
 		for_each_of_allnodes_from(root, np) {
 			pr_info(" --> loop\n");
 			if (np->phandle == handle &&
@@ -1257,8 +1255,6 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	int size;
 	struct device_node *walk;
 
-	pr_info("of_phandle_iterator_init() list_name=%s cells_name=%s\n", list_name, cells_name);
-
 	memset(it, 0, sizeof(*it));
 
 	/*
@@ -1280,13 +1276,9 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	it->cur = list;
 
 	/* find the root of our tree */
-	for (walk=np; walk->parent; walk=walk->parent)
-	{
-		pr_info("parent scan: %ld\n", walk);
-	}
+	for (walk=np; walk->parent; walk=walk->parent);
 	it->root = ((walk == of_root) ? NULL : walk);
 
-	pr_info("of_phandle_iterator_init() OK 2: walk=%ld root=%ld\n", walk, it->root);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(of_phandle_iterator_init);
@@ -1300,17 +1292,8 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 		it->node = NULL;
 	}
 
-	if (!it->cur)
-		pr_info("iterator: cur==NULL\n");
-	else
-		pr_info("iterator: cur != NULL\n");
-
-	pr_info("it->phandle_end=%d it->list_end=%d\n", it->phandle_end, it->list_end);
-
-	if (!it->cur || it->phandle_end >= it->list_end) {
-		pr_info("of_phandle_iterator_next() -ENOENT\n");
+	if (!it->cur || it->phandle_end >= it->list_end)
 		return -ENOENT;
-	}
 
 	it->cur = it->phandle_end;
 
@@ -1319,16 +1302,11 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 
 	if (it->phandle) {
 
-		pr_info("iterator_next: now calling of_find_node_by_phandle ... handle=%d\n", it->phandle);
 		/*
 		 * Find the provider node and parse the #*-cells property to
 		 * determine the argument length.
 		 */
 		it->node = of_find_node_by_phandle_from(it->root, it->phandle);
-		if (it->node)
-			pr_info("--> found node for phandle\n");
-		else
-			pr_info("--> no node for phandle\n");
 
 		if (it->cells_name) {
 			if (!it->node) {
@@ -1369,13 +1347,9 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 			goto err;
 		}
 	}
-	else
-		pr_info("iterator_next: phandle is 0\n");
 
 	it->phandle_end = it->cur + count;
 	it->cur_count = count;
-
-	pr_info("of_phandle_iterator_next() OK\n");
 
 	return 0;
 

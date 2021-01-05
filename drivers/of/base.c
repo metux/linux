@@ -1187,13 +1187,15 @@ int of_modalias_node(struct device_node *node, char *modalias, int len)
 EXPORT_SYMBOL_GPL(of_modalias_node);
 
 /**
- * of_find_node_by_phandle - Find a node given a phandle
+ * of_find_node_by_phandle_from - Find a node given a phandle
+ * @root:	root of the tree (on NULL default to of_root)
  * @handle:	phandle of the node to find
  *
  * Returns a node pointer with refcount incremented, use
  * of_node_put() on it when done.
  */
-struct device_node *of_find_node_by_phandle(phandle handle)
+struct device_node *of_find_node_by_phandle_from(struct device_node *root,
+						 phandle handle)
 {
 	struct device_node *np = NULL;
 	unsigned long flags;
@@ -1204,6 +1206,9 @@ struct device_node *of_find_node_by_phandle(phandle handle)
 
 	handle_hash = of_phandle_cache_hash(handle);
 
+	pr_info("of_find_node_by_phandle(): handle=%d hash=%d\n", handle, handle_hash);
+	WARN_ON(1);
+
 	raw_spin_lock_irqsave(&devtree_lock, flags);
 
 	if (phandle_cache[handle_hash] &&
@@ -1211,10 +1216,11 @@ struct device_node *of_find_node_by_phandle(phandle handle)
 		np = phandle_cache[handle_hash];
 
 	if (!np) {
-		for_each_of_allnodes(np)
+		for_each_of_allnodes_from(root, np)
 			if (np->phandle == handle &&
 			    !of_node_check_flag(np, OF_DETACHED)) {
-				phandle_cache[handle_hash] = np;
+				if (!root)
+					phandle_cache[handle_hash] = np;
 				break;
 			}
 	}
@@ -1223,7 +1229,7 @@ struct device_node *of_find_node_by_phandle(phandle handle)
 	raw_spin_unlock_irqrestore(&devtree_lock, flags);
 	return np;
 }
-EXPORT_SYMBOL(of_find_node_by_phandle);
+EXPORT_SYMBOL(of_find_node_by_phandle_from);
 
 void of_print_phandle_args(const char *msg, const struct of_phandle_args *args)
 {
@@ -1378,6 +1384,7 @@ static int __of_parse_phandle_with_args(const struct device_node *np,
 
 	/* Loop over the phandles until all the requested entry is found */
 	of_for_each_phandle(&it, rc, np, list_name, cells_name, cell_count) {
+		pr_info("of_for_each_phandle() loop step\n");
 		/*
 		 * All of the error cases bail out of the loop, so at
 		 * this point, the parsing is successful. If the requested
@@ -1386,11 +1393,16 @@ static int __of_parse_phandle_with_args(const struct device_node *np,
 		 */
 		rc = -ENOENT;
 		if (cur_index == index) {
-			if (!it.phandle)
+			pr_info("--> index matches: %d\n", index);
+			if (!it.phandle) {
+				pr_info("iterator has no phandle\n");
 				goto err;
+			}
+			pr_info("iterator has phandle=%ld\n", it.phandle);
 
 			if (out_args) {
 				int c;
+				pr_info("got out_args\n");
 
 				c = of_phandle_iterator_args(&it,
 							     out_args->args,
@@ -1398,16 +1410,20 @@ static int __of_parse_phandle_with_args(const struct device_node *np,
 				out_args->np = it.node;
 				out_args->args_count = c;
 			} else {
+				pr_info("no out_args\n");
 				of_node_put(it.node);
 			}
 
+			pr_info("returning success\n");
 			/* Found it! return success */
 			return 0;
 		}
 
 		cur_index++;
+		pr_info("cur_index now %d\n", cur_index);
 	}
 
+	pr_info("bailed out: %d\n", rc);
 	/*
 	 * Unlock node before returning result; will be one of:
 	 * -ENOENT : index is for empty phandle

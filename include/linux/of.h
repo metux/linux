@@ -82,6 +82,7 @@ struct of_phandle_iterator {
 	const char *cells_name;
 	int cell_count;
 	const struct device_node *parent;
+	const struct device_node *root;
 
 	/* List size information */
 	const __be32 *list_end;

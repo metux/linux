@@ -1251,6 +1251,7 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 {
 	const __be32 *list;
 	int size;
+	struct device_node *walk;
 
 	pr_info("of_phandle_iterator_init() list_name=%s cells_name=%s\n", list_name, cells_name);
 
@@ -1273,6 +1274,17 @@ int of_phandle_iterator_init(struct of_phandle_iterator *it,
 	it->list_end = list + size / sizeof(*list);
 	it->phandle_end = list;
 	it->cur = list;
+
+	/* find the root of our tree */
+	for (walk=np; walk->parent; walk=walk->parent);
+
+	if (walk == of_root) {
+		pr_info("walked to the global root\n");
+		it->root = NULL;
+	} else {
+		pr_info("dangling root\n");
+		it->root = walk;
+	}
 
 	pr_info("of_phandle_iterator_init() OK\n");
 	return 0;
@@ -1320,8 +1332,8 @@ int of_phandle_iterator_next(struct of_phandle_iterator *it)
 
 		if (it->cells_name) {
 			if (!it->node) {
-				pr_err("%pOF: could not find phandle\n",
-				       it->parent);
+				pr_err("%pOF: could not find phandle %d\n",
+				       it->parent, it->phandle);
 				goto err;
 			}
 

@@ -421,7 +421,12 @@ static size_t mtk_iommu_unmap(struct iommu_domain *domain,
 			      unsigned long iova, size_t size)
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
+	unsigned long end = iova + size - 1;
 
+	if (gather->start > iova)
+		gather->start = iova;
+	if (gather->end < end)
+		gather->end = end;
 	return dom->iop->unmap(dom->iop, iova, size, gather);
 }
 
@@ -429,9 +434,6 @@ static void mtk_iommu_iotlb_sync(struct iommu_domain *domain)
 {
 	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
 	size_t length = gather->end - gather->start + 1;
-
-	if (gather->start == ULONG_MAX)
-		return;
 
 	mtk_iommu_tlb_flush_range_sync(gather->start, length, gather->pgsize,
 				       data);

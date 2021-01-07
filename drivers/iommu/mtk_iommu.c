@@ -430,7 +430,7 @@ static size_t mtk_iommu_unmap(struct iommu_domain *domain,
 static void mtk_iommu_iotlb_sync(struct iommu_domain *domain)
 {
 	struct mtk_iommu_data *data = mtk_iommu_get_m4u_data();
-	size_t length = gather->end - gather->start;
+	size_t length = gather->end - gather->start + 1;
 
 	if (gather->start == ULONG_MAX)
 		return;

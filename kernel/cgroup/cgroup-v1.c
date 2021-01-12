@@ -17,6 +17,7 @@
 #include <linux/fs_parser.h>
 
 #include <trace/events/cgroup.h>
+#include <trace/hooks/cgroup.h>
 
 #include <trace/hooks/cgroup.h>
 

@@ -324,10 +324,10 @@ const char * const migratetype_names[MIGRATE_TYPES] = {
 	"Unmovable",
 	"Movable",
 	"Reclaimable",
+	"HighAtomic",
 #ifdef CONFIG_CMA
 	"CMA",
 #endif
-	"HighAtomic",
 #ifdef CONFIG_MEMORY_ISOLATION
 	"Isolate",
 #endif
@@ -1195,12 +1195,8 @@ static void kernel_init_free_pages(struct page *page, int numpages)
 
 	/* s390's use of memset() could override KASAN redzones. */
 	kasan_disable_current();
-	for (i = 0; i < numpages; i++) {
-		u8 tag = page_kasan_tag(page + i);
-		page_kasan_tag_reset(page + i);
+	for (i = 0; i < numpages; i++)
 		clear_highpage(page + i);
-		page_kasan_tag_set(page + i, tag);
-	}
 	kasan_enable_current();
 }
 
@@ -2848,34 +2844,35 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 {
 	struct page *page;
 
+	if (IS_ENABLED(CONFIG_CMA)) {
+		/*
+		 * Balance movable allocations between regular and CMA areas by
+		 * allocating from CMA when over half of the zone's free memory
+		 * is in the CMA area.
+		 */
+		if (alloc_flags & ALLOC_CMA &&
+		    zone_page_state(zone, NR_FREE_CMA_PAGES) >
+		    zone_page_state(zone, NR_FREE_PAGES) / 2) {
+			page = __rmqueue_cma_fallback(zone, order);
+			if (page)
+				goto out;
+		}
+	}
 retry:
 	page = __rmqueue_smallest(zone, order, migratetype);
+	if (unlikely(!page)) {
+		if (alloc_flags & ALLOC_CMA)
+			page = __rmqueue_cma_fallback(zone, order);
 
-	if (unlikely(!page) && __rmqueue_fallback(zone, order, migratetype,
-						  alloc_flags))
-		goto retry;
-
-	trace_mm_page_alloc_zone_locked(page, order, migratetype);
+		if (!page && __rmqueue_fallback(zone, order, migratetype,
+								alloc_flags))
+			goto retry;
+	}
+out:
+	if (page)
+		trace_mm_page_alloc_zone_locked(page, order, migratetype);
 	return page;
 }
-
-#ifdef CONFIG_CMA
-static struct page *__rmqueue_cma(struct zone *zone, unsigned int order,
-				  int migratetype,
-				  unsigned int alloc_flags)
-{
-	struct page *page = __rmqueue_cma_fallback(zone, order);
-	trace_mm_page_alloc_zone_locked(page, order, MIGRATE_CMA);
-	return page;
-}
-#else
-static inline struct page *__rmqueue_cma(struct zone *zone, unsigned int order,
-					 int migratetype,
-					 unsigned int alloc_flags)
-{
-	return NULL;
-}
-#endif
 
 /*
  * Obtain a specified number of elements from the buddy allocator, all under
@@ -2890,14 +2887,8 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 
 	spin_lock(&zone->lock);
 	for (i = 0; i < count; ++i) {
-		struct page *page;
-
-		if (is_migrate_cma(migratetype))
-			page = __rmqueue_cma(zone, order, migratetype,
-					     alloc_flags);
-		else
-			page = __rmqueue(zone, order, migratetype, alloc_flags);
-
+		struct page *page = __rmqueue(zone, order, migratetype,
+								alloc_flags);
 		if (unlikely(page == NULL))
 			break;
 
@@ -2930,28 +2921,6 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	__mod_zone_page_state(zone, NR_FREE_PAGES, -(i << order));
 	spin_unlock(&zone->lock);
 	return alloced;
-}
-
-/*
- * Return the pcp list that corresponds to the migrate type if that list isn't
- * empty.
- * If the list is empty return NULL.
- */
-static struct list_head *get_populated_pcp_list(struct zone *zone,
-			unsigned int order, struct per_cpu_pages *pcp,
-			int migratetype, unsigned int alloc_flags)
-{
-	struct list_head *list = &pcp->lists[migratetype];
-
-	if (list_empty(list)) {
-		pcp->count += rmqueue_bulk(zone, order,
-				pcp->batch, list,
-				migratetype, alloc_flags);
-
-		if (list_empty(list))
-			list = NULL;
-	}
-	return list;
 }
 
 #ifdef CONFIG_NUMA
@@ -3404,28 +3373,16 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z)
 static struct page *__rmqueue_pcplist(struct zone *zone, int migratetype,
 			unsigned int alloc_flags,
 			struct per_cpu_pages *pcp,
-			gfp_t gfp_flags)
+			struct list_head *list)
 {
-	struct page *page = NULL;
-	struct list_head *list = NULL;
+	struct page *page;
 
 	do {
-		/* First try to get CMA pages */
-		if (migratetype == MIGRATE_MOVABLE &&
-				alloc_flags & ALLOC_CMA) {
-			list = get_populated_pcp_list(zone, 0, pcp,
-					get_cma_migrate_type(), alloc_flags);
-		}
-
-		if (list == NULL) {
-			/*
-			 * Either CMA is not suitable or there are no
-			 * free CMA pages.
-			 */
-			list = get_populated_pcp_list(zone, 0, pcp,
+		if (list_empty(list)) {
+			pcp->count += rmqueue_bulk(zone, 0,
+					pcp->batch, list,
 					migratetype, alloc_flags);
-			if (unlikely(list == NULL) ||
-					unlikely(list_empty(list)))
+			if (unlikely(list_empty(list)))
 				return NULL;
 		}
 
@@ -3443,13 +3400,14 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 			int migratetype, unsigned int alloc_flags)
 {
 	struct per_cpu_pages *pcp;
+	struct list_head *list;
 	struct page *page;
 	unsigned long flags;
 
 	local_irq_save(flags);
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
-	page = __rmqueue_pcplist(zone,  migratetype, alloc_flags, pcp,
-				 gfp_flags);
+	list = &pcp->lists[migratetype];
+	page = __rmqueue_pcplist(zone,  migratetype, alloc_flags, pcp, list);
 	if (page) {
 		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1);
 		zone_statistics(preferred_zone, zone);
@@ -3471,9 +3429,16 @@ struct page *rmqueue(struct zone *preferred_zone,
 	struct page *page;
 
 	if (likely(order == 0)) {
-		page = rmqueue_pcplist(preferred_zone, zone, gfp_flags,
-				       migratetype, alloc_flags);
-		goto out;
+		/*
+		 * MIGRATE_MOVABLE pcplist could have the pages on CMA area and
+		 * we need to skip it when CMA area isn't allowed.
+		 */
+		if (!IS_ENABLED(CONFIG_CMA) || alloc_flags & ALLOC_CMA ||
+				migratetype != MIGRATE_MOVABLE) {
+			page = rmqueue_pcplist(preferred_zone, zone, gfp_flags,
+					migratetype, alloc_flags);
+			goto out;
+		}
 	}
 
 	/*
@@ -3496,15 +3461,8 @@ struct page *rmqueue(struct zone *preferred_zone,
 			if (page)
 				trace_mm_page_alloc_zone_locked(page, order, migratetype);
 		}
-		if (!page) {
-			if (migratetype == MIGRATE_MOVABLE &&
-					alloc_flags & ALLOC_CMA)
-				page = __rmqueue_cma(zone, order, migratetype,
-						     alloc_flags);
-			if (!page)
-				page = __rmqueue(zone, order, migratetype,
-						 alloc_flags);
-		}
+		if (!page)
+			page = __rmqueue(zone, order, migratetype, alloc_flags);
 	} while (page && check_new_pages(page, order));
 	spin_unlock(&zone->lock);
 	if (!page)
@@ -3682,14 +3640,6 @@ bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 			continue;
 
 		for (mt = 0; mt < MIGRATE_PCPTYPES; mt++) {
-#ifdef CONFIG_CMA
-			/*
-			 * Note that this check is needed only
-			 * when MIGRATE_CMA < MIGRATE_PCPTYPES.
-			 */
-			if (mt == MIGRATE_CMA)
-				continue;
-#endif
 			if (!free_area_empty(area, mt))
 				return true;
 		}
@@ -3825,8 +3775,7 @@ static inline unsigned int current_alloc_flags(gfp_t gfp_mask,
 	unsigned int pflags = current->flags;
 
 	if (!(pflags & PF_MEMALLOC_NOCMA) &&
-			gfp_migratetype(gfp_mask) == MIGRATE_MOVABLE &&
-			gfp_mask & __GFP_CMA)
+			gfp_migratetype(gfp_mask) == MIGRATE_MOVABLE)
 		alloc_flags |= ALLOC_CMA;
 
 #endif
@@ -7651,11 +7600,6 @@ unsigned long free_reserved_area(void *start, void *end, int poison, const char 
 		 * alias for the memset().
 		 */
 		direct_map_addr = page_address(page);
-		/*
-		 * Perform a kasan-unchecked memset() since this memory
-		 * has not been initialized.
-		 */
-		direct_map_addr = kasan_reset_tag(direct_map_addr);
 		if ((unsigned int)poison <= 0xFF)
 			memset(direct_map_addr, poison, PAGE_SIZE);
 
@@ -8465,15 +8409,11 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 	unsigned int nr_reclaimed;
 	unsigned long pfn = start;
 	unsigned int tries = 0;
-	unsigned int max_tries = 5;
 	int ret = 0;
 	struct migration_target_control mtc = {
 		.nid = zone_to_nid(cc->zone),
 		.gfp_mask = GFP_USER | __GFP_MOVABLE | __GFP_RETRY_MAYFAIL,
 	};
-
-	if (cc->alloc_contig && cc->mode == MIGRATE_ASYNC)
-		max_tries = 1;
 
 	migrate_prep();
 
@@ -8491,7 +8431,7 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 				break;
 			}
 			tries = 0;
-		} else if (++tries == max_tries) {
+		} else if (++tries == 5) {
 			ret = ret < 0 ? ret : -EBUSY;
 			break;
 		}
@@ -8542,7 +8482,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 		.nr_migratepages = 0,
 		.order = -1,
 		.zone = page_zone(pfn_to_page(start)),
-		.mode = gfp_mask & __GFP_NORETRY ? MIGRATE_ASYNC : MIGRATE_SYNC,
+		.mode = MIGRATE_SYNC,
 		.ignore_skip_hint = true,
 		.no_set_skip_hint = true,
 		.gfp_mask = current_gfp_context(gfp_mask),

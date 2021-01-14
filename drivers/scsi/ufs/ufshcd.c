@@ -7777,8 +7777,6 @@ out:
 		pm_runtime_put_sync(hba->dev);
 		ufshcd_exit_clk_scaling(hba);
 		ufshcd_hba_exit(hba);
-	} else {
-		ufshcd_clear_ua_wluns(hba);
 	}
 }
 

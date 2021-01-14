@@ -287,6 +287,38 @@ const void *of_get_property(const struct device_node *np, const char *name,
 EXPORT_SYMBOL(of_get_property);
 
 /*
+ * of_match_string - match a propery against given string
+ * @node: device_node to look up at
+ * @name: name of the property
+ * @value: value to match against
+ *
+ * Look for property by name and match all string elements against value.
+ * Returns true if the property exists and any one of the string elements
+ * matches the given value.
+ */
+bool of_match_string(const struct device_node *node, const char* name,
+		     const char* value)
+{
+	struct property *prop;
+	const char *walk;
+
+	if (!name || !value)
+		return false;
+
+	prop = of_find_property(node, name, NULL);
+	if (!prop)
+		return false;
+
+	for (walk=of_prop_next_string(prop, NULL); walk;
+	     walk=of_prop_next_string(prop, walk)) {
+		if (strcmp(walk, value)==0)
+			return true;
+	}
+	return true;
+}
+EXPORT_SYMBOL_GPL(of_match_string);
+
+/*
  * arch_match_cpu_phys_id - Match the given logical CPU and physical id
  *
  * @cpu: logical cpu index of a core/thread

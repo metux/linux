@@ -112,12 +112,15 @@ void __of_update_property_sysfs(struct device_node *np, struct property *newprop
 	__of_add_property_sysfs(np, newprop);
 }
 
-int __of_attach_node_sysfs(struct device_node *np)
+int __of_attach_node_sysfs(struct device_node *np, const char *basename)
 {
 	const char *name;
 	struct kobject *parent;
 	struct property *pp;
 	int rc;
+
+	if (!basename)
+		basename = "base";
 
 	if (!of_kset)
 		return 0;
@@ -125,7 +128,7 @@ int __of_attach_node_sysfs(struct device_node *np)
 	np->kobj.kset = of_kset;
 	if (!np->parent) {
 		/* Nodes without parents are new top level trees */
-		name = safe_name(&of_kset->kobj, "base");
+		name = safe_name(&of_kset->kobj, basename);
 		parent = NULL;
 	} else {
 		name = safe_name(&np->parent->kobj, kbasename(np->full_name));

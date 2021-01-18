@@ -16,7 +16,9 @@
  *
  *   DECLARE_STATIC_CALL(name, func);
  *   DEFINE_STATIC_CALL(name, func);
+ *   DEFINE_STATIC_CALL_NULL(name, typename);
  *   static_call(name)(args...);
+ *   static_call_cond(name)(args...);
  *   static_call_update(name, func);
  *
  * Usage example:
@@ -52,6 +54,43 @@
  *   rather than calling through the trampoline.  This requires objtool or a
  *   compiler plugin to detect all the static_call() sites and annotate them
  *   in the .static_call_sites section.
+ *
+ *
+ * Notes on NULL function pointers:
+ *
+ *   Static_call()s support NULL functions, with many of the caveats that
+ *   regular function pointers have.
+ *
+ *   Clearly calling a NULL function pointer is 'BAD', so too for
+ *   static_call()s (although when HAVE_STATIC_CALL it might not be immediately
+ *   fatal). A NULL static_call can be the result of:
+ *
+ *     DECLARE_STATIC_CALL_NULL(my_static_call, void (*)(int));
+ *
+ *   which is equivalent to declaring a NULL function pointer with just a
+ *   typename:
+ *
+ *     void (*my_func_ptr)(int arg1) = NULL;
+ *
+ *   or using static_call_update() with a NULL function. In both cases the
+ *   HAVE_STATIC_CALL implementation will patch the trampoline with a RET
+ *   instruction, instead of an immediate tail-call JMP. HAVE_STATIC_CALL_INLINE
+ *   architectures can patch the trampoline call to a NOP.
+ *
+ *   In all cases, any argument evaluation is unconditional. Unlike a regular
+ *   conditional function pointer call:
+ *
+ *     if (my_func_ptr)
+ *         my_func_ptr(arg1)
+ *
+ *   where the argument evaludation also depends on the pointer value.
+ *
+ *   When calling a static_call that can be NULL, use:
+ *
+ *     static_call_cond(name)(arg1);
+ *
+ *   which will include the required value tests to avoid NULL-pointer
+ *   dereferences.
  */
 
 #include <linux/types.h>
@@ -64,29 +103,13 @@
 /*
  * Either @site or @tramp can be NULL.
  */
-extern void arch_static_call_transform(void *site, void *tramp, void *func);
+extern void arch_static_call_transform(void *site, void *tramp, void *func, bool tail);
 
 #define STATIC_CALL_TRAMP_ADDR(name) &STATIC_CALL_TRAMP(name)
-
-/*
- * __ADDRESSABLE() is used to ensure the key symbol doesn't get stripped from
- * the symbol table so that objtool can reference it when it generates the
- * .static_call_sites section.
- */
-#define __static_call(name)						\
-({									\
-	__ADDRESSABLE(STATIC_CALL_KEY(name));				\
-	&STATIC_CALL_TRAMP(name);					\
-})
 
 #else
 #define STATIC_CALL_TRAMP_ADDR(name) NULL
 #endif
-
-
-#define DECLARE_STATIC_CALL(name, func)					\
-	extern struct static_call_key STATIC_CALL_KEY(name);		\
-	extern typeof(func) STATIC_CALL_TRAMP(name);
 
 #define static_call_update(name, func)					\
 ({									\
@@ -97,6 +120,8 @@ extern void arch_static_call_transform(void *site, void *tramp, void *func);
 
 #ifdef CONFIG_HAVE_STATIC_CALL_INLINE
 
+extern int __init static_call_init(void);
+
 struct static_call_mod {
 	struct static_call_mod *next;
 	struct module *mod; /* for vmlinux, mod == NULL */
@@ -105,21 +130,35 @@ struct static_call_mod {
 
 struct static_call_key {
 	void *func;
-	struct static_call_mod *mods;
+	union {
+		/* bit 0: 0 = mods, 1 = sites */
+		unsigned long type;
+		struct static_call_mod *mods;
+		struct static_call_site *sites;
+	};
 };
 
 extern void __static_call_update(struct static_call_key *key, void *tramp, void *func);
 extern int static_call_mod_init(struct module *mod);
+extern int static_call_text_reserved(void *start, void *end);
 
 #define DEFINE_STATIC_CALL(name, _func)					\
 	DECLARE_STATIC_CALL(name, _func);				\
 	struct static_call_key STATIC_CALL_KEY(name) = {		\
 		.func = _func,						\
-		.mods = NULL,						\
+		.type = 1,						\
 	};								\
 	ARCH_DEFINE_STATIC_CALL_TRAMP(name, _func)
 
-#define static_call(name)	__static_call(name)
+#define DEFINE_STATIC_CALL_NULL(name, _func)				\
+	DECLARE_STATIC_CALL(name, _func);				\
+	struct static_call_key STATIC_CALL_KEY(name) = {		\
+		.func = NULL,						\
+		.type = 1,						\
+	};								\
+	ARCH_DEFINE_STATIC_CALL_NULL_TRAMP(name)
+
+#define static_call_cond(name)	(void)__static_call(name)
 
 #define EXPORT_STATIC_CALL(name)					\
 	EXPORT_SYMBOL(STATIC_CALL_KEY(name));				\
@@ -131,6 +170,8 @@ extern int static_call_mod_init(struct module *mod);
 
 #elif defined(CONFIG_HAVE_STATIC_CALL)
 
+static inline int static_call_init(void) { return 0; }
+
 struct static_call_key {
 	void *func;
 };
@@ -142,15 +183,27 @@ struct static_call_key {
 	};								\
 	ARCH_DEFINE_STATIC_CALL_TRAMP(name, _func)
 
-#define static_call(name)	__static_call(name)
+#define DEFINE_STATIC_CALL_NULL(name, _func)				\
+	DECLARE_STATIC_CALL(name, _func);				\
+	struct static_call_key STATIC_CALL_KEY(name) = {		\
+		.func = NULL,						\
+	};								\
+	ARCH_DEFINE_STATIC_CALL_NULL_TRAMP(name)
+
+#define static_call_cond(name)	(void)__static_call(name)
 
 static inline
 void __static_call_update(struct static_call_key *key, void *tramp, void *func)
 {
 	cpus_read_lock();
 	WRITE_ONCE(key->func, func);
-	arch_static_call_transform(NULL, tramp, func);
+	arch_static_call_transform(NULL, tramp, func, false);
 	cpus_read_unlock();
+}
+
+static inline int static_call_text_reserved(void *start, void *end)
+{
+	return 0;
 }
 
 #define EXPORT_STATIC_CALL(name)					\
@@ -163,6 +216,8 @@ void __static_call_update(struct static_call_key *key, void *tramp, void *func)
 
 #else /* Generic implementation */
 
+static inline int static_call_init(void) { return 0; }
+
 struct static_call_key {
 	void *func;
 };
@@ -173,13 +228,45 @@ struct static_call_key {
 		.func = _func,						\
 	}
 
-#define static_call(name)						\
-	((typeof(STATIC_CALL_TRAMP(name))*)(STATIC_CALL_KEY(name).func))
+#define DEFINE_STATIC_CALL_NULL(name, _func)				\
+	DECLARE_STATIC_CALL(name, _func);				\
+	struct static_call_key STATIC_CALL_KEY(name) = {		\
+		.func = NULL,						\
+	}
+
+static inline void __static_call_nop(void) { }
+
+/*
+ * This horrific hack takes care of two things:
+ *
+ *  - it ensures the compiler will only load the function pointer ONCE,
+ *    which avoids a reload race.
+ *
+ *  - it ensures the argument evaluation is unconditional, similar
+ *    to the HAVE_STATIC_CALL variant.
+ *
+ * Sadly current GCC/Clang (10 for both) do not optimize this properly
+ * and will emit an indirect call for the NULL case :-(
+ */
+#define __static_call_cond(name)					\
+({									\
+	void *func = READ_ONCE(STATIC_CALL_KEY(name).func);		\
+	if (!func)							\
+		func = &__static_call_nop;				\
+	(typeof(STATIC_CALL_TRAMP(name))*)func;				\
+})
+
+#define static_call_cond(name)	(void)__static_call_cond(name)
 
 static inline
 void __static_call_update(struct static_call_key *key, void *tramp, void *func)
 {
 	WRITE_ONCE(key->func, func);
+}
+
+static inline int static_call_text_reserved(void *start, void *end)
+{
+	return 0;
 }
 
 #define EXPORT_STATIC_CALL(name)	EXPORT_SYMBOL(STATIC_CALL_KEY(name))

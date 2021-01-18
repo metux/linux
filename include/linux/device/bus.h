@@ -254,6 +254,8 @@ void bus_sort_breadthfirst(struct bus_type *bus,
 			   int (*compare)(const struct device *a,
 					  const struct device *b));
 
+struct bus_type *find_bus(const char *name);
+
 /**
  * bus_unregister_device_by_name - remove device by bus id from specific bus
  *                                 and unregister it from device core

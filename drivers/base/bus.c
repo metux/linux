@@ -754,13 +754,19 @@ EXPORT_SYMBOL_GPL(device_reprobe);
  *
  * Note that kset_find_obj increments bus' reference count.
  */
-#if 0
-struct bus_type *find_bus(char *name)
+struct bus_type *find_bus(const char *name)
 {
 	struct kobject *k = kset_find_obj(bus_kset, name);
-	return k ? to_bus(k) : NULL;
+	struct subsys_private *subsys_priv;
+
+	if (!k)
+		return NULL;
+
+	subsys_priv = container_of(to_kset(k), struct subsys_private, subsys);
+
+	return subsys_priv->bus;
 }
-#endif  /*  0  */
+EXPORT_SYMBOL_GPL(find_bus);
 
 static int bus_add_groups(struct bus_type *bus,
 			  const struct attribute_group **groups)

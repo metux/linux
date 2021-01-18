@@ -39,7 +39,7 @@ static struct kset *system_kset;
 static int __must_check bus_rescan_devices_helper(struct device *dev,
 						void *data);
 
-static struct bus_type *bus_get(struct bus_type *bus)
+struct bus_type *bus_get(struct bus_type *bus)
 {
 	if (bus) {
 		kset_get(&bus->p->subsys);
@@ -47,12 +47,14 @@ static struct bus_type *bus_get(struct bus_type *bus)
 	}
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(bus_get);
 
-static void bus_put(struct bus_type *bus)
+void bus_put(struct bus_type *bus)
 {
 	if (bus)
 		kset_put(&bus->p->subsys);
 }
+EXPORT_SYMBOL_GPL(bus_put);
 
 static ssize_t drv_attr_show(struct kobject *kobj, struct attribute *attr,
 			     char *buf)

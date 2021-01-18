@@ -178,6 +178,22 @@ static const struct kset_uevent_ops bus_uevent_ops = {
 
 static struct kset *bus_kset;
 
+int bus_unregister_device_by_name(struct bus_type *bus, const char *name)
+{
+	struct device *dev;
+
+	dev = bus_find_device_by_name(bus, NULL, name);
+	if (!dev)
+		return -ENOENT;
+
+	device_driver_detach(dev);
+	device_unregister(dev);
+	put_device(dev);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bus_unregister_device_by_name);
+
 /* Manually detach a device from its associated driver. */
 static ssize_t unbind_store(struct device_driver *drv, const char *buf,
 			    size_t count)

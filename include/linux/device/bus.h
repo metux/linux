@@ -253,6 +253,15 @@ int bus_for_each_drv(struct bus_type *bus, struct device_driver *start,
 void bus_sort_breadthfirst(struct bus_type *bus,
 			   int (*compare)(const struct device *a,
 					  const struct device *b));
+
+/**
+ * bus_unregister_device_by_name - remove device by bus id from specific bus
+ *                                 and unregister it from device core
+ * @bus: bus type
+ * @name: name of the device to remove
+ */
+int bus_unregister_device_by_name(struct bus_type *bus, const char *name);
+
 /*
  * Bus notifiers: Get notified of addition/removal of devices
  * and binding/unbinding of drivers to devices.

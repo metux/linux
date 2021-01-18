@@ -120,6 +120,9 @@ extern void bus_unregister(struct bus_type *bus);
 
 extern int __must_check bus_rescan_devices(struct bus_type *bus);
 
+struct bus_type *bus_get(struct bus_type *bus);
+void bus_put(struct bus_type *bus);
+
 struct bus_attribute {
 	struct attribute	attr;
 	ssize_t (*show)(struct bus_type *bus, char *buf);

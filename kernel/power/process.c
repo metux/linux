@@ -23,6 +23,8 @@
 #include <trace/events/power.h>
 #include <linux/cpuset.h>
 
+#include <trace/hooks/power.h>
+
 /*
  * Timeout for stopping processes
  */
@@ -99,16 +101,19 @@ static int try_to_freeze_tasks(bool user_only)
 		if (wq_busy)
 			show_workqueue_state();
 
-		if (!wakeup || pm_debug_messages_on) {
+		if (pm_debug_messages_on) {
 			read_lock(&tasklist_lock);
 			for_each_process_thread(g, p) {
 				if (p != current && !freezer_should_skip(p)
-				    && freezing(p) && !frozen(p))
+				    && freezing(p) && !frozen(p)) {
 					sched_show_task(p);
+					trace_android_vh_try_to_freeze_todo_unfrozen(p);
+				}
 			}
 			read_unlock(&tasklist_lock);
 		}
-		read_unlock(&tasklist_lock);
+
+		trace_android_vh_try_to_freeze_todo(todo, elapsed_msecs, wq_busy);
 	} else {
 		pr_cont("(elapsed %d.%03d seconds) ", elapsed_msecs / 1000,
 			elapsed_msecs % 1000);

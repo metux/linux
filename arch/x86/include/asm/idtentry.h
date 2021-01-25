@@ -563,6 +563,7 @@ DECLARE_IDTENTRY_DF(X86_TRAP_DF,	exc_double_fault);
 
 #ifdef CONFIG_XEN_PV
 DECLARE_IDTENTRY_XENCB(X86_TRAP_OTHER,	exc_xen_hypervisor_callback);
+DECLARE_IDTENTRY_RAW(X86_TRAP_OTHER,	exc_xen_unknown_trap);
 #endif
 
 /* Device interrupts common/spurious */

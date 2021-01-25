@@ -345,15 +345,13 @@ static void set_aliased_prot(void *v, pgprot_t prot)
 	pte_t *ptep;
 	pte_t pte;
 	unsigned long pfn;
-	struct page *page;
 	unsigned char dummy;
+	void *va;
 
 	ptep = lookup_address((unsigned long)v, &level);
 	BUG_ON(ptep == NULL);
 
 	pfn = pte_pfn(*ptep);
-	page = pfn_to_page(pfn);
-
 	pte = pfn_pte(pfn, prot);
 
 	/*
@@ -383,14 +381,10 @@ static void set_aliased_prot(void *v, pgprot_t prot)
 	if (HYPERVISOR_update_va_mapping((unsigned long)v, pte, 0))
 		BUG();
 
-	if (!PageHighMem(page)) {
-		void *av = __va(PFN_PHYS(pfn));
+	va = __va(PFN_PHYS(pfn));
 
-		if (av != v)
-			if (HYPERVISOR_update_va_mapping((unsigned long)av, pte, 0))
-				BUG();
-	} else
-		kmap_flush_unused();
+	if (va != v && HYPERVISOR_update_va_mapping((unsigned long)va, pte, 0))
+		BUG();
 
 	preempt_enable();
 }
@@ -589,6 +583,13 @@ DEFINE_IDTENTRY_RAW(xenpv_exc_debug)
 		exc_debug(regs);
 }
 
+DEFINE_IDTENTRY_RAW(exc_xen_unknown_trap)
+{
+	/* This should never happen and there is no way to handle it. */
+	pr_err("Unknown trap in Xen PV mode.");
+	BUG();
+}
+
 struct trap_array_entry {
 	void (*orig)(void);
 	void (*xen)(void);
@@ -637,6 +638,7 @@ static bool __ref get_trap_addr(void **addr, unsigned int ist)
 {
 	unsigned int nr;
 	bool ist_okay = false;
+	bool found = false;
 
 	/*
 	 * Replace trap handler addresses by Xen specific ones.
@@ -651,6 +653,7 @@ static bool __ref get_trap_addr(void **addr, unsigned int ist)
 		if (*addr == entry->orig) {
 			*addr = entry->xen;
 			ist_okay = entry->ist_okay;
+			found = true;
 			break;
 		}
 	}
@@ -661,9 +664,13 @@ static bool __ref get_trap_addr(void **addr, unsigned int ist)
 		nr = (*addr - (void *)early_idt_handler_array[0]) /
 		     EARLY_IDT_HANDLER_SIZE;
 		*addr = (void *)xen_early_idt_handler_array[nr];
+		found = true;
 	}
 
-	if (WARN_ON(ist != 0 && !ist_okay))
+	if (!found)
+		*addr = (void *)xen_asm_exc_xen_unknown_trap;
+
+	if (WARN_ON(found && ist != 0 && !ist_okay))
 		return false;
 
 	return true;

@@ -14,13 +14,12 @@
 #include "warn.h"
 #include "arch_elf.h"
 
+#include <linux/objtool.h>
 #include <linux/hashtable.h>
 #include <linux/kernel.h>
 #include <linux/static_call_types.h>
 
 #define FAKE_JUMP_OFFSET -1
-
-#define C_JUMP_TABLE_SECTION ".rodata..c_jump_table"
 
 struct alternative {
 	struct list_head list;
@@ -503,8 +502,21 @@ static int create_static_call_sections(struct objtool_file *file)
 
 		key_sym = find_symbol_by_name(file->elf, tmp);
 		if (!key_sym) {
-			WARN("static_call: can't find static_call_key symbol: %s", tmp);
-			return -1;
+			if (!module) {
+				WARN("static_call: can't find static_call_key symbol: %s", tmp);
+				return -1;
+			}
+
+			/*
+			 * For modules(), the key might not be exported, which
+			 * means the module can make static calls but isn't
+			 * allowed to change them.
+			 *
+			 * In that case we temporarily set the key to be the
+			 * trampoline address.  This is fixed up in
+			 * static_call_add_module().
+			 */
+			key_sym = insn->call_dest;
 		}
 		free(key_name);
 
@@ -663,6 +675,8 @@ static const char *uaccess_safe_builtin[] = {
 	"__asan_store4_noabort",
 	"__asan_store8_noabort",
 	"__asan_store16_noabort",
+	"__kasan_check_read",
+	"__kasan_check_write",
 	/* KASAN in-line */
 	"__asan_report_load_n_noabort",
 	"__asan_report_load1_noabort",
@@ -990,6 +1004,17 @@ static void remove_insn_ops(struct instruction *insn)
 	}
 }
 
+static struct symbol *find_call_destination(struct section *sec, unsigned long offset)
+{
+	struct symbol *call_dest;
+
+	call_dest = find_func_by_offset(sec, offset);
+	if (!call_dest)
+		call_dest = find_symbol_by_offset(sec, offset);
+
+	return call_dest;
+}
+
 /*
  * Find the destination instructions for all calls.
  */
@@ -1007,9 +1032,7 @@ static int add_call_destinations(struct objtool_file *file)
 					       insn->offset, insn->len);
 		if (!reloc) {
 			dest_off = arch_jump_destination(insn);
-			insn->call_dest = find_func_by_offset(insn->sec, dest_off);
-			if (!insn->call_dest)
-				insn->call_dest = find_symbol_by_offset(insn->sec, dest_off);
+			insn->call_dest = find_call_destination(insn->sec, dest_off);
 
 			if (insn->ignore)
 				continue;
@@ -1027,8 +1050,8 @@ static int add_call_destinations(struct objtool_file *file)
 
 		} else if (reloc->sym->type == STT_SECTION) {
 			dest_off = arch_dest_reloc_offset(reloc->addend);
-			insn->call_dest = find_func_by_offset(reloc->sym->sec,
-							      dest_off);
+			insn->call_dest = find_call_destination(reloc->sym->sec,
+								dest_off);
 			if (!insn->call_dest) {
 				if (is_cfi_section(reloc->sym->sec))
 					continue;
@@ -1383,56 +1406,15 @@ static int add_jump_table(struct objtool_file *file, struct instruction *insn,
 }
 
 /*
- * find_jump_table() - Given a dynamic jump, find the switch jump table in
- * .rodata associated with it.
- *
- * There are 3 basic patterns:
- *
- * 1. jmpq *[rodata addr](,%reg,8)
- *
- *    This is the most common case by far.  It jumps to an address in a simple
- *    jump table which is stored in .rodata.
- *
- * 2. jmpq *[rodata addr](%rip)
- *
- *    This is caused by a rare GCC quirk, currently only seen in three driver
- *    functions in the kernel, only with certain obscure non-distro configs.
- *
- *    As part of an optimization, GCC makes a copy of an existing switch jump
- *    table, modifies it, and then hard-codes the jump (albeit with an indirect
- *    jump) to use a single entry in the table.  The rest of the jump table and
- *    some of its jump targets remain as dead code.
- *
- *    In such a case we can just crudely ignore all unreachable instruction
- *    warnings for the entire object file.  Ideally we would just ignore them
- *    for the function, but that would require redesigning the code quite a
- *    bit.  And honestly that's just not worth doing: unreachable instruction
- *    warnings are of questionable value anyway, and this is such a rare issue.
- *
- * 3. mov [rodata addr],%reg1
- *    ... some instructions ...
- *    jmpq *(%reg1,%reg2,8)
- *
- *    This is a fairly uncommon pattern which is new for GCC 6.  As of this
- *    writing, there are 11 occurrences of it in the allmodconfig kernel.
- *
- *    As of GCC 7 there are quite a few more of these and the 'in between' code
- *    is significant. Esp. with KASAN enabled some of the code between the mov
- *    and jmpq uses .rodata itself, which can confuse things.
- *
- *    TODO: Once we have DWARF CFI and smarter instruction decoding logic,
- *    ensure the same register is used in the mov and jump instructions.
- *
- *    NOTE: RETPOLINE made it harder still to decode dynamic jumps.
+ * find_jump_table() - Given a dynamic jump, find the switch jump table
+ * associated with it.
  */
 static struct reloc *find_jump_table(struct objtool_file *file,
 				      struct symbol *func,
 				      struct instruction *insn)
 {
-	struct reloc *text_reloc, *table_reloc;
+	struct reloc *table_reloc;
 	struct instruction *dest_insn, *orig_insn = insn;
-	struct section *table_sec;
-	unsigned long table_offset;
 
 	/*
 	 * Backward search using the @first_jump_src links, these help avoid
@@ -1453,51 +1435,12 @@ static struct reloc *find_jump_table(struct objtool_file *file,
 		     insn->jump_dest->offset > orig_insn->offset))
 		    break;
 
-		/* look for a relocation which references .rodata */
-		text_reloc = find_reloc_by_dest_range(file->elf, insn->sec,
-						    insn->offset, insn->len);
-		if (!text_reloc || text_reloc->sym->type != STT_SECTION ||
-		    !text_reloc->sym->sec->rodata)
-			continue;
-
-		table_offset = text_reloc->addend;
-		table_sec = text_reloc->sym->sec;
-
-		if (text_reloc->type == R_X86_64_PC32)
-			table_offset += 4;
-
-		/*
-		 * Make sure the .rodata address isn't associated with a
-		 * symbol.  GCC jump tables are anonymous data.
-		 *
-		 * Also support C jump tables which are in the same format as
-		 * switch jump tables.  For objtool to recognize them, they
-		 * need to be placed in the C_JUMP_TABLE_SECTION section.  They
-		 * have symbols associated with them.
-		 */
-		if (find_symbol_containing(table_sec, table_offset) &&
-		    strcmp(table_sec->name, C_JUMP_TABLE_SECTION))
-			continue;
-
-		/*
-		 * Each table entry has a reloc associated with it.  The reloc
-		 * should reference text in the same function as the original
-		 * instruction.
-		 */
-		table_reloc = find_reloc_by_dest(file->elf, table_sec, table_offset);
+		table_reloc = arch_find_switch_table(file, insn);
 		if (!table_reloc)
 			continue;
 		dest_insn = find_insn(file, table_reloc->sym->sec, table_reloc->addend);
 		if (!dest_insn || !dest_insn->func || dest_insn->func->pfunc != func)
 			continue;
-
-		/*
-		 * Use of RIP-relative switch jumps is quite rare, and
-		 * indicates a rare GCC quirk/bug which can leave dead code
-		 * behind.
-		 */
-		if (text_reloc->type == R_X86_64_PC32)
-			file->ignore_unreachables = true;
 
 		return table_reloc;
 	}
@@ -2056,7 +1999,8 @@ static int update_cfi_state(struct instruction *insn, struct cfi_state *cfi,
 		return 0;
 	}
 
-	if (cfi->type == ORC_TYPE_REGS || cfi->type == ORC_TYPE_REGS_IRET)
+	if (cfi->type == UNWIND_HINT_TYPE_REGS ||
+	    cfi->type == UNWIND_HINT_TYPE_REGS_PARTIAL)
 		return update_cfi_state_regs(insn, cfi, op);
 
 	switch (op->dest.type) {
@@ -2304,7 +2248,7 @@ static int update_cfi_state(struct instruction *insn, struct cfi_state *cfi,
 				/* drap: push %rbp */
 				cfi->stack_size = 0;
 
-			} else if (regs[op->src.reg].base == CFI_UNDEFINED) {
+			} else {
 
 				/* drap: push %reg */
 				save_reg(cfi, op->src.reg, CFI_BP, -cfi->stack_size);
@@ -2333,9 +2277,7 @@ static int update_cfi_state(struct instruction *insn, struct cfi_state *cfi,
 
 				/* save drap offset so we know when to restore it */
 				cfi->drap_offset = op->dest.offset;
-			}
-
-			else if (regs[op->src.reg].base == CFI_UNDEFINED) {
+			} else {
 
 				/* drap: mov reg, disp(%rbp) */
 				save_reg(cfi, op->src.reg, CFI_BP, op->dest.offset);
@@ -2910,9 +2852,10 @@ static bool is_ubsan_insn(struct instruction *insn)
 			"__ubsan_handle_builtin_unreachable"));
 }
 
-static bool ignore_unreachable_insn(struct instruction *insn)
+static bool ignore_unreachable_insn(struct objtool_file *file, struct instruction *insn)
 {
 	int i;
+	struct instruction *prev_insn;
 
 	if (insn->ignore || insn->type == INSN_NOP)
 		return true;
@@ -2929,6 +2872,9 @@ static bool ignore_unreachable_insn(struct instruction *insn)
 	    !strcmp(insn->sec->name, ".altinstr_aux"))
 		return true;
 
+	if (insn->type == INSN_JUMP_UNCONDITIONAL && insn->offset == FAKE_JUMP_OFFSET)
+		return true;
+
 	if (!insn->func)
 		return false;
 
@@ -2937,8 +2883,11 @@ static bool ignore_unreachable_insn(struct instruction *insn)
 	 * __builtin_unreachable().  The BUG() macro has an unreachable() after
 	 * the UD2, which causes GCC's undefined trap logic to emit another UD2
 	 * (or occasionally a JMP to UD2).
+	 *
+	 * It may also insert a UD2 after calling a __noreturn function.
 	 */
-	if (list_prev_entry(insn, list)->dead_end &&
+	prev_insn = list_prev_entry(insn, list);
+	if ((prev_insn->dead_end || dead_end_function(file, prev_insn->call_dest)) &&
 	    (insn->type == INSN_BUG ||
 	     (insn->type == INSN_JUMP_UNCONDITIONAL &&
 	      insn->jump_dest && insn->jump_dest->type == INSN_BUG)))
@@ -3065,7 +3014,7 @@ static int validate_reachable_instructions(struct objtool_file *file)
 		return 0;
 
 	for_each_insn(file, insn) {
-		if (insn->visited || ignore_unreachable_insn(insn))
+		if (insn->visited || ignore_unreachable_insn(file, insn))
 			continue;
 
 		WARN_FUNC("unreachable instruction", insn->sec, insn->offset);

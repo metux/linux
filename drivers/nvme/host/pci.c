@@ -293,9 +293,21 @@ static void nvme_dbbuf_init(struct nvme_dev *dev,
 	nvmeq->dbbuf_cq_ei = &dev->dbbuf_eis[cq_idx(qid, dev->db_stride)];
 }
 
+static void nvme_dbbuf_free(struct nvme_queue *nvmeq)
+{
+	if (!nvmeq->qid)
+		return;
+
+	nvmeq->dbbuf_sq_db = NULL;
+	nvmeq->dbbuf_cq_db = NULL;
+	nvmeq->dbbuf_sq_ei = NULL;
+	nvmeq->dbbuf_cq_ei = NULL;
+}
+
 static void nvme_dbbuf_set(struct nvme_dev *dev)
 {
 	struct nvme_command c;
+	unsigned int i;
 
 	if (!dev->dbbuf_dbs)
 		return;
@@ -309,6 +321,9 @@ static void nvme_dbbuf_set(struct nvme_dev *dev)
 		dev_warn(dev->ctrl.device, "unable to set dbbuf\n");
 		/* Free memory and continue on */
 		nvme_dbbuf_dma_free(dev);
+
+		for (i = 1; i <= dev->online_queues; i++)
+			nvme_dbbuf_free(&dev->queues[i]);
 	}
 }
 
@@ -2097,32 +2112,30 @@ static int nvme_setup_irqs(struct nvme_dev *dev, unsigned int nr_io_queues)
 		.calc_sets	= nvme_calc_irq_sets,
 		.priv		= dev,
 	};
-	unsigned int irq_queues, this_p_queues;
+	unsigned int irq_queues, poll_queues;
 
 	/*
-	 * Poll queues don't need interrupts, but we need at least one IO
-	 * queue left over for non-polled IO.
+	 * Poll queues don't need interrupts, but we need at least one I/O queue
+	 * left over for non-polled I/O.
 	 */
-	this_p_queues = dev->nr_poll_queues;
-	if (this_p_queues >= nr_io_queues) {
-		this_p_queues = nr_io_queues - 1;
-		irq_queues = 1;
-	} else {
-		irq_queues = nr_io_queues - this_p_queues + 1;
-	}
-	dev->io_queues[HCTX_TYPE_POLL] = this_p_queues;
+	poll_queues = min(dev->nr_poll_queues, nr_io_queues - 1);
+	dev->io_queues[HCTX_TYPE_POLL] = poll_queues;
 
-	/* Initialize for the single interrupt case */
+	/*
+	 * Initialize for the single interrupt case, will be updated in
+	 * nvme_calc_irq_sets().
+	 */
 	dev->io_queues[HCTX_TYPE_DEFAULT] = 1;
 	dev->io_queues[HCTX_TYPE_READ] = 0;
 
 	/*
-	 * Some Apple controllers require all queues to use the
-	 * first vector.
+	 * We need interrupts for the admin queue and each non-polled I/O queue,
+	 * but some Apple controllers require all queues to use the first
+	 * vector.
 	 */
-	if (dev->ctrl.quirks & NVME_QUIRK_SINGLE_VECTOR)
-		irq_queues = 1;
-
+	irq_queues = 1;
+	if (!(dev->ctrl.quirks & NVME_QUIRK_SINGLE_VECTOR))
+		irq_queues += (nr_io_queues - poll_queues);
 	return pci_alloc_irq_vectors_affinity(pdev, 1, irq_queues,
 			      PCI_IRQ_ALL_TYPES | PCI_IRQ_AFFINITY, &affd);
 }
@@ -3247,7 +3260,10 @@ static const struct pci_device_id nvme_id_table[] = {
 				NVME_QUIRK_IGNORE_DEV_SUBNQN, },
 	{ PCI_DEVICE(0x1c5c, 0x1504),   /* SK Hynix PC400 */
 		.driver_data = NVME_QUIRK_DISABLE_WRITE_ZEROES, },
-	{ PCI_DEVICE_CLASS(PCI_CLASS_STORAGE_EXPRESS, 0xffffff) },
+	{ PCI_DEVICE(0x15b7, 0x2001),   /*  Sandisk Skyhawk */
+		.driver_data = NVME_QUIRK_DISABLE_WRITE_ZEROES, },
+	{ PCI_DEVICE(0x2646, 0x2263),   /* KINGSTON A2000 NVMe SSD  */
+		.driver_data = NVME_QUIRK_NO_DEEPEST_PS, },
 	{ PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x2001),
 		.driver_data = NVME_QUIRK_SINGLE_VECTOR },
 	{ PCI_DEVICE(PCI_VENDOR_ID_APPLE, 0x2003) },
@@ -3255,6 +3271,8 @@ static const struct pci_device_id nvme_id_table[] = {
 		.driver_data = NVME_QUIRK_SINGLE_VECTOR |
 				NVME_QUIRK_128_BYTES_SQES |
 				NVME_QUIRK_SHARED_TAGS },
+
+	{ PCI_DEVICE_CLASS(PCI_CLASS_STORAGE_EXPRESS, 0xffffff) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, nvme_id_table);

@@ -470,7 +470,7 @@ static int host1x_probe(struct platform_device *pdev)
 	if (err < 0)
 		goto deinit_debugfs;
 
-	err = devm_of_platform_populate(&pdev->dev);
+	err = devm_of_childs_populate(&pdev->dev);
 	if (err < 0)
 		goto unregister;
 

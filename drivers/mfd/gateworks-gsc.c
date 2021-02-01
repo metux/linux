@@ -246,7 +246,7 @@ static int gsc_probe(struct i2c_client *client)
 	if (ret)
 		dev_err(dev, "failed to create sysfs attrs\n");
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret) {
 		sysfs_remove_group(&dev->kobj, &attr_group);
 		return ret;

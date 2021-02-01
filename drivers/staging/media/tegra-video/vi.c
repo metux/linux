@@ -1737,7 +1737,7 @@ static int tegra_vi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = devm_of_platform_populate(&pdev->dev);
+	ret = devm_of_childs_populate(&pdev->dev);
 	if (ret < 0) {
 		dev_err(&pdev->dev,
 			"failed to populate vi child device: %d\n", ret);

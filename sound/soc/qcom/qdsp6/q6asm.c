@@ -1727,7 +1727,7 @@ static int q6asm_probe(struct apr_device *adev)
 	spin_lock_init(&q6asm->slock);
 	dev_set_drvdata(dev, q6asm);
 
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 #ifdef CONFIG_OF

@@ -601,7 +601,7 @@ static int q6adm_probe(struct apr_device *adev)
 	INIT_LIST_HEAD(&adm->copps_list);
 	spin_lock_init(&adm->copps_list_lock);
 
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 #ifdef CONFIG_OF

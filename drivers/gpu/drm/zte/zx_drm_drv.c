@@ -134,7 +134,7 @@ static int zx_drm_probe(struct platform_device *pdev)
 	struct component_match *match = NULL;
 	int ret;
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret)
 		return ret;
 

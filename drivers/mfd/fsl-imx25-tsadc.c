@@ -171,7 +171,7 @@ static int mx25_tsadc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, tsadc);
 
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 static int mx25_tsadc_remove(struct platform_device *pdev)

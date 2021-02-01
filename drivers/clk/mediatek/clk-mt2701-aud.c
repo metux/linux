@@ -163,7 +163,7 @@ static int clk_mt2701_aud_probe(struct platform_device *pdev)
 		goto err_clk_provider;
 	}
 
-	r = devm_of_platform_populate(&pdev->dev);
+	r = devm_of_childs_populate(&pdev->dev);
 	if (r)
 		goto err_plat_populate;
 

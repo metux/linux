@@ -2579,7 +2579,7 @@ static int gemini_ethernet_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, geth);
 
 	/* Spawn child devices for the two ports */
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 static int gemini_ethernet_remove(struct platform_device *pdev)

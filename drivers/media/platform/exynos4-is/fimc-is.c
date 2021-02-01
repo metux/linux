@@ -834,7 +834,7 @@ static int fimc_is_probe(struct platform_device *pdev)
 
 	vb2_dma_contig_set_max_seg_size(dev, DMA_BIT_MASK(32));
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret < 0)
 		goto err_pm;
 

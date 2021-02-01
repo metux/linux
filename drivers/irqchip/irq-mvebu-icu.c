@@ -395,7 +395,7 @@ static int mvebu_icu_probe(struct platform_device *pdev)
 	if (static_branch_unlikely(&legacy_bindings))
 		return mvebu_icu_subset_probe(pdev);
 	else
-		return devm_of_platform_populate(&pdev->dev);
+		return devm_of_childs_populate(&pdev->dev);
 }
 
 static const struct of_device_id mvebu_icu_of_match[] = {

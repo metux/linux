@@ -277,7 +277,7 @@ static int pruss_probe(struct platform_device *pdev)
 		goto node_put;
 	}
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret) {
 		dev_err(dev, "failed to register child devices\n");
 		goto node_put;
@@ -300,7 +300,7 @@ static int pruss_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
-	devm_of_platform_depopulate(dev);
+	devm_of_childs_depopulate(dev);
 
 	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);

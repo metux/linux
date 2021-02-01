@@ -942,7 +942,7 @@ exit:
 #endif
 	dev_set_drvdata(dev, wrapper);
 	dev_dbg(dev, "GENI SE Driver probed\n");
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 static const struct of_device_id geni_se_dt_match[] = {

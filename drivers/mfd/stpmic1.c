@@ -159,7 +159,7 @@ static int stpmic1_probe(struct i2c_client *i2c,
 		return ret;
 	}
 
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 #ifdef CONFIG_PM_SLEEP

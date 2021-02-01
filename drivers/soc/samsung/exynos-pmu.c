@@ -139,7 +139,7 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	if (devm_of_platform_populate(dev))
+	if (devm_of_childs_populate(dev))
 		dev_err(dev, "Error populating children, reboot and poweroff might not work properly\n");
 
 	dev_dbg(dev, "Exynos PMU Driver probe done\n");

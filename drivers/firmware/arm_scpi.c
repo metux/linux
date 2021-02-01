@@ -1011,7 +1011,7 @@ static int scpi_probe(struct platform_device *pdev)
 				   scpi_info->firmware_version));
 	scpi_info->scpi_ops = &scpi_ops;
 
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 static const struct of_device_id scpi_of_match[] = {

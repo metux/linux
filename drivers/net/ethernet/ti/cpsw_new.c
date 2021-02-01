@@ -1260,7 +1260,7 @@ static int cpsw_probe_dt(struct cpsw_common *cpsw)
 
 	/* Populate all the child nodes here...
 	 */
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	/* We do not want to force this, as in some cases may not have child */
 	if (ret)
 		dev_warn(dev, "Doesn't have any child node\n");

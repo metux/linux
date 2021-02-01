@@ -1416,9 +1416,9 @@ static int k3_r5_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, cluster);
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret) {
-		dev_err(dev, "devm_of_platform_populate failed, ret = %d\n",
+		dev_err(dev, "devm_of_childs_populate failed, ret = %d\n",
 			ret);
 		return ret;
 	}

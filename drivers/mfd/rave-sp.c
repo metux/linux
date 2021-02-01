@@ -822,7 +822,7 @@ static int rave_sp_probe(struct serdev_device *serdev)
 	dev_info(dev, "Firmware version: %s",   sp->part_number_firmware);
 	dev_info(dev, "Bootloader version: %s", sp->part_number_bootloader);
 
-	return devm_of_platform_populate(dev);
+	return devm_of_childs_populate(dev);
 }
 
 MODULE_DEVICE_TABLE(of, rave_sp_dt_ids);

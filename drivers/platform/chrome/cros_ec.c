@@ -237,7 +237,7 @@ int cros_ec_register(struct cros_ec_device *ec_dev)
 	}
 
 	if (IS_ENABLED(CONFIG_OF) && dev->of_node) {
-		err = devm_of_platform_populate(dev);
+		err = devm_of_childs_populate(dev);
 		if (err) {
 			platform_device_unregister(ec_dev->pd);
 			platform_device_unregister(ec_dev->ec);

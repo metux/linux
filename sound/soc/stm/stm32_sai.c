@@ -242,7 +242,7 @@ static int stm32_sai_probe(struct platform_device *pdev)
 	sai->set_sync = &stm32_sai_set_sync;
 	platform_set_drvdata(pdev, sai);
 
-	return devm_of_platform_populate(&pdev->dev);
+	return devm_of_childs_populate(&pdev->dev);
 }
 
 #ifdef CONFIG_PM_SLEEP

@@ -392,7 +392,7 @@ static int mcde_probe(struct platform_device *pdev)
 	writel(0xFFFFFFFF, mcde->regs + MCDE_RISERR);
 
 	/* Spawn child devices for the DSI ports */
-	devm_of_platform_populate(dev);
+	devm_of_childs_populate(dev);
 
 	/* Create something that will match the subdrivers when we bind */
 	for (i = 0; i < ARRAY_SIZE(mcde_component_drivers); i++) {

@@ -34,7 +34,7 @@ static int simple_mfd_i2c_probe(struct i2c_client *i2c)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	return devm_of_platform_populate(&i2c->dev);
+	return devm_of_childs_populate(&i2c->dev);
 }
 
 static const struct of_device_id simple_mfd_i2c_of_match[] = {

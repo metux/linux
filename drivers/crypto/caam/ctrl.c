@@ -903,7 +903,7 @@ static int caam_probe(struct platform_device *pdev)
 	dev_info(dev, "job rings = %d, qi = %d\n",
 		 ctrlpriv->total_jobrs, ctrlpriv->qi_present);
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret)
 		dev_err(dev, "JR platform devices creation error\n");
 

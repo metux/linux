@@ -78,7 +78,7 @@ static int atmel_flexcom_probe(struct platform_device *pdev)
 
 	clk_disable_unprepare(ddata->clk);
 
-	return devm_of_platform_populate(&pdev->dev);
+	return devm_of_childs_populate(&pdev->dev);
 }
 
 static const struct of_device_id atmel_flexcom_of_match[] = {

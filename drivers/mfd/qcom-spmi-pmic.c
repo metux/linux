@@ -136,7 +136,7 @@ static int pmic_spmi_probe(struct spmi_device *sdev)
 	if (sdev->usid % 2 == 0)
 		pmic_spmi_show_revid(regmap, &sdev->dev);
 
-	return devm_of_platform_populate(&sdev->dev);
+	return devm_of_childs_populate(&sdev->dev);
 }
 
 MODULE_DEVICE_TABLE(of, pmic_spmi_id_table);

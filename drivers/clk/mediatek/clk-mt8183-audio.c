@@ -82,7 +82,7 @@ static int clk_mt8183_audio_probe(struct platform_device *pdev)
 	if (r)
 		return r;
 
-	r = devm_of_platform_populate(&pdev->dev);
+	r = devm_of_childs_populate(&pdev->dev);
 	if (r)
 		of_clk_del_provider(node);
 

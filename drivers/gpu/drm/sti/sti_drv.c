@@ -239,7 +239,7 @@ static int sti_platform_probe(struct platform_device *pdev)
 
 	dma_set_coherent_mask(dev, DMA_BIT_MASK(32));
 
-	devm_of_platform_populate(dev);
+	devm_of_childs_populate(dev);
 
 	child_np = of_get_next_available_child(node, NULL);
 

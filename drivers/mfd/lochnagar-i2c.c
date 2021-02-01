@@ -367,7 +367,7 @@ static int lochnagar_i2c_probe(struct i2c_client *i2c)
 		return ret;
 	}
 
-	ret = devm_of_platform_populate(dev);
+	ret = devm_of_childs_populate(dev);
 	if (ret < 0) {
 		dev_err(dev, "Failed to populate child nodes: %d\n", ret);
 		return ret;

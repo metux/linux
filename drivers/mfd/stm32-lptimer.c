@@ -80,7 +80,7 @@ static int stm32_lptimer_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ddata);
 
-	return devm_of_platform_populate(&pdev->dev);
+	return devm_of_childs_populate(&pdev->dev);
 }
 
 static const struct of_device_id stm32_lptimer_of_match[] = {

@@ -614,10 +614,10 @@ static int map_prefix(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 	/* with mso/msl, the prefix lies at offset *mso* */
 	prefix += scb_s->mso;
 
-	rc = kvm_s390_shadow_fault(vcpu, vsie_page->gmap, prefix, NULL);
+	rc = kvm_s390_shadow_fault(vcpu, vsie_page->gmap, prefix);
 	if (!rc && (scb_s->ecb & ECB_TE))
 		rc = kvm_s390_shadow_fault(vcpu, vsie_page->gmap,
-					   prefix + PAGE_SIZE, NULL);
+					   prefix + PAGE_SIZE);
 	/*
 	 * We don't have to mprotect, we will be called for all unshadows.
 	 * SIE will detect if protection applies and trigger a validity.
@@ -908,7 +908,7 @@ static int handle_fault(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 				    current->thread.gmap_addr, 1);
 
 	rc = kvm_s390_shadow_fault(vcpu, vsie_page->gmap,
-				   current->thread.gmap_addr, NULL);
+				   current->thread.gmap_addr);
 	if (rc > 0) {
 		rc = inject_fault(vcpu, rc,
 				  current->thread.gmap_addr,
@@ -930,7 +930,7 @@ static void handle_last_fault(struct kvm_vcpu *vcpu,
 {
 	if (vsie_page->fault_addr)
 		kvm_s390_shadow_fault(vcpu, vsie_page->gmap,
-				      vsie_page->fault_addr, NULL);
+				      vsie_page->fault_addr);
 	vsie_page->fault_addr = 0;
 }
 
@@ -1001,7 +1001,7 @@ static u64 vsie_get_register(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page,
 static int vsie_handle_mvpg(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 {
 	struct kvm_s390_sie_block *scb_s = &vsie_page->scb_s;
-	unsigned long pei_dest, pei_src, src, dest, mask, prefix;
+	unsigned long pei_dest, pei_src, src, dest, mask;
 	u64 *pei_block = &vsie_page->scb_o->mcic;
 	int edat, rc_dest, rc_src;
 	union ctlreg0 cr0;
@@ -1009,12 +1009,9 @@ static int vsie_handle_mvpg(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 	cr0.val = vcpu->arch.sie_block->gcr[0];
 	edat = cr0.edat && test_kvm_facility(vcpu->kvm, 8);
 	mask = _kvm_s390_logical_to_effective(&scb_s->gpsw, PAGE_MASK);
-	prefix = scb_s->prefix << GUEST_PREFIX_SHIFT;
 
 	dest = vsie_get_register(vcpu, vsie_page, scb_s->ipb >> 20) & mask;
-	dest = _kvm_s390_real_to_abs(prefix, dest) + scb_s->mso;
 	src = vsie_get_register(vcpu, vsie_page, scb_s->ipb >> 16) & mask;
-	src = _kvm_s390_real_to_abs(prefix, src) + scb_s->mso;
 
 	rc_dest = kvm_s390_shadow_fault(vcpu, vsie_page->gmap, dest, &pei_dest);
 	rc_src = kvm_s390_shadow_fault(vcpu, vsie_page->gmap, src, &pei_src);
@@ -1087,9 +1084,6 @@ static int do_vsie_run(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 	int rc = 0;
 
 	handle_last_fault(vcpu, vsie_page);
-
-	if (need_resched())
-		schedule();
 
 	srcu_read_unlock(&vcpu->kvm->srcu, vcpu->srcu_idx);
 
@@ -1275,6 +1269,7 @@ static int vsie_run(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 		    kvm_s390_vcpu_has_irq(vcpu, 0) ||
 		    kvm_s390_vcpu_sie_inhibited(vcpu))
 			break;
+		cond_resched();
 	}
 
 	if (rc == -EFAULT) {

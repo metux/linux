@@ -87,35 +87,16 @@ EXPORT_SYMBOL_GPL(pci_epc_get);
  * pci_epc_get_first_free_bar() - helper to get first unreserved BAR
  * @epc_features: pci_epc_features structure that holds the reserved bar bitmap
  *
- * Invoke to get the first unreserved BAR that can be used by the endpoint
+ * Invoke to get the first unreserved BAR that can be used for endpoint
  * function. For any incorrect value in reserved_bar return '0'.
  */
-enum pci_barno
-pci_epc_get_first_free_bar(const struct pci_epc_features *epc_features)
-{
-	return pci_epc_get_next_free_bar(epc_features, BAR_0);
-}
-EXPORT_SYMBOL_GPL(pci_epc_get_first_free_bar);
-
-/**
- * pci_epc_get_next_free_bar() - helper to get unreserved BAR starting from @bar
- * @epc_features: pci_epc_features structure that holds the reserved bar bitmap
- * @bar: the starting BAR number from where unreserved BAR should be searched
- *
- * Invoke to get the next unreserved BAR starting from @bar that can be used
- * for endpoint function. For any incorrect value in reserved_bar return '0'.
- */
-enum pci_barno pci_epc_get_next_free_bar(const struct pci_epc_features
-					 *epc_features, enum pci_barno bar)
+unsigned int pci_epc_get_first_free_bar(const struct pci_epc_features
+					*epc_features)
 {
 	unsigned long free_bar;
 
 	if (!epc_features)
-		return BAR_0;
-
-	/* If 'bar - 1' is a 64-bit BAR, move to the next BAR */
-	if ((epc_features->bar_fixed_64bit << 1) & 1 << bar)
-		bar++;
+		return 0;
 
 	/* Find if the reserved BAR is also a 64-bit BAR */
 	free_bar = epc_features->reserved_bar & epc_features->bar_fixed_64bit;
@@ -124,13 +105,14 @@ enum pci_barno pci_epc_get_next_free_bar(const struct pci_epc_features
 	free_bar <<= 1;
 	free_bar |= epc_features->reserved_bar;
 
-	free_bar = find_next_zero_bit(&free_bar, 6, bar);
+	/* Now find the free BAR */
+	free_bar = ffz(free_bar);
 	if (free_bar > 5)
-		return NO_BAR;
+		return 0;
 
 	return free_bar;
 }
-EXPORT_SYMBOL_GPL(pci_epc_get_next_free_bar);
+EXPORT_SYMBOL_GPL(pci_epc_get_first_free_bar);
 
 /**
  * pci_epc_get_features() - get the features supported by EPC

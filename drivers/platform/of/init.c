@@ -21,24 +21,26 @@
 
 #define DECLARE_FDT_EXTERN(n) \
 	extern char __dtb_##n##_begin[]; \
-	static struct bin_attribute __dtb_##n##_attr = { \
-		.attr = { .name = "fdt-" #n, .mode = S_IRUSR }, \
-		.private = __dtb_##n##_begin, \
-		.read = fdt_image_raw_read, \
-	};
-
-struct fdt_image {
-	char *begin;
-	size_t size;
-	const char *basename;
-	struct bin_attribute *bin_attr;
-	struct device_node *root;
-};
 
 #define FDT_IMAGE_ENT(n)		\
 	{ .basename = "ofdrv-" #n,	\
 	  .begin = __dtb_##n##_begin,	\
-	  .bin_attr = &__dtb_##n##_attr }
+	  .fdt_name = "fdt-" #n,	\
+	}
+
+struct fdt_image {
+	char *begin;
+	const char *basename;
+	const char *fdt_name;
+};
+
+struct ofdrv_priv {
+	struct device_node *root;
+	struct fdt_image *pdata;
+	void *begin;
+	size_t size;
+	struct bin_attribute bin_attr;
+};
 
 static ssize_t fdt_image_raw_read(struct file *filep, struct kobject *kobj,
 				  struct bin_attribute *bin_attr, char *buf,
@@ -52,34 +54,16 @@ static ssize_t fdt_image_raw_read(struct file *filep, struct kobject *kobj,
 DECLARE_FDT_EXTERN(apu2x);
 #endif
 
+// FIXME: make it __init ? will be copied anyways
 static struct fdt_image fdt[] = {
 #ifdef CONFIG_PLATFORM_OF_DRV_PCENGINES_APU2
 	FDT_IMAGE_ENT(apu2x)
 #endif
 };
 
-static int __init ofdrv_parse_image(struct fdt_image *image)
-{
-	struct device_node* root;
-	void *new_fdt;
+struct platform_device *pdevs[ARRAY_SIZE(fdt)];
 
-	image->size = fdt_totalsize(image->begin);
-	new_fdt = kmemdup(image->begin, image->size, GFP_KERNEL);
-	if (!new_fdt)
-		return -ENOMEM;
-
-	image->begin = new_fdt;
-	of_fdt_unflatten_tree(new_fdt, NULL, &root);
-
-	if (IS_ERR_OR_NULL(root))
-		return PTR_ERR(root);
-
-	image->root = root;
-
-	return 0;
-}
-
-static bool __init ofdrv_match_dmi(const struct device_node *node)
+static bool ofdrv_match_dmi(const struct device_node *node)
 {
 #ifdef CONFIG_DMI
 	const char *board = dmi_get_system_info(DMI_BOARD_NAME);
@@ -98,7 +82,7 @@ static bool __init ofdrv_match_dmi(const struct device_node *node)
 #endif
 }
 
-static void __init ofdrv_kick_devs(struct device_node *np, const char *bus_name)
+static void ofdrv_kick_devs(struct device_node *np, const char *bus_name)
 {
 	struct property *prop;
 	const char *walk;
@@ -126,7 +110,7 @@ static void __init ofdrv_kick_devs(struct device_node *np, const char *bus_name)
 	bus_put(bus);
 }
 
-static void __init ofdrv_unbind(struct device_node *parent)
+static void ofdrv_unbind(struct device_node *parent)
 {
 	struct property *pr;
 	struct device_node *np = of_get_child_by_name(parent, "unbind");
@@ -138,7 +122,7 @@ static void __init ofdrv_unbind(struct device_node *parent)
 		ofdrv_kick_devs(np, pr->name);
 }
 
-static int __init ofdrv_board_probe(struct device_node *node)
+static int ofdrv_board_probe(struct device_node *node)
 {
 	struct device_node *devs;
 
@@ -161,53 +145,106 @@ static int __init ofdrv_board_probe(struct device_node *node)
 	return of_platform_populate(devs, NULL, NULL, NULL);
 }
 
-static int __init ofdrv_init_sysfs(struct fdt_image *image)
+static int ofdrv_probe(struct platform_device *pdev)
 {
-	struct device_node *np;
-	int ret;
-
-	image->bin_attr->size = image->size;
-	image->bin_attr->private = image->begin;
-
-	ret = sysfs_create_bin_file(firmware_kobj, image->bin_attr);
-	if (ret)
-		pr_warn("failed creating sysfs bin file: %d\n", ret);
-
-	__of_attach_node_sysfs(image->root, image->basename);
-	for_each_of_allnodes_from(image->root, np)
-		__of_attach_node_sysfs(np, image->basename);
-
-	return 0;
-}
-
-static int __init ofdrv_init_image(struct fdt_image *image)
-{
+	struct fdt_image *pdata;
+	struct ofdrv_priv *priv;
 	struct device_node *child;
 	int ret;
 
-	ret = ofdrv_parse_image(image);
+	pdata = dev_get_platdata(&pdev->dev);
+	if (!pdata)
+		return -EINVAL;
+
+	priv = devm_kzalloc(&pdev->dev, sizeof(struct fdt_image), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	priv->pdata = pdata;
+	platform_set_drvdata(pdev, priv);
+
+	/* unflatten the fdt */
+	priv->size = fdt_totalsize(pdata->begin);
+	priv->begin = devm_kmemdup(&pdev->dev, pdata->begin, priv->size,
+				   GFP_KERNEL);
+	if (!priv->begin)
+		return -ENOMEM;
+
+	of_fdt_unflatten_tree(priv->begin, NULL, &priv->root);
+
+	if (IS_ERR_OR_NULL(priv->root)) {
+		dev_err(&pdev->dev, "failed unflattening tree: %ld\n",
+			PTR_ERR(priv->root));
+		return PTR_ERR(priv->root);
+	}
+
+	/* initialize sysfs bin file */
+	priv->bin_attr.attr.name = pdata->fdt_name;
+	priv->bin_attr.attr.mode = S_IRUSR;
+	priv->bin_attr.size = priv->size;
+	priv->bin_attr.private = priv->begin;
+	priv->bin_attr.read = fdt_image_raw_read;
+	ret = sysfs_create_bin_file(firmware_kobj, &priv->bin_attr);
 	if (ret)
-		return ret;
+		dev_warn(&pdev->dev, "failed creating sysfs file: %d\n", ret);
 
-	ofdrv_init_sysfs(image);
+	/* attach dt nodes to sysfs */
+	__of_attach_node_sysfs(priv->root, priv->pdata->basename);
+	for_each_of_allnodes_from(priv->root, child)
+		__of_attach_node_sysfs(child, priv->pdata->basename);
 
-	for_each_child_of_node(image->root, child)
+	/* do probing */
+	for_each_child_of_node(priv->root, child)
 		ofdrv_board_probe(child);
 
 	return 0;
 }
 
+static int ofdrv_remove(struct platform_device *pdev)
+{
+	return 0;
+}
+
+#define DRIVER_NAME	"ofdrv"
+
+struct platform_driver ofdrv_driver = {
+	.driver = {
+		.name = DRIVER_NAME,
+	},
+	.probe = ofdrv_probe,
+	.remove = ofdrv_remove,
+};
+
 static int __init ofdrv_init(void)
 {
 	int x;
 
-	for (x=0; x<ARRAY_SIZE(fdt); x++)
-		ofdrv_init_image(&fdt[x]);
+	platform_driver_register(&ofdrv_driver);
+
+	for (x=0; x<ARRAY_SIZE(fdt); x++) {
+		pdevs[x] = platform_device_register_resndata(NULL,
+			DRIVER_NAME,
+			x,
+			NULL,
+			0,
+			&fdt[x],
+			sizeof(struct fdt_image));
+	}
 
 	return 0;
 }
 
+static void __exit ofdrv_exit(void)
+{
+	int x;
+
+	for (x=0; x<ARRAY_SIZE(fdt); x++)
+		if (!IS_ERR_OR_NULL(pdevs[x]))
+			platform_device_unregister(pdevs[x]);
+}
+
 module_init(ofdrv_init);
+module_exit(ofdrv_exit);
 
 MODULE_AUTHOR("Enrico Weigelt, metux IT consult <info@metux.net>");
 MODULE_DESCRIPTION("Generic oftree based initialization of custom board devices");

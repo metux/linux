@@ -47,7 +47,14 @@ static ssize_t fdt_image_raw_read(struct file *filep, struct kobject *kobj,
 	return count;
 }
 
+#ifdef CONFIG_PLATFORM_OF_DRV_PCENGINES_APU2
+DECLARE_FDT_EXTERN(apu2x);
+#endif
+
 static struct fdt_image fdt[] = {
+#ifdef CONFIG_PLATFORM_OF_DRV_PCENGINES_APU2
+	FDT_IMAGE_ENT(apu2x)
+#endif
 };
 
 static int __init ofdrv_init_sysfs(struct fdt_image *image)

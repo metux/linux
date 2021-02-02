@@ -38,4 +38,19 @@ config PLATFORM_OF_DRV_SYSFS_DT
 	  Say Y here to enable exposing device tree nodes at
 	  /sys/firmware/devicetree.
 
+config PLATFORM_OF_DRV_PCENGINES_APU2
+	bool "Support PC Engines APU2/3/4 mainboards"
+	depends on INPUT
+	depends on GPIOLIB
+	depends on X86
+	select GPIO_AMD_FCH
+	select KEYBOARD_GPIO_POLLED
+	select LEDS_GPIO
+	select INPUT_KEYBOARD
+	help
+	  Say Y to enable devicetree based support for PC Engines APU2/3/4
+	  mainboards. This supersedes the older pcengines-apu2 driver.
+
+	  Supports Gpios, front panel LEDs and front button.
+
 endif # PLATFORM_OF_DRV

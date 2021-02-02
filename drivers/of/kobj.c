@@ -166,3 +166,20 @@ void __of_detach_node_sysfs(struct device_node *np)
 
 	of_node_put(np);
 }
+
+void of_attach_tree_sysfs(struct device_node *root, const char* base)
+{
+	struct device_node *np;
+
+	if (!root)
+		return;
+
+	/* need to from our parent, so we don't traverse above our root,
+	 * if it's actually a subtree */
+	root->parent = NULL;
+
+	__of_attach_node_sysfs(root, base);
+	for_each_of_allnodes_from(root, np)
+		__of_attach_node_sysfs(np, base);
+}
+EXPORT_SYMBOL_GPL(of_attach_tree_sysfs);

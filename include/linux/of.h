@@ -421,6 +421,8 @@ extern int of_update_property(struct device_node *np, struct property *newprop);
 extern int of_attach_node(struct device_node *);
 extern int of_detach_node(struct device_node *);
 
+extern void of_attach_tree_sysfs(struct device_node *root, const char* base);
+
 #define of_match_ptr(_ptr)	(_ptr)
 
 /**
@@ -1008,6 +1010,11 @@ static inline int of_map_id(struct device_node *np, u32 id,
 static inline phys_addr_t of_dma_get_max_cpu_address(struct device_node *np)
 {
 	return PHYS_ADDR_MAX;
+}
+
+static inline void of_attach_tree_sysfs(struct device_node *root,
+					const char* base)
+{
 }
 
 #define of_match_ptr(_ptr)	NULL

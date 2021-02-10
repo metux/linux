@@ -333,6 +333,7 @@ int main(int argc, char *argv[])
 		generate_label_tree(dti, "__symbols__", true);
 
 	if (generate_fixups) {
+		// FIXME
 		generate_fixups_tree(dti, "__fixups__");
 		generate_local_fixups_tree(dti, "__local_fixups__");
 	}

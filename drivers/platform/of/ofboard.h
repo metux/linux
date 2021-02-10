@@ -4,5 +4,6 @@
 #include <linux/platform_device.h>
 
 extern struct platform_driver ofboard_driver;
+extern void init_oftree(void);
 
 #endif

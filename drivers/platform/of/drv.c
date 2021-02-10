@@ -11,11 +11,13 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/slab.h>
+#include <linux/of_fdt.h>
 
 #include "ofboard.h"
 
 static bool __init ofboard_match_dmi(struct device *dev)
 {
+	return true;
 #ifdef CONFIG_DMI
 	const char *board = dmi_get_system_info(DMI_BOARD_NAME);
 	const char *vendor = dmi_get_system_info(DMI_SYS_VENDOR);
@@ -79,32 +81,44 @@ static void __init ofboard_unbind(struct device *dev)
 
 static int ofboard_populate(struct device *dev)
 {
-	int ret;
-	struct device_node *of_node = dev->of_node;
-	struct device_node *np = of_get_child_by_name(of_node, "devices");
+	int ret = 0;
+	int id = 0;
 
-	if (IS_ERR_OR_NULL(np)) {
-		dev_info(dev, "board oftree has no devices\n");
-		return -ENOENT;
-	}
-
-	ret = of_platform_populate(np, NULL, NULL, dev);
-	if (ret) {
-		dev_err(dev, "failed probing of childs: %d\n", ret);
+	ret = of_overlay_apply(dev_get_platdata(dev), dev->of_node, &id);
+	if (ret < 0) {
+		dev_err(dev, "failed to apply overlay\n");
 		return ret;
 	}
 
-	return 0;
+	dev_info(dev, "applied overlay: %d\n", id);
+	return ret;
 }
 
 static int ofboard_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct device_node *devnode;
 
-	if (!ofboard_match_dmi(dev))
+	dev_info(dev, "probing ...\n");
+
+	of_fdt_unflatten_tree(dev_get_platdata(dev), NULL, &devnode);
+	if (!devnode) {
+		dev_err(&pdev->dev, "failed unflattening fdt\n");
 		return -EINVAL;
+	}
+
+	dev->of_node = devnode;
+
+	if (!ofboard_match_dmi(dev)) {
+		dev_info(dev, "dmi info doesnt match\n");
+		return -EINVAL;
+	}
+
+	dev_info(dev, "unbinding ...\n");
 
 	ofboard_unbind(&pdev->dev);
+
+	dev_info(dev, "populating ...\n");
 
 	return ofboard_populate(dev);
 }

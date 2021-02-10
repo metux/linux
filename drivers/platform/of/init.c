@@ -14,6 +14,8 @@
 #include <linux/libfdt.h>
 #include <linux/of_platform.h>
 #include <linux/slab.h>
+#include "../../of/of_private.h"
+
 #include "ofboard.h"
 
 #define DECLARE_FDT_EXTERN(n) \
@@ -50,6 +52,8 @@ static ssize_t fdt_image_raw_read(struct file *filep, struct kobject *kobj,
 #ifdef CONFIG_PLATFORM_OF_DRV_PCENGINES_APU2
 DECLARE_FDT_EXTERN(apu2x);
 #endif
+
+DECLARE_FDT_EXTERN(testing);
 
 static struct fdt_image fdt[] = {
 #ifdef CONFIG_PLATFORM_OF_DRV_PCENGINES_APU2
@@ -91,37 +95,28 @@ static int __init ofdrv_parse_image(struct fdt_image *image)
 	return 0;
 }
 
-static int __init ofdrv_init_image(struct fdt_image *image)
+static void populate_fdt(const char* name, char *ptr)
 {
-	struct device_node *np;
-	int ret;
-
-	ret = ofdrv_parse_image(image);
-	if (ret)
-		return ret;
-
-	ofdrv_init_sysfs(image);
-
-	for_each_child_of_node(image->root, np) {
-		struct platform_device_info pdevinfo = {
-			.name = np->name,
-			.fwnode = &np->fwnode,
-			.id = PLATFORM_DEVID_NONE,
-		};
-		platform_device_register_full(&pdevinfo);
-	}
-
-	return 0;
+	struct platform_device_info pdevinfo = {
+//		.name = name,
+		.name = "ofboard",
+		.id = PLATFORM_DEVID_NONE,
+		.data = ptr,
+		.size_data = fdt_totalsize(ptr),
+	};
+	platform_device_register_full(&pdevinfo);
 }
 
 static int __init ofdrv_init(void)
 {
-	int x;
+	pr_info("---------> ofdrv_init()\n");
+
+	init_oftree();
 
 	platform_driver_register(&ofboard_driver);
+	populate_fdt("testing", __dtb_testing_begin);
 
-	for (x=0; x<ARRAY_SIZE(fdt); x++)
-		ofdrv_init_image(&fdt[x]);
+	pr_info("ofdrv done\n");
 
 	return 0;
 }

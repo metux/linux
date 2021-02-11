@@ -1234,7 +1234,7 @@ static int spi_transfer_one_message(struct spi_controller *ctlr,
 			ptp_read_system_prets(xfer->ptp_sts);
 		}
 
-		if (xfer->tx_buf || xfer->rx_buf) {
+		if ((xfer->tx_buf || xfer->rx_buf) && xfer->len) {
 			reinit_completion(&ctlr->xfer_completion);
 
 			ret = ctlr->transfer_one(ctlr, msg->spi, xfer);

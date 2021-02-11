@@ -431,22 +431,22 @@ static const struct dmi_system_id pciprobe_dmi_table[] __initconst = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "ftServer"),
 		},
 	},
-        {
-                .callback = set_scan_all,
-                .ident = "Stratus/NEC ftServer",
-                .matches = {
-                        DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
-                        DMI_MATCH(DMI_PRODUCT_NAME, "Express5800/R32"),
-                },
-        },
-        {
-                .callback = set_scan_all,
-                .ident = "Stratus/NEC ftServer",
-                .matches = {
-                        DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
-                        DMI_MATCH(DMI_PRODUCT_NAME, "Express5800/R31"),
-                },
-        },
+	{
+		.callback = set_scan_all,
+		.ident = "Stratus/NEC ftServer",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Express5800/R32"),
+		},
+	},
+	{
+		.callback = set_scan_all,
+		.ident = "Stratus/NEC ftServer",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Express5800/R31"),
+		},
+	},
 	{}
 };
 
@@ -703,7 +703,6 @@ void pcibios_release_device(struct pci_dev *dev)
 {
 	if (atomic_dec_return(&dev->enable_cnt) >= 0)
 		pcibios_disable_device(dev);
-
 }
 #endif
 

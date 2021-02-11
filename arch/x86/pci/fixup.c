@@ -546,10 +546,10 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATI, 0x4385, sb600_hpet_quirk);
  */
 static void twinhead_reserve_killing_zone(struct pci_dev *dev)
 {
-        if (dev->subsystem_vendor == 0x14FF && dev->subsystem_device == 0xA003) {
-                pr_info("Reserving memory on Twinhead H12Y\n");
-                request_mem_region(0xFFB00000, 0x100000, "twinhead");
-        }
+	if (dev->subsystem_vendor == 0x14FF && dev->subsystem_device == 0xA003) {
+		pr_info("Reserving memory on Twinhead H12Y\n");
+		request_mem_region(0xFFB00000, 0x100000, "twinhead");
+	}
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x27B9, twinhead_reserve_killing_zone);
 
@@ -668,15 +668,15 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x19e1, quirk_intel_th_dnv);
 
 #ifdef CONFIG_PHYS_ADDR_T_64BIT
 
-#define AMD_141b_MMIO_BASE(x)	(0x80 + (x) * 0x8)
+#define AMD_141b_MMIO_BASE(x)			(0x80 + (x) * 0x8)
 #define AMD_141b_MMIO_BASE_RE_MASK		BIT(0)
 #define AMD_141b_MMIO_BASE_WE_MASK		BIT(1)
 #define AMD_141b_MMIO_BASE_MMIOBASE_MASK	GENMASK(31,8)
 
-#define AMD_141b_MMIO_LIMIT(x)	(0x84 + (x) * 0x8)
+#define AMD_141b_MMIO_LIMIT(x)			(0x84 + (x) * 0x8)
 #define AMD_141b_MMIO_LIMIT_MMIOLIMIT_MASK	GENMASK(31,8)
 
-#define AMD_141b_MMIO_HIGH(x)	(0x180 + (x) * 0x4)
+#define AMD_141b_MMIO_HIGH(x)			(0x180 + (x) * 0x4)
 #define AMD_141b_MMIO_HIGH_MMIOBASE_MASK	GENMASK(7,0)
 #define AMD_141b_MMIO_HIGH_MMIOLIMIT_SHIFT	16
 #define AMD_141b_MMIO_HIGH_MMIOLIMIT_MASK	GENMASK(23,16)

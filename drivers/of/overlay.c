@@ -870,8 +870,6 @@ static void free_overlay_changeset(struct overlay_changeset *ovcs)
 }
 
 /*
- * internal documentation
- *
  * of_overlay_apply() - Create and apply an overlay changeset
  * @fdt:	the FDT that was unflattened to create @tree
  * @tree:	Expanded overlay device tree
@@ -912,8 +910,7 @@ static void free_overlay_changeset(struct overlay_changeset *ovcs)
  * id is returned to *ovcs_id.
  */
 
-static int of_overlay_apply(const void *fdt, struct device_node *tree,
-		int *ovcs_id)
+int of_overlay_apply(const void *fdt, struct device_node *tree, int *ovcs_id)
 {
 	struct overlay_changeset *ovcs;
 	int ret = 0, ret_revert, ret_tmp;
@@ -1010,6 +1007,7 @@ out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(of_overlay_apply);
 
 int of_overlay_fdt_apply(const void *overlay_fdt, u32 overlay_fdt_size,
 			 int *ovcs_id)

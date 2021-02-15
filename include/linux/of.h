@@ -1482,6 +1482,7 @@ struct of_overlay_notify_data {
 
 int of_overlay_fdt_apply(const void *overlay_fdt, u32 overlay_fdt_size,
 			 int *ovcs_id);
+int of_overlay_apply(const void *fdt, struct device_node *tree, int *ovcs_id);
 int of_overlay_remove(int *ovcs_id);
 int of_overlay_remove_all(void);
 
@@ -1492,6 +1493,12 @@ int of_overlay_notifier_unregister(struct notifier_block *nb);
 
 static inline int of_overlay_fdt_apply(void *overlay_fdt, u32 overlay_fdt_size,
 				       int *ovcs_id)
+{
+	return -ENOTSUPP;
+}
+
+static inline of_overlay_apply(const void *fdt, struct device_node *tree,
+			       int *ovcs_id)
 {
 	return -ENOTSUPP;
 }

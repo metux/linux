@@ -2013,6 +2013,10 @@ char *device_node_string(char *buf, char *end, struct device_node *dn,
 			break;
 		case 'n':	/* name */
 			p = fwnode_get_name(of_fwnode_handle(dn));
+			if (!p) {
+				pr_warn("device_node without name. Kernel bug ?\n");
+				p = "<NULL>";
+			}
 			precision = str_spec.precision;
 			str_spec.precision = strchrnul(p, '@') - p;
 			buf = string(buf, end, p, str_spec);

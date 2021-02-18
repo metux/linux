@@ -60,10 +60,8 @@ static int __report_module(struct addr_location *al, u64 ip,
 	mod = dwfl_addrmodule(ui->dwfl, ip);
 	if (mod) {
 		Dwarf_Addr s;
-		void **userdatap;
 
-		dwfl_module_info(mod, &userdatap, &s, NULL, NULL, NULL, NULL, NULL);
-		*userdatap = dso;
+		dwfl_module_info(mod, NULL, &s, NULL, NULL, NULL, NULL, NULL);
 		if (s != al->map->start - al->map->pgoff)
 			mod = 0;
 	}

@@ -90,7 +90,13 @@ static int ofboard_populate(struct device *dev)
 		return ret;
 	}
 
-	dev_info(dev, "applied overlay: %d\n", id);
+	ret = of_platform_populate(of_root, NULL, NULL, NULL);
+	if (ret < 0) {
+		dev_err(dev, "failed to populate new nodes: %d\n", ret);
+		return ret;
+	}
+
+	dev_info(dev, "applied overlay: ID=%d ret=%d\n", id, ret);
 	return ret;
 }
 

@@ -99,7 +99,7 @@ static int ofboard_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *devnode;
 
-	dev_info(dev, "probing ...\n");
+	dev_info(dev, "probing: %s ...\n", dev_name(&pdev->dev));
 
 	of_fdt_unflatten_tree(dev_get_platdata(dev), NULL, &devnode);
 	if (!devnode) {
@@ -114,24 +114,14 @@ static int ofboard_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	dev_info(dev, "unbinding ...\n");
-
 	ofboard_unbind(&pdev->dev);
-
-	dev_info(dev, "populating ...\n");
 
 	return ofboard_populate(dev);
 }
 
-static const struct of_device_id ofboard_of_match[] = {
-	{ .compatible = "virtual,dmi-board" },
-	{}
-};
-
 struct platform_driver ofboard_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
-		.of_match_table = ofboard_of_match,
 	},
 	.probe = ofboard_probe,
 };

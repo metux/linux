@@ -100,6 +100,7 @@ static void populate_fdt(const char* name, char *ptr)
 	struct platform_device_info pdevinfo = {
 //		.name = name,
 		.name = "ofboard",
+		.driver_override = "ofboard",
 		.id = PLATFORM_DEVID_NONE,
 		.data = ptr,
 		.size_data = fdt_totalsize(ptr),
@@ -107,14 +108,34 @@ static void populate_fdt(const char* name, char *ptr)
 	platform_device_register_full(&pdevinfo);
 }
 
+struct ofimg {
+	char *name;
+	void *data;
+};
+
+
+#define DECLARE_OFIMG(n) \
+	{					\
+		.data = __dtb_##n##_begin,	\
+		.name = "ofboard-" #n,		\
+	}
+
+static struct ofimg of_images[] = {
+	DECLARE_OFIMG(testing),
+};
+
 static int __init ofdrv_init(void)
 {
-	pr_info("---------> ofdrv_init()\n");
+	int x;
 
 	init_oftree();
 
 	platform_driver_register(&ofboard_driver);
-	populate_fdt("testing", __dtb_testing_begin);
+
+	for (x=0; x<ARRAY_SIZE(of_images); x++) {
+		pr_info("populating ofimage: %s\n", of_images[x].name);
+		populate_fdt(of_images[x].name, of_images[x].data);
+	}
 
 	pr_info("ofdrv done\n");
 

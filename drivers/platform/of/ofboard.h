@@ -3,6 +3,8 @@
 
 #include <linux/platform_device.h>
 
+#define DRIVER_NAME	"ofboard"
+
 extern struct platform_driver ofboard_driver;
 extern void init_oftree(void);
 

@@ -98,9 +98,8 @@ static int __init ofdrv_parse_image(struct fdt_image *image)
 static void populate_fdt(const char* name, char *ptr)
 {
 	struct platform_device_info pdevinfo = {
-//		.name = name,
-		.name = "ofboard",
-		.driver_override = "ofboard",
+		.name = name,
+		.driver_override = DRIVER_NAME,
 		.id = PLATFORM_DEVID_NONE,
 		.data = ptr,
 		.size_data = fdt_totalsize(ptr),

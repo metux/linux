@@ -130,7 +130,7 @@ static const struct of_device_id ofboard_of_match[] = {
 
 struct platform_driver ofboard_driver = {
 	.driver = {
-		.name = "ofboard",
+		.name = DRIVER_NAME,
 		.of_match_table = ofboard_of_match,
 	},
 	.probe = ofboard_probe,

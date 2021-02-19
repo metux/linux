@@ -846,6 +846,10 @@ struct platform_device *platform_device_register_full(
 	pdev->dev.of_node = of_node_get(to_of_node(pdev->dev.fwnode));
 	pdev->dev.of_node_reused = pdevinfo->of_node_reused;
 
+	if (pdevinfo->driver_override)
+		pdev->driver_override = kstrdup(pdevinfo->driver_override,
+						GFP_KERNEL);
+
 	if (pdevinfo->dma_mask) {
 		pdev->platform_dma_mask = pdevinfo->dma_mask;
 		pdev->dev.dma_mask = &pdev->platform_dma_mask;

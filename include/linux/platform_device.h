@@ -95,6 +95,8 @@ struct platform_device_info {
 		const char *name;
 		int id;
 
+		const char *driver_override;
+
 		const struct resource *res;
 		unsigned int num_res;
 

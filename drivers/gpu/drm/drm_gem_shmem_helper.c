@@ -536,15 +536,19 @@ static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 	loff_t num_pages = obj->size >> PAGE_SHIFT;
 	vm_fault_t ret;
 	struct page *page;
+	pgoff_t page_offset;
+
+	/* We don't use vmf->pgoff since that has the fake offset */
+	page_offset = (vmf->address - vma->vm_start) >> PAGE_SHIFT;
 
 	mutex_lock(&shmem->pages_lock);
 
-	if (vmf->pgoff >= num_pages ||
+	if (page_offset >= num_pages ||
 	    WARN_ON_ONCE(!shmem->pages) ||
 	    shmem->madv < 0) {
 		ret = VM_FAULT_SIGBUS;
 	} else {
-		page = shmem->pages[vmf->pgoff];
+		page = shmem->pages[page_offset];
 
 		ret = vmf_insert_page(vma, vmf->address, page);
 	}
@@ -600,11 +604,13 @@ int drm_gem_shmem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 	struct drm_gem_shmem_object *shmem;
 	int ret;
 
-	/* Remove the fake offset */
-	vma->vm_pgoff -= drm_vma_node_start(&obj->vma_node);
+	if (obj->import_attach) {
+		/* Drop the reference drm_gem_mmap_obj() acquired.*/
+		drm_gem_object_put(obj);
+		vma->vm_private_data = NULL;
 
-	if (obj->import_attach)
 		return dma_buf_mmap(obj->dma_buf, vma, 0);
+	}
 
 	shmem = to_drm_gem_shmem_obj(obj);
 

@@ -119,6 +119,7 @@ static ssize_t phys_index_show(struct device *dev,
 	unsigned long phys_index;
 
 	phys_index = mem->start_section_nr / sections_per_block;
+
 	return sysfs_emit(buf, "%08lx\n", phys_index);
 }
 
@@ -139,7 +140,7 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
 {
 	struct memory_block *mem = to_memory_block(dev);
-	ssize_t len = 0;
+	const char *output;
 
 	/*
 	 * We can probably put these states in a nice little array
@@ -147,22 +148,20 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 	 */
 	switch (mem->state) {
 	case MEM_ONLINE:
-		len = sysfs_emit(buf, "online\n");
+		output = "online";
 		break;
 	case MEM_OFFLINE:
-		len = sysfs_emit(buf, "offline\n");
+		output = "offline";
 		break;
 	case MEM_GOING_OFFLINE:
-		len = sysfs_emit(buf, "going-offline\n");
+		output = "going-offline";
 		break;
 	default:
-		len = sysfs_emit(buf, "ERROR-UNKNOWN-%ld\n",
-				 mem->state);
 		WARN_ON(1);
-		break;
+		return sysfs_emit(buf, "ERROR-UNKNOWN-%ld\n", mem->state);
 	}
 
-	return len;
+	return sysfs_emit(buf, "%s\n", output);
 }
 
 int memory_notify(unsigned long val, void *v)
@@ -291,33 +290,34 @@ static ssize_t state_store(struct device *dev, struct device_attribute *attr,
 }
 
 /*
- * phys_device is a bad name for this.  What I really want
- * is a way to differentiate between memory ranges that
- * are part of physical devices that constitute
- * a complete removable unit or fru.
- * i.e. do these ranges belong to the same physical device,
- * s.t. if I offline all of these sections I can then
- * remove the physical device?
+ * Legacy interface that we cannot remove: s390x exposes the storage increment
+ * covered by a memory block, allowing for identifying which memory blocks
+ * comprise a storage increment. Since a memory block spans complete
+ * storage increments nowadays, this interface is basically unused. Other
+ * archs never exposed != 0.
  */
 static ssize_t phys_device_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	struct memory_block *mem = to_memory_block(dev);
-	return sysfs_emit(buf, "%d\n", mem->phys_device);
+	unsigned long start_pfn = section_nr_to_pfn(mem->start_section_nr);
+
+	return sysfs_emit(buf, "%d\n",
+			  arch_get_memory_phys_device(start_pfn));
 }
 
 #ifdef CONFIG_MEMORY_HOTREMOVE
-static void print_allowed_zone(char *buf, int nid, unsigned long start_pfn,
-		unsigned long nr_pages, int online_type,
-		struct zone *default_zone)
+static int print_allowed_zone(char *buf, int len, int nid,
+			      unsigned long start_pfn, unsigned long nr_pages,
+			      int online_type, struct zone *default_zone)
 {
 	struct zone *zone;
 
 	zone = zone_for_pfn_range(online_type, nid, start_pfn, nr_pages);
-	if (zone != default_zone) {
-		strcat(buf, " ");
-		strcat(buf, zone->name);
-	}
+	if (zone == default_zone)
+		return 0;
+
+	return sysfs_emit_at(buf, len, " %s", zone->name);
 }
 
 static ssize_t valid_zones_show(struct device *dev,
@@ -327,6 +327,7 @@ static ssize_t valid_zones_show(struct device *dev,
 	unsigned long start_pfn = section_nr_to_pfn(mem->start_section_nr);
 	unsigned long nr_pages = PAGES_PER_SECTION * sections_per_block;
 	struct zone *default_zone;
+	int len = 0;
 	int nid;
 
 	/*
@@ -341,24 +342,23 @@ static ssize_t valid_zones_show(struct device *dev,
 		default_zone = test_pages_in_a_zone(start_pfn,
 						    start_pfn + nr_pages);
 		if (!default_zone)
-			return sysfs_emit(buf, "none\n");
-		strcat(buf, default_zone->name);
+			return sysfs_emit(buf, "%s\n", "none");
+		len += sysfs_emit_at(buf, len, "%s", default_zone->name);
 		goto out;
 	}
 
 	nid = mem->nid;
 	default_zone = zone_for_pfn_range(MMOP_ONLINE, nid, start_pfn,
 					  nr_pages);
-	strcat(buf, default_zone->name);
 
-	print_allowed_zone(buf, nid, start_pfn, nr_pages, MMOP_ONLINE_KERNEL,
-			default_zone);
-	print_allowed_zone(buf, nid, start_pfn, nr_pages, MMOP_ONLINE_MOVABLE,
-			default_zone);
+	len += sysfs_emit_at(buf, len, "%s", default_zone->name);
+	len += print_allowed_zone(buf, len, nid, start_pfn, nr_pages,
+				  MMOP_ONLINE_KERNEL, default_zone);
+	len += print_allowed_zone(buf, len, nid, start_pfn, nr_pages,
+				  MMOP_ONLINE_MOVABLE, default_zone);
 out:
-	strcat(buf, "\n");
-
-	return strlen(buf);
+	len += sysfs_emit_at(buf, len, "\n");
+	return len;
 }
 static DEVICE_ATTR_RO(valid_zones);
 #endif
@@ -432,7 +432,8 @@ static ssize_t probe_store(struct device *dev, struct device_attribute *attr,
 
 	nid = memory_add_physaddr_to_nid(phys_addr);
 	ret = __add_memory(nid, phys_addr,
-			   MIN_MEMORY_BLOCK_SIZE * sections_per_block);
+			   MIN_MEMORY_BLOCK_SIZE * sections_per_block,
+			   MHP_NONE);
 
 	if (ret)
 		goto out;
@@ -487,11 +488,7 @@ static DEVICE_ATTR_WO(soft_offline_page);
 static DEVICE_ATTR_WO(hard_offline_page);
 #endif
 
-/*
- * Note that phys_device is optional.  It is here to allow for
- * differentiation between which *physical* devices each
- * section belongs to...
- */
+/* See phys_device_show(). */
 int __weak arch_get_memory_phys_device(unsigned long start_pfn)
 {
 	return 0;
@@ -573,7 +570,6 @@ int register_memory(struct memory_block *memory)
 static int init_memory_block(unsigned long block_id, unsigned long state)
 {
 	struct memory_block *mem;
-	unsigned long start_pfn;
 	int ret = 0;
 
 	mem = find_memory_block_by_id(block_id);
@@ -587,8 +583,6 @@ static int init_memory_block(unsigned long block_id, unsigned long state)
 
 	mem->start_section_nr = block_id * sections_per_block;
 	mem->state = state;
-	start_pfn = section_nr_to_pfn(mem->start_section_nr);
-	mem->phys_device = arch_get_memory_phys_device(start_pfn);
 	mem->nid = NUMA_NO_NODE;
 
 	ret = register_memory(mem);

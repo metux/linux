@@ -26,6 +26,7 @@
 #include "node.h"
 #include "segment.h"
 #include <trace/events/f2fs.h>
+#include <trace/events/android_fs.h>
 
 #define NUM_PREALLOC_POST_READ_CTXS	128
 
@@ -421,6 +422,8 @@ static void f2fs_set_bio_crypt_ctx(struct bio *bio, const struct inode *inode,
 	 */
 	if (!fio || !fio->encrypted_page)
 		fscrypt_set_bio_crypt_ctx(bio, inode, first_idx, gfp_mask);
+	else if (fscrypt_inode_should_skip_dm_default_key(inode))
+		bio_set_skip_dm_default_key(bio);
 }
 
 static bool f2fs_crypt_mergeable_bio(struct bio *bio, const struct inode *inode,
@@ -432,7 +435,9 @@ static bool f2fs_crypt_mergeable_bio(struct bio *bio, const struct inode *inode,
 	 * read/write raw data without encryption.
 	 */
 	if (fio && fio->encrypted_page)
-		return !bio_has_crypt_ctx(bio);
+		return !bio_has_crypt_ctx(bio) &&
+			(bio_should_skip_dm_default_key(bio) ==
+			 fscrypt_inode_should_skip_dm_default_key(inode));
 
 	return fscrypt_mergeable_bio(bio, inode, next_idx);
 }
@@ -1097,7 +1102,6 @@ int f2fs_reserve_new_blocks(struct dnode_of_data *dn, blkcnt_t count)
 
 	for (; count > 0; dn->ofs_in_node++) {
 		block_t blkaddr = f2fs_data_blkaddr(dn);
-
 		if (blkaddr == NULL_ADDR) {
 			dn->data_blkaddr = NEW_ADDR;
 			__set_data_blkaddr(dn);
@@ -1849,7 +1853,6 @@ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 	int ret = 0;
 	bool compr_cluster = false;
 	unsigned int cluster_size = F2FS_I(inode)->i_cluster_size;
-	loff_t maxbytes;
 
 	if (fieinfo->fi_flags & FIEMAP_FLAG_CACHE) {
 		ret = f2fs_precache_extents(inode);
@@ -1862,15 +1865,6 @@ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		return ret;
 
 	inode_lock(inode);
-
-	maxbytes = max_file_blocks(inode) << F2FS_BLKSIZE_BITS;
-	if (start > maxbytes) {
-		ret = -EFBIG;
-		goto out;
-	}
-
-	if (len > maxbytes || (maxbytes - len) < start)
-		len = maxbytes - start;
 
 	if (fieinfo->fi_flags & FIEMAP_FLAG_XATTR) {
 		ret = f2fs_xattr_fiemap(inode, fieinfo);
@@ -2298,7 +2292,7 @@ static int f2fs_mpage_readpages(struct inode *inode,
 							max_nr_pages,
 							&last_block_in_bio,
 							rac != NULL, false);
-				f2fs_destroy_compress_ctx(&cc, false);
+				f2fs_destroy_compress_ctx(&cc);
 				if (ret)
 					goto set_error_page;
 			}
@@ -2343,7 +2337,7 @@ next_page:
 							max_nr_pages,
 							&last_block_in_bio,
 							rac != NULL, false);
-				f2fs_destroy_compress_ctx(&cc, false);
+				f2fs_destroy_compress_ctx(&cc);
 			}
 		}
 #endif
@@ -3044,7 +3038,7 @@ next:
 		}
 	}
 	if (f2fs_compressed_file(inode))
-		f2fs_destroy_compress_ctx(&cc, false);
+		f2fs_destroy_compress_ctx(&cc);
 #endif
 	if (retry) {
 		index = 0;
@@ -3285,6 +3279,16 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 	block_t blkaddr = NULL_ADDR;
 	int err = 0;
 
+	if (trace_android_fs_datawrite_start_enabled()) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_datawrite_start(inode, pos, len,
+						 current->pid, path,
+						 current->comm);
+	}
 	trace_f2fs_write_begin(inode, pos, len, flags);
 
 	if (!f2fs_is_checkpoint_ready(sbi)) {
@@ -3412,6 +3416,7 @@ static int f2fs_write_end(struct file *file,
 {
 	struct inode *inode = page->mapping->host;
 
+	trace_android_fs_datawrite_end(inode, pos, len);
 	trace_f2fs_write_end(inode, pos, len, copied);
 
 	/*
@@ -3545,6 +3550,29 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 
 	trace_f2fs_direct_IO_enter(inode, offset, count, rw);
 
+	if (trace_android_fs_dataread_start_enabled() &&
+	    (rw == READ)) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_dataread_start(inode, offset,
+						count, current->pid, path,
+						current->comm);
+	}
+	if (trace_android_fs_datawrite_start_enabled() &&
+	    (rw == WRITE)) {
+		char *path, pathbuf[MAX_TRACE_PATHBUF_LEN];
+
+		path = android_fstrace_get_pathname(pathbuf,
+						    MAX_TRACE_PATHBUF_LEN,
+						    inode);
+		trace_android_fs_datawrite_start(inode, offset, count,
+						 current->pid, path,
+						 current->comm);
+	}
+
 	if (rw == WRITE && whint_mode == WHINT_MODE_OFF)
 		iocb->ki_hint = WRITE_LIFE_NOT_SET;
 
@@ -3600,6 +3628,13 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	}
 
 out:
+	if (trace_android_fs_dataread_start_enabled() &&
+	    (rw == READ))
+		trace_android_fs_dataread_end(inode, offset, count);
+	if (trace_android_fs_datawrite_start_enabled() &&
+	    (rw == WRITE))
+		trace_android_fs_datawrite_end(inode, offset, count);
+
 	trace_f2fs_direct_IO_exit(inode, offset, count, rw, err);
 
 	return err;
@@ -3777,7 +3812,6 @@ int f2fs_migrate_page(struct address_space *mapping,
 
 	if (atomic_written) {
 		struct inmem_pages *cur;
-
 		list_for_each_entry(cur, &fi->inmem_pages, list)
 			if (cur->page == page) {
 				cur->page = newpage;
@@ -3812,7 +3846,6 @@ static int f2fs_is_file_aligned(struct inode *inode)
 	block_t pblock;
 	unsigned long nr_pblocks;
 	unsigned int blocks_per_sec = BLKS_PER_SEC(sbi);
-	unsigned int not_aligned = 0;
 	int ret = 0;
 
 	cur_lblock = 0;
@@ -3845,20 +3878,13 @@ static int f2fs_is_file_aligned(struct inode *inode)
 
 		if ((pblock - main_blkaddr) & (blocks_per_sec - 1) ||
 			nr_pblocks & (blocks_per_sec - 1)) {
-			if (f2fs_is_pinned_file(inode)) {
-				f2fs_err(sbi, "Swapfile does not align to section");
-				ret = -EINVAL;
-				goto out;
-			}
-			not_aligned++;
+			f2fs_err(sbi, "Swapfile does not align to section");
+			ret = -EINVAL;
+			goto out;
 		}
 
 		cur_lblock += nr_pblocks;
 	}
-	if (not_aligned)
-		f2fs_warn(sbi, "Swapfile (%u) is not align to section: \n"
-			"\t1) creat(), 2) ioctl(F2FS_IOC_SET_PIN_FILE), 3) fallocate()",
-			not_aligned);
 out:
 	return ret;
 }
@@ -3877,7 +3903,6 @@ static int check_swap_activate_fast(struct swap_info_struct *sis,
 	int nr_extents = 0;
 	unsigned long nr_pblocks;
 	unsigned int blocks_per_sec = BLKS_PER_SEC(sbi);
-	unsigned int not_aligned = 0;
 	int ret = 0;
 
 	/*
@@ -3907,7 +3932,7 @@ static int check_swap_activate_fast(struct swap_info_struct *sis,
 		/* hole */
 		if (!(map.m_flags & F2FS_MAP_FLAGS)) {
 			f2fs_err(sbi, "Swapfile has holes\n");
-			ret = -EINVAL;
+			ret = -ENOENT;
 			goto out;
 		}
 
@@ -3916,12 +3941,9 @@ static int check_swap_activate_fast(struct swap_info_struct *sis,
 
 		if ((pblock - SM_I(sbi)->main_blkaddr) & (blocks_per_sec - 1) ||
 				nr_pblocks & (blocks_per_sec - 1)) {
-			if (f2fs_is_pinned_file(inode)) {
-				f2fs_err(sbi, "Swapfile does not align to section");
-				ret = -EINVAL;
-				goto out;
-			}
-			not_aligned++;
+			f2fs_err(sbi, "Swapfile does not align to section");
+			ret = -EINVAL;
+			goto out;
 		}
 
 		if (cur_lblock + nr_pblocks >= sis->max)
@@ -3950,11 +3972,6 @@ static int check_swap_activate_fast(struct swap_info_struct *sis,
 	sis->max = cur_lblock;
 	sis->pages = cur_lblock - 1;
 	sis->highest_bit = cur_lblock - 1;
-
-	if (not_aligned)
-		f2fs_warn(sbi, "Swapfile (%u) is not align to section: \n"
-			"\t1) creat(), 2) ioctl(F2FS_IOC_SET_PIN_FILE), 3) fallocate()",
-			not_aligned);
 out:
 	return ret;
 }
@@ -4063,7 +4080,7 @@ out:
 	return ret;
 bad_bmap:
 	f2fs_err(sbi, "Swapfile has holes\n");
-	return -EINVAL;
+	return -ENOENT;
 }
 
 static int f2fs_swap_activate(struct swap_info_struct *sis, struct file *file,

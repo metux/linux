@@ -16,7 +16,6 @@
 
 #include <asm/asm-offsets.h>
 #include <asm/asm-bug.h>
-#include <asm/alternative.h>
 #include <asm/cpufeature.h>
 #include <asm/cputype.h>
 #include <asm/debug-monitors.h>
@@ -24,14 +23,6 @@
 #include <asm/pgtable-hwdef.h>
 #include <asm/ptrace.h>
 #include <asm/thread_info.h>
-
-	/*
-	 * Provide a wxN alias for each wN register so what we can paste a xN
-	 * reference after a 'w' to obtain the 32-bit version.
-	 */
-	.irp	n,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30
-	wx\n	.req	w\n
-	.endr
 
 	.macro save_and_disable_daif, flags
 	mrs	\flags, daif
@@ -721,35 +712,6 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 .macro set_sctlr_el2, reg
 	set_sctlr sctlr_el2, \reg
 .endm
-
-	/*
-	 * Check whether preempt/bh-disabled asm code should yield as soon as
-	 * it is able. This is the case if we are currently running in task
-	 * context, and either a softirq is pending, or the TIF_NEED_RESCHED
-	 * flag is set and re-enabling preemption a single time would result in
-	 * a preempt count of zero. (Note that the TIF_NEED_RESCHED flag is
-	 * stored negated in the top word of the thread_info::preempt_count
-	 * field)
-	 */
-	.macro		cond_yield, lbl:req, tmp:req, tmp2:req
-	get_current_task \tmp
-	ldr		\tmp, [\tmp, #TSK_TI_PREEMPT]
-	/*
-	 * If we are serving a softirq, there is no point in yielding: the
-	 * softirq will not be preempted no matter what we do, so we should
-	 * run to completion as quickly as we can.
-	 */
-	tbnz		\tmp, #SOFTIRQ_SHIFT, .Lnoyield_\@
-#ifdef CONFIG_PREEMPTION
-	sub		\tmp, \tmp, #PREEMPT_DISABLE_OFFSET
-	cbz		\tmp, \lbl
-#endif
-	adr_l		\tmp, irq_stat + IRQ_CPUSTAT_SOFTIRQ_PENDING
-	this_cpu_offset	\tmp2
-	ldr		w\tmp, [\tmp, \tmp2]
-	cbnz		w\tmp, \lbl	// yield on pending softirq in task context
-.Lnoyield_\@:
-	.endm
 
 	/*
 	 * Check whether preempt-disabled code should yield as soon as it

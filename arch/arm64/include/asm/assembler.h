@@ -758,13 +758,24 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 	 * flag is set. (Note that the latter is stored negated in the
 	 * top word of the thread_info::preempt_count field)
 	 */
-	.macro		cond_yield, lbl:req, tmp:req
-#ifdef CONFIG_PREEMPTION
+	.macro		cond_yield, lbl:req, tmp:req, tmp2:req
 	get_current_task \tmp
 	ldr		\tmp, [\tmp, #TSK_TI_PREEMPT]
+	/*
+	 * If we are serving a softirq, there is no point in yielding: the
+	 * softirq will not be preempted no matter what we do, so we should
+	 * run to completion as quickly as we can.
+	 */
+	tbnz		\tmp, #SOFTIRQ_SHIFT, .Lnoyield_\@
+#ifdef CONFIG_PREEMPTION
 	sub		\tmp, \tmp, #PREEMPT_DISABLE_OFFSET
 	cbz		\tmp, \lbl
 #endif
+	adr_l		\tmp, irq_stat + IRQ_CPUSTAT_SOFTIRQ_PENDING
+	this_cpu_offset	\tmp2
+	ldr		w\tmp, [\tmp, \tmp2]
+	cbnz		w\tmp, \lbl	// yield on pending softirq in task context
+.Lnoyield_\@:
 	.endm
 
 /*

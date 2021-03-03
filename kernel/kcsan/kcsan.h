@@ -10,6 +10,7 @@
 
 #include <linux/atomic.h>
 #include <linux/kcsan.h>
+#include <linux/sched.h>
 
 /* The number of adjacent watchpoints to check. */
 #define KCSAN_CHECK_ADJACENT 1
@@ -24,9 +25,10 @@ extern unsigned int kcsan_udelay_interrupt;
 extern bool kcsan_enabled;
 
 /*
- * Initialize debugfs file.
+ * Save/restore IRQ flags state trace dirtied by KCSAN.
  */
-void kcsan_debugfs_init(void);
+void kcsan_save_irqtrace(struct task_struct *task);
+void kcsan_restore_irqtrace(struct task_struct *task);
 
 /*
  * Statistics counters displayed via debugfs; should only be modified in

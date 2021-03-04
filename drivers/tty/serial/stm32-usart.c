@@ -222,6 +222,11 @@ static void stm32_usart_receive_chars(struct uart_port *port, bool threaded)
 	else
 		spin_lock(&port->lock);
 
+	if (threaded)
+		spin_lock_irqsave(&port->lock, flags);
+	else
+		spin_lock(&port->lock);
+
 	while (stm32_usart_pending_rx(port, &sr, &stm32_port->last_res,
 				      threaded)) {
 		sr |= USART_SR_DUMMY_RX;

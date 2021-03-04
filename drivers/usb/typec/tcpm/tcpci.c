@@ -210,11 +210,11 @@ static int tcpci_get_cc(struct tcpc_dev *tcpc,
 	*cc1 = tcpci_to_typec_cc((reg >> TCPC_CC_STATUS_CC1_SHIFT) &
 				 TCPC_CC_STATUS_CC1_MASK,
 				 reg & TCPC_CC_STATUS_TERM ||
-				 tcpc_presenting_rd(role_control, CC1));
+				 tcpc_presenting_cc1_rd(role_control));
 	*cc2 = tcpci_to_typec_cc((reg >> TCPC_CC_STATUS_CC2_SHIFT) &
 				 TCPC_CC_STATUS_CC2_MASK,
 				 reg & TCPC_CC_STATUS_TERM ||
-				 tcpc_presenting_rd(role_control, CC2));
+				 tcpc_presenting_cc2_rd(role_control));
 
 	return 0;
 }

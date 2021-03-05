@@ -1651,6 +1651,7 @@ static int expand_inode_data(struct inode *inode, loff_t offset,
 	if (f2fs_is_pinned_file(inode)) {
 		block_t sec_blks = BLKS_PER_SEC(sbi);
 		block_t sec_len = roundup(map.m_len, sec_blks);
+		block_t done = 0;
 
 		map.m_len = sec_blks;
 next_alloc:
@@ -1658,8 +1659,10 @@ next_alloc:
 			GET_SEC_FROM_SEG(sbi, overprovision_segments(sbi)))) {
 			down_write(&sbi->gc_lock);
 			err = f2fs_gc(sbi, true, false, false, NULL_SEGNO);
-			if (err && err != -ENODATA && err != -EAGAIN)
+			if (err && err != -ENODATA && err != -EAGAIN) {
+				map.m_len = done;
 				goto out_err;
+			}
 		}
 
 		down_write(&sbi->pin_sem);
@@ -1674,6 +1677,7 @@ next_alloc:
 		up_write(&sbi->pin_sem);
 
 		expanded += map.m_len;
+		done += map.m_len;
 		sec_len -= map.m_len;
 		map.m_lblk += map.m_len;
 		if (!err && sec_len)

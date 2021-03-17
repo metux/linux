@@ -151,8 +151,6 @@ enum {
 	Opt_compress_chksum,
 	Opt_compress_mode,
 	Opt_atgc,
-	Opt_gc_merge,
-	Opt_nogc_merge,
 	Opt_err,
 };
 
@@ -225,8 +223,6 @@ static match_table_t f2fs_tokens = {
 	{Opt_compress_chksum, "compress_chksum"},
 	{Opt_compress_mode, "compress_mode=%s"},
 	{Opt_atgc, "atgc"},
-	{Opt_gc_merge, "gc_merge"},
-	{Opt_nogc_merge, "nogc_merge"},
 	{Opt_err, NULL},
 };
 
@@ -447,12 +443,12 @@ static int f2fs_set_test_dummy_encryption(struct super_block *sb,
 	 * needed to allow it to be set or changed during remount.  We do allow
 	 * it to be specified during remount, but only if there is no change.
 	 */
-	if (is_remount && !F2FS_OPTION(sbi).dummy_enc_ctx.ctx) {
+	if (is_remount && !F2FS_OPTION(sbi).dummy_enc_policy.policy) {
 		f2fs_warn(sbi, "Can't set test_dummy_encryption on remount");
 		return -EINVAL;
 	}
 	err = fscrypt_set_test_dummy_encryption(
-		sb, arg, &F2FS_OPTION(sbi).dummy_enc_ctx);
+		sb, arg->from, &F2FS_OPTION(sbi).dummy_enc_policy);
 	if (err) {
 		if (err == -EEXIST)
 			f2fs_warn(sbi,
@@ -559,7 +555,6 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 
 	while ((p = strsep(&options, ",")) != NULL) {
 		int token;
-
 		if (!*p)
 			continue;
 		/*
@@ -1078,12 +1073,6 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 		case Opt_atgc:
 			set_opt(sbi, ATGC);
 			break;
-		case Opt_gc_merge:
-			set_opt(sbi, GC_MERGE);
-			break;
-		case Opt_nogc_merge:
-			clear_opt(sbi, GC_MERGE);
-			break;
 		default:
 			f2fs_err(sbi, "Unrecognized mount option \"%s\" or missing value",
 				 p);
@@ -1439,7 +1428,7 @@ static void f2fs_put_super(struct super_block *sb)
 	for (i = 0; i < MAXQUOTAS; i++)
 		kfree(F2FS_OPTION(sbi).s_qf_names[i]);
 #endif
-	fscrypt_free_dummy_context(&F2FS_OPTION(sbi).dummy_enc_ctx);
+	fscrypt_free_dummy_policy(&F2FS_OPTION(sbi).dummy_enc_policy);
 	destroy_percpu_info(sbi);
 	for (i = 0; i < NR_PAGE_TYPE; i++)
 		kvfree(sbi->write_io[i]);
@@ -1689,9 +1678,6 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	else if (F2FS_OPTION(sbi).bggc_mode == BGGC_MODE_OFF)
 		seq_printf(seq, ",background_gc=%s", "off");
 
-	if (test_opt(sbi, GC_MERGE))
-		seq_puts(seq, ",gc_merge");
-
 	if (test_opt(sbi, DISABLE_ROLL_FORWARD))
 		seq_puts(seq, ",disable_roll_forward");
 	if (test_opt(sbi, NORECOVERY))
@@ -1843,7 +1829,6 @@ static void default_options(struct f2fs_sb_info *sbi)
 	set_opt(sbi, EXTENT_CACHE);
 	set_opt(sbi, NOHEAP);
 	clear_opt(sbi, DISABLE_CHECKPOINT);
-	set_opt(sbi, MERGE_CHECKPOINT);
 	F2FS_OPTION(sbi).unusable_cap = 0;
 	sbi->sb->s_flags |= SB_LAZYTIME;
 	set_opt(sbi, FLUSH_MERGE);
@@ -1896,7 +1881,7 @@ static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 
 	ret = sync_filesystem(sbi->sb);
 	if (ret || err) {
-		err = ret ? ret : err;
+		err = ret ? ret: err;
 		goto restore_flag;
 	}
 
@@ -1945,9 +1930,8 @@ static int f2fs_remount(struct super_block *sb, int *flags, char *data)
 	struct f2fs_mount_info org_mount_opt;
 	unsigned long old_sb_flags;
 	int err;
-	bool need_restart_gc = false, need_stop_gc = false;
-	bool need_restart_ckpt = false, need_stop_ckpt = false;
-	bool need_restart_flush = false, need_stop_flush = false;
+	bool need_restart_gc = false;
+	bool need_stop_gc = false;
 	bool no_extent_cache = !test_opt(sbi, EXTENT_CACHE);
 	bool disable_checkpoint = test_opt(sbi, DISABLE_CHECKPOINT);
 	bool no_io_align = !F2FS_IO_ALIGNED(sbi);
@@ -2056,8 +2040,7 @@ static int f2fs_remount(struct super_block *sb, int *flags, char *data)
 	 * option. Also sync the filesystem.
 	 */
 	if ((*flags & SB_RDONLY) ||
-			(F2FS_OPTION(sbi).bggc_mode == BGGC_MODE_OFF &&
-			!test_opt(sbi, GC_MERGE))) {
+			F2FS_OPTION(sbi).bggc_mode == BGGC_MODE_OFF) {
 		if (sbi->gc_thread) {
 			f2fs_stop_gc_thread(sbi);
 			need_restart_gc = true;
@@ -2079,10 +2062,19 @@ static int f2fs_remount(struct super_block *sb, int *flags, char *data)
 		clear_sbi_flag(sbi, SBI_IS_CLOSE);
 	}
 
+	if (checkpoint_changed) {
+		if (test_opt(sbi, DISABLE_CHECKPOINT)) {
+			err = f2fs_disable_checkpoint(sbi);
+			if (err)
+				goto restore_gc;
+		} else {
+			f2fs_enable_checkpoint(sbi);
+		}
+	}
+
 	if ((*flags & SB_RDONLY) || test_opt(sbi, DISABLE_CHECKPOINT) ||
 			!test_opt(sbi, MERGE_CHECKPOINT)) {
 		f2fs_stop_ckpt_thread(sbi);
-		need_restart_ckpt = true;
 	} else {
 		err = f2fs_start_ckpt_thread(sbi);
 		if (err) {
@@ -2091,7 +2083,6 @@ static int f2fs_remount(struct super_block *sb, int *flags, char *data)
 			    err);
 			goto restore_gc;
 		}
-		need_stop_ckpt = true;
 	}
 
 	/*
@@ -2101,24 +2092,11 @@ static int f2fs_remount(struct super_block *sb, int *flags, char *data)
 	if ((*flags & SB_RDONLY) || !test_opt(sbi, FLUSH_MERGE)) {
 		clear_opt(sbi, FLUSH_MERGE);
 		f2fs_destroy_flush_cmd_control(sbi, false);
-		need_restart_flush = true;
 	} else {
 		err = f2fs_create_flush_cmd_control(sbi);
 		if (err)
-			goto restore_ckpt;
-		need_stop_flush = true;
+			goto restore_gc;
 	}
-
-	if (checkpoint_changed) {
-		if (test_opt(sbi, DISABLE_CHECKPOINT)) {
-			err = f2fs_disable_checkpoint(sbi);
-			if (err)
-				goto restore_flush;
-		} else {
-			f2fs_enable_checkpoint(sbi);
-		}
-	}
-
 skip:
 #ifdef CONFIG_QUOTA
 	/* Release old quota file names */
@@ -2133,21 +2111,6 @@ skip:
 	adjust_unusable_cap_perc(sbi);
 	*flags = (*flags & ~SB_LAZYTIME) | (sb->s_flags & SB_LAZYTIME);
 	return 0;
-restore_flush:
-	if (need_restart_flush) {
-		if (f2fs_create_flush_cmd_control(sbi))
-			f2fs_warn(sbi, "background flush thread has stopped");
-	} else if (need_stop_flush) {
-		clear_opt(sbi, FLUSH_MERGE);
-		f2fs_destroy_flush_cmd_control(sbi, false);
-	}
-restore_ckpt:
-	if (need_restart_ckpt) {
-		if (f2fs_start_ckpt_thread(sbi))
-			f2fs_warn(sbi, "background ckpt thread has stopped");
-	} else if (need_stop_ckpt) {
-		f2fs_stop_ckpt_thread(sbi);
-	}
 restore_gc:
 	if (need_restart_gc) {
 		if (f2fs_start_gc_thread(sbi))
@@ -2711,10 +2674,9 @@ static int f2fs_set_context(struct inode *inode, const void *ctx, size_t len,
 				ctx, len, fs_data, XATTR_CREATE);
 }
 
-static const union fscrypt_context *
-f2fs_get_dummy_context(struct super_block *sb)
+static const union fscrypt_policy *f2fs_get_dummy_policy(struct super_block *sb)
 {
-	return F2FS_OPTION(F2FS_SB(sb)).dummy_enc_ctx.ctx;
+	return F2FS_OPTION(F2FS_SB(sb)).dummy_enc_policy.policy;
 }
 
 static bool f2fs_has_stable_inodes(struct super_block *sb)
@@ -2752,7 +2714,7 @@ static const struct fscrypt_operations f2fs_cryptops = {
 	.key_prefix		= "f2fs:",
 	.get_context		= f2fs_get_context,
 	.set_context		= f2fs_set_context,
-	.get_dummy_context	= f2fs_get_dummy_context,
+	.get_dummy_policy	= f2fs_get_dummy_policy,
 	.empty_dir		= f2fs_empty_dir,
 	.max_namelen		= F2FS_NAME_LEN,
 	.has_stable_inodes	= f2fs_has_stable_inodes,
@@ -3762,7 +3724,7 @@ try_onemore:
 	sbi->iostat_period_ms = DEFAULT_IOSTAT_PERIOD_MS;
 
 	for (i = 0; i < NR_PAGE_TYPE; i++) {
-		int n = (i == META) ? 1 : NR_TEMP_TYPE;
+		int n = (i == META) ? 1: NR_TEMP_TYPE;
 		int j;
 
 		sbi->write_io[i] =
@@ -3972,18 +3934,10 @@ try_onemore:
 		 * previous checkpoint was not done by clean system shutdown.
 		 */
 		if (f2fs_hw_is_readonly(sbi)) {
-			if (!is_set_ckpt_flags(sbi, CP_UMOUNT_FLAG)) {
-				err = f2fs_recover_fsync_data(sbi, true);
-				if (err > 0) {
-					err = -EROFS;
-					f2fs_err(sbi, "Need to recover fsync data, but "
-						"write access unavailable, please try "
-						"mount w/ disable_roll_forward or norecovery");
-				}
-				if (err < 0)
-					goto free_meta;
-			}
-			f2fs_info(sbi, "write access unavailable, skipping recovery");
+			if (!is_set_ckpt_flags(sbi, CP_UMOUNT_FLAG))
+				f2fs_err(sbi, "Need to recover fsync data, but write access unavailable");
+			else
+				f2fs_info(sbi, "write access unavailable, skipping recovery");
 			goto reset_checkpoint;
 		}
 
@@ -4040,8 +3994,7 @@ reset_checkpoint:
 	 * If filesystem is not mounted as read-only then
 	 * do start the gc_thread.
 	 */
-	if ((F2FS_OPTION(sbi).bggc_mode != BGGC_MODE_OFF ||
-		test_opt(sbi, GC_MERGE)) && !f2fs_readonly(sb)) {
+	if (F2FS_OPTION(sbi).bggc_mode != BGGC_MODE_OFF && !f2fs_readonly(sb)) {
 		/* After POR, we can run background GC thread.*/
 		err = f2fs_start_gc_thread(sbi);
 		if (err)
@@ -4133,7 +4086,7 @@ free_options:
 	for (i = 0; i < MAXQUOTAS; i++)
 		kfree(F2FS_OPTION(sbi).s_qf_names[i]);
 #endif
-	fscrypt_free_dummy_context(&F2FS_OPTION(sbi).dummy_enc_ctx);
+	fscrypt_free_dummy_policy(&F2FS_OPTION(sbi).dummy_enc_policy);
 	kvfree(options);
 free_sb_buf:
 	kfree(raw_super);

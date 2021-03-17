@@ -1242,6 +1242,9 @@ static void amdgpu_ttm_backend_unbind(struct ttm_bo_device *bdev,
 	if (gtt->userptr)
 		amdgpu_ttm_tt_unpin_userptr(bdev, ttm);
 
+	if (!gtt->bound)
+		return;
+
 	if (gtt->offset == AMDGPU_BO_INVALID_OFFSET)
 		return;
 

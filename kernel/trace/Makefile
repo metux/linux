@@ -98,3 +98,5 @@ obj-$(CONFIG_TRACEPOINT_BENCHMARK) += trace_benchmark.o
 obj-$(CONFIG_TRACE_MMIO_ACCESS) += trace_readwrite.o
 
 libftrace-y := ftrace.o
+
+obj-$(CONFIG_TRACING) += mtk_trace.o

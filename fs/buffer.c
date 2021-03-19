@@ -1266,14 +1266,6 @@ static void bh_lru_install(struct buffer_head *bh)
 	int i;
 
 	check_irqs_on();
-	/*
-	 * buffer_head in bh_lru could increase refcount of the page
-	 * until it will be invalidated. It causes page migraion failure.
-	 * Skip putting upcoming bh into bh_lru until migration is done.
-	 */
-	if (lru_cache_disabled())
-		return;
-
 	bh_lru_lock();
 
 	b = this_cpu_ptr(&bh_lrus);
@@ -1419,7 +1411,7 @@ EXPORT_SYMBOL(__bread_gfp);
  * This doesn't race because it runs in each cpu either in irq
  * or with preempt disabled.
  */
-void invalidate_bh_lru(void *arg)
+static void invalidate_bh_lru(void *arg)
 {
 	struct bh_lru *b = &get_cpu_var(bh_lrus);
 	int i;
@@ -1431,7 +1423,7 @@ void invalidate_bh_lru(void *arg)
 	put_cpu_var(bh_lrus);
 }
 
-bool has_bh_in_lru(int cpu, void *dummy)
+static bool has_bh_in_lru(int cpu, void *dummy)
 {
 	struct bh_lru *b = per_cpu_ptr(&bh_lrus, cpu);
 	int i;

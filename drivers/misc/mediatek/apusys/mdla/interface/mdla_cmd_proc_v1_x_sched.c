@@ -57,9 +57,15 @@ static void mdla_cmd_prepare_v1_x_sched(struct mdla_run_cmd *cd,
 	ce->ctx_id = apusys_hd->ctx_id;
 	ce->context_callback = apusys_hd->context_callback;
 	apusys_hd->ip_time = 0;
-	ce->kva = (void *)(apusys_hd->cmd_entry + cd->offset_code_buf);
 	ce->cmdbuf = apusys_hd->cmdbuf;
 	ce->priority = priority;
+
+	if (cd->offset_code_buf == 0)
+		/* for mdla UT */
+		ce->kva = (void *)apusys_mem_query_kva((u32)ce->mva);
+	else
+		ce->kva = (void *)(apusys_hd->cmd_entry + cd->offset_code_buf);
+
 
 	if (apusys_hd->multicore_total == 2) {
 		ce->cmd_id = apusys_hd->cmd_id;

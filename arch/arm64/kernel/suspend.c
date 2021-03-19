@@ -76,8 +76,9 @@ void notrace __cpu_suspend_exit(void)
 	if (arm64_get_ssbd_state() == ARM64_SSBD_FORCE_DISABLE)
 		arm64_set_ssbd_mitigation(false);
 
-	/* Restore additional MTE-specific configuration */
+	/* Restore additional feature-specific configuration */
 	mte_suspend_exit();
+	ptrauth_suspend_exit();
 }
 
 /*

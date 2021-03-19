@@ -228,8 +228,6 @@ struct prctl_mm_map {
 # define PR_PAC_APDAKEY			(1UL << 2)
 # define PR_PAC_APDBKEY			(1UL << 3)
 # define PR_PAC_APGAKEY			(1UL << 4)
-#define PR_SET_VMA		0x53564d41
-# define PR_SET_VMA_ANON_NAME		0
 
 /* Tagged user address controls for arm64 */
 #define PR_SET_TAGGED_ADDR_CTRL		55
@@ -248,5 +246,12 @@ struct prctl_mm_map {
 /* Control reclaim behavior when allocating memory */
 #define PR_SET_IO_FLUSHER		57
 #define PR_GET_IO_FLUSHER		58
+
+#define PR_SET_VMA		0x53564d41
+# define PR_SET_VMA_ANON_NAME		0
+
+/* Set/get enabled arm64 pointer authentication keys */
+#define PR_PAC_SET_ENABLED_KEYS		60
+#define PR_PAC_GET_ENABLED_KEYS		61
 
 #endif /* _LINUX_PRCTL_H */

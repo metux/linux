@@ -1658,10 +1658,8 @@ next_alloc:
 			GET_SEC_FROM_SEG(sbi, overprovision_segments(sbi)))) {
 			down_write(&sbi->gc_lock);
 			err = f2fs_gc(sbi, true, false, false, NULL_SEGNO);
-			if (err && err != -ENODATA && err != -EAGAIN) {
-				map.m_len = done;
+			if (err && err != -ENODATA && err != -EAGAIN)
 				goto out_err;
-			}
 		}
 
 		down_write(&sbi->pin_sem);

@@ -76,10 +76,10 @@ module_srcpath := $(srctree)
 quiet_cmd_cat = GEN     $@
       cmd_cat = cat $(real-prereqs) > $@
 
-ifneq ($(wildcard $(mixed-build-prefix)vmlinux.symvers),)
+ifneq ($(wildcard vmlinux.symvers),)
 
 __modpost: Module.symvers
-Module.symvers: $(mixed-build-prefix)vmlinux.symvers modules-only.symvers FORCE
+Module.symvers: vmlinux.symvers modules-only.symvers FORCE
 	$(call if_changed,cat)
 
 targets += Module.symvers

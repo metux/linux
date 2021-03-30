@@ -9036,6 +9036,7 @@ init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer)
 	ftrace_init_tracefs(tr, d_tracer);
 }
 
+#ifndef CONFIG_TRACEFS_DISABLE_AUTOMOUNT
 static struct vfsmount *trace_automount(struct dentry *mntpt, void *ingore)
 {
 	struct vfsmount *mnt;
@@ -9057,6 +9058,7 @@ static struct vfsmount *trace_automount(struct dentry *mntpt, void *ingore)
 
 	return mnt;
 }
+#endif
 
 /**
  * tracing_init_dentry - initialize top level trace array
@@ -9081,6 +9083,7 @@ int tracing_init_dentry(void)
 	if (WARN_ON(!tracefs_initialized()))
 		return -ENODEV;
 
+#ifndef CONFIG_TRACEFS_DISABLE_AUTOMOUNT
 	/*
 	 * As there may still be users that expect the tracing
 	 * files to exist in debugfs/tracing, we must automount
@@ -9089,6 +9092,9 @@ int tracing_init_dentry(void)
 	 */
 	tr->dir = debugfs_create_automount("tracing", NULL,
 					   trace_automount, NULL);
+#else
+	tr->dir = ERR_PTR(-ENODEV);
+#endif
 
 	return 0;
 }

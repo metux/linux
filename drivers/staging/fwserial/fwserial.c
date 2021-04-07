@@ -1235,8 +1235,6 @@ static int set_serial_info(struct tty_struct *tty,
 
 	cdelay = msecs_to_jiffies(ss->close_delay * 10);
 
-	cdelay = msecs_to_jiffies(ss->close_delay * 10);
-
 	mutex_lock(&port->port.mutex);
 	if (!capable(CAP_SYS_ADMIN)) {
 		if (cdelay != port->port.close_delay ||

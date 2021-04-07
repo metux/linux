@@ -3237,6 +3237,7 @@ static unsigned int tcpm_pd_select_pps_apdo(struct tcpm_port *port)
 						      port->pps_data.req_out_volt));
 		port->pps_data.req_op_curr = min(port->pps_data.req_max_curr,
 						 port->pps_data.req_op_curr);
+		power_supply_changed(port->psy);
 	}
 
 	return src_pdo;

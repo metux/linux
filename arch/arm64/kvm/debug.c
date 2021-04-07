@@ -159,6 +159,8 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
 
 	kvm_arm_setup_mdcr_el2(vcpu);
 
+	kvm_arm_setup_mdcr_el2(vcpu);
+
 	/* Is Guest debugging in effect? */
 	if (vcpu->guest_debug) {
 		/* Save guest debug state */

@@ -338,28 +338,54 @@ static int mt7615_mcu_drv_pmctrl(struct mt7615_dev *dev)
 {
 	struct mt76_phy *mphy = &dev->mt76.phy;
 	struct mt76_dev *mdev = &dev->mt76;
+	u32 addr;
+	int err;
+
+	if (is_mt7663(mdev)) {
+		/* Clear firmware own via N9 eint */
+		mt76_wr(dev, MT_PCIE_DOORBELL_PUSH, MT_CFG_LPCR_HOST_DRV_OWN);
+		mt76_poll(dev, MT_CONN_ON_MISC, MT_CFG_LPCR_HOST_FW_OWN, 0, 3000);
+
+		addr = MT_CONN_HIF_ON_LPCTL;
+	} else {
+		addr = MT_CFG_LPCR_HOST;
+	}
+
+	mt76_wr(dev, addr, MT_CFG_LPCR_HOST_DRV_OWN);
+
+	mt7622_trigger_hif_int(dev, true);
+
+	err = !mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN, 0, 3000);
+
+	mt7622_trigger_hif_int(dev, false);
+
+	if (err) {
+		dev_err(mdev->dev, "driver own failed\n");
+		return -ETIMEDOUT;
+	}
+
+	clear_bit(MT76_STATE_PM, &mphy->state);
+
+	return 0;
+}
+
+static int mt7615_mcu_lp_drv_pmctrl(struct mt7615_dev *dev)
+{
+	struct mt76_phy *mphy = &dev->mt76.phy;
 	int i;
 
 	if (!test_and_clear_bit(MT76_STATE_PM, &mphy->state))
 		goto out;
 
-	mt7622_trigger_hif_int(dev, true);
-
 	for (i = 0; i < MT7615_DRV_OWN_RETRY_COUNT; i++) {
-		u32 addr;
-
-		addr = is_mt7663(mdev) ? MT_PCIE_DOORBELL_PUSH : MT_CFG_LPCR_HOST;
-		mt76_wr(dev, addr, MT_CFG_LPCR_HOST_DRV_OWN);
-
-		addr = is_mt7663(mdev) ? MT_CONN_HIF_ON_LPCTL : MT_CFG_LPCR_HOST;
-		if (mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN, 0, 50))
+		mt76_wr(dev, MT_PCIE_DOORBELL_PUSH, MT_CFG_LPCR_HOST_DRV_OWN);
+		if (mt76_poll_msec(dev, MT_CONN_HIF_ON_LPCTL,
+				   MT_CFG_LPCR_HOST_FW_OWN, 0, 50))
 			break;
 	}
 
-	mt7622_trigger_hif_int(dev, false);
-
 	if (i == MT7615_DRV_OWN_RETRY_COUNT) {
-		dev_err(mdev->dev, "driver own failed\n");
+		dev_err(dev->mt76.dev, "driver own failed\n");
 		set_bit(MT76_STATE_PM, &mphy->state);
 		return -EIO;
 	}
@@ -386,7 +412,7 @@ static int mt7615_mcu_fw_pmctrl(struct mt7615_dev *dev)
 
 	if (is_mt7622(&dev->mt76) &&
 	    !mt76_poll_msec(dev, addr, MT_CFG_LPCR_HOST_FW_OWN,
-			    MT_CFG_LPCR_HOST_FW_OWN, 300)) {
+			    MT_CFG_LPCR_HOST_FW_OWN, 3000)) {
 		dev_err(dev->mt76.dev, "Timeout for firmware own\n");
 		clear_bit(MT76_STATE_PM, &mphy->state);
 		err = -EIO;
@@ -1179,7 +1205,7 @@ mt7615_mcu_wtbl_ht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 		tlv = mt7615_mcu_add_nested_tlv(skb, WTBL_HT, sizeof(*ht),
 						wtbl_tlv, sta_wtbl);
 		ht = (struct wtbl_ht *)tlv;
-		ht->ldpc = sta->ht_cap.cap & IEEE80211_HT_CAP_LDPC_CODING;
+		ht->ldpc = !!(sta->ht_cap.cap & IEEE80211_HT_CAP_LDPC_CODING);
 		ht->af = sta->ht_cap.ampdu_factor;
 		ht->mm = sta->ht_cap.ampdu_density;
 		ht->ht = 1;
@@ -1197,7 +1223,7 @@ mt7615_mcu_wtbl_ht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta,
 		tlv = mt7615_mcu_add_nested_tlv(skb, WTBL_VHT, sizeof(*vht),
 						wtbl_tlv, sta_wtbl);
 		vht = (struct wtbl_vht *)tlv;
-		vht->ldpc = sta->vht_cap.cap & IEEE80211_VHT_CAP_RXLDPC,
+		vht->ldpc = !!(sta->vht_cap.cap & IEEE80211_VHT_CAP_RXLDPC);
 		vht->vht = 1;
 
 		af = (sta->vht_cap.cap &
@@ -1900,7 +1926,7 @@ static const struct mt7615_mcu_ops uni_update_ops = {
 	.add_tx_ba = mt7615_mcu_uni_tx_ba,
 	.add_rx_ba = mt7615_mcu_uni_rx_ba,
 	.sta_add = mt7615_mcu_uni_add_sta,
-	.set_drv_ctrl = mt7615_mcu_drv_pmctrl,
+	.set_drv_ctrl = mt7615_mcu_lp_drv_pmctrl,
 	.set_fw_ctrl = mt7615_mcu_fw_pmctrl,
 };
 
@@ -2894,14 +2920,6 @@ int mt7615_mcu_set_chan_info(struct mt7615_phy *phy, int cmd)
 		.center_chan2 = ieee80211_frequency_to_channel(freq2),
 	};
 
-#ifdef CONFIG_NL80211_TESTMODE
-	if (dev->mt76.test.state == MT76_TM_STATE_TX_FRAMES &&
-	    dev->mt76.test.tx_antenna_mask) {
-		req.tx_streams = hweight8(dev->mt76.test.tx_antenna_mask);
-		req.rx_streams_mask = dev->mt76.test.tx_antenna_mask;
-	}
-#endif
-
 	if (dev->mt76.hw->conf.flags & IEEE80211_CONF_OFFCHANNEL)
 		req.switch_reason = CH_SWITCH_SCAN_BYPASS_DPD;
 	else if ((chandef->chan->flags & IEEE80211_CHAN_RADAR) &&
@@ -3326,7 +3344,7 @@ static int mt7615_dcoc_freq_idx(u16 freq, u8 bw)
 			freq = freq_bw40[idx];
 			break;
 		}
-		/* fall through */
+		fallthrough;
 	case NL80211_CHAN_WIDTH_40:
 		idx = mt7615_find_freq_idx(freq_bw40, ARRAY_SIZE(freq_bw40),
 					   freq);

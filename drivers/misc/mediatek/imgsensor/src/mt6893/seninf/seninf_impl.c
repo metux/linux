@@ -43,7 +43,7 @@ void _swap_data_cam_mux(unsigned int cam_tg_offset,
 		cam_tg_offset, SENINF_RD32(pseninf->pseninf_base[0] + cam_tg_offset),
 		camsv_tg_offset, SENINF_RD32(pseninf->pseninf_base[0] + camsv_tg_offset));
 }
-extern MINT32 _switch_tg_for_stagger(unsigned int cam_tg, struct SENINF *pseninf)
+MINT32 _switch_tg_for_stagger(unsigned int cam_tg, struct SENINF *pseninf)
 {
 	int ret = -1;
 	unsigned int camsv_tg = 0xff;
@@ -134,7 +134,7 @@ extern MINT32 _switch_tg_for_stagger(unsigned int cam_tg, struct SENINF *pseninf
 		pr_debug("%s invalid cam_tg number = %d", __func__, cam_tg);
 	return ret;
 }
-extern MINT32 _seninf_set_tg_for_switch(unsigned int cam_tg, unsigned int camsv_tg)
+MINT32 _seninf_set_tg_for_switch(unsigned int cam_tg, unsigned int camsv_tg)
 {
 	pr_debug("%s cam_tg number = %d camsv_tg = %d",
 			__func__, cam_tg, camsv_tg);

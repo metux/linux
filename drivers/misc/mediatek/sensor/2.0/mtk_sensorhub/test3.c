@@ -13,6 +13,8 @@
 #include <linux/hrtimer.h>
 #include <linux/time.h>
 #include <asm/arch_timer.h>
+
+#include "hf_sensor_type.h"
 #include "sensor_comm.h"
 
 struct test_sensor_t {
@@ -26,19 +28,42 @@ static struct test_sensor_t test_sensor = {
 	.name = "test_sensor3",
 };
 
-static void test_work_func(struct work_struct *work)
+static void test_debug(void)
 {
 	int ret = 0;
 	struct sensor_comm_ctrl *ctrl = NULL;
 
 	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
-	ctrl->sensor_type = 0;
+	ctrl->sensor_type = SENSOR_TYPE_INVALID;
 	ctrl->command = SENS_COMM_CTRL_DEBUG_CMD;
 	ctrl->length = 0;
 	ret = sensor_comm_ctrl_send(ctrl, sizeof(*ctrl) + ctrl->length);
 	if (ret < 0)
 		pr_err("debug fail\n");
 	kfree(ctrl);
+}
+
+static void test_config(void)
+{
+	int ret = 0;
+	struct sensor_comm_ctrl *ctrl = NULL;
+	int32_t cfg[3] = {500, 100, 203};
+
+	ctrl = kzalloc(sizeof(*ctrl) + sizeof(cfg), GFP_KERNEL);
+	ctrl->sensor_type = SENSOR_TYPE_ACCELEROMETER;
+	ctrl->command = SENS_COMM_CTRL_CONFIG_CMD;
+	ctrl->length = sizeof(cfg);
+	memcpy(ctrl->data, cfg, sizeof(cfg));
+	ret = sensor_comm_ctrl_send(ctrl, sizeof(*ctrl) + ctrl->length);
+	if (ret < 0)
+		pr_err("config fail\n");
+	kfree(ctrl);
+}
+
+static void test_work_func(struct work_struct *work)
+{
+	test_debug();
+	test_config();
 }
 
 static enum hrtimer_restart test_timer_func(struct hrtimer *timer)

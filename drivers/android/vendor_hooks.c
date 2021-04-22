@@ -287,6 +287,7 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sys_set_task);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_nice_check);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_cgroup_attach);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mm_dirty_limits);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_oom_check_panic);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_uninterruptible_tasks);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_check_uninterruptible_tasks_dn);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mmc_blk_reset);

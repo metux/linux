@@ -242,10 +242,9 @@ gen_btf()
 	printf '\1' | dd of=${2} conv=notrunc bs=1 seek=16 status=none
 }
 
-# Create ${2} .o file with all symbols from the ${1} object file
+# Create ${2} .S file with all symbols from the ${1} object file
 kallsyms()
 {
-	info KSYM ${2}
 	local kallsymopt;
 
 	if [ -n "${CONFIG_KALLSYMS_ALL}" ]; then
@@ -260,13 +259,16 @@ kallsyms()
 		kallsymopt="${kallsymopt} --base-relative"
 	fi
 
-	local aflags="${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL}               \
-		      ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS}"
+	info KSYMS ${2}
 
-	local afile="`basename ${2} .o`.S"
+	if [ -n "${CONFIG_CFI_CLANG}" ]; then
+		${PERL} ${srctree}/scripts/generate_cfi_kallsyms.pl ${1} | \
+			sort -n > .tmp_kallsyms
+	else
+		${NM} -n ${1} > .tmp_kallsyms
+	fi
 
-	${NM} -n ${1} | scripts/kallsyms ${kallsymopt} > ${afile}
-	${CC} ${aflags} -c -o ${2} ${afile}
+	scripts/kallsyms ${kallsymopt} < .tmp_kallsyms > ${2}
 }
 
 # Perform one step in kallsyms generation, including temporary linking of
@@ -276,9 +278,15 @@ kallsyms_step()
 	kallsymso_prev=${kallsymso}
 	kallsyms_vmlinux=.tmp_vmlinux.kallsyms${1}
 	kallsymso=${kallsyms_vmlinux}.o
+	kallsyms_S=${kallsyms_vmlinux}.S
 
 	vmlinux_link ${kallsyms_vmlinux} "${kallsymso_prev}" ${btf_vmlinux_bin_o}
-	kallsyms ${kallsyms_vmlinux} ${kallsymso}
+	kallsyms ${kallsyms_vmlinux} ${kallsyms_S}
+
+	info AS ${kallsyms_S}
+	${CC} ${NOSTDINC_FLAGS} ${LINUXINCLUDE} ${KBUILD_CPPFLAGS} \
+	      ${KBUILD_AFLAGS} ${KBUILD_AFLAGS_KERNEL} \
+	      -c -o ${kallsymso} ${kallsyms_S}
 }
 
 # Create map file with all symbols from ${1}
@@ -298,6 +306,7 @@ cleanup()
 {
 	rm -f .btf.*
 	rm -f .tmp_System.map
+	rm -f .tmp_kallsyms
 	rm -f .tmp_initcalls.lds
 	rm -f .tmp_symversions.lds
 	rm -f .tmp_vmlinux*
@@ -417,9 +426,9 @@ fi
 vmlinux_link vmlinux "${kallsymso}" ${btf_vmlinux_bin_o}
 
 # fill in BTF IDs
-if [ -n "${CONFIG_DEBUG_INFO_BTF}" ]; then
-info BTFIDS vmlinux
-${RESOLVE_BTFIDS} vmlinux
+if [ -n "${CONFIG_DEBUG_INFO_BTF}" -a -n "${CONFIG_BPF}" ]; then
+	info BTFIDS vmlinux
+	${RESOLVE_BTFIDS} vmlinux
 fi
 
 if [ -n "${CONFIG_BUILDTIME_TABLE_SORT}" ]; then

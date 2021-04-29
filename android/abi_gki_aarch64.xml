@@ -85188,6 +85188,7 @@
         <return type-id='d9fbdc06'/>
       </function-decl>
       <pointer-type-def type-id='df80a1e0' size-in-bits='64' id='d9fbdc06'/>
+
       <class-decl name='frame_vector' size-in-bits='128' is-struct='yes' visibility='default' filepath='include/linux/mm.h' line='1902' column='1' id='df80a1e0'>
         <data-member access='public' layout-offset-in-bits='0'>
           <var-decl name='nr_allocated' type-id='f0981eeb' visibility='default' filepath='include/linux/mm.h' line='1903' column='1'/>
@@ -107616,6 +107617,10 @@
         <parameter type-id='10216dc5' name='pctldev' filepath='drivers/pinctrl/core.c' line='1491' column='1'/>
         <return type-id='95e97e5e'/>
       </function-decl>
+      <function-decl name='pinctrl_enable' mangled-name='pinctrl_enable' filepath='drivers/pinctrl/core.c' line='2072' column='1' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='pinctrl_enable'>
+        <parameter type-id='10216dc5' name='pctldev' filepath='drivers/pinctrl/core.c' line='2072' column='1'/>
+        <return type-id='95e97e5e'/>
+      </function-decl>
       <function-decl name='pinctrl_dev_get_drvdata' mangled-name='pinctrl_dev_get_drvdata' filepath='drivers/pinctrl/core.c' line='87' column='1' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='pinctrl_dev_get_drvdata'>
         <parameter type-id='10216dc5' name='pctldev' filepath='drivers/pinctrl/core.c' line='87' column='1'/>
         <return type-id='eaa32e2f'/>
@@ -128870,6 +128875,12 @@
       </function-decl>
     </abi-instr>
     <abi-instr address-size='64' path='fs/open.c' language='LANG_C89'>
+      <function-decl name='filp_open' mangled-name='filp_open' filepath='fs/open.c' line='1140' column='1' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='filp_open'>
+        <parameter type-id='80f4b756' name='filename' filepath='fs/open.c' line='1140' column='1'/>
+        <parameter type-id='95e97e5e' name='flags' filepath='fs/open.c' line='1140' column='1'/>
+        <parameter type-id='2594b00f' name='mode' filepath='fs/open.c' line='1140' column='1'/>
+        <return type-id='77e79a4b'/>
+      </function-decl>
       <function-decl name='vfs_fallocate' mangled-name='vfs_fallocate' filepath='fs/open.c' line='229' column='1' visibility='default' binding='global' size-in-bits='64' elf-symbol-id='vfs_fallocate'>
         <parameter type-id='77e79a4b' name='file' filepath='fs/open.c' line='229' column='1'/>
         <parameter type-id='95e97e5e' name='mode' filepath='fs/open.c' line='229' column='1'/>

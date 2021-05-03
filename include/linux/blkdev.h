@@ -316,6 +316,8 @@ enum blk_zoned_model {
 };
 
 struct queue_limits {
+	unsigned int		bio_max_bytes;
+
 	unsigned long		bounce_pfn;
 	unsigned long		seg_boundary_mask;
 	unsigned long		virt_boundary_mask;
@@ -350,6 +352,8 @@ struct queue_limits {
 
 typedef int (*report_zones_cb)(struct blk_zone *zone, unsigned int idx,
 			       void *data);
+
+void blk_queue_set_zoned(struct gendisk *disk, enum blk_zoned_model model);
 
 #ifdef CONFIG_BLK_DEV_ZONED
 

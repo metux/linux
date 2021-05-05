@@ -195,7 +195,7 @@ static struct kvm_user_return_msrs __percpu *user_return_msrs;
 u64 __read_mostly host_efer;
 EXPORT_SYMBOL_GPL(host_efer);
 
-bool __read_mostly allow_smaller_maxphyaddr;
+bool __read_mostly allow_smaller_maxphyaddr = 0;
 EXPORT_SYMBOL_GPL(allow_smaller_maxphyaddr);
 
 static u64 __read_mostly host_xss;
@@ -321,22 +321,6 @@ static void kvm_on_user_return(struct user_return_notifier *urn)
 		}
 	}
 }
-
-int kvm_probe_user_return_msr(u32 msr)
-{
-	u64 val;
-	int ret;
-
-	preempt_disable();
-	ret = rdmsrl_safe(msr, &val);
-	if (ret)
-		goto out;
-	ret = wrmsrl_safe(msr, val);
-out:
-	preempt_enable();
-	return ret;
-}
-EXPORT_SYMBOL_GPL(kvm_probe_user_return_msr);
 
 void kvm_define_user_return_msr(unsigned slot, u32 msr)
 {
@@ -997,6 +981,7 @@ int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 	unsigned long old_cr4 = kvm_read_cr4(vcpu);
 	unsigned long pdptr_bits = X86_CR4_PGE | X86_CR4_PSE | X86_CR4_PAE |
 				   X86_CR4_SMEP;
+	unsigned long mmu_role_bits = pdptr_bits | X86_CR4_SMAP | X86_CR4_PKE;
 
 	if (kvm_valid_cr4(vcpu, cr4))
 		return 1;
@@ -1024,7 +1009,7 @@ int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 	if (kvm_x86_ops.set_cr4(vcpu, cr4))
 		return 1;
 
-	if (((cr4 ^ old_cr4) & pdptr_bits) ||
+	if (((cr4 ^ old_cr4) & mmu_role_bits) ||
 	    (!(cr4 & X86_CR4_PCIDE) && (old_cr4 & X86_CR4_PCIDE)))
 		kvm_mmu_reset_context(vcpu);
 
@@ -3435,9 +3420,9 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		 * even when not intercepted. AMD manual doesn't explicitly
 		 * state this but appears to behave the same.
 		 *
-		 * Unconditionally return L1's TSC offset on userspace reads
-		 * so that userspace reads and writes always operate on L1's
-		 * offset, e.g. to ensure deterministic behavior for migration.
+		 * On userspace reads and writes, however, we unconditionally
+		 * return L1's TSC value to ensure backwards-compatible
+		 * behavior for migration.
 		 */
 		u64 tsc_offset = msr_info->host_initiated ? vcpu->arch.l1_tsc_offset :
 							    vcpu->arch.tsc_offset;
@@ -7864,18 +7849,6 @@ static void pvclock_gtod_update_fn(struct work_struct *work)
 static DECLARE_WORK(pvclock_gtod_work, pvclock_gtod_update_fn);
 
 /*
- * Indirection to move queue_work() out of the tk_core.seq write held
- * region to prevent possible deadlocks against time accessors which
- * are invoked with work related locks held.
- */
-static void pvclock_irq_work_fn(struct irq_work *w)
-{
-	queue_work(system_long_wq, &pvclock_gtod_work);
-}
-
-static DEFINE_IRQ_WORK(pvclock_irq_work, pvclock_irq_work_fn);
-
-/*
  * Notification about pvclock gtod data update.
  */
 static int pvclock_gtod_notify(struct notifier_block *nb, unsigned long unused,
@@ -7886,14 +7859,13 @@ static int pvclock_gtod_notify(struct notifier_block *nb, unsigned long unused,
 
 	update_pvclock_gtod(tk);
 
-	/*
-	 * Disable master clock if host does not trust, or does not use,
-	 * TSC based clocksource. Delegate queue_work() to irq_work as
-	 * this is invoked with tk_core.seq write held.
+	/* disable master clock if host does not trust, or does not
+	 * use, TSC based clocksource.
 	 */
 	if (!gtod_is_based_on_tsc(gtod->clock.vclock_mode) &&
 	    atomic_read(&kvm_guest_has_master_clock) != 0)
-		irq_work_queue(&pvclock_irq_work);
+		queue_work(system_long_wq, &pvclock_gtod_work);
+
 	return 0;
 }
 
@@ -8009,7 +7981,6 @@ void kvm_arch_exit(void)
 	cpuhp_remove_state_nocalls(CPUHP_AP_X86_KVM_CLK_ONLINE);
 #ifdef CONFIG_X86_64
 	pvclock_gtod_unregister_notifier(&pvclock_gtod_notifier);
-	irq_work_sync(&pvclock_irq_work);
 	cancel_work_sync(&pvclock_gtod_work);
 #endif
 	kvm_x86_ops.hardware_enable = NULL;
@@ -9061,15 +9032,6 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	++vcpu->stat.exits;
 	local_irq_disable();
 	kvm_after_interrupt(vcpu);
-
-	/*
-	 * Wait until after servicing IRQs to account guest time so that any
-	 * ticks that occurred while running the guest are properly accounted
-	 * to the guest.  Waiting until IRQs are enabled degrades the accuracy
-	 * of accounting via context tracking, but the loss of accuracy is
-	 * acceptable for all known use cases.
-	 */
-	vtime_account_guest_exit();
 
 	if (lapic_in_kernel(vcpu)) {
 		s64 delta = vcpu->arch.apic->lapic_timer.advance_expire_delta;

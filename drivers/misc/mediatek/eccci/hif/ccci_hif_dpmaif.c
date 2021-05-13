@@ -53,6 +53,7 @@
 #include "dpmaif_reg.h"
 #endif
 
+#include "ccci_hif_dpmaif_comm.h"
 
 #ifndef CCCI_KMODULE_ENABLE
 #if defined(CCCI_SKB_TRACE)
@@ -2724,7 +2725,7 @@ static irqreturn_t dpmaif_isr(int irq, void *data)
 
 #ifdef ENABLE_CPU_AFFINITY
 #include <linux/sched.h>
-void mtk_ccci_affinity_rta(u32 irq_cpus, u32 push_cpus, int cpu_nr)
+void mtk_ccci_affinity_rta_v2(u32 irq_cpus, u32 push_cpus, int cpu_nr)
 {
 	struct cpumask imask, tmask;
 	unsigned int i;
@@ -3638,8 +3639,9 @@ int dpmaif_stop_tx_sw(unsigned char hif_id)
 	return 0;
 }
 
-void dpmaif_hw_reset(unsigned char md_id)
+static void dpmaif_hw_reset(void)
 {
+	unsigned char md_id = 0;
 	unsigned int reg_value;
 	int ret;
 #ifndef MT6297
@@ -3747,6 +3749,43 @@ void dpmaif_hw_reset(unsigned char md_id)
 #endif
 }
 
+static void dpmaif_hw_reset_6893(void)
+{
+	unsigned char md_id = 0;
+	unsigned int reg_value;
+
+	/* pre- DPMAIF HW reset: bus-protect */
+	reg_value = ccci_read32(infra_ao_mem, 0);
+	reg_value &= ~INFRA_PROT_DPMAIF_BIT;
+	ccci_write32(infra_ao_mem, 0, reg_value);
+	CCCI_REPEAT_LOG(md_id, TAG, "%s:set prot:0x%x\n", __func__, reg_value);
+
+	/* DPMAIF HW reset */
+	CCCI_DEBUG_LOG(md_id, TAG, "%s:rst dpmaif\n", __func__);
+	/* reset dpmaif hw: AO Domain */
+	reg_value = DPMAIF_AO_RST_MASK;/* so only this bit effective */
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+			INFRA_RST0_REG_AO, reg_value);
+
+	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset\n", __func__);
+	/* reset dpmaif clr */
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+			INFRA_RST1_REG_AO, reg_value);
+	CCCI_BOOTUP_LOG(md_id, TAG, "%s:done\n", __func__);
+
+	/* reset dpmaif hw: PD Domain */
+	reg_value = DPMAIF_PD_RST_MASK;
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+			INFRA_RST0_REG_PD, reg_value);
+	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset\n", __func__);
+
+	/* reset dpmaif clr */
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+			INFRA_RST1_REG_PD, reg_value);
+	CCCI_DEBUG_LOG(md_id, TAG, "%s:done\n", __func__);
+
+}
+
 int dpmaif_stop(unsigned char hif_id)
 {
 	if (dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_PWROFF
@@ -3775,9 +3814,9 @@ int dpmaif_stop(unsigned char hif_id)
 #ifdef MT6297
 	/* CG set */
 	ccci_hif_dpmaif_set_clk(0);
-	dpmaif_hw_reset(dpmaif_ctrl->md_id);
+	g_plt_ops.hw_reset();
 #else
-	dpmaif_hw_reset(dpmaif_ctrl->md_id);
+	g_plt_ops.hw_reset();
 	/* CG set */
 	ccci_hif_dpmaif_set_clk(0);
 #endif
@@ -4121,57 +4160,28 @@ DPMAIF_INIT_FAIL:
 	return ret;
 }
 
-int ccci_hif_dpmaif_probe(struct platform_device *pdev)
+static void dpmaif_init_plat_ops(void)
+{
+	if (g_ap_palt == 6893)
+		g_plt_ops.hw_reset = dpmaif_hw_reset_6893;
+	else
+		g_plt_ops.hw_reset = dpmaif_hw_reset;
+
+}
+
+int ccci_dpmaif_hif_init_v2(struct platform_device *pdev)
 {
 	int ret;
+
+	dpmaif_init_plat_ops();
 
 	ret = ccci_dpmaif_hif_init(&pdev->dev);
 	if (ret < 0) {
 		CCCI_ERROR_LOG(-1, TAG, "ccci dpmaif init fail");
 		return ret;
 	}
+
 	dpmaif_ctrl->plat_dev = pdev;
+
 	return 0;
 }
-
-
-static const struct of_device_id ccci_dpmaif_of_ids[] = {
-	{.compatible = "mediatek,dpmaif"},
-	{}
-};
-
-static struct platform_driver ccci_hif_dpmaif_driver = {
-
-	.driver = {
-		.name = "ccci_hif_dpmaif",
-		.of_match_table = ccci_dpmaif_of_ids,
-	},
-
-	.probe = ccci_hif_dpmaif_probe,
-};
-
-static int __init ccci_hif_dpmaif_init(void)
-{
-	int ret;
-
-	ret = platform_driver_register(&ccci_hif_dpmaif_driver);
-	if (ret) {
-		CCCI_ERROR_LOG(-1, TAG, "ccci hif_dpmaif driver init fail %d",
-			ret);
-		return ret;
-	}
-	return 0;
-}
-
-static void __exit ccci_hif_dpmaif_exit(void)
-{
-}
-
-module_init(ccci_hif_dpmaif_init);
-module_exit(ccci_hif_dpmaif_exit);
-
-MODULE_AUTHOR("ccci");
-MODULE_DESCRIPTION("ccci hif dpmaif driver");
-MODULE_LICENSE("GPL");
-
-

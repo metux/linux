@@ -281,6 +281,34 @@ static void init_regbase(void)
 }
 
 /*
+ * clkchk pwr_status
+ */
+static u32 pwr_ofs[STA_NUM] = {
+	[PWR_STA] = 0x16C,
+	[PWR_STA2] = 0x170,
+	[OTHER_STA] = 0x178,
+};
+
+u32 *get_spm_pwr_status_array(void)
+{
+	static void __iomem *scpsys_base, *pwr_addr[STA_NUM];
+	static u32 pwr_sta[STA_NUM];
+	int i;
+
+	for (i = 0; i < STA_NUM; i++) {
+		if (!scpsys_base)
+			scpsys_base = ioremap(0x10006000, PAGE_SIZE);
+
+		if (pwr_ofs[i] && !pwr_sta[i]) {
+			pwr_addr[i] = scpsys_base + pwr_ofs[i];
+			pwr_sta[i] = clk_readl(pwr_addr[i]);
+		}
+	}
+
+	return pwr_sta;
+}
+
+/*
  * clkchk pwr_state
  */
 static struct pvd_msk pvd_pwr_mask[] = {
@@ -500,6 +528,7 @@ static int get_vcore_opp(void)
 
 static struct clkchk_ops clkchk_mt6853_ops = {
 	.get_all_regnames = get_all_mt6853_regnames,
+	.get_spm_pwr_status_array = get_spm_pwr_status_array,
 	.get_pvd_pwr_mask = get_pvd_pwr_mask,
 	.get_off_pll_names = get_off_pll_names,
 	.get_notice_pll_names = get_notice_pll_names,

@@ -284,3 +284,4 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_of_i2c_get_board_info);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sys_set_task);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_nice_check);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_cgroup_attach);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mm_dirty_limits);

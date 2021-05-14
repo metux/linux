@@ -278,3 +278,4 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_update_topology_flags_workfn);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_of_i2c_get_board_info);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sys_set_task);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_nice_check);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_cgroup_attach);

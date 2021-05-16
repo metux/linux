@@ -1017,6 +1017,7 @@
   i2c_del_adapter
   i2c_del_driver
   i2c_get_dma_safe_msg_buf
+  i2c_new_client_device
   i2c_put_dma_safe_msg_buf
   i2c_register_driver
   i2c_transfer
@@ -1494,6 +1495,7 @@
   of_graph_is_present
   of_graph_parse_endpoint
   of_hwspin_lock_get_id
+  of_i2c_get_board_info
   of_icc_get
   of_icc_xlate_onecell
   of_iomap

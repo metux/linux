@@ -26,6 +26,7 @@
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
 #include <../misc/mediatek/iommu/iommu_iova_dbg.h>
 #endif
+#include <trace/hooks/iommu.h>
 
 struct iommu_dma_msi_page {
 	struct list_head	list;
@@ -498,6 +499,7 @@ static dma_addr_t iommu_dma_alloc_iova(struct iommu_domain *domain,
 		mtk_iova_dbg_dump(dev);
 	}
 #endif
+	trace_android_vh_iommu_alloc_iova(dev, iova, size);
 
 	return (dma_addr_t)iova << shift;
 }
@@ -519,6 +521,8 @@ static void iommu_dma_free_iova(struct iommu_dma_cookie *cookie,
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
 	mtk_iova_dbg_free(iova, size);
 #endif
+
+	trace_android_vh_iommu_free_iova(iova, size);
 }
 
 static void __iommu_dma_unmap(struct device *dev, dma_addr_t dma_addr,

@@ -8557,7 +8557,7 @@ static void alloc_contig_dump_pages(struct list_head *page_list)
 			}
 			dump_page(page, "migration failure");
 		}
-		pr_warn("total dump_pages %u skipping %u\n", nr_pages, nr_skip);
+		pr_warn("total dump_pages %lu skipping %lu\n", nr_pages, nr_skip);
 	}
 }
 #else

@@ -728,6 +728,24 @@ static int ufs_mtk_install_tracepoints(void)
 	return 0;
 }
 
+static void ufs_mtk_get_controller_version(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	int ret, ver = 0;
+
+	if (host->hw_ver.major)
+		return;
+
+	/* Set default (minimum) version anyway */
+	host->hw_ver.major = 2;
+
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_LOCALVERINFO), &ver);
+	if (!ret) {
+		if (ver >= UFS_UNIPRO_VER_1_8)
+			host->hw_ver.major = 3;
+	}
+}
+
 /**
  * ufs_mtk_init - find other essential mmio bases
  * @hba: host controller instance

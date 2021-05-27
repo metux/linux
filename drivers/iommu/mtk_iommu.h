@@ -95,6 +95,10 @@ struct mtk_iommu_plat_data {
 	u32                 flags;
 	u32                 inv_sel_reg;
 
+	u32		    tbw_reg_val;
+	u32		    reg_val;
+	int		    iommu_id;
+	enum mtk_iommu_type iommu_type;
 	unsigned int				iova_region_nr;
 	const struct mtk_iommu_iova_region	*iova_region;
 	u32		    reg_val;

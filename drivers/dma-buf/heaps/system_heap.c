@@ -10,8 +10,6 @@
  *	Andrew F. Davis <afd@ti.com>
  */
 
-#define pr_fmt(fmt) "dma_heap: system "fmt
-
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-heap.h>
@@ -161,11 +159,10 @@ static void system_heap_unmap_dma_buf(struct dma_buf_attachment *attachment,
 				      enum dma_data_direction direction)
 {
 	struct dma_heap_attachment *a = attachment->priv;
-	int attr = attachment->dma_map_attrs;;
+	int attr = attachment->dma_map_attrs;
 
 	if (a->uncached)
 		attr |= DMA_ATTR_SKIP_CPU_SYNC;
-
 	a->mapped = false;
 	dma_unmap_sgtable(attachment->dev, table, direction, attr);
 }
@@ -365,18 +362,7 @@ static void system_heap_dma_buf_release(struct dma_buf *dmabuf)
 	deferred_free(&buffer->deferred_free, system_heap_buf_free, npages);
 }
 
-static int system_heap_dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags)
-{
-	struct system_heap_buffer *buffer = dmabuf->priv;
-
-	*flags = buffer->uncached;
-
-	return 0;
-}
-
 static const struct dma_buf_ops system_heap_buf_ops = {
-	/* one attachment can only map once */
-	.cache_sgt_mapping = 1,
 	.attach = system_heap_attach,
 	.detach = system_heap_detach,
 	.map_dma_buf = system_heap_map_dma_buf,
@@ -387,7 +373,6 @@ static const struct dma_buf_ops system_heap_buf_ops = {
 	.vmap = system_heap_vmap,
 	.vunmap = system_heap_vunmap,
 	.release = system_heap_dma_buf_release,
-	.get_flags = system_heap_dma_buf_get_flags,
 };
 
 static struct page *alloc_largest_available(unsigned long size,
@@ -503,6 +488,7 @@ free_buffer:
 	list_for_each_entry_safe(page, tmp_page, &pages, lru)
 		__free_pages(page, compound_order(page));
 	kfree(buffer);
+
 	return ERR_PTR(ret);
 }
 

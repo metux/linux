@@ -159,6 +159,13 @@ static int getLedDespIndex(char *name)
  * driver functions
  ***************************************************************************/
 
+static int brightness_maptolevel(struct led_conf_info *led_dat, int brightness)
+{
+	return (((led_dat->max_hw_brightness) * brightness
+				+ ((led_dat->cdev.max_brightness) / 2))
+				/ (led_dat->cdev.max_brightness));
+}
+
 static void __led_pwm_set(struct led_pwm_info *led_info)
 {
 	int new_duty = led_info->duty;
@@ -204,6 +211,7 @@ int mt_leds_brightness_set(char *name, int level)
 {
 	struct mtk_led_data *led_dat;
 	int index;
+	int hw_brightness = 0;
 
 	index = getLedDespIndex(name);
 	if (index < 0) {
@@ -213,10 +221,15 @@ int mt_leds_brightness_set(char *name, int level)
 	led_dat = container_of(leds_info->leds[index],
 		struct mtk_led_data, desp);
 
-	if (!led_dat->conf.aal_enable) {
-		pr_notice("please enable aal function first!");
+	led_dat->conf.aal_enable = 1;
+
+	hw_brightness = brightness_maptolevel(&led_dat->conf, led_dat->last_brightness);
+
+	if (level > hw_brightness){
+		pr_notice("set brightness error %d, %d", level, hw_brightness);
 		return -1;
 	}
+
 	led_level_pwm_set(led_dat, level);
 	led_dat->last_hw_brightness = level;
 
@@ -235,13 +248,6 @@ static int led_pwm_disable(struct led_pwm_info *led_info)
 	mutex_unlock(&leds_mutex);
 
 	return 0;
-}
-
-static int brightness_maptolevel(struct led_conf_info *led_dat, int brightness)
-{
-	return (((led_dat->max_hw_brightness) * brightness
-				+ ((led_dat->cdev.max_brightness) / 2))
-				/ (led_dat->cdev.max_brightness));
 }
 
 static int led_level_set(struct led_classdev *led_cdev,
@@ -427,13 +433,8 @@ static int mtk_leds_parse_dt(struct device *dev,
 			pr_info("No max-hw-brightness, use default value 1023");
 			s_led->conf.max_hw_brightness = 1023;
 		}
-		ret = of_property_read_u32(child,
-			"aal-enable", &(s_led->conf.aal_enable));
-		if (ret) {
-			pr_info("No aal-enable, use default value 0");
-			s_led->conf.aal_enable = 0;
-		}
 		s_led->conf.limit_hw_brightness = s_led->conf.max_hw_brightness;
+
 		ret = of_property_read_string(child, "default-state", &state);
 		if (!ret) {
 			if (!strcmp(state, "half"))
@@ -443,6 +444,7 @@ static int mtk_leds_parse_dt(struct device *dev,
 			else
 				level = 0;
 		}
+		s_led->conf.aal_enable = 0;
 		pr_info("parse %s(%d) leds dt: %s, %d, %d, %d\n",
 			s_led->conf.cdev.name, num, s_led->info.name,
 			s_led->conf.cdev.max_brightness,

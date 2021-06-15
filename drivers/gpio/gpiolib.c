@@ -499,6 +499,8 @@ static int gpiochip_setup_dev(struct gpio_device *gdev)
 {
 	int ret;
 
+	printk(KERN_INFO "--> calling gcdev_register()\n");
+
 	ret = gcdev_register(gdev, gpio_devt);
 	if (ret)
 		return ret;

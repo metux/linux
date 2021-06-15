@@ -173,6 +173,8 @@ static void virtio_gpio_signal(struct virtio_gpio_priv *priv, int event,
 {
 	int mapped_irq = irq_find_mapping(priv->gc.irq.domain, pin);
 
+	printk(KERN_INFO, "received IRQ: %d\n", mapped_irq);
+
 	if ((pin < priv->num_gpios) && test_bit(pin, priv->irq_mask))
 		generic_handle_irq(mapped_irq);
 }
@@ -270,6 +272,8 @@ static int virtio_gpio_probe(struct virtio_device *vdev)
 	const char **gpio_names = NULL;
 	struct device *dev = &vdev->dev;
 	struct gpio_irq_chip *girq;
+
+	dev_info(&vdev->dev, "virtio_gpio_probe()\n");
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)

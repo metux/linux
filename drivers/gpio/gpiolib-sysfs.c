@@ -197,6 +197,8 @@ static int gpio_sysfs_request_irq(struct device *dev, unsigned char flags)
 	if (ret < 0)
 		goto err_put_kn;
 
+	dev_info(dev, "gpiolib: requesting IRQ: %d\n", data->irq);
+
 	ret = request_any_context_irq(data->irq, gpio_sysfs_irq, irq_flags,
 				"gpiolib", data);
 	if (ret < 0)
@@ -222,6 +224,8 @@ static void gpio_sysfs_free_irq(struct device *dev)
 {
 	struct gpiod_data *data = dev_get_drvdata(dev);
 	struct gpio_desc *desc = data->desc;
+
+	dev_info(dev, "qpiolib: freeing irq: %d\n", data->irq);
 
 	data->irq_flags = 0;
 	free_irq(data->irq, data);

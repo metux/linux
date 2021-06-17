@@ -1437,6 +1437,7 @@
   __scsi_iterate_devices
   sdio_signal_irq
   send_sig
+  send_sig_info
   seq_hex_dump
   seq_lseek
   seq_open

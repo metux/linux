@@ -3427,48 +3427,84 @@ out_err:
 }
 EXPORT_SYMBOL(vfs_tmpfile);
 
-static int do_tmpfile(struct nameidata *nd, unsigned flags,
-		const struct open_flags *op,
-		struct file *file)
+static struct file *do_tmpfile(struct nameidata *nd, unsigned flags,
+		const struct open_flags *op)
 {
 	struct user_namespace *mnt_userns;
 	struct dentry *child;
+	struct file *file;
 	struct path path;
-	int error = path_lookupat(nd, flags | LOOKUP_DIRECTORY, &path);
+	int error;
+
+	error = path_lookupat(nd, flags | LOOKUP_DIRECTORY, &path);
 	if (unlikely(error))
-		return error;
+		return ERR_PTR(error);
+
 	error = mnt_want_write(path.mnt);
 	if (unlikely(error))
-		goto out;
+		goto err_free_path;
+
 	mnt_userns = mnt_user_ns(path.mnt);
 	child = vfs_tmpfile(mnt_userns, path.dentry, op->mode, op->open_flag);
 	error = PTR_ERR(child);
-	if (IS_ERR(child))
-		goto out2;
+	if (error)
+		goto err_drop_write;
+
 	dput(path.dentry);
 	path.dentry = child;
 	audit_inode(nd->name, child, 0);
 	/* Don't check for other permissions, the inode was just created */
 	error = may_open(mnt_userns, &path, 0, op->open_flag);
-	if (!error)
-		error = vfs_open(&path, file);
-out2:
+	if (error)
+		goto err_drop_write;
+
+	file = alloc_empty_file(op->open_flag, current_cred());
+	error = PTR_ERR(file);
+	if (error)
+		goto err_drop_write;
+
+	error = vfs_open(&path, file);
+	if (error)
+		goto err_put_file;
+
 	mnt_drop_write(path.mnt);
-out:
 	path_put(&path);
-	return error;
+	return file;
+
+err_put_file:
+	fput(file);
+
+err_drop_write:
+	mnt_drop_write(path.mnt);
+
+err_free_path:
+	path_put(&path);
+	return ERR_PTR(error);
 }
 
-static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
+static struct file *do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 {
 	struct path path;
+	struct file *file;
 	int error = path_lookupat(nd, flags, &path);
-	if (!error) {
-		audit_inode(nd->name, path.dentry, 0);
-		error = vfs_open(&path, file);
-		path_put(&path);
+
+	if (error)
+		return PTR_ERR(error);
+
+	file = alloc_empty_file(op->open_flag, current_cred());
+	if (IS_ERR(file))
+		return file;
+
+	audit_inode(nd->name, path.dentry, 0);
+
+	error = vfs_open(&path, file);
+	if (error) {
+		fput(file);
+		file = ERR_PTR(error);
 	}
-	return error;
+
+	path_put(&path);
+	return file;
 }
 
 static struct file *path_openat(struct nameidata *nd,
@@ -3477,15 +3513,16 @@ static struct file *path_openat(struct nameidata *nd,
 	struct file *file;
 	int error;
 
-	file = alloc_empty_file(op->open_flag, current_cred());
-	if (IS_ERR(file))
-		return file;
-
-	if (unlikely(file->f_flags & __O_TMPFILE)) {
-		error = do_tmpfile(nd, flags, op, file);
-	} else if (unlikely(file->f_flags & O_PATH)) {
-		error = do_o_path(nd, flags, file);
+	if (unlikely(op->open_flags & __O_TMPFILE)) {
+		file = do_tmpfile(nd, flags, op, file);
+		error = PTR_ERR(file);
+	} else if (unlikely(op->open_flags & O_PATH)) {
+		file = do_o_path(nd, flags, file);
+		error = PTR_ERR(file);
 	} else {
+		file = make_empty_file(op);
+		if (IS_ERR(file))
+			return file;
 		const char *s = path_init(nd, flags);
 		while (!(error = link_path_walk(s, nd)) &&
 		       (s = open_last_lookups(nd, file, op)) != NULL)

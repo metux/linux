@@ -3116,7 +3116,7 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
  *
  * An error code is returned on failure.
  */
-static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
+static struct dentry *lookup_open(struct nameidata *nd, struct file **file,
 				  const struct open_flags *op,
 				  bool got_write)
 {
@@ -3132,7 +3132,9 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	if (unlikely(IS_DEADDIR(dir_inode)))
 		return ERR_PTR(-ENOENT);
 
-	file->f_mode &= ~FMODE_CREATED;
+	// fixme: need to allocate it somewhere
+
+	*file->f_mode &= ~FMODE_CREATED;
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
 		if (!dentry) {
@@ -3183,7 +3185,8 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	if (create_error)
 		open_flag &= ~O_CREAT;
 	if (dir_inode->i_op->atomic_open) {
-		dentry = atomic_open(nd, dentry, file, open_flag, mode);
+		*file = alloc_empty_file(open_flag, current_cred());
+		dentry = atomic_open(nd, dentry, *file, open_flag, mode);
 		if (unlikely(create_error) && dentry == ERR_PTR(-ENOENT))
 			dentry = ERR_PTR(create_error);
 		return dentry;
@@ -3229,7 +3232,7 @@ out_dput:
 }
 
 static const char *open_last_lookups(struct nameidata *nd,
-		   struct file *file, const struct open_flags *op)
+		   struct file **file, const struct open_flags *op)
 {
 	struct dentry *dir = nd->path.dentry;
 	int open_flag = op->open_flag;
@@ -3240,6 +3243,11 @@ static const char *open_last_lookups(struct nameidata *nd,
 	const char *res;
 
 	nd->flags |= op->intent;
+
+	// FIXME: need to free it at some places !
+	*file = alloc_empty_file(op->open_flag, current_cred());
+	if (IS_ERR(*file))
+		return ERR_CAST(*file);
 
 	if (nd->last_type != LAST_NORM) {
 		if (nd->depth)
@@ -3278,12 +3286,18 @@ static const char *open_last_lookups(struct nameidata *nd,
 		 * dropping this one anyway.
 		 */
 	}
+
+	// FIXME: need to free it at some places !
+	*file = alloc_empty_file(op->open_flag, current_cred());
+	if (IS_ERR(*file))
+		return ERR_CAST(*file);
+
 	if (open_flag & O_CREAT)
 		inode_lock(dir->d_inode);
 	else
 		inode_lock_shared(dir->d_inode);
-	dentry = lookup_open(nd, file, op, got_write);
-	if (!IS_ERR(dentry) && (file->f_mode & FMODE_CREATED))
+	dentry = lookup_open(nd, *file, op, got_write);
+	if (!IS_ERR(dentry) && (*file->f_mode & FMODE_CREATED))
 		fsnotify_create(dir->d_inode, dentry);
 	if (open_flag & O_CREAT)
 		inode_unlock(dir->d_inode);
@@ -3293,10 +3307,11 @@ static const char *open_last_lookups(struct nameidata *nd,
 	if (got_write)
 		mnt_drop_write(nd->path.mnt);
 
+	// FIXME: do we need to fput() here ?
 	if (IS_ERR(dentry))
 		return ERR_CAST(dentry);
 
-	if (file->f_mode & (FMODE_OPENED | FMODE_CREATED)) {
+	if (*file->f_mode & (FMODE_OPENED | FMODE_CREATED)) {
 		dput(nd->path.dentry);
 		nd->path.dentry = dentry;
 		return NULL;

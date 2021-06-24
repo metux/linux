@@ -40,5 +40,8 @@
 #include "ksym.h"
 #include "mkp_api.h"
 #include "mkp_hvc.h"
+#include "helper.h"
+#include "mkp_module.h"
+#include "mkp_demo.h"
 
 #endif /* _MKP_H */

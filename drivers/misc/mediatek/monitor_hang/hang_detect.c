@@ -20,6 +20,7 @@
 #include <linux/sched/clock.h>
 #include <linux/sched/debug.h>
 #include <linux/sched/rt.h>
+#include <linux/sched/signal.h>
 #include <linux/sched/task.h>
 #include <linux/semaphore.h>
 #include <linux/slab.h>
@@ -84,10 +85,6 @@ static void monitor_hang_kick(int lParam);
 static void reset_hang_info(void)
 {
 	Hang_Detect_first = false;
-#ifdef CONFIG_MTK_HANG_DETECT_DB
-	memset(Hang_Info, 0, MaxHangInfoSize);
-	Hang_Info_Size = 0;
-#endif
 }
 
 int add_white_list(char *name)
@@ -1078,8 +1075,11 @@ static void show_task_backtrace(void)
 	log_hang_info("dump backtrace end: %llu\n", local_clock());
 	if (Hang_Detect_first == false) {
 		if (aee_aed_task)
-			send_sig_info(SIGUSR1, SEND_SIG_PRIV,
-				aee_aed_task);
+			send_sig(SIGUSR1, aee_aed_task, 1);
+		if (system_server_task)
+			send_sig(SIGQUIT, system_server_task, 1);
+		if (monkey_task)
+			send_sig(SIGQUIT, monkey_task, 1);
 	}
 }
 
@@ -1206,6 +1206,12 @@ static int hang_detect_thread(void *arg)
 				log_hang_info(
 					"[Hang_detect]Dump the %d time process bt.\n",
 					Hang_Detect_first ? 2 : 1);
+#ifdef CONFIG_MTK_HANG_DETECT_DB
+				if (!Hang_Detect_first) {
+					memset(Hang_Info, 0, MaxHangInfoSize);
+					Hang_Info_Size = 0;
+				}
+#endif
 				if (Hang_Detect_first == true
 					&& dump_bt_done != 1) {
 		/* some time dump thread will block in dumping native bt */

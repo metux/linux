@@ -7,11 +7,15 @@ static int srvfs_dir_unlink(struct inode *inode, struct dentry *dentry)
 {
 	struct srvfs_fileref *fileref = dentry->d_inode->i_private;
 
-	if (fileref == NULL)
+	if (fileref == NULL) {
+		pr_err("srvfs unlink: dentry's inode has no fileref\n");
 		return -EFAULT;
+	}
 
 	d_delete(dentry);
 	dput(dentry);
+
+	pr_info("srvfs unlink: sucessfully unlinked\n");
 
 	return 0;
 }

@@ -802,6 +802,8 @@ struct file *unbox_file(struct file *f)
 	   we can just call fput() on it.
 	*/
 
+	pr_info("unboxing file ...");
+
 	boxed = f->boxed_file;
 	fput(f);
 

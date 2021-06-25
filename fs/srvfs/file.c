@@ -19,8 +19,10 @@ static int srvfs_file_open(struct inode *inode, struct file *file)
 
 	if (fileref->file) {
 		pr_info("open inode: already assigned another file\n");
-		srvfs_proxy_fill_fops(file);
-//		file->f_op = &proxy_file_ops;
+//		srvfs_proxy_fill_fops(file);
+		get_file_rcu(fileref->file);
+		file->boxed_file = fileref->file;
+		// FIXME: need to inc file refcounter
 	}
 	else {
 		pr_info("open inode: no file assigned yet\n");
@@ -159,7 +161,7 @@ struct file_operations srvfs_file_ops = {
 	.release	= srvfs_file_release,
 };
 
-int srvfs_insert_file (struct super_block *sb, struct dentry *dentry)
+int srvfs_insert_file(struct super_block *sb, struct dentry *dentry)
 {
 	struct inode *inode;
 	struct srvfs_fileref *fileref;
@@ -175,9 +177,9 @@ int srvfs_insert_file (struct super_block *sb, struct dentry *dentry)
 
 	atomic_set(&fileref->counter, 0);
 
-	inode_init_owner(inode, sb->s_root->d_inode, mode);
+	inode_init_owner(&init_user_ns, inode, sb->s_root->d_inode, mode);
 
-	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
 	inode->i_fop = &srvfs_file_ops;
 	inode->i_ino = srvfs_inode_id(inode->i_sb);
 	inode->i_private = fileref;

@@ -16,7 +16,7 @@
 
 #define PROXY_NO_BACKEND \
 	pr_info("%s() no backend file handler\n", __FUNCTION__); \
-	BUG_ON(1)
+	BUG_ON(1);
 
 #define PROXY_PASS_FILE(opname, args...) \
 	PROXY_INTRO \
@@ -85,10 +85,10 @@ static int proxy_setlease(struct file *proxy, long arg,
 static int proxy_lock(struct file *proxy, int cmd, struct file_lock *fl)
 	PASS_TO_FILE(lock, target, cmd, fl);
 
-static ssize_t proxy_dedupe_file_range(struct file *proxy, u64 loff, u64 olen,
-				       struct file *dst_file, u64 dst_loff)
-	PASS_TO_FILE(dedupe_file_range, target, loff, olen, dst_file,
-		     dst_loff);
+//static ssize_t proxy_dedupe_file_range(struct file *proxy, u64 loff, u64 olen,
+//				       struct file *dst_file, u64 dst_loff)
+//	PASS_TO_FILE(dedupe_file_range, target, loff, olen, dst_file,
+//		     dst_loff);
 
 static int proxy_flush(struct file *proxy, fl_owner_t id)
 	PASS_TO_FILE(flush, target, id);
@@ -113,11 +113,11 @@ static ssize_t proxy_copy_file_range(struct file *proxy, loff_t pos_in,
 	PASS_TO_FILE(copy_file_range, target, pos_in, file_out,
 		     pos_out, size, flags);
 
-static int proxy_clone_file_range(struct file *proxy, loff_t pos_in,
-				  struct file *file_out, loff_t pos_out,
-				  u64 len)
-	PASS_TO_FILE(clone_file_range, target, pos_in, file_out,
-		    pos_out, len);
+//static int proxy_clone_file_range(struct file *proxy, loff_t pos_in,
+//				  struct file *file_out, loff_t pos_out,
+//				  u64 len)
+//	PASS_TO_FILE(clone_file_range, target, pos_in, file_out,
+//		    pos_out, len);
 
 static long proxy_fallocate(struct file *proxy, int mode, loff_t offset,
 			    loff_t len)
@@ -286,8 +286,8 @@ void srvfs_proxy_fill_fops(struct file *file)
 	COPY_FILEOP(fallocate);
 	COPY_FILEOP(show_fdinfo);
 	COPY_FILEOP(copy_file_range);
-	COPY_FILEOP(clone_file_range);
-	COPY_FILEOP(dedupe_file_range);
+//	COPY_FILEOP(clone_file_range);
+//	COPY_FILEOP(dedupe_file_range);
 	COPY_FILEOP(read_iter);
 	COPY_FILEOP(write_iter);
 	COPY_FILEOP(iterate);

@@ -20,7 +20,9 @@ static int srvfs_dir_unlink(struct inode *inode, struct dentry *dentry)
 	return 0;
 }
 
-static int srvfs_dir_create (struct inode *inode, struct dentry *dentry, umode_t mode, bool excl)
+static int srvfs_dir_create(struct user_namespace *mnt_userns,
+			    struct inode *inode, struct dentry *dentry,
+			    umode_t mode, bool excl)
 {
 	return srvfs_insert_file(inode->i_sb, dget(dentry));
 }

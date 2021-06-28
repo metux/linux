@@ -385,6 +385,11 @@ DECLARE_RESTRICTED_HOOK(android_rvh_force_compatible_pre,
 DECLARE_RESTRICTED_HOOK(android_rvh_force_compatible_post,
 	TP_PROTO(void *unused),
 	TP_ARGS(unused), 1);
+
+DECLARE_HOOK(android_vh_setscheduler_uclamp,
+	TP_PROTO(struct task_struct *tsk, int clamp_id, unsigned int value),
+	TP_ARGS(tsk, clamp_id, value));
+
 /* macro versions of hooks are no longer required */
 
 DECLARE_RESTRICTED_HOOK(android_vh_nice_check,

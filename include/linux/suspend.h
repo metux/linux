@@ -8,6 +8,7 @@
 #include <linux/pm.h>
 #include <linux/mm.h>
 #include <linux/freezer.h>
+#include <linux/android_kabi.h>
 #include <asm/errno.h>
 
 #ifdef CONFIG_VT
@@ -185,6 +186,8 @@ struct platform_suspend_ops {
 	bool (*suspend_again)(void);
 	void (*end)(void);
 	void (*recover)(void);
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct platform_s2idle_ops {
@@ -195,6 +198,8 @@ struct platform_s2idle_ops {
 	void (*restore_early)(void);
 	void (*restore)(void);
 	void (*end)(void);
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 #ifdef CONFIG_SUSPEND
@@ -426,6 +431,8 @@ struct platform_hibernation_ops {
 	int (*pre_restore)(void);
 	void (*restore_cleanup)(void);
 	void (*recover)(void);
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 #ifdef CONFIG_HIBERNATION
@@ -473,9 +480,9 @@ static inline int hibernate_quiet_exec(int (*func)(void *data), void *data) {
 #endif /* CONFIG_HIBERNATION */
 
 #ifdef CONFIG_HIBERNATION_SNAPSHOT_DEV
-int is_hibernate_resume_dev(const struct inode *);
+int is_hibernate_resume_dev(dev_t dev);
 #else
-static inline int is_hibernate_resume_dev(const struct inode *i) { return 0; }
+static inline int is_hibernate_resume_dev(dev_t dev) { return 0; }
 #endif
 
 /* Hibernation and suspend events */

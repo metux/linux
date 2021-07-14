@@ -136,6 +136,7 @@ struct cmdq_client {
 	struct mbox_chan *chan;
 	void *cl_priv;
 	struct mutex chan_mutex;
+	bool use_iommu;
 };
 
 struct cmdq_operand {

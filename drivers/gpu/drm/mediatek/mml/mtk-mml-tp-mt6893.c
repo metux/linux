@@ -551,5 +551,5 @@ static __exit void mml_topology_ip_exit(void)
 module_exit(mml_topology_ip_exit);
 
 MODULE_AUTHOR("Dennis-YC Hsieh <dennis-yc.hsieh@mediatek.com>");
-MODULE_DESCRIPTION("MediaTek SoC display MML topology");
+MODULE_DESCRIPTION("MediaTek SoC display MML for MT6893");
 MODULE_LICENSE("GPL v2");

@@ -293,7 +293,7 @@ static ssize_t mdla_rv_dbg_mem_write(struct file *flip,
 	buf[count] = '\0';
 
 	if (kstrtouint(buf, 10, &size) != 0) {
-		ret = -EINVAL;
+		count = -EINVAL;
 		goto out;
 	}
 
@@ -321,7 +321,7 @@ static void mdla_plat_dbgfs_init(struct device *dev, struct dentry *parent)
 {
 	struct mdla_dbgfs_ipi_file *file;
 	u32 mask;
-	int i;
+	u32 i;
 
 	if (!dev || !parent)
 		return;

@@ -8,6 +8,7 @@
 
 #include <linux/bitops.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
+#include <linux/pm_qos.h>
 
 /*
  * Vendor specific UFSHCI Registers
@@ -117,18 +118,41 @@ struct ufs_mtk_hw_ver {
 struct ufs_mtk_host {
 	struct phy *mphy;
 	struct regulator *reg_va09;
-	struct ufs_mtk_hw_ver hw_ver;
 	struct reset_control *hci_reset;
 	struct reset_control *unipro_reset;
 	struct reset_control *crypto_reset;
 	struct ufs_hba *hba;
 	struct ufs_mtk_crypt_cfg *crypt;
+	struct ufs_mtk_hw_ver hw_ver;
 	enum ufs_mtk_host_caps caps;
 	bool mphy_powered_on;
 	bool unipro_lpm;
 	bool ref_clk_enabled;
 	u16 ref_clk_ungating_wait_us;
 	u16 ref_clk_gating_wait_us;
+	bool pm_qos_init;
+	struct pm_qos_request pm_qos_req;
+	bool qos_allowed;
+	bool qos_enabled;
+	bool boot_device;
+
+	struct mutex rpmb_lock;
 };
+
+enum {
+	BOOTDEV_SDMMC = 1,
+	BOOTDEV_UFS   = 2
+};
+
+struct tag_bootmode {
+	u32 size;
+	u32 tag;
+	u32 bootmode;
+	u32 boottype;
+};
+
+#if IS_ENABLED(CONFIG_RPMB)
+struct rpmb_dev *ufs_mtk_rpmb_get_raw_dev(void);
+#endif
 
 #endif /* !_UFS_MEDIATEK_H */

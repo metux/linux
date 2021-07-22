@@ -815,7 +815,7 @@ s32 cmdq_pkt_write_value_addr_reuse(struct cmdq_pkt *pkt, dma_addr_t addr,
 
 	*curr_buf_va = cmdq_pkt_get_curr_buf_va(pkt) - CMDQ_INST_SIZE;
 	*inst_offset = pkt->cmd_buf_size - CMDQ_INST_SIZE;
-	cmdq_msg("%s: curr_buf_va:%p idx:%u",
+	cmdq_log("%s: curr_buf_va:%p idx:%u",
 		__func__, *curr_buf_va, *inst_offset);
 	return err;
 }
@@ -828,7 +828,7 @@ void cmdq_pkt_reuse_buf_va(struct cmdq_pkt *pkt, struct cmdq_reuse *reuse,
 
 	for (i = 0; i < count; i++) {
 		*reuse[i].va = (*reuse[i].va & GENMASK(63, 32)) | reuse[i].val;
-		cmdq_msg("%s:curr reuse:%d va:%p val:%#x inst:%#llx",
+		cmdq_log("%s:curr reuse:%d va:%p val:%#x inst:%#llx",
 			__func__, i, reuse[i].va, reuse[i].val, *reuse[i].va);
 	}
 }
@@ -890,7 +890,7 @@ s32 cmdq_pkt_copy(struct cmdq_pkt *dst, struct cmdq_pkt *src)
 	}
 
 	list_for_each_entry_safe(buf, tmp, &dst->buf, list_entry) {
-		cmdq_msg("%s: buf:%p va:%p pa:%pa tmp:%p",
+		cmdq_log("%s: buf:%p va:%p pa:%pa tmp:%p",
 			__func__, buf, buf->va_base, &buf->pa_base, tmp);
 
 		if (!list_is_last(&buf->list_entry, &dst->buf)) {
@@ -898,7 +898,7 @@ s32 cmdq_pkt_copy(struct cmdq_pkt *dst, struct cmdq_pkt *src)
 				CMDQ_INST_SIZE;
 			*va = ((u64)(CMDQ_CODE_JUMP << 24 | 1) << 32) |
 				CMDQ_REG_SHIFT_ADDR(tmp->pa_base);
-			cmdq_msg("%s: va:%p inst:%#llx", __func__, va, *va);
+			cmdq_log("%s: va:%p inst:%#llx", __func__, va, *va);
 		}
 	}
 

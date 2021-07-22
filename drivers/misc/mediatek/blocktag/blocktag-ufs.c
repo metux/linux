@@ -155,7 +155,7 @@ void ufs_mtk_biolog_send_command(unsigned int task_id,
 		return;
 
 	if (cmd->request)
-		mtk_btag_commit_req(cmd->request);
+		mtk_btag_commit_req(cmd->request, false);
 
 	tsk->lba = scsi_cmnd_lba(cmd);
 	tsk->len = scsi_cmnd_len(cmd);
@@ -458,7 +458,7 @@ int ufs_mtk_biolog_init(bool qos_allowed, bool boot_device)
 		ufs_mtk_btag_vops.earaio_enabled = true;
 
 	if (boot_device)
-		ufs_mtk_btag_vops.boot_device = true;
+		ufs_mtk_btag_vops.boot_device[BTAG_STORAGE_UFS] = true;
 
 	btag = mtk_btag_alloc("ufs",
 		UFS_BIOLOG_RINGBUF_MAX,

@@ -59,6 +59,7 @@ static unsigned int prev_freq[CM_MGR_CPU_CLUSTER];
 
 static int cm_mgr_init_done;
 static int cm_mgr_idx = -1;
+spinlock_t cm_mgr_lock;
 
 u32 cm_mgr_get_perfs_mt6893(int num)
 {
@@ -302,9 +303,12 @@ void check_cm_mgr_status_mt6893(unsigned int cluster, unsigned int freq,
 		unsigned int idx)
 {
 	unsigned int bcpu_opp_max;
+	unsigned long spinlock_save_flag;
 
 	if (!cm_mgr_init_done)
 		return;
+
+	spin_lock_irqsave(&cm_mgr_lock, spinlock_save_flag);
 
 	prev_freq_idx[cluster] = idx;
 	prev_freq[cluster] = freq;
@@ -314,6 +318,7 @@ void check_cm_mgr_status_mt6893(unsigned int cluster, unsigned int freq,
 	else
 		bcpu_opp_max = prev_freq_idx[CM_MGR_BB];
 
+	spin_unlock_irqrestore(&cm_mgr_lock, spinlock_save_flag);
 	cm_mgr_update_dram_by_cpu_opp(bcpu_opp_max);
 }
 EXPORT_SYMBOL_GPL(check_cm_mgr_status_mt6893);
@@ -327,6 +332,7 @@ static int platform_cm_mgr_probe(struct platform_device *pdev)
 #endif /* CONFIG_MTK_DVFSRC */
 	struct icc_path *bw_path;
 
+	spin_lock_init(&cm_mgr_lock);
 	ret = cm_mgr_common_init();
 	if (ret) {
 		pr_info("[CM_MGR] FAILED TO INIT(%d)\n", ret);

@@ -31,6 +31,9 @@
 #include <linux/vmalloc.h>
 #include <asm/dma.h>
 #include <linux/aer.h>
+#ifndef  __GENKSYMS__
+#include <trace/hooks/pci.h>
+#endif
 #include "pci.h"
 
 DEFINE_MUTEX(pci_slot_mutex);
@@ -46,7 +49,7 @@ EXPORT_SYMBOL(isa_dma_bridge_buggy);
 int pci_pci_problems;
 EXPORT_SYMBOL(pci_pci_problems);
 
-unsigned int pci_pm_d3_delay;
+unsigned int pci_pm_d3hot_delay;
 
 static void pci_pme_list_scan(struct work_struct *work);
 
@@ -63,13 +66,17 @@ struct pci_pme_device {
 
 static void pci_dev_d3_sleep(struct pci_dev *dev)
 {
-	unsigned int delay = dev->d3_delay;
+	unsigned int delay = dev->d3hot_delay;
+	int err = -EOPNOTSUPP;
 
-	if (delay < pci_pm_d3_delay)
-		delay = pci_pm_d3_delay;
+	if (delay < pci_pm_d3hot_delay)
+		delay = pci_pm_d3hot_delay;
 
-	if (delay)
-		msleep(delay);
+	if (delay) {
+		trace_android_rvh_pci_d3_sleep(dev, delay, &err);
+		if (err == -EOPNOTSUPP)
+			msleep(delay);
+	}
 }
 
 #ifdef CONFIG_PCI_DOMAINS
@@ -98,7 +105,19 @@ unsigned long pci_hotplug_mmio_pref_size = DEFAULT_HOTPLUG_MMIO_PREF_SIZE;
 #define DEFAULT_HOTPLUG_BUS_SIZE	1
 unsigned long pci_hotplug_bus_size = DEFAULT_HOTPLUG_BUS_SIZE;
 
+
+/* PCIe MPS/MRRS strategy; can be overridden by kernel command-line param */
+#ifdef CONFIG_PCIE_BUS_TUNE_OFF
+enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_TUNE_OFF;
+#elif defined CONFIG_PCIE_BUS_SAFE
+enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_SAFE;
+#elif defined CONFIG_PCIE_BUS_PERFORMANCE
+enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_PERFORMANCE;
+#elif defined CONFIG_PCIE_BUS_PEER2PEER
+enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_PEER2PEER;
+#else
 enum pcie_bus_config_types pcie_bus_config = PCIE_BUS_DEFAULT;
+#endif
 
 /*
  * The default CLS is used if arch didn't set CLS explicitly and not
@@ -873,6 +892,10 @@ static void pci_std_enable_acs(struct pci_dev *dev)
 	/* Upstream Forwarding */
 	ctrl |= (cap & PCI_ACS_UF);
 
+	/* Enable Translation Blocking for external devices */
+	if (dev->external_facing || dev->untrusted)
+		ctrl |= (cap & PCI_ACS_TB);
+
 	pci_write_config_word(dev, pos + PCI_ACS_CTRL, ctrl);
 }
 
@@ -1046,7 +1069,7 @@ static int pci_raw_set_power_state(struct pci_dev *dev, pci_power_t state)
 		if ((pmcsr & PCI_PM_CTRL_STATE_MASK) == PCI_D3hot
 		 && !(pmcsr & PCI_PM_CTRL_NO_SOFT_RESET))
 			need_restore = true;
-		/* Fall-through - force to D0 */
+		fallthrough;	/* force to D0 */
 	default:
 		pmcsr = 0;
 		break;
@@ -1062,7 +1085,7 @@ static int pci_raw_set_power_state(struct pci_dev *dev, pci_power_t state)
 	if (state == PCI_D3hot || dev->current_state == PCI_D3hot)
 		pci_dev_d3_sleep(dev);
 	else if (state == PCI_D2 || dev->current_state == PCI_D2)
-		msleep(PCI_PM_D2_DELAY);
+		udelay(PCI_PM_D2_DELAY);
 
 	pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 	dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
@@ -2528,7 +2551,7 @@ static pci_power_t pci_target_state(struct pci_dev *dev, bool wakeup)
 		case PCI_D2:
 			if (pci_no_d1d2(dev))
 				break;
-			/* else, fall through */
+			fallthrough;
 		default:
 			target_state = state;
 		}
@@ -3000,7 +3023,7 @@ void pci_pm_init(struct pci_dev *dev)
 	}
 
 	dev->pm_cap = pm;
-	dev->d3_delay = PCI_PM_D3_WAIT;
+	dev->d3hot_delay = PCI_PM_D3HOT_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
 	dev->bridge_d3 = pci_bridge_d3_possible(dev);
 	dev->d3cold_allowed = true;
@@ -3025,7 +3048,7 @@ void pci_pm_init(struct pci_dev *dev)
 			 (pmc & PCI_PM_CAP_PME_D0) ? " D0" : "",
 			 (pmc & PCI_PM_CAP_PME_D1) ? " D1" : "",
 			 (pmc & PCI_PM_CAP_PME_D2) ? " D2" : "",
-			 (pmc & PCI_PM_CAP_PME_D3) ? " D3hot" : "",
+			 (pmc & PCI_PM_CAP_PME_D3hot) ? " D3hot" : "",
 			 (pmc & PCI_PM_CAP_PME_D3cold) ? " D3cold" : "");
 		dev->pme_support = pmc >> PCI_PM_CAP_PME_SHIFT;
 		dev->pme_poll = true;
@@ -4624,7 +4647,7 @@ static int pci_af_flr(struct pci_dev *dev, int probe)
  *
  * NOTE: This causes the caller to sleep for twice the device power transition
  * cooldown period, which for the D0->D3hot and D3hot->D0 transitions is 10 ms
- * by default (i.e. unless the @dev's d3_delay field has a different value).
+ * by default (i.e. unless the @dev's d3hot_delay field has a different value).
  * Moreover, only devices in D0 can be reset by this function.
  */
 static int pci_pm_reset(struct pci_dev *dev, int probe)
@@ -4704,9 +4727,7 @@ static bool pcie_wait_for_link_delay(struct pci_dev *pdev, bool active,
 	}
 	if (active && ret)
 		msleep(delay);
-	else if (ret != active)
-		pci_info(pdev, "Data Link Layer Link Active not %s in 1000 msec\n",
-			active ? "set" : "cleared");
+
 	return ret == active;
 }
 
@@ -4831,6 +4852,7 @@ void pci_bridge_wait_for_secondary_bus(struct pci_dev *dev)
 			delay);
 		if (!pcie_wait_for_link_delay(dev, true, delay)) {
 			/* Did not train, no need to wait any further */
+			pci_info(dev, "Data Link Layer Link Active not set in 1000 msec\n");
 			return;
 		}
 	}

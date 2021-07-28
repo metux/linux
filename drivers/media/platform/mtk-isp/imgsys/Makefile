@@ -7,6 +7,7 @@ ccflags-y += -I$(srctree)/drivers/media/platform/mtk-isp/mtk-hcp
 ccflags-$(CONFIG_MTK_CMDQ_MBOX_EXT) += -I$(srctree)/drivers/misc/mediatek/cmdq/mailbox/
 ccflags-y += -I$(srctree)/drivers/media/platform/mtk-isp/imgsys/platforms/
 ccflags-y += -I$(srctree)/drivers/media/platform/mtk-isp/imgsys/platforms/isp71
+ccflags-y += -I$(srctree)/drivers/media/platform/mtk-isp/mtk-ipesys-me/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/mtk-interconnect/
 ccflags-y += -I$(srctree)/drivers/iommu
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/iommu
@@ -27,7 +28,6 @@ platforms/isp71/modules/mtk_imgsys-dip.o \
 platforms/isp71/modules/mtk_imgsys-traw.o \
 platforms/isp71/modules/mtk_imgsys-pqdip.o \
 platforms/isp71/modules/mtk_imgsys-wpe.o \
-platforms/isp71/modules/mtk_imgsys-me.o \
 platforms/isp71/modules/mtk_imgsys-adl.o
 
 mtk_imgsys_v4l2-objs :=\

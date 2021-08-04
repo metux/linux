@@ -3170,7 +3170,7 @@ void mtk_crtc_enable_iommu_runtime(struct mtk_drm_crtc *mtk_crtc,
 	if (priv->data->mmsys_id == MMSYS_MT6983) {
 		/*set smi_larb_sec_con reg as 1*/
 		mtk_crtc_exec_atf_prebuilt_instr(mtk_crtc, handle);
-		}
+	}
 #endif
 
 	mtk_crtc_enable_iommu(mtk_crtc, handle);

@@ -514,7 +514,7 @@ static void mtk_dsi_post_cmd(struct mtk_dsi *dsi,
 
 static void mtk_dsi_dphy_timconfig(struct mtk_dsi *dsi, void *handle)
 {
-
+	struct mtk_drm_private *priv = dsi->ddp_comp.mtk_crtc->base.dev->dev_private;
 	struct mtk_dsi_phy_timcon *phy_timcon = NULL;
 	u32 lpx = 0, hs_prpr = 0, hs_zero = 0, hs_trail = 0;
 	u32 ta_get = 0, ta_sure = 0, ta_go = 0, da_hs_exit = 0;
@@ -535,11 +535,12 @@ static void mtk_dsi_dphy_timconfig(struct mtk_dsi *dsi, void *handle)
 	hs_trail = NS_TO_CYCLE((0x4 * ui + 0x50) *
 		dsi->data_rate, 0x1F40) + 0x1;
 
-#ifdef MIPI_TX_MT6983
-	lpx = (lpx % 2) ? lpx : lpx + 1;
-	hs_prpr = (hs_prpr % 2) ? hs_prpr : hs_prpr + 1;
-	hs_prpr = hs_prpr > 7 ? hs_prpr : 7;
-#endif
+	//MIPI_TX_MT6983
+	if (priv->data->mmsys_id == MMSYS_MT6983) {
+		lpx = (lpx % 2) ? lpx : lpx + 1;
+		hs_prpr = (hs_prpr % 2) ? hs_prpr : hs_prpr + 1;
+		hs_prpr = hs_prpr > 7 ? hs_prpr : 7;
+	}
 	ta_get = 5 * lpx;
 	ta_sure = 3 * lpx / 2;
 	ta_go = 4 * lpx;
@@ -576,6 +577,14 @@ static void mtk_dsi_dphy_timconfig(struct mtk_dsi *dsi, void *handle)
 	clk_hs_prpr = CHK_SWITCH(phy_timcon->clk_hs_prpr, clk_hs_prpr);
 	clk_hs_exit = CHK_SWITCH(phy_timcon->clk_hs_exit, clk_hs_exit);
 	clk_hs_post = CHK_SWITCH(phy_timcon->clk_hs_post, clk_hs_post);
+
+	//MIPI_TX_MT6983
+	if (priv->data->mmsys_id == MMSYS_MT6983) {
+		lpx = (lpx % 2) ? lpx + 1 : lpx; //lpx must be even
+		hs_prpr = (hs_prpr % 2) ? hs_prpr + 1 : hs_prpr; //hs_prpr must be even
+		hs_prpr = hs_prpr >= 6 ? hs_prpr : 6; //hs_prpr must be more than 6
+		da_hs_exit = (da_hs_exit % 2) ? da_hs_exit + 1 : da_hs_exit; //must be odd
+	}
 
 CONFIG_REG:
 	value = REG_FLD_VAL(FLD_LPX, lpx)
@@ -624,7 +633,7 @@ CONFIG_REG:
 
 static void mtk_dsi_cphy_timconfig(struct mtk_dsi *dsi, void *handle)
 {
-
+	struct mtk_drm_private *priv = dsi->ddp_comp.mtk_crtc->base.dev->dev_private;
 	struct mtk_dsi_phy_timcon *phy_timcon = NULL;
 	u32 lpx = 0, hs_prpr = 0, hs_zero = 0, hs_trail = 0;
 	u32 ta_get = 0, ta_sure = 0, ta_go = 0, da_hs_exit = 0;
@@ -680,6 +689,14 @@ static void mtk_dsi_cphy_timconfig(struct mtk_dsi *dsi, void *handle)
 	clk_hs_prpr = CHK_SWITCH(phy_timcon->clk_hs_prpr, clk_hs_prpr);
 	clk_hs_exit = CHK_SWITCH(phy_timcon->clk_hs_exit, clk_hs_exit);
 	clk_hs_post = CHK_SWITCH(phy_timcon->clk_hs_post, clk_hs_post);
+
+	//MIPI_TX_MT6983
+	if (priv->data->mmsys_id == MMSYS_MT6983) {
+		lpx = (lpx % 2) ? lpx + 1 : lpx; //lpx must be even
+		hs_prpr = (hs_prpr % 2) ? hs_prpr + 1 : hs_prpr; //hs_prpr must be even
+		hs_prpr = hs_prpr >= 6 ? hs_prpr : 6; //hs_prpr must be more than 6
+		da_hs_exit = (da_hs_exit % 2) ? da_hs_exit + 1 : da_hs_exit; //must be odd
+	}
 
 CONFIG_REG:
 	dsi->data_phy_cycle = hs_prpr + hs_zero + da_hs_exit + lpx + 5;
@@ -1004,6 +1021,8 @@ static int mtk_dsi_set_data_rate(struct mtk_dsi *dsi)
 
 static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 {
+	struct mtk_drm_private *priv = dsi->ddp_comp.mtk_crtc->base.dev->dev_private;
+
 #ifndef MTK_DRM_BRINGUP_STAGE
 	struct device *dev = dsi->dev;
 #endif
@@ -1021,11 +1040,21 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	if (dsi->ext) {
 		if (dsi->ext->params->is_cphy)
-			mtk_mipi_tx_cphy_lane_config(dsi->phy, dsi->ext,
-						     !!dsi->slave_dsi);
+			if (priv->data->mmsys_id == MMSYS_MT6983) {
+				mtk_mipi_tx_cphy_lane_config_mt6983(dsi->phy, dsi->ext,
+							     !!dsi->slave_dsi);
+			} else {
+				mtk_mipi_tx_cphy_lane_config(dsi->phy, dsi->ext,
+							     !!dsi->slave_dsi);
+			}
 		else
-			mtk_mipi_tx_dphy_lane_config(dsi->phy, dsi->ext,
-						     !!dsi->slave_dsi);
+			if (priv->data->mmsys_id == MMSYS_MT6983) {
+				mtk_mipi_tx_dphy_lane_config_mt6983(dsi->phy, dsi->ext,
+							     !!dsi->slave_dsi);
+			} else {
+				mtk_mipi_tx_dphy_lane_config(dsi->phy, dsi->ext,
+							     !!dsi->slave_dsi);
+			}
 	}
 
 	pm_runtime_get_sync(dsi->host.dev);
@@ -1076,9 +1105,15 @@ static bool mtk_dsi_clk_hs_state(struct mtk_dsi *dsi)
 
 static void mtk_dsi_clk_hs_mode(struct mtk_dsi *dsi, bool enter)
 {
-#ifdef MIPI_TX_MT6983
-	writel(0x55, dsi->regs + DSI_PHY_LCPAT);
-#endif
+	struct mtk_drm_private *priv = dsi->ddp_comp.mtk_crtc->base.dev->dev_private;
+
+	//MIPI_TX_MT6983
+	if (priv->data->mmsys_id == MMSYS_MT6983) {
+		if (dsi->ext && dsi->ext->params->is_cphy)
+			writel(0xAA, dsi->regs + DSI_PHY_LCPAT);
+		else
+			writel(0x55, dsi->regs + DSI_PHY_LCPAT);
+	}
 	if (enter && !mtk_dsi_clk_hs_state(dsi))
 		mtk_dsi_mask(dsi, DSI_PHY_LCCON, LC_HS_TX_EN, LC_HS_TX_EN);
 	else if (!enter && mtk_dsi_clk_hs_state(dsi))

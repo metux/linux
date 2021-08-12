@@ -145,7 +145,6 @@ static void mtk_gamma_config(struct mtk_ddp_comp *comp,
 static int mtk_gamma_write_lut_reg(struct mtk_ddp_comp *comp,
 	struct cmdq_pkt *handle, int lock)
 {
-/*
 	struct DISP_GAMMA_LUT_T *gamma_lut;
 	int i;
 	int ret = 0;
@@ -196,8 +195,6 @@ gamma_write_lut_unlock:
 		mutex_unlock(&g_gamma_global_lock);
 
 	return ret;
-*/
-	return 0;
 }
 
 static int mtk_gamma_write_12bit_lut_reg(struct mtk_ddp_comp *comp,

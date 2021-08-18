@@ -382,9 +382,7 @@ enum cmdq_smc_request {
 	CMDQ_ENABLE_DEBUG,
 };
 
-#ifdef CMDQ_SMC_SUPPORT
 static atomic_t cmdq_dbg_ctrl = ATOMIC_INIT(0);
-#endif
 
 void cmdq_util_dump_dbg_reg(void *chan)
 {
@@ -398,14 +396,13 @@ void cmdq_util_dump_dbg_reg(void *chan)
 	}
 
 	id = cmdq_util_get_hw_id((u32)cmdq_mbox_get_base_pa(chan));
-#ifdef CMDQ_SMC_SUPPORT
+
 	if (atomic_cmpxchg(&cmdq_dbg_ctrl, 0, 1) == 0) {
 		struct arm_smccc_res res;
 
 		arm_smccc_smc(MTK_SIP_CMDQ_CONTROL, CMDQ_ENABLE_DEBUG, id,
 			0, 0, 0, 0, 0, &res);
 	}
-#endif
 
 	/* debug select */
 	for (i = 0; i < 6; i++) {

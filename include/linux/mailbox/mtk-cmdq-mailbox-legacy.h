@@ -144,11 +144,7 @@ struct cmdq_pkt {
 	u64			rec_trigger;
 	u64			rec_wait;
 	u64			rec_irq;
-
-#if defined(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT) || \
-	defined(CONFIG_MTK_CAM_SECURITY_SUPPORT)
 	void			*sec_data;
-#endif
 #endif	/* end of CONFIG_MTK_CMDQ_MBOX_EXT */
 };
 
@@ -289,9 +285,5 @@ void cmdq_thread_timeout_restore(struct cmdq_thread *thread, const u32 ms);
 void cmdq_mmp_wait(struct mbox_chan *chan, void *pkt);
 #endif
 
-#if defined(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT) || \
-	defined(CONFIG_MTK_CAM_SECURITY_SUPPORT)
 s32 cmdq_sec_insert_backup_cookie(struct cmdq_pkt *pkt);
-#endif
-
 #endif /* __MTK_CMDQ_MAILBOX_H__ */

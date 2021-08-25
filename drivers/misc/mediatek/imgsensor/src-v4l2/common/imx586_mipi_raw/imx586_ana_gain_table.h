@@ -4,7 +4,8 @@
  */
 
 /*****************************************************************************/
-
+#ifndef __IMX586_ANA_GAIN_TABLE_H__
+#define __IMX586_ANA_GAIN_TABLE_H__
 static kal_uint32 imx586_ana_gain_table[] = {
 /*Imx586 should start from 1.12x gain*/
 	1149,
@@ -905,4 +906,4 @@ static kal_uint32 imx586_ana_gain_table[] = {
 	61680,
 	65536,
 };
-
+#endif

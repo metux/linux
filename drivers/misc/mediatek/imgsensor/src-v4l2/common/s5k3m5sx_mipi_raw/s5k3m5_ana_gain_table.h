@@ -4,7 +4,8 @@
  */
 
 /*****************************************************************************/
-
+#ifndef __S5K3M5_ANA_GAIN_TABLE_H__
+#define __S5K3M5_ANA_GAIN_TABLE_H__
 static kal_uint32 s5k3m5_ana_gain_table[] = {
 	1024,
 	1056,
@@ -488,4 +489,4 @@ static kal_uint32 s5k3m5_ana_gain_table[] = {
 	16352,
 	16384,
 };
-
+#endif

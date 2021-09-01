@@ -79,6 +79,8 @@ static atomic_t g_aal_eof_irq = ATOMIC_INIT(0);
 static atomic_t g_aal1_eof_irq = ATOMIC_INIT(0);
 static atomic_t g_aal_first_frame = ATOMIC_INIT(1);
 static atomic_t g_aal1_first_frame = ATOMIC_INIT(1);
+static atomic_t g_aal_dre30_write = ATOMIC_INIT(1);
+static atomic_t g_aal_interrupt_enabled = ATOMIC_INIT(1);
 static struct workqueue_struct *aal_flip_wq;
 static struct workqueue_struct *aal_refresh_wq;
 
@@ -133,7 +135,6 @@ static bool isDualPQ;
 enum AAL_IOCTL_CMD {
 	INIT_REG = 0,
 	SET_PARAM,
-	EVENTCTL,
 	FLIP_SRAM,
 	BYPASS_AAL
 };
@@ -326,6 +327,8 @@ static void disp_aal_set_interrupt(struct mtk_ddp_comp *comp, int enable)
 				writel(0x2, default_comp->regs + DISP_AAL_INTEN);
 		} else
 			writel(0x2, comp->regs + DISP_AAL_INTEN);
+
+		atomic_set(&g_aal_interrupt_enabled, 1);
 		AALIRQ_LOG("interrupt enabled\n");
 	} else if (!enable) {
 		if (atomic_read(&aal_data->dirty_frame_retrieved) == 1) {
@@ -339,6 +342,8 @@ static void disp_aal_set_interrupt(struct mtk_ddp_comp *comp, int enable)
 			} else {
 				writel(0x0, comp->regs + DISP_AAL_INTEN);
 			}
+
+			atomic_set(&g_aal_interrupt_enabled, 0);
 			AALIRQ_LOG("interrupt disabled");
 		} //else {
 			/* Dirty histogram was not retrieved. */
@@ -560,13 +565,13 @@ int mtk_drm_ioctl_aal_eventctl(struct drm_device *dev, void *data,
 	spin_unlock_irqrestore(&g_aal_irq_en_lock, flags);
 
 	if (*enabled) {
-		if (g_aal_fo->mtk_dre30_support) {
-			struct drm_crtc *crtc = private->crtc[0];
-			mtk_crtc_user_cmd(crtc, comp, EVENTCTL, data);
+//		if (g_aal_fo->mtk_dre30_support) {
+//			struct drm_crtc *crtc = private->crtc[0];
+//			mtk_crtc_user_cmd(crtc, comp, EVENTCTL, data);
+//			mtk_crtc_check_trigger(comp->mtk_crtc, true, true);
+//		} else {
 			mtk_crtc_check_trigger(comp->mtk_crtc, true, true);
-		} else {
-			mtk_crtc_check_trigger(comp->mtk_crtc, true, true);
-		}
+//		}
 	}
 
 	return ret;
@@ -574,9 +579,7 @@ int mtk_drm_ioctl_aal_eventctl(struct drm_device *dev, void *data,
 
 static void mtk_crtc_user_cmd_work(struct work_struct *work_item)
 {
-
 	mtk_crtc_user_cmd(g_aal_data->crtc, default_comp, FLIP_SRAM, NULL);
-	mtk_crtc_check_trigger(default_comp->mtk_crtc, true, true);
 }
 
 static void mtk_disp_aal_refresh_trigger(struct work_struct *work_item)
@@ -600,7 +603,8 @@ void disp_aal_flip_sram(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 
 	if (comp->mtk_crtc->is_dual_pipe) {
 		if (comp->id == DDP_COMPONENT_AAL0) {
-			if (atomic_read(&g_aal_dre_config) == 1) {
+			if (atomic_read(&g_aal_dre_config) == 1 &&
+				!atomic_read(&g_aal_first_frame)) {
 				AALFLOW_LOG("[SRAM] %s g_aal_dre_config not 0 in %s",
 						mtk_dump_comp_str_id(comp->id), caller);
 				return;
@@ -617,7 +621,8 @@ void disp_aal_flip_sram(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 				AALERR("[SRAM] Error when get hist_apb in %s", caller);
 			}
 		} else if (comp->id == DDP_COMPONENT_AAL1) {
-			if (atomic_read(&g_aal1_dre_config) == 1) {
+			if (atomic_read(&g_aal1_dre_config) == 1 &&
+				!atomic_read(&g_aal1_first_frame)) {
 				AALFLOW_LOG("[SRAM] %s g_aal1_dre_config not 0 in %s",
 						mtk_dump_comp_str_id(comp->id), caller);
 				return;
@@ -634,62 +639,12 @@ void disp_aal_flip_sram(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 			}
 		}
 	} else {
-		if (atomic_read(&g_aal_dre_config) == 1) {
+		if (atomic_read(&g_aal_dre_config) == 1 &&
+				!atomic_read(&g_aal_first_frame)) {
 			AALFLOW_LOG("[SRAM] g_aal_dre_config not 0 in %s", caller);
 			return;
 		}
 		atomic_set(&g_aal_dre_config, 1);
-		if (atomic_cmpxchg(&g_aal_force_hist_apb, 0, 1) == 0) {
-			hist_apb = 0;
-			hist_int = 1;
-		} else if (atomic_cmpxchg(&g_aal_force_hist_apb, 1, 0) == 1) {
-			hist_apb = 1;
-			hist_int = 0;
-		} else {
-			AALERR("[SRAM] Error when get hist_apb in %s", caller);
-		}
-	}
-	sram_cfg = (hist_int << 6)|(hist_apb << 5)|(1 << 4);
-	AALFLOW_LOG("[SRAM] hist_apb(%d) hist_int(%d) 0x%08x comp_id[%d] in %s",
-		hist_apb, hist_int, sram_cfg, comp->id, caller);
-	cmdq_pkt_write(handle, comp->cmdq_base,
-		dre3_pa + DISP_AAL_SRAM_CFG, sram_cfg, (0x7 << 4));
-}
-
-void disp_aal_first_flip_sram(struct mtk_ddp_comp *comp,
-	struct cmdq_pkt *handle, const char *caller)
-{
-	u32 hist_apb = 0, hist_int = 0, sram_cfg = 0;
-	phys_addr_t dre3_pa = mtk_aal_dre3_pa(comp);
-
-	if (!g_aal_fo->mtk_dre30_support)
-		return;
-
-	if (aal_sram_method != AAL_SRAM_SOF)
-		return;
-	if ((comp->mtk_crtc->is_dual_pipe)) {
-		if (comp->id == DDP_COMPONENT_AAL0) {
-			if (atomic_cmpxchg(&g_aal_force_hist_apb, 0, 1) == 0) {
-				hist_apb = 0;
-				hist_int = 1;
-			} else if (atomic_cmpxchg(&g_aal_force_hist_apb, 1, 0) == 1) {
-				hist_apb = 1;
-				hist_int = 0;
-			} else {
-				AALERR("[SRAM] Error when get hist_apb in %s", caller);
-			}
-		} else if (comp->id == DDP_COMPONENT_AAL1) {
-			if (atomic_cmpxchg(&g_aal1_force_hist_apb, 0, 1) == 0) {
-				hist_apb = 0;
-				hist_int = 1;
-			} else if (atomic_cmpxchg(&g_aal1_force_hist_apb, 1, 0) == 1) {
-				hist_apb = 1;
-				hist_int = 0;
-			} else {
-				AALERR("[SRAM] Error when get hist_apb in %s", caller);
-			}
-		}
-	} else {
 		if (atomic_cmpxchg(&g_aal_force_hist_apb, 0, 1) == 0) {
 			hist_apb = 0;
 			hist_int = 1;
@@ -1259,6 +1214,7 @@ static int disp_aal_write_dre3_to_reg(struct mtk_ddp_comp *comp,
 			memcpy(&g_aal_gain, &g_aal_gain_db,
 				sizeof(g_aal_gain));
 			spin_unlock_irqrestore(&g_aal_dre3_gain_lock, flags);
+			atomic_set(&g_aal_dre30_write, 1);
 		}
 	}
 
@@ -1432,7 +1388,7 @@ int disp_aal_set_param(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 	}
 
 	ret = disp_aal_write_param_to_reg(comp, handle, &g_aal_param);
-	disp_aal_flip_sram(comp, handle, __func__);
+	//disp_aal_flip_sram(comp, handle, __func__);
 	if (comp->mtk_crtc->is_dual_pipe) {
 		struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
 		struct drm_crtc *crtc = &mtk_crtc->base;
@@ -1440,7 +1396,7 @@ int disp_aal_set_param(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 		struct mtk_ddp_comp *comp_aal1 = priv->ddp_comp[DDP_COMPONENT_AAL1];
 
 		ret = disp_aal_write_param_to_reg(comp_aal1, handle, &g_aal_param);
-		disp_aal_flip_sram(comp_aal1, handle, __func__);
+		//disp_aal_flip_sram(comp_aal1, handle, __func__);
 
 	}
 /* FIXME
@@ -1828,9 +1784,18 @@ static void disp_aal_update_dre3_sram(struct mtk_ddp_comp *comp,
 			}
 		}
 	}
+
 	if (spin_trylock_irqsave(&g_aal_dre3_gain_lock, flags)) {
 		/* Write DRE 3.0 gain */
-		disp_aal_write_dre3(comp);
+		if (comp->mtk_crtc->is_dual_pipe) {
+			if (!atomic_read(&g_aal_first_frame) &&
+				!atomic_read(&g_aal1_first_frame))
+				disp_aal_write_dre3(comp);
+		} else {
+			if (!atomic_read(&g_aal_first_frame))
+				disp_aal_write_dre3(comp);
+		}
+
 		spin_unlock_irqrestore(&g_aal_dre3_gain_lock, flags);
 	}
 }
@@ -2212,7 +2177,7 @@ static int mtk_aal_user_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 			return -EFAULT;
 		}
 		break;
-	case EVENTCTL:
+	case FLIP_SRAM:
 		disp_aal_flip_sram(comp, handle, __func__);
 		if (comp->mtk_crtc->is_dual_pipe) {
 			struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
@@ -2221,17 +2186,6 @@ static int mtk_aal_user_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 			struct mtk_ddp_comp *comp_aal1 = priv->ddp_comp[DDP_COMPONENT_AAL1];
 
 			disp_aal_flip_sram(comp_aal1, handle, __func__);
-		}
-		break;
-	case FLIP_SRAM:
-		disp_aal_first_flip_sram(comp, handle, __func__);
-		if (comp->mtk_crtc->is_dual_pipe) {
-			struct mtk_drm_crtc *mtk_crtc = comp->mtk_crtc;
-			struct drm_crtc *crtc = &mtk_crtc->base;
-			struct mtk_drm_private *priv = crtc->dev->dev_private;
-			struct mtk_ddp_comp *comp_aal1 = priv->ddp_comp[DDP_COMPONENT_AAL1];
-
-			disp_aal_first_flip_sram(comp_aal1, handle, __func__);
 		}
 		break;
 	case BYPASS_AAL:
@@ -2686,6 +2640,23 @@ void disp_aal_on_start_of_frame(void)
 			AALFLOW_LOG("dual pipe first_flip queue_work");
 			queue_work(aal_flip_wq, &g_aal_data->aal_flip_task);
 			AALFLOW_LOG("end first_flip queue_work");
+			queue_work(aal_refresh_wq, &g_aal_data->aal_refresh_task);
+		}
+	}
+
+	if (atomic_read(&g_aal_dre30_write) == 1) {
+		queue_work(aal_refresh_wq, &g_aal_data->aal_refresh_task);
+		atomic_set(&g_aal_dre30_write, 0);
+	}
+
+	if (atomic_read(&g_aal_interrupt_enabled) == 1) {
+		if (default_comp->mtk_crtc->is_dual_pipe) {
+			if (!atomic_read(&g_aal_first_frame) &&
+				!atomic_read(&g_aal1_first_frame))
+				queue_work(aal_flip_wq, &g_aal_data->aal_flip_task);
+		} else {
+			if (!atomic_read(&g_aal_first_frame))
+				queue_work(aal_flip_wq, &g_aal_data->aal_flip_task);
 		}
 	}
 }

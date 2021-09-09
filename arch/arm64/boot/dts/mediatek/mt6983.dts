@@ -11230,7 +11230,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11243,6 +11242,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_A_IMGO_1)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_a0";
 	};
 
 	camsv2@1a111000 {
@@ -11267,7 +11271,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11280,6 +11283,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_A_IMGO_2)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_a1";
 	};
 
 	camsv3@1a112000 {
@@ -11304,7 +11312,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11317,6 +11324,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_B_IMGO_1)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_b0";
 	};
 
 	camsv4@1a113000 {
@@ -11341,7 +11353,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11354,6 +11365,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_B_IMGO_2)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_b1";
 	};
 
 	camsv5@1a114000 {
@@ -11378,7 +11394,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11391,6 +11406,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_C_IMGO_1)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_c0";
 	};
 
 	camsv6@1a115000 {
@@ -11415,7 +11435,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11428,6 +11447,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_C_IMGO_2)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_c1";
 	};
 
 	camsv7@1a116000 {
@@ -11452,7 +11476,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11465,6 +11488,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_D_IMGO_1)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_d0";
 	};
 
 	camsv8@1a117000 {
@@ -11489,7 +11517,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11502,6 +11529,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_D_IMGO_2)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_d1";
 	};
 
 	camsv9@1a180000 {
@@ -11526,7 +11558,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11539,6 +11570,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_E_IMGO_1)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_e0";
 	};
 
 	camsv10@1a181000 {
@@ -11563,7 +11599,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11576,6 +11611,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_E_IMGO_2)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_e1";
 	};
 
 	camsv11@1a182000 {
@@ -11599,7 +11639,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11611,6 +11650,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_F_IMGO_1)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_f0";
 	};
 
 	camsv12@1a183000 {
@@ -11634,7 +11678,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11646,6 +11689,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_F_IMGO_2)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_f1";
 	};
 
 	camsv13@1a184000 {
@@ -11669,7 +11717,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11681,6 +11728,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_G_IMGO_1)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_g0";
 	};
 
 	camsv14@1a185000 {
@@ -11704,7 +11756,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11716,6 +11767,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L13_CAM1_GCAMSV_G_IMGO_2)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l13_imgo_g1";
 	};
 
 	camsv15@1a186000 {
@@ -11739,7 +11795,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11751,6 +11806,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_H_IMGO_1)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_h0";
 	};
 
 	camsv16@1a187000 {
@@ -11774,7 +11834,6 @@
 				<&topckgen_clk CLK_TOP_CAM_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTG_SEL>,
 				<&topckgen_clk CLK_TOP_CAMTM_SEL>;
-
 		clock-names = "cam_main_cam2mm0_gals_cg_con",
 					"cam_main_cam2mm1_gals_cg_con",
 					"cam_main_cam2sys_gals_cg_con",
@@ -11786,6 +11845,11 @@
 					"topckgen_top_cam_sel",
 					"topckgen_top_camtg_sel",
 					"topckgen_top_camtm_sel";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L14_CAM1_GCAMSV_H_IMGO_2)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l14_imgo_h1";
 	};
 
 	mraw1@1a130000 {
@@ -11807,6 +11871,20 @@
 					"camsys_mraw_camtg",
 					"camsys_main_mraw0",
 					"topckgen_top_muxcamtm";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW0_CQI_M1)
+				&mmqos SLAVE_COMMON(0)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW0_CQI_M2)
+				&mmqos SLAVE_COMMON(0)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW0_IMGO_M1)
+				&mmqos SLAVE_COMMON(0)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW0_IMGBO_M1)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l25_cqi_m1_0",
+			"l25_cqi_m2_0",
+			"l25_imgo_m1_0",
+			"l25_imgbo_m1_0";
 	};
 
 	mraw2@1a140000 {
@@ -11828,6 +11906,20 @@
 					"camsys_mraw_camtg",
 					"camsys_main_mraw1",
 					"topckgen_top_muxcamtm";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW1_CQI_M1)
+				&mmqos SLAVE_COMMON(1)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW1_CQI_M2)
+				&mmqos SLAVE_COMMON(1)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW1_IMGO_M1)
+				&mmqos SLAVE_COMMON(1)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW1_IMGBO_M1)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l26_cqi_m1_1",
+			"l26_cqi_m2_1",
+			"l26_imgo_m1_1",
+			"l26_imgbo_m1_1";
 	};
 
 	mraw3@1a150000 {
@@ -11849,6 +11941,20 @@
 					"camsys_mraw_camtg",
 					"camsys_main_mraw2",
 					"topckgen_top_muxcamtm";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW2_CQI_M1)
+				&mmqos SLAVE_COMMON(0)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW2_CQI_M2)
+				&mmqos SLAVE_COMMON(0)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW2_IMGO_M1)
+				&mmqos SLAVE_COMMON(0)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L25_CAM_MRAW2_IMGBO_M1)
+				&mmqos SLAVE_COMMON(0)>;
+		interconnect-names =
+			"l25_cqi_m1_2",
+			"l25_cqi_m2_2",
+			"l25_imgo_m1_2",
+			"l25_imgbo_m1_2";
 	};
 
 	mraw4@1a160000 {
@@ -11870,6 +11976,20 @@
 					"camsys_mraw_camtg",
 					"camsys_main_mraw3",
 					"topckgen_top_muxcamtm";
+		interconnects =
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW3_CQI_M1)
+				&mmqos SLAVE_COMMON(1)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW3_CQI_M2)
+				&mmqos SLAVE_COMMON(1)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW3_IMGO_M1)
+				&mmqos SLAVE_COMMON(1)>,
+			<&mmqos MASTER_LARB_PORT(M4U_PORT_L26_CAM_MRAW3_IMGBO_M1)
+				&mmqos SLAVE_COMMON(1)>;
+		interconnect-names =
+			"l26_cqi_m1_3",
+			"l26_cqi_m2_3",
+			"l26_imgo_m1_3",
+			"l26_imgbo_m1_3";
 	};
 
 	remoteproc_ccd: remoteproc_ccd@1a030000 {

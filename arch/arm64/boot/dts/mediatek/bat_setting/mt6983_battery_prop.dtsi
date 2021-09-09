@@ -19,7 +19,7 @@
 	/* System shutdown current */
 	FG_METER_RESISTANCE = <(70)>;
 	/* The resistance of PCB */
-	CAR_TUNE_VALUE = <(100)>;
+	CAR_TUNE_VALUE = <(101)>;
 	/* Tune value for current measurement */
 	PMIC_MIN_VOL = <(33500)>;
 	/* vboot voltage for gauge 0%*/

@@ -3463,6 +3463,8 @@ struct mtk_cam_ctx *mtk_cam_start_ctx(struct mtk_cam_device *cam,
 		goto fail_release_buffer_pool;
 	}
 
+	sched_set_fifo(ctx->sensor_worker_task);
+
 	ctx->composer_wq =
 			alloc_ordered_workqueue(dev_name(cam->dev),
 						WQ_HIGHPRI | WQ_FREEZABLE);

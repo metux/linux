@@ -2653,6 +2653,8 @@
   vprintk
   vscnprintf
   vsnprintf
+  vsock_addr_init
+  vsock_remove_sock
   vunmap
   vzalloc
   wait_for_completion

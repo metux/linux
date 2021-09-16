@@ -4438,6 +4438,7 @@ mtk_cam_dev_node_desc output_queues[] = {
 #else
 		.smem_alloc = false,
 #endif
+		.need_cache_sync_on_prepare = true,
 		.dma_port = MTKCAM_IPI_RAW_META_STATS_CFG,
 		.fmts = meta_fmts,
 		.default_fmt_idx = 0,
@@ -4903,6 +4904,7 @@ mtk_cam_dev_node_desc capture_queues[] = {
 		.link_flags = MEDIA_LNK_FL_ENABLED |  MEDIA_LNK_FL_IMMUTABLE,
 		.image = false,
 		.smem_alloc = false,
+		.need_cache_sync_on_finish = true,
 		.dma_port = MTKCAM_IPI_RAW_META_STATS_1,
 		.fmts = meta_fmts,
 		.default_fmt_idx = 2,
@@ -4917,6 +4919,7 @@ mtk_cam_dev_node_desc capture_queues[] = {
 		.link_flags = MEDIA_LNK_FL_ENABLED |  MEDIA_LNK_FL_IMMUTABLE,
 		.image = false,
 		.smem_alloc = false,
+		.need_cache_sync_on_finish = true,
 		.dma_port = MTKCAM_IPI_RAW_META_STATS_2,
 		.fmts = meta_fmts,
 		.default_fmt_idx = 3,

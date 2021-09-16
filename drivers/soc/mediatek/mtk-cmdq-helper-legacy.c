@@ -1480,9 +1480,6 @@ void cmdq_pkt_perf_begin(struct cmdq_pkt *pkt)
 	dma_addr_t pa;
 	struct cmdq_pkt_buffer *buf;
 
-	if (!cmdq_perf)
-		return;
-
 	if (!pkt->buf_size)
 		if (cmdq_pkt_add_cmd_buffer(pkt) < 0)
 			return;
@@ -1499,9 +1496,6 @@ void cmdq_pkt_perf_end(struct cmdq_pkt *pkt)
 {
 	dma_addr_t pa;
 	struct cmdq_pkt_buffer *buf;
-
-	if (!cmdq_perf)
-		return;
 
 	if (!pkt->buf_size)
 		if (cmdq_pkt_add_cmd_buffer(pkt) < 0)

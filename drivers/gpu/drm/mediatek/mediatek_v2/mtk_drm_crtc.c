@@ -8133,8 +8133,11 @@ static int mtk_drm_pf_release_thread(void *data)
 	struct mtk_drm_private *private;
 	struct mtk_drm_crtc *mtk_crtc = (struct mtk_drm_crtc *)data;
 	struct drm_crtc *crtc;
+	unsigned int crtc_idx;
+#ifndef DRM_CMDQ_DISABLE
 	struct cmdq_pkt_buffer *cmdq_buf;
-	unsigned int fence_idx, crtc_idx;
+	unsigned int fence_idx;
+#endif
 
 	crtc = &mtk_crtc->base;
 	private = crtc->dev->dev_private;
@@ -8146,6 +8149,7 @@ static int mtk_drm_pf_release_thread(void *data)
 				 atomic_read(&mtk_crtc->pf_event));
 		atomic_set(&mtk_crtc->pf_event, 0);
 
+#ifndef DRM_CMDQ_DISABLE
 		mutex_lock(&private->commit.lock);
 		cmdq_buf = &(mtk_crtc->gce_obj.buf);
 		fence_idx = *(unsigned int *)(cmdq_buf->va_base +
@@ -8154,6 +8158,7 @@ static int mtk_drm_pf_release_thread(void *data)
 		mtk_release_present_fence(private->session_id[crtc_idx],
 					  fence_idx, 0);
 		mutex_unlock(&private->commit.lock);
+#endif
 	}
 
 	return 0;
@@ -8164,8 +8169,12 @@ static int mtk_drm_sf_pf_release_thread(void *data)
 	struct mtk_drm_private *private;
 	struct mtk_drm_crtc *mtk_crtc = (struct mtk_drm_crtc *)data;
 	struct drm_crtc *crtc;
+	unsigned int crtc_idx;
+#ifndef DRM_CMDQ_DISABLE
 	struct cmdq_pkt_buffer *cmdq_buf;
-	unsigned int fence_idx, crtc_idx;
+	unsigned int fence_idx;
+#endif
+
 
 	crtc = &mtk_crtc->base;
 	private = crtc->dev->dev_private;
@@ -8177,6 +8186,7 @@ static int mtk_drm_sf_pf_release_thread(void *data)
 					 atomic_read(&mtk_crtc->sf_pf_event));
 		atomic_set(&mtk_crtc->sf_pf_event, 0);
 
+#ifndef DRM_CMDQ_DISABLE
 		mutex_lock(&private->commit.lock);
 		cmdq_buf = &(mtk_crtc->gce_obj.buf);
 		fence_idx = *(unsigned int *)(cmdq_buf->va_base +
@@ -8185,6 +8195,7 @@ static int mtk_drm_sf_pf_release_thread(void *data)
 		mtk_release_sf_present_fence(private->session_id[crtc_idx],
 					     fence_idx);
 		mutex_unlock(&private->commit.lock);
+#endif
 	}
 
 	return 0;

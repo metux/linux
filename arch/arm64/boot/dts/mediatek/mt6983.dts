@@ -13580,10 +13580,6 @@
 	regulator-always-on;
 };
 
-&mt6363_vemc {
-	regulator-always-on;
-};
-
 &mt6363_vm18 {
 	regulator-always-on;
 };

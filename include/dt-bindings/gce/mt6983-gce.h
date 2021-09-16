@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2019 MediaTek Inc.
+ * Copyright (c) 2021 MediaTek Inc.
  *
  */
 
-#ifndef _DT_BINDINGS_GCE_MT6885_H
-#define _DT_BINDINGS_GCE_MT6885_H
+#ifndef _DT_BINDINGS_GCE_MT6983_H
+#define _DT_BINDINGS_GCE_MT6983_H
 
 /* assign timeout 0 also means default */
 #define CMDQ_NO_TIMEOUT		0xffffffff
@@ -776,7 +776,7 @@
 #define CMDQ_EVENT_CAMSYS_CAM_SUBC_RING_BUFFER_OVERFLOW_INT_IN		478
 #define CMDQ_EVENT_GCE_EVENT_0						898
 #define CMDQ_EVENT_GCE_EVENT_1						899
-#define CMDQ_EVENT_GCE_EVENT_2						890
+#define CMDQ_EVENT_GCE_EVENT_2						900
 
 /* CMDQ sw tokens
  * Following definitions are gce sw token which may use by clients

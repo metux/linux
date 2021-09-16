@@ -3504,7 +3504,7 @@ struct mtk_cam_ctx *mtk_cam_start_ctx(struct mtk_cam_device *cam,
 	struct mtk_cam_ctx *ctx = node->ctx;
 	struct media_graph *graph;
 	struct v4l2_subdev **target_sd;
-	int ret, i;
+	int ret, i, is_first_ctx;
 	struct media_entity *entity = &node->vdev.entity;
 
 	dev_info(cam->dev, "%s:ctx(%d): triggered by %s\n",
@@ -3526,7 +3526,8 @@ struct mtk_cam_ctx *mtk_cam_start_ctx(struct mtk_cam_device *cam,
 	init_completion(&ctx->session_complete);
 	init_completion(&ctx->m2m_complete);
 
-	if (!cam->composer_cnt) {
+	is_first_ctx = !cam->composer_cnt;
+	if (is_first_ctx) {
 		cam->running_job_count = 0;
 
 		dev_info(cam->dev, "%s: power on camsys\n", __func__);
@@ -3564,6 +3565,7 @@ struct mtk_cam_ctx *mtk_cam_start_ctx(struct mtk_cam_device *cam,
 			goto fail_shutdown;
 	}
 #endif
+	cam->composer_cnt++;
 
 	ret = mtk_cam_working_buf_pool_init(ctx);
 	if (ret) {
@@ -3682,13 +3684,13 @@ fail_uninit_composer:
 #if CCD_READY
 	isp_composer_uninit(ctx);
 fail_shutdown:
-	if (!cam->composer_cnt) {
+	if (is_first_ctx) {
 		pm_runtime_mark_last_busy(cam->dev);
 		pm_runtime_put_sync_autosuspend(cam->dev);
 		rproc_shutdown(cam->rproc_handle);
 	}
 fail_rproc_put:
-	if (!cam->composer_cnt) {
+	if (is_first_ctx) {
 		rproc_put(cam->rproc_handle);
 		cam->rproc_handle = NULL;
 	}
@@ -3887,7 +3889,6 @@ int mtk_cam_ctx_stream_on(struct mtk_cam_ctx *ctx)
 		return 0;
 	}
 
-	cam->composer_cnt++;
 	for (i = 0; i < MAX_PIPES_PER_STREAM && ctx->pipe_subdevs[i]; i++) {
 		ret = v4l2_subdev_call(ctx->pipe_subdevs[i], video,
 				       s_stream, 1);
@@ -4181,7 +4182,6 @@ fail_pipe_off:
 #if CCD_READY
 	isp_composer_destroy_session(ctx);
 #endif
-	cam->composer_cnt--;
 	for (i = 0; i < MAX_PIPES_PER_STREAM && ctx->pipe_subdevs[i]; i++)
 		v4l2_subdev_call(ctx->pipe_subdevs[i], video, s_stream, 0);
 	v4l2_subdev_call(ctx->seninf, video, s_stream, 0);

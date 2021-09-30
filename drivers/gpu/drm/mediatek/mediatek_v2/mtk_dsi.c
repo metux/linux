@@ -1689,6 +1689,7 @@ static irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id)
 	bool doze_enabled = 0;
 	unsigned int doze_wait = 0;
 	static unsigned int cnt;
+	ktime_t irq_time = ktime_get();
 
 	if (mtk_drm_top_clk_isr_get("dsi_irq") == false) {
 		DDPIRQ("%s, top clk off\n", __func__);
@@ -1816,7 +1817,7 @@ static irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id)
 				mtk_crtc && mtk_crtc->vblank_en)
 				mtk_crtc_vblank_irq(&mtk_crtc->base);
 
-			mtk_crtc->eof_time = ktime_get();
+			mtk_crtc->eof_time = irq_time;
 		}
 	}
 

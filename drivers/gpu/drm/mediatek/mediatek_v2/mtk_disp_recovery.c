@@ -193,8 +193,7 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 				     mtk_crtc->gce_obj.event[EVENT_ESD_EOF]);
 
 		mtk_ddp_comp_io_cmd(output_comp, cmdq_handle, ESD_CHECK_READ,
-				    (void *)mtk_crtc->gce_obj.buf.pa_base +
-					    DISP_SLOT_ESD_READ_BASE);
+				    (void *)mtk_crtc);
 
 		cmdq_pkt_set_event(cmdq_handle,
 				   mtk_crtc->gce_obj.event[EVENT_ESD_EOF]);
@@ -222,8 +221,7 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 
 
 		mtk_ddp_comp_io_cmd(output_comp, cmdq_handle, ESD_CHECK_READ,
-				    (void *)mtk_crtc->gce_obj.buf.pa_base +
-					    DISP_SLOT_ESD_READ_BASE);
+				    (void *)mtk_crtc);
 
 		mtk_ddp_comp_io_cmd(output_comp, cmdq_handle,
 				    DSI_START_VDO_MODE, NULL);
@@ -259,8 +257,7 @@ int _mtk_esd_check_read(struct drm_crtc *crtc)
 	}
 
 	ret = mtk_ddp_comp_io_cmd(output_comp, NULL, ESD_CHECK_CMP,
-				  (void *)mtk_crtc->gce_obj.buf.va_base +
-					  DISP_SLOT_ESD_READ_BASE);
+				  (void *)mtk_crtc);
 done:
 	cmdq_pkt_destroy(cmdq_handle);
 	return ret;

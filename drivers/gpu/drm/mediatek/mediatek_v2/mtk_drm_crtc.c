@@ -3584,6 +3584,12 @@ static void ddp_cmdq_cb(struct cmdq_cb_data data)
 		drm_writeback_signal_completion(&mtk_crtc->wb_connector, 0);
 	}
 	DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+
+	if (cb_data->is_mml) {
+		atomic_set(&(mtk_crtc->mml_last_job_is_flushed), 1);
+		wake_up_interruptible(&(mtk_crtc->signal_mml_last_job_is_flushed_wq));
+	}
+
 #ifdef MTK_DRM_FB_LEAK
 	cmdq_pkt_wait_complete(cb_data->cmdq_handle);
 #endif

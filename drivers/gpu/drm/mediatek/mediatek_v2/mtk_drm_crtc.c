@@ -1221,20 +1221,18 @@ void mtk_crtc_prepare_dual_pipe(struct mtk_drm_crtc *mtk_crtc)
 
 	if (mtk_crtc_is_dual_pipe(&(mtk_crtc->base))) {
 		mtk_crtc->is_dual_pipe = true;
-#if IS_ENABLED(CONFIG_MTK_MMDVFS)
+
 		if (mtk_drm_helper_get_opt(priv->helper_opt,
 				MTK_DRM_OPT_MMDVFS_SUPPORT)) {
 			if (drm_crtc_index(&mtk_crtc->base) == 1) {
-				mtk_drm_set_mmclk(&mtk_crtc->base, 2, __func__);
+				mtk_drm_set_mmclk(&mtk_crtc->base, 3, __func__);
 				//DDPFUNC("current freq: %d\n",
 				//pm_qos_request(PM_QOS_DISP_FREQ));
 			}
 		}
-#endif
 	} else {
 		mtk_crtc->is_dual_pipe = false;
 
-#if IS_ENABLED(CONFIG_MTK_MMDVFS)
 		if (mtk_drm_helper_get_opt(priv->helper_opt,
 				MTK_DRM_OPT_MMDVFS_SUPPORT)) {
 			if (drm_crtc_index(&mtk_crtc->base) == 1)
@@ -1243,7 +1241,7 @@ void mtk_crtc_prepare_dual_pipe(struct mtk_drm_crtc *mtk_crtc)
 			//	drm_crtc_index(&mtk_crtc->base),
 			//	pm_qos_request(PM_QOS_DISP_FREQ));
 		}
-#endif
+
 		return;
 	}
 
@@ -1308,6 +1306,7 @@ bool mtk_crtc_in_dual_pipe(struct mtk_drm_crtc *mtk_crtc, struct mtk_ddp_comp *c
 	}
 	return false;
 }
+
 int mtk_crtc_user_cmd(struct drm_crtc *crtc, struct mtk_ddp_comp *comp,
 		unsigned int cmd, void *params)
 {

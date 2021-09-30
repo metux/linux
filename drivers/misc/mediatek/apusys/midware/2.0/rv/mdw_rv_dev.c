@@ -102,7 +102,7 @@ static int mdw_rv_dev_send_sync(struct mdw_rv_dev *mrdev, struct mdw_ipi_msg *ms
 	struct mdw_ipi_msg_sync *s_msg = NULL;
 	unsigned long timeout = msecs_to_jiffies(MDW_CMD_IPI_TIMEOUT);
 
-	s_msg = vzalloc(sizeof(*s_msg));
+	s_msg = kzalloc(sizeof(*s_msg), GFP_KERNEL);
 	if (!s_msg)
 		return -ENOMEM;
 
@@ -138,7 +138,7 @@ static int mdw_rv_dev_send_sync(struct mdw_rv_dev *mrdev, struct mdw_ipi_msg *ms
 fail_send_sync:
 	mutex_unlock(&mrdev->mtx);
 out:
-	vfree(s_msg);
+	kfree(s_msg);
 
 	return ret;
 }
@@ -417,7 +417,7 @@ int mdw_rv_dev_init(struct mdw_device *mdev)
 		goto out;
 	}
 
-	mrdev = kvzalloc(sizeof(*mrdev), GFP_KERNEL);
+	mrdev = kzalloc(sizeof(*mrdev), GFP_KERNEL);
 	if (!mrdev)
 		return -ENOMEM;
 
@@ -447,7 +447,7 @@ int mdw_rv_dev_init(struct mdw_device *mdev)
 	goto out;
 
 free_mrdev:
-	kvfree(mrdev);
+	kfree(mrdev);
 	mdev->dev_specific = NULL;
 out:
 	return ret;
@@ -461,6 +461,6 @@ void mdw_rv_dev_deinit(struct mdw_device *mdev)
 		return;
 
 	rpmsg_destroy_ept(mrdev->ept);
-	kvfree(mrdev);
+	kfree(mrdev);
 	mdev->dev_specific = NULL;
 }

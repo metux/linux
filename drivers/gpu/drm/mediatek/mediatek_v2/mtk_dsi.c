@@ -5435,7 +5435,10 @@ static void mtk_dsi_cmd_timing_change(struct mtk_dsi *dsi,
 			&mtk_crtc->base.state->adjusted_mode, &dsi->vm);
 
 	/*  send lcm cmd before DSI power down if needed */
-	if (dsi->ext && dsi->ext->funcs &&
+	if (dsi->ext && dsi->ext->funcs && dsi->ext->funcs->mode_switch_hs) {
+		dsi->ext->funcs->mode_switch_hs(dsi->panel,
+		&dsi->conn, dsi, src_mode, dst_mode, BEFORE_DSI_POWERDOWN, mtk_dsi_cmdq_pack_gce);
+	} else if (dsi->ext && dsi->ext->funcs &&
 		dsi->ext->funcs->mode_switch)
 		dsi->ext->funcs->mode_switch(dsi->panel, &dsi->conn, src_mode,
 			dst_mode, BEFORE_DSI_POWERDOWN);
@@ -5467,7 +5470,10 @@ static void mtk_dsi_cmd_timing_change(struct mtk_dsi *dsi,
 		mtk_dsi_set_mmclk_by_datarate(dsi, mtk_crtc, 1);
 skip_change_mipi:
 	/*  send lcm cmd after DSI power on if needed */
-	if (dsi->ext && dsi->ext->funcs &&
+	if (dsi->ext && dsi->ext->funcs && dsi->ext->funcs->mode_switch_hs) {
+		dsi->ext->funcs->mode_switch_hs(dsi->panel,
+		&dsi->conn, dsi, src_mode, dst_mode, AFTER_DSI_POWERON, mtk_dsi_cmdq_pack_gce);
+	} else if (dsi->ext && dsi->ext->funcs &&
 		dsi->ext->funcs->mode_switch)
 		dsi->ext->funcs->mode_switch(dsi->panel, &dsi->conn, src_mode,
 			dst_mode, AFTER_DSI_POWERON);

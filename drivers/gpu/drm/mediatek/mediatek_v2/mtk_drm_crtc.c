@@ -1695,7 +1695,8 @@ static void _mtk_crtc_lye_addon_module_disconnect(
 
 		if (addon_module->type == ADDON_BETWEEN &&
 		    (addon_module->module == DISP_RSZ ||
-		    addon_module->module == DISP_RSZ_v2)) {
+		    addon_module->module == DISP_RSZ_v2 ||
+		    addon_module->module == DISP_RSZ_v5)) {
 			int w = crtc->state->adjusted_mode.hdisplay;
 			int h = crtc->state->adjusted_mode.vdisplay;
 			struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
@@ -1925,7 +1926,8 @@ _mtk_crtc_lye_addon_module_connect(
 
 		if (addon_module->type == ADDON_BETWEEN &&
 		    (addon_module->module == DISP_RSZ ||
-		    addon_module->module == DISP_RSZ_v2)) {
+		    addon_module->module == DISP_RSZ_v2 ||
+		    addon_module->module == DISP_RSZ_v5)) {
 			struct mtk_crtc_state *state =
 				to_mtk_crtc_state(crtc->state);
 

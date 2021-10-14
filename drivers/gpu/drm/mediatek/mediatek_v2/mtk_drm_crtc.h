@@ -793,6 +793,7 @@ struct mtk_drm_crtc {
 	bool is_mml;
 	bool last_is_mml;
 	bool is_mml_debug;
+	bool need_stop_last_mml_job;
 };
 
 struct mtk_crtc_state {

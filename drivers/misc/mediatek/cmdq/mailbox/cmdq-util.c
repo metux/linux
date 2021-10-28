@@ -612,8 +612,6 @@ static int __init cmdq_util_init(void)
 		dput(dir);
 #endif
 
-	cmdq_util_log_feature_set(NULL, CMDQ_LOG_FEAT_PERF);
-
 #ifdef CONFIG_MTK_DEVAPC
 	register_devapc_vio_callback(&devapc_vio_handle);
 #endif

@@ -77,7 +77,6 @@ void notrace __cpu_suspend_exit(void)
 		arm64_set_ssbd_mitigation(false);
 
 	/* Restore additional feature-specific configuration */
-	mte_suspend_exit();
 	ptrauth_suspend_exit();
 }
 

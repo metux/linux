@@ -1196,6 +1196,17 @@ fs/devpts/inode.o
 fs/direct-io.o
 fs/d_path.o
 fs/drop_caches.o
+fs/erofs/data.o
+fs/erofs/decompressor.o
+fs/erofs/dir.o
+fs/erofs/inode.o
+fs/erofs/namei.o
+fs/erofs/pcpubuf.o
+fs/erofs/super.o
+fs/erofs/utils.o
+fs/erofs/xattr.o
+fs/erofs/zdata.o
+fs/erofs/zmap.o
 fs/eventfd.o
 fs/eventpoll.o
 fs/exec.o

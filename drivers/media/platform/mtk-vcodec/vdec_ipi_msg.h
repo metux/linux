@@ -164,6 +164,7 @@ enum vdec_set_param_type {
  */
 struct vdec_ap_ipi_cmd {
 	__u32 msg_id;
+	__u32 ctx_id;
 	__u32 vcu_inst_addr;
 	__u32 reserved;
 };
@@ -209,6 +210,7 @@ struct vdec_vcu_ipi_mem_op {
  */
 struct vdec_ap_ipi_init {
 	__u32 msg_id;
+	__u32 ctx_id;
 	__u32 reserved;
 #ifndef CONFIG_64BIT
 	union {
@@ -251,6 +253,7 @@ struct vdec_vcu_ipi_init_ack {
  */
 struct vdec_ap_ipi_dec_start {
 	__u32 msg_id;
+	__u32 ctx_id;
 	__u32 vcu_inst_addr;
 	__u32 data[3];
 	__u32 reserved;
@@ -265,9 +268,10 @@ struct vdec_ap_ipi_dec_start {
  */
 struct vdec_ap_ipi_set_param {
 	__u32 msg_id;
+	__u32 ctx_id;
 	__u32 vcu_inst_addr;
 	__u32 id;
-	__u32 data[13];
+	__u32 data[12];
 };
 
 /**
@@ -278,6 +282,7 @@ struct vdec_ap_ipi_set_param {
  */
 struct vdec_ap_ipi_query_cap {
 	__u32 msg_id;
+	__u32 ctx_id;
 	__u32 id;
 #ifndef CONFIG_64BIT
 	union {

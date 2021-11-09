@@ -937,6 +937,8 @@ static void cmdq_thread_irq_handler(struct cmdq *cmdq,
 
 	list_for_each_entry_safe(task, tmp, &thread->task_busy_list,
 				 list_entry) {
+		thread->irq_task += 1;
+
 		if (task->end_time)
 			cmdq_util_err("thd:%d pkt:%p is done,start:%llu end:%llu",
 				thread->idx, task->pkt, task->exec_time, task->end_time);
@@ -993,6 +995,7 @@ static irqreturn_t cmdq_irq_handler(int irq, void *dev)
 	bool secure_irq = false;
 	struct cmdq_task *task, *tmp;
 	struct list_head removes;
+	u64 start = sched_clock(), end, count = 0;
 
 	if (atomic_read(&cmdq->usage) <= 0) {
 		cmdq_msg("%s cmdq:%#lx suspend:%s",
@@ -1011,9 +1014,15 @@ static irqreturn_t cmdq_irq_handler(int irq, void *dev)
 		return IRQ_NONE;
 	}
 
+	for (i = 0; i < ARRAY_SIZE(cmdq->thread); i++) {
+		cmdq->thread[i].irq_time = 0;
+		cmdq->thread[i].irq_task = 0;
+	}
+
 	INIT_LIST_HEAD(&removes);
 	for_each_clear_bit(bit, &irq_status, fls(cmdq->irq_mask)) {
 		struct cmdq_thread *thread = &cmdq->thread[bit];
+		u64 irq_time;
 
 		cmdq_log("bit=%d, thread->base=%p", bit, thread->base);
 		if (!thread->occupied) {
@@ -1021,15 +1030,36 @@ static irqreturn_t cmdq_irq_handler(int irq, void *dev)
 			continue;
 		}
 
+		irq_time = sched_clock();
 		spin_lock_irqsave(&thread->chan->lock, flags);
 		cmdq_thread_irq_handler(cmdq, thread, &removes);
 		spin_unlock_irqrestore(&thread->chan->lock, flags);
+		thread->irq_time = sched_clock() - irq_time;
+		count += 1;
 	}
 
 	list_for_each_entry_safe(task, tmp, &removes, list_entry) {
 		list_del(&task->list_entry);
 		kfree(task);
 	}
+
+	end = sched_clock() - start;
+	if (end >= 1000000) /* 1ms */
+		for (i = 0; i < ARRAY_SIZE(cmdq->thread); i += 8) {
+			struct cmdq_thread *thread = &cmdq->thread[i];
+
+			cmdq_util_err(
+				"IRQ_LONG:%llu:%u hwid:%hu thread:%d: %llu:%u %llu:%u %llu:%u %llu:%u %llu:%u %llu:%u %llu:%u %llu:%u",
+				end, (u32)count, cmdq->hwid, i,
+				thread->irq_time, thread->irq_task,
+				(thread + 1)->irq_time, (thread + 1)->irq_task,
+				(thread + 2)->irq_time, (thread + 2)->irq_task,
+				(thread + 3)->irq_time, (thread + 3)->irq_task,
+				(thread + 4)->irq_time, (thread + 4)->irq_task,
+				(thread + 5)->irq_time, (thread + 5)->irq_task,
+				(thread + 6)->irq_time, (thread + 6)->irq_task,
+				(thread + 7)->irq_time, (thread + 7)->irq_task);
+		}
 
 	return secure_irq ? IRQ_NONE : IRQ_HANDLED;
 }

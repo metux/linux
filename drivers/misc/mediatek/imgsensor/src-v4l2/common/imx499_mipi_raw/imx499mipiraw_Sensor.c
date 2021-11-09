@@ -51,7 +51,7 @@
 #define imx499_table_write_cmos_sensor(...) subdrv_i2c_wr_regs_u8(__VA_ARGS__)
 
 
-
+#define TYPE2 0
 #define HV_MIRROR_FLIP 1
 /************************************************************************
  * Proifling
@@ -124,8 +124,6 @@ static struct imgsensor_info_struct imgsensor_info = {
 		/*     following for GetDefaultFramerateByScenario()    */
 		.max_framerate = 300,
 	},
-
-
 	.cap = {/*data rate 1644.00 Mbps/lane */
 		.pclk = 564000000,/*VTP Pixel rate*/
 		.linelength = 5120,
@@ -238,7 +236,7 @@ static struct imgsensor_info_struct imgsensor_info = {
 
 
 /* Sensor output window information */
-static struct SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[10] = {
+static struct SENSOR_WINSIZE_INFO_STRUCT imgsensor_winsize_info[5] = {
 	{4656, 3496, 0, 2, 4656, 3492, 2328, 1746,
 	0000, 0000, 2328, 1746, 0, 0, 2328, 1746},	/*Preview*/
 	{4656, 3496, 0, 0, 4656, 3496, 4656, 3496,
@@ -267,7 +265,7 @@ static struct SENSOR_VC_INFO_STRUCT SENSOR_VC_INFO[3] = {
 	  0x03, 0x00, 0x0000, 0x0000},/*VC3*/
 	 /* Video mode setting */
 	 {0x02, 0x0a, 0x00, 0x08, 0x40, 0x00,
-	  0x00, 0x2b, 0x14E0, 0x0FB0,
+	  0x00, 0x2b, 0x1230, 0x0A30,
 	  0x00, 0x00, 0x00, 0x00,
 	  0x00, 0x31, 0x02BC, 0x0144*2,
 	  0x03, 0x00, 0x0000, 0x0000}
@@ -2719,9 +2717,132 @@ static int feature_control(struct subdrv_ctx *ctx, MSDK_SENSOR_FEATURE_ENUM feat
 
 	return ERROR_NONE;
 } /* feature_control(ctx) */
+#ifdef IMGSENSOR_VC_ROUTING
+static struct mtk_mbus_frame_desc_entry frame_desc_prev_pdaf[] = {
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x2b,
+			.hsize = 0x0918,
+			.vsize = 0x06D2,
+		},
+	},
+#if TYPE2
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x31,
+			.hsize = 0x02BC,
+			.vsize = 0x019F*2,
+			.user_data_desc = VC_PDAF_STATS,
+		},
+	},
+#endif
+};
+
+static struct mtk_mbus_frame_desc_entry frame_desc_cap_pdaf[] = {
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x2b,
+			.hsize = 0x1230,
+			.vsize = 0x0DA8,
+		},
+	},
+#if TYPE2
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x31,
+			.hsize = 0x02BC,
+			.vsize = 0x01A0*2,
+			.user_data_desc = VC_PDAF_STATS,
+		},
+	},
+#endif
+};
+
+static struct mtk_mbus_frame_desc_entry frame_desc_vid[] = {
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x2b,
+			.hsize = 0x1230,
+			.vsize = 0x0A30,
+		},
+	},
+#if TYPE2
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x31,
+			.hsize = 0x02BC,
+			.vsize = 0x0144*2,
+			.user_data_desc = VC_PDAF_STATS,
+		},
+	},
+#endif
+};
+
+static struct mtk_mbus_frame_desc_entry frame_desc_hs_vid[] = {
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x2b,
+			.hsize = 0x0500,
+			.vsize = 0x02D0,
+		},
+	},
+};
 
 
+static struct mtk_mbus_frame_desc_entry frame_desc_slim_vid[] = {
+	{
+		.bus.csi2 = {
+			.channel = 0,
+			.data_type = 0x2b,
+			.hsize = 0x0500,
+			.vsize = 0x02D0,
+		},
+	},
+};
 
+static int get_frame_desc(struct subdrv_ctx *ctx,
+		int scenario_id, struct mtk_mbus_frame_desc *fd)
+{
+	switch (scenario_id) {
+	case SENSOR_SCENARIO_ID_NORMAL_PREVIEW:
+		fd->type = MTK_MBUS_FRAME_DESC_TYPE_CSI2;
+		fd->num_entries = ARRAY_SIZE(frame_desc_prev_pdaf);
+		memcpy(fd->entry, frame_desc_prev_pdaf, sizeof(frame_desc_prev_pdaf));
+		break;
+	case SENSOR_SCENARIO_ID_NORMAL_CAPTURE:
+		fd->type = MTK_MBUS_FRAME_DESC_TYPE_CSI2;
+		fd->num_entries = ARRAY_SIZE(frame_desc_cap_pdaf);
+		memcpy(fd->entry, frame_desc_cap_pdaf, sizeof(frame_desc_cap_pdaf));
+		break;
+	case SENSOR_SCENARIO_ID_NORMAL_VIDEO:
+		fd->type = MTK_MBUS_FRAME_DESC_TYPE_CSI2;
+		fd->num_entries = ARRAY_SIZE(frame_desc_vid);
+		memcpy(fd->entry, frame_desc_vid, sizeof(frame_desc_vid));
+		break;
+	case SENSOR_SCENARIO_ID_HIGHSPEED_VIDEO:
+		fd->type = MTK_MBUS_FRAME_DESC_TYPE_CSI2;
+		fd->num_entries = ARRAY_SIZE(frame_desc_hs_vid);
+		memcpy(fd->entry, frame_desc_hs_vid, sizeof(frame_desc_hs_vid));
+		break;
+	case SENSOR_SCENARIO_ID_SLIM_VIDEO:
+		fd->type = MTK_MBUS_FRAME_DESC_TYPE_CSI2;
+		fd->num_entries = ARRAY_SIZE(frame_desc_slim_vid);
+		memcpy(fd->entry, frame_desc_slim_vid, sizeof(frame_desc_slim_vid));
+		break;
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+#endif
 
 static const struct subdrv_ctx defctx = {
 
@@ -2772,6 +2893,27 @@ static int get_temp(struct subdrv_ctx *ctx, int *temp)
 	return 0;
 }
 
+static int get_csi_param(struct subdrv_ctx *ctx,
+	enum SENSOR_SCENARIO_ID_ENUM scenario_id,
+	struct mtk_csi_param *csi_param)
+{
+	switch (scenario_id) {
+	case SENSOR_SCENARIO_ID_NORMAL_PREVIEW:
+	case SENSOR_SCENARIO_ID_NORMAL_VIDEO:
+	case SENSOR_SCENARIO_ID_HIGHSPEED_VIDEO:
+		csi_param->dphy_trail = 0x25;
+		break;
+	case SENSOR_SCENARIO_ID_NORMAL_CAPTURE:
+		csi_param->dphy_trail = 0x8;
+		break;
+	default:
+		csi_param->dphy_trail = 0;
+		break;
+	}
+
+	return 0;
+}
+
 static int init_ctx(struct subdrv_ctx *ctx,
 		struct i2c_client *i2c_client, u8 i2c_write_id)
 {
@@ -2791,6 +2933,10 @@ static struct subdrv_ops ops = {
 	.feature_control = feature_control,
 	.close = close,
 	.get_temp = get_temp,
+	.get_csi_param = get_csi_param,
+#ifdef IMGSENSOR_VC_ROUTING
+	.get_frame_desc = get_frame_desc,
+#endif
 };
 
 static struct subdrv_pw_seq_entry pw_seq[] = {

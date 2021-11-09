@@ -6784,6 +6784,8 @@ static irqreturn_t mtk_disp_mutex_irq_handler(int irq, void *dev_id)
 	unsigned int m_id = 0;
 	int ret = 0;
 
+	irq_debug[0] = sched_clock();
+
 	if (mtk_drm_top_clk_isr_get("mutex_irq") == false) {
 		DDPIRQ("%s, top clk off\n", __func__);
 		return IRQ_NONE;
@@ -6796,7 +6798,6 @@ static irqreturn_t mtk_disp_mutex_irq_handler(int irq, void *dev_id)
 	}
 
 	DRM_MMP_MARK(IRQ, irq, val);
-
 	DDPIRQ("MM_MUTEX irq, val:0x%x\n", val);
 
 	writel(~val, ddp->regs + DISP_REG_MUTEX_INTSTA);

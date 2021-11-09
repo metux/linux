@@ -195,7 +195,6 @@ static void mtk_postmask_config(struct mtk_ddp_comp *comp,
 	unsigned int value;
 	struct mtk_panel_params *panel_ext =
 		mtk_drm_get_lcm_ext_params(&comp->mtk_crtc->base);
-#ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
 #ifndef POSTMASK_DRAM_MODE
 	unsigned int i = 0;
 	unsigned int num = 0;
@@ -205,7 +204,6 @@ static void mtk_postmask_config(struct mtk_ddp_comp *comp,
 	dma_addr_t addr = 0;
 	unsigned int force_relay = 0;
 	struct mtk_disp_postmask *postmask = comp_to_postmask(comp);
-#endif
 #endif
 	unsigned int width;
 
@@ -230,7 +228,6 @@ static void mtk_postmask_config(struct mtk_ddp_comp *comp,
 		DDPPR_ERR("%s:panel_ext not found\n", __func__);
 
 	if (panel_ext && panel_ext->round_corner_en) {
-#ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
 		value = (REG_FLD_VAL((PAUSE_REGION_FLD_RDMA_PAUSE_START),
 				     panel_ext->corner_pattern_height) |
 			 REG_FLD_VAL(
@@ -358,7 +355,6 @@ static void mtk_postmask_config(struct mtk_ddp_comp *comp,
 			mtk_ddp_write_relaxed(
 				comp, 0x0, DISP_POSTMASK_GRAD_VAL(i), handle);
 		}
-#endif
 #endif
 		/* config relay mode */
 	} else {

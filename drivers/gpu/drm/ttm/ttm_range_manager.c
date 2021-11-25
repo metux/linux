@@ -113,9 +113,7 @@ static void ttm_range_man_free(struct ttm_resource_manager *man,
 static const struct ttm_resource_manager_func ttm_range_manager_func;
 
 int ttm_range_man_init(struct ttm_bo_device *bdev,
-		       unsigned type,
-		       uint32_t available_caching,
-		       bool use_tt,
+		       unsigned type, bool use_tt,
 		       unsigned long p_size)
 {
 	struct ttm_resource_manager *man;
@@ -126,7 +124,6 @@ int ttm_range_man_init(struct ttm_bo_device *bdev,
 		return -ENOMEM;
 
 	man = &rman->manager;
-	man->available_caching = available_caching;
 	man->use_tt = use_tt;
 
 	man->func = &ttm_range_manager_func;
@@ -149,6 +146,9 @@ int ttm_range_man_fini(struct ttm_bo_device *bdev,
 	struct ttm_range_manager *rman = to_range_manager(man);
 	struct drm_mm *mm = &rman->mm;
 	int ret;
+
+	if (!man)
+		return 0;
 
 	ttm_resource_manager_set_used(man, false);
 

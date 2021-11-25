@@ -8,6 +8,7 @@
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
+#include <linux/kmemleak.h>
 #include <uapi/linux/btf.h>
 
 #define RINGBUF_CREATE_FLAG_MASK (BPF_F_NUMA_NODE)
@@ -109,6 +110,7 @@ static struct bpf_ringbuf *bpf_ringbuf_area_alloc(size_t data_sz, int numa_node)
 	rb = vmap(pages, nr_meta_pages + 2 * nr_data_pages,
 		  VM_ALLOC | VM_USERMAP, PAGE_KERNEL);
 	if (rb) {
+		kmemleak_not_leak(pages);
 		rb->pages = pages;
 		rb->nr_pages = nr_pages;
 		return rb;
@@ -131,15 +133,6 @@ static void bpf_ringbuf_notify(struct irq_work *work)
 static struct bpf_ringbuf *bpf_ringbuf_alloc(size_t data_sz, int numa_node)
 {
 	struct bpf_ringbuf *rb;
-
-	if (!data_sz || !PAGE_ALIGNED(data_sz))
-		return ERR_PTR(-EINVAL);
-
-#ifdef CONFIG_64BIT
-	/* on 32-bit arch, it's impossible to overflow record's hdr->pgoff */
-	if (data_sz > RINGBUF_MAX_DATA_SZ)
-		return ERR_PTR(-E2BIG);
-#endif
 
 	rb = bpf_ringbuf_area_alloc(data_sz, numa_node);
 	if (!rb)
@@ -166,8 +159,15 @@ static struct bpf_map *ringbuf_map_alloc(union bpf_attr *attr)
 		return ERR_PTR(-EINVAL);
 
 	if (attr->key_size || attr->value_size ||
-	    attr->max_entries == 0 || !PAGE_ALIGNED(attr->max_entries))
+	    !is_power_of_2(attr->max_entries) ||
+	    !PAGE_ALIGNED(attr->max_entries))
 		return ERR_PTR(-EINVAL);
+
+#ifdef CONFIG_64BIT
+	/* on 32-bit arch, it's impossible to overflow record's hdr->pgoff */
+	if (attr->max_entries > RINGBUF_MAX_DATA_SZ)
+		return ERR_PTR(-E2BIG);
+#endif
 
 	rb_map = kzalloc(sizeof(*rb_map), GFP_USER);
 	if (!rb_map)

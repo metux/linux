@@ -12,10 +12,6 @@
 #include <linux/iopoll.h>
 #include "felix.h"
 
-#define VSC9953_VCAP_IS2_CNT			1024
-#define VSC9953_VCAP_IS2_ENTRY_WIDTH		376
-#define VSC9953_VCAP_PORT_CNT			10
-
 #define MSCC_MIIM_CMD_OPR_WRITE			BIT(1)
 #define MSCC_MIIM_CMD_OPR_READ			BIT(2)
 #define MSCC_MIIM_CMD_WRDATA_SHIFT		4
@@ -841,13 +837,6 @@ static struct vcap_props vsc9953_vcap_props[] = {
 		.actions = vsc9953_vcap_is1_actions,
 	},
 	[VCAP_IS2] = {
-		.tg_width = 2,
-		.sw_count = 4,
-		.entry_count = VSC9953_VCAP_IS2_CNT,
-		.entry_width = VSC9953_VCAP_IS2_ENTRY_WIDTH,
-		.action_count = VSC9953_VCAP_IS2_CNT +
-				VSC9953_VCAP_PORT_CNT + 2,
-		.action_width = 101,
 		.action_type_width = 1,
 		.action_table = {
 			[IS2_ACTION_TYPE_NORMAL] = {
@@ -859,8 +848,6 @@ static struct vcap_props vsc9953_vcap_props[] = {
 				.count = 4
 			},
 		},
-		.counter_words = 4,
-		.counter_width = 32,
 		.target = S2,
 		.keys = vsc9953_vcap_is2_keys,
 		.actions = vsc9953_vcap_is2_actions,
@@ -1073,6 +1060,8 @@ static u16 vsc9953_wm_enc(u16 value)
 static const struct ocelot_ops vsc9953_ops = {
 	.reset			= vsc9953_reset,
 	.wm_enc			= vsc9953_wm_enc,
+	.port_to_netdev		= felix_port_to_netdev,
+	.netdev_to_port		= felix_netdev_to_port,
 };
 
 static int vsc9953_mdio_bus_alloc(struct ocelot *ocelot)
@@ -1192,7 +1181,7 @@ static const struct felix_info seville_info_vsc9953 = {
 	.stats_layout		= vsc9953_stats_layout,
 	.num_stats		= ARRAY_SIZE(vsc9953_stats_layout),
 	.vcap			= vsc9953_vcap_props,
-	.shared_queue_sz	= 2048 * 1024,
+	.shared_queue_sz	= 256 * 1024,
 	.num_mact_rows		= 2048,
 	.num_ports		= 10,
 	.mdio_bus_alloc		= vsc9953_mdio_bus_alloc,
@@ -1221,9 +1210,15 @@ static int seville_probe(struct platform_device *pdev)
 
 	ocelot = &felix->ocelot;
 	ocelot->dev = &pdev->dev;
+	ocelot->num_flooding_pgids = 1;
 	felix->info = &seville_info_vsc9953;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		err = -EINVAL;
+		dev_err(&pdev->dev, "Invalid resource\n");
+		goto err_alloc_felix;
+	}
 	felix->switch_base = res->start;
 
 	ds = kzalloc(sizeof(struct dsa_switch), GFP_KERNEL);

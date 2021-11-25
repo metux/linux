@@ -353,7 +353,7 @@ static void netlink_rcv_wake(struct sock *sk)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
 
-	if (skb_queue_empty(&sk->sk_receive_queue))
+	if (skb_queue_empty_lockless(&sk->sk_receive_queue))
 		clear_bit(NETLINK_S_CONGESTED, &nlk->state);
 	if (!test_bit(NETLINK_S_CONGESTED, &nlk->state))
 		wake_up_interruptible(&nlk->wait);
@@ -453,11 +453,13 @@ void netlink_table_ungrab(void)
 static inline void
 netlink_lock_table(void)
 {
+	unsigned long flags;
+
 	/* read_lock() synchronizes us to netlink_table_grab */
 
-	read_lock(&nl_table_lock);
+	read_lock_irqsave(&nl_table_lock, flags);
 	atomic_inc(&nl_table_users);
-	read_unlock(&nl_table_lock);
+	read_unlock_irqrestore(&nl_table_lock, flags);
 }
 
 static inline void
@@ -1621,7 +1623,7 @@ static void netlink_update_socket_mc(struct netlink_sock *nlk,
 }
 
 static int netlink_setsockopt(struct socket *sock, int level, int optname,
-			      char __user *optval, unsigned int optlen)
+			      sockptr_t optval, unsigned int optlen)
 {
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
@@ -1632,7 +1634,7 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 		return -ENOPROTOOPT;
 
 	if (optlen >= sizeof(int) &&
-	    get_user(val, (unsigned int __user *)optval))
+	    copy_from_sockptr(&val, optval, sizeof(val)))
 		return -EFAULT;
 
 	switch (optname) {

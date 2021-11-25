@@ -352,6 +352,7 @@ void vmx_set_segment(struct kvm_vcpu *vcpu, struct kvm_segment *var, int seg);
 u64 construct_eptp(struct kvm_vcpu *vcpu, unsigned long root_hpa,
 		   int root_level);
 
+bool vmx_guest_inject_ac(struct kvm_vcpu *vcpu);
 void update_exception_bitmap(struct kvm_vcpu *vcpu);
 void vmx_update_msr_bitmap(struct kvm_vcpu *vcpu);
 bool vmx_nmi_blocked(struct kvm_vcpu *vcpu);
@@ -487,13 +488,16 @@ static inline void decache_tsc_multiplier(struct vcpu_vmx *vmx)
 
 static inline bool vmx_has_waitpkg(struct vcpu_vmx *vmx)
 {
-	return vmx->secondary_exec_control &
+	return secondary_exec_controls_get(vmx) &
 		SECONDARY_EXEC_ENABLE_USR_WAIT_PAUSE;
 }
 
 static inline bool vmx_need_pf_intercept(struct kvm_vcpu *vcpu)
 {
-	return !enable_ept || cpuid_maxphyaddr(vcpu) < boot_cpu_data.x86_phys_bits;
+	if (!enable_ept)
+		return true;
+
+	return allow_smaller_maxphyaddr && cpuid_maxphyaddr(vcpu) < boot_cpu_data.x86_phys_bits;
 }
 
 static inline bool is_unrestricted_guest(struct kvm_vcpu *vcpu)

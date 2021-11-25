@@ -4521,6 +4521,19 @@ bool btf_ctx_access(int off, int size, enum bpf_access_type type,
 			btf_kind_str[BTF_INFO_KIND(t->info)]);
 		return false;
 	}
+
+	/* check for PTR_TO_RDONLY_BUF_OR_NULL or PTR_TO_RDWR_BUF_OR_NULL */
+	for (i = 0; i < prog->aux->ctx_arg_info_size; i++) {
+		const struct bpf_ctx_arg_aux *ctx_arg_info = &prog->aux->ctx_arg_info[i];
+
+		if (ctx_arg_info->offset == off &&
+		    (ctx_arg_info->reg_type == PTR_TO_RDONLY_BUF_OR_NULL ||
+		     ctx_arg_info->reg_type == PTR_TO_RDWR_BUF_OR_NULL)) {
+			info->reg_type = ctx_arg_info->reg_type;
+			return true;
+		}
+	}
+
 	if (t->type == 0)
 		/* This is a pointer to void.
 		 * It is the same as scalar from the verifier safety pov.
@@ -4947,11 +4960,23 @@ int btf_distill_func_proto(struct bpf_verifier_log *log,
 	m->ret_size = ret;
 
 	for (i = 0; i < nargs; i++) {
+		if (i == nargs - 1 && args[i].type == 0) {
+			bpf_log(log,
+				"The function %s with variable args is unsupported.\n",
+				tname);
+			return -EINVAL;
+		}
 		ret = __get_type_size(btf, args[i].type, &t);
 		if (ret < 0) {
 			bpf_log(log,
 				"The function %s arg%d type %s is unsupported.\n",
 				tname, i, btf_kind_str[BTF_INFO_KIND(t->info)]);
+			return -EINVAL;
+		}
+		if (ret == 0) {
+			bpf_log(log,
+				"The function %s has malformed void argument.\n",
+				tname);
 			return -EINVAL;
 		}
 		m->arg_size[i] = ret;

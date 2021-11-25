@@ -64,6 +64,8 @@
 	((MIPS_ISA_REV >= (ge)) && (MIPS_ISA_REV < (lt)))
 #define __isa_range_or_flag(ge, lt, flag) \
 	(__isa_range(ge, lt) || ((MIPS_ISA_REV < (lt)) && __isa(flag)))
+#define __isa_range_and_ase(ge, lt, ase) \
+	(__isa_range(ge, lt) && __ase(ase))
 
 /*
  * SMP assumption: Options of CPU 0 are a superset of all processors.
@@ -299,10 +301,6 @@
 # define cpu_has_mips64r5	(cpu_has_64bits && \
 				 __isa_range_or_flag(5, 6, MIPS_CPU_ISA_M64R5))
 #endif
-#ifndef cpu_has_mips64r5
-# define cpu_has_mips64r5	(cpu_has_64bits && \
-				 __isa_range_or_flag(5, 6, MIPS_CPU_ISA_M64R5))
-#endif
 #ifndef cpu_has_mips64r6
 # define cpu_has_mips64r6	__isa_ge_and_flag(6, MIPS_CPU_ISA_M64R6)
 #endif
@@ -427,7 +425,7 @@
 #endif
 
 #ifndef cpu_has_mipsmt
-#define cpu_has_mipsmt		__isa_lt_and_ase(6, MIPS_ASE_MIPSMT)
+#define cpu_has_mipsmt		__isa_range_and_ase(2, 6, MIPS_ASE_MIPSMT)
 #endif
 
 #ifndef cpu_has_vp

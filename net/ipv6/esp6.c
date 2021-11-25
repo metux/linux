@@ -708,7 +708,7 @@ static int esp6_output(struct xfrm_state *x, struct sk_buff *skb)
 		struct xfrm_dst *dst = (struct xfrm_dst *)skb_dst(skb);
 		u32 padto;
 
-		padto = min(x->tfcpad, xfrm_state_mtu(x, dst->child_mtu_cached));
+		padto = min(x->tfcpad, __xfrm_state_mtu(x, dst->child_mtu_cached));
 		if (skb->len < padto)
 			esp.tfclen = padto - skb->len;
 	}
@@ -800,10 +800,17 @@ int esp6_input_done2(struct sk_buff *skb, int err)
 
 	if (x->encap) {
 		const struct ipv6hdr *ip6h = ipv6_hdr(skb);
+		int offset = skb_network_offset(skb) + sizeof(*ip6h);
 		struct xfrm_encap_tmpl *encap = x->encap;
-		struct udphdr *uh = (void *)(skb_network_header(skb) + hdr_len);
-		struct tcphdr *th = (void *)(skb_network_header(skb) + hdr_len);
-		__be16 source;
+		u8 nexthdr = ip6h->nexthdr;
+		__be16 frag_off, source;
+		struct udphdr *uh;
+		struct tcphdr *th;
+
+		offset = ipv6_skip_exthdr(skb, offset, &nexthdr, &frag_off);
+		uh = (void *)(skb->data + offset);
+		th = (void *)(skb->data + offset);
+		hdr_len += offset;
 
 		switch (x->encap->encap_type) {
 		case TCP_ENCAP_ESPINTCP:

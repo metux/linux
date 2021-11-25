@@ -572,16 +572,12 @@ int xfrm_output(struct sock *sk, struct sk_buff *skb)
 	switch (x->outer_mode.family) {
 	case AF_INET:
 		memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
-#ifdef CONFIG_NETFILTER
 		IPCB(skb)->flags |= IPSKB_XFRM_TRANSFORMED;
-#endif
 		break;
 	case AF_INET6:
 		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
 
-#ifdef CONFIG_NETFILTER
 		IP6CB(skb)->flags |= IP6SKB_XFRM_TRANSFORMED;
-#endif
 		break;
 	}
 
@@ -713,14 +709,7 @@ out:
 static int xfrm6_extract_output(struct xfrm_state *x, struct sk_buff *skb)
 {
 #if IS_ENABLED(CONFIG_IPV6)
-	unsigned int ptr = 0;
 	int err;
-
-	if (x->outer_mode.encap == XFRM_MODE_BEET &&
-	    ipv6_find_hdr(skb, &ptr, NEXTHDR_FRAGMENT, NULL, NULL) >= 0) {
-		net_warn_ratelimited("BEET mode doesn't support inner IPv6 fragments\n");
-		return -EAFNOSUPPORT;
-	}
 
 	err = xfrm6_tunnel_check_size(skb);
 	if (err)

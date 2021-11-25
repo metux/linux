@@ -44,6 +44,9 @@
 #include <nvif/if500b.h>
 #include <nvif/if900b.h>
 
+static int nouveau_ttm_tt_bind(struct ttm_bo_device *bdev, struct ttm_tt *ttm,
+			       struct ttm_resource *reg);
+
 /*
  * NV10-NV40 tiling helpers
  */
@@ -340,17 +343,37 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 }
 
 static void
-set_placement_list(struct ttm_place *pl, unsigned *n, uint32_t domain,
-		   uint32_t flags)
+set_placement_list(struct nouveau_drm *drm, struct ttm_place *pl, unsigned *n,
+		   uint32_t domain, uint32_t flags)
 {
 	*n = 0;
 
-	if (domain & NOUVEAU_GEM_DOMAIN_VRAM)
-		pl[(*n)++].flags = TTM_PL_FLAG_VRAM | flags;
-	if (domain & NOUVEAU_GEM_DOMAIN_GART)
-		pl[(*n)++].flags = TTM_PL_FLAG_TT | flags;
-	if (domain & NOUVEAU_GEM_DOMAIN_CPU)
-		pl[(*n)++].flags = TTM_PL_FLAG_SYSTEM | flags;
+	if (domain & NOUVEAU_GEM_DOMAIN_VRAM) {
+		struct nvif_mmu *mmu = &drm->client.mmu;
+
+		pl[*n].mem_type = TTM_PL_VRAM;
+		pl[*n].flags = flags & ~TTM_PL_FLAG_CACHED;
+
+		/* Some BARs do not support being ioremapped WC */
+		if (drm->client.device.info.family >= NV_DEVICE_INFO_V0_TESLA &&
+		    mmu->type[drm->ttm.type_vram].type & NVIF_MEM_UNCACHED)
+			pl[*n].flags &= ~TTM_PL_FLAG_WC;
+
+		(*n)++;
+	}
+	if (domain & NOUVEAU_GEM_DOMAIN_GART) {
+		pl[*n].mem_type = TTM_PL_TT;
+		pl[*n].flags = flags;
+
+		if (drm->agp.bridge)
+			pl[*n].flags &= ~TTM_PL_FLAG_CACHED;
+
+		(*n)++;
+	}
+	if (domain & NOUVEAU_GEM_DOMAIN_CPU) {
+		pl[*n].mem_type = TTM_PL_SYSTEM;
+		pl[(*n)++].flags = flags;
+	}
 }
 
 static void
@@ -391,17 +414,18 @@ void
 nouveau_bo_placement_set(struct nouveau_bo *nvbo, uint32_t domain,
 			 uint32_t busy)
 {
+	struct nouveau_drm *drm = nouveau_bdev(nvbo->bo.bdev);
 	struct ttm_placement *pl = &nvbo->placement;
 	uint32_t flags = (nvbo->force_coherent ? TTM_PL_FLAG_UNCACHED :
 						 TTM_PL_MASK_CACHING) |
 			 (nvbo->pin_refcnt ? TTM_PL_FLAG_NO_EVICT : 0);
 
 	pl->placement = nvbo->placements;
-	set_placement_list(nvbo->placements, &pl->num_placement,
+	set_placement_list(drm, nvbo->placements, &pl->num_placement,
 			   domain, flags);
 
 	pl->busy_placement = nvbo->busy_placements;
-	set_placement_list(nvbo->busy_placements, &pl->num_busy_placement,
+	set_placement_list(drm, nvbo->busy_placements, &pl->num_busy_placement,
 			   domain | busy, flags);
 
 	set_placement_range(nvbo, domain);
@@ -566,7 +590,7 @@ nouveau_bo_sync_for_device(struct nouveau_bo *nvbo)
 	struct ttm_dma_tt *ttm_dma = (struct ttm_dma_tt *)nvbo->bo.ttm;
 	int i;
 
-	if (!ttm_dma)
+	if (!ttm_dma || !ttm_dma->dma_address)
 		return;
 
 	/* Don't waste time looping if the object is coherent */
@@ -586,7 +610,7 @@ nouveau_bo_sync_for_cpu(struct nouveau_bo *nvbo)
 	struct ttm_dma_tt *ttm_dma = (struct ttm_dma_tt *)nvbo->bo.ttm;
 	int i;
 
-	if (!ttm_dma)
+	if (!ttm_dma || !ttm_dma->dma_address)
 		return;
 
 	/* Don't waste time looping if the object is coherent */
@@ -690,6 +714,36 @@ nouveau_ttm_tt_create(struct ttm_buffer_object *bo, uint32_t page_flags)
 	return nouveau_sgdma_create_ttm(bo, page_flags);
 }
 
+static int
+nouveau_ttm_tt_bind(struct ttm_bo_device *bdev, struct ttm_tt *ttm,
+		    struct ttm_resource *reg)
+{
+#if IS_ENABLED(CONFIG_AGP)
+	struct nouveau_drm *drm = nouveau_bdev(bdev);
+#endif
+	if (!reg)
+		return -EINVAL;
+#if IS_ENABLED(CONFIG_AGP)
+	if (drm->agp.bridge)
+		return ttm_agp_bind(ttm, reg);
+#endif
+	return nouveau_sgdma_bind(bdev, ttm, reg);
+}
+
+static void
+nouveau_ttm_tt_unbind(struct ttm_bo_device *bdev, struct ttm_tt *ttm)
+{
+#if IS_ENABLED(CONFIG_AGP)
+	struct nouveau_drm *drm = nouveau_bdev(bdev);
+
+	if (drm->agp.bridge) {
+		ttm_agp_unbind(ttm);
+		return;
+	}
+#endif
+	nouveau_sgdma_unbind(bdev, ttm);
+}
+
 static void
 nouveau_bo_evict_flags(struct ttm_buffer_object *bo, struct ttm_placement *pl)
 {
@@ -769,7 +823,7 @@ nouveau_bo_move_m2mf(struct ttm_buffer_object *bo, int evict, bool intr,
 			if (ret == 0) {
 				ret = ttm_bo_move_accel_cleanup(bo,
 								&fence->base,
-								evict,
+								evict, false,
 								new_reg);
 				nouveau_fence_unref(&fence);
 			}
@@ -855,7 +909,8 @@ nouveau_bo_move_flipd(struct ttm_buffer_object *bo, bool evict, bool intr,
 	struct ttm_place placement_memtype = {
 		.fpfn = 0,
 		.lpfn = 0,
-		.flags = TTM_PL_FLAG_TT | TTM_PL_MASK_CACHING
+		.mem_type = TTM_PL_TT,
+		.flags = TTM_PL_MASK_CACHING
 	};
 	struct ttm_placement placement;
 	struct ttm_resource tmp_reg;
@@ -870,7 +925,11 @@ nouveau_bo_move_flipd(struct ttm_buffer_object *bo, bool evict, bool intr,
 	if (ret)
 		return ret;
 
-	ret = ttm_tt_bind(bo->bdev, bo->ttm, &tmp_reg, &ctx);
+	ret = ttm_tt_populate(bo->bdev, bo->ttm, &ctx);
+	if (ret)
+		goto out;
+
+	ret = nouveau_ttm_tt_bind(bo->bdev, bo->ttm, &tmp_reg);
 	if (ret)
 		goto out;
 
@@ -892,7 +951,8 @@ nouveau_bo_move_flips(struct ttm_buffer_object *bo, bool evict, bool intr,
 	struct ttm_place placement_memtype = {
 		.fpfn = 0,
 		.lpfn = 0,
-		.flags = TTM_PL_FLAG_TT | TTM_PL_MASK_CACHING
+		.mem_type = TTM_PL_TT,
+		.flags = TTM_PL_MASK_CACHING
 	};
 	struct ttm_placement placement;
 	struct ttm_resource tmp_reg;
@@ -1015,9 +1075,7 @@ nouveau_bo_move(struct ttm_buffer_object *bo, bool evict,
 
 	/* Fake bo copy. */
 	if (old_reg->mem_type == TTM_PL_SYSTEM && !bo->ttm) {
-		BUG_ON(bo->mem.mm_node != NULL);
-		bo->mem = *new_reg;
-		new_reg->mm_node = NULL;
+		ttm_bo_move_null(bo, new_reg);
 		goto out;
 	}
 
@@ -1156,8 +1214,8 @@ retry:
 			}
 
 			reg->bus.offset = handle;
-			ret = 0;
 		}
+		ret = 0;
 		break;
 	default:
 		ret = -EINVAL;
@@ -1249,14 +1307,14 @@ nouveau_ttm_tt_populate(struct ttm_bo_device *bdev,
 	struct device *dev;
 	bool slave = !!(ttm->page_flags & TTM_PAGE_FLAG_SG);
 
-	if (ttm->state != tt_unpopulated)
+	if (ttm_tt_is_populated(ttm))
 		return 0;
 
 	if (slave && ttm->sg) {
 		/* make userspace faulting work */
 		drm_prime_sg_to_page_addr_arrays(ttm->sg, ttm->pages,
 						 ttm_dma->dma_address, ttm->num_pages);
-		ttm->state = tt_unbound;
+		ttm_tt_set_populated(ttm);
 		return 0;
 	}
 
@@ -1265,7 +1323,7 @@ nouveau_ttm_tt_populate(struct ttm_bo_device *bdev,
 
 #if IS_ENABLED(CONFIG_AGP)
 	if (drm->agp.bridge) {
-		return ttm_agp_tt_populate(bdev, ttm, ctx);
+		return ttm_pool_populate(ttm, ctx);
 	}
 #endif
 
@@ -1294,7 +1352,7 @@ nouveau_ttm_tt_unpopulate(struct ttm_bo_device *bdev,
 
 #if IS_ENABLED(CONFIG_AGP)
 	if (drm->agp.bridge) {
-		ttm_agp_tt_unpopulate(bdev, ttm);
+		ttm_pool_unpopulate(ttm);
 		return;
 	}
 #endif
@@ -1307,6 +1365,22 @@ nouveau_ttm_tt_unpopulate(struct ttm_bo_device *bdev,
 #endif
 
 	ttm_unmap_and_unpopulate_pages(dev, ttm_dma);
+}
+
+static void
+nouveau_ttm_tt_destroy(struct ttm_bo_device *bdev,
+		       struct ttm_tt *ttm)
+{
+#if IS_ENABLED(CONFIG_AGP)
+	struct nouveau_drm *drm = nouveau_bdev(bdev);
+	if (drm->agp.bridge) {
+		ttm_agp_unbind(ttm);
+		ttm_tt_destroy_common(bdev, ttm);
+		ttm_agp_destroy(ttm);
+		return;
+	}
+#endif
+	nouveau_sgdma_destroy(bdev, ttm);
 }
 
 void
@@ -1324,6 +1398,9 @@ struct ttm_bo_driver nouveau_bo_driver = {
 	.ttm_tt_create = &nouveau_ttm_tt_create,
 	.ttm_tt_populate = &nouveau_ttm_tt_populate,
 	.ttm_tt_unpopulate = &nouveau_ttm_tt_unpopulate,
+	.ttm_tt_bind = &nouveau_ttm_tt_bind,
+	.ttm_tt_unbind = &nouveau_ttm_tt_unbind,
+	.ttm_tt_destroy = &nouveau_ttm_tt_destroy,
 	.eviction_valuable = ttm_bo_eviction_valuable,
 	.evict_flags = nouveau_bo_evict_flags,
 	.move_notify = nouveau_bo_move_ntfy,

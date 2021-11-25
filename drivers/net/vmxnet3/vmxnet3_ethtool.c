@@ -1,7 +1,7 @@
 /*
  * Linux driver for VMware's vmxnet3 ethernet NIC.
  *
- * Copyright (C) 2008-2020, VMware, Inc. All Rights Reserved.
+ * Copyright (C) 2008-2021, VMware, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,6 +26,10 @@
 
 
 #include "vmxnet3_int.h"
+#include <net/vxlan.h>
+#include <net/geneve.h>
+
+#define VXLAN_UDP_PORT 8472
 
 struct vmxnet3_stat_desc {
 	char desc[ETH_GSTRING_LEN];
@@ -264,6 +268,48 @@ netdev_features_t vmxnet3_fix_features(struct net_device *netdev,
 	if (!(features & NETIF_F_RXCSUM))
 		features &= ~NETIF_F_LRO;
 
+	return features;
+}
+
+netdev_features_t vmxnet3_features_check(struct sk_buff *skb,
+					 struct net_device *netdev,
+					 netdev_features_t features)
+{
+	struct vmxnet3_adapter *adapter = netdev_priv(netdev);
+
+	/* Validate if the tunneled packet is being offloaded by the device */
+	if (VMXNET3_VERSION_GE_4(adapter) &&
+	    skb->encapsulation && skb->ip_summed == CHECKSUM_PARTIAL) {
+		u8 l4_proto = 0;
+		u16 port;
+		struct udphdr *udph;
+
+		switch (vlan_get_protocol(skb)) {
+		case htons(ETH_P_IP):
+			l4_proto = ip_hdr(skb)->protocol;
+			break;
+		case htons(ETH_P_IPV6):
+			l4_proto = ipv6_hdr(skb)->nexthdr;
+			break;
+		default:
+			return features & ~(NETIF_F_CSUM_MASK | NETIF_F_GSO_MASK);
+		}
+
+		switch (l4_proto) {
+		case IPPROTO_UDP:
+			udph = udp_hdr(skb);
+			port = be16_to_cpu(udph->dest);
+			/* Check if offloaded port is supported */
+			if (port != GENEVE_UDP_PORT &&
+			    port != IANA_VXLAN_UDP_PORT &&
+			    port != VXLAN_UDP_PORT) {
+				return features & ~(NETIF_F_CSUM_MASK | NETIF_F_GSO_MASK);
+			}
+			break;
+		default:
+			return features & ~(NETIF_F_CSUM_MASK | NETIF_F_GSO_MASK);
+		}
+	}
 	return features;
 }
 

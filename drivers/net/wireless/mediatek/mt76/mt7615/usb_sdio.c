@@ -226,7 +226,6 @@ bool mt7663_usb_sdio_tx_status_data(struct mt76_dev *mdev, u8 *update)
 EXPORT_SYMBOL_GPL(mt7663_usb_sdio_tx_status_data);
 
 void mt7663_usb_sdio_tx_complete_skb(struct mt76_dev *mdev,
-				     enum mt76_txq_id qid,
 				     struct mt76_queue_entry *e)
 {
 	unsigned int headroom = MT_USB_TXD_SIZE;
@@ -235,7 +234,7 @@ void mt7663_usb_sdio_tx_complete_skb(struct mt76_dev *mdev,
 		headroom += MT_USB_HDR_SIZE;
 	skb_pull(e->skb, headroom);
 
-	mt76_tx_complete_skb(mdev, e->skb);
+	mt76_tx_complete_skb(mdev, e->wcid, e->skb);
 }
 EXPORT_SYMBOL_GPL(mt7663_usb_sdio_tx_complete_skb);
 
@@ -244,13 +243,15 @@ int mt7663_usb_sdio_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 				   struct ieee80211_sta *sta,
 				   struct mt76_tx_info *tx_info)
 {
-	struct mt7615_sta *msta = container_of(wcid, struct mt7615_sta, wcid);
 	struct mt7615_dev *dev = container_of(mdev, struct mt7615_dev, mt76);
 	struct sk_buff *skb = tx_info->skb;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct mt7615_sta *msta;
+	int pad;
 
+	msta = wcid ? container_of(wcid, struct mt7615_sta, wcid) : NULL;
 	if ((info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE) &&
-	    !msta->rate_probe) {
+	    msta && !msta->rate_probe) {
 		/* request to configure sampling rate */
 		spin_lock_bh(&dev->mt76.lock);
 		mt7615_mac_set_rates(&dev->phy, msta, &info->control.rates[0],
@@ -259,10 +260,16 @@ int mt7663_usb_sdio_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	}
 
 	mt7663_usb_sdio_write_txwi(dev, wcid, qid, sta, skb);
-	if (mt76_is_usb(mdev))
-		put_unaligned_le32(skb->len, skb_push(skb, sizeof(skb->len)));
+	if (mt76_is_usb(mdev)) {
+		u32 len = skb->len;
 
-	return mt76_skb_adjust_pad(skb);
+		put_unaligned_le32(len, skb_push(skb, sizeof(len)));
+		pad = round_up(skb->len, 4) + 4 - skb->len;
+	} else {
+		pad = round_up(skb->len, 4) - skb->len;
+	}
+
+	return mt76_skb_adjust_pad(skb, pad);
 }
 EXPORT_SYMBOL_GPL(mt7663_usb_sdio_tx_prepare_skb);
 

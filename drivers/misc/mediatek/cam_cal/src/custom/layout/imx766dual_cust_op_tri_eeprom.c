@@ -27,11 +27,11 @@ static struct STRUCT_CALIBRATION_LAYOUT_STRUCT cal_layout_table = {
 	{
 		{0x00000001, 0x00000000, 0x00000000, do_module_version},
 		{0x00000001, 0x00000000, 0x00000002, do_part_number},
-		{0x00000001, 0x000000D0, 0x0000074C, do_single_lsc_imx766dual},
+		{0x00000001, 0x00003B10, 0x0000074C, do_single_lsc_imx766dual},
 		{0x00000001, 0x00000007, 0x0000000E, do_2a_gain_imx766dual},
-		{0x00000001, 0x00000830, 0x00001A78, do_pdaf},
+		{0x00000001, 0x00004270, 0x00001A78, do_pdaf},
 		{0x00000000, 0x00000FAE, 0x00000550, do_stereo_data},
-		{0x00000001, 0x00000000, 0x00004000, do_dump_all},
+		{0x00000001, 0x00000000, 0x00008000, do_dump_all},
 		{0x00000001, 0x00000008, 0x00000002, do_lens_id_imx766dual}
 	}
 };
@@ -43,9 +43,9 @@ struct STRUCT_CAM_CAL_CONFIG_STRUCT imx766dual_cust_op_tri_eeprom = {
 	.layout = &cal_layout_table,
 	.sensor_id = IMX766DUAL_SENSOR_ID,
 	.i2c_write_id = 0xA2,
-	.max_size = 0x4000,
+	.max_size = 0x8000,
 	.enable_preload = 1,
-	.preload_size = 0x4000,
+	.preload_size = 0x8000,
 };
 
 static unsigned int do_single_lsc_imx766dual(struct EEPROM_DRV_FD_DATA *pdata,

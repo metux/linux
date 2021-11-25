@@ -42,8 +42,6 @@ struct cmdq_util_helper_fp *cmdq_util;
 				<< 32 | CMDQ_EOC_IRQ_EN)
 #define CMDQ_MBOX_BUF_LIMIT	16 /* default limit count */
 
-#define CMDQ_PREDUMP_TIMEOUT_MS		200
-
 /* sleep for 312 tick, which around 12us */
 #define CMDQ_POLL_TICK			312
 
@@ -2068,7 +2066,7 @@ static int cmdq_pkt_wait_complete_loop(struct cmdq_pkt *pkt)
 
 	while (!pkt->task_alloc) {
 		ret = wait_for_completion_timeout(&pkt->cmplt,
-			msecs_to_jiffies(CMDQ_PREDUMP_TIMEOUT_MS));
+			msecs_to_jiffies(CMDQ_PREDUMP_MS(timeout_ms)));
 		if (ret) {
 			/* task alloc failed then skip predump */
 			skip = true;
@@ -2085,7 +2083,7 @@ static int cmdq_pkt_wait_complete_loop(struct cmdq_pkt *pkt)
 		}
 
 		ret = wait_for_completion_timeout(&pkt->cmplt,
-			msecs_to_jiffies(CMDQ_PREDUMP_TIMEOUT_MS));
+			msecs_to_jiffies(CMDQ_PREDUMP_MS(timeout_ms)));
 		if (ret)
 			break;
 

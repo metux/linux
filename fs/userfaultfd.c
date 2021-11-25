@@ -62,7 +62,7 @@ struct userfaultfd_ctx {
 	/* waitqueue head for events */
 	wait_queue_head_t event_wqh;
 	/* a refile sequence protected by fault_pending_wqh lock */
-	struct seqcount refile_seq;
+	seqcount_spinlock_t refile_seq;
 	/* pseudo fd refcounting */
 	refcount_t refcount;
 	/* userfaultfd syscall flags */
@@ -337,7 +337,6 @@ out:
 	return ret;
 }
 
-/* Should pair with userfaultfd_signal_pending() */
 static inline long userfaultfd_get_blocking_state(unsigned int flags)
 {
 	if (flags & FAULT_FLAG_INTERRUPTIBLE)
@@ -347,18 +346,6 @@ static inline long userfaultfd_get_blocking_state(unsigned int flags)
 		return TASK_KILLABLE;
 
 	return TASK_UNINTERRUPTIBLE;
-}
-
-/* Should pair with userfaultfd_get_blocking_state() */
-static inline bool userfaultfd_signal_pending(unsigned int flags)
-{
-	if (flags & FAULT_FLAG_INTERRUPTIBLE)
-		return signal_pending(current);
-
-	if (flags & FAULT_FLAG_KILLABLE)
-		return fatal_signal_pending(current);
-
-	return false;
 }
 
 /*
@@ -523,33 +510,9 @@ vm_fault_t handle_userfault(struct vm_fault *vmf, unsigned long reason)
 						       vmf->flags, reason);
 	mmap_read_unlock(mm);
 
-	if (likely(must_wait && !READ_ONCE(ctx->released) &&
-		   !userfaultfd_signal_pending(vmf->flags))) {
+	if (likely(must_wait && !READ_ONCE(ctx->released))) {
 		wake_up_poll(&ctx->fd_wqh, EPOLLIN);
 		schedule();
-		ret |= VM_FAULT_MAJOR;
-
-		/*
-		 * False wakeups can orginate even from rwsem before
-		 * up_read() however userfaults will wait either for a
-		 * targeted wakeup on the specific uwq waitqueue from
-		 * wake_userfault() or for signals or for uffd
-		 * release.
-		 */
-		while (!READ_ONCE(uwq.waken)) {
-			/*
-			 * This needs the full smp_store_mb()
-			 * guarantee as the state write must be
-			 * visible to other CPUs before reading
-			 * uwq.waken from other CPUs.
-			 */
-			set_current_state(blocking_state);
-			if (READ_ONCE(uwq.waken) ||
-			    READ_ONCE(ctx->released) ||
-			    userfaultfd_signal_pending(vmf->flags))
-				break;
-			schedule();
-		}
 	}
 
 	__set_current_state(TASK_RUNNING);
@@ -1278,23 +1241,21 @@ static __always_inline void wake_userfault(struct userfaultfd_ctx *ctx,
 }
 
 static __always_inline int validate_range(struct mm_struct *mm,
-					  __u64 *start, __u64 len)
+					  __u64 start, __u64 len)
 {
 	__u64 task_size = mm->task_size;
 
-	*start = untagged_addr(*start);
-
-	if (*start & ~PAGE_MASK)
+	if (start & ~PAGE_MASK)
 		return -EINVAL;
 	if (len & ~PAGE_MASK)
 		return -EINVAL;
 	if (!len)
 		return -EINVAL;
-	if (*start < mmap_min_addr)
+	if (start < mmap_min_addr)
 		return -EINVAL;
-	if (*start >= task_size)
+	if (start >= task_size)
 		return -EINVAL;
-	if (len > task_size - *start)
+	if (len > task_size - start)
 		return -EINVAL;
 	return 0;
 }
@@ -1354,7 +1315,7 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 		vm_flags |= VM_UFFD_MINOR;
 	}
 
-	ret = validate_range(mm, &uffdio_register.range.start,
+	ret = validate_range(mm, uffdio_register.range.start,
 			     uffdio_register.range.len);
 	if (ret)
 		goto out;
@@ -1562,7 +1523,7 @@ static int userfaultfd_unregister(struct userfaultfd_ctx *ctx,
 	if (copy_from_user(&uffdio_unregister, buf, sizeof(uffdio_unregister)))
 		goto out;
 
-	ret = validate_range(mm, &uffdio_unregister.start,
+	ret = validate_range(mm, uffdio_unregister.start,
 			     uffdio_unregister.len);
 	if (ret)
 		goto out;
@@ -1713,7 +1674,7 @@ static int userfaultfd_wake(struct userfaultfd_ctx *ctx,
 	if (copy_from_user(&uffdio_wake, buf, sizeof(uffdio_wake)))
 		goto out;
 
-	ret = validate_range(ctx->mm, &uffdio_wake.start, uffdio_wake.len);
+	ret = validate_range(ctx->mm, uffdio_wake.start, uffdio_wake.len);
 	if (ret)
 		goto out;
 
@@ -1753,7 +1714,7 @@ static int userfaultfd_copy(struct userfaultfd_ctx *ctx,
 			   sizeof(uffdio_copy)-sizeof(__s64)))
 		goto out;
 
-	ret = validate_range(ctx->mm, &uffdio_copy.dst, uffdio_copy.len);
+	ret = validate_range(ctx->mm, uffdio_copy.dst, uffdio_copy.len);
 	if (ret)
 		goto out;
 	/*
@@ -1810,7 +1771,7 @@ static int userfaultfd_zeropage(struct userfaultfd_ctx *ctx,
 			   sizeof(uffdio_zeropage)-sizeof(__s64)))
 		goto out;
 
-	ret = validate_range(ctx->mm, &uffdio_zeropage.range.start,
+	ret = validate_range(ctx->mm, uffdio_zeropage.range.start,
 			     uffdio_zeropage.range.len);
 	if (ret)
 		goto out;
@@ -1860,7 +1821,7 @@ static int userfaultfd_writeprotect(struct userfaultfd_ctx *ctx,
 			   sizeof(struct uffdio_writeprotect)))
 		return -EFAULT;
 
-	ret = validate_range(ctx->mm, &uffdio_wp.range.start,
+	ret = validate_range(ctx->mm, uffdio_wp.range.start,
 			     uffdio_wp.range.len);
 	if (ret)
 		return ret;
@@ -1908,7 +1869,7 @@ static int userfaultfd_continue(struct userfaultfd_ctx *ctx, unsigned long arg)
 			   sizeof(uffdio_continue) - (sizeof(__s64))))
 		goto out;
 
-	ret = validate_range(ctx->mm, &uffdio_continue.range.start,
+	ret = validate_range(ctx->mm, uffdio_continue.range.start,
 			     uffdio_continue.range.len);
 	if (ret)
 		goto out;
@@ -2092,7 +2053,7 @@ static void init_once_userfaultfd_ctx(void *mem)
 	init_waitqueue_head(&ctx->fault_wqh);
 	init_waitqueue_head(&ctx->event_wqh);
 	init_waitqueue_head(&ctx->fd_wqh);
-	seqcount_init(&ctx->refile_seq);
+	seqcount_spinlock_init(&ctx->refile_seq, &ctx->fault_pending_wqh.lock);
 }
 
 SYSCALL_DEFINE1(userfaultfd, int, flags)

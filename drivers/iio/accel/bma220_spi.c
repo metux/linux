@@ -2,16 +2,18 @@
 /**
  * BMA220 Digital triaxial acceleration sensor driver
  *
- * Copyright (c) 2016, Intel Corporation.
+ * Copyright (c) 2016,2020 Intel Corporation.
  */
 
+#include <linux/bits.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/spi/spi.h>
+
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-#include <linux/spi/spi.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 
@@ -23,8 +25,8 @@
 #define BMA220_REG_SUSPEND			0x18
 
 #define BMA220_CHIP_ID				0xDD
-#define BMA220_READ_MASK			0x80
-#define BMA220_RANGE_MASK			0x03
+#define BMA220_READ_MASK			BIT(7)
+#define BMA220_RANGE_MASK			GENMASK(1, 0)
 #define BMA220_DATA_SHIFT			2
 #define BMA220_SUSPEND_SLEEP			0xFF
 #define BMA220_SUSPEND_WAKE			0x00
@@ -61,7 +63,11 @@ static const int bma220_scale_table[][2] = {
 struct bma220_data {
 	struct spi_device *spi_device;
 	struct mutex lock;
-	s8 buffer[16]; /* 3x8-bit channels + 5x8 padding + 8x8 timestamp */
+	struct {
+		s8 chans[3];
+		/* Ensure timestamp is naturally aligned. */
+		s64 timestamp __aligned(8);
+	} scan;
 	u8 tx_buf[2] ____cacheline_aligned;
 };
 
@@ -92,12 +98,12 @@ static irqreturn_t bma220_trigger_handler(int irq, void *p)
 
 	mutex_lock(&data->lock);
 	data->tx_buf[0] = BMA220_REG_ACCEL_X | BMA220_READ_MASK;
-	ret = spi_write_then_read(spi, data->tx_buf, 1, data->buffer,
+	ret = spi_write_then_read(spi, data->tx_buf, 1, &data->scan.chans,
 				  ARRAY_SIZE(bma220_channels) - 1);
 	if (ret < 0)
 		goto err;
 
-	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
+	iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
 					   pf->timestamp);
 err:
 	mutex_unlock(&data->lock);
@@ -300,7 +306,6 @@ static __maybe_unused int bma220_resume(struct device *dev)
 
 	return bma220_read_reg(data->spi_device, BMA220_REG_SUSPEND);
 }
-
 static SIMPLE_DEV_PM_OPS(bma220_pm_ops, bma220_suspend, bma220_resume);
 
 static const struct spi_device_id bma220_spi_id[] = {
@@ -312,7 +317,6 @@ static const struct acpi_device_id bma220_acpi_id[] = {
 	{"BMA0220", 0},
 	{}
 };
-
 MODULE_DEVICE_TABLE(spi, bma220_spi_id);
 
 static struct spi_driver bma220_driver = {
@@ -325,7 +329,6 @@ static struct spi_driver bma220_driver = {
 	.remove =           bma220_remove,
 	.id_table =         bma220_spi_id,
 };
-
 module_spi_driver(bma220_driver);
 
 MODULE_AUTHOR("Tiberiu Breana <tiberiu.a.breana@intel.com>");

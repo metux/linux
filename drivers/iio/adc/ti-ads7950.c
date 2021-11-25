@@ -9,7 +9,7 @@
  * Copyright 2012 CS Systemes d'Information
  *
  * And also on hwmon/ads79xx.c
- * Copyright (C) 2013 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2013 Texas Instruments Incorporated - https://www.ti.com/
  *	Nishanth Menon
  */
 
@@ -568,7 +568,6 @@ static int ti_ads7950_probe(struct spi_device *spi)
 	st->ring_xfer.tx_buf = &st->tx_buf[0];
 	st->ring_xfer.rx_buf = &st->rx_buf[0];
 	/* len will be set later */
-	st->ring_xfer.cs_change = true;
 
 	spi_message_add_tail(&st->ring_xfer, &st->ring_msg);
 

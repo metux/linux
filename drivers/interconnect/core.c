@@ -57,12 +57,18 @@ static int icc_summary_show(struct seq_file *s, void *data)
 
 			icc_summary_show_one(s, n);
 			hlist_for_each_entry(r, &n->req_list, req_node) {
+				u32 avg_bw = 0, peak_bw = 0;
+
 				if (!r->dev)
 					continue;
 
+				if (r->enabled) {
+					avg_bw = r->avg_bw;
+					peak_bw = r->peak_bw;
+				}
+
 				seq_printf(s, "  %-27s %12u %12u %12u\n",
-					   dev_name(r->dev), r->tag, r->avg_bw,
-					   r->peak_bw);
+					   dev_name(r->dev), r->tag, avg_bw, peak_bw);
 			}
 		}
 	}
@@ -277,23 +283,22 @@ static int aggregate_requests(struct icc_node *node)
 static int apply_constraints(struct icc_path *path)
 {
 	struct icc_node *next, *prev = NULL;
+	struct icc_provider *p;
 	int ret = -EINVAL;
 	int i;
 
 	for (i = 0; i < path->num_nodes; i++) {
 		next = path->reqs[i].node;
+		p = next->provider;
 
-		/*
-		 * Both endpoints should be valid master-slave pairs of the
-		 * same interconnect provider that will be configured.
-		 */
-		if (!prev || next->provider != prev->provider) {
+		/* both endpoints should be valid master-slave pairs */
+		if (!prev || (p != prev->provider && !p->inter_set)) {
 			prev = next;
 			continue;
 		}
 
 		/* set the constraints */
-		ret = next->provider->set(prev, next);
+		ret = p->set(prev, next);
 		if (ret)
 			goto out;
 
@@ -354,7 +359,7 @@ struct icc_node_data *of_icc_get_from_provider(struct of_phandle_args *spec)
 	struct icc_node_data *data = NULL;
 	struct icc_provider *provider;
 
-	if (!spec || spec->args_count != 1)
+	if (!spec)
 		return ERR_PTR(-EINVAL);
 
 	mutex_lock(&icc_lock);
@@ -398,7 +403,7 @@ struct icc_path *devm_of_icc_get(struct device *dev, const char *name)
 {
 	struct icc_path **ptr, *path;
 
-	ptr = devres_alloc(devm_icc_release, sizeof(**ptr), GFP_KERNEL);
+	ptr = devres_alloc(devm_icc_release, sizeof(*ptr), GFP_KERNEL);
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
@@ -473,18 +478,14 @@ struct icc_path *of_icc_get_by_index(struct device *dev, int idx)
 	src_data = of_icc_get_from_provider(&src_args);
 
 	if (IS_ERR(src_data)) {
-		if (PTR_ERR(src_data) != -EPROBE_DEFER)
-			dev_err(dev, "error finding src node: %ld\n",
-				PTR_ERR(src_data));
+		dev_err_probe(dev, PTR_ERR(src_data), "error finding src node\n");
 		return ERR_CAST(src_data);
 	}
 
 	dst_data = of_icc_get_from_provider(&dst_args);
 
 	if (IS_ERR(dst_data)) {
-		if (PTR_ERR(dst_data) != -EPROBE_DEFER)
-			dev_err(dev, "error finding dst node: %ld\n",
-				PTR_ERR(dst_data));
+		dev_err_probe(dev, PTR_ERR(dst_data), "error finding dst node\n");
 		kfree(src_data);
 		return ERR_CAST(dst_data);
 	}
@@ -584,6 +585,24 @@ void icc_set_tag(struct icc_path *path, u32 tag)
 	mutex_unlock(&icc_lock);
 }
 EXPORT_SYMBOL_GPL(icc_set_tag);
+
+/**
+ * icc_get_name() - Get name of the icc path
+ * @path: reference to the path returned by icc_get()
+ *
+ * This function is used by an interconnect consumer to get the name of the icc
+ * path.
+ *
+ * Returns a valid pointer on success, or NULL otherwise.
+ */
+const char *icc_get_name(struct icc_path *path)
+{
+	if (!path)
+		return NULL;
+
+	return path->name;
+}
+EXPORT_SYMBOL_GPL(icc_get_name);
 
 /**
  * icc_set_bw() - set bandwidth constraints on an interconnect path
@@ -954,6 +973,14 @@ void icc_node_add(struct icc_node *node, struct icc_provider *provider)
 	}
 	node->avg_bw = node->init_avg;
 	node->peak_bw = node->init_peak;
+
+	if (provider->pre_aggregate)
+		provider->pre_aggregate(node);
+
+	if (provider->aggregate)
+		provider->aggregate(node, 0, node->init_avg, node->init_peak,
+				    &node->avg_bw, &node->peak_bw);
+
 	provider->set(node, node);
 	node->avg_bw = 0;
 	node->peak_bw = 0;
@@ -1063,7 +1090,6 @@ static int of_count_icc_providers(struct device_node *np)
 			count++;
 		count += of_count_icc_providers(child);
 	}
-	of_node_put(np);
 
 	return count;
 }
@@ -1085,6 +1111,8 @@ void icc_sync_state(struct device *dev)
 		dev_dbg(p->dev, "interconnect provider is in synced state\n");
 		list_for_each_entry(n, &p->nodes, node_list) {
 			if (n->init_avg || n->init_peak) {
+				n->init_avg = 0;
+				n->init_peak = 0;
 				aggregate_requests(n);
 				p->set(n, n);
 			}
@@ -1109,12 +1137,7 @@ static int __init icc_init(void)
 	return 0;
 }
 
-static void __exit icc_exit(void)
-{
-	debugfs_remove_recursive(icc_debugfs_dir);
-}
-module_init(icc_init);
-module_exit(icc_exit);
+device_initcall(icc_init);
 
 MODULE_AUTHOR("Georgi Djakov <georgi.djakov@linaro.org>");
 MODULE_DESCRIPTION("Interconnect Driver Core");

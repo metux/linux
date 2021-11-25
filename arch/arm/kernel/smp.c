@@ -89,7 +89,6 @@ static int nr_ipi __read_mostly = NR_IPI;
 static struct irq_desc *ipi_desc[MAX_IPI] __read_mostly;
 
 static void ipi_setup(int cpu);
-static void ipi_teardown(int cpu);
 
 static DECLARE_COMPLETION(cpu_running);
 
@@ -238,6 +237,17 @@ int platform_can_hotplug_cpu(unsigned int cpu)
 	 * of clock tick interrupts.
 	 */
 	return cpu != 0;
+}
+
+static void ipi_teardown(int cpu)
+{
+	int i;
+
+	if (WARN_ON_ONCE(!ipi_irq_base))
+		return;
+
+	for (i = 0; i < nr_ipi; i++)
+		disable_percpu_irq(ipi_irq_base + i);
 }
 
 /*
@@ -425,7 +435,6 @@ asmlinkage void secondary_start_kernel(void)
 #endif
 	pr_debug("CPU%u: Booted secondary processor\n", cpu);
 
-	preempt_disable();
 	trace_hardirqs_off();
 
 	/*
@@ -534,7 +543,12 @@ void show_ipi_list(struct seq_file *p, int prec)
 	unsigned int cpu, i;
 
 	for (i = 0; i < NR_IPI; i++) {
-		unsigned int irq = irq_desc_get_irq(ipi_desc[i]);
+		unsigned int irq;
+
+		if (!ipi_desc[i])
+			continue;
+
+		irq = irq_desc_get_irq(ipi_desc[i]);
 		seq_printf(p, "%*s%u: ", prec - 1, "IPI", i);
 
 		for_each_online_cpu(cpu)
@@ -708,17 +722,6 @@ static void ipi_setup(int cpu)
 
 	for (i = 0; i < nr_ipi; i++)
 		enable_percpu_irq(ipi_irq_base + i, 0);
-}
-
-static void ipi_teardown(int cpu)
-{
-	int i;
-
-	if (WARN_ON_ONCE(!ipi_irq_base))
-		return;
-
-	for (i = 0; i < nr_ipi; i++)
-		disable_percpu_irq(ipi_irq_base + i);
 }
 
 void __init set_smp_ipi_range(int ipi_base, int n)

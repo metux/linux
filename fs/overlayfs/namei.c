@@ -106,12 +106,12 @@ int ovl_check_fb_len(struct ovl_fb *fb, int fb_len)
 }
 
 static struct ovl_fh *ovl_get_fh(struct ovl_fs *ofs, struct dentry *dentry,
-				 const char *name)
+				 enum ovl_xattr ox)
 {
 	int res, err;
 	struct ovl_fh *fh = NULL;
 
-	res = ovl_do_getxattr(ofs, dentry, name, NULL, 0);
+	res = ovl_do_getxattr(ofs, dentry, ox, NULL, 0);
 	if (res < 0) {
 		if (res == -ENODATA || res == -EOPNOTSUPP)
 			return NULL;
@@ -125,7 +125,7 @@ static struct ovl_fh *ovl_get_fh(struct ovl_fs *ofs, struct dentry *dentry,
 	if (!fh)
 		return ERR_PTR(-ENOMEM);
 
-	res = ovl_do_getxattr(ofs, dentry, name, fh->buf, res);
+	res = ovl_do_getxattr(ofs, dentry, ox, fh->buf, res);
 	if (res < 0)
 		goto fail;
 
@@ -366,7 +366,7 @@ int ovl_check_origin_fh(struct ovl_fs *ofs, struct ovl_fh *fh, bool connected,
 		return PTR_ERR(origin);
 
 	if (upperdentry && !ovl_is_whiteout(upperdentry) &&
-	    ((d_inode(origin)->i_mode ^ d_inode(upperdentry)->i_mode) & S_IFMT))
+	    inode_wrong_type(d_inode(upperdentry), d_inode(origin)->i_mode))
 		goto invalid;
 
 	if (!*stackp)
@@ -416,9 +416,9 @@ static int ovl_check_origin(struct ovl_fs *ofs, struct dentry *upperdentry,
  * Return 0 on match, -ESTALE on mismatch, < 0 on error.
  */
 static int ovl_verify_fh(struct ovl_fs *ofs, struct dentry *dentry,
-			 const char *name, const struct ovl_fh *fh)
+			 enum ovl_xattr ox, const struct ovl_fh *fh)
 {
-	struct ovl_fh *ofh = ovl_get_fh(ofs, dentry, name);
+	struct ovl_fh *ofh = ovl_get_fh(ofs, dentry, ox);
 	int err = 0;
 
 	if (!ofh)
@@ -443,7 +443,7 @@ static int ovl_verify_fh(struct ovl_fs *ofs, struct dentry *dentry,
  * Return 0 on match, -ESTALE on mismatch, -ENODATA on no xattr, < 0 on error.
  */
 int ovl_verify_set_fh(struct ovl_fs *ofs, struct dentry *dentry,
-		      const char *name, struct dentry *real, bool is_upper,
+		      enum ovl_xattr ox, struct dentry *real, bool is_upper,
 		      bool set)
 {
 	struct inode *inode;
@@ -457,9 +457,9 @@ int ovl_verify_set_fh(struct ovl_fs *ofs, struct dentry *dentry,
 		goto fail;
 	}
 
-	err = ovl_verify_fh(ofs, dentry, name, fh);
+	err = ovl_verify_fh(ofs, dentry, ox, fh);
 	if (set && err == -ENODATA)
-		err = ovl_do_setxattr(ofs, dentry, name, fh->buf, fh->fb.len);
+		err = ovl_do_setxattr(ofs, dentry, ox, fh->buf, fh->fb.len);
 	if (err)
 		goto fail;
 
@@ -724,7 +724,7 @@ struct dentry *ovl_lookup_index(struct ovl_fs *ofs, struct dentry *upper,
 		index = ERR_PTR(-ESTALE);
 		goto out;
 	} else if (ovl_dentry_weird(index) || ovl_is_whiteout(index) ||
-		   ((inode->i_mode ^ d_inode(origin)->i_mode) & S_IFMT)) {
+		   inode_wrong_type(inode, d_inode(origin)->i_mode)) {
 		/*
 		 * Index should always be of the same file type as origin
 		 * except for the case of a whiteout index. A whiteout

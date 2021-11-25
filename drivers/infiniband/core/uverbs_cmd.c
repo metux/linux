@@ -223,6 +223,7 @@ int ib_alloc_ucontext(struct uverbs_attr_bundle *attrs)
 	xa_init_flags(&ucontext->mmap_xa, XA_FLAGS_ALLOC);
 
 	rdma_restrack_new(&ucontext->res, RDMA_RESTRACK_CTX);
+	rdma_restrack_set_name(&ucontext->res, NULL);
 	attrs->context = ucontext;
 	return 0;
 }
@@ -251,7 +252,7 @@ int ib_init_ucontext(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		goto err_uncharge;
 
-	rdma_restrack_uadd(&ucontext->res);
+	rdma_restrack_add(&ucontext->res);
 
 	/*
 	 * Make sure that ib_uverbs_get_ucontext() sees the pointer update
@@ -443,10 +444,12 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	atomic_set(&pd->usecnt, 0);
 
 	rdma_restrack_new(&pd->res, RDMA_RESTRACK_PD);
+	rdma_restrack_set_name(&pd->res, NULL);
+
 	ret = ib_dev->ops.alloc_pd(pd, &attrs->driver_udata);
 	if (ret)
 		goto err_alloc;
-	rdma_restrack_uadd(&pd->res);
+	rdma_restrack_add(&pd->res);
 
 	uobj->object = pd;
 	uobj_finalize_uobj_create(uobj, attrs);
@@ -748,7 +751,8 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	mr->iova = cmd.hca_va;
 
 	rdma_restrack_new(&mr->res, RDMA_RESTRACK_MR);
-	rdma_restrack_uadd(&mr->res);
+	rdma_restrack_set_name(&mr->res, NULL);
+	rdma_restrack_add(&mr->res);
 
 	uobj->object = mr;
 	uobj_put_obj_read(pd);
@@ -1008,10 +1012,12 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	atomic_set(&cq->usecnt, 0);
 
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
+	rdma_restrack_set_name(&cq->res, NULL);
+
 	ret = ib_dev->ops.create_cq(cq, &attr, &attrs->driver_udata);
 	if (ret)
 		goto err_free;
-	rdma_restrack_uadd(&cq->res);
+	rdma_restrack_add(&cq->res);
 
 	obj->uevent.uobject.object = cq;
 	obj->uevent.event_file = READ_ONCE(attrs->ufile->default_async_file);
@@ -1250,8 +1256,21 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 	bool has_sq = true;
 	struct ib_device *ib_dev;
 
-	if (cmd->qp_type == IB_QPT_RAW_PACKET && !capable(CAP_NET_RAW))
-		return -EPERM;
+	switch (cmd->qp_type) {
+	case IB_QPT_RAW_PACKET:
+		if (!capable(CAP_NET_RAW))
+			return -EPERM;
+		break;
+	case IB_QPT_RC:
+	case IB_QPT_UC:
+	case IB_QPT_UD:
+	case IB_QPT_XRC_INI:
+	case IB_QPT_XRC_TGT:
+	case IB_QPT_DRIVER:
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	obj = (struct ib_uqp_object *)uobj_alloc(UVERBS_OBJECT_QP, attrs,
 						 &ib_dev);
@@ -2981,12 +3000,29 @@ static int ib_uverbs_ex_modify_wq(struct uverbs_attr_bundle *attrs)
 	if (!wq)
 		return -EINVAL;
 
-	wq_attr.curr_wq_state = cmd.curr_wq_state;
-	wq_attr.wq_state = cmd.wq_state;
 	if (cmd.attr_mask & IB_WQ_FLAGS) {
 		wq_attr.flags = cmd.flags;
 		wq_attr.flags_mask = cmd.flags_mask;
 	}
+
+	if (cmd.attr_mask & IB_WQ_CUR_STATE) {
+		if (cmd.curr_wq_state > IB_WQS_ERR)
+			return -EINVAL;
+
+		wq_attr.curr_wq_state = cmd.curr_wq_state;
+	} else {
+		wq_attr.curr_wq_state = wq->state;
+	}
+
+	if (cmd.attr_mask & IB_WQ_STATE) {
+		if (cmd.wq_state > IB_WQS_ERR)
+			return -EINVAL;
+
+		wq_attr.wq_state = cmd.wq_state;
+	} else {
+		wq_attr.wq_state = wq_attr.curr_wq_state;
+	}
+
 	ret = wq->device->ops.modify_wq(wq, &wq_attr, cmd.attr_mask,
 					&attrs->driver_udata);
 	rdma_lookup_put_uobject(&wq->uobject->uevent.uobject,

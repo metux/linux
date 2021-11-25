@@ -78,7 +78,8 @@ struct rm3100_data {
 	bool use_interrupt;
 	int conversion_time;
 	int scale;
-	u8 buffer[RM3100_SCAN_BYTES];
+	/* Ensure naturally aligned timestamp */
+	u8 buffer[RM3100_SCAN_BYTES] __aligned(8);
 	struct iio_trigger *drdy_trig;
 
 	/*
@@ -463,8 +464,6 @@ static int rm3100_buffer_postdisable(struct iio_dev *indio_dev)
 
 static const struct iio_buffer_setup_ops rm3100_buffer_ops = {
 	.preenable = rm3100_buffer_preenable,
-	.postenable = iio_triggered_buffer_postenable,
-	.predisable = iio_triggered_buffer_predisable,
 	.postdisable = rm3100_buffer_postdisable,
 };
 

@@ -4759,7 +4759,7 @@ static int vega10_display_configuration_changed_task(struct pp_hwmgr *hwmgr)
 	if ((data->water_marks_bitmap & WaterMarksExist) &&
 			!(data->water_marks_bitmap & WaterMarksLoaded)) {
 		result = smum_smc_table_manager(hwmgr, (uint8_t *)wm_table, WMTABLE, false);
-		PP_ASSERT_WITH_CODE(result, "Failed to update WMTABLE!", return EINVAL);
+		PP_ASSERT_WITH_CODE(result, "Failed to update WMTABLE!", return -EINVAL);
 		data->water_marks_bitmap |= WaterMarksLoaded;
 	}
 
@@ -5122,6 +5122,13 @@ static int vega10_get_power_profile_mode(struct pp_hwmgr *hwmgr, char *buf)
 	return size;
 }
 
+static bool vega10_get_power_profile_mode_quirks(struct pp_hwmgr *hwmgr)
+{
+	struct amdgpu_device *adev = hwmgr->adev;
+
+	return (adev->pdev->device == 0x6860);
+}
+
 static int vega10_set_power_profile_mode(struct pp_hwmgr *hwmgr, long *input, uint32_t size)
 {
 	struct vega10_hwmgr *data = hwmgr->backend;
@@ -5158,9 +5165,15 @@ static int vega10_set_power_profile_mode(struct pp_hwmgr *hwmgr, long *input, ui
 	}
 
 out:
-	smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_SetWorkloadMask,
+	if (vega10_get_power_profile_mode_quirks(hwmgr))
+		smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_SetWorkloadMask,
+						1 << power_profile_mode,
+						NULL);
+	else
+		smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_SetWorkloadMask,
 						(!power_profile_mode) ? 0 : 1 << (power_profile_mode - 1),
 						NULL);
+
 	hwmgr->power_profile_mode = power_profile_mode;
 
 	return 0;

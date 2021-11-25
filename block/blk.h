@@ -44,11 +44,7 @@ static inline void __blk_get_queue(struct request_queue *q)
 	kobject_get(&q->kobj);
 }
 
-static inline bool
-is_flush_rq(struct request *req, struct blk_mq_hw_ctx *hctx)
-{
-	return hctx->fq->flush_rq == req;
-}
+bool is_flush_rq(struct request *req);
 
 struct blk_flush_queue *blk_alloc_flush_queue(int node, int cmd_size,
 					      gfp_t flags);
@@ -114,6 +110,11 @@ static inline bool bio_integrity_endio(struct bio *bio)
 	return true;
 }
 
+bool blk_integrity_merge_rq(struct request_queue *, struct request *,
+		struct request *);
+bool blk_integrity_merge_bio(struct request_queue *, struct request *,
+		struct bio *);
+
 static inline bool integrity_req_gap_back_merge(struct request *req,
 		struct bio *next)
 {
@@ -137,6 +138,16 @@ static inline bool integrity_req_gap_front_merge(struct request *req,
 void blk_integrity_add(struct gendisk *);
 void blk_integrity_del(struct gendisk *);
 #else /* CONFIG_BLK_DEV_INTEGRITY */
+static inline bool blk_integrity_merge_rq(struct request_queue *rq,
+		struct request *r1, struct request *r2)
+{
+	return true;
+}
+static inline bool blk_integrity_merge_bio(struct request_queue *rq,
+		struct request *r, struct bio *b)
+{
+	return true;
+}
 static inline bool integrity_req_gap_back_merge(struct request *req,
 		struct bio *next)
 {
@@ -169,14 +180,10 @@ static inline void blk_integrity_del(struct gendisk *disk)
 unsigned long blk_rq_timeout(unsigned long timeout);
 void blk_add_timer(struct request *req);
 
-bool bio_attempt_front_merge(struct request *req, struct bio *bio,
-		unsigned int nr_segs);
-bool bio_attempt_back_merge(struct request *req, struct bio *bio,
-		unsigned int nr_segs);
-bool bio_attempt_discard_merge(struct request_queue *q, struct request *req,
-		struct bio *bio);
 bool blk_attempt_plug_merge(struct request_queue *q, struct bio *bio,
 		unsigned int nr_segs, struct request **same_queue_rq);
+bool blk_bio_list_merge(struct request_queue *q, struct list_head *list,
+			struct bio *bio, unsigned int nr_segs);
 
 void blk_account_io_start(struct request *req);
 void blk_account_io_done(struct request *req, u64 now);
@@ -223,10 +230,6 @@ ssize_t part_timeout_store(struct device *, struct device_attribute *,
 void __blk_queue_split(struct bio **bio, unsigned int *nr_segs);
 int ll_back_merge_fn(struct request *req, struct bio *bio,
 		unsigned int nr_segs);
-int ll_front_merge_fn(struct request *req,  struct bio *bio,
-		unsigned int nr_segs);
-struct request *attempt_back_merge(struct request_queue *q, struct request *rq);
-struct request *attempt_front_merge(struct request_queue *q, struct request *rq);
 int blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 				struct request *next);
 unsigned int blk_recalc_rq_segments(struct request *rq);
@@ -296,11 +299,13 @@ int create_task_io_context(struct task_struct *task, gfp_t gfp_mask, int node);
 extern int blk_throtl_init(struct request_queue *q);
 extern void blk_throtl_exit(struct request_queue *q);
 extern void blk_throtl_register_queue(struct request_queue *q);
+extern void blk_throtl_charge_bio_split(struct bio *bio);
 bool blk_throtl_bio(struct bio *bio);
 #else /* CONFIG_BLK_DEV_THROTTLING */
 static inline int blk_throtl_init(struct request_queue *q) { return 0; }
 static inline void blk_throtl_exit(struct request_queue *q) { }
 static inline void blk_throtl_register_queue(struct request_queue *q) { }
+static inline void blk_throtl_charge_bio_split(struct bio *bio) { }
 static inline bool blk_throtl_bio(struct bio *bio) { return false; }
 #endif /* CONFIG_BLK_DEV_THROTTLING */
 #ifdef CONFIG_BLK_DEV_THROTTLING_LOW

@@ -238,9 +238,21 @@ static int amdgpu_dma_buf_pin(struct dma_buf_attachment *attach)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
+	int r;
 
 	/* pin buffer into GTT */
-	return amdgpu_bo_pin(bo, AMDGPU_GEM_DOMAIN_GTT);
+	r = amdgpu_bo_pin(bo, AMDGPU_GEM_DOMAIN_GTT);
+	if (r)
+		return r;
+
+	if (bo->tbo.moving) {
+		r = dma_fence_wait(bo->tbo.moving, true);
+		if (r) {
+			amdgpu_bo_unpin(bo);
+			return r;
+		}
+	}
+	return 0;
 }
 
 /**
@@ -459,6 +471,7 @@ amdgpu_dma_buf_create_obj(struct drm_device *dev, struct dma_buf *dma_buf)
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_bo *bo;
 	struct amdgpu_bo_param bp;
+	struct drm_gem_object *gobj;
 	int ret;
 
 	memset(&bp, 0, sizeof(bp));
@@ -469,17 +482,20 @@ amdgpu_dma_buf_create_obj(struct drm_device *dev, struct dma_buf *dma_buf)
 	bp.type = ttm_bo_type_sg;
 	bp.resv = resv;
 	dma_resv_lock(resv, NULL);
-	ret = amdgpu_bo_create(adev, &bp, &bo);
+	ret = amdgpu_gem_object_create(adev, dma_buf->size, PAGE_SIZE,
+			AMDGPU_GEM_DOMAIN_CPU,
+			0, ttm_bo_type_sg, resv, &gobj);
 	if (ret)
 		goto error;
 
+	bo = gem_to_amdgpu_bo(gobj);
 	bo->allowed_domains = AMDGPU_GEM_DOMAIN_GTT;
 	bo->preferred_domains = AMDGPU_GEM_DOMAIN_GTT;
 	if (dma_buf->ops != &amdgpu_dmabuf_ops)
 		bo->prime_shared_count = 1;
 
 	dma_resv_unlock(resv);
-	return &bo->tbo.base;
+	return gobj;
 
 error:
 	dma_resv_unlock(resv);

@@ -904,7 +904,6 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_DEVX_QUERY_EQN)(
 	struct mlx5_ib_dev *dev;
 	int user_vector;
 	int dev_eqn;
-	unsigned int irqn;
 	int err;
 
 	if (uverbs_copy_from(&user_vector, attrs,
@@ -916,7 +915,7 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_DEVX_QUERY_EQN)(
 		return PTR_ERR(c);
 	dev = to_mdev(c->ibucontext.device);
 
-	err = mlx5_vector2eqn(dev->mdev, user_vector, &dev_eqn, &irqn);
+	err = mlx5_vector2eqn(dev->mdev, user_vector, &dev_eqn);
 	if (err < 0)
 		return err;
 
@@ -2364,17 +2363,24 @@ static int devx_event_notifier(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-void mlx5_ib_devx_init_event_table(struct mlx5_ib_dev *dev)
+int mlx5_ib_devx_init(struct mlx5_ib_dev *dev)
 {
 	struct mlx5_devx_event_table *table = &dev->devx_event_table;
+	int uid;
 
-	xa_init(&table->event_xa);
-	mutex_init(&table->event_xa_lock);
-	MLX5_NB_INIT(&table->devx_nb, devx_event_notifier, NOTIFY_ANY);
-	mlx5_eq_notifier_register(dev->mdev, &table->devx_nb);
+	uid = mlx5_ib_devx_create(dev, false);
+	if (uid > 0) {
+		dev->devx_whitelist_uid = uid;
+		xa_init(&table->event_xa);
+		mutex_init(&table->event_xa_lock);
+		MLX5_NB_INIT(&table->devx_nb, devx_event_notifier, NOTIFY_ANY);
+		mlx5_eq_notifier_register(dev->mdev, &table->devx_nb);
+	}
+
+	return 0;
 }
 
-void mlx5_ib_devx_cleanup_event_table(struct mlx5_ib_dev *dev)
+void mlx5_ib_devx_cleanup(struct mlx5_ib_dev *dev)
 {
 	struct mlx5_devx_event_table *table = &dev->devx_event_table;
 	struct devx_event_subscription *sub, *tmp;
@@ -2382,17 +2388,21 @@ void mlx5_ib_devx_cleanup_event_table(struct mlx5_ib_dev *dev)
 	void *entry;
 	unsigned long id;
 
-	mlx5_eq_notifier_unregister(dev->mdev, &table->devx_nb);
-	mutex_lock(&dev->devx_event_table.event_xa_lock);
-	xa_for_each(&table->event_xa, id, entry) {
-		event = entry;
-		list_for_each_entry_safe(sub, tmp, &event->unaffiliated_list,
-					 xa_list)
-			devx_cleanup_subscription(dev, sub);
-		kfree(entry);
+	if (dev->devx_whitelist_uid) {
+		mlx5_eq_notifier_unregister(dev->mdev, &table->devx_nb);
+		mutex_lock(&dev->devx_event_table.event_xa_lock);
+		xa_for_each(&table->event_xa, id, entry) {
+			event = entry;
+			list_for_each_entry_safe(
+				sub, tmp, &event->unaffiliated_list, xa_list)
+				devx_cleanup_subscription(dev, sub);
+			kfree(entry);
+		}
+		mutex_unlock(&dev->devx_event_table.event_xa_lock);
+		xa_destroy(&table->event_xa);
+
+		mlx5_ib_devx_destroy(dev, dev->devx_whitelist_uid);
 	}
-	mutex_unlock(&dev->devx_event_table.event_xa_lock);
-	xa_destroy(&table->event_xa);
 }
 
 static ssize_t devx_async_cmd_event_read(struct file *filp, char __user *buf,

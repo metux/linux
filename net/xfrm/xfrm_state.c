@@ -2003,6 +2003,7 @@ int xfrm_alloc_spi(struct xfrm_state *x, u32 low, u32 high)
 	int err = -ENOENT;
 	__be32 minspi = htonl(low);
 	__be32 maxspi = htonl(high);
+	__be32 newspi = 0;
 	u32 mark = x->mark.v & x->mark.m;
 
 	spin_lock_bh(&x->lock);
@@ -2021,21 +2022,22 @@ int xfrm_alloc_spi(struct xfrm_state *x, u32 low, u32 high)
 			xfrm_state_put(x0);
 			goto unlock;
 		}
-		x->id.spi = minspi;
+		newspi = minspi;
 	} else {
 		u32 spi = 0;
 		for (h = 0; h < high-low+1; h++) {
 			spi = low + prandom_u32()%(high-low+1);
 			x0 = xfrm_state_lookup(net, mark, &x->id.daddr, htonl(spi), x->id.proto, x->props.family);
 			if (x0 == NULL) {
-				x->id.spi = htonl(spi);
+				newspi = htonl(spi);
 				break;
 			}
 			xfrm_state_put(x0);
 		}
 	}
-	if (x->id.spi) {
+	if (newspi) {
 		spin_lock_bh(&net->xfrm.xfrm_state_lock);
+		x->id.spi = newspi;
 		h = xfrm_spi_hash(net, &x->id.daddr, x->id.spi, x->id.proto, x->props.family);
 		hlist_add_head_rcu(&x->byspi, net->xfrm.state_byspi + h);
 		spin_unlock_bh(&net->xfrm.xfrm_state_lock);
@@ -2295,6 +2297,66 @@ static bool km_is_alive(const struct km_event *c)
 	return is_alive;
 }
 
+#if IS_ENABLED(CONFIG_XFRM_USER_COMPAT)
+static DEFINE_SPINLOCK(xfrm_translator_lock);
+static struct xfrm_translator __rcu *xfrm_translator;
+
+struct xfrm_translator *xfrm_get_translator(void)
+{
+	struct xfrm_translator *xtr;
+
+	rcu_read_lock();
+	xtr = rcu_dereference(xfrm_translator);
+	if (unlikely(!xtr))
+		goto out;
+	if (!try_module_get(xtr->owner))
+		xtr = NULL;
+out:
+	rcu_read_unlock();
+	return xtr;
+}
+EXPORT_SYMBOL_GPL(xfrm_get_translator);
+
+void xfrm_put_translator(struct xfrm_translator *xtr)
+{
+	module_put(xtr->owner);
+}
+EXPORT_SYMBOL_GPL(xfrm_put_translator);
+
+int xfrm_register_translator(struct xfrm_translator *xtr)
+{
+	int err = 0;
+
+	spin_lock_bh(&xfrm_translator_lock);
+	if (unlikely(xfrm_translator != NULL))
+		err = -EEXIST;
+	else
+		rcu_assign_pointer(xfrm_translator, xtr);
+	spin_unlock_bh(&xfrm_translator_lock);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(xfrm_register_translator);
+
+int xfrm_unregister_translator(struct xfrm_translator *xtr)
+{
+	int err = 0;
+
+	spin_lock_bh(&xfrm_translator_lock);
+	if (likely(xfrm_translator != NULL)) {
+		if (rcu_access_pointer(xfrm_translator) != xtr)
+			err = -EINVAL;
+		else
+			RCU_INIT_POINTER(xfrm_translator, NULL);
+	}
+	spin_unlock_bh(&xfrm_translator_lock);
+	synchronize_rcu();
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(xfrm_unregister_translator);
+#endif
+
 int xfrm_user_policy(struct sock *sk, int optname, sockptr_t optval, int optlen)
 {
 	int err;
@@ -2454,7 +2516,7 @@ void xfrm_state_delete_tunnel(struct xfrm_state *x)
 }
 EXPORT_SYMBOL(xfrm_state_delete_tunnel);
 
-u32 xfrm_state_mtu(struct xfrm_state *x, int mtu)
+u32 __xfrm_state_mtu(struct xfrm_state *x, int mtu)
 {
 	const struct xfrm_type *type = READ_ONCE(x->type);
 	struct crypto_aead *aead;
@@ -2485,7 +2547,17 @@ u32 xfrm_state_mtu(struct xfrm_state *x, int mtu)
 	return ((mtu - x->props.header_len - crypto_aead_authsize(aead) -
 		 net_adj) & ~(blksize - 1)) + net_adj - 2;
 }
-EXPORT_SYMBOL_GPL(xfrm_state_mtu);
+EXPORT_SYMBOL_GPL(__xfrm_state_mtu);
+
+u32 xfrm_state_mtu(struct xfrm_state *x, int mtu)
+{
+	mtu = __xfrm_state_mtu(x, mtu);
+
+	if (x->props.family == AF_INET6 && mtu < IPV6_MIN_MTU)
+		return IPV6_MIN_MTU;
+
+	return mtu;
+}
 
 int __xfrm_init_state(struct xfrm_state *x, bool init_replay, bool offload)
 {

@@ -382,7 +382,7 @@ static int raw_getsockopt(struct sock *sk, int level, int optname,
 }
 
 static int raw_setsockopt(struct sock *sk, int level, int optname,
-			  char __user *optval, unsigned int optlen)
+			  sockptr_t optval, unsigned int optlen)
 {
 	return -EOPNOTSUPP;
 }
@@ -872,7 +872,7 @@ static int dgram_getsockopt(struct sock *sk, int level, int optname,
 }
 
 static int dgram_setsockopt(struct sock *sk, int level, int optname,
-			    char __user *optval, unsigned int optlen)
+			    sockptr_t optval, unsigned int optlen)
 {
 	struct dgram_sock *ro = dgram_sk(sk);
 	struct net *net = sock_net(sk);
@@ -882,7 +882,7 @@ static int dgram_setsockopt(struct sock *sk, int level, int optname,
 	if (optlen < sizeof(int))
 		return -EINVAL;
 
-	if (get_user(val, (int __user *)optval))
+	if (copy_from_sockptr(&val, optval, sizeof(int)))
 		return -EFAULT;
 
 	lock_sock(sk);
@@ -984,6 +984,11 @@ static const struct proto_ops ieee802154_dgram_ops = {
 	.sendpage	   = sock_no_sendpage,
 };
 
+static void ieee802154_sock_destruct(struct sock *sk)
+{
+	skb_queue_purge(&sk->sk_receive_queue);
+}
+
 /* Create a socket. Initialise the socket, blank the addresses
  * set the state.
  */
@@ -1024,7 +1029,7 @@ static int ieee802154_create(struct net *net, struct socket *sock,
 	sock->ops = ops;
 
 	sock_init_data(sock, sk);
-	/* FIXME: sk->sk_destruct */
+	sk->sk_destruct = ieee802154_sock_destruct;
 	sk->sk_family = PF_IEEE802154;
 
 	/* Checksums on by default */

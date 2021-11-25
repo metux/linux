@@ -53,7 +53,11 @@ struct tcs3414_data {
 	u8 control;
 	u8 gain;
 	u8 timing;
-	u16 buffer[8]; /* 4x 16-bit + 8 bytes timestamp */
+	/* Ensure timestamp is naturally aligned */
+	struct {
+		u16 chans[4];
+		s64 timestamp __aligned(8);
+	} scan;
 };
 
 #define TCS3414_CHANNEL(_color, _si, _addr) { \
@@ -209,10 +213,10 @@ static irqreturn_t tcs3414_trigger_handler(int irq, void *p)
 		if (ret < 0)
 			goto done;
 
-		data->buffer[j++] = ret;
+		data->scan.chans[j++] = ret;
 	}
 
-	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
+	iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
 		iio_get_time_ns(indio_dev));
 
 done:
@@ -243,35 +247,19 @@ static const struct iio_info tcs3414_info = {
 static int tcs3414_buffer_postenable(struct iio_dev *indio_dev)
 {
 	struct tcs3414_data *data = iio_priv(indio_dev);
-	int ret;
-
-	ret = iio_triggered_buffer_postenable(indio_dev);
-	if (ret)
-		return ret;
 
 	data->control |= TCS3414_CONTROL_ADC_EN;
-	ret = i2c_smbus_write_byte_data(data->client, TCS3414_CONTROL,
+	return i2c_smbus_write_byte_data(data->client, TCS3414_CONTROL,
 		data->control);
-	if (ret)
-		iio_triggered_buffer_predisable(indio_dev);
-
-	return ret;
 }
 
 static int tcs3414_buffer_predisable(struct iio_dev *indio_dev)
 {
 	struct tcs3414_data *data = iio_priv(indio_dev);
-	int ret, ret2;
 
 	data->control &= ~TCS3414_CONTROL_ADC_EN;
-	ret = i2c_smbus_write_byte_data(data->client, TCS3414_CONTROL,
+	return i2c_smbus_write_byte_data(data->client, TCS3414_CONTROL,
 		data->control);
-
-	ret2 = iio_triggered_buffer_predisable(indio_dev);
-	if (!ret)
-		ret = ret2;
-
-	return ret;
 }
 
 static const struct iio_buffer_setup_ops tcs3414_buffer_setup_ops = {

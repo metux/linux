@@ -15,6 +15,10 @@
 
 struct xdp_ring {
 	u32 producer ____cacheline_aligned_in_smp;
+	/* Hinder the adjacent cache prefetcher to prefetch the consumer
+	 * pointer if the producer pointer is touched and vice versa.
+	 */
+	u32 pad ____cacheline_aligned_in_smp;
 	u32 consumer ____cacheline_aligned_in_smp;
 	u32 flags;
 };
@@ -96,7 +100,7 @@ struct xsk_queue {
  * seen and read by the consumer.
  *
  * The consumer peeks into the ring to see if the producer has written
- * any new entries. If so, the producer can then read these entries
+ * any new entries. If so, the consumer can then read these entries
  * and when it is done reading them release them back to the producer
  * so that the producer can use these slots to fill in new entries.
  *
@@ -122,12 +126,15 @@ static inline bool xskq_cons_read_addr_unchecked(struct xsk_queue *q, u64 *addr)
 static inline bool xp_aligned_validate_desc(struct xsk_buff_pool *pool,
 					    struct xdp_desc *desc)
 {
-	u64 chunk;
-
-	if (desc->len > pool->chunk_size)
-		return false;
+	u64 chunk, chunk_end;
 
 	chunk = xp_aligned_extract_addr(pool, desc->addr);
+	if (likely(desc->len)) {
+		chunk_end = xp_aligned_extract_addr(pool, desc->addr + desc->len - 1);
+		if (chunk != chunk_end)
+			return false;
+	}
+
 	if (chunk >= pool->addrs_cnt)
 		return false;
 
@@ -257,6 +264,12 @@ static inline bool xskq_cons_is_full(struct xsk_queue *q)
 	/* No barriers needed since data is not accessed */
 	return READ_ONCE(q->ring->producer) - READ_ONCE(q->ring->consumer) ==
 		q->nentries;
+}
+
+static inline u32 xskq_cons_present_entries(struct xsk_queue *q)
+{
+	/* No barriers needed since data is not accessed */
+	return READ_ONCE(q->ring->producer) - READ_ONCE(q->ring->consumer);
 }
 
 /* Functions for producers */

@@ -240,7 +240,6 @@ static void mptcp_parse_option(const struct sk_buff *skb,
 		}
 
 		mp_opt->add_addr = 1;
-		mp_opt->port = 0;
 		mp_opt->addr_id = *ptr++;
 		pr_debug("ADD_ADDR: id=%d, echo=%d", mp_opt->addr_id, mp_opt->echo);
 		if (mp_opt->family == MPTCP_ADDR_IPVERSION_4) {
@@ -296,6 +295,8 @@ void mptcp_get_options(const struct sk_buff *skb,
 	mp_opt->mp_capable = 0;
 	mp_opt->mp_join = 0;
 	mp_opt->add_addr = 0;
+	mp_opt->ahmac = 0;
+	mp_opt->port = 0;
 	mp_opt->rm_addr = 0;
 	mp_opt->dss = 0;
 
@@ -313,6 +314,8 @@ void mptcp_get_options(const struct sk_buff *skb,
 			length--;
 			continue;
 		default:
+			if (length < 2)
+				return;
 			opsize = *ptr++;
 			if (opsize < 2) /* "silly options" */
 				return;

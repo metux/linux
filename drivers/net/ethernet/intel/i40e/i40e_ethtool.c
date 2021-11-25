@@ -900,6 +900,7 @@ static void i40e_get_settings_link_up(struct i40e_hw *hw,
 		if (hw_link_info->requested_speeds & I40E_LINK_SPEED_10GB)
 			ethtool_link_ksettings_add_link_mode(ks, advertising,
 							     10000baseT_Full);
+		i40e_get_settings_link_up_fec(hw_link_info->req_fec_info, ks);
 		break;
 	case I40E_PHY_TYPE_SGMII:
 		ethtool_link_ksettings_add_link_mode(ks, supported, Autoneg);
@@ -979,7 +980,7 @@ static void i40e_get_settings_link_up(struct i40e_hw *hw,
 	default:
 		/* if we got here and link is up something bad is afoot */
 		netdev_info(netdev,
-			    "WARNING: Link is up but PHY type 0x%x is not recognized.\n",
+			    "WARNING: Link is up but PHY type 0x%x is not recognized, or incorrect cable is in use\n",
 			    hw_link_info->phy_type);
 	}
 
@@ -1261,8 +1262,7 @@ static int i40e_set_link_ksettings(struct net_device *netdev,
 			if (ethtool_link_ksettings_test_link_mode(&safe_ks,
 								  supported,
 								  Autoneg) &&
-			    hw->phy.link_info.phy_type !=
-			    I40E_PHY_TYPE_10GBASE_T) {
+			    hw->phy.media_type != I40E_MEDIA_TYPE_BASET) {
 				netdev_info(netdev, "Autoneg cannot be disabled on this phy\n");
 				err = -EINVAL;
 				goto done;
@@ -1492,12 +1492,16 @@ static int i40e_set_fec_param(struct net_device *netdev,
 	struct i40e_pf *pf = np->vsi->back;
 	struct i40e_hw *hw = &pf->hw;
 	u8 fec_cfg = 0;
-	int err = 0;
 
 	if (hw->device_id != I40E_DEV_ID_25G_SFP28 &&
-	    hw->device_id != I40E_DEV_ID_25G_B) {
-		err = -EPERM;
-		goto done;
+	    hw->device_id != I40E_DEV_ID_25G_B &&
+	    hw->device_id != I40E_DEV_ID_KX_X722)
+		return -EPERM;
+
+	if (hw->mac.type == I40E_MAC_X722 &&
+	    !(hw->flags & I40E_HW_FLAG_X722_FEC_REQUEST_CAPABLE)) {
+		netdev_err(netdev, "Setting FEC encoding not supported by firmware. Please update the NVM image.\n");
+		return -EOPNOTSUPP;
 	}
 
 	switch (fecparam->fec) {
@@ -1519,14 +1523,10 @@ static int i40e_set_fec_param(struct net_device *netdev,
 	default:
 		dev_warn(&pf->pdev->dev, "Unsupported FEC mode: %d",
 			 fecparam->fec);
-		err = -EINVAL;
-		goto done;
+		return -EINVAL;
 	}
 
-	err = i40e_set_fec_cfg(netdev, fec_cfg);
-
-done:
-	return err;
+	return i40e_set_fec_cfg(netdev, fec_cfg);
 }
 
 static int i40e_nway_reset(struct net_device *netdev)
@@ -4995,10 +4995,18 @@ flags_complete:
 		}
 	}
 
-	if (((changed_flags & I40E_FLAG_RS_FEC) ||
-	     (changed_flags & I40E_FLAG_BASE_R_FEC)) &&
+	if (changed_flags & I40E_FLAG_RS_FEC &&
 	    pf->hw.device_id != I40E_DEV_ID_25G_SFP28 &&
 	    pf->hw.device_id != I40E_DEV_ID_25G_B) {
+		dev_warn(&pf->pdev->dev,
+			 "Device does not support changing FEC configuration\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (changed_flags & I40E_FLAG_BASE_R_FEC &&
+	    pf->hw.device_id != I40E_DEV_ID_25G_SFP28 &&
+	    pf->hw.device_id != I40E_DEV_ID_25G_B &&
+	    pf->hw.device_id != I40E_DEV_ID_KX_X722) {
 		dev_warn(&pf->pdev->dev,
 			 "Device does not support changing FEC configuration\n");
 		return -EOPNOTSUPP;
@@ -5098,6 +5106,10 @@ flags_complete:
 					dev_warn(&pf->pdev->dev,
 						 "Device configuration forbids SW from starting the LLDP agent.\n");
 					return -EINVAL;
+				case I40E_AQ_RC_EAGAIN:
+					dev_warn(&pf->pdev->dev,
+						 "Stop FW LLDP agent command is still being processed, please try again in a second.\n");
+					return -EBUSY;
 				default:
 					dev_warn(&pf->pdev->dev,
 						 "Starting FW LLDP agent failed: error: %s, %s\n",

@@ -35,6 +35,7 @@
 #include <crypto/hash.h>
 #include <linux/falloc.h>
 #include <linux/percpu-rwsem.h>
+#include <linux/fiemap.h>
 #ifdef __KERNEL__
 #include <linux/compat.h>
 #endif
@@ -79,14 +80,22 @@
 #define ext4_debug(fmt, ...)	no_printk(fmt, ##__VA_ARGS__)
 #endif
 
-/*
- * Turn on EXT_DEBUG to get lots of info about extents operations.
- */
+ /*
+  * Turn on EXT_DEBUG to enable ext4_ext_show_path/leaf/move in extents.c
+  */
 #define EXT_DEBUG__
-#ifdef EXT_DEBUG
-#define ext_debug(fmt, ...)	printk(fmt, ##__VA_ARGS__)
+
+/*
+ * Dynamic printk for controlled extents debugging.
+ */
+#ifdef CONFIG_EXT4_DEBUG
+#define ext_debug(ino, fmt, ...)					\
+	pr_debug("[%s/%d] EXT4-fs (%s): ino %lu: (%s, %d): %s:" fmt,	\
+		 current->comm, task_pid_nr(current),			\
+		 ino->i_sb->s_id, ino->i_ino, __FILE__, __LINE__,	\
+		 __func__, ##__VA_ARGS__)
 #else
-#define ext_debug(fmt, ...)	no_printk(fmt, ##__VA_ARGS__)
+#define ext_debug(ino, fmt, ...)	no_printk(fmt, ##__VA_ARGS__)
 #endif
 
 /* data type for block offset of block group */
@@ -141,6 +150,8 @@ enum SHIFT_DIRECTION {
 #define EXT4_MB_USE_ROOT_BLOCKS		0x1000
 /* Use blocks from reserved pool */
 #define EXT4_MB_USE_RESERVED		0x2000
+/* Do strict check for free blocks while retrying block allocation */
+#define EXT4_MB_STRICT_CHECK		0x4000
 
 struct ext4_allocation_request {
 	/* target inode for block we're allocating */
@@ -170,10 +181,10 @@ struct ext4_allocation_request {
  * well as to store the information returned by ext4_map_blocks().  It
  * takes less room on the stack than a struct buffer_head.
  */
-#define EXT4_MAP_NEW		(1 << BH_New)
-#define EXT4_MAP_MAPPED		(1 << BH_Mapped)
-#define EXT4_MAP_UNWRITTEN	(1 << BH_Unwritten)
-#define EXT4_MAP_BOUNDARY	(1 << BH_Boundary)
+#define EXT4_MAP_NEW		BIT(BH_New)
+#define EXT4_MAP_MAPPED		BIT(BH_Mapped)
+#define EXT4_MAP_UNWRITTEN	BIT(BH_Unwritten)
+#define EXT4_MAP_BOUNDARY	BIT(BH_Boundary)
 #define EXT4_MAP_FLAGS		(EXT4_MAP_NEW | EXT4_MAP_MAPPED |\
 				 EXT4_MAP_UNWRITTEN | EXT4_MAP_BOUNDARY)
 
@@ -419,7 +430,7 @@ struct flex_groups {
 
 #define EXT4_INLINE_DATA_FL		0x10000000 /* Inode has inline data. */
 #define EXT4_PROJINHERIT_FL		0x20000000 /* Create with parents projid */
-#define EXT4_CASEFOLD_FL		0x40000000 /* Casefolded file */
+#define EXT4_CASEFOLD_FL		0x40000000 /* Casefolded directory */
 #define EXT4_RESERVED_FL		0x80000000 /* reserved for ext4 lib */
 
 /* User modifiable flags */
@@ -525,6 +536,7 @@ enum {
 	EXT4_INODE_DAX		= 25,	/* Inode is DAX */
 	EXT4_INODE_INLINE_DATA	= 28,	/* Data in inode. */
 	EXT4_INODE_PROJINHERIT	= 29,	/* Create with parents projid */
+	EXT4_INODE_CASEFOLD	= 30,	/* Casefolded directory */
 	EXT4_INODE_RESERVED	= 31,	/* reserved for ext4 lib */
 };
 
@@ -570,6 +582,7 @@ static inline void ext4_check_flag_values(void)
 	CHECK_FLAG_VALUE(EA_INODE);
 	CHECK_FLAG_VALUE(INLINE_DATA);
 	CHECK_FLAG_VALUE(PROJINHERIT);
+	CHECK_FLAG_VALUE(CASEFOLD);
 	CHECK_FLAG_VALUE(RESERVED);
 }
 
@@ -644,8 +657,6 @@ enum {
 #define EXT4_GET_BLOCKS_METADATA_NOFAIL		0x0020
 	/* Don't normalize allocation size (used for fallocate) */
 #define EXT4_GET_BLOCKS_NO_NORMALIZE		0x0040
-	/* Request will not result in inode size update (user for fallocate) */
-#define EXT4_GET_BLOCKS_KEEP_SIZE		0x0080
 	/* Convert written extents to unwritten */
 #define EXT4_GET_BLOCKS_CONVERT_UNWRITTEN	0x0100
 	/* Write zeros to newly created written extents */
@@ -667,6 +678,7 @@ enum {
  */
 #define EXT4_EX_NOCACHE				0x40000000
 #define EXT4_EX_FORCE_CACHE			0x20000000
+#define EXT4_EX_NOFAIL				0x10000000
 
 /*
  * Flags used by ext4_free_blocks
@@ -1219,7 +1231,6 @@ struct ext4_inode_info {
 						      blocks */
 #define EXT4_MOUNT2_HURD_COMPAT		0x00000004 /* Support HURD-castrated
 						      file systems */
-
 #define EXT4_MOUNT2_EXPLICIT_JOURNAL_CHECKSUM	0x00000008 /* User explicitly
 						specified journal checksum */
 
@@ -1469,6 +1480,7 @@ struct ext4_sb_info {
 	struct kobject s_kobj;
 	struct completion s_kobj_unregister;
 	struct super_block *s_sb;
+	struct buffer_head *s_mmp_bh;
 
 	/* Journaling */
 	struct journal_s *s_journal;
@@ -2093,6 +2105,7 @@ static inline bool ext4_has_incompat_features(struct super_block *sb)
  */
 #define EXT4_FLAGS_RESIZING	0
 #define EXT4_FLAGS_SHUTDOWN	1
+#define EXT4_FLAGS_BDEV_IS_DAX	2
 
 static inline int ext4_forced_shutdown(struct ext4_sb_info *sbi)
 {
@@ -2164,7 +2177,7 @@ struct ext4_dir_entry_2 {
 	__le32	inode;			/* Inode number */
 	__le16	rec_len;		/* Directory entry length */
 	__u8	name_len;		/* Name length */
-	__u8	file_type;
+	__u8	file_type;		/* See file type macros EXT4_FT_* below */
 	char	name[EXT4_NAME_LEN];	/* File name */
 };
 
@@ -2854,7 +2867,7 @@ extern int ext4_can_truncate(struct inode *inode);
 extern int ext4_truncate(struct inode *);
 extern int ext4_break_layouts(struct inode *);
 extern int ext4_punch_hole(struct inode *inode, loff_t offset, loff_t length);
-extern void ext4_set_inode_flags(struct inode *);
+extern void ext4_set_inode_flags(struct inode *, bool init);
 extern int ext4_alloc_da_blocks(struct inode *inode);
 extern void ext4_set_aops(struct inode *inode);
 extern int ext4_writepage_trans_blocks(struct inode *);
@@ -3527,7 +3540,7 @@ struct ext4_extent;
  */
 #define EXT_MAX_BLOCKS	0xffffffff
 
-extern int ext4_ext_tree_init(handle_t *handle, struct inode *);
+extern void ext4_ext_tree_init(handle_t *handle, struct inode *inode);
 extern int ext4_ext_index_trans_blocks(struct inode *inode, int extents);
 extern int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 			       struct ext4_map_blocks *map, int flags);
@@ -3607,6 +3620,9 @@ extern struct ext4_io_end_vec *ext4_last_io_end_vec(ext4_io_end_t *io_end);
 
 /* mmp.c */
 extern int ext4_multi_mount_protect(struct super_block *, ext4_fsblk_t);
+
+/* mmp.c */
+extern void ext4_stop_mmpd(struct ext4_sb_info *sbi);
 
 /* verity.c */
 extern const struct fsverity_operations ext4_verityops;

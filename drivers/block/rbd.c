@@ -4010,10 +4010,10 @@ static int rbd_try_lock(struct rbd_device *rbd_dev)
 		rbd_warn(rbd_dev, "breaking header lock owned by %s%llu",
 			 ENTITY_NAME(lockers[0].id.name));
 
-		ret = ceph_monc_blacklist_add(&client->monc,
+		ret = ceph_monc_blocklist_add(&client->monc,
 					      &lockers[0].info.addr);
 		if (ret) {
-			rbd_warn(rbd_dev, "blacklist of %s%llu failed: %d",
+			rbd_warn(rbd_dev, "blocklist of %s%llu failed: %d",
 				 ENTITY_NAME(lockers[0].id.name), ret);
 			goto out;
 		}
@@ -4077,7 +4077,7 @@ static int rbd_try_acquire_lock(struct rbd_device *rbd_dev)
 	ret = rbd_try_lock(rbd_dev);
 	if (ret < 0) {
 		rbd_warn(rbd_dev, "failed to lock header: %d", ret);
-		if (ret == -EBLACKLISTED)
+		if (ret == -EBLOCKLISTED)
 			goto out;
 
 		ret = 1; /* request lock anyway */
@@ -4147,8 +4147,6 @@ again:
 
 static bool rbd_quiesce_lock(struct rbd_device *rbd_dev)
 {
-	bool need_wait;
-
 	dout("%s rbd_dev %p\n", __func__, rbd_dev);
 	lockdep_assert_held_write(&rbd_dev->lock_rwsem);
 
@@ -4160,11 +4158,11 @@ static bool rbd_quiesce_lock(struct rbd_device *rbd_dev)
 	 */
 	rbd_dev->lock_state = RBD_LOCK_STATE_RELEASING;
 	rbd_assert(!completion_done(&rbd_dev->releasing_wait));
-	need_wait = !list_empty(&rbd_dev->running_list);
-	downgrade_write(&rbd_dev->lock_rwsem);
-	if (need_wait)
-		wait_for_completion(&rbd_dev->releasing_wait);
-	up_read(&rbd_dev->lock_rwsem);
+	if (list_empty(&rbd_dev->running_list))
+		return true;
+
+	up_write(&rbd_dev->lock_rwsem);
+	wait_for_completion(&rbd_dev->releasing_wait);
 
 	down_write(&rbd_dev->lock_rwsem);
 	if (rbd_dev->lock_state != RBD_LOCK_STATE_RELEASING)
@@ -4250,15 +4248,11 @@ static void rbd_handle_acquired_lock(struct rbd_device *rbd_dev, u8 struct_v,
 	if (!rbd_cid_equal(&cid, &rbd_empty_cid)) {
 		down_write(&rbd_dev->lock_rwsem);
 		if (rbd_cid_equal(&cid, &rbd_dev->owner_cid)) {
-			/*
-			 * we already know that the remote client is
-			 * the owner
-			 */
-			up_write(&rbd_dev->lock_rwsem);
-			return;
+			dout("%s rbd_dev %p cid %llu-%llu == owner_cid\n",
+			     __func__, rbd_dev, cid.gid, cid.handle);
+		} else {
+			rbd_set_owner_cid(rbd_dev, &cid);
 		}
-
-		rbd_set_owner_cid(rbd_dev, &cid);
 		downgrade_write(&rbd_dev->lock_rwsem);
 	} else {
 		down_read(&rbd_dev->lock_rwsem);
@@ -4283,14 +4277,12 @@ static void rbd_handle_released_lock(struct rbd_device *rbd_dev, u8 struct_v,
 	if (!rbd_cid_equal(&cid, &rbd_empty_cid)) {
 		down_write(&rbd_dev->lock_rwsem);
 		if (!rbd_cid_equal(&cid, &rbd_dev->owner_cid)) {
-			dout("%s rbd_dev %p unexpected owner, cid %llu-%llu != owner_cid %llu-%llu\n",
+			dout("%s rbd_dev %p cid %llu-%llu != owner_cid %llu-%llu\n",
 			     __func__, rbd_dev, cid.gid, cid.handle,
 			     rbd_dev->owner_cid.gid, rbd_dev->owner_cid.handle);
-			up_write(&rbd_dev->lock_rwsem);
-			return;
+		} else {
+			rbd_set_owner_cid(rbd_dev, &rbd_empty_cid);
 		}
-
-		rbd_set_owner_cid(rbd_dev, &rbd_empty_cid);
 		downgrade_write(&rbd_dev->lock_rwsem);
 	} else {
 		down_read(&rbd_dev->lock_rwsem);
@@ -4613,7 +4605,7 @@ static void rbd_reregister_watch(struct work_struct *work)
 	ret = __rbd_register_watch(rbd_dev);
 	if (ret) {
 		rbd_warn(rbd_dev, "failed to reregister watch: %d", ret);
-		if (ret != -EBLACKLISTED && ret != -ENOENT) {
+		if (ret != -EBLOCKLISTED && ret != -ENOENT) {
 			queue_delayed_work(rbd_dev->task_wq,
 					   &rbd_dev->watch_dwork,
 					   RBD_RETRY_DELAY);
@@ -4921,7 +4913,7 @@ static void rbd_dev_update_size(struct rbd_device *rbd_dev)
 		size = (sector_t)rbd_dev->mapping.size / SECTOR_SIZE;
 		dout("setting size to %llu sectors", (unsigned long long)size);
 		set_capacity(rbd_dev->disk, size);
-		revalidate_disk(rbd_dev->disk);
+		revalidate_disk_size(rbd_dev->disk, true);
 	}
 }
 
@@ -5022,7 +5014,7 @@ static int rbd_init_disk(struct rbd_device *rbd_dev)
 	}
 
 	if (!ceph_test_opt(rbd_dev->rbd_client->client, NOCRC))
-		q->backing_dev_info->capabilities |= BDI_CAP_STABLE_WRITES;
+		blk_queue_flag_set(QUEUE_FLAG_STABLE_WRITES, q);
 
 	/*
 	 * disk_release() expects a queue ref from add_disk() and will
@@ -5119,6 +5111,9 @@ static ssize_t rbd_config_info_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct rbd_device *rbd_dev = dev_to_rbd_dev(dev);
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	return sprintf(buf, "%s\n", rbd_dev->config_info);
 }
@@ -5230,6 +5225,9 @@ static ssize_t rbd_image_refresh(struct device *dev,
 {
 	struct rbd_device *rbd_dev = dev_to_rbd_dev(dev);
 	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	ret = rbd_dev_refresh(rbd_dev);
 	if (ret)
@@ -7059,6 +7057,9 @@ static ssize_t do_rbd_add(struct bus_type *bus,
 	struct rbd_client *rbdc;
 	int rc;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	if (!try_module_get(THIS_MODULE))
 		return -ENODEV;
 
@@ -7208,6 +7209,9 @@ static ssize_t do_rbd_remove(struct bus_type *bus,
 	char opt_buf[6];
 	bool force = false;
 	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	dev_id = -1;
 	opt_buf[0] = '\0';

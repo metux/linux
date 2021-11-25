@@ -121,6 +121,13 @@ static void ocelot_vcap_enable(struct ocelot *ocelot, int port)
 	ocelot_write_gix(ocelot, ANA_PORT_VCAP_S2_CFG_S2_ENA |
 			 ANA_PORT_VCAP_S2_CFG_S2_IP6_CFG(0xa),
 			 ANA_PORT_VCAP_S2_CFG, port);
+
+	ocelot_write_gix(ocelot, ANA_PORT_VCAP_CFG_S1_ENA,
+			 ANA_PORT_VCAP_CFG, port);
+
+	ocelot_rmw_gix(ocelot, REW_PORT_CFG_ES0_EN,
+		       REW_PORT_CFG_ES0_EN,
+		       REW_PORT_CFG, port);
 }
 
 static inline u32 ocelot_vlant_read_vlanaccess(struct ocelot *ocelot)
@@ -205,11 +212,27 @@ static int ocelot_port_set_native_vlan(struct ocelot *ocelot, int port,
 	return 0;
 }
 
-void ocelot_port_vlan_filtering(struct ocelot *ocelot, int port,
-				bool vlan_aware)
+int ocelot_port_vlan_filtering(struct ocelot *ocelot, int port,
+			       bool vlan_aware, struct switchdev_trans *trans)
 {
 	struct ocelot_port *ocelot_port = ocelot->ports[port];
 	u32 val;
+
+	if (switchdev_trans_ph_prepare(trans)) {
+		struct ocelot_vcap_block *block = &ocelot->block[VCAP_IS1];
+		struct ocelot_vcap_filter *filter;
+
+		list_for_each_entry(filter, &block->rules, list) {
+			if (filter->ingress_port_mask & BIT(port) &&
+			    filter->action.vid_replace_ena) {
+				dev_err(ocelot->dev,
+					"Cannot change VLAN state with vlan modify rules active\n");
+				return -EBUSY;
+			}
+		}
+
+		return 0;
+	}
 
 	ocelot_port->vlan_aware = vlan_aware;
 
@@ -224,6 +247,8 @@ void ocelot_port_vlan_filtering(struct ocelot *ocelot, int port,
 		       ANA_PORT_VLAN_CFG, port);
 
 	ocelot_port_set_native_vlan(ocelot, port, ocelot_port->vid);
+
+	return 0;
 }
 EXPORT_SYMBOL(ocelot_port_vlan_filtering);
 
@@ -330,6 +355,7 @@ static u32 ocelot_read_eq_avail(struct ocelot *ocelot, int port)
 
 int ocelot_port_flush(struct ocelot *ocelot, int port)
 {
+	unsigned int pause_ena;
 	int err, val;
 
 	/* Disable dequeuing from the egress queues */
@@ -338,6 +364,7 @@ int ocelot_port_flush(struct ocelot *ocelot, int port)
 		       QSYS_PORT_MODE, port);
 
 	/* Disable flow control */
+	ocelot_fields_read(ocelot, port, SYS_PAUSE_CFG_PAUSE_ENA, &pause_ena);
 	ocelot_fields_write(ocelot, port, SYS_PAUSE_CFG_PAUSE_ENA, 0);
 
 	/* Disable priority flow control */
@@ -372,6 +399,9 @@ int ocelot_port_flush(struct ocelot *ocelot, int port)
 
 	/* Clear flushing again. */
 	ocelot_rmw_gix(ocelot, 0, REW_PORT_CFG_FLUSH_ENA, REW_PORT_CFG, port);
+
+	/* Re-enable flow control */
+	ocelot_fields_write(ocelot, port, SYS_PAUSE_CFG_PAUSE_ENA, pause_ena);
 
 	return err;
 }
@@ -1162,12 +1192,24 @@ EXPORT_SYMBOL(ocelot_port_bridge_join);
 int ocelot_port_bridge_leave(struct ocelot *ocelot, int port,
 			     struct net_device *bridge)
 {
+	struct switchdev_trans trans;
+	int ret;
+
 	ocelot->bridge_mask &= ~BIT(port);
 
 	if (!ocelot->bridge_mask)
 		ocelot->hw_bridge_dev = NULL;
 
-	ocelot_port_vlan_filtering(ocelot, port, 0);
+	trans.ph_prepare = true;
+	ret = ocelot_port_vlan_filtering(ocelot, port, false, &trans);
+	if (ret)
+		return ret;
+
+	trans.ph_prepare = false;
+	ret = ocelot_port_vlan_filtering(ocelot, port, false, &trans);
+	if (ret)
+		return ret;
+
 	ocelot_port_set_pvid(ocelot, port, 0);
 	return ocelot_port_set_native_vlan(ocelot, port, 0);
 }
@@ -1519,10 +1561,11 @@ int ocelot_init(struct ocelot *ocelot)
 		     SYS_FRM_AGING_MAX_AGE(307692), SYS_FRM_AGING);
 
 	/* Setup flooding PGIDs */
-	ocelot_write_rix(ocelot, ANA_FLOODING_FLD_MULTICAST(PGID_MC) |
-			 ANA_FLOODING_FLD_BROADCAST(PGID_MC) |
-			 ANA_FLOODING_FLD_UNICAST(PGID_UC),
-			 ANA_FLOODING, 0);
+	for (i = 0; i < ocelot->num_flooding_pgids; i++)
+		ocelot_write_rix(ocelot, ANA_FLOODING_FLD_MULTICAST(PGID_MC) |
+				 ANA_FLOODING_FLD_BROADCAST(PGID_MC) |
+				 ANA_FLOODING_FLD_UNICAST(PGID_UC),
+				 ANA_FLOODING, i);
 	ocelot_write(ocelot, ANA_FLOODING_IPMC_FLD_MC6_DATA(PGID_MCIPV6) |
 		     ANA_FLOODING_IPMC_FLD_MC6_CTRL(PGID_MC) |
 		     ANA_FLOODING_IPMC_FLD_MC4_DATA(PGID_MCIPV4) |

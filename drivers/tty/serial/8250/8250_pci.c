@@ -2809,15 +2809,6 @@ static struct pci_serial_quirk *find_quirk(struct pci_dev *dev)
 	return quirk;
 }
 
-static inline int get_pci_irq(struct pci_dev *dev,
-				const struct pciserial_board *board)
-{
-	if (board->flags & FL_NOIRQ)
-		return 0;
-	else
-		return dev->irq;
-}
-
 /*
  * This is the configuration table for all of the PCI serial boards
  * which we support.  It is directly indexed by the pci_board_num_t enum
@@ -3813,6 +3804,12 @@ static const struct pci_device_id blacklist[] = {
 	{ PCI_VDEVICE(INTEL, 0x0f0c), },
 	{ PCI_VDEVICE(INTEL, 0x228a), },
 	{ PCI_VDEVICE(INTEL, 0x228c), },
+	{ PCI_VDEVICE(INTEL, 0x4b96), },
+	{ PCI_VDEVICE(INTEL, 0x4b97), },
+	{ PCI_VDEVICE(INTEL, 0x4b98), },
+	{ PCI_VDEVICE(INTEL, 0x4b99), },
+	{ PCI_VDEVICE(INTEL, 0x4b9a), },
+	{ PCI_VDEVICE(INTEL, 0x4b9b), },
 	{ PCI_VDEVICE(INTEL, 0x9ce3), },
 	{ PCI_VDEVICE(INTEL, 0x9ce4), },
 
@@ -3973,6 +3970,7 @@ pciserial_init_ports(struct pci_dev *dev, const struct pciserial_board *board)
 		if (pci_match_id(pci_use_msi, dev)) {
 			dev_dbg(&dev->dev, "Using MSI(-X) interrupts\n");
 			pci_set_master(dev);
+			uart.port.flags &= ~UPF_SHARE_IRQ;
 			rc = pci_alloc_irq_vectors(dev, 1, 1, PCI_IRQ_ALL_TYPES);
 		} else {
 			dev_dbg(&dev->dev, "Using legacy interrupts\n");

@@ -1157,23 +1157,22 @@ static enum link_training_result check_link_loss_status(
 	const struct link_training_settings *link_training_setting)
 {
 	enum link_training_result status = LINK_TRAINING_SUCCESS;
-	unsigned int lane01_status_address = DP_LANE0_1_STATUS;
 	union lane_status lane_status;
-	uint8_t dpcd_buf[4] = {0};
+	uint8_t dpcd_buf[6] = {0};
 	uint32_t lane;
 
 	core_link_read_dpcd(
-		link,
-		lane01_status_address,
-		(uint8_t *)(dpcd_buf),
-		sizeof(dpcd_buf));
+			link,
+			DP_SINK_COUNT,
+			(uint8_t *)(dpcd_buf),
+			sizeof(dpcd_buf));
 
 	/*parse lane status*/
 	for (lane = 0; lane < link->cur_link_settings.lane_count; lane++) {
 		/*
 		 * check lanes status
 		 */
-		lane_status.raw = get_nibble_at_index(&dpcd_buf[0], lane);
+		lane_status.raw = get_nibble_at_index(&dpcd_buf[2], lane);
 
 		if (!lane_status.bits.CHANNEL_EQ_DONE_0 ||
 			!lane_status.bits.CR_DONE_0 ||
@@ -1705,6 +1704,8 @@ static void set_dp_mst_mode(struct dc_link *link, bool mst_enable)
 		link->type = dc_connection_single;
 		link->local_sink = link->remote_sinks[0];
 		link->local_sink->sink_signal = SIGNAL_TYPE_DISPLAY_PORT;
+		dc_sink_retain(link->local_sink);
+		dm_helpers_dp_mst_stop_top_mgr(link->ctx, link);
 	} else if (mst_enable == true &&
 			link->type == dc_connection_single &&
 			link->remote_sinks[0] != NULL) {
@@ -4375,22 +4376,6 @@ void dp_set_fec_enable(struct dc_link *link, bool enable)
 
 void dpcd_set_source_specific_data(struct dc_link *link)
 {
-	uint8_t dspc = 0;
-	enum dc_status ret;
-
-	ret = core_link_read_dpcd(link, DP_DOWN_STREAM_PORT_COUNT, &dspc,
-				  sizeof(dspc));
-
-	if (ret != DC_OK) {
-		DC_LOG_ERROR("Error in DP aux read transaction,"
-			     " not writing source specific data\n");
-		return;
-	}
-
-	/* Return if OUI unsupported */
-	if (!(dspc & DP_OUI_SUPPORT))
-		return;
-
 	if (!link->dc->vendor_signature.is_valid) {
 		struct dpcd_amd_signature amd_signature;
 		amd_signature.AMD_IEEE_TxSignature_byte1 = 0x0;
@@ -4461,9 +4446,9 @@ bool dc_link_get_backlight_level_nits(struct dc_link *link,
 			link->connector_signal != SIGNAL_TYPE_DISPLAY_PORT))
 		return false;
 
-	if (!core_link_read_dpcd(link, DP_SOURCE_BACKLIGHT_CURRENT_PEAK,
+	if (core_link_read_dpcd(link, DP_SOURCE_BACKLIGHT_CURRENT_PEAK,
 			dpcd_backlight_get.raw,
-			sizeof(union dpcd_source_backlight_get)))
+			sizeof(union dpcd_source_backlight_get)) != DC_OK)
 		return false;
 
 	*backlight_millinits_avg =
@@ -4502,9 +4487,9 @@ bool dc_link_read_default_bl_aux(struct dc_link *link, uint32_t *backlight_milli
 		link->connector_signal != SIGNAL_TYPE_DISPLAY_PORT))
 		return false;
 
-	if (!core_link_read_dpcd(link, DP_SOURCE_BACKLIGHT_LEVEL,
+	if (core_link_read_dpcd(link, DP_SOURCE_BACKLIGHT_LEVEL,
 		(uint8_t *) backlight_millinits,
-		sizeof(uint32_t)))
+		sizeof(uint32_t)) != DC_OK)
 		return false;
 
 	return true;

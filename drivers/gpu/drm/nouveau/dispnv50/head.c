@@ -49,11 +49,8 @@ nv50_head_flush_clr(struct nv50_head *head,
 }
 
 void
-nv50_head_flush_set(struct nv50_head *head, struct nv50_head_atom *asyh)
+nv50_head_flush_set_wndw(struct nv50_head *head, struct nv50_head_atom *asyh)
 {
-	if (asyh->set.view   ) head->func->view    (head, asyh);
-	if (asyh->set.mode   ) head->func->mode    (head, asyh);
-	if (asyh->set.core   ) head->func->core_set(head, asyh);
 	if (asyh->set.olut   ) {
 		asyh->olut.offset = nv50_lut_load(&head->olut,
 						  asyh->olut.buffer,
@@ -61,6 +58,14 @@ nv50_head_flush_set(struct nv50_head *head, struct nv50_head_atom *asyh)
 						  asyh->olut.load);
 		head->func->olut_set(head, asyh);
 	}
+}
+
+void
+nv50_head_flush_set(struct nv50_head *head, struct nv50_head_atom *asyh)
+{
+	if (asyh->set.view   ) head->func->view    (head, asyh);
+	if (asyh->set.mode   ) head->func->mode    (head, asyh);
+	if (asyh->set.core   ) head->func->core_set(head, asyh);
 	if (asyh->set.curs   ) head->func->curs_set(head, asyh);
 	if (asyh->set.base   ) head->func->base    (head, asyh);
 	if (asyh->set.ovly   ) head->func->ovly    (head, asyh);
@@ -106,9 +111,9 @@ nv50_head_atomic_check_dither(struct nv50_head_atom *armh,
 		}
 	}
 
-	asyh->dither.enable = mode;
-	asyh->dither.bits = mode >> 1;
-	asyh->dither.mode = mode >> 3;
+	asyh->dither.enable = NVVAL_GET(mode, NV507D, HEAD_SET_DITHER_CONTROL, ENABLE);
+	asyh->dither.bits = NVVAL_GET(mode, NV507D, HEAD_SET_DITHER_CONTROL, BITS);
+	asyh->dither.mode = NVVAL_GET(mode, NV507D, HEAD_SET_DITHER_CONTROL, MODE);
 	asyh->set.dither = true;
 }
 
@@ -414,7 +419,7 @@ nv50_head_atomic_check(struct drm_crtc *crtc, struct drm_crtc_state *state)
 		asyh->set.curs = asyh->curs.visible;
 	}
 
-	ret = nv50_crc_atomic_check(head, asyh, armh);
+	ret = nv50_crc_atomic_check_head(head, asyh, armh);
 	if (ret)
 		return ret;
 
@@ -489,7 +494,7 @@ nv50_head_destroy(struct drm_crtc *crtc)
 {
 	struct nv50_head *head = nv50_head(crtc);
 
-	nvif_notify_fini(&head->base.vblank);
+	nvif_notify_dtor(&head->base.vblank);
 	nv50_lut_fini(&head->olut);
 	drm_crtc_cleanup(crtc);
 	kfree(head);
@@ -598,7 +603,7 @@ nv50_head_create(struct drm_device *dev, int index)
 		}
 	}
 
-	ret = nvif_notify_init(&disp->disp->object, nv50_head_vblank_handler,
+	ret = nvif_notify_ctor(&disp->disp->object, "kmsVbl", nv50_head_vblank_handler,
 			       false, NV04_DISP_NTFY_VBLANK,
 			       &(struct nvif_notify_head_req_v0) {
 				    .head = nv_crtc->index,

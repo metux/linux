@@ -439,6 +439,7 @@ int cmd_hist_enable(void)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(cmd_hist_enable);
 
 int cmd_hist_disable(void)
 {
@@ -450,6 +451,7 @@ int cmd_hist_disable(void)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(cmd_hist_disable);
 
 static void cmd_hist_cleanup(void)
 {
@@ -662,6 +664,8 @@ void ufs_mtk_dbg_get_aee_buffer(unsigned long *vaddr, unsigned long *size)
 	/* retrun start location */
 	*vaddr = (unsigned long)ufs_aee_buffer;
 	*size = UFS_AEE_BUFFER_SIZE - free_size;
+
+	cmd_hist_enable();
 }
 EXPORT_SYMBOL_GPL(ufs_mtk_dbg_get_aee_buffer);
 

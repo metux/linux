@@ -2027,7 +2027,6 @@ static void disp_aal_single_pipe_hist_update(struct mtk_ddp_comp *comp)
 
 	do {
 		intsta = readl(comp->regs + DISP_AAL_INTSTA);
-		AALIRQ_LOG("AAL Module, intsta: 0x%x\n", intsta);
 		/* Only process end of frame state */
 		if ((intsta & 0x2) == 0x0) {
 			AALERR("break\n");
@@ -2040,7 +2039,6 @@ static void disp_aal_single_pipe_hist_update(struct mtk_ddp_comp *comp)
 		}
 
 		/* Allow to disable interrupt */
-		AALIRQ_LOG("set dirty_frame_retrieved to 1\n");
 		atomic_set(&aal_data->dirty_frame_retrieved, 1);
 
 		if (spin_trylock_irqsave(&g_aal_hist_lock, flags)) {
@@ -2058,8 +2056,6 @@ static void disp_aal_single_pipe_hist_update(struct mtk_ddp_comp *comp)
 
 			spin_unlock_irqrestore(&g_aal_hist_lock, flags);
 
-			AALIRQ_LOG("wake_up_interruptible g_aal_hist_wq:%d\n",
-				read_success);
 			if (read_success == true)
 				wake_up_interruptible(&g_aal_hist_wq);
 		} else {
@@ -2075,7 +2071,6 @@ static void disp_aal_single_pipe_hist_update(struct mtk_ddp_comp *comp)
 			 * AAL service is not running, not need per-frame wakeup
 			 * We stop interrupt until next frame dirty.
 			 */
-			AALIRQ_LOG("set disp_aal_set_interrupt to 0\n");
 			if (spin_trylock_irqsave(&g_aal_clock_lock, flags)) {
 				if (atomic_read(&aal_data->is_clock_on) != 1)
 					AALIRQ_LOG("clock is off\n");
@@ -2583,20 +2578,15 @@ void disp_aal_on_end_of_frame(struct mtk_ddp_comp *comp)
 	else
 		disp_aal_single_pipe_hist_update(comp);
 
-	AALIRQ_LOG("first_frame = %d, g_aal_eof_irq = %d",
-			atomic_read(&g_aal_first_frame),
-			atomic_read(&g_aal_eof_irq));
 	if (isDualPQ) {
 		if (atomic_read(&g_aal_first_frame) == 1
 			&& atomic_read(&g_aal1_first_frame) == 1) {
-			AALIRQ_LOG("aal_refresh_task");
 			atomic_set(&g_aal_first_frame, 0);
 			atomic_set(&g_aal1_first_frame, 0);
 			queue_work(aal_refresh_wq, &g_aal_data->aal_refresh_task);
 		}
 	} else {
 		if (atomic_read(&g_aal_first_frame) == 1) {
-			AALIRQ_LOG("aal_refresh_task");
 			atomic_set(&g_aal_first_frame, 0);
 			queue_work(aal_refresh_wq, &g_aal_data->aal_refresh_task);
 		}
@@ -2689,7 +2679,7 @@ static irqreturn_t mtk_disp_aal_irq_handler(int irq, void *dev_id)
 		}
 		spin_unlock_irqrestore(&g_aal_clock_lock, flags);
 	}
-	AALIRQ_LOG("end\n");
+
 	return ret;
 }
 

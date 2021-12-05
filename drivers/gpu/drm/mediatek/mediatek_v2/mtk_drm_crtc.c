@@ -6563,7 +6563,8 @@ void mml_cmdq_pkt_init(struct drm_crtc *crtc, struct cmdq_pkt *cmdq_handle)
 
 struct cmdq_pkt *mtk_crtc_gce_commit_begin(struct drm_crtc *crtc,
 						struct drm_crtc_state *old_crtc_state,
-						struct mtk_crtc_state *crtc_state)
+						struct mtk_crtc_state *crtc_state,
+						bool need_sync_mml)
 {
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct cmdq_pkt *cmdq_handle;
@@ -6582,7 +6583,8 @@ struct cmdq_pkt *mtk_crtc_gce_commit_begin(struct drm_crtc *crtc,
 			mtk_crtc->gce_obj.client[CLIENT_CFG]);
 
 	/* mml need to power on InlineRotate and sync with mml */
-	mml_cmdq_pkt_init(crtc, cmdq_handle);
+	if (need_sync_mml)
+		mml_cmdq_pkt_init(crtc, cmdq_handle);
 
 	if (old_crtc_state != NULL)
 		old_mtk_state = to_mtk_crtc_state(old_crtc_state);
@@ -7217,7 +7219,7 @@ static void mtk_drm_crtc_atomic_begin(struct drm_crtc *crtc,
 				state->prop_val[CRTC_PROP_MSYNC2_0_ENABLE],
 				mtk_crtc->msync2.msync_disabled);
 
-	state->cmdq_handle = mtk_crtc_gce_commit_begin(crtc, old_crtc_state, state);
+	state->cmdq_handle = mtk_crtc_gce_commit_begin(crtc, old_crtc_state, state, true);
 
 	/*Msync 2.0: add cmds to cfg thread*/
 	if (!mtk_crtc_is_frame_trigger_mode(crtc) &&

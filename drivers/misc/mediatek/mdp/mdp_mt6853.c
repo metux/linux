@@ -2089,7 +2089,7 @@ static void mdp_readback_aal_by_engine(struct cmdqRecStruct *handle,
 	u16 engine, dma_addr_t pa, u32 param)
 {
 	phys_addr_t base;
-	u32 pipe;
+	u32 pipe = 0;
 
 	switch (engine) {
 	case CMDQ_ENG_MDP_AAL0:

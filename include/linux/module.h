@@ -292,11 +292,12 @@ extern typeof(name) __mod_##type##__##name##_device_table		\
  * files require multiple MODULE_FIRMWARE() specifiers */
 #define MODULE_FIRMWARE(_firmware) MODULE_INFO(firmware, _firmware)
 
+#define _MODULE_IMPORT_NS(ns)	MODULE_INFO(import_ns, #ns)
+#define MODULE_IMPORT_NS(ns)	_MODULE_IMPORT_NS(ns)
+
 struct notifier_block;
 
 #ifdef CONFIG_MODULES
-
-#define MODULE_IMPORT_NS(ns) MODULE_INFO(import_ns, #ns)
 
 extern int modules_disabled; /* for sysctl */
 /* Get/put a kernel symbol (calls must be symmetric) */

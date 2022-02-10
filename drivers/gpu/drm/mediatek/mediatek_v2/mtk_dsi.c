@@ -535,8 +535,12 @@ static void mtk_dsi_dphy_timconfig(struct mtk_dsi *dsi, void *handle)
 	hs_zero = hs_zero > hs_prpr ? hs_zero - hs_prpr : hs_zero;
 
 	/* spec.  hs_trail > max(8ui, 60ns+4ui) */
-	hs_trail = NS_TO_CYCLE((9 * ui), cycle_time) > NS_TO_CYCLE((80 + 5 * ui), cycle_time) ?
-			NS_TO_CYCLE((9 * ui), cycle_time) : NS_TO_CYCLE((80 + 5 * ui), cycle_time);
+	if (dsi->driver_data->dsi_new_trail)
+		hs_trail = (65 * dsi->data_rate + 4000) / 8000 + 5;
+	else
+		hs_trail = NS_TO_CYCLE((9 * ui), cycle_time)
+			> NS_TO_CYCLE((80 + 5 * ui), cycle_time) ? NS_TO_CYCLE((9 * ui), cycle_time)
+			: NS_TO_CYCLE((80 + 5 * ui), cycle_time);
 
 	/* spec. ta_get = 5*lpx */
 	ta_get = 5 * lpx;
@@ -553,7 +557,10 @@ static void mtk_dsi_dphy_timconfig(struct mtk_dsi *dsi, void *handle)
 	clk_zero = NS_TO_CYCLE(350, cycle_time);
 	clk_zero = clk_zero > clk_hs_prpr ? clk_zero - clk_hs_prpr : clk_zero;
 	/* spec. clk_trail > 60ns */
-	clk_trail = NS_TO_CYCLE(80, cycle_time);
+	if (dsi->driver_data->dsi_new_trail)
+		clk_trail = (80 * dsi->data_rate + 5000) / 8000 + 5;
+	else
+		clk_trail = NS_TO_CYCLE(80, cycle_time);
 	da_hs_sync = 1;
 	cont_det = 3;
 
@@ -7106,6 +7113,7 @@ static const struct mtk_dsi_driver_data mt8173_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7125,6 +7133,7 @@ static const struct mtk_dsi_driver_data mt6779_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7144,6 +7153,7 @@ static const struct mtk_dsi_driver_data mt6885_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = false,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0xffe,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7163,6 +7173,7 @@ static const struct mtk_dsi_driver_data mt6983_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = false,
 	.dsi_buffer = true,
+	.dsi_new_trail = false,
 	.max_vfp = 0xffe,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7182,6 +7193,7 @@ static const struct mtk_dsi_driver_data mt6895_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = false,
 	.dsi_buffer = true,
+	.dsi_new_trail = true,
 	.max_vfp = 0xffe,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V2,
 	.dsi_irq_ts_debug = true,
@@ -7202,6 +7214,7 @@ static const struct mtk_dsi_driver_data mt6873_dsi_driver_data = {
 	.need_bypass_shadow = true,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7221,6 +7234,7 @@ static const struct mtk_dsi_driver_data mt6853_dsi_driver_data = {
 	.need_bypass_shadow = true,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7240,6 +7254,7 @@ static const struct mtk_dsi_driver_data mt6833_dsi_driver_data = {
 	.need_bypass_shadow = true,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };
@@ -7259,6 +7274,7 @@ static const struct mtk_dsi_driver_data mt6879_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = false,
 	.dsi_buffer = true,
+	.dsi_new_trail = false,
 	.max_vfp = 0xffe,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V2,
 };
@@ -7278,6 +7294,7 @@ static const struct mtk_dsi_driver_data mt6855_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0x7ffe,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V2,
 };
@@ -7293,6 +7310,7 @@ static const struct mtk_dsi_driver_data mt2701_dsi_driver_data = {
 	.need_bypass_shadow = false,
 	.need_wait_fifo = true,
 	.dsi_buffer = false,
+	.dsi_new_trail = false,
 	.max_vfp = 0,
 	.mmclk_by_datarate = mtk_dsi_set_mmclk_by_datarate_V1,
 };

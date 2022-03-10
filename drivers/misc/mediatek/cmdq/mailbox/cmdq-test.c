@@ -1382,7 +1382,8 @@ cmdq_test_trigger(struct cmdq_test *test, const s32 sec, const s32 id)
 	cmdq_mbox_enable(test->clt->chan);
 	cmdq_mbox_enable(test->loop->chan);
 #ifdef CMDQ_SECURE_SUPPORT
-	cmdq_sec_mbox_enable(test->sec->chan);
+	if (test->sec)
+		cmdq_sec_mbox_enable(test->sec->chan);
 #endif
 
 	switch (id) {
@@ -1475,7 +1476,8 @@ cmdq_test_trigger(struct cmdq_test *test, const s32 sec, const s32 id)
 	}
 
 #ifdef CMDQ_SECURE_SUPPORT
-	cmdq_sec_mbox_disable(test->sec->chan);
+	if (test->sec)
+		cmdq_sec_mbox_disable(test->sec->chan);
 #endif
 	cmdq_mbox_disable(test->loop->chan);
 	cmdq_mbox_disable(test->clt->chan);

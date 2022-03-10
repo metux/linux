@@ -5981,14 +5981,18 @@ static void mtk_dsi_dy_fps_cmdq_cb(struct cmdq_cb_data data)
 	struct mtk_drm_private *priv =
 		mtk_crtc->base.dev->dev_private;
 
-	DDPINFO("%s vdo mode fps change done\n", __func__);
+	DDPINFO("%s: vdo mode fps change, cur:%u, clk:%u, last:%u\n",
+		__func__, cb_mmclk_req_idx, cb_pixclk,
+		mtk_crtc->qos_ctx->last_mmclk_req_idx);
 
 	if (mtk_drm_helper_get_opt(priv->helper_opt,
 		MTK_DRM_OPT_MMDVFS_SUPPORT)) {
+		DDP_MUTEX_LOCK(&mtk_crtc->lock, __func__, __LINE__);
 		if (comp && (comp->id == DDP_COMPONENT_DSI0 ||
 			comp->id == DDP_COMPONENT_DSI1)) {
 			mtk_drm_set_mmclk_by_pixclk(&mtk_crtc->base, pixclk, __func__);
 		}
+		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
 	}
 
 	cmdq_pkt_destroy(cb_data->cmdq_handle);

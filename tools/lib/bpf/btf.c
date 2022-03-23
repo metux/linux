@@ -146,6 +146,23 @@ void *btf_add_mem(void **data, size_t *cap_cnt, size_t elem_sz,
 	return new_data + cur_cnt * elem_sz;
 }
 
+/* Ensure given dynamically allocated memory region has enough allocated space
+ * to accommodate *need_cnt* elements of size *elem_sz* bytes each
+ */
+int btf_ensure_mem(void **data, size_t *cap_cnt, size_t elem_sz, size_t need_cnt)
+{
+	void *p;
+
+	if (need_cnt <= *cap_cnt)
+		return 0;
+
+	p = btf_add_mem(data, cap_cnt, elem_sz, *cap_cnt, SIZE_MAX, need_cnt - *cap_cnt);
+	if (!p)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int btf_add_type_idx_entry(struct btf *btf, __u32 type_off)
 {
 	__u32 *p;
@@ -188,32 +205,29 @@ static int btf_parse_hdr(struct btf *btf)
 		}
 		btf_bswap_hdr(hdr);
 	} else if (hdr->magic != BTF_MAGIC) {
-		pr_debug("Invalid BTF magic:%x\n", hdr->magic);
+		pr_debug("Invalid BTF magic: %x\n", hdr->magic);
 		return -EINVAL;
 	}
 
-	meta_left = btf->raw_size - sizeof(*hdr);
-	if (!meta_left) {
-		pr_debug("BTF has no data\n");
+	if (btf->raw_size < hdr->hdr_len) {
+		pr_debug("BTF header len %u larger than data size %u\n",
+			 hdr->hdr_len, btf->raw_size);
 		return -EINVAL;
 	}
 
-	if (meta_left < hdr->type_off) {
-		pr_debug("Invalid BTF type section offset:%u\n", hdr->type_off);
+	meta_left = btf->raw_size - hdr->hdr_len;
+	if (meta_left < (long long)hdr->str_off + hdr->str_len) {
+		pr_debug("Invalid BTF total size: %u\n", btf->raw_size);
 		return -EINVAL;
 	}
 
-	if (meta_left < hdr->str_off) {
-		pr_debug("Invalid BTF string section offset:%u\n", hdr->str_off);
+	if ((long long)hdr->type_off + hdr->type_len > hdr->str_off) {
+		pr_debug("Invalid BTF data sections layout: type data at %u + %u, strings data at %u + %u\n",
+			 hdr->type_off, hdr->type_len, hdr->str_off, hdr->str_len);
 		return -EINVAL;
 	}
 
-	if (hdr->type_off >= hdr->str_off) {
-		pr_debug("BTF type section offset >= string section offset. No type?\n");
-		return -EINVAL;
-	}
-
-	if (hdr->type_off & 0x02) {
+	if (hdr->type_off % 4) {
 		pr_debug("BTF type section is not aligned to 4 bytes\n");
 		return -EINVAL;
 	}
@@ -347,7 +361,7 @@ static int btf_parse_type_sec(struct btf *btf)
 	struct btf_header *hdr = btf->hdr;
 	void *next_type = btf->types_data;
 	void *end_type = next_type + hdr->type_len;
-	int err, i, type_size;
+	int err, i = 0, type_size;
 
 	/* VOID (type_id == 0) is specially handled by btf__get_type_by_id(),
 	 * so ensure we can never properly use its offset from index by

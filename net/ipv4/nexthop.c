@@ -133,12 +133,9 @@ static struct nexthop *nexthop_alloc(void)
 
 static struct nh_group *nexthop_grp_alloc(u16 num_nh)
 {
-	size_t sz = offsetof(struct nexthop, nh_grp)
-		    + sizeof(struct nh_group)
-		    + sizeof(struct nh_grp_entry) * num_nh;
 	struct nh_group *nhg;
 
-	nhg = kzalloc(sz, GFP_KERNEL);
+	nhg = kzalloc(struct_size(nhg, nh_entries, num_nh), GFP_KERNEL);
 	if (nhg)
 		nhg->num_nh = num_nh;
 
@@ -279,7 +276,7 @@ static int nh_fill_node(struct sk_buff *skb, struct nexthop *nh,
 	case AF_INET:
 		fib_nh = &nhi->fib_nh;
 		if (fib_nh->fib_nh_gw_family &&
-		    nla_put_u32(skb, NHA_GATEWAY, fib_nh->fib_nh_gw4))
+		    nla_put_be32(skb, NHA_GATEWAY, fib_nh->fib_nh_gw4))
 			goto nla_put_failure;
 		break;
 
@@ -848,7 +845,7 @@ static void remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 		remove_nh_grp_entry(net, nhge, nlinfo);
 
 	/* make sure all see the newly published array before releasing rtnl */
-	synchronize_rcu();
+	synchronize_net();
 }
 
 static void remove_nexthop_group(struct nexthop *nh, struct nl_info *nlinfo)
@@ -872,8 +869,6 @@ static void __remove_nexthop_fib(struct net *net, struct nexthop *nh)
 	struct fib6_info *f6i, *tmp;
 	bool do_flush = false;
 	struct fib_info *fi;
-
-	call_nexthop_notifiers(net, NEXTHOP_EVENT_DEL, nh);
 
 	list_for_each_entry(fi, &nh->fi_list, nh_list) {
 		fi->fib_flags |= RTNH_F_DEAD;
@@ -912,6 +907,8 @@ static void __remove_nexthop(struct net *net, struct nexthop *nh,
 static void remove_nexthop(struct net *net, struct nexthop *nh,
 			   struct nl_info *nlinfo)
 {
+	call_nexthop_notifiers(net, NEXTHOP_EVENT_DEL, nh);
+
 	/* remove from the tree */
 	rb_erase(&nh->rb_node, &net->nexthop.rb_root);
 
@@ -967,6 +964,23 @@ static int replace_nexthop_grp(struct net *net, struct nexthop *old,
 	return 0;
 }
 
+static void nh_group_v4_update(struct nh_group *nhg)
+{
+	struct nh_grp_entry *nhges;
+	bool has_v4 = false;
+	int i;
+
+	nhges = nhg->nh_entries;
+	for (i = 0; i < nhg->num_nh; i++) {
+		struct nh_info *nhi;
+
+		nhi = rtnl_dereference(nhges[i].nh->nh_info);
+		if (nhi->family == AF_INET)
+			has_v4 = true;
+	}
+	nhg->has_v4 = has_v4;
+}
+
 static int replace_nexthop_single(struct net *net, struct nexthop *old,
 				  struct nexthop *new,
 				  struct netlink_ext_ack *extack)
@@ -989,6 +1003,21 @@ static int replace_nexthop_single(struct net *net, struct nexthop *old,
 
 	rcu_assign_pointer(old->nh_info, newi);
 	rcu_assign_pointer(new->nh_info, oldi);
+
+	/* When replacing an IPv4 nexthop with an IPv6 nexthop, potentially
+	 * update IPv4 indication in all the groups using the nexthop.
+	 */
+	if (oldi->family == AF_INET && newi->family == AF_INET6) {
+		struct nh_grp_entry *nhge;
+
+		list_for_each_entry(nhge, &old->grp_list, nh_list) {
+			struct nexthop *nhp = nhge->nh_parent;
+			struct nh_group *nhg;
+
+			nhg = rtnl_dereference(nhp->nh_grp);
+			nh_group_v4_update(nhg);
+		}
+	}
 
 	return 0;
 }
@@ -1107,7 +1136,7 @@ static int insert_nexthop(struct net *net, struct nexthop *new_nh,
 	while (1) {
 		struct nexthop *nh;
 
-		next = rtnl_dereference(*pp);
+		next = *pp;
 		if (!next)
 			break;
 
@@ -1274,6 +1303,7 @@ static int nh_create_ipv4(struct net *net, struct nexthop *nh,
 		.fc_gw4   = cfg->gw.ipv4,
 		.fc_gw_family = cfg->gw.ipv4 ? AF_INET : 0,
 		.fc_flags = cfg->nh_flags,
+		.fc_nlinfo = cfg->nlinfo,
 		.fc_encap = cfg->nh_encap,
 		.fc_encap_type = cfg->nh_encap_type,
 	};
@@ -1312,6 +1342,7 @@ static int nh_create_ipv6(struct net *net,  struct nexthop *nh,
 		.fc_ifindex = cfg->nh_ifindex,
 		.fc_gateway = cfg->gw.ipv6,
 		.fc_flags = cfg->nh_flags,
+		.fc_nlinfo = cfg->nlinfo,
 		.fc_encap = cfg->nh_encap,
 		.fc_encap_type = cfg->nh_encap_type,
 		.fc_is_fdb = cfg->nh_fdb,

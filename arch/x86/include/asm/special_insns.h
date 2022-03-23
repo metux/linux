@@ -258,28 +258,6 @@ static inline void movdir64b(void *dst, const void *src)
 		     :  "m" (*__src), "a" (__dst), "d" (__src));
 }
 
-/* The dst parameter must be 64-bytes aligned */
-static inline void movdir64b(void *dst, const void *src)
-{
-	const struct { char _[64]; } *__src = src;
-	struct { char _[64]; } *__dst = dst;
-
-	/*
-	 * MOVDIR64B %(rdx), rax.
-	 *
-	 * Both __src and __dst must be memory constraints in order to tell the
-	 * compiler that no other memory accesses should be reordered around
-	 * this one.
-	 *
-	 * Also, both must be supplied as lvalues because this tells
-	 * the compiler what the object is (its size) the instruction accesses.
-	 * I.e., not the pointers but what they point to, thus the deref'ing '*'.
-	 */
-	asm volatile(".byte 0x66, 0x0f, 0x38, 0xf8, 0x02"
-		     : "+m" (*__dst)
-		     :  "m" (*__src), "a" (__dst), "d" (__src));
-}
-
 /**
  * enqcmds - Enqueue a command in supervisor (CPL0) mode
  * @dst: destination, in MMIO space (must be 512-bit aligned)
@@ -302,8 +280,8 @@ static inline void movdir64b(void *dst, const void *src)
 static inline int enqcmds(void __iomem *dst, const void *src)
 {
 	const struct { char _[64]; } *__src = src;
-	struct { char _[64]; } *__dst = dst;
-	int zf;
+	struct { char _[64]; } __iomem *__dst = dst;
+	bool zf;
 
 	/*
 	 * ENQCMDS %(rdx), rax

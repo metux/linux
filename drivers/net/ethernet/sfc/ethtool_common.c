@@ -106,7 +106,6 @@ void efx_ethtool_get_drvinfo(struct net_device *net_dev,
 	struct efx_nic *efx = netdev_priv(net_dev);
 
 	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
-	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
 	efx_mcdi_print_fwver(efx, info->fw_version,
 			     sizeof(info->fw_version));
 	strlcpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
@@ -408,7 +407,7 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 				snprintf(strings, ETH_GSTRING_LEN,
 					 "tx-%u.tx_packets",
 					 channel->tx_queue[0].queue /
-					 EFX_TXQ_TYPES);
+					 EFX_MAX_TXQ_PER_CHANNEL);
 
 				strings += ETH_GSTRING_LEN;
 			}
@@ -564,20 +563,14 @@ int efx_ethtool_get_link_ksettings(struct net_device *net_dev,
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
 	struct efx_link_state *link_state = &efx->link_state;
-	u32 supported;
 
 	mutex_lock(&efx->mac_lock);
 	efx_mcdi_phy_get_link_ksettings(efx, cmd);
 	mutex_unlock(&efx->mac_lock);
 
 	/* Both MACs support pause frames (bidirectional and respond-only) */
-	ethtool_convert_link_mode_to_legacy_u32(&supported,
-						cmd->link_modes.supported);
-
-	supported |= SUPPORTED_Pause | SUPPORTED_Asym_Pause;
-
-	ethtool_convert_legacy_u32_to_link_mode(cmd->link_modes.supported,
-						supported);
+	ethtool_link_ksettings_add_link_mode(cmd, supported, Pause);
+	ethtool_link_ksettings_add_link_mode(cmd, supported, Asym_Pause);
 
 	if (LOOPBACK_INTERNAL(efx)) {
 		cmd->base.speed = link_state->speed;

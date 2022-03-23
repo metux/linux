@@ -35,6 +35,7 @@
 #include "nouveau_vmm.h"
 
 #include <nvif/class.h>
+#include <nvif/push206e.h>
 
 void
 nouveau_gem_object_del(struct drm_gem_object *gem)
@@ -45,8 +46,10 @@ nouveau_gem_object_del(struct drm_gem_object *gem)
 	int ret;
 
 	ret = pm_runtime_get_sync(dev);
-	if (WARN_ON(ret < 0 && ret != -EACCES))
+	if (WARN_ON(ret < 0 && ret != -EACCES)) {
+		pm_runtime_put_autosuspend(dev);
 		return;
+	}
 
 	if (gem->import_attach)
 		drm_prime_gem_destroy(gem, nvbo->bo.sg);
@@ -187,15 +190,14 @@ nouveau_gem_new(struct nouveau_cli *cli, u64 size, int align, uint32_t domain,
 	 * to the caller, instead of a normal nouveau_bo ttm reference. */
 	ret = drm_gem_object_init(drm->dev, &nvbo->bo.base, size);
 	if (ret) {
-		nouveau_bo_ref(NULL, &nvbo);
+		drm_gem_object_release(&nvbo->bo.base);
+		kfree(nvbo);
 		return ret;
 	}
 
 	ret = nouveau_bo_init(nvbo, size, align, domain, NULL, NULL);
-	if (ret) {
-		nouveau_bo_ref(NULL, &nvbo);
+	if (ret)
 		return ret;
-	}
 
 	/* we restrict allowed domains on nv50+ to only the types
 	 * that were requested at creation time.  not possibly on
@@ -554,8 +556,10 @@ nouveau_gem_pushbuf_validate(struct nouveau_channel *chan,
 			NV_PRINTK(err, cli, "validating bo list\n");
 		validate_fini(op, chan, NULL, NULL);
 		return ret;
+	} else if (ret > 0) {
+		*apply_relocs = true;
 	}
-	*apply_relocs = ret;
+
 	return 0;
 }
 
@@ -658,7 +662,6 @@ nouveau_gem_pushbuf_reloc_apply(struct nouveau_cli *cli,
 		nouveau_bo_wr32(nvbo, r->reloc_bo_offset >> 2, data);
 	}
 
-	u_free(reloc);
 	return ret;
 }
 
@@ -785,7 +788,7 @@ revalidate:
 		}
 	} else
 	if (drm->client.device.info.chipset >= 0x25) {
-		ret = RING_SPACE(chan, req->nr_push * 2);
+		ret = PUSH_WAIT(chan->chan.push, req->nr_push * 2);
 		if (ret) {
 			NV_PRINTK(err, cli, "cal_space: %d\n", ret);
 			goto out;
@@ -795,11 +798,11 @@ revalidate:
 			struct nouveau_bo *nvbo = (void *)(unsigned long)
 				bo[push[i].bo_index].user_priv;
 
-			OUT_RING(chan, (nvbo->offset + push[i].offset) | 2);
-			OUT_RING(chan, 0);
+			PUSH_CALL(chan->chan.push, nvbo->offset + push[i].offset);
+			PUSH_DATA(chan->chan.push, 0);
 		}
 	} else {
-		ret = RING_SPACE(chan, req->nr_push * (2 + NOUVEAU_DMA_SKIPS));
+		ret = PUSH_WAIT(chan->chan.push, req->nr_push * (2 + NOUVEAU_DMA_SKIPS));
 		if (ret) {
 			NV_PRINTK(err, cli, "jmp_space: %d\n", ret);
 			goto out;
@@ -829,11 +832,10 @@ revalidate:
 						push[i].length - 8) / 4, cmd);
 			}
 
-			OUT_RING(chan, 0x20000000 |
-				      (nvbo->offset + push[i].offset));
-			OUT_RING(chan, 0);
+			PUSH_JUMP(chan->chan.push, nvbo->offset + push[i].offset);
+			PUSH_DATA(chan->chan.push, 0);
 			for (j = 0; j < NOUVEAU_DMA_SKIPS; j++)
-				OUT_RING(chan, 0);
+				PUSH_DATA(chan->chan.push, 0);
 		}
 	}
 
@@ -869,9 +871,10 @@ out:
 				break;
 			}
 		}
-		u_free(reloc);
 	}
 out_prevalid:
+	if (!IS_ERR(reloc))
+		u_free(reloc);
 	u_free(bo);
 	u_free(push);
 

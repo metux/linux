@@ -100,7 +100,6 @@ static inline const u8 *fscrypt_context_nonce(const union fscrypt_context *ctx)
 	return NULL;
 }
 
-#undef fscrypt_policy
 union fscrypt_policy {
 	u8 version;
 	struct fscrypt_policy_v1 v1;
@@ -550,8 +549,9 @@ int __init fscrypt_init_keyring(void);
 struct fscrypt_mode {
 	const char *friendly_name;
 	const char *cipher_str;
-	int keysize;
-	int ivsize;
+	int keysize;		/* key size in bytes */
+	int security_strength;	/* security strength in bytes */
+	int ivsize;		/* IV size in bytes */
 	int logged_impl_name;
 	enum blk_crypto_mode_num blk_crypto_mode;
 };

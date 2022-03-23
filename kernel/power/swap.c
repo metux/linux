@@ -226,6 +226,7 @@ struct hib_bio_batch {
 	atomic_t		count;
 	wait_queue_head_t	wait;
 	blk_status_t		error;
+	struct blk_plug		plug;
 };
 
 static void hib_init_batch(struct hib_bio_batch *hb)
@@ -233,6 +234,12 @@ static void hib_init_batch(struct hib_bio_batch *hb)
 	atomic_set(&hb->count, 0);
 	init_waitqueue_head(&hb->wait);
 	hb->error = BLK_STS_OK;
+	blk_start_plug(&hb->plug);
+}
+
+static void hib_finish_batch(struct hib_bio_batch *hb)
+{
+	blk_finish_plug(&hb->plug);
 }
 
 static void hib_end_io(struct bio *bio)
@@ -292,8 +299,12 @@ static int hib_submit_io(int op, int op_flags, pgoff_t page_off, void *addr,
 	return error;
 }
 
-static blk_status_t hib_wait_io(struct hib_bio_batch *hb)
+static int hib_wait_io(struct hib_bio_batch *hb)
 {
+	/*
+	 * We are relying on the behavior of blk_plug that a thread with
+	 * a plug will flush the plug list before sleeping.
+	 */
 	wait_event(hb->wait, atomic_read(&hb->count) == 0);
 	return blk_status_to_errno(hb->error);
 }
@@ -343,12 +354,10 @@ static int swsusp_swap_check(void)
 		return res;
 	root_swap = res;
 
-	hib_resume_bdev = bdget(swsusp_resume_device);
-	if (!hib_resume_bdev)
-		return -ENOMEM;
-	res = blkdev_get(hib_resume_bdev, FMODE_WRITE, NULL);
-	if (res)
-		return res;
+	hib_resume_bdev = blkdev_get_by_dev(swsusp_resume_device, FMODE_WRITE,
+			NULL);
+	if (IS_ERR(hib_resume_bdev))
+		return PTR_ERR(hib_resume_bdev);
 
 	res = set_blocksize(hib_resume_bdev, PAGE_SIZE);
 	if (res < 0)
@@ -560,6 +569,7 @@ static int save_image(struct swap_map_handle *handle,
 		nr_pages++;
 	}
 	err2 = hib_wait_io(&hb);
+	hib_finish_batch(&hb);
 	stop = ktime_get();
 	if (!ret)
 		ret = err2;
@@ -853,6 +863,7 @@ out_finish:
 		pr_info("Image saving done\n");
 	swsusp_show_speed(start, stop, nr_to_write, "Wrote");
 out_clean:
+	hib_finish_batch(&hb);
 	if (crc) {
 		if (crc->thr)
 			kthread_stop(crc->thr);
@@ -1083,6 +1094,7 @@ static int load_image(struct swap_map_handle *handle,
 		nr_pages++;
 	}
 	err2 = hib_wait_io(&hb);
+	hib_finish_batch(&hb);
 	stop = ktime_get();
 	if (!ret)
 		ret = err2;
@@ -1446,6 +1458,7 @@ out_finish:
 	}
 	swsusp_show_speed(start, stop, nr_to_read, "Read");
 out_clean:
+	hib_finish_batch(&hb);
 	for (i = 0; i < ring_size; i++)
 		free_page((unsigned long)page[i]);
 	if (crc) {
@@ -1508,9 +1521,10 @@ end:
 int swsusp_check(void)
 {
 	int error;
+	void *holder;
 
 	hib_resume_bdev = blkdev_get_by_dev(swsusp_resume_device,
-					    FMODE_READ, NULL);
+					    FMODE_READ | FMODE_EXCL, &holder);
 	if (!IS_ERR(hib_resume_bdev)) {
 		set_blocksize(hib_resume_bdev, PAGE_SIZE);
 		clear_page(swsusp_header);
@@ -1532,7 +1546,7 @@ int swsusp_check(void)
 
 put:
 		if (error)
-			blkdev_put(hib_resume_bdev, FMODE_READ);
+			blkdev_put(hib_resume_bdev, FMODE_READ | FMODE_EXCL);
 		else
 			pr_debug("Image signature found, resuming\n");
 	} else {

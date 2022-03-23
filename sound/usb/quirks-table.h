@@ -25,6 +25,16 @@
 	.idProduct = prod, \
 	.bInterfaceClass = USB_CLASS_VENDOR_SPEC
 
+/* A standard entry matching with vid/pid and the audio class/subclass */
+#define USB_AUDIO_DEVICE(vend, prod) \
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE | \
+		       USB_DEVICE_ID_MATCH_INT_CLASS | \
+		       USB_DEVICE_ID_MATCH_INT_SUBCLASS, \
+	.idVendor = vend, \
+	.idProduct = prod, \
+	.bInterfaceClass = USB_CLASS_AUDIO, \
+	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
+
 /* FTDI devices */
 {
 	USB_DEVICE(0x0403, 0xb8d8),
@@ -58,33 +68,55 @@
 	}
 },
 
+/* E-Mu 0202 USB */
+{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f02) },
+/* E-Mu 0404 USB */
+{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f04) },
+/* E-Mu Tracker Pre */
+{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f0a) },
+/* E-Mu 0204 USB */
+{ USB_DEVICE_VENDOR_SPEC(0x041e, 0x3f19) },
+
+/*
+ * Creative Technology, Ltd Live! Cam Sync HD [VF0770]
+ * The device advertises 8 formats, but only a rate of 48kHz is honored by the
+ * hardware and 24 bits give chopped audio, so only report the one working
+ * combination.
+ */
 {
-	/* E-Mu 0202 USB */
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
-	.idVendor = 0x041e,
-	.idProduct = 0x3f02,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-},
-{
-	/* E-Mu 0404 USB */
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
-	.idVendor = 0x041e,
-	.idProduct = 0x3f04,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-},
-{
-	/* E-Mu Tracker Pre */
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
-	.idVendor = 0x041e,
-	.idProduct = 0x3f0a,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-},
-{
-	/* E-Mu 0204 USB */
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
-	.idVendor = 0x041e,
-	.idProduct = 0x3f19,
-	.bInterfaceClass = USB_CLASS_AUDIO,
+	USB_DEVICE(0x041e, 0x4095),
+	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
+		.ifnum = QUIRK_ANY_INTERFACE,
+		.type = QUIRK_COMPOSITE,
+		.data = &(const struct snd_usb_audio_quirk[]) {
+			{
+				.ifnum = 2,
+				.type = QUIRK_AUDIO_STANDARD_MIXER,
+			},
+			{
+				.ifnum = 3,
+				.type = QUIRK_AUDIO_FIXED_ENDPOINT,
+				.data = &(const struct audioformat) {
+					.formats = SNDRV_PCM_FMTBIT_S16_LE,
+					.channels = 2,
+					.fmt_bits = 16,
+					.iface = 3,
+					.altsetting = 4,
+					.altset_idx = 4,
+					.endpoint = 0x82,
+					.ep_attr = 0x05,
+					.rates = SNDRV_PCM_RATE_48000,
+					.rate_min = 48000,
+					.rate_max = 48000,
+					.nr_rates = 1,
+					.rate_table = (unsigned int[]) { 48000 },
+				},
+			},
+			{
+				.ifnum = -1
+			},
+		},
+	},
 },
 
 /*
@@ -127,69 +159,13 @@
  * Logitech QuickCam: bDeviceClass is vendor-specific, so generic interface
  * class matches do not take effect without an explicit ID match.
  */
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x0850,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-},
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x08ae,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-},
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x08c6,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-},
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x08f0,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-},
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x08f5,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-},
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x08f6,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL
-},
-{
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x046d,
-	.idProduct = 0x0990,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL,
-},
+{ USB_AUDIO_DEVICE(0x046d, 0x0850) },
+{ USB_AUDIO_DEVICE(0x046d, 0x08ae) },
+{ USB_AUDIO_DEVICE(0x046d, 0x08c6) },
+{ USB_AUDIO_DEVICE(0x046d, 0x08f0) },
+{ USB_AUDIO_DEVICE(0x046d, 0x08f5) },
+{ USB_AUDIO_DEVICE(0x046d, 0x08f6) },
+{ USB_AUDIO_DEVICE(0x046d, 0x0990) },
 
 /*
  * Yamaha devices
@@ -2807,10 +2783,7 @@ YAMAHA_DEVICE(0x7010, "UB99"),
 },
 
 /* KeithMcMillen Stringport */
-{
-	USB_DEVICE(0x1f38, 0x0001),
-	.bInterfaceClass = USB_CLASS_AUDIO,
-},
+{ USB_DEVICE(0x1f38, 0x0001) }, /* FIXME: should be more restrictive matching */
 
 /* Miditech devices */
 {
@@ -2841,13 +2814,7 @@ YAMAHA_DEVICE(0x7010, "UB99"),
  */
 
 #define AU0828_DEVICE(vid, pid, vname, pname) { \
-	.idVendor = vid, \
-	.idProduct = pid, \
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE | \
-		       USB_DEVICE_ID_MATCH_INT_CLASS | \
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS, \
-	.bInterfaceClass = USB_CLASS_AUDIO, \
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL, \
+	USB_AUDIO_DEVICE(vid, pid), \
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) { \
 		.vendor_name = vname, \
 		.product_name = pname, \
@@ -2877,13 +2844,7 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 
 /* Syntek STK1160 */
 {
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x05e1,
-	.idProduct = 0x0408,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL,
+	USB_AUDIO_DEVICE(0x05e1, 0x0408),
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
 		.vendor_name = "Syntek",
 		.product_name = "STK1160",
@@ -3045,10 +3006,7 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 },
 {
 	/* Tascam US122 MKII - playback-only support */
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
-	.idVendor = 0x0644,
-	.idProduct = 0x8021,
-	.bInterfaceClass = USB_CLASS_AUDIO,
+	USB_DEVICE_VENDOR_SPEC(0x0644, 0x8021),
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
 		.vendor_name = "TASCAM",
 		.product_name = "US122 MKII",
@@ -3638,13 +3596,7 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
  * channels to be swapped and out of phase, which is dealt with in quirks.c.
  */
 {
-	.match_flags = USB_DEVICE_ID_MATCH_DEVICE |
-		       USB_DEVICE_ID_MATCH_INT_CLASS |
-		       USB_DEVICE_ID_MATCH_INT_SUBCLASS,
-	.idVendor = 0x534d,
-	.idProduct = 0x2109,
-	.bInterfaceClass = USB_CLASS_AUDIO,
-	.bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL,
+	USB_AUDIO_DEVICE(0x534d, 0x2109),
 	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
 		.vendor_name = "MacroSilicon",
 		.product_name = "MS2109",
@@ -3683,5 +3635,38 @@ AU0828_DEVICE(0x2040, 0x7270, "Hauppauge", "HVR-950Q"),
 		}
 	}
 },
+{
+	/*
+	 * Sennheiser GSP670
+	 * Change order of interfaces loaded
+	 */
+	USB_DEVICE(0x1395, 0x0300),
+	.bInterfaceClass = USB_CLASS_PER_INTERFACE,
+	.driver_info = (unsigned long) &(const struct snd_usb_audio_quirk) {
+		.ifnum = QUIRK_ANY_INTERFACE,
+		.type = QUIRK_COMPOSITE,
+		.data = &(const struct snd_usb_audio_quirk[]) {
+			// Communication
+			{
+				.ifnum = 3,
+				.type = QUIRK_AUDIO_STANDARD_INTERFACE
+			},
+			// Recording
+			{
+				.ifnum = 4,
+				.type = QUIRK_AUDIO_STANDARD_INTERFACE
+			},
+			// Main
+			{
+				.ifnum = 1,
+				.type = QUIRK_AUDIO_STANDARD_INTERFACE
+			},
+			{
+				.ifnum = -1
+			}
+		}
+	}
+},
 
 #undef USB_DEVICE_VENDOR_SPEC
+#undef USB_AUDIO_DEVICE

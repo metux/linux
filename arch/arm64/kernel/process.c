@@ -61,7 +61,7 @@
 
 #if defined(CONFIG_STACKPROTECTOR) && !defined(CONFIG_STACKPROTECTOR_PER_TASK)
 #include <linux/stackprotector.h>
-unsigned long __stack_chk_guard __read_mostly;
+unsigned long __stack_chk_guard __ro_after_init;
 EXPORT_SYMBOL(__stack_chk_guard);
 #endif
 
@@ -517,14 +517,13 @@ static void erratum_1418040_thread_switch(struct task_struct *prev,
 	bool prev32, next32;
 	u64 val;
 
-	if (!(IS_ENABLED(CONFIG_ARM64_ERRATUM_1418040) &&
-	      cpus_have_const_cap(ARM64_WORKAROUND_1418040)))
+	if (!IS_ENABLED(CONFIG_ARM64_ERRATUM_1418040))
 		return;
 
 	prev32 = is_compat_thread(task_thread_info(prev));
 	next32 = is_compat_thread(task_thread_info(next));
 
-	if (prev32 == next32)
+	if (prev32 == next32 || !this_cpu_has_cap(ARM64_WORKAROUND_1418040))
 		return;
 
 	val = read_sysreg(cntkctl_el1);
@@ -674,15 +673,16 @@ void arch_setup_new_exec(void)
  */
 static unsigned int tagged_addr_disabled;
 
-long set_tagged_addr_ctrl(unsigned long arg)
+long set_tagged_addr_ctrl(struct task_struct *task, unsigned long arg)
 {
 	unsigned long valid_mask = PR_TAGGED_ADDR_ENABLE;
+	struct thread_info *ti = task_thread_info(task);
 
-	if (is_compat_task())
+	if (is_compat_thread(ti))
 		return -EINVAL;
 
 	if (system_supports_mte())
-		valid_mask |= PR_MTE_TCF_MASK;
+		valid_mask |= PR_MTE_TCF_MASK | PR_MTE_TAG_MASK;
 
 	if (arg & ~valid_mask)
 		return -EINVAL;
@@ -694,25 +694,26 @@ long set_tagged_addr_ctrl(unsigned long arg)
 	if (arg & PR_TAGGED_ADDR_ENABLE && tagged_addr_disabled)
 		return -EINVAL;
 
-	if (set_mte_ctrl(arg) != 0)
+	if (set_mte_ctrl(task, arg) != 0)
 		return -EINVAL;
 
-	update_thread_flag(TIF_TAGGED_ADDR, arg & PR_TAGGED_ADDR_ENABLE);
+	update_ti_thread_flag(ti, TIF_TAGGED_ADDR, arg & PR_TAGGED_ADDR_ENABLE);
 
 	return 0;
 }
 
-long get_tagged_addr_ctrl(void)
+long get_tagged_addr_ctrl(struct task_struct *task)
 {
 	long ret = 0;
+	struct thread_info *ti = task_thread_info(task);
 
-	if (is_compat_task())
+	if (is_compat_thread(ti))
 		return -EINVAL;
 
-	if (test_thread_flag(TIF_TAGGED_ADDR))
+	if (test_ti_thread_flag(ti, TIF_TAGGED_ADDR))
 		ret = PR_TAGGED_ADDR_ENABLE;
 
-	ret |= get_mte_ctrl();
+	ret |= get_mte_ctrl(task);
 
 	return ret;
 }

@@ -283,7 +283,8 @@ static inline bool con_should_update(const struct vc_data *vc)
 	return con_is_visible(vc) && !console_blanked;
 }
 
-static inline unsigned short *screenpos(struct vc_data *vc, int offset, int viewed)
+static inline unsigned short *screenpos(const struct vc_data *vc, int offset,
+		bool viewed)
 {
 	unsigned short *p;
 	
@@ -543,7 +544,7 @@ int vc_uniscr_check(struct vc_data *vc)
  * This must be preceded by a successful call to vc_uniscr_check() once
  * the console lock has been taken.
  */
-void vc_uniscr_copy_line(struct vc_data *vc, void *dest, int viewed,
+void vc_uniscr_copy_line(const struct vc_data *vc, void *dest, bool viewed,
 			 unsigned int row, unsigned int col, unsigned int nr)
 {
 	struct uni_screen *uniscr = get_vc_uniscr(vc);
@@ -752,7 +753,7 @@ static void update_attr(struct vc_data *vc)
 }
 
 /* Note: inverting the screen twice should revert to the original state */
-void invert_screen(struct vc_data *vc, int offset, int count, int viewed)
+void invert_screen(struct vc_data *vc, int offset, int count, bool viewed)
 {
 	unsigned short *p;
 
@@ -811,7 +812,7 @@ void complement_pos(struct vc_data *vc, int offset)
 
 	if (old_offset != -1 && old_offset >= 0 &&
 	    old_offset < vc->vc_screenbuf_size) {
-		scr_writew(old, screenpos(vc, old_offset, 1));
+		scr_writew(old, screenpos(vc, old_offset, true));
 		if (con_should_update(vc))
 			vc->vc_sw->con_putc(vc, old, oldy, oldx);
 		notify_update(vc);
@@ -823,7 +824,7 @@ void complement_pos(struct vc_data *vc, int offset)
 	    offset < vc->vc_screenbuf_size) {
 		unsigned short new;
 		unsigned short *p;
-		p = screenpos(vc, offset, 1);
+		p = screenpos(vc, offset, true);
 		old = scr_readw(p);
 		new = old ^ vc->vc_complement_mask;
 		scr_writew(new, p);
@@ -1180,7 +1181,6 @@ static inline int resize_screen(struct vc_data *vc, int width, int height,
 /**
  *	vc_do_resize	-	resizing method for the tty
  *	@tty: tty being resized
- *	@real_tty: real tty (different to tty if a pty/tty pair)
  *	@vc: virtual console private data
  *	@cols: columns
  *	@lines: lines
@@ -1201,7 +1201,7 @@ static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 	unsigned int old_rows, old_row_size, first_copied_row;
 	unsigned int new_cols, new_rows, new_row_size, new_screen_size;
 	unsigned int user;
-	unsigned short *newscreen;
+	unsigned short *oldscreen, *newscreen;
 	struct uni_screen *new_uniscr = NULL;
 
 	WARN_CONSOLE_UNLOCKED();
@@ -1220,8 +1220,25 @@ static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 	new_row_size = new_cols << 1;
 	new_screen_size = new_row_size * new_rows;
 
-	if (new_cols == vc->vc_cols && new_rows == vc->vc_rows)
-		return 0;
+	if (new_cols == vc->vc_cols && new_rows == vc->vc_rows) {
+		/*
+		 * This function is being called here to cover the case
+		 * where the userspace calls the FBIOPUT_VSCREENINFO twice,
+		 * passing the same fb_var_screeninfo containing the fields
+		 * yres/xres equal to a number non-multiple of vc_font.height
+		 * and yres_virtual/xres_virtual equal to number lesser than the
+		 * vc_font.height and yres/xres.
+		 * In the second call, the struct fb_var_screeninfo isn't
+		 * being modified by the underlying driver because of the
+		 * if above, and this causes the fbcon_display->vrows to become
+		 * negative and it eventually leads to out-of-bound
+		 * access by the imageblit function.
+		 * To give the correct values to the struct and to not have
+		 * to deal with possible errors from the code below, we call
+		 * the resize_screen here as well.
+		 */
+		return resize_screen(vc, new_cols, new_rows, user);
+	}
 
 	if (new_screen_size > KMALLOC_MAX_SIZE || !new_screen_size)
 		return -EINVAL;
@@ -1299,10 +1316,11 @@ static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 	if (new_scr_end > new_origin)
 		scr_memsetw((void *)new_origin, vc->vc_video_erase_char,
 			    new_scr_end - new_origin);
-	kfree(vc->vc_screenbuf);
+	oldscreen = vc->vc_screenbuf;
 	vc->vc_screenbuf = newscreen;
 	vc->vc_screenbuf_size = new_screen_size;
 	set_origin(vc);
+	kfree(oldscreen);
 
 	/* do part of a reset_terminal() */
 	vc->vc_top = 0;
@@ -1885,7 +1903,9 @@ static void set_mode(struct vc_data *vc, int on_off)
 			case 5:			/* Inverted screen on/off */
 				if (vc->vc_decscnm != on_off) {
 					vc->vc_decscnm = on_off;
-					invert_screen(vc, 0, vc->vc_screenbuf_size, 0);
+					invert_screen(vc, 0,
+							vc->vc_screenbuf_size,
+							false);
 					update_attr(vc);
 				}
 				break;
@@ -2057,7 +2077,7 @@ static void restore_cur(struct vc_data *vc)
 
 enum { ESnormal, ESesc, ESsquare, ESgetpars, ESfunckey,
 	EShash, ESsetG0, ESsetG1, ESpercent, EScsiignore, ESnonstd,
-	ESpalette, ESosc };
+	ESpalette, ESosc, ESapc, ESpm, ESdcs };
 
 /* console_lock is held (except via vc_init()) */
 static void reset_terminal(struct vc_data *vc, int do_clear)
@@ -2131,20 +2151,28 @@ static void vc_setGx(struct vc_data *vc, unsigned int which, int c)
 		vc->vc_translate = set_translate(*charset, vc);
 }
 
+/* is this state an ANSI control string? */
+static bool ansi_control_string(unsigned int state)
+{
+	if (state == ESosc || state == ESapc || state == ESpm || state == ESdcs)
+		return true;
+	return false;
+}
+
 /* console_lock is held */
 static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 {
 	/*
 	 *  Control characters can be used in the _middle_
-	 *  of an escape sequence.
+	 *  of an escape sequence, aside from ANSI control strings.
 	 */
-	if (vc->vc_state == ESosc && c>=8 && c<=13) /* ... except for OSC */
+	if (ansi_control_string(vc->vc_state) && c >= 8 && c <= 13)
 		return;
 	switch (c) {
 	case 0:
 		return;
 	case 7:
-		if (vc->vc_state == ESosc)
+		if (ansi_control_string(vc->vc_state))
 			vc->vc_state = ESnormal;
 		else if (vc->vc_bell_duration)
 			kd_mksound(vc->vc_bell_pitch, vc->vc_bell_duration);
@@ -2205,6 +2233,12 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 		case ']':
 			vc->vc_state = ESnonstd;
 			return;
+		case '_':
+			vc->vc_state = ESapc;
+			return;
+		case '^':
+			vc->vc_state = ESpm;
+			return;
 		case '%':
 			vc->vc_state = ESpercent;
 			return;
@@ -2221,6 +2255,9 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 		case 'H':
 			if (vc->state.x < VC_TABSTOPS_COUNT)
 				set_bit(vc->state.x, vc->vc_tab_stop);
+			return;
+		case 'P':
+			vc->vc_state = ESdcs;
 			return;
 		case 'Z':
 			respond_ID(tty);
@@ -2518,7 +2555,13 @@ static void do_con_trol(struct tty_struct *tty, struct vc_data *vc, int c)
 		vc_setGx(vc, 1, c);
 		vc->vc_state = ESnormal;
 		return;
+	case ESapc:
+		return;
 	case ESosc:
+		return;
+	case ESpm:
+		return;
+	case ESdcs:
 		return;
 	default:
 		vc->vc_state = ESnormal;
@@ -2605,6 +2648,9 @@ static inline int vc_sanitize_unicode(const int c)
 
 /**
  * vc_translate_unicode -- Combine UTF-8 into Unicode in @vc_utf_char
+ * @vc: virtual console
+ * @c: character to translate
+ * @rescan: we return true if we need more (continuation) data
  *
  * @vc_utf_char is the being-constructed unicode character.
  * @vc_utf_count is the number of continuation bytes still expected to arrive.
@@ -3980,7 +4026,7 @@ EXPORT_SYMBOL(con_is_visible);
 
 /**
  * con_debug_enter - prepare the console for the kernel debugger
- * @sw: console driver
+ * @vc: virtual console
  *
  * Called when the console is taken over by the kernel debugger, this
  * function needs to save the current console state, then put the console
@@ -4038,7 +4084,6 @@ EXPORT_SYMBOL_GPL(con_debug_enter);
 
 /**
  * con_debug_leave - restore console state
- * @sw: console driver
  *
  * Restore the console state to what it was before the kernel debugger
  * was invoked.
@@ -4700,27 +4745,6 @@ static int con_font_default(struct vc_data *vc, struct console_font_op *op)
 	return rc;
 }
 
-static int con_font_copy(struct vc_data *vc, struct console_font_op *op)
-{
-	int con = op->height;
-	int rc;
-
-
-	console_lock();
-	if (vc->vc_mode != KD_TEXT)
-		rc = -EINVAL;
-	else if (!vc->vc_sw->con_font_copy)
-		rc = -ENOSYS;
-	else if (con < 0 || !vc_cons_allocated(con))
-		rc = -ENOTTY;
-	else if (con == vc->vc_num)	/* nothing to do */
-		rc = 0;
-	else
-		rc = vc->vc_sw->con_font_copy(vc, con);
-	console_unlock();
-	return rc;
-}
-
 int con_font_op(struct vc_data *vc, struct console_font_op *op)
 {
 	switch (op->op) {
@@ -4731,7 +4755,8 @@ int con_font_op(struct vc_data *vc, struct console_font_op *op)
 	case KD_FONT_OP_SET_DEFAULT:
 		return con_font_default(vc, op);
 	case KD_FONT_OP_COPY:
-		return con_font_copy(vc, op);
+		/* was buggy and never really used */
+		return -EINVAL;
 	}
 	return -ENOSYS;
 }
@@ -4741,9 +4766,9 @@ int con_font_op(struct vc_data *vc, struct console_font_op *op)
  */
 
 /* used by selection */
-u16 screen_glyph(struct vc_data *vc, int offset)
+u16 screen_glyph(const struct vc_data *vc, int offset)
 {
-	u16 w = scr_readw(screenpos(vc, offset, 1));
+	u16 w = scr_readw(screenpos(vc, offset, true));
 	u16 c = w & 0xff;
 
 	if (w & vc->vc_hi_font_mask)
@@ -4752,7 +4777,7 @@ u16 screen_glyph(struct vc_data *vc, int offset)
 }
 EXPORT_SYMBOL_GPL(screen_glyph);
 
-u32 screen_glyph_unicode(struct vc_data *vc, int n)
+u32 screen_glyph_unicode(const struct vc_data *vc, int n)
 {
 	struct uni_screen *uniscr = get_vc_uniscr(vc);
 
@@ -4763,27 +4788,27 @@ u32 screen_glyph_unicode(struct vc_data *vc, int n)
 EXPORT_SYMBOL_GPL(screen_glyph_unicode);
 
 /* used by vcs - note the word offset */
-unsigned short *screen_pos(struct vc_data *vc, int w_offset, int viewed)
+unsigned short *screen_pos(const struct vc_data *vc, int w_offset, bool viewed)
 {
 	return screenpos(vc, 2 * w_offset, viewed);
 }
 EXPORT_SYMBOL_GPL(screen_pos);
 
-void getconsxy(struct vc_data *vc, unsigned char *p)
+void getconsxy(const struct vc_data *vc, unsigned char xy[static 2])
 {
 	/* clamp values if they don't fit */
-	p[0] = min(vc->state.x, 0xFFu);
-	p[1] = min(vc->state.y, 0xFFu);
+	xy[0] = min(vc->state.x, 0xFFu);
+	xy[1] = min(vc->state.y, 0xFFu);
 }
 
-void putconsxy(struct vc_data *vc, unsigned char *p)
+void putconsxy(struct vc_data *vc, unsigned char xy[static const 2])
 {
 	hide_cursor(vc);
-	gotoxy(vc, p[0], p[1]);
+	gotoxy(vc, xy[0], xy[1]);
 	set_cursor(vc);
 }
 
-u16 vcs_scr_readw(struct vc_data *vc, const u16 *org)
+u16 vcs_scr_readw(const struct vc_data *vc, const u16 *org)
 {
 	if ((unsigned long)org == vc->vc_pos && softcursor_original != -1)
 		return softcursor_original;

@@ -176,11 +176,11 @@ Master Keys
 
 Each encrypted directory tree is protected by a *master key*.  Master
 keys can be up to 64 bytes long, and must be at least as long as the
-greater of the key length needed by the contents and filenames
-encryption modes being used.  For example, if AES-256-XTS is used for
-contents encryption, the master key must be 64 bytes (512 bits).  Note
-that the XTS mode is defined to require a key twice as long as that
-required by the underlying block cipher.
+greater of the security strength of the contents and filenames
+encryption modes being used.  For example, if any AES-256 mode is
+used, the master key must be at least 256 bits, i.e. 32 bytes.  A
+stricter requirement applies if the key is used by a v1 encryption
+policy and AES-256-XTS is used; such keys must be 64 bytes.
 
 To "unlock" an encrypted directory tree, userspace must provide the
 appropriate master key.  There can be any number of master keys, each
@@ -1156,7 +1156,7 @@ setxattr() because of the special semantics of the encryption xattr.
 were to be added to or removed from anything other than an empty
 directory.)  These structs are defined as follows::
 
-    #define FS_KEY_DERIVATION_NONCE_SIZE 16
+    #define FSCRYPT_FILE_NONCE_SIZE 16
 
     #define FSCRYPT_KEY_DESCRIPTOR_SIZE  8
     struct fscrypt_context_v1 {
@@ -1165,7 +1165,7 @@ directory.)  These structs are defined as follows::
             u8 filenames_encryption_mode;
             u8 flags;
             u8 master_key_descriptor[FSCRYPT_KEY_DESCRIPTOR_SIZE];
-            u8 nonce[FS_KEY_DERIVATION_NONCE_SIZE];
+            u8 nonce[FSCRYPT_FILE_NONCE_SIZE];
     };
 
     #define FSCRYPT_KEY_IDENTIFIER_SIZE  16
@@ -1176,7 +1176,7 @@ directory.)  These structs are defined as follows::
             u8 flags;
             u8 __reserved[4];
             u8 master_key_identifier[FSCRYPT_KEY_IDENTIFIER_SIZE];
-            u8 nonce[FS_KEY_DERIVATION_NONCE_SIZE];
+            u8 nonce[FSCRYPT_FILE_NONCE_SIZE];
     };
 
 The context structs contain the same information as the corresponding
@@ -1201,6 +1201,18 @@ temporary buffer or "bounce page", then write out the temporary
 buffer.  Some filesystems, such as UBIFS, already use temporary
 buffers regardless of encryption.  Other filesystems, such as ext4 and
 F2FS, have to allocate bounce pages specially for encryption.
+
+Fscrypt is also able to use inline encryption hardware instead of the
+kernel crypto API for en/decryption of file contents.  When possible,
+and if directed to do so (by specifying the 'inlinecrypt' mount option
+for an ext4/F2FS filesystem), it adds encryption contexts to bios and
+uses blk-crypto to perform the en/decryption instead of making use of
+the above read/write path changes.  Of course, even if directed to
+make use of inline encryption, fscrypt will only be able to do so if
+either hardware inline encryption support is available for the
+selected encryption algorithm or CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK
+is selected.  If neither is the case, fscrypt will fall back to using
+the above mentioned read/write path changes for en/decryption.
 
 Filename hashing and encoding
 -----------------------------
@@ -1248,7 +1260,9 @@ Tests
 
 To test fscrypt, use xfstests, which is Linux's de facto standard
 filesystem test suite.  First, run all the tests in the "encrypt"
-group on the relevant filesystem(s).  For example, to test ext4 and
+group on the relevant filesystem(s).  One can also run the tests
+with the 'inlinecrypt' mount option to test the implementation for
+inline encryption support.  For example, to test ext4 and
 f2fs encryption using `kvm-xfstests
 <https://github.com/tytso/xfstests-bld/blob/master/Documentation/kvm-quickstart.md>`_::
 

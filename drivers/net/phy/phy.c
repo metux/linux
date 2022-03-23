@@ -260,62 +260,10 @@ static void phy_sanitize_settings(struct phy_device *phydev)
 	}
 }
 
-int phy_ethtool_ksettings_set(struct phy_device *phydev,
-			      const struct ethtool_link_ksettings *cmd)
-{
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
-	u8 autoneg = cmd->base.autoneg;
-	u8 duplex = cmd->base.duplex;
-	u32 speed = cmd->base.speed;
-
-	if (cmd->base.phy_address != phydev->mdio.addr)
-		return -EINVAL;
-
-	linkmode_copy(advertising, cmd->link_modes.advertising);
-
-	/* We make sure that we don't pass unsupported values in to the PHY */
-	linkmode_and(advertising, advertising, phydev->supported);
-
-	/* Verify the settings we care about. */
-	if (autoneg != AUTONEG_ENABLE && autoneg != AUTONEG_DISABLE)
-		return -EINVAL;
-
-	if (autoneg == AUTONEG_ENABLE && linkmode_empty(advertising))
-		return -EINVAL;
-
-	if (autoneg == AUTONEG_DISABLE &&
-	    ((speed != SPEED_1000 &&
-	      speed != SPEED_100 &&
-	      speed != SPEED_10) ||
-	     (duplex != DUPLEX_HALF &&
-	      duplex != DUPLEX_FULL)))
-		return -EINVAL;
-
-	phydev->autoneg = autoneg;
-
-	if (autoneg == AUTONEG_DISABLE) {
-		phydev->speed = speed;
-		phydev->duplex = duplex;
-	}
-
-	linkmode_copy(phydev->advertising, advertising);
-
-	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
-			 phydev->advertising, autoneg == AUTONEG_ENABLE);
-
-	phydev->master_slave_set = cmd->base.master_slave_cfg;
-	phydev->mdix_ctrl = cmd->base.eth_tp_mdix_ctrl;
-
-	/* Restart the PHY */
-	phy_start_aneg(phydev);
-
-	return 0;
-}
-EXPORT_SYMBOL(phy_ethtool_ksettings_set);
-
 void phy_ethtool_ksettings_get(struct phy_device *phydev,
 			       struct ethtool_link_ksettings *cmd)
 {
+	mutex_lock(&phydev->lock);
 	linkmode_copy(cmd->link_modes.supported, phydev->supported);
 	linkmode_copy(cmd->link_modes.advertising, phydev->advertising);
 	linkmode_copy(cmd->link_modes.lp_advertising, phydev->lp_advertising);
@@ -334,6 +282,7 @@ void phy_ethtool_ksettings_get(struct phy_device *phydev,
 	cmd->base.autoneg = phydev->autoneg;
 	cmd->base.eth_tp_mdix_ctrl = phydev->mdix_ctrl;
 	cmd->base.eth_tp_mdix = phydev->mdix;
+	mutex_unlock(&phydev->lock);
 }
 EXPORT_SYMBOL(phy_ethtool_ksettings_get);
 
@@ -458,7 +407,16 @@ int phy_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 EXPORT_SYMBOL(phy_do_ioctl);
 
-/* same as phy_do_ioctl, but ensures that net_device is running */
+/**
+ * phy_do_ioctl_running - generic ndo_do_ioctl implementation but test first
+ *
+ * @dev: the net_device struct
+ * @ifr: &struct ifreq for socket ioctl's
+ * @cmd: ioctl cmd to execute
+ *
+ * Same as phy_do_ioctl, but ensures that net_device is running before
+ * handling the ioctl.
+ */
 int phy_do_ioctl_running(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	if (!netif_running(dev))
@@ -468,6 +426,12 @@ int phy_do_ioctl_running(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 EXPORT_SYMBOL(phy_do_ioctl_running);
 
+/**
+ * phy_queue_state_machine - Trigger the state machine to run soon
+ *
+ * @phydev: the phy_device struct
+ * @jiffies: Run the state machine after these jiffies
+ */
 void phy_queue_state_machine(struct phy_device *phydev, unsigned long jiffies)
 {
 	mod_delayed_work(system_power_efficient_wq, &phydev->state_queue,
@@ -475,6 +439,11 @@ void phy_queue_state_machine(struct phy_device *phydev, unsigned long jiffies)
 }
 EXPORT_SYMBOL(phy_queue_state_machine);
 
+/**
+ * phy_queue_state_machine - Trigger the state machine to run now
+ *
+ * @phydev: the phy_device struct
+ */
 static void phy_trigger_machine(struct phy_device *phydev)
 {
 	phy_queue_state_machine(phydev, 0);
@@ -491,6 +460,12 @@ static void phy_abort_cable_test(struct phy_device *phydev)
 		phydev_err(phydev, "Error while aborting cable test");
 }
 
+/**
+ * phy_ethtool_get_strings - Get the statistic counter names
+ *
+ * @phydev: the phy_device struct
+ * @data: Where to put the strings
+ */
 int phy_ethtool_get_strings(struct phy_device *phydev, u8 *data)
 {
 	if (!phydev->drv)
@@ -504,6 +479,11 @@ int phy_ethtool_get_strings(struct phy_device *phydev, u8 *data)
 }
 EXPORT_SYMBOL(phy_ethtool_get_strings);
 
+/**
+ * phy_ethtool_get_sset_count - Get the number of statistic counters
+ *
+ * @phydev: the phy_device struct
+ */
 int phy_ethtool_get_sset_count(struct phy_device *phydev)
 {
 	int ret;
@@ -525,6 +505,13 @@ int phy_ethtool_get_sset_count(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(phy_ethtool_get_sset_count);
 
+/**
+ * phy_ethtool_get_stats - Get the statistic counters
+ *
+ * @phydev: the phy_device struct
+ * @stats: What counters to get
+ * @data: Where to store the counters
+ */
 int phy_ethtool_get_stats(struct phy_device *phydev,
 			  struct ethtool_stats *stats, u64 *data)
 {
@@ -539,6 +526,12 @@ int phy_ethtool_get_stats(struct phy_device *phydev,
 }
 EXPORT_SYMBOL(phy_ethtool_get_stats);
 
+/**
+ * phy_start_cable_test - Start a cable test
+ *
+ * @phydev: the phy_device struct
+ * @extack: extack for reporting useful error messages
+ */
 int phy_start_cable_test(struct phy_device *phydev,
 			 struct netlink_ext_ack *extack)
 {
@@ -602,6 +595,13 @@ out:
 }
 EXPORT_SYMBOL(phy_start_cable_test);
 
+/**
+ * phy_start_cable_test_tdr - Start a raw TDR cable test
+ *
+ * @phydev: the phy_device struct
+ * @extack: extack for reporting useful error messages
+ * @config: Configuration of the test to run
+ */
 int phy_start_cable_test_tdr(struct phy_device *phydev,
 			     struct netlink_ext_ack *extack,
 			     const struct phy_tdr_config *config)
@@ -716,6 +716,37 @@ static int phy_check_link_status(struct phy_device *phydev)
 }
 
 /**
+ * _phy_start_aneg - start auto-negotiation for this PHY device
+ * @phydev: the phy_device struct
+ *
+ * Description: Sanitizes the settings (if we're not autonegotiating
+ *   them), and then calls the driver's config_aneg function.
+ *   If the PHYCONTROL Layer is operating, we change the state to
+ *   reflect the beginning of Auto-negotiation or forcing.
+ */
+static int _phy_start_aneg(struct phy_device *phydev)
+{
+	int err;
+
+	lockdep_assert_held(&phydev->lock);
+
+	if (!phydev->drv)
+		return -EIO;
+
+	if (AUTONEG_DISABLE == phydev->autoneg)
+		phy_sanitize_settings(phydev);
+
+	err = phy_config_aneg(phydev);
+	if (err < 0)
+		return err;
+
+	if (phy_is_started(phydev))
+		err = phy_check_link_status(phydev);
+
+	return err;
+}
+
+/**
  * phy_start_aneg - start auto-negotiation for this PHY device
  * @phydev: the phy_device struct
  *
@@ -728,21 +759,8 @@ int phy_start_aneg(struct phy_device *phydev)
 {
 	int err;
 
-	if (!phydev->drv)
-		return -EIO;
-
 	mutex_lock(&phydev->lock);
-
-	if (AUTONEG_DISABLE == phydev->autoneg)
-		phy_sanitize_settings(phydev);
-
-	err = phy_config_aneg(phydev);
-	if (err < 0)
-		goto out_unlock;
-
-	if (phy_is_started(phydev))
-		err = phy_check_link_status(phydev);
-out_unlock:
+	err = _phy_start_aneg(phydev);
 	mutex_unlock(&phydev->lock);
 
 	return err;
@@ -764,6 +782,66 @@ static int phy_poll_aneg_done(struct phy_device *phydev)
 
 	return ret < 0 ? ret : 0;
 }
+
+int phy_ethtool_ksettings_set(struct phy_device *phydev,
+			      const struct ethtool_link_ksettings *cmd)
+{
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
+	u8 autoneg = cmd->base.autoneg;
+	u8 duplex = cmd->base.duplex;
+	u32 speed = cmd->base.speed;
+
+	if (cmd->base.phy_address != phydev->mdio.addr)
+		return -EINVAL;
+
+	linkmode_copy(advertising, cmd->link_modes.advertising);
+
+	/* We make sure that we don't pass unsupported values in to the PHY */
+	linkmode_and(advertising, advertising, phydev->supported);
+
+	/* Verify the settings we care about. */
+	if (autoneg != AUTONEG_ENABLE && autoneg != AUTONEG_DISABLE)
+		return -EINVAL;
+
+	if (autoneg == AUTONEG_ENABLE && linkmode_empty(advertising))
+		return -EINVAL;
+
+	if (autoneg == AUTONEG_DISABLE &&
+	    ((speed != SPEED_1000 &&
+	      speed != SPEED_100 &&
+	      speed != SPEED_10) ||
+	     (duplex != DUPLEX_HALF &&
+	      duplex != DUPLEX_FULL)))
+		return -EINVAL;
+
+	mutex_lock(&phydev->lock);
+	phydev->autoneg = autoneg;
+
+	if (autoneg == AUTONEG_DISABLE) {
+		phydev->speed = speed;
+		phydev->duplex = duplex;
+	}
+
+	linkmode_copy(phydev->advertising, advertising);
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
+			 phydev->advertising, autoneg == AUTONEG_ENABLE);
+
+	phydev->master_slave_set = cmd->base.master_slave_cfg;
+	phydev->mdix_ctrl = cmd->base.eth_tp_mdix_ctrl;
+
+	/* Restart the PHY */
+	if (phy_is_started(phydev)) {
+		phydev->state = PHY_UP;
+		phy_trigger_machine(phydev);
+	} else {
+		_phy_start_aneg(phydev);
+	}
+
+	mutex_unlock(&phydev->lock);
+	return 0;
+}
+EXPORT_SYMBOL(phy_ethtool_ksettings_set);
 
 /**
  * phy_speed_down - set speed to lowest speed supported by both link partners
@@ -998,7 +1076,7 @@ void phy_stop(struct phy_device *phydev)
 {
 	struct net_device *dev = phydev->attached_dev;
 
-	if (!phy_is_started(phydev)) {
+	if (!phy_is_started(phydev) && phydev->state != PHY_DOWN) {
 		WARN(1, "called from state %s\n",
 		     phy_state_to_str(phydev->state));
 		return;
@@ -1365,6 +1443,12 @@ int phy_ethtool_set_eee(struct phy_device *phydev, struct ethtool_eee *data)
 }
 EXPORT_SYMBOL(phy_ethtool_set_eee);
 
+/**
+ * phy_ethtool_set_wol - Configure Wake On LAN
+ *
+ * @phydev: target phy_device struct
+ * @wol: Configuration requested
+ */
 int phy_ethtool_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
 	if (phydev->drv && phydev->drv->set_wol)
@@ -1374,6 +1458,12 @@ int phy_ethtool_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 }
 EXPORT_SYMBOL(phy_ethtool_set_wol);
 
+/**
+ * phy_ethtool_get_wol - Get the current Wake On LAN configuration
+ *
+ * @phydev: target phy_device struct
+ * @wol: Store the current configuration here
+ */
 void phy_ethtool_get_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
 	if (phydev->drv && phydev->drv->get_wol)
@@ -1407,6 +1497,10 @@ int phy_ethtool_set_link_ksettings(struct net_device *ndev,
 }
 EXPORT_SYMBOL(phy_ethtool_set_link_ksettings);
 
+/**
+ * phy_ethtool_nway_reset - Restart auto negotiation
+ * @ndev: Network device to restart autoneg for
+ */
 int phy_ethtool_nway_reset(struct net_device *ndev)
 {
 	struct phy_device *phydev = ndev->phydev;

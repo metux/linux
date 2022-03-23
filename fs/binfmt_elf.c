@@ -627,7 +627,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 
 			vaddr = eppnt->p_vaddr;
 			if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
-				elf_type |= MAP_FIXED_NOREPLACE;
+				elf_type |= MAP_FIXED;
 			else if (no_base && interp_elf_ex->e_type == ET_DYN)
 				load_addr = -vaddr;
 
@@ -1946,9 +1946,6 @@ struct elf_thread_status
 	struct elf_prstatus prstatus;	/* NT_PRSTATUS */
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct task_struct *thread;
-#ifdef ELF_CORE_COPY_XFPREGS
-	elf_fpxregset_t xfpu;		/* ELF_CORE_XFPREG_TYPE */
-#endif
 	struct memelfnote notes[3];
 	int num_notes;
 };
@@ -1979,15 +1976,6 @@ static int elf_dump_thread_status(long signr, struct elf_thread_status *t)
 		t->num_notes++;
 		sz += notesize(&t->notes[1]);
 	}
-
-#ifdef ELF_CORE_COPY_XFPREGS
-	if (elf_core_copy_task_xfpregs(p, &t->xfpu)) {
-		fill_note(&t->notes[2], "LINUX", ELF_CORE_XFPREG_TYPE,
-			  sizeof(t->xfpu), &t->xfpu);
-		t->num_notes++;
-		sz += notesize(&t->notes[2]);
-	}
-#endif	
 	return sz;
 }
 
@@ -1998,9 +1986,6 @@ struct elf_note_info {
 	struct elf_prpsinfo *psinfo;	/* NT_PRPSINFO */
 	struct list_head thread_list;
 	elf_fpregset_t *fpu;
-#ifdef ELF_CORE_COPY_XFPREGS
-	elf_fpxregset_t *xfpu;
-#endif
 	user_siginfo_t csigdata;
 	int thread_status_size;
 	int numnote;
@@ -2024,11 +2009,6 @@ static int elf_note_info_init(struct elf_note_info *info)
 	info->fpu = kmalloc(sizeof(*info->fpu), GFP_KERNEL);
 	if (!info->fpu)
 		return 0;
-#ifdef ELF_CORE_COPY_XFPREGS
-	info->xfpu = kmalloc(sizeof(*info->xfpu), GFP_KERNEL);
-	if (!info->xfpu)
-		return 0;
-#endif
 	return 1;
 }
 
@@ -2092,13 +2072,6 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	if (info->prstatus->pr_fpvalid)
 		fill_note(info->notes + info->numnote++,
 			  "CORE", NT_PRFPREG, sizeof(*info->fpu), info->fpu);
-#ifdef ELF_CORE_COPY_XFPREGS
-	if (elf_core_copy_task_xfpregs(current, info->xfpu))
-		fill_note(info->notes + info->numnote++,
-			  "LINUX", ELF_CORE_XFPREG_TYPE,
-			  sizeof(*info->xfpu), info->xfpu);
-#endif
-
 	return 1;
 }
 
@@ -2151,9 +2124,6 @@ static void free_note_info(struct elf_note_info *info)
 	kfree(info->psinfo);
 	kfree(info->notes);
 	kfree(info->fpu);
-#ifdef ELF_CORE_COPY_XFPREGS
-	kfree(info->xfpu);
-#endif
 }
 
 #endif

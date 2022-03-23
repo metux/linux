@@ -118,7 +118,7 @@ config INTEL_TXT
 	  it was configured with, especially since they may be responsible for
 	  providing such assurances to VMs and services running on it.
 
-	  See <http://www.intel.com/technology/security/> for more information
+	  See <https://www.intel.com/technology/security/> for more information
 	  about Intel(R) TXT.
 	  See <http://tboot.sourceforge.net> for more information about tboot.
 	  See Documentation/x86/intel_txt.rst for a description of how to enable
@@ -191,6 +191,9 @@ config HARDENED_USERCOPY_PAGESPAN
 config FORTIFY_SOURCE
 	bool "Harden common str/mem functions against buffer overflows"
 	depends on ARCH_HAS_FORTIFY_SOURCE
+	# https://bugs.llvm.org/show_bug.cgi?id=50322
+	# https://bugs.llvm.org/show_bug.cgi?id=41459
+	depends on !CC_IS_CLANG
 	help
 	  Detect overflows of buffers in common string and memory functions
 	  where the compiler can determine and validate the buffer sizes.

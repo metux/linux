@@ -5283,6 +5283,9 @@ static void mtk_crtc_addon_connector_disconnect(struct drm_crtc *crtc,
 		dsc_comp = priv->ddp_comp[DDP_COMPONENT_DSC0];
 
 		switch (priv->data->mmsys_id) {
+		case MMSYS_MT6789:
+			mtk_ddp_remove_dsc_prim_MT6789(mtk_crtc, handle);
+			break;
 		case MMSYS_MT6885:
 			mtk_ddp_remove_dsc_prim_MT6885(mtk_crtc, handle);
 			break;
@@ -5381,6 +5384,9 @@ static void mtk_crtc_addon_connector_connect(struct drm_crtc *crtc,
 
 		/* insert DSC */
 		switch (priv->data->mmsys_id) {
+		case MMSYS_MT6789:
+			mtk_ddp_insert_dsc_prim_MT6789(mtk_crtc, handle);
+			break;
 		case MMSYS_MT6885:
 			mtk_ddp_insert_dsc_prim_MT6885(mtk_crtc, handle);
 			break;

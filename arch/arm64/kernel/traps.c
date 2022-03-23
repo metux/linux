@@ -409,6 +409,7 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 
 void do_bti(struct pt_regs *regs)
 {
+	trace_android_rvh_do_bti(regs, user_mode(regs));
 	BUG_ON(!user_mode(regs));
 	force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
 }

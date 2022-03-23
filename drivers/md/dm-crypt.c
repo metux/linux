@@ -741,7 +741,7 @@ static int crypt_iv_eboiv_gen(struct crypt_config *cc, u8 *iv,
 	u8 buf[MAX_CIPHER_BLOCKSIZE] __aligned(__alignof__(__le64));
 	struct skcipher_request *req;
 	struct scatterlist src, dst;
-	struct crypto_wait wait;
+	DECLARE_CRYPTO_WAIT(wait);
 	int err;
 
 	req = skcipher_request_alloc(any_tfm(cc), GFP_NOIO);
@@ -939,7 +939,7 @@ static int crypt_iv_elephant(struct crypt_config *cc, struct dm_crypt_request *d
 	u8 *es, *ks, *data, *data2, *data_offset;
 	struct skcipher_request *req;
 	struct scatterlist *sg, *sg2, src, dst;
-	struct crypto_wait wait;
+	DECLARE_CRYPTO_WAIT(wait);
 	int i, r;
 
 	req = skcipher_request_alloc(elephant->tfm, GFP_NOIO);
@@ -2643,7 +2643,12 @@ static void *crypt_page_alloc(gfp_t gfp_mask, void *pool_data)
 	struct crypt_config *cc = pool_data;
 	struct page *page;
 
-	if (unlikely(percpu_counter_compare(&cc->n_allocated_pages, dm_crypt_pages_per_client) >= 0) &&
+	/*
+	 * Note, percpu_counter_read_positive() may over (and under) estimate
+	 * the current usage by at most (batch - 1) * num_online_cpus() pages,
+	 * but avoids potential spinlock contention of an exact result.
+	 */
+	if (unlikely(percpu_counter_read_positive(&cc->n_allocated_pages) >= dm_crypt_pages_per_client) &&
 	    likely(gfp_mask & __GFP_NORETRY))
 		return NULL;
 

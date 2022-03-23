@@ -9,6 +9,8 @@
 #include <nvif/cl0002.h>
 #include <nvif/timer.h>
 
+#include <nvhw/class/cl907d.h>
+
 #include "nouveau_drv.h"
 #include "core.h"
 #include "head.h"
@@ -261,7 +263,29 @@ void nv50_crc_atomic_stop_reporting(struct drm_atomic_state *state)
 	}
 }
 
-void nv50_crc_atomic_prepare_notifier_contexts(struct drm_atomic_state *state)
+void nv50_crc_atomic_init_notifier_contexts(struct drm_atomic_state *state)
+{
+	struct drm_crtc_state *new_crtc_state;
+	struct drm_crtc *crtc;
+	int i;
+
+	for_each_new_crtc_in_state(state, crtc, new_crtc_state, i) {
+		struct nv50_head *head = nv50_head(crtc);
+		struct nv50_head_atom *asyh = nv50_head_atom(new_crtc_state);
+		struct nv50_crc *crc = &head->crc;
+		int i;
+
+		if (!asyh->set.crc)
+			continue;
+
+		crc->entry_idx = 0;
+		crc->ctx_changed = false;
+		for (i = 0; i < ARRAY_SIZE(crc->ctx); i++)
+			nv50_crc_reset_ctx(&crc->ctx[i]);
+	}
+}
+
+void nv50_crc_atomic_release_notifier_contexts(struct drm_atomic_state *state)
 {
 	const struct nv50_crc_func *func =
 		nv50_disp(state->dev)->core->func->crc;
@@ -274,22 +298,15 @@ void nv50_crc_atomic_prepare_notifier_contexts(struct drm_atomic_state *state)
 		struct nv50_head_atom *asyh = nv50_head_atom(new_crtc_state);
 		struct nv50_crc *crc = &head->crc;
 		struct nv50_crc_notifier_ctx *ctx = &crc->ctx[crc->ctx_idx];
-		int i;
 
-		if (asyh->clr.crc && asyh->crc.src) {
-			if (crc->ctx_changed) {
-				nv50_crc_wait_ctx_finished(head, func, ctx);
-				ctx = &crc->ctx[crc->ctx_idx ^ 1];
-			}
+		if (!asyh->clr.crc)
+			continue;
+
+		if (crc->ctx_changed) {
 			nv50_crc_wait_ctx_finished(head, func, ctx);
+			ctx = &crc->ctx[crc->ctx_idx ^ 1];
 		}
-
-		if (asyh->set.crc) {
-			crc->entry_idx = 0;
-			crc->ctx_changed = false;
-			for (i = 0; i < ARRAY_SIZE(crc->ctx); i++)
-				nv50_crc_reset_ctx(&crc->ctx[i]);
-		}
+		nv50_crc_wait_ctx_finished(head, func, ctx);
 	}
 }
 
@@ -325,16 +342,13 @@ void nv50_crc_atomic_start_reporting(struct drm_atomic_state *state)
 	}
 }
 
-int nv50_crc_atomic_check(struct nv50_head *head,
-			  struct nv50_head_atom *asyh,
-			  struct nv50_head_atom *armh)
+int nv50_crc_atomic_check_head(struct nv50_head *head,
+			       struct nv50_head_atom *asyh,
+			       struct nv50_head_atom *armh)
 {
-	struct drm_atomic_state *state = asyh->state.state;
+	struct nv50_atom *atom = nv50_atom(asyh->state.state);
 	struct drm_device *dev = head->base.base.dev;
-	struct nv50_atom *atom = nv50_atom(state);
 	struct nv50_disp *disp = nv50_disp(dev);
-	struct drm_encoder *encoder;
-	struct nv50_outp_atom *outp_atom;
 	bool changed = armh->crc.src != asyh->crc.src;
 
 	if (!armh->crc.src && !asyh->crc.src) {
@@ -373,27 +387,52 @@ int nv50_crc_atomic_check(struct nv50_head *head,
 			asyh->set.or |= armh->or.crc_raster !=
 					asyh->or.crc_raster;
 
-		/*
-		 * If we're reprogramming our OR, we need to flush the CRC
-		 * disable first
-		 */
-		if (asyh->clr.crc) {
-			encoder = nv50_head_atom_get_encoder(armh);
-
-			list_for_each_entry(outp_atom, &atom->outp, head) {
-				if (outp_atom->encoder == encoder) {
-					if (outp_atom->set.mask)
-						atom->flush_disable = true;
-					break;
-				}
-			}
-		}
+		if (asyh->clr.crc && asyh->set.crc)
+			atom->flush_disable = true;
 	} else {
 		asyh->set.crc = false;
 		asyh->clr.crc = false;
 	}
 
 	return 0;
+}
+
+void nv50_crc_atomic_check_outp(struct nv50_atom *atom)
+{
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+	int i;
+
+	if (atom->flush_disable)
+		return;
+
+	for_each_oldnew_crtc_in_state(&atom->state, crtc, old_crtc_state,
+				      new_crtc_state, i) {
+		struct nv50_head_atom *armh = nv50_head_atom(old_crtc_state);
+		struct nv50_head_atom *asyh = nv50_head_atom(new_crtc_state);
+		struct nv50_outp_atom *outp_atom;
+		struct nouveau_encoder *outp =
+			nv50_real_outp(nv50_head_atom_get_encoder(armh));
+		struct drm_encoder *encoder = &outp->base.base;
+
+		if (!asyh->clr.crc)
+			continue;
+
+		/*
+		 * Re-programming ORs can't be done in the same flush as
+		 * disabling CRCs
+		 */
+		list_for_each_entry(outp_atom, &atom->outp, head) {
+			if (outp_atom->encoder == encoder) {
+				if (outp_atom->set.mask) {
+					atom->flush_disable = true;
+					return;
+				} else {
+					break;
+				}
+			}
+		}
+	}
 }
 
 static enum nv50_crc_source_type
@@ -441,10 +480,6 @@ void nv50_crc_atomic_clr(struct nv50_head *head)
 	func->set_src(head, 0, NV50_CRC_SOURCE_TYPE_NONE, NULL, 0);
 }
 
-#define NV50_CRC_RASTER_ACTIVE   0
-#define NV50_CRC_RASTER_COMPLETE 1
-#define NV50_CRC_RASTER_INACTIVE 2
-
 static inline int
 nv50_crc_raster_type(enum nv50_crc_source source)
 {
@@ -453,11 +488,11 @@ nv50_crc_raster_type(enum nv50_crc_source source)
 	case NV50_CRC_SOURCE_AUTO:
 	case NV50_CRC_SOURCE_RG:
 	case NV50_CRC_SOURCE_OUTP_ACTIVE:
-		return NV50_CRC_RASTER_ACTIVE;
+		return NV907D_HEAD_SET_CONTROL_OUTPUT_RESOURCE_CRC_MODE_ACTIVE_RASTER;
 	case NV50_CRC_SOURCE_OUTP_COMPLETE:
-		return NV50_CRC_RASTER_COMPLETE;
+		return NV907D_HEAD_SET_CONTROL_OUTPUT_RESOURCE_CRC_MODE_COMPLETE_RASTER;
 	case NV50_CRC_SOURCE_OUTP_INACTIVE:
-		return NV50_CRC_RASTER_INACTIVE;
+		return NV907D_HEAD_SET_CONTROL_OUTPUT_RESOURCE_CRC_MODE_NON_ACTIVE_RASTER;
 	}
 
 	return 0;
@@ -473,11 +508,11 @@ nv50_crc_ctx_init(struct nv50_head *head, struct nvif_mmu *mmu,
 	struct nv50_core *core = nv50_disp(head->base.base.dev)->core;
 	int ret;
 
-	ret = nvif_mem_init_map(mmu, NVIF_MEM_VRAM, len, &ctx->mem);
+	ret = nvif_mem_ctor_map(mmu, "kmsCrcNtfy", NVIF_MEM_VRAM, len, &ctx->mem);
 	if (ret)
 		return ret;
 
-	ret = nvif_object_init(&core->chan.base.user,
+	ret = nvif_object_ctor(&core->chan.base.user, "kmsCrcNtfyCtxDma",
 			       NV50_DISP_HANDLE_CRC_CTX(head, idx),
 			       NV_DMA_IN_MEMORY,
 			       &(struct nv_dma_v0) {
@@ -494,15 +529,15 @@ nv50_crc_ctx_init(struct nv50_head *head, struct nvif_mmu *mmu,
 	return 0;
 
 fail_fini:
-	nvif_mem_fini(&ctx->mem);
+	nvif_mem_dtor(&ctx->mem);
 	return ret;
 }
 
 static inline void
 nv50_crc_ctx_fini(struct nv50_crc_notifier_ctx *ctx)
 {
-	nvif_object_fini(&ctx->ntfy);
-	nvif_mem_fini(&ctx->mem);
+	nvif_object_dtor(&ctx->ntfy);
+	nvif_mem_dtor(&ctx->mem);
 }
 
 int nv50_crc_set_source(struct drm_crtc *crtc, const char *source_str)
@@ -669,6 +704,7 @@ static const struct file_operations nv50_crc_flip_threshold_fops = {
 	.open = nv50_crc_debugfs_flip_threshold_open,
 	.read = seq_read,
 	.write = nv50_crc_debugfs_flip_threshold_set,
+	.release = single_release,
 };
 
 int nv50_head_crc_late_register(struct nv50_head *head)

@@ -64,10 +64,12 @@ unsigned long __kvmhv_copy_tofrom_guest_radix(int lpid, int pid,
 	}
 	isync();
 
+	pagefault_disable();
 	if (is_load)
-		ret = copy_from_user_nofault(to, (const void __user *)from, n);
+		ret = __copy_from_user_inatomic(to, (const void __user *)from, n);
 	else
-		ret = copy_to_user_nofault((void __user *)to, from, n);
+		ret = __copy_to_user_inatomic((void __user *)to, from, n);
+	pagefault_enable();
 
 	/* switch the pid first to avoid running host with unallocated pid */
 	if (quadrant == 1 && pid != old_pid)
@@ -161,7 +163,9 @@ int kvmppc_mmu_walk_radix_tree(struct kvm_vcpu *vcpu, gva_t eaddr,
 			return -EINVAL;
 		/* Read the entry from guest memory */
 		addr = base + (index * sizeof(rpte));
+		vcpu->srcu_idx = srcu_read_lock(&kvm->srcu);
 		ret = kvm_read_guest(kvm, addr, &rpte, sizeof(rpte));
+		srcu_read_unlock(&kvm->srcu, vcpu->srcu_idx);
 		if (ret) {
 			if (pte_ret_p)
 				*pte_ret_p = addr;
@@ -237,7 +241,9 @@ int kvmppc_mmu_radix_translate_table(struct kvm_vcpu *vcpu, gva_t eaddr,
 
 	/* Read the table to find the root of the radix tree */
 	ptbl = (table & PRTB_MASK) + (table_index * sizeof(entry));
+	vcpu->srcu_idx = srcu_read_lock(&kvm->srcu);
 	ret = kvm_read_guest(kvm, ptbl, &entry, sizeof(entry));
+	srcu_read_unlock(&kvm->srcu, vcpu->srcu_idx);
 	if (ret)
 		return ret;
 

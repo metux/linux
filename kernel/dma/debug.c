@@ -143,8 +143,12 @@ static const char *type2name[] = {
 	[dma_debug_resource] = "resource",
 };
 
-static const char *dir2name[4] = { "DMA_BIDIRECTIONAL", "DMA_TO_DEVICE",
-				   "DMA_FROM_DEVICE", "DMA_NONE" };
+static const char *dir2name[] = {
+	[DMA_BIDIRECTIONAL]	= "DMA_BIDIRECTIONAL",
+	[DMA_TO_DEVICE]		= "DMA_TO_DEVICE",
+	[DMA_FROM_DEVICE]	= "DMA_FROM_DEVICE",
+	[DMA_NONE]		= "DMA_NONE",
+};
 
 /*
  * The access to some variables in this macro is racy. We can't use atomic_t
@@ -443,9 +447,6 @@ void debug_dma_dump_mappings(struct device *dev)
  * dma_active_cacheline entry to track per event.  dma_map_sg(), on the
  * other hand, consumes a single dma_debug_entry, but inserts 'nents'
  * entries into the tree.
- *
- * At any time debug_dma_assert_idle() can be called to trigger a
- * warning if any cachelines in the given page are in the active set.
  */
 static RADIX_TREE(dma_active_cacheline, GFP_NOWAIT);
 static DEFINE_SPINLOCK(radix_lock);
@@ -492,10 +493,7 @@ static void active_cacheline_inc_overlap(phys_addr_t cln)
 	overlap = active_cacheline_set_overlap(cln, ++overlap);
 
 	/* If we overflowed the overlap counter then we're potentially
-	 * leaking dma-mappings.  Otherwise, if maps and unmaps are
-	 * balanced then this overflow may cause false negatives in
-	 * debug_dma_assert_idle() as the cacheline may be marked idle
-	 * prematurely.
+	 * leaking dma-mappings.
 	 */
 	WARN_ONCE(overlap > ACTIVE_CACHELINE_MAX_OVERLAP,
 		  pr_fmt("exceeded %d overlapping mappings of cacheline %pa\n"),
@@ -548,53 +546,6 @@ static void active_cacheline_remove(struct dma_debug_entry *entry)
 	if (active_cacheline_dec_overlap(cln) < 0)
 		radix_tree_delete(&dma_active_cacheline, cln);
 	spin_unlock_irqrestore(&radix_lock, flags);
-}
-
-/**
- * debug_dma_assert_idle() - assert that a page is not undergoing dma
- * @page: page to lookup in the dma_active_cacheline tree
- *
- * Place a call to this routine in cases where the cpu touching the page
- * before the dma completes (page is dma_unmapped) will lead to data
- * corruption.
- */
-void debug_dma_assert_idle(struct page *page)
-{
-	static struct dma_debug_entry *ents[CACHELINES_PER_PAGE];
-	struct dma_debug_entry *entry = NULL;
-	void **results = (void **) &ents;
-	unsigned int nents, i;
-	unsigned long flags;
-	phys_addr_t cln;
-
-	if (dma_debug_disabled())
-		return;
-
-	if (!page)
-		return;
-
-	cln = (phys_addr_t) page_to_pfn(page) << CACHELINE_PER_PAGE_SHIFT;
-	spin_lock_irqsave(&radix_lock, flags);
-	nents = radix_tree_gang_lookup(&dma_active_cacheline, results, cln,
-				       CACHELINES_PER_PAGE);
-	for (i = 0; i < nents; i++) {
-		phys_addr_t ent_cln = to_cacheline_number(ents[i]);
-
-		if (ent_cln == cln) {
-			entry = ents[i];
-			break;
-		} else if (ent_cln >= cln + CACHELINES_PER_PAGE)
-			break;
-	}
-	spin_unlock_irqrestore(&radix_lock, flags);
-
-	if (!entry)
-		return;
-
-	cln = to_cacheline_number(entry);
-	err_printk(entry->dev, entry,
-		   "cpu touching an active dma mapped cacheline [cln=%pa]\n",
-		   &cln);
 }
 
 /*
@@ -843,7 +794,7 @@ static int dump_show(struct seq_file *seq, void *v)
 }
 DEFINE_SHOW_ATTRIBUTE(dump);
 
-static void dma_debug_fs_init(void)
+static int __init dma_debug_fs_init(void)
 {
 	struct dentry *dentry = debugfs_create_dir("dma-api", NULL);
 
@@ -856,7 +807,10 @@ static void dma_debug_fs_init(void)
 	debugfs_create_u32("nr_total_entries", 0444, dentry, &nr_total_entries);
 	debugfs_create_file("driver_filter", 0644, dentry, NULL, &filter_fops);
 	debugfs_create_file("dump", 0444, dentry, NULL, &dump_fops);
+
+	return 0;
 }
+core_initcall_sync(dma_debug_fs_init);
 
 static int device_dma_allocations(struct device *dev, struct dma_debug_entry **out_entry)
 {
@@ -940,8 +894,6 @@ static int dma_debug_init(void)
 		INIT_LIST_HEAD(&dma_entry_hash[i].list);
 		spin_lock_init(&dma_entry_hash[i].lock);
 	}
-
-	dma_debug_fs_init();
 
 	nr_pages = DIV_ROUND_UP(nr_prealloc_entries, DMA_DEBUG_DYNAMIC_ENTRIES);
 	for (i = 0; i < nr_pages; ++i)
@@ -1070,7 +1022,7 @@ static void check_unmap(struct dma_debug_entry *ref)
 	/*
 	 * Drivers should use dma_mapping_error() to check the returned
 	 * addresses of dma_map_single() and dma_map_page().
-	 * If not, print this warning message. See Documentation/DMA-API.txt.
+	 * If not, print this warning message. See Documentation/core-api/dma-api.rst.
 	 */
 	if (entry->map_err_type == MAP_ERR_NOT_CHECKED) {
 		err_printk(ref->dev, entry,
@@ -1348,6 +1300,12 @@ void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 	if (unlikely(dma_debug_disabled()))
 		return;
 
+	for_each_sg(sg, s, nents, i) {
+		check_for_stack(dev, sg_page(s), s->offset);
+		if (!PageHighMem(sg_page(s)))
+			check_for_illegal_area(dev, sg_virt(s), s->length);
+	}
+
 	for_each_sg(sg, s, mapped_ents, i) {
 		entry = dma_entry_alloc();
 		if (!entry)
@@ -1362,12 +1320,6 @@ void debug_dma_map_sg(struct device *dev, struct scatterlist *sg,
 		entry->direction      = direction;
 		entry->sg_call_ents   = nents;
 		entry->sg_mapped_ents = mapped_ents;
-
-		check_for_stack(dev, sg_page(s), s->offset);
-
-		if (!PageHighMem(sg_page(s))) {
-			check_for_illegal_area(dev, sg_virt(s), sg_dma_len(s));
-		}
 
 		check_sg_segment(dev, s);
 

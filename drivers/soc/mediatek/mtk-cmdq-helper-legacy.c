@@ -450,7 +450,7 @@ void cmdq_pkt_free_buf(struct cmdq_pkt *pkt)
 	list_for_each_entry_safe(buf, tmp, &pkt->buf, list_entry) {
 		list_del(&buf->list_entry);
 		if (buf->use_pool) {
-			if (pkt->cur_pool.pool)
+			if (pkt->cur_pool.pool && buf->va_base)
 				cmdq_mbox_pool_free_impl(pkt->cur_pool.pool,
 					buf->va_base, buf->pa_base,
 					pkt->cur_pool.cnt);

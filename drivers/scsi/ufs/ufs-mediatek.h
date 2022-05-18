@@ -229,7 +229,7 @@ struct ufs_mtk_host {
 	bool boot_device;
 	struct ufs_vreg *vcc;
 
-	struct mutex rpmb_lock;
+	struct semaphore rpmb_sem;
 #if defined(CONFIG_UFSFEATURE)
 	struct ufsf_feature ufsf;
 #endif

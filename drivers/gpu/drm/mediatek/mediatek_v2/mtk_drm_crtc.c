@@ -7397,17 +7397,18 @@ static void mtk_drm_crtc_enable_fake_layer(struct drm_crtc *crtc,
 	DDPINFO("%s\n", __func__);
 
 	ovl_comp_id = mtk_drm_crtc_find_ovl_comp_id(priv, 0, 0);
-	if (ovl_comp_id < 0)
+	if (ovl_comp_id < 0 && ovl_comp_id >= DDP_COMPONENT_ID_MAX)
 		ovl_comp_id = DDP_COMPONENT_OVL0;
 	ovl_2l_comp_id = mtk_drm_crtc_find_ovl_comp_id(priv, 1, 0);
-	if (ovl_2l_comp_id < 0)
+	if (ovl_2l_comp_id < 0 && ovl_2l_comp_id >= DDP_COMPONENT_ID_MAX)
 		ovl_2l_comp_id = DDP_COMPONENT_OVL0_2L;
 	if (mtk_crtc->is_dual_pipe) {
 		dual_pipe_ovl_comp_id = mtk_drm_crtc_find_ovl_comp_id(priv, 0, 1);
-		if (dual_pipe_ovl_comp_id < 0)
+		if (dual_pipe_ovl_comp_id < 0 && dual_pipe_ovl_comp_id >= DDP_COMPONENT_ID_MAX)
 			dual_pipe_ovl_comp_id = DDP_COMPONENT_OVL1;
 		dual_pipe_ovl_2l_comp_id = mtk_drm_crtc_find_ovl_comp_id(priv, 1, 1);
-		if (dual_pipe_ovl_2l_comp_id < 0)
+		if (dual_pipe_ovl_2l_comp_id < 0
+				&& dual_pipe_ovl_2l_comp_id >= DDP_COMPONENT_ID_MAX)
 			dual_pipe_ovl_2l_comp_id = DDP_COMPONENT_OVL1_2L;
 	}
 

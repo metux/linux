@@ -727,7 +727,6 @@ static struct stm32_timer_trigger *stm32_setup_counter_device(struct device *dev
 	indio_dev->modes = INDIO_HARDWARE_TRIGGERED;
 	indio_dev->num_channels = 1;
 	indio_dev->channels = &stm32_trigger_channel;
-	indio_dev->dev.of_node = dev->of_node;
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret)
@@ -913,6 +912,6 @@ static struct platform_driver stm32_timer_trigger_driver = {
 };
 module_platform_driver(stm32_timer_trigger_driver);
 
-MODULE_ALIAS("platform: stm32-timer-trigger");
+MODULE_ALIAS("platform:stm32-timer-trigger");
 MODULE_DESCRIPTION("STMicroelectronics STM32 Timer Trigger driver");
 MODULE_LICENSE("GPL v2");

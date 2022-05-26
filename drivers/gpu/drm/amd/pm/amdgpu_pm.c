@@ -827,6 +827,18 @@ static ssize_t amdgpu_set_pp_od_clk_voltage(struct device *dev,
 			return -EINVAL;
 		}
 	} else {
+
+		if (adev->powerplay.pp_funcs->set_fine_grain_clk_vol) {
+			ret = amdgpu_dpm_set_fine_grain_clk_vol(adev, type,
+								parameter,
+								parameter_size);
+			if (ret) {
+				pm_runtime_mark_last_busy(ddev->dev);
+				pm_runtime_put_autosuspend(ddev->dev);
+				return -EINVAL;
+			}
+		}
+
 		if (adev->powerplay.pp_funcs->odn_edit_dpm_table) {
 			ret = amdgpu_dpm_odn_edit_dpm_table(adev, type,
 						parameter, parameter_size);
@@ -2084,6 +2096,12 @@ static int default_attr_update(struct amdgpu_device *adev, struct amdgpu_device_
 			dev_attr->attr.mode &= ~S_IWUGO;
 			dev_attr->store = NULL;
 		}
+	}
+
+	/* setting should not be allowed from VF */
+	if (amdgpu_sriov_vf(adev)) {
+		dev_attr->attr.mode &= ~S_IWUGO;
+		dev_attr->store = NULL;
 	}
 
 #undef DEVICE_ATTR_IS

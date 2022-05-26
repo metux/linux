@@ -136,9 +136,9 @@ bool mlxsw_sp_bridge_device_is_offloaded(const struct mlxsw_sp *mlxsw_sp,
 }
 
 static int mlxsw_sp_bridge_device_upper_rif_destroy(struct net_device *dev,
-						    void *data)
+						    struct netdev_nested_priv *priv)
 {
-	struct mlxsw_sp *mlxsw_sp = data;
+	struct mlxsw_sp *mlxsw_sp = priv->data;
 
 	mlxsw_sp_rif_destroy_by_dev(mlxsw_sp, dev);
 	return 0;
@@ -147,10 +147,14 @@ static int mlxsw_sp_bridge_device_upper_rif_destroy(struct net_device *dev,
 static void mlxsw_sp_bridge_device_rifs_destroy(struct mlxsw_sp *mlxsw_sp,
 						struct net_device *dev)
 {
+	struct netdev_nested_priv priv = {
+		.data = (void *)mlxsw_sp,
+	};
+
 	mlxsw_sp_rif_destroy_by_dev(mlxsw_sp, dev);
 	netdev_walk_all_upper_dev_rcu(dev,
 				      mlxsw_sp_bridge_device_upper_rif_destroy,
-				      mlxsw_sp);
+				      &priv);
 }
 
 static int mlxsw_sp_bridge_device_vxlan_init(struct mlxsw_sp_bridge *bridge,
@@ -2406,6 +2410,7 @@ static void mlxsw_sp_fdb_notify_mac_process(struct mlxsw_sp *mlxsw_sp,
 					    char *sfn_pl, int rec_index,
 					    bool adding)
 {
+	unsigned int max_ports = mlxsw_core_max_ports(mlxsw_sp->core);
 	struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan;
 	struct mlxsw_sp_bridge_device *bridge_device;
 	struct mlxsw_sp_bridge_port *bridge_port;
@@ -2418,6 +2423,9 @@ static void mlxsw_sp_fdb_notify_mac_process(struct mlxsw_sp *mlxsw_sp,
 	int err;
 
 	mlxsw_reg_sfn_mac_unpack(sfn_pl, rec_index, mac, &fid, &local_port);
+
+	if (WARN_ON_ONCE(local_port >= max_ports))
+		return;
 	mlxsw_sp_port = mlxsw_sp->ports[local_port];
 	if (!mlxsw_sp_port) {
 		dev_err_ratelimited(mlxsw_sp->bus_info->dev, "Incorrect local port in FDB notification\n");

@@ -23,19 +23,14 @@
  * have changed (i.e. renamed over).
  *
  * Unlike fsnotify_parent(), the event will be reported regardless of the
- * FS_EVENT_ON_CHILD mask on the parent inode.
+ * FS_EVENT_ON_CHILD mask on the parent inode and will not be reported if only
+ * the child is interested and not the parent.
  */
 static inline void fsnotify_name(struct inode *dir, __u32 mask,
 				 struct inode *child,
 				 const struct qstr *name, u32 cookie)
 {
-	fsnotify(dir, mask, child, FSNOTIFY_EVENT_INODE, name, cookie);
-	/*
-	 * Send another flavor of the event without child inode data and
-	 * without the specific event type (e.g. FS_CREATE|FS_IS_DIR).
-	 * The name is relative to the dir inode the event is reported to.
-	 */
-	fsnotify(dir, FS_DIR_MODIFY, dir, FSNOTIFY_EVENT_INODE, name, 0);
+	fsnotify(mask, child, FSNOTIFY_EVENT_INODE, dir, name, NULL, cookie);
 }
 
 static inline void fsnotify_dirent(struct inode *dir, struct dentry *dentry,
@@ -44,38 +39,55 @@ static inline void fsnotify_dirent(struct inode *dir, struct dentry *dentry,
 	fsnotify_name(dir, mask, d_inode(dentry), &dentry->d_name, 0);
 }
 
-/*
- * Simple wrappers to consolidate calls fsnotify_parent()/fsnotify() when
- * an event is on a file/dentry.
- */
-static inline void fsnotify_dentry(struct dentry *dentry, __u32 mask)
+static inline void fsnotify_inode(struct inode *inode, __u32 mask)
 {
-	struct inode *inode = d_inode(dentry);
-
 	if (S_ISDIR(inode->i_mode))
 		mask |= FS_ISDIR;
 
-	fsnotify_parent(dentry, mask, inode, FSNOTIFY_EVENT_INODE);
-	fsnotify(inode, mask, inode, FSNOTIFY_EVENT_INODE, NULL, 0);
+	fsnotify(mask, inode, FSNOTIFY_EVENT_INODE, NULL, NULL, inode, 0);
+}
+
+/* Notify this dentry's parent about a child's events. */
+static inline int fsnotify_parent(struct dentry *dentry, __u32 mask,
+				  const void *data, int data_type)
+{
+	struct inode *inode = d_inode(dentry);
+
+	if (S_ISDIR(inode->i_mode)) {
+		mask |= FS_ISDIR;
+
+		/* sb/mount marks are not interested in name of directory */
+		if (!(dentry->d_flags & DCACHE_FSNOTIFY_PARENT_WATCHED))
+			goto notify_child;
+	}
+
+	/* disconnected dentry cannot notify parent */
+	if (IS_ROOT(dentry))
+		goto notify_child;
+
+	return __fsnotify_parent(dentry, mask, data, data_type);
+
+notify_child:
+	return fsnotify(mask, data, data_type, NULL, NULL, inode, 0);
+}
+
+/*
+ * Simple wrappers to consolidate calls to fsnotify_parent() when an event
+ * is on a file/dentry.
+ */
+static inline void fsnotify_dentry(struct dentry *dentry, __u32 mask)
+{
+	fsnotify_parent(dentry, mask, d_inode(dentry), FSNOTIFY_EVENT_INODE);
 }
 
 static inline int fsnotify_file(struct file *file, __u32 mask)
 {
 	const struct path *path = &file->f_path;
-	struct inode *inode = file_inode(file);
-	int ret;
 
 	if (file->f_mode & FMODE_NONOTIFY)
 		return 0;
 
-	if (S_ISDIR(inode->i_mode))
-		mask |= FS_ISDIR;
-
-	ret = fsnotify_parent(path->dentry, mask, path, FSNOTIFY_EVENT_PATH);
-	if (ret)
-		return ret;
-
-	return fsnotify(inode, mask, path, FSNOTIFY_EVENT_PATH, NULL, 0);
+	return fsnotify_parent(path->dentry, mask, path, FSNOTIFY_EVENT_PATH);
 }
 
 /* Simple call site for access decisions */
@@ -108,12 +120,7 @@ static inline int fsnotify_perm(struct file *file, int mask)
  */
 static inline void fsnotify_link_count(struct inode *inode)
 {
-	__u32 mask = FS_ATTRIB;
-
-	if (S_ISDIR(inode->i_mode))
-		mask |= FS_ISDIR;
-
-	fsnotify(inode, mask, inode, FSNOTIFY_EVENT_INODE, NULL, 0);
+	fsnotify_inode(inode, FS_ATTRIB);
 }
 
 /*
@@ -128,7 +135,6 @@ static inline void fsnotify_move(struct inode *old_dir, struct inode *new_dir,
 	u32 fs_cookie = fsnotify_get_cookie();
 	__u32 old_dir_mask = FS_MOVED_FROM;
 	__u32 new_dir_mask = FS_MOVED_TO;
-	__u32 mask = FS_MOVE_SELF;
 	const struct qstr *new_name = &moved->d_name;
 
 	if (old_dir == new_dir)
@@ -137,7 +143,6 @@ static inline void fsnotify_move(struct inode *old_dir, struct inode *new_dir,
 	if (isdir) {
 		old_dir_mask |= FS_ISDIR;
 		new_dir_mask |= FS_ISDIR;
-		mask |= FS_ISDIR;
 	}
 
 	fsnotify_name(old_dir, old_dir_mask, source, old_name, fs_cookie);
@@ -145,9 +150,7 @@ static inline void fsnotify_move(struct inode *old_dir, struct inode *new_dir,
 
 	if (target)
 		fsnotify_link_count(target);
-
-	if (source)
-		fsnotify(source, mask, source, FSNOTIFY_EVENT_INODE, NULL, 0);
+	fsnotify_inode(source, FS_MOVE_SELF);
 	audit_inode_child(new_dir, moved, AUDIT_TYPE_CHILD_CREATE);
 }
 
@@ -172,12 +175,7 @@ static inline void fsnotify_vfsmount_delete(struct vfsmount *mnt)
  */
 static inline void fsnotify_inoderemove(struct inode *inode)
 {
-	__u32 mask = FS_DELETE_SELF;
-
-	if (S_ISDIR(inode->i_mode))
-		mask |= FS_ISDIR;
-
-	fsnotify(inode, mask, inode, FSNOTIFY_EVENT_INODE, NULL, 0);
+	fsnotify_inode(inode, FS_DELETE_SELF);
 	__fsnotify_inode_delete(inode);
 }
 
@@ -206,6 +204,55 @@ static inline void fsnotify_link(struct inode *dir, struct inode *inode,
 }
 
 /*
+ * fsnotify_delete - @dentry was unlinked and unhashed
+ *
+ * Caller must make sure that dentry->d_name is stable.
+ *
+ * Note: unlike fsnotify_unlink(), we have to pass also the unlinked inode
+ * as this may be called after d_delete() and old_dentry may be negative.
+ */
+static inline void fsnotify_delete(struct inode *dir, struct inode *inode,
+				   struct dentry *dentry)
+{
+	__u32 mask = FS_DELETE;
+
+	if (S_ISDIR(inode->i_mode))
+		mask |= FS_ISDIR;
+
+	fsnotify_name(dir, mask, inode, &dentry->d_name, 0);
+}
+
+/**
+ * d_delete_notify - delete a dentry and call fsnotify_delete()
+ * @dentry: The dentry to delete
+ *
+ * This helper is used to guaranty that the unlinked inode cannot be found
+ * by lookup of this name after fsnotify_delete() event has been delivered.
+ */
+static inline void d_delete_notify(struct inode *dir, struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+
+	ihold(inode);
+	d_delete(dentry);
+	fsnotify_delete(dir, inode, dentry);
+	iput(inode);
+}
+
+/*
+ * fsnotify_unlink - 'name' was unlinked
+ *
+ * Caller must make sure that dentry->d_name is stable.
+ */
+static inline void fsnotify_unlink(struct inode *dir, struct dentry *dentry)
+{
+	if (WARN_ON_ONCE(d_is_negative(dentry)))
+		return;
+
+	fsnotify_delete(dir, d_inode(dentry), dentry);
+}
+
+/*
  * fsnotify_mkdir - directory 'name' was created
  */
 static inline void fsnotify_mkdir(struct inode *inode, struct dentry *dentry)
@@ -213,6 +260,19 @@ static inline void fsnotify_mkdir(struct inode *inode, struct dentry *dentry)
 	audit_inode_child(inode, dentry, AUDIT_TYPE_CHILD_CREATE);
 
 	fsnotify_dirent(inode, dentry, FS_CREATE | FS_ISDIR);
+}
+
+/*
+ * fsnotify_rmdir - directory 'name' was removed
+ *
+ * Caller must make sure that dentry->d_name is stable.
+ */
+static inline void fsnotify_rmdir(struct inode *dir, struct dentry *dentry)
+{
+	if (WARN_ON_ONCE(d_is_negative(dentry)))
+		return;
+
+	fsnotify_delete(dir, d_inode(dentry), dentry);
 }
 
 /*

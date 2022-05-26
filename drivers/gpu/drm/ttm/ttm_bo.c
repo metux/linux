@@ -260,7 +260,11 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 			goto out_err;
 
 		if (mem->mem_type != TTM_PL_SYSTEM) {
-			ret = ttm_tt_bind(bdev, bo->ttm, mem, ctx);
+			ret = ttm_tt_populate(bdev, bo->ttm, ctx);
+			if (ret)
+				goto out_err;
+
+			ret = ttm_bo_tt_bind(bo, mem);
 			if (ret)
 				goto out_err;
 		}
@@ -294,17 +298,13 @@ static int ttm_bo_handle_move_mem(struct ttm_buffer_object *bo,
 	}
 
 moved:
-	bo->evicted = false;
-
 	ctx->bytes_moved += bo->num_pages << PAGE_SHIFT;
 	return 0;
 
 out_err:
 	new_man = ttm_manager_type(bdev, bo->mem.mem_type);
-	if (!new_man->use_tt) {
-		ttm_tt_destroy(bdev, bo->ttm);
-		bo->ttm = NULL;
-	}
+	if (!new_man->use_tt)
+		ttm_bo_tt_destroy(bo);
 
 	return ret;
 }
@@ -322,8 +322,7 @@ static void ttm_bo_cleanup_memtype_use(struct ttm_buffer_object *bo)
 	if (bo->bdev->driver->move_notify)
 		bo->bdev->driver->move_notify(bo, false, NULL);
 
-	ttm_tt_destroy(bo->bdev, bo->ttm);
-	bo->ttm = NULL;
+	ttm_bo_tt_destroy(bo);
 	ttm_resource_free(bo, &bo->mem);
 }
 
@@ -637,9 +636,7 @@ static int ttm_bo_evict(struct ttm_buffer_object *bo,
 		if (ret != -ERESTARTSYS)
 			pr_err("Buffer eviction failed\n");
 		ttm_resource_free(bo, &evict_mem);
-		goto out;
 	}
-	bo->evicted = true;
 out:
 	return ret;
 }
@@ -650,7 +647,7 @@ bool ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 	/* Don't evict this BO if it's outside of the
 	 * requested placement range
 	 */
-	if (place->fpfn >= (bo->mem.start + bo->mem.size) ||
+	if (place->fpfn >= (bo->mem.start + bo->mem.num_pages) ||
 	    (place->lpfn && place->lpfn <= bo->mem.start))
 		return false;
 
@@ -792,6 +789,8 @@ int ttm_mem_evict_first(struct ttm_bo_device *bdev,
 	ret = ttm_bo_evict(bo, ctx);
 	if (locked)
 		ttm_bo_unreserve(bo);
+	else
+		ttm_bo_move_to_lru_tail_unlocked(bo);
 
 	ttm_bo_put(bo);
 	return ret;
@@ -910,11 +909,8 @@ static int ttm_bo_mem_placement(struct ttm_buffer_object *bo,
 	if (!man || !ttm_resource_manager_used(man))
 		return -EBUSY;
 
-	if ((place->flags & man->available_caching) == 0)
-		return -EBUSY;
-
-	cur_flags = place->flags & man->available_caching;
-	cur_flags = ttm_bo_select_caching(man, bo->mem.placement, cur_flags);
+	cur_flags = ttm_bo_select_caching(man, bo->mem.placement,
+					  place->flags);
 	cur_flags |= place->flags & ~TTM_PL_MASK_CACHING;
 
 	mem->mem_type = place->mem_type;
@@ -1257,9 +1253,9 @@ int ttm_bo_init(struct ttm_bo_device *bdev,
 }
 EXPORT_SYMBOL(ttm_bo_init);
 
-size_t ttm_bo_acc_size(struct ttm_bo_device *bdev,
-		       unsigned long bo_size,
-		       unsigned struct_size)
+static size_t ttm_bo_acc_size(struct ttm_bo_device *bdev,
+			      unsigned long bo_size,
+			      unsigned struct_size)
 {
 	unsigned npages = (PAGE_ALIGN(bo_size)) >> PAGE_SHIFT;
 	size_t size = 0;
@@ -1269,7 +1265,6 @@ size_t ttm_bo_acc_size(struct ttm_bo_device *bdev,
 	size += ttm_round_pot(sizeof(struct ttm_tt));
 	return size;
 }
-EXPORT_SYMBOL(ttm_bo_acc_size);
 
 size_t ttm_bo_dma_acc_size(struct ttm_bo_device *bdev,
 			   unsigned long bo_size,
@@ -1432,7 +1427,6 @@ static void ttm_bo_init_sysman(struct ttm_bo_device *bdev)
 	 * Other types need to be driver / IOCTL initialized.
 	 */
 	man->use_tt = true;
-	man->available_caching = TTM_PL_MASK_CACHING;
 
 	ttm_resource_manager_init(man, 0);
 	ttm_set_driver_manager(bdev, TTM_PL_SYSTEM, man);
@@ -1617,3 +1611,22 @@ void ttm_bo_swapout_all(void)
 	while (ttm_bo_swapout(&ttm_bo_glob, &ctx) == 0);
 }
 EXPORT_SYMBOL(ttm_bo_swapout_all);
+
+void ttm_bo_tt_destroy(struct ttm_buffer_object *bo)
+{
+	if (bo->ttm == NULL)
+		return;
+
+	ttm_tt_destroy(bo->bdev, bo->ttm);
+	bo->ttm = NULL;
+}
+
+int ttm_bo_tt_bind(struct ttm_buffer_object *bo, struct ttm_resource *mem)
+{
+	return bo->bdev->driver->ttm_tt_bind(bo->bdev, bo->ttm, mem);
+}
+
+void ttm_bo_tt_unbind(struct ttm_buffer_object *bo)
+{
+	bo->bdev->driver->ttm_tt_unbind(bo->bdev, bo->ttm);
+}

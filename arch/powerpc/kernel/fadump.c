@@ -754,10 +754,8 @@ u32 *fadump_regs_to_elf_notes(u32 *buf, struct pt_regs *regs)
 
 void fadump_update_elfcore_header(char *bufp)
 {
-	struct elfhdr *elf;
 	struct elf_phdr *phdr;
 
-	elf = (struct elfhdr *)bufp;
 	bufp += sizeof(struct elfhdr);
 
 	/* First note is a place holder for cpu notes info. */
@@ -1642,6 +1640,14 @@ int __init setup_fadump(void)
 	/* Initialize the kernel dump memory structure for FAD registration. */
 	else if (fw_dump.reserve_dump_area_size)
 		fw_dump.ops->fadump_init_mem_struct(&fw_dump);
+
+	/*
+	 * In case of panic, fadump is triggered via ppc_panic_event()
+	 * panic notifier. Setting crash_kexec_post_notifiers to 'true'
+	 * lets panic() function take crash friendly path before panic
+	 * notifiers are invoked.
+	 */
+	crash_kexec_post_notifiers = true;
 
 	return 1;
 }

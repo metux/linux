@@ -470,8 +470,8 @@ static irqreturn_t ad7768_trigger_handler(int irq, void *p)
 	iio_push_to_buffers_with_timestamp(indio_dev, &st->data.scan,
 					   iio_get_time_ns(indio_dev));
 
-	iio_trigger_notify_done(indio_dev->trig);
 err_unlock:
+	iio_trigger_notify_done(indio_dev->trig);
 	mutex_unlock(&st->lock);
 
 	return IRQ_HANDLED;
@@ -494,7 +494,6 @@ static int ad7768_buffer_postenable(struct iio_dev *indio_dev)
 {
 	struct ad7768_state *st = iio_priv(indio_dev);
 
-	iio_triggered_buffer_postenable(indio_dev);
 	/*
 	 * Write a 1 to the LSB of the INTERFACE_FORMAT register to enter
 	 * continuous read mode. Subsequent data reads do not require an
@@ -506,17 +505,12 @@ static int ad7768_buffer_postenable(struct iio_dev *indio_dev)
 static int ad7768_buffer_predisable(struct iio_dev *indio_dev)
 {
 	struct ad7768_state *st = iio_priv(indio_dev);
-	int ret;
 
 	/*
 	 * To exit continuous read mode, perform a single read of the ADC_DATA
 	 * reg (0x2C), which allows further configuration of the device.
 	 */
-	ret = ad7768_spi_reg_read(st, AD7768_REG_ADC_DATA, 3);
-	if (ret < 0)
-		return ret;
-
-	return iio_triggered_buffer_predisable(indio_dev);
+	return ad7768_spi_reg_read(st, AD7768_REG_ADC_DATA, 3);
 }
 
 static const struct iio_buffer_setup_ops ad7768_buffer_ops = {

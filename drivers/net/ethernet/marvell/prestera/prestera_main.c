@@ -50,12 +50,14 @@ int prestera_port_pvid_set(struct prestera_port *port, u16 vid)
 struct prestera_port *prestera_port_find_by_hwid(struct prestera_switch *sw,
 						 u32 dev_id, u32 hw_id)
 {
-	struct prestera_port *port = NULL;
+	struct prestera_port *port = NULL, *tmp;
 
 	read_lock(&sw->port_list_lock);
-	list_for_each_entry(port, &sw->port_list, list) {
-		if (port->dev_id == dev_id && port->hw_id == hw_id)
+	list_for_each_entry(tmp, &sw->port_list, list) {
+		if (tmp->dev_id == dev_id && tmp->hw_id == hw_id) {
+			port = tmp;
 			break;
+		}
 	}
 	read_unlock(&sw->port_list_lock);
 
@@ -64,12 +66,14 @@ struct prestera_port *prestera_port_find_by_hwid(struct prestera_switch *sw,
 
 struct prestera_port *prestera_find_port(struct prestera_switch *sw, u32 id)
 {
-	struct prestera_port *port = NULL;
+	struct prestera_port *port = NULL, *tmp;
 
 	read_lock(&sw->port_list_lock);
-	list_for_each_entry(port, &sw->port_list, list) {
-		if (port->id == id)
+	list_for_each_entry(tmp, &sw->port_list, list) {
+		if (tmp->id == id) {
+			port = tmp;
 			break;
+		}
 	}
 	read_unlock(&sw->port_list_lock);
 
@@ -485,10 +489,9 @@ bool prestera_netdev_check(const struct net_device *dev)
 	return dev->netdev_ops == &prestera_netdev_ops;
 }
 
-static int prestera_lower_dev_walk(struct net_device *dev,
-				   struct netdev_nested_priv *priv)
+static int prestera_lower_dev_walk(struct net_device *dev, void *data)
 {
-	struct prestera_port **pport = (struct prestera_port **)priv->data;
+	struct prestera_port **pport = data;
 
 	if (prestera_netdev_check(dev)) {
 		*pport = netdev_priv(dev);
@@ -501,14 +504,11 @@ static int prestera_lower_dev_walk(struct net_device *dev,
 struct prestera_port *prestera_port_dev_lower_find(struct net_device *dev)
 {
 	struct prestera_port *port = NULL;
-	struct netdev_nested_priv priv = {
-		.data = (void *)&port,
-	};
 
 	if (prestera_netdev_check(dev))
 		return netdev_priv(dev);
 
-	netdev_walk_all_lower_dev(dev, prestera_lower_dev_walk, &priv);
+	netdev_walk_all_lower_dev(dev, prestera_lower_dev_walk, &port);
 
 	return port;
 }

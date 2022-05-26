@@ -539,9 +539,6 @@ out:
  * Check if the NIP corresponds to the address of a sync
  * instruction for which there is an entry in the exception
  * table.
- * Note that the 601 only takes a machine check on TEA
- * (transfer error ack) signal assertion, and does not
- * set any of the top 16 bits of SRR1.
  *  -- paulus.
  */
 static inline int check_io_access(struct pt_regs *regs)
@@ -806,7 +803,6 @@ int machine_check_generic(struct pt_regs *regs)
 	case 0x80000:
 		pr_cont("Machine check signal\n");
 		break;
-	case 0:		/* for 601 */
 	case 0x40000:
 	case 0x140000:	/* 7450 MSS error and TEA */
 		pr_cont("Transfer error ack signal\n");
@@ -902,7 +898,7 @@ static void p9_hmi_special_emu(struct pt_regs *regs)
 {
 	unsigned int ra, rb, t, i, sel, instr, rc;
 	const void __user *addr;
-	u8 vbuf[16], *vdst;
+	u8 vbuf[16] __aligned(16), *vdst;
 	unsigned long ea, msr, msr_mask;
 	bool swap;
 
@@ -1936,11 +1932,40 @@ void vsx_unavailable_tm(struct pt_regs *regs)
 }
 #endif /* CONFIG_PPC_TRANSACTIONAL_MEM */
 
-void performance_monitor_exception(struct pt_regs *regs)
+static void performance_monitor_exception_nmi(struct pt_regs *regs)
 {
+	nmi_enter();
+
 	__this_cpu_inc(irq_stat.pmu_irqs);
 
 	perf_irq(regs);
+
+	nmi_exit();
+}
+
+static void performance_monitor_exception_async(struct pt_regs *regs)
+{
+	irq_enter();
+
+	__this_cpu_inc(irq_stat.pmu_irqs);
+
+	perf_irq(regs);
+
+	irq_exit();
+}
+
+void performance_monitor_exception(struct pt_regs *regs)
+{
+	/*
+	 * On 64-bit, if perf interrupts hit in a local_irq_disable
+	 * (soft-masked) region, we consider them as NMIs. This is required to
+	 * prevent hash faults on user addresses when reading callchains (and
+	 * looks better from an irq tracing perspective).
+	 */
+	if (IS_ENABLED(CONFIG_PPC64) && unlikely(arch_irq_disabled_regs(regs)))
+		performance_monitor_exception_nmi(regs);
+	else
+		performance_monitor_exception_async(regs);
 }
 
 #ifdef CONFIG_PPC_ADV_DEBUG_REGS

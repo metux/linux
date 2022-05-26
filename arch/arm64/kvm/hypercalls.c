@@ -31,19 +31,42 @@ int kvm_hvc_call_handler(struct kvm_vcpu *vcpu)
 				val = SMCCC_RET_SUCCESS;
 				break;
 			case SPECTRE_UNAFFECTED:
-				val = SMCCC_RET_NOT_REQUIRED;
+				val = SMCCC_ARCH_WORKAROUND_RET_UNAFFECTED;
 				break;
 			}
 			break;
 		case ARM_SMCCC_ARCH_WORKAROUND_2:
-			switch (arm64_get_ssbd_state()) {
-			case ARM64_SSBD_FORCE_DISABLE:
-			case ARM64_SSBD_UNKNOWN:
+			switch (arm64_get_spectre_v4_state()) {
+			case SPECTRE_VULNERABLE:
 				break;
-			case ARM64_SSBD_KERNEL:
-			case ARM64_SSBD_FORCE_ENABLE:
-			case ARM64_SSBD_MITIGATED:
+			case SPECTRE_MITIGATED:
+				/*
+				 * SSBS everywhere: Indicate no firmware
+				 * support, as the SSBS support will be
+				 * indicated to the guest and the default is
+				 * safe.
+				 *
+				 * Otherwise, expose a permanent mitigation
+				 * to the guest, and hide SSBS so that the
+				 * guest stays protected.
+				 */
+				if (cpus_have_final_cap(ARM64_SSBS))
+					break;
+				fallthrough;
+			case SPECTRE_UNAFFECTED:
 				val = SMCCC_RET_NOT_REQUIRED;
+				break;
+			}
+			break;
+		case ARM_SMCCC_ARCH_WORKAROUND_3:
+			switch (arm64_get_spectre_bhb_state()) {
+			case SPECTRE_VULNERABLE:
+				break;
+			case SPECTRE_MITIGATED:
+				val = SMCCC_RET_SUCCESS;
+				break;
+			case SPECTRE_UNAFFECTED:
+				val = SMCCC_ARCH_WORKAROUND_RET_UNAFFECTED;
 				break;
 			}
 			break;

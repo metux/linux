@@ -16,9 +16,6 @@
 #include <linux/pci.h>
 #include "felix.h"
 
-#define VSC9959_VCAP_IS2_CNT		1024
-#define VSC9959_VCAP_IS2_ENTRY_WIDTH	376
-#define VSC9959_VCAP_PORT_CNT		6
 #define VSC9959_TAS_GCL_ENTRY_MAX	63
 
 static const u32 vsc9959_ana_regmap[] = {
@@ -714,6 +711,7 @@ static const struct vcap_field vsc9959_vcap_is1_actions[] = {
 	[VCAP_IS1_ACT_PAG_OVERRIDE_MASK]	= { 13,  8},
 	[VCAP_IS1_ACT_PAG_VAL]			= { 21,  8},
 	[VCAP_IS1_ACT_RSV]			= { 29,  9},
+	/* The fields below are incorrectly shifted by 2 in the manual */
 	[VCAP_IS1_ACT_VID_REPLACE_ENA]		= { 38,  1},
 	[VCAP_IS1_ACT_VID_ADD_VAL]		= { 39, 12},
 	[VCAP_IS1_ACT_FID_SEL]			= { 51,  2},
@@ -851,13 +849,6 @@ static struct vcap_props vsc9959_vcap_props[] = {
 		.actions = vsc9959_vcap_is1_actions,
 	},
 	[VCAP_IS2] = {
-		.tg_width = 2,
-		.sw_count = 4,
-		.entry_count = VSC9959_VCAP_IS2_CNT,
-		.entry_width = VSC9959_VCAP_IS2_ENTRY_WIDTH,
-		.action_count = VSC9959_VCAP_IS2_CNT +
-				VSC9959_VCAP_PORT_CNT + 2,
-		.action_width = 89,
 		.action_type_width = 1,
 		.action_table = {
 			[IS2_ACTION_TYPE_NORMAL] = {
@@ -869,8 +860,6 @@ static struct vcap_props vsc9959_vcap_props[] = {
 				.count = 4
 			},
 		},
-		.counter_words = 4,
-		.counter_width = 32,
 		.target = S2,
 		.keys = vsc9959_vcap_is2_keys,
 		.actions = vsc9959_vcap_is2_actions,
@@ -1020,6 +1009,8 @@ static u16 vsc9959_wm_enc(u16 value)
 static const struct ocelot_ops vsc9959_ops = {
 	.reset			= vsc9959_reset,
 	.wm_enc			= vsc9959_wm_enc,
+	.port_to_netdev		= felix_port_to_netdev,
+	.netdev_to_port		= felix_netdev_to_port,
 };
 
 static int vsc9959_mdio_bus_alloc(struct ocelot *ocelot)
@@ -1059,7 +1050,7 @@ static int vsc9959_mdio_bus_alloc(struct ocelot *ocelot)
 		return PTR_ERR(hw);
 	}
 
-	bus = devm_mdiobus_alloc_size(dev, sizeof(*mdio_priv));
+	bus = mdiobus_alloc_size(sizeof(*mdio_priv));
 	if (!bus)
 		return -ENOMEM;
 
@@ -1079,6 +1070,7 @@ static int vsc9959_mdio_bus_alloc(struct ocelot *ocelot)
 	rc = mdiobus_register(bus);
 	if (rc < 0) {
 		dev_err(dev, "failed to register MDIO bus\n");
+		mdiobus_free(bus);
 		return rc;
 	}
 
@@ -1128,6 +1120,7 @@ static void vsc9959_mdio_bus_free(struct ocelot *ocelot)
 		lynx_pcs_destroy(pcs);
 	}
 	mdiobus_unregister(felix->imdio);
+	mdiobus_free(felix->imdio);
 }
 
 static void vsc9959_sched_speed_set(struct ocelot *ocelot, int port,
@@ -1438,6 +1431,7 @@ static int felix_pci_probe(struct pci_dev *pdev,
 	pci_set_drvdata(pdev, felix);
 	ocelot = &felix->ocelot;
 	ocelot->dev = &pdev->dev;
+	ocelot->num_flooding_pgids = FELIX_NUM_TC;
 	felix->info = &felix_info_vsc9959;
 	felix->switch_base = pci_resource_start(pdev,
 						felix->info->switch_pci_bar);

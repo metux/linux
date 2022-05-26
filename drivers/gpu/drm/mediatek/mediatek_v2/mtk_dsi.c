@@ -1027,7 +1027,15 @@ static int mtk_dsi_set_data_rate(struct mtk_dsi *dsi)
 
 void mtk_dsi_config_null_packet(struct mtk_dsi *dsi)
 {
-	u32 null_packet_len = dsi->ext->params->cmd_null_pkt_len;
+	u32 null_packet_len = 0;
+
+	if (!dsi)
+		return;
+
+	if (!dsi->ext || !dsi->ext->params)
+		return;
+
+	null_packet_len = dsi->ext->params->cmd_null_pkt_len;
 
 	if (!dsi->ext->params->lp_perline_en &&
 		mtk_dsi_is_cmd_mode(&dsi->ddp_comp) &&
@@ -3673,7 +3681,7 @@ bool mtk_dsi_is_cmd_mode(struct mtk_ddp_comp *comp)
 
 static const char *mtk_dsi_get_porch_str(enum dsi_porch_type type)
 {
-	if (type < 0) {
+	if (type >= DSI_PORCH_NUM) {
 		DDPPR_ERR("%s: Invalid dsi porch type:%d\n", __func__, type);
 		type = 0;
 	}

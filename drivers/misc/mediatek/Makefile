@@ -138,3 +138,4 @@ obj-$(CONFIG_MTK_MT6382_BDG) += spi_slave_drv/
 obj-$(CONFIG_MID_CSCI_SUPPORT) += csci/
 ##Leo add 20210827
 obj-y += weibu/
+obj-y += met_drv_v3/

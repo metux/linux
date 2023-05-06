@@ -490,7 +490,7 @@ static int vega20_setup_asic_task(struct pp_hwmgr *hwmgr)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)(hwmgr->adev);
 	int ret = 0;
-	bool use_baco = (adev->in_gpu_reset &&
+	bool use_baco = (amdgpu_in_reset(adev) &&
 			 (amdgpu_asic_reset_method(adev) == AMD_RESET_METHOD_BACO)) ||
 		(adev->in_runpm && amdgpu_asic_supports_baco(adev));
 
@@ -2962,7 +2962,8 @@ static int vega20_odn_edit_dpm_table(struct pp_hwmgr *hwmgr,
 			data->od8_settings.od8_settings_array;
 	OverDriveTable_t *od_table =
 			&(data->smc_state_table.overdrive_table);
-	int32_t input_index, input_clk, input_vol, i;
+	int32_t input_clk, input_vol, i;
+	uint32_t input_index;
 	int od8_id;
 	int ret;
 

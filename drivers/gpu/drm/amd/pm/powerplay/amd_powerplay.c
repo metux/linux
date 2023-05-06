@@ -911,7 +911,21 @@ static int pp_set_power_profile_mode(void *handle, long *input, uint32_t size)
 	return ret;
 }
 
-static int pp_odn_edit_dpm_table(void *handle, uint32_t type, long *input, uint32_t size)
+static int pp_set_fine_grain_clk_vol(void *handle, uint32_t type, long *input, uint32_t size)
+{
+	struct pp_hwmgr *hwmgr = handle;
+
+	if (!hwmgr || !hwmgr->pm_en)
+		return -EINVAL;
+
+	if (hwmgr->hwmgr_func->set_fine_grain_clk_vol == NULL)
+		return 0;
+
+	return hwmgr->hwmgr_func->set_fine_grain_clk_vol(hwmgr, type, input, size);
+}
+
+static int pp_odn_edit_dpm_table(void *handle, enum PP_OD_DPM_TABLE_COMMAND type,
+				 long *input, uint32_t size)
 {
 	struct pp_hwmgr *hwmgr = handle;
 
@@ -920,7 +934,7 @@ static int pp_odn_edit_dpm_table(void *handle, uint32_t type, long *input, uint3
 
 	if (hwmgr->hwmgr_func->odn_edit_dpm_table == NULL) {
 		pr_info_ratelimited("%s was not implemented.\n", __func__);
-		return -EINVAL;
+		return 0;
 	}
 
 	return hwmgr->hwmgr_func->odn_edit_dpm_table(hwmgr, type, input, size);
@@ -1645,6 +1659,7 @@ static const struct amd_pm_funcs pp_dpm_funcs = {
 	.set_powergating_by_smu = pp_set_powergating_by_smu,
 	.get_power_profile_mode = pp_get_power_profile_mode,
 	.set_power_profile_mode = pp_set_power_profile_mode,
+	.set_fine_grain_clk_vol = pp_set_fine_grain_clk_vol,
 	.odn_edit_dpm_table = pp_odn_edit_dpm_table,
 	.set_mp1_state = pp_dpm_set_mp1_state,
 	.set_power_limit = pp_set_power_limit,

@@ -1751,10 +1751,16 @@ static void rproc_crash_handler_work(struct work_struct *work)
 
 	mutex_lock(&rproc->lock);
 
-	if (rproc->state == RPROC_CRASHED || rproc->state == RPROC_OFFLINE) {
+	if (rproc->state == RPROC_CRASHED) {
 		/* handle only the first crash detected */
 		mutex_unlock(&rproc->lock);
 		return;
+	}
+
+	if (rproc->state == RPROC_OFFLINE) {
+		/* Don't recover if the remote processor was stopped */
+		mutex_unlock(&rproc->lock);
+		goto out;
 	}
 
 	rproc->state = RPROC_CRASHED;
@@ -1765,6 +1771,9 @@ static void rproc_crash_handler_work(struct work_struct *work)
 
 	if (!rproc->recovery_disabled)
 		rproc_trigger_recovery(rproc);
+
+out:
+	pm_relax(rproc->dev.parent);
 }
 
 /**
@@ -2481,6 +2490,9 @@ void rproc_report_crash(struct rproc *rproc, enum rproc_crash_type type)
 		pr_err("NULL rproc pointer\n");
 		return;
 	}
+
+	/* Prevent suspend while the remoteproc is being recovered */
+	pm_stay_awake(rproc->dev.parent);
 
 	dev_err(&rproc->dev, "crash detected in %s: type %s\n",
 		rproc->name, rproc_crash_to_string(type));

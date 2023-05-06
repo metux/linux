@@ -322,39 +322,42 @@ int smu_v11_0_setup_pptable(struct smu_context *smu)
 	void *table;
 	uint16_t version_major, version_minor;
 
-	hdr = (const struct smc_firmware_header_v1_0 *) adev->pm.fw->data;
-	version_major = le16_to_cpu(hdr->header.header_version_major);
-	version_minor = le16_to_cpu(hdr->header.header_version_minor);
-	if ((version_major == 2 && smu->smu_table.boot_values.pp_table_id > 0) ||
-	    adev->asic_type == CHIP_NAVY_FLOUNDER) {
-		dev_info(adev->dev, "use driver provided pptable %d\n", smu->smu_table.boot_values.pp_table_id);
-		switch (version_minor) {
-		case 0:
-			ret = smu_v11_0_set_pptable_v2_0(smu, &table, &size);
-			break;
-		case 1:
-			ret = smu_v11_0_set_pptable_v2_1(smu, &table, &size,
-							 smu->smu_table.boot_values.pp_table_id);
-			break;
-		default:
-			ret = -EINVAL;
-			break;
+	if (!amdgpu_sriov_vf(adev)) {
+		hdr = (const struct smc_firmware_header_v1_0 *) adev->pm.fw->data;
+		version_major = le16_to_cpu(hdr->header.header_version_major);
+		version_minor = le16_to_cpu(hdr->header.header_version_minor);
+		if ((version_major == 2 && smu->smu_table.boot_values.pp_table_id > 0) ||
+			adev->asic_type == CHIP_NAVY_FLOUNDER) {
+			dev_info(adev->dev, "use driver provided pptable %d\n", smu->smu_table.boot_values.pp_table_id);
+			switch (version_minor) {
+			case 0:
+				ret = smu_v11_0_set_pptable_v2_0(smu, &table, &size);
+				break;
+			case 1:
+				ret = smu_v11_0_set_pptable_v2_1(smu, &table, &size,
+								smu->smu_table.boot_values.pp_table_id);
+				break;
+			default:
+				ret = -EINVAL;
+				break;
+			}
+			if (ret)
+				return ret;
+			goto out;
 		}
-		if (ret)
-			return ret;
-
-	} else {
-		dev_info(adev->dev, "use vbios provided pptable\n");
-		index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
-						    powerplayinfo);
-
-		ret = amdgpu_atombios_get_data_table(adev, index, &atom_table_size, &frev, &crev,
-					      (uint8_t **)&table);
-		if (ret)
-			return ret;
-		size = atom_table_size;
 	}
 
+	dev_info(adev->dev, "use vbios provided pptable\n");
+	index = get_index_into_master_table(atom_master_list_of_data_tables_v2_1,
+						powerplayinfo);
+
+	ret = amdgpu_atombios_get_data_table(adev, index, &atom_table_size, &frev, &crev,
+						(uint8_t **)&table);
+	if (ret)
+		return ret;
+	size = atom_table_size;
+
+out:
 	if (!smu->smu_table.power_play_table)
 		smu->smu_table.power_play_table = table;
 	if (!smu->smu_table.power_play_table_size)
@@ -453,9 +456,6 @@ int smu_v11_0_init_power(struct smu_context *smu)
 {
 	struct smu_power_context *smu_power = &smu->smu_power;
 
-	if (smu_power->power_context || smu_power->power_context_size != 0)
-		return -EINVAL;
-
 	smu_power->power_context = kzalloc(sizeof(struct smu_11_0_dpm_context),
 					   GFP_KERNEL);
 	if (!smu_power->power_context)
@@ -468,9 +468,6 @@ int smu_v11_0_init_power(struct smu_context *smu)
 int smu_v11_0_fini_power(struct smu_context *smu)
 {
 	struct smu_power_context *smu_power = &smu->smu_power;
-
-	if (!smu_power->power_context || smu_power->power_context_size == 0)
-		return -EINVAL;
 
 	kfree(smu_power->power_context);
 	smu_power->power_context = NULL;
@@ -700,18 +697,16 @@ int smu_v11_0_set_tool_table_location(struct smu_context *smu)
 
 int smu_v11_0_init_display_count(struct smu_context *smu, uint32_t count)
 {
-	int ret = 0;
 	struct amdgpu_device *adev = smu->adev;
 
 	/* Navy_Flounder do not support to change display num currently */
 	if (adev->asic_type == CHIP_NAVY_FLOUNDER)
 		return 0;
 
-	if (!smu->pm_enabled)
-		return ret;
-
-	ret = smu_cmn_send_smc_msg_with_param(smu, SMU_MSG_NumOfDisplays, count, NULL);
-	return ret;
+	return smu_cmn_send_smc_msg_with_param(smu,
+					       SMU_MSG_NumOfDisplays,
+					       count,
+					       NULL);
 }
 
 
@@ -721,7 +716,6 @@ int smu_v11_0_set_allowed_mask(struct smu_context *smu)
 	int ret = 0;
 	uint32_t feature_mask[2];
 
-	mutex_lock(&feature->mutex);
 	if (bitmap_empty(feature->allowed, SMU_FEATURE_MAX) || feature->feature_num < 64)
 		goto failed;
 
@@ -738,7 +732,6 @@ int smu_v11_0_set_allowed_mask(struct smu_context *smu)
 		goto failed;
 
 failed:
-	mutex_unlock(&feature->mutex);
 	return ret;
 }
 
@@ -774,9 +767,6 @@ int smu_v11_0_system_features_control(struct smu_context *smu,
 int smu_v11_0_notify_display_change(struct smu_context *smu)
 {
 	int ret = 0;
-
-	if (!smu->pm_enabled)
-		return ret;
 
 	if (smu_cmn_feature_is_enabled(smu, SMU_FEATURE_DPM_UCLK_BIT) &&
 	    smu->adev->gmc.vram_type == AMDGPU_VRAM_TYPE_HBM)
@@ -947,12 +937,45 @@ int smu_v11_0_set_power_limit(struct smu_context *smu, uint32_t n)
 	return 0;
 }
 
+static int smu_v11_0_ack_ac_dc_interrupt(struct smu_context *smu)
+{
+	return smu_cmn_send_smc_msg(smu,
+				SMU_MSG_ReenableAcDcInterrupt,
+				NULL);
+}
+
+static int smu_v11_0_process_pending_interrupt(struct smu_context *smu)
+{
+	int ret = 0;
+
+	if (smu->dc_controlled_by_gpio &&
+	    smu_cmn_feature_is_enabled(smu, SMU_FEATURE_ACDC_BIT))
+		ret = smu_v11_0_ack_ac_dc_interrupt(smu);
+
+	return ret;
+}
+
+void smu_v11_0_interrupt_work(struct smu_context *smu)
+{
+	if (smu_v11_0_ack_ac_dc_interrupt(smu))
+		dev_err(smu->adev->dev, "Ack AC/DC interrupt Failed!\n");
+}
+
 int smu_v11_0_enable_thermal_alert(struct smu_context *smu)
 {
-	if (smu->smu_table.thermal_controller_type)
-		return amdgpu_irq_get(smu->adev, &smu->irq_source, 0);
+	int ret = 0;
 
-	return 0;
+	if (smu->smu_table.thermal_controller_type) {
+		ret = amdgpu_irq_get(smu->adev, &smu->irq_source, 0);
+		if (ret)
+			return ret;
+	}
+
+	/*
+	 * After init there might have been missed interrupts triggered
+	 * before driver registers for interrupt (Ex. AC/DC).
+	 */
+	return smu_v11_0_process_pending_interrupt(smu);
 }
 
 int smu_v11_0_disable_thermal_alert(struct smu_context *smu)
@@ -1170,7 +1193,12 @@ int smu_v11_0_set_fan_speed_rpm(struct smu_context *smu,
 	if (ret)
 		return ret;
 
-	crystal_clock_freq = amdgpu_asic_get_xclk(adev);
+	/*
+	 * crystal_clock_freq div by 4 is required since the fan control
+	 * module refers to 25MHz
+	 */
+
+	crystal_clock_freq = amdgpu_asic_get_xclk(adev) / 4;
 	tach_period = 60 * crystal_clock_freq * 10000 / (8 * speed);
 	WREG32_SOC15(THM, 0, mmCG_TACH_CTRL,
 		     REG_SET_FIELD(RREG32_SOC15(THM, 0, mmCG_TACH_CTRL),
@@ -1182,15 +1210,34 @@ int smu_v11_0_set_fan_speed_rpm(struct smu_context *smu,
 	return ret;
 }
 
+int smu_v11_0_get_fan_speed_rpm(struct smu_context *smu,
+				uint32_t *speed)
+{
+	struct amdgpu_device *adev = smu->adev;
+	uint32_t tach_period, crystal_clock_freq;
+	uint64_t tmp64;
+
+	tach_period = REG_GET_FIELD(RREG32_SOC15(THM, 0, mmCG_TACH_CTRL),
+				    CG_TACH_CTRL, TARGET_PERIOD);
+	if (!tach_period)
+		return -EINVAL;
+
+	crystal_clock_freq = amdgpu_asic_get_xclk(adev);
+
+	tmp64 = (uint64_t)crystal_clock_freq * 60 * 10000;
+	do_div(tmp64, (tach_period * 8));
+	*speed = (uint32_t)tmp64;
+
+	return 0;
+}
+
 int smu_v11_0_set_xgmi_pstate(struct smu_context *smu,
 				     uint32_t pstate)
 {
-	int ret = 0;
-	ret = smu_cmn_send_smc_msg_with_param(smu,
-					  SMU_MSG_SetXgmiMode,
-					  pstate ? XGMI_MODE_PSTATE_D0 : XGMI_MODE_PSTATE_D3,
+	return smu_cmn_send_smc_msg_with_param(smu,
+					       SMU_MSG_SetXgmiMode,
+					       pstate ? XGMI_MODE_PSTATE_D0 : XGMI_MODE_PSTATE_D3,
 					  NULL);
-	return ret;
 }
 
 static int smu_v11_0_set_irq_state(struct amdgpu_device *adev,
@@ -1258,13 +1305,6 @@ static int smu_v11_0_set_irq_state(struct amdgpu_device *adev,
 	return 0;
 }
 
-static int smu_v11_0_ack_ac_dc_interrupt(struct smu_context *smu)
-{
-	return smu_cmn_send_smc_msg(smu,
-				SMU_MSG_ReenableAcDcInterrupt,
-				NULL);
-}
-
 #define THM_11_0__SRCID__THM_DIG_THERM_L2H		0		/* ASIC_TEMP > CG_THERMAL_INT.DIG_THERM_INTH  */
 #define THM_11_0__SRCID__THM_DIG_THERM_H2L		1		/* ASIC_TEMP < CG_THERMAL_INT.DIG_THERM_INTL  */
 
@@ -1320,11 +1360,11 @@ static int smu_v11_0_irq_process(struct amdgpu_device *adev,
 			switch (ctxid) {
 			case 0x3:
 				dev_dbg(adev->dev, "Switched to AC mode!\n");
-				smu_v11_0_ack_ac_dc_interrupt(&adev->smu);
+				schedule_work(&smu->interrupt_work);
 				break;
 			case 0x4:
 				dev_dbg(adev->dev, "Switched to DC mode!\n");
-				smu_v11_0_ack_ac_dc_interrupt(&adev->smu);
+				schedule_work(&smu->interrupt_work);
 				break;
 			case 0x7:
 				/*
@@ -1421,11 +1461,7 @@ int smu_v11_0_get_max_sustainable_clocks_by_dc(struct smu_context *smu,
 
 int smu_v11_0_set_azalia_d3_pme(struct smu_context *smu)
 {
-	int ret = 0;
-
-	ret = smu_cmn_send_smc_msg(smu, SMU_MSG_BacoAudioD3PME, NULL);
-
-	return ret;
+	return smu_cmn_send_smc_msg(smu, SMU_MSG_BacoAudioD3PME, NULL);
 }
 
 static int smu_v11_0_baco_set_armd3_sequence(struct smu_context *smu, enum smu_v11_0_baco_seq baco_seq)
@@ -1436,14 +1472,13 @@ static int smu_v11_0_baco_set_armd3_sequence(struct smu_context *smu, enum smu_v
 bool smu_v11_0_baco_is_support(struct smu_context *smu)
 {
 	struct smu_baco_context *smu_baco = &smu->smu_baco;
-	bool baco_support;
 
-	mutex_lock(&smu_baco->mutex);
-	baco_support = smu_baco->platform_support;
-	mutex_unlock(&smu_baco->mutex);
-
-	if (!baco_support)
+	if (!smu_baco->platform_support)
 		return false;
+
+	/* return true if ASIC is in BACO state already */
+	if (smu_v11_0_baco_get_state(smu) == SMU_BACO_STATE_ENTER)
+		return true;
 
 	/* Arcturus does not support this bit mask */
 	if (smu_cmn_feature_is_supported(smu, SMU_FEATURE_BACO_BIT) &&
@@ -1535,13 +1570,7 @@ int smu_v11_0_baco_enter(struct smu_context *smu)
 
 int smu_v11_0_baco_exit(struct smu_context *smu)
 {
-	int ret = 0;
-
-	ret = smu_v11_0_baco_set_state(smu, SMU_BACO_STATE_EXIT);
-	if (ret)
-		return ret;
-
-	return ret;
+	return smu_v11_0_baco_set_state(smu, SMU_BACO_STATE_EXIT);
 }
 
 int smu_v11_0_mode1_reset(struct smu_context *smu)
@@ -1990,4 +2019,48 @@ void smu_v11_0_init_gpu_metrics_v1_0(struct gpu_metrics_v1_0 *gpu_metrics)
 	gpu_metrics->common_header.content_revision = 0;
 
 	gpu_metrics->system_clock_counter = ktime_get_boottime_ns();
+}
+
+int smu_v11_0_gfx_ulv_control(struct smu_context *smu,
+			      bool enablement)
+{
+	int ret = 0;
+
+	if (smu_cmn_feature_is_supported(smu, SMU_FEATURE_GFX_ULV_BIT))
+		ret = smu_cmn_feature_set_enabled(smu, SMU_FEATURE_GFX_ULV_BIT, enablement);
+
+	return ret;
+}
+
+int smu_v11_0_deep_sleep_control(struct smu_context *smu,
+				 bool enablement)
+{
+	struct amdgpu_device *adev = smu->adev;
+	int ret = 0;
+
+	if (smu_cmn_feature_is_supported(smu, SMU_FEATURE_DS_GFXCLK_BIT)) {
+		ret = smu_cmn_feature_set_enabled(smu, SMU_FEATURE_DS_GFXCLK_BIT, enablement);
+		if (ret) {
+			dev_err(adev->dev, "Failed to %s GFXCLK DS!\n", enablement ? "enable" : "disable");
+			return ret;
+		}
+	}
+
+	if (smu_cmn_feature_is_supported(smu, SMU_FEATURE_DS_SOCCLK_BIT)) {
+		ret = smu_cmn_feature_set_enabled(smu, SMU_FEATURE_DS_SOCCLK_BIT, enablement);
+		if (ret) {
+			dev_err(adev->dev, "Failed to %s SOCCLK DS!\n", enablement ? "enable" : "disable");
+			return ret;
+		}
+	}
+
+	if (smu_cmn_feature_is_supported(smu, SMU_FEATURE_DS_LCLK_BIT)) {
+		ret = smu_cmn_feature_set_enabled(smu, SMU_FEATURE_DS_LCLK_BIT, enablement);
+		if (ret) {
+			dev_err(adev->dev, "Failed to %s LCLK DS!\n", enablement ? "enable" : "disable");
+			return ret;
+		}
+	}
+
+	return ret;
 }

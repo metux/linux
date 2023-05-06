@@ -389,6 +389,7 @@ static const struct intel_device_info ilk_m_info = {
 	GEN5_FEATURES,
 	PLATFORM(INTEL_IRONLAKE),
 	.is_mobile = 1,
+	.has_rps = true,
 	.display.has_fbc = 1,
 };
 
@@ -402,7 +403,8 @@ static const struct intel_device_info ilk_m_info = {
 	.has_coherent_ggtt = true, \
 	.has_llc = 1, \
 	.has_rc6 = 1, \
-	.has_rc6p = 1, \
+	/* snb does support rc6p, but enabling it causes various issues */ \
+	.has_rc6p = 0, \
 	.has_rps = true, \
 	.dma_mask_size = 40, \
 	.ppgtt_type = INTEL_PPGTT_ALIASING, \

@@ -352,6 +352,7 @@ static enum bp_result get_gpio_i2c_info(
 	uint32_t count = 0;
 	unsigned int table_index = 0;
 	bool find_valid = false;
+	struct atom_gpio_pin_assignment *pin;
 
 	if (!info)
 		return BP_RESULT_BADINPUT;
@@ -379,20 +380,17 @@ static enum bp_result get_gpio_i2c_info(
 			- sizeof(struct atom_common_table_header))
 				/ sizeof(struct atom_gpio_pin_assignment);
 
+	pin = (struct atom_gpio_pin_assignment *) header->gpio_pin;
+
 	for (table_index = 0; table_index < count; table_index++) {
-		if (((record->i2c_id & I2C_HW_CAP) == (
-		header->gpio_pin[table_index].gpio_id &
-						I2C_HW_CAP)) &&
-		((record->i2c_id & I2C_HW_ENGINE_ID_MASK)  ==
-		(header->gpio_pin[table_index].gpio_id &
-					I2C_HW_ENGINE_ID_MASK)) &&
-		((record->i2c_id & I2C_HW_LANE_MUX) ==
-		(header->gpio_pin[table_index].gpio_id &
-						I2C_HW_LANE_MUX))) {
+		if (((record->i2c_id & I2C_HW_CAP) 				== (pin->gpio_id & I2C_HW_CAP)) &&
+		    ((record->i2c_id & I2C_HW_ENGINE_ID_MASK)	== (pin->gpio_id & I2C_HW_ENGINE_ID_MASK)) &&
+		    ((record->i2c_id & I2C_HW_LANE_MUX) 		== (pin->gpio_id & I2C_HW_LANE_MUX))) {
 			/* still valid */
 			find_valid = true;
 			break;
 		}
+		pin = (struct atom_gpio_pin_assignment *)((uint8_t *)pin + sizeof(struct atom_gpio_pin_assignment));
 	}
 
 	/* If we don't find the entry that we are looking for then
@@ -844,6 +842,73 @@ static enum bp_result bios_parser_get_spread_spectrum_info(
 		break;
 	}
 	/* there can not be more then one entry for SS Info table */
+	return result;
+}
+
+static enum bp_result get_soc_bb_info_v4_4(
+	struct bios_parser *bp,
+	struct bp_soc_bb_info *soc_bb_info)
+{
+	enum bp_result result = BP_RESULT_OK;
+	struct atom_display_controller_info_v4_4 *disp_cntl_tbl = NULL;
+
+	if (!soc_bb_info)
+		return BP_RESULT_BADINPUT;
+
+	if (!DATA_TABLES(dce_info))
+		return BP_RESULT_BADBIOSTABLE;
+
+	if (!DATA_TABLES(smu_info))
+		return BP_RESULT_BADBIOSTABLE;
+
+	disp_cntl_tbl =  GET_IMAGE(struct atom_display_controller_info_v4_4,
+							DATA_TABLES(dce_info));
+	if (!disp_cntl_tbl)
+		return BP_RESULT_BADBIOSTABLE;
+
+	soc_bb_info->dram_clock_change_latency_100ns = disp_cntl_tbl->max_mclk_chg_lat;
+	soc_bb_info->dram_sr_enter_exit_latency_100ns = disp_cntl_tbl->max_sr_enter_exit_lat;
+	soc_bb_info->dram_sr_exit_latency_100ns = disp_cntl_tbl->max_sr_exit_lat;
+
+	return result;
+}
+
+static enum bp_result bios_parser_get_soc_bb_info(
+	struct dc_bios *dcb,
+	struct bp_soc_bb_info *soc_bb_info)
+{
+	struct bios_parser *bp = BP_FROM_DCB(dcb);
+	enum bp_result result = BP_RESULT_UNSUPPORTED;
+	struct atom_common_table_header *header;
+	struct atom_data_revision tbl_revision;
+
+	if (!soc_bb_info) /* check for bad input */
+		return BP_RESULT_BADINPUT;
+
+	if (!DATA_TABLES(dce_info))
+		return BP_RESULT_UNSUPPORTED;
+
+	header = GET_IMAGE(struct atom_common_table_header,
+						DATA_TABLES(dce_info));
+	get_atom_data_table_revision(header, &tbl_revision);
+
+	switch (tbl_revision.major) {
+	case 4:
+		switch (tbl_revision.minor) {
+		case 1:
+		case 2:
+		case 3:
+			break;
+		case 4:
+			result = get_soc_bb_info_v4_4(bp, soc_bb_info);
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+
 	return result;
 }
 
@@ -2222,7 +2287,9 @@ static const struct dc_vbios_funcs vbios_funcs = {
 
 	.get_atom_dc_golden_table = bios_get_atom_dc_golden_table,
 
-	.enable_lvtma_control = bios_parser_enable_lvtma_control
+	.enable_lvtma_control = bios_parser_enable_lvtma_control,
+
+	.get_soc_bb_info = bios_parser_get_soc_bb_info,
 };
 
 static bool bios_parser2_construct(

@@ -312,6 +312,9 @@ static void print_verbose_info(struct task_struct *task)
 	if (!task)
 		return;
 
+	/* Restore IRQ state trace for printing. */
+	kcsan_restore_irqtrace(task);
+
 	pr_err("\n");
 	debug_show_held_locks(task);
 	print_irqtrace_events(task);
@@ -627,8 +630,8 @@ void kcsan_report(const volatile void *ptr, size_t size, int access_type,
 		bool reported = value_change != KCSAN_VALUE_CHANGE_FALSE &&
 				print_report(value_change, type, &ai, other_info);
 
-		if (reported && panic_on_warn)
-			panic("panic_on_warn set ...\n");
+		if (reported)
+			check_panic_on_warn("KCSAN");
 
 		release_report(&flags, other_info);
 	}

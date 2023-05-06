@@ -1945,7 +1945,8 @@ static void cpu_enable_mte(struct arm64_cpu_capabilities const *cap)
 {
 	static bool cleared_zero_page = false;
 	sysreg_clear_set(sctlr_el1, 0, SCTLR_ELx_ATA | SCTLR_EL1_ATA0);
-	isb();
+
+	mte_cpu_setup();
 
 	/*
 	 * Clear the tags in the zero page. This needs to be done via the

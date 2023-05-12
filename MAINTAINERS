@@ -5242,7 +5242,7 @@ M:	Vinod Koul <vkoul@kernel.org>
 L:	dmaengine@vger.kernel.org
 S:	Maintained
 Q:	https://patchwork.kernel.org/project/linux-dmaengine/list/
-T:	git git://git.infradead.org/users/vkoul/slave-dma.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/vkoul/dmaengine.git
 F:	Documentation/devicetree/bindings/dma/
 F:	Documentation/driver-api/dmaengine/
 F:	drivers/dma/
@@ -14716,6 +14716,8 @@ F:	arch/mips/generic/board-ranchu.c
 
 RANDOM NUMBER DRIVER
 M:	"Theodore Ts'o" <tytso@mit.edu>
+M:	Jason A. Donenfeld <Jason@zx2c4.com>
+T:	git https://git.kernel.org/pub/scm/linux/kernel/git/crng/random.git
 S:	Maintained
 F:	drivers/char/random.c
 
@@ -19294,7 +19296,8 @@ F:	arch/x86/xen/*swiotlb*
 F:	drivers/xen/*swiotlb*
 
 XFS FILESYSTEM
-M:	Darrick J. Wong <darrick.wong@oracle.com>
+M:	Amir Goldstein <amir73il@gmail.com>
+M:	Darrick J. Wong <djwong@kernel.org>
 M:	linux-xfs@vger.kernel.org
 L:	linux-xfs@vger.kernel.org
 S:	Supported

@@ -706,6 +706,8 @@ static void mlx5e_build_rep_params(struct net_device *netdev)
 
 	params->num_tc                = 1;
 	params->tunneled_offload_en = false;
+	if (rep->vport != MLX5_VPORT_UPLINK)
+		params->vlan_strip_disable = true;
 
 	mlx5_query_min_inline(mdev, &params->tx_min_inline_mode);
 
@@ -877,6 +879,24 @@ static int mlx5e_create_rep_vport_rx_rule(struct mlx5e_priv *priv)
 	return 0;
 }
 
+static void rep_vport_rx_rule_destroy(struct mlx5e_priv *priv)
+{
+	struct mlx5e_rep_priv *rpriv = priv->ppriv;
+
+	if (!rpriv->vport_rx_rule)
+		return;
+
+	mlx5_del_flow_rules(rpriv->vport_rx_rule);
+	rpriv->vport_rx_rule = NULL;
+}
+
+int mlx5e_rep_bond_update(struct mlx5e_priv *priv, bool cleanup)
+{
+	rep_vport_rx_rule_destroy(priv);
+
+	return cleanup ? 0 : mlx5e_create_rep_vport_rx_rule(priv);
+}
+
 static int mlx5e_init_rep_rx(struct mlx5e_priv *priv)
 {
 	struct mlx5_core_dev *mdev = priv->mdev;
@@ -941,9 +961,8 @@ err_close_drop_rq:
 
 static void mlx5e_cleanup_rep_rx(struct mlx5e_priv *priv)
 {
-	struct mlx5e_rep_priv *rpriv = priv->ppriv;
-
-	mlx5_del_flow_rules(rpriv->vport_rx_rule);
+	mlx5e_ethtool_cleanup_steering(priv);
+	rep_vport_rx_rule_destroy(priv);
 	mlx5e_destroy_rep_root_ft(priv);
 	mlx5e_destroy_ttc_table(priv, &priv->fs.ttc);
 	mlx5e_destroy_direct_tirs(priv, priv->direct_tir);
@@ -982,16 +1001,18 @@ static int mlx5e_init_uplink_rep_tx(struct mlx5e_rep_priv *rpriv)
 
 	mlx5_init_port_tun_entropy(&uplink_priv->tun_entropy, priv->mdev);
 
+	mlx5e_rep_bond_init(rpriv);
 	err = mlx5e_rep_tc_netdevice_event_register(rpriv);
 	if (err) {
 		mlx5_core_err(priv->mdev, "Failed to register netdev notifier, err: %d\n",
 			      err);
-		goto tc_rep_cleanup;
+		goto err_event_reg;
 	}
 
 	return 0;
 
-tc_rep_cleanup:
+err_event_reg:
+	mlx5e_rep_bond_cleanup(rpriv);
 	mlx5e_rep_tc_cleanup(rpriv);
 	return err;
 }
@@ -1023,8 +1044,7 @@ destroy_tises:
 static void mlx5e_cleanup_uplink_rep_tx(struct mlx5e_rep_priv *rpriv)
 {
 	mlx5e_rep_tc_netdevice_event_unregister(rpriv);
-	mlx5e_rep_indr_clean_block_privs(rpriv);
-
+	mlx5e_rep_bond_cleanup(rpriv);
 	mlx5e_rep_tc_cleanup(rpriv);
 }
 
@@ -1086,6 +1106,8 @@ static void mlx5e_uplink_rep_enable(struct mlx5e_priv *priv)
 
 	mlx5e_rep_tc_enable(priv);
 
+	mlx5_modify_vport_admin_state(mdev, MLX5_VPORT_STATE_OP_MOD_UPLINK,
+				      0, 0, MLX5_VPORT_ADMIN_STATE_AUTO);
 	mlx5_lag_add(mdev, netdev);
 	priv->events_nb.notifier_call = uplink_rep_async_event;
 	mlx5_notifier_register(mdev, &priv->events_nb);

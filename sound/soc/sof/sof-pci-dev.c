@@ -35,7 +35,27 @@ static int sof_pci_debug;
 module_param_named(sof_pci_debug, sof_pci_debug, int, 0444);
 MODULE_PARM_DESC(sof_pci_debug, "SOF PCI debug options (0x0 all off)");
 
+static const char *sof_override_tplg_name;
+
 #define SOF_PCI_DISABLE_PM_RUNTIME BIT(0)
+
+static int sof_tplg_cb(const struct dmi_system_id *id)
+{
+	sof_override_tplg_name = id->driver_data;
+	return 1;
+}
+
+static const struct dmi_system_id sof_tplg_table[] = {
+	{
+		.callback = sof_tplg_cb,
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Volteer"),
+			DMI_MATCH(DMI_OEM_STRING, "AUDIO-MAX98373_ALC5682I_I2S_UP4"),
+		},
+		.driver_data = "sof-tgl-rt5682-ssp0-max98373-ssp2.tplg",
+	},
+	{}
+};
 
 static const struct dmi_system_id community_key_platforms[] = {
 	{
@@ -55,7 +75,7 @@ static const struct dmi_system_id community_key_platforms[] = {
 	{
 		.ident = "Google Chromebooks",
 		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Google"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google"),
 		}
 	},
 	{},
@@ -64,6 +84,7 @@ static const struct dmi_system_id community_key_platforms[] = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_APOLLOLAKE)
 static const struct sof_dev_desc bxt_desc = {
 	.machines		= snd_soc_acpi_intel_bxt_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
 	.resindex_imr_base	= -1,
@@ -81,6 +102,7 @@ static const struct sof_dev_desc bxt_desc = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_GEMINILAKE)
 static const struct sof_dev_desc glk_desc = {
 	.machines		= snd_soc_acpi_intel_glk_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
 	.resindex_imr_base	= -1,
@@ -126,6 +148,7 @@ static const struct sof_dev_desc tng_desc = {
 static const struct sof_dev_desc cnl_desc = {
 	.machines		= snd_soc_acpi_intel_cnl_machines,
 	.alt_machines		= snd_soc_acpi_intel_cnl_sdw_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
 	.resindex_imr_base	= -1,
@@ -144,6 +167,7 @@ static const struct sof_dev_desc cnl_desc = {
 static const struct sof_dev_desc cfl_desc = {
 	.machines		= snd_soc_acpi_intel_cfl_machines,
 	.alt_machines		= snd_soc_acpi_intel_cfl_sdw_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
 	.resindex_imr_base	= -1,
@@ -162,6 +186,7 @@ static const struct sof_dev_desc cfl_desc = {
 static const struct sof_dev_desc cml_desc = {
 	.machines		= snd_soc_acpi_intel_cml_machines,
 	.alt_machines		= snd_soc_acpi_intel_cml_sdw_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base	= 0,
 	.resindex_pcicfg_base	= -1,
 	.resindex_imr_base	= -1,
@@ -180,6 +205,7 @@ static const struct sof_dev_desc cml_desc = {
 static const struct sof_dev_desc icl_desc = {
 	.machines               = snd_soc_acpi_intel_icl_machines,
 	.alt_machines		= snd_soc_acpi_intel_icl_sdw_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base      = 0,
 	.resindex_pcicfg_base   = -1,
 	.resindex_imr_base      = -1,
@@ -198,6 +224,7 @@ static const struct sof_dev_desc icl_desc = {
 static const struct sof_dev_desc tgl_desc = {
 	.machines               = snd_soc_acpi_intel_tgl_machines,
 	.alt_machines		= snd_soc_acpi_intel_tgl_sdw_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base      = 0,
 	.resindex_pcicfg_base   = -1,
 	.resindex_imr_base      = -1,
@@ -208,7 +235,7 @@ static const struct sof_dev_desc tgl_desc = {
 	.default_tplg_path = "intel/sof-tplg",
 	.default_fw_filename = "sof-tgl.ri",
 	.nocodec_tplg_filename = "sof-tgl-nocodec.tplg",
-	.ops = &sof_cnl_ops,
+	.ops = &sof_tgl_ops,
 };
 
 static const struct sof_dev_desc tglh_desc = {
@@ -231,6 +258,7 @@ static const struct sof_dev_desc tglh_desc = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_ELKHARTLAKE)
 static const struct sof_dev_desc ehl_desc = {
 	.machines               = snd_soc_acpi_intel_ehl_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base      = 0,
 	.resindex_pcicfg_base   = -1,
 	.resindex_imr_base      = -1,
@@ -248,6 +276,7 @@ static const struct sof_dev_desc ehl_desc = {
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_JASPERLAKE)
 static const struct sof_dev_desc jsl_desc = {
 	.machines               = snd_soc_acpi_intel_jsl_machines,
+	.use_acpi_target_states	= true,
 	.resindex_lpe_base      = 0,
 	.resindex_pcicfg_base   = -1,
 	.resindex_imr_base      = -1,
@@ -305,10 +334,10 @@ static int sof_pci_probe(struct pci_dev *pci,
 	int ret;
 
 	ret = snd_intel_dsp_driver_probe(pci);
-	if (ret != SND_INTEL_DSP_DRIVER_ANY &&
-	    ret != SND_INTEL_DSP_DRIVER_SOF)
+	if (ret != SND_INTEL_DSP_DRIVER_ANY && ret != SND_INTEL_DSP_DRIVER_SOF) {
+		dev_dbg(&pci->dev, "SOF PCI driver not selected, aborting probe\n");
 		return -ENODEV;
-
+	}
 	dev_dbg(&pci->dev, "PCI DSP detected");
 
 	/* get ops for platform */
@@ -369,6 +398,10 @@ static int sof_pci_probe(struct pci_dev *pci,
 	else
 		sof_pdata->tplg_filename_prefix =
 			sof_pdata->desc->default_tplg_path;
+
+	dmi_check_system(sof_tplg_table);
+	if (sof_override_tplg_name)
+		sof_pdata->tplg_filename = sof_override_tplg_name;
 
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_PROBE_WORK_QUEUE)
 	/* set callback to enable runtime_pm */

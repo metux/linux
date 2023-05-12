@@ -99,7 +99,7 @@ static int bch_keylist_realloc(struct keylist *l, unsigned int u64s,
 	 * bch_data_insert_keys() will insert the keys created so far
 	 * and finish the rest when the keylist is empty.
 	 */
-	if (newsize * sizeof(uint64_t) > block_bytes(c) - sizeof(struct jset))
+	if (newsize * sizeof(uint64_t) > block_bytes(c->cache) - sizeof(struct jset))
 		return -ENOMEM;
 
 	return __bch_keylist_realloc(l, u64s);
@@ -394,8 +394,8 @@ static bool check_should_bypass(struct cached_dev *dc, struct bio *bio)
 			goto skip;
 	}
 
-	if (bio->bi_iter.bi_sector & (c->sb.block_size - 1) ||
-	    bio_sectors(bio) & (c->sb.block_size - 1)) {
+	if (bio->bi_iter.bi_sector & (c->cache->sb.block_size - 1) ||
+	    bio_sectors(bio) & (c->cache->sb.block_size - 1)) {
 		pr_debug("skipping unaligned io\n");
 		goto skip;
 	}
@@ -1109,6 +1109,12 @@ static void detached_dev_do_request(struct bcache_device *d, struct bio *bio)
 	 * which would call closure_get(&dc->disk.cl)
 	 */
 	ddip = kzalloc(sizeof(struct detached_dev_io_private), GFP_NOIO);
+	if (!ddip) {
+		bio->bi_status = BLK_STS_RESOURCE;
+		bio->bi_end_io(bio);
+		return;
+	}
+
 	ddip->d = d;
 	/* Count on the bcache device */
 	ddip->start_time = part_start_io_acct(d->disk, &ddip->part, bio);

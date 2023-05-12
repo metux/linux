@@ -83,13 +83,12 @@ void __init
 kasan_update_early_region(unsigned long k_start, unsigned long k_end, pte_t pte)
 {
 	unsigned long k_cur;
-	phys_addr_t pa = __pa(kasan_early_shadow_page);
 
 	for (k_cur = k_start; k_cur != k_end; k_cur += PAGE_SIZE) {
 		pmd_t *pmd = pmd_off_k(k_cur);
 		pte_t *ptep = pte_offset_kernel(pmd, k_cur);
 
-		if ((pte_val(*ptep) & PTE_RPN_MASK) != pa)
+		if (pte_page(*ptep) != virt_to_page(lm_alias(kasan_early_shadow_page)))
 			continue;
 
 		__set_pte_at(&init_mm, k_cur, ptep, pte, 0);
@@ -115,6 +114,12 @@ static void __init kasan_unmap_early_shadow_vmalloc(void)
 	unsigned long k_end = (unsigned long)kasan_mem_to_shadow((void *)VMALLOC_END);
 
 	kasan_update_early_region(k_start, k_end, __pte(0));
+
+#ifdef MODULES_VADDR
+	k_start = (unsigned long)kasan_mem_to_shadow((void *)MODULES_VADDR);
+	k_end = (unsigned long)kasan_mem_to_shadow((void *)MODULES_END);
+	kasan_update_early_region(k_start, k_end, __pte(0));
+#endif
 }
 
 void __init kasan_mmu_init(void)
@@ -168,22 +173,6 @@ void __init kasan_late_init(void)
 		kasan_unmap_early_shadow_vmalloc();
 }
 
-#ifdef CONFIG_PPC_BOOK3S_32
-u8 __initdata early_hash[256 << 10] __aligned(256 << 10) = {0};
-
-static void __init kasan_early_hash_table(void)
-{
-	unsigned int hash = __pa(early_hash);
-
-	modify_instruction_site(&patch__hash_page_A0, 0xffff, hash >> 16);
-	modify_instruction_site(&patch__flush_hash_A0, 0xffff, hash >> 16);
-
-	Hash = (struct hash_pte *)early_hash;
-}
-#else
-static void __init kasan_early_hash_table(void) {}
-#endif
-
 void __init kasan_early_init(void)
 {
 	unsigned long addr = KASAN_SHADOW_START;
@@ -199,7 +188,4 @@ void __init kasan_early_init(void)
 		next = pgd_addr_end(addr, end);
 		pmd_populate_kernel(&init_mm, pmd, kasan_early_shadow_pte);
 	} while (pmd++, addr = next, addr != end);
-
-	if (early_mmu_has_feature(MMU_FTR_HPTE_TABLE))
-		kasan_early_hash_table();
 }

@@ -32,11 +32,6 @@
 #include "inc/hw/link_encoder.h"
 #include "core_status.h"
 
-enum vline_select {
-	VLINE0,
-	VLINE1
-};
-
 struct pipe_ctx;
 struct dc_state;
 struct dc_stream_status;
@@ -56,6 +51,7 @@ struct hw_sequencer_funcs {
 
 	/* Pipe Programming Related */
 	void (*init_hw)(struct dc *dc);
+	void (*power_down_on_boot)(struct dc *dc);
 	void (*enable_accelerated_mode)(struct dc *dc,
 			struct dc_state *context);
 	enum dc_status (*apply_ctx_to_hw)(struct dc *dc,
@@ -65,6 +61,10 @@ struct hw_sequencer_funcs {
 			const struct dc_stream_state *stream,
 			int num_planes, struct dc_state *context);
 	void (*program_front_end_for_ctx)(struct dc *dc,
+			struct dc_state *context);
+	bool (*disconnect_pipes)(struct dc *dc,
+			struct dc_state *context);
+	void (*wait_for_pending_cleared)(struct dc *dc,
 			struct dc_state *context);
 	void (*post_unlock_program_front_end)(struct dc *dc,
 			struct dc_state *context);
@@ -107,14 +107,18 @@ struct hw_sequencer_funcs {
 			int group_index, int group_size,
 			struct pipe_ctx *grouped_pipes[]);
 	void (*setup_periodic_interrupt)(struct dc *dc,
-			struct pipe_ctx *pipe_ctx,
-			enum vline_select vline);
+			struct pipe_ctx *pipe_ctx);
 	void (*set_drr)(struct pipe_ctx **pipe_ctx, int num_pipes,
 			unsigned int vmin, unsigned int vmax,
 			unsigned int vmid, unsigned int vmid_frame_number);
 	void (*set_static_screen_control)(struct pipe_ctx **pipe_ctx,
 			int num_pipes,
 			const struct dc_static_screen_params *events);
+#ifndef TRIM_FSFT
+	bool (*optimize_timing_for_fsft)(struct dc *dc,
+			struct dc_crtc_timing *timing,
+			unsigned int max_input_rate_in_khz);
+#endif
 
 	/* Stream Related */
 	void (*enable_stream)(struct pipe_ctx *pipe_ctx);
@@ -205,6 +209,10 @@ struct hw_sequencer_funcs {
 
 	void (*set_pipe)(struct pipe_ctx *pipe_ctx);
 
+#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
+	/* Idle Optimization Related */
+	bool (*apply_idle_power_optimizations)(struct dc *dc, bool enable);
+#endif
 
 };
 

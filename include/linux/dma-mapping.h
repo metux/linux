@@ -6,7 +6,6 @@
 #include <linux/string.h>
 #include <linux/device.h>
 #include <linux/err.h>
-#include <linux/dma-debug.h>
 #include <linux/dma-direction.h>
 #include <linux/scatterlist.h>
 #include <linux/bug.h>
@@ -68,7 +67,7 @@
  * or last level cache. This is useful for buffers that are being mapped for
  * devices that are non-coherent, but can use the system cache.
  */
-#define DMA_ATTR_SYS_CACHE_ONLY		(1UL << 10)
+#define DMA_ATTR_SYS_CACHE_ONLY		(1UL << 14)
 
 /*
  * DMA_ATTR_SYS_CACHE_ONLY_NWA: used to indicate that the buffer should be
@@ -77,7 +76,7 @@
  * useful for buffers that are being mapped for devices that are non-coherent,
  * but can use the system cache.
  */
-#define DMA_ATTR_SYS_CACHE_ONLY_NWA	(1UL << 11)
+#define DMA_ATTR_SYS_CACHE_ONLY_NWA	(1UL << 15)
 
 /*
  * A dma_addr_t can hold any valid DMA or bus address for the platform.  It can
@@ -92,6 +91,21 @@
 #define DMA_MAPPING_ERROR		(~(dma_addr_t)0)
 
 #define DMA_BIT_MASK(n)	(((n) == 64) ? ~0ULL : ((1ULL<<(n))-1))
+
+#ifdef CONFIG_DMA_API_DEBUG
+void debug_dma_mapping_error(struct device *dev, dma_addr_t dma_addr);
+void debug_dma_map_single(struct device *dev, const void *addr,
+		unsigned long len);
+#else
+static inline void debug_dma_mapping_error(struct device *dev,
+		dma_addr_t dma_addr)
+{
+}
+static inline void debug_dma_map_single(struct device *dev, const void *addr,
+		unsigned long len)
+{
+}
+#endif /* CONFIG_DMA_API_DEBUG */
 
 #ifdef CONFIG_HAS_DMA
 static inline int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
@@ -391,30 +405,6 @@ static inline void dma_sync_sgtable_for_device(struct device *dev,
 #define dma_unmap_page(d, a, s, r) dma_unmap_page_attrs(d, a, s, r, 0)
 #define dma_get_sgtable(d, t, v, h, s) dma_get_sgtable_attrs(d, t, v, h, s, 0)
 #define dma_mmap_coherent(d, v, c, h, s) dma_mmap_attrs(d, v, c, h, s, 0)
-
-extern int dma_common_mmap(struct device *dev, struct vm_area_struct *vma,
-		void *cpu_addr, dma_addr_t dma_addr, size_t size,
-		unsigned long attrs);
-struct page *dma_common_alloc_pages(struct device *dev, size_t size,
-		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp);
-void dma_common_free_pages(struct device *dev, size_t size, struct page *vaddr,
-		dma_addr_t dma_handle, enum dma_data_direction dir);
-struct page **dma_common_find_pages(void *cpu_addr);
-void *dma_common_contiguous_remap(struct page *page, size_t size,
-			pgprot_t prot, const void *caller);
-
-void *dma_common_pages_remap(struct page **pages, size_t size,
-			pgprot_t prot, const void *caller);
-void dma_common_free_remap(void *cpu_addr, size_t size);
-
-struct page *dma_alloc_from_pool(struct device *dev, size_t size,
-		void **cpu_addr, gfp_t flags,
-		bool (*phys_addr_ok)(struct device *, phys_addr_t, size_t));
-bool dma_free_from_pool(struct device *dev, void *start, size_t size);
-
-int
-dma_common_get_sgtable(struct device *dev, struct sg_table *sgt, void *cpu_addr,
-		dma_addr_t dma_addr, size_t size, unsigned long attrs);
 
 static inline void *dma_alloc_coherent(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp)

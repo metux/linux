@@ -833,11 +833,11 @@ static int virtio_fs_setup_dax(struct virtio_device *vdev, struct virtio_fs *fs)
 	 * initialize a struct resource from scratch (only the start
 	 * and end fields will be used).
 	 */
-	pgmap->range = (struct range) {
+	pgmap->res = (struct resource){
+		.name = "virtio-fs dax window",
 		.start = (phys_addr_t) cache_reg.addr,
 		.end = (phys_addr_t) cache_reg.addr + cache_reg.len - 1,
 	};
-	pgmap->nr_range = 1;
 
 	fs->window_kaddr = devm_memremap_pages(&vdev->dev, pgmap);
 	if (IS_ERR(fs->window_kaddr))
@@ -971,7 +971,7 @@ static struct virtio_driver virtio_fs_driver = {
 #endif
 };
 
-static void virtio_fs_wake_forget_and_unlock(struct fuse_iqueue *fiq)
+static void virtio_fs_wake_forget_and_unlock(struct fuse_iqueue *fiq, bool sync)
 __releases(fiq->lock)
 {
 	struct fuse_forget_link *link;
@@ -1006,7 +1006,8 @@ __releases(fiq->lock)
 	kfree(link);
 }
 
-static void virtio_fs_wake_interrupt_and_unlock(struct fuse_iqueue *fiq)
+static void virtio_fs_wake_interrupt_and_unlock(struct fuse_iqueue *fiq,
+						bool sync)
 __releases(fiq->lock)
 {
 	/*
@@ -1221,7 +1222,8 @@ out:
 	return ret;
 }
 
-static void virtio_fs_wake_pending_and_unlock(struct fuse_iqueue *fiq)
+static void virtio_fs_wake_pending_and_unlock(struct fuse_iqueue *fiq,
+					      bool sync)
 __releases(fiq->lock)
 {
 	unsigned int queue_id = VQ_REQUEST; /* TODO multiqueue */

@@ -15,7 +15,7 @@ static int mlx5e_ktls_add(struct net_device *netdev, struct sock *sk,
 	struct mlx5_core_dev *mdev = priv->mdev;
 	int err;
 
-	if (WARN_ON(!mlx5e_ktls_type_check(mdev, crypto_info)))
+	if (!mlx5e_ktls_type_check(mdev, crypto_info))
 		return -EOPNOTSUPP;
 
 	if (direction == TLS_OFFLOAD_CTX_DIR_TX)
@@ -40,7 +40,11 @@ static int mlx5e_ktls_resync(struct net_device *netdev,
 			     struct sock *sk, u32 seq, u8 *rcd_sn,
 			     enum tls_offload_ctx_dir direction)
 {
-	return -EOPNOTSUPP;
+	if (unlikely(direction != TLS_OFFLOAD_CTX_DIR_RX))
+		return -EOPNOTSUPP;
+
+	mlx5e_ktls_rx_resync(netdev, sk, seq, rcd_sn);
+	return 0;
 }
 
 static const struct tlsdev_ops mlx5e_ktls_ops = {
@@ -53,9 +57,6 @@ void mlx5e_ktls_build_netdev(struct mlx5e_priv *priv)
 {
 	struct net_device *netdev = priv->netdev;
 	struct mlx5_core_dev *mdev = priv->mdev;
-
-	if (!mlx5_accel_is_ktls_device(mdev))
-		return;
 
 	if (mlx5_accel_is_ktls_tx(mdev)) {
 		netdev->hw_features |= NETIF_F_HW_TLS_TX;

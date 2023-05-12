@@ -715,11 +715,17 @@ int amdgpu_vm_validate_pt_bos(struct amdgpu_device *adev, struct amdgpu_vm *vm,
  * Check if all VM PDs/PTs are ready for updates
  *
  * Returns:
- * True if eviction list is empty.
+ * True if VM is not evicting.
  */
 bool amdgpu_vm_ready(struct amdgpu_vm *vm)
 {
-	return list_empty(&vm->evicted);
+	bool ret;
+
+	amdgpu_vm_eviction_lock(vm);
+	ret = !vm->evicting;
+	amdgpu_vm_eviction_unlock(vm);
+
+	return ret && list_empty(&vm->evicted);
 }
 
 /**
@@ -1502,6 +1508,8 @@ static int amdgpu_vm_update_ptes(struct amdgpu_vm_update_params *params,
 
 			pt = cursor.entry->base.bo;
 			shift = parent_shift;
+			frag_end = max(frag_end, ALIGN(frag_start + 1,
+				   1ULL << shift));
 		}
 
 		/* Looks good so far, calculate parameters for the update */
@@ -1513,19 +1521,26 @@ static int amdgpu_vm_update_ptes(struct amdgpu_vm_update_params *params,
 		entry_end = min(entry_end, end);
 
 		do {
+			struct amdgpu_vm *vm = params->vm;
 			uint64_t upd_end = min(entry_end, frag_end);
 			unsigned nptes = (upd_end - frag_start) >> shift;
+			uint64_t upd_flags = flags | AMDGPU_PTE_FRAG(frag);
 
 			/* This can happen when we set higher level PDs to
 			 * silent to stop fault floods.
 			 */
 			nptes = max(nptes, 1u);
+
+			trace_amdgpu_vm_update_ptes(params, frag_start, upd_end,
+						    nptes, dst, incr, upd_flags,
+						    vm->task_info.pid,
+						    vm->immediate.fence_context);
 			amdgpu_vm_update_flags(params, pt, cursor.level,
 					       pe_start, dst, nptes, incr,
-					       flags | AMDGPU_PTE_FRAG(frag));
+					       upd_flags);
 
 			pe_start += nptes * 8;
-			dst += (uint64_t)nptes * AMDGPU_GPU_PAGE_SIZE << shift;
+			dst += nptes * incr;
 
 			frag_start = upd_end;
 			if (frag_start >= frag_end) {
@@ -1693,13 +1708,13 @@ static int amdgpu_vm_bo_split_mapping(struct amdgpu_device *adev,
 		uint64_t max_entries;
 		uint64_t addr, last;
 
+		max_entries = mapping->last - start + 1;
 		if (nodes) {
 			addr = nodes->start << PAGE_SHIFT;
-			max_entries = (nodes->size - pfn) *
-				AMDGPU_GPU_PAGES_IN_CPU_PAGE;
+			max_entries = min((nodes->size - pfn) *
+				AMDGPU_GPU_PAGES_IN_CPU_PAGE, max_entries);
 		} else {
 			addr = 0;
-			max_entries = S64_MAX;
 		}
 
 		if (pages_addr) {
@@ -1729,7 +1744,7 @@ static int amdgpu_vm_bo_split_mapping(struct amdgpu_device *adev,
 			addr += pfn << PAGE_SHIFT;
 		}
 
-		last = min((uint64_t)mapping->last, start + max_entries - 1);
+		last = start + max_entries - 1;
 		r = amdgpu_vm_bo_update_mapping(adev, vm, false, false, resv,
 						start, last, flags, addr,
 						dma_addr, fence);
@@ -3185,7 +3200,11 @@ void amdgpu_vm_manager_init(struct amdgpu_device *adev)
 	 */
 #ifdef CONFIG_X86_64
 	if (amdgpu_vm_update_mode == -1) {
-		if (amdgpu_gmc_vram_full_visible(&adev->gmc))
+		/* For asic with VF MMIO access protection
+		 * avoid using CPU for VM table updates
+		 */
+		if (amdgpu_gmc_vram_full_visible(&adev->gmc) &&
+		    !amdgpu_sriov_vf_mmio_access_protection(adev))
 			adev->vm_manager.vm_update_mode =
 				AMDGPU_VM_USE_CPU_FOR_COMPUTE;
 		else

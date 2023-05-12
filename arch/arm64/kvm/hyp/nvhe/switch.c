@@ -58,9 +58,9 @@ static void __activate_traps(struct kvm_vcpu *vcpu)
 		 * configured and enabled. We can now restore the guest's S1
 		 * configuration: SCTLR, and only then TCR.
 		 */
-		write_sysreg_el1(ctxt->sys_regs[SCTLR_EL1],	SYS_SCTLR);
+		write_sysreg_el1(ctxt_sys_reg(ctxt, SCTLR_EL1),	SYS_SCTLR);
 		isb();
-		write_sysreg_el1(ctxt->sys_regs[TCR_EL1],	SYS_TCR);
+		write_sysreg_el1(ctxt_sys_reg(ctxt, TCR_EL1),	SYS_TCR);
 	}
 }
 
@@ -275,4 +275,9 @@ void __noreturn hyp_panic(void)
 
 	__hyp_do_panic(host_ctxt, spsr, elr, par);
 	unreachable();
+}
+
+asmlinkage void kvm_unexpected_el2_exception(void)
+{
+	__kvm_unexpected_el2_exception();
 }

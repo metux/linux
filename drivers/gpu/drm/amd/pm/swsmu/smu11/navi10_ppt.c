@@ -45,6 +45,7 @@
 
 #include "asic_reg/mp/mp_11_0_sh_mask.h"
 #include "smu_cmn.h"
+#include "smu_11_0_cdr_table.h"
 
 /*
  * DO NOT use these for err/warn/info/debug messages.
@@ -139,6 +140,9 @@ static struct cmn2asic_msg_mapping navi10_message_map[SMU_MSG_MAX_COUNT] = {
 	MSG_MAP(GetVoltageByDpm,		PPSMC_MSG_GetVoltageByDpm,		0),
 	MSG_MAP(GetVoltageByDpmOverdrive,	PPSMC_MSG_GetVoltageByDpmOverdrive,	0),
 	MSG_MAP(SetMGpuFanBoostLimitRpm,	PPSMC_MSG_SetMGpuFanBoostLimitRpm,	0),
+	MSG_MAP(SET_DRIVER_DUMMY_TABLE_DRAM_ADDR_HIGH, PPSMC_MSG_SetDriverDummyTableDramAddrHigh, 0),
+	MSG_MAP(SET_DRIVER_DUMMY_TABLE_DRAM_ADDR_LOW, PPSMC_MSG_SetDriverDummyTableDramAddrLow, 0),
+	MSG_MAP(GET_UMC_FW_WA,			PPSMC_MSG_GetUMCFWWA,			0),
 };
 
 static struct cmn2asic_mapping navi10_clk_map[SMU_CLK_COUNT] = {
@@ -279,9 +283,6 @@ navi10_get_allowed_feature_mask(struct smu_context *smu,
 				| FEATURE_MASK(FEATURE_FW_CTF_BIT)
 				| FEATURE_MASK(FEATURE_OUT_OF_BAND_MONITOR_BIT);
 
-	if (adev->pm.pp_feature & PP_SOCCLK_DPM_MASK)
-		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_SOCCLK_BIT);
-
 	if (adev->pm.pp_feature & PP_SCLK_DPM_MASK)
 		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_GFXCLK_BIT);
 
@@ -290,11 +291,6 @@ navi10_get_allowed_feature_mask(struct smu_context *smu,
 
 	if (adev->pm.pp_feature & PP_DCEFCLK_DPM_MASK)
 		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_DCEFCLK_BIT);
-
-	if (adev->pm.pp_feature & PP_MCLK_DPM_MASK)
-		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_UCLK_BIT)
-				| FEATURE_MASK(FEATURE_MEM_VDDCI_SCALING_BIT)
-				| FEATURE_MASK(FEATURE_MEM_MVDD_SCALING_BIT);
 
 	if (adev->pm.pp_feature & PP_ULV_MASK)
 		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_GFX_ULV_BIT);
@@ -320,21 +316,44 @@ navi10_get_allowed_feature_mask(struct smu_context *smu,
 	if (smu->dc_controlled_by_gpio)
 		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_ACDC_BIT);
 
-	/* disable DPM UCLK and DS SOCCLK on navi10 A0 secure board */
-	if (is_asic_secure(smu)) {
-		/* only for navi10 A0 */
-		if ((adev->asic_type == CHIP_NAVI10) &&
-			(adev->rev_id == 0)) {
-			*(uint64_t *)feature_mask &=
-					~(FEATURE_MASK(FEATURE_DPM_UCLK_BIT)
-					  | FEATURE_MASK(FEATURE_MEM_VDDCI_SCALING_BIT)
-					  | FEATURE_MASK(FEATURE_MEM_MVDD_SCALING_BIT));
-			*(uint64_t *)feature_mask &=
-					~FEATURE_MASK(FEATURE_DS_SOCCLK_BIT);
-		}
-	}
+	if (adev->pm.pp_feature & PP_SOCCLK_DPM_MASK)
+		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_SOCCLK_BIT);
+
+	/* DPM UCLK enablement should be skipped for navi10 A0 secure board */
+	if (!(is_asic_secure(smu) &&
+	     (adev->asic_type == CHIP_NAVI10) &&
+	     (adev->rev_id == 0)) &&
+	    (adev->pm.pp_feature & PP_MCLK_DPM_MASK))
+		*(uint64_t *)feature_mask |= FEATURE_MASK(FEATURE_DPM_UCLK_BIT)
+				| FEATURE_MASK(FEATURE_MEM_VDDCI_SCALING_BIT)
+				| FEATURE_MASK(FEATURE_MEM_MVDD_SCALING_BIT);
+
+	/* DS SOCCLK enablement should be skipped for navi10 A0 secure board */
+	if (is_asic_secure(smu) &&
+	    (adev->asic_type == CHIP_NAVI10) &&
+	    (adev->rev_id == 0))
+		*(uint64_t *)feature_mask &=
+				~FEATURE_MASK(FEATURE_DS_SOCCLK_BIT);
 
 	return 0;
+}
+
+static void navi10_check_bxco_support(struct smu_context *smu)
+{
+	struct smu_table_context *table_context = &smu->smu_table;
+	struct smu_11_0_powerplay_table *powerplay_table =
+		table_context->power_play_table;
+	struct smu_baco_context *smu_baco = &smu->smu_baco;
+	struct amdgpu_device *adev = smu->adev;
+	uint32_t val;
+
+	if (powerplay_table->platform_caps & SMU_11_0_PP_PLATFORM_CAP_BACO ||
+	    powerplay_table->platform_caps & SMU_11_0_PP_PLATFORM_CAP_MACO) {
+		val = RREG32_SOC15(NBIO, 0, mmRCC_BIF_STRAP0);
+		smu_baco->platform_support =
+			(val & RCC_BIF_STRAP0__STRAP_PX_CAPABLE_MASK) ? true :
+									false;
+	}
 }
 
 static int navi10_check_powerplay_table(struct smu_context *smu)
@@ -342,16 +361,11 @@ static int navi10_check_powerplay_table(struct smu_context *smu)
 	struct smu_table_context *table_context = &smu->smu_table;
 	struct smu_11_0_powerplay_table *powerplay_table =
 		table_context->power_play_table;
-	struct smu_baco_context *smu_baco = &smu->smu_baco;
 
 	if (powerplay_table->platform_caps & SMU_11_0_PP_PLATFORM_CAP_HARDWAREDC)
 		smu->dc_controlled_by_gpio = true;
 
-	mutex_lock(&smu_baco->mutex);
-	if (powerplay_table->platform_caps & SMU_11_0_PP_PLATFORM_CAP_BACO ||
-	    powerplay_table->platform_caps & SMU_11_0_PP_PLATFORM_CAP_MACO)
-		smu_baco->platform_support = true;
-	mutex_unlock(&smu_baco->mutex);
+	navi10_check_bxco_support(smu);
 
 	table_context->thermal_controller_type =
 		powerplay_table->thermal_controller_type;
@@ -1370,22 +1384,13 @@ static int navi10_get_fan_speed_rpm(struct smu_context *smu,
 					   speed);
 }
 
-static int navi10_get_fan_speed_percent(struct smu_context *smu,
-					uint32_t *speed)
+static int navi10_get_fan_parameters(struct smu_context *smu)
 {
-	int ret = 0;
-	uint32_t percent = 0;
-	uint32_t current_rpm;
 	PPTable_t *pptable = smu->smu_table.driver_pptable;
 
-	ret = navi10_get_fan_speed_rpm(smu, &current_rpm);
-	if (ret)
-		return ret;
+	smu->fan_max_rpm = pptable->FanMaximumRpm;
 
-	percent = current_rpm * 100 / pptable->FanMaximumRpm;
-	*speed = percent > 100 ? 100 : percent;
-
-	return ret;
+	return 0;
 }
 
 static int navi10_get_power_profile_mode(struct smu_context *smu, char *buf)
@@ -1609,57 +1614,43 @@ static int navi10_notify_smc_display_config(struct smu_context *smu)
 }
 
 static int navi10_set_watermarks_table(struct smu_context *smu,
-				       struct dm_pp_wm_sets_with_clock_ranges_soc15 *clock_ranges)
+				       struct pp_smu_wm_range_sets *clock_ranges)
 {
 	Watermarks_t *table = smu->smu_table.watermarks_table;
 	int ret = 0;
 	int i;
 
 	if (clock_ranges) {
-		if (clock_ranges->num_wm_dmif_sets > 4 ||
-		    clock_ranges->num_wm_mcif_sets > 4)
+		if (clock_ranges->num_reader_wm_sets > NUM_WM_RANGES ||
+		    clock_ranges->num_writer_wm_sets > NUM_WM_RANGES)
 			return -EINVAL;
 
-		for (i = 0; i < clock_ranges->num_wm_dmif_sets; i++) {
-			table->WatermarkRow[1][i].MinClock =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_dmif_clocks_ranges[i].wm_min_dcfclk_clk_in_khz /
-				1000));
-			table->WatermarkRow[1][i].MaxClock =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_dmif_clocks_ranges[i].wm_max_dcfclk_clk_in_khz /
-				1000));
-			table->WatermarkRow[1][i].MinUclk =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_dmif_clocks_ranges[i].wm_min_mem_clk_in_khz /
-				1000));
-			table->WatermarkRow[1][i].MaxUclk =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_dmif_clocks_ranges[i].wm_max_mem_clk_in_khz /
-				1000));
-			table->WatermarkRow[1][i].WmSetting = (uint8_t)
-					clock_ranges->wm_dmif_clocks_ranges[i].wm_set_id;
+		for (i = 0; i < clock_ranges->num_reader_wm_sets; i++) {
+			table->WatermarkRow[WM_DCEFCLK][i].MinClock =
+				clock_ranges->reader_wm_sets[i].min_drain_clk_mhz;
+			table->WatermarkRow[WM_DCEFCLK][i].MaxClock =
+				clock_ranges->reader_wm_sets[i].max_drain_clk_mhz;
+			table->WatermarkRow[WM_DCEFCLK][i].MinUclk =
+				clock_ranges->reader_wm_sets[i].min_fill_clk_mhz;
+			table->WatermarkRow[WM_DCEFCLK][i].MaxUclk =
+				clock_ranges->reader_wm_sets[i].max_fill_clk_mhz;
+
+			table->WatermarkRow[WM_DCEFCLK][i].WmSetting =
+				clock_ranges->reader_wm_sets[i].wm_inst;
 		}
 
-		for (i = 0; i < clock_ranges->num_wm_mcif_sets; i++) {
-			table->WatermarkRow[0][i].MinClock =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_mcif_clocks_ranges[i].wm_min_socclk_clk_in_khz /
-				1000));
-			table->WatermarkRow[0][i].MaxClock =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_mcif_clocks_ranges[i].wm_max_socclk_clk_in_khz /
-				1000));
-			table->WatermarkRow[0][i].MinUclk =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_mcif_clocks_ranges[i].wm_min_mem_clk_in_khz /
-				1000));
-			table->WatermarkRow[0][i].MaxUclk =
-				cpu_to_le16((uint16_t)
-				(clock_ranges->wm_mcif_clocks_ranges[i].wm_max_mem_clk_in_khz /
-				1000));
-			table->WatermarkRow[0][i].WmSetting = (uint8_t)
-					clock_ranges->wm_mcif_clocks_ranges[i].wm_set_id;
+		for (i = 0; i < clock_ranges->num_writer_wm_sets; i++) {
+			table->WatermarkRow[WM_SOCCLK][i].MinClock =
+				clock_ranges->writer_wm_sets[i].min_fill_clk_mhz;
+			table->WatermarkRow[WM_SOCCLK][i].MaxClock =
+				clock_ranges->writer_wm_sets[i].max_fill_clk_mhz;
+			table->WatermarkRow[WM_SOCCLK][i].MinUclk =
+				clock_ranges->writer_wm_sets[i].min_drain_clk_mhz;
+			table->WatermarkRow[WM_SOCCLK][i].MaxUclk =
+				clock_ranges->writer_wm_sets[i].max_drain_clk_mhz;
+
+			table->WatermarkRow[WM_SOCCLK][i].WmSetting =
+				clock_ranges->writer_wm_sets[i].wm_inst;
 		}
 
 		smu->watermarks_bitmap |= WATERMARKS_EXIST;
@@ -1972,13 +1963,11 @@ static int navi10_overdrive_get_gfx_clk_base_voltage(struct smu_context *smu,
 static bool navi10_is_baco_supported(struct smu_context *smu)
 {
 	struct amdgpu_device *adev = smu->adev;
-	uint32_t val;
 
 	if (amdgpu_sriov_vf(adev) || (!smu_v11_0_baco_is_support(smu)))
 		return false;
 
-	val = RREG32_SOC15(NBIO, 0, mmRCC_BIF_STRAP0);
-	return (val & RCC_BIF_STRAP0__STRAP_PX_CAPABLE_MASK) ? true : false;
+	return true;
 }
 
 static int navi10_set_default_od_settings(struct smu_context *smu)
@@ -2203,59 +2192,46 @@ static int navi10_run_btc(struct smu_context *smu)
 	return ret;
 }
 
-static int navi10_dummy_pstate_control(struct smu_context *smu, bool enable)
+static bool navi10_need_umc_cdr_workaround(struct smu_context *smu)
 {
-	int result = 0;
+	struct amdgpu_device *adev = smu->adev;
 
-	if (!enable)
-		result = smu_cmn_send_smc_msg(smu, SMU_MSG_DAL_DISABLE_DUMMY_PSTATE_CHANGE, NULL);
-	else
-		result = smu_cmn_send_smc_msg(smu, SMU_MSG_DAL_ENABLE_DUMMY_PSTATE_CHANGE, NULL);
-
-	return result;
-}
-
-static inline bool navi10_need_umc_cdr_12gbps_workaround(struct amdgpu_device *adev)
-{
-	if (adev->asic_type != CHIP_NAVI10)
+	if (!smu_cmn_feature_is_enabled(smu, SMU_FEATURE_DPM_UCLK_BIT))
 		return false;
 
-	if (adev->pdev->device == 0x731f &&
-	    (adev->pdev->revision == 0xc2 ||
-	     adev->pdev->revision == 0xc3 ||
-	     adev->pdev->revision == 0xca ||
-	     adev->pdev->revision == 0xcb))
+	if (adev->asic_type == CHIP_NAVI10 ||
+	    adev->asic_type == CHIP_NAVI14)
 		return true;
-	else
-		return false;
+
+	return false;
 }
 
-static int navi10_disable_umc_cdr_12gbps_workaround(struct smu_context *smu)
+static int navi10_umc_hybrid_cdr_workaround(struct smu_context *smu)
 {
 	uint32_t uclk_count, uclk_min, uclk_max;
-	uint32_t smu_version;
 	int ret = 0;
 
-	if (!navi10_need_umc_cdr_12gbps_workaround(smu->adev))
-		return 0;
-
-	ret = smu_cmn_get_smc_version(smu, NULL, &smu_version);
-	if (ret)
-		return ret;
-
-	/* This workaround is available only for 42.50 or later SMC firmwares */
-	if (smu_version < 0x2A3200)
+	/* This workaround can be applied only with uclk dpm enabled */
+	if (!smu_cmn_feature_is_enabled(smu, SMU_FEATURE_DPM_UCLK_BIT))
 		return 0;
 
 	ret = smu_v11_0_get_dpm_level_count(smu, SMU_UCLK, &uclk_count);
 	if (ret)
 		return ret;
 
-	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, (uint16_t)0, &uclk_min);
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, (uint16_t)(uclk_count - 1), &uclk_max);
 	if (ret)
 		return ret;
 
-	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, (uint16_t)(uclk_count - 1), &uclk_max);
+	/*
+	 * The NAVI10_UMC_HYBRID_CDR_WORKAROUND_UCLK_THRESHOLD is 750Mhz.
+	 * This workaround is needed only when the max uclk frequency
+	 * not greater than that.
+	 */
+	if (uclk_max > 0x2EE)
+		return 0;
+
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, (uint16_t)0, &uclk_min);
 	if (ret)
 		return ret;
 
@@ -2272,8 +2248,97 @@ static int navi10_disable_umc_cdr_12gbps_workaround(struct smu_context *smu)
 	/*
 	 * In this case, SMU already disabled dummy pstate during enablement
 	 * of UCLK DPM, we have to re-enabled it.
-	 * */
-	return navi10_dummy_pstate_control(smu, true);
+	 */
+	return smu_cmn_send_smc_msg(smu, SMU_MSG_DAL_ENABLE_DUMMY_PSTATE_CHANGE, NULL);
+}
+
+static int navi10_set_dummy_pstates_table_location(struct smu_context *smu)
+{
+	struct smu_table_context *smu_table = &smu->smu_table;
+	struct smu_table *dummy_read_table =
+				&smu_table->dummy_read_1_table;
+	char *dummy_table = dummy_read_table->cpu_addr;
+	int ret = 0;
+	uint32_t i;
+
+	for (i = 0; i < 0x40000; i += 0x1000 * 2) {
+		memcpy(dummy_table, &NoDbiPrbs7[0], 0x1000);
+		dummy_table += 0x1000;
+		memcpy(dummy_table, &DbiPrbs7[0], 0x1000);
+		dummy_table += 0x1000;
+	}
+
+	amdgpu_asic_flush_hdp(smu->adev, NULL);
+
+	ret = smu_cmn_send_smc_msg_with_param(smu,
+					      SMU_MSG_SET_DRIVER_DUMMY_TABLE_DRAM_ADDR_HIGH,
+					      upper_32_bits(dummy_read_table->mc_address),
+					      NULL);
+	if (ret)
+		return ret;
+
+	return smu_cmn_send_smc_msg_with_param(smu,
+					       SMU_MSG_SET_DRIVER_DUMMY_TABLE_DRAM_ADDR_LOW,
+					       lower_32_bits(dummy_read_table->mc_address),
+					       NULL);
+}
+
+static int navi10_run_umc_cdr_workaround(struct smu_context *smu)
+{
+	struct amdgpu_device *adev = smu->adev;
+	uint8_t umc_fw_greater_than_v136 = false;
+	uint8_t umc_fw_disable_cdr = false;
+	uint32_t pmfw_version;
+	uint32_t param;
+	int ret = 0;
+
+	if (!navi10_need_umc_cdr_workaround(smu))
+		return 0;
+
+	ret = smu_cmn_get_smc_version(smu, NULL, &pmfw_version);
+	if (ret) {
+		dev_err(adev->dev, "Failed to get smu version!\n");
+		return ret;
+	}
+
+	/*
+	 * The messages below are only supported by Navi10 42.53.0 and later
+	 * PMFWs and Navi14 53.29.0 and later PMFWs.
+	 * - PPSMC_MSG_SetDriverDummyTableDramAddrHigh
+	 * - PPSMC_MSG_SetDriverDummyTableDramAddrLow
+	 * - PPSMC_MSG_GetUMCFWWA
+	 */
+	if (((adev->asic_type == CHIP_NAVI10) && (pmfw_version >= 0x2a3500)) ||
+	    ((adev->asic_type == CHIP_NAVI14) && (pmfw_version >= 0x351D00))) {
+		ret = smu_cmn_send_smc_msg_with_param(smu,
+						      SMU_MSG_GET_UMC_FW_WA,
+						      0,
+						      &param);
+		if (ret)
+			return ret;
+
+		/* First bit indicates if the UMC f/w is above v137 */
+		umc_fw_greater_than_v136 = param & 0x1;
+
+		/* Second bit indicates if hybrid-cdr is disabled */
+		umc_fw_disable_cdr = param & 0x2;
+
+		/* w/a only allowed if UMC f/w is <= 136 */
+		if (umc_fw_greater_than_v136)
+			return 0;
+
+		if (umc_fw_disable_cdr) {
+			if (adev->asic_type == CHIP_NAVI10)
+				return navi10_umc_hybrid_cdr_workaround(smu);
+		} else {
+			return navi10_set_dummy_pstates_table_location(smu);
+		}
+	} else {
+		if (adev->asic_type == CHIP_NAVI10)
+			return navi10_umc_hybrid_cdr_workaround(smu);
+	}
+
+	return 0;
 }
 
 static void navi10_fill_i2c_req(SwI2cRequest_t  *req, bool write,
@@ -2480,29 +2545,6 @@ static const struct i2c_algorithm navi10_i2c_algo = {
 	.functionality = navi10_i2c_func,
 };
 
-static int navi10_i2c_control_init(struct smu_context *smu, struct i2c_adapter *control)
-{
-	struct amdgpu_device *adev = to_amdgpu_device(control);
-	int res;
-
-	control->owner = THIS_MODULE;
-	control->class = I2C_CLASS_SPD;
-	control->dev.parent = &adev->pdev->dev;
-	control->algo = &navi10_i2c_algo;
-	snprintf(control->name, sizeof(control->name), "AMDGPU SMU");
-
-	res = i2c_add_adapter(control);
-	if (res)
-		DRM_ERROR("Failed to register hw i2c, err: %d\n", res);
-
-	return res;
-}
-
-static void navi10_i2c_control_fini(struct smu_context *smu, struct i2c_adapter *control)
-{
-	i2c_del_adapter(control);
-}
-
 static ssize_t navi10_get_gpu_metrics(struct smu_context *smu,
 				      void **table)
 {
@@ -2604,13 +2646,44 @@ static int navi10_enable_mgpu_fan_boost(struct smu_context *smu)
 					       NULL);
 }
 
+static int navi10_post_smu_init(struct smu_context *smu)
+{
+	struct amdgpu_device *adev = smu->adev;
+	int ret = 0;
+
+	if (amdgpu_sriov_vf(adev))
+		return 0;
+
+	ret = navi10_run_umc_cdr_workaround(smu);
+	if (ret) {
+		dev_err(adev->dev, "Failed to apply umc cdr workaround!\n");
+		return ret;
+	}
+
+	if (!smu->dc_controlled_by_gpio) {
+		/*
+		 * For Navi1X, manually switch it to AC mode as PMFW
+		 * may boot it with DC mode.
+		 */
+		ret = smu_v11_0_set_power_source(smu,
+						 adev->pm.ac_power ?
+						 SMU_POWER_SOURCE_AC :
+						 SMU_POWER_SOURCE_DC);
+		if (ret) {
+			dev_err(adev->dev, "Failed to switch to %s mode!\n",
+					adev->pm.ac_power ? "AC" : "DC");
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 static const struct pptable_funcs navi10_ppt_funcs = {
 	.get_allowed_feature_mask = navi10_get_allowed_feature_mask,
 	.set_default_dpm_table = navi10_set_default_dpm_table,
 	.dpm_set_vcn_enable = navi10_dpm_set_vcn_enable,
 	.dpm_set_jpeg_enable = navi10_dpm_set_jpeg_enable,
-	.i2c_init = navi10_i2c_control_init,
-	.i2c_fini = navi10_i2c_control_fini,
 	.print_clk_levels = navi10_print_clk_levels,
 	.force_clk_levels = navi10_force_clk_levels,
 	.populate_umd_state_clk = navi10_populate_umd_state_clk,
@@ -2619,7 +2692,6 @@ static const struct pptable_funcs navi10_ppt_funcs = {
 	.display_config_changed = navi10_display_config_changed,
 	.notify_smc_display_config = navi10_notify_smc_display_config,
 	.is_dpm_running = navi10_is_dpm_running,
-	.get_fan_speed_percent = navi10_get_fan_speed_percent,
 	.get_fan_speed_rpm = navi10_get_fan_speed_rpm,
 	.get_power_profile_mode = navi10_get_power_profile_mode,
 	.set_power_profile_mode = navi10_set_power_profile_mode,
@@ -2680,12 +2752,16 @@ static const struct pptable_funcs navi10_ppt_funcs = {
 	.set_default_od_settings = navi10_set_default_od_settings,
 	.od_edit_dpm_table = navi10_od_edit_dpm_table,
 	.run_btc = navi10_run_btc,
-	.disable_umc_cdr_12gbps_workaround = navi10_disable_umc_cdr_12gbps_workaround,
 	.set_power_source = smu_v11_0_set_power_source,
 	.get_pp_feature_mask = smu_cmn_get_pp_feature_mask,
 	.set_pp_feature_mask = smu_cmn_set_pp_feature_mask,
 	.get_gpu_metrics = navi10_get_gpu_metrics,
 	.enable_mgpu_fan_boost = navi10_enable_mgpu_fan_boost,
+	.gfx_ulv_control = smu_v11_0_gfx_ulv_control,
+	.deep_sleep_control = smu_v11_0_deep_sleep_control,
+	.get_fan_parameters = navi10_get_fan_parameters,
+	.post_init = navi10_post_smu_init,
+	.interrupt_work = smu_v11_0_interrupt_work,
 };
 
 void navi10_set_ppt_funcs(struct smu_context *smu)

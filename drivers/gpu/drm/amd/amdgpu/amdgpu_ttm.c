@@ -63,13 +63,16 @@
 
 #define AMDGPU_TTM_VRAM_MAX_DW_READ	(size_t)128
 
+static int amdgpu_ttm_backend_bind(struct ttm_bo_device *bdev,
+				   struct ttm_tt *ttm,
+				   struct ttm_resource *bo_mem);
+
 static int amdgpu_ttm_init_on_chip(struct amdgpu_device *adev,
 				    unsigned int type,
-				    uint64_t size)
+				    uint64_t size_in_page)
 {
 	return ttm_range_man_init(&adev->mman.bdev, type,
-				  TTM_PL_FLAG_UNCACHED,
-				  false, size >> PAGE_SHIFT);
+				  false, size_in_page);
 }
 
 /**
@@ -497,9 +500,9 @@ static int amdgpu_move_blit(struct ttm_buffer_object *bo,
 
 	/* Always block for VM page tables before committing the new location */
 	if (bo->type == ttm_bo_type_kernel)
-		r = ttm_bo_move_accel_cleanup(bo, fence, true, new_mem);
+		r = ttm_bo_move_accel_cleanup(bo, fence, true, false, new_mem);
 	else
-		r = ttm_bo_pipeline_move(bo, fence, evict, new_mem);
+		r = ttm_bo_move_accel_cleanup(bo, fence, evict, true, new_mem);
 	dma_fence_put(fence);
 	return r;
 
@@ -548,8 +551,12 @@ static int amdgpu_move_vram_ram(struct ttm_buffer_object *bo, bool evict,
 		goto out_cleanup;
 	}
 
+	r = ttm_tt_populate(bo->bdev, bo->ttm, ctx);
+	if (unlikely(r))
+		goto out_cleanup;
+
 	/* Bind the memory to the GTT space */
-	r = ttm_tt_bind(bo->bdev, bo->ttm, &tmp_mem, ctx);
+	r = amdgpu_ttm_backend_bind(bo->bdev, bo->ttm, &tmp_mem);
 	if (unlikely(r)) {
 		goto out_cleanup;
 	}
@@ -810,6 +817,7 @@ struct amdgpu_ttm_tt {
 	uint64_t		userptr;
 	struct task_struct	*usertask;
 	uint32_t		userflags;
+	bool			bound;
 #if IS_ENABLED(CONFIG_DRM_AMDGPU_USERPTR)
 	struct hmm_range	*range;
 #endif
@@ -1008,6 +1016,7 @@ static int amdgpu_ttm_tt_pin_userptr(struct ttm_bo_device *bdev,
 
 release_sg:
 	kfree(ttm->sg);
+	ttm->sg = NULL;
 	return r;
 }
 
@@ -1107,6 +1116,12 @@ static int amdgpu_ttm_backend_bind(struct ttm_bo_device *bdev,
 	uint64_t flags;
 	int r = 0;
 
+	if (!bo_mem)
+		return -EINVAL;
+
+	if (gtt->bound)
+		return 0;
+
 	if (gtt->userptr) {
 		r = amdgpu_ttm_tt_pin_userptr(bdev, ttm);
 		if (r) {
@@ -1140,6 +1155,7 @@ static int amdgpu_ttm_backend_bind(struct ttm_bo_device *bdev,
 	if (r)
 		DRM_ERROR("failed to bind %lu pages at 0x%08llX\n",
 			  ttm->num_pages, gtt->offset);
+	gtt->bound = true;
 	return r;
 }
 
@@ -1253,6 +1269,7 @@ static void amdgpu_ttm_backend_unbind(struct ttm_bo_device *bdev,
 	if (r)
 		DRM_ERROR("failed to unbind %lu pages at 0x%08llX\n",
 			  gtt->ttm.ttm.num_pages, gtt->offset);
+	gtt->bound = false;
 }
 
 static void amdgpu_ttm_backend_destroy(struct ttm_bo_device *bdev,
@@ -1260,6 +1277,8 @@ static void amdgpu_ttm_backend_destroy(struct ttm_bo_device *bdev,
 {
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
 
+	amdgpu_ttm_backend_unbind(bdev, ttm);
+	ttm_tt_destroy_common(bdev, ttm);
 	if (gtt->usertask)
 		put_task_struct(gtt->usertask);
 
@@ -1313,7 +1332,7 @@ static int amdgpu_ttm_tt_populate(struct ttm_bo_device *bdev,
 			return -ENOMEM;
 
 		ttm->page_flags |= TTM_PAGE_FLAG_SG;
-		ttm->state = tt_unbound;
+		ttm_tt_set_populated(ttm);
 		return 0;
 	}
 
@@ -1333,7 +1352,7 @@ static int amdgpu_ttm_tt_populate(struct ttm_bo_device *bdev,
 		drm_prime_sg_to_page_addr_arrays(ttm->sg, ttm->pages,
 						 gtt->ttm.dma_address,
 						 ttm->num_pages);
-		ttm->state = tt_unbound;
+		ttm_tt_set_populated(ttm);
 		return 0;
 	}
 
@@ -2091,7 +2110,7 @@ int amdgpu_copy_buffer(struct amdgpu_ring *ring, uint64_t src_offset,
 	unsigned i;
 	int r;
 
-	if (direct_submit && !ring->sched.ready) {
+	if (!direct_submit && !ring->sched.ready) {
 		DRM_ERROR("Trying to move memory with ring turned off.\n");
 		return -EINVAL;
 	}

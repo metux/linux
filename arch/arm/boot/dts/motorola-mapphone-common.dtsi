@@ -208,7 +208,7 @@
 	};
 
 	lcd0: panel@0 {
-		compatible = "panel-dsi-cm";
+		compatible = "motorola,droid4-panel", "panel-dsi-cm";
 		reg = <0>;
 		label = "lcd0";
 		vddi-supply = <&lcd_regulator>;
@@ -218,6 +218,7 @@
 
 		width-mm = <50>;
 		height-mm = <89>;
+		rotation = <90>;
 
 		panel-timing {
 			clock-frequency = <0>;		/* Calculated by dsi */
@@ -429,7 +430,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins>;
 
-		reset-gpios = <&gpio6 13 GPIO_ACTIVE_HIGH>; /* gpio173 */
+		reset-gpios = <&gpio6 13 GPIO_ACTIVE_LOW>; /* gpio173 */
 
 		/* gpio_183 with sys_nirq2 pad as wakeup */
 		interrupts-extended = <&gpio6 23 IRQ_TYPE_LEVEL_LOW>,

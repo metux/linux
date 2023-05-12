@@ -98,7 +98,7 @@ static const struct vsc85xx_hw_stat vsc8584_hw_stats[] = {
 	},
 };
 
-#ifdef CONFIG_OF_MDIO
+#if IS_ENABLED(CONFIG_OF_MDIO)
 static const struct vsc8531_edge_rate_table edge_table[] = {
 	{MSCC_VDDMAC_3300, { 0, 2,  4,  7, 10, 17, 29, 53} },
 	{MSCC_VDDMAC_2500, { 0, 3,  6, 10, 14, 23, 37, 63} },
@@ -382,7 +382,7 @@ out_unlock:
 	mutex_unlock(&phydev->lock);
 }
 
-#ifdef CONFIG_OF_MDIO
+#if IS_ENABLED(CONFIG_OF_MDIO)
 static int vsc85xx_edge_rate_magic_get(struct phy_device *phydev)
 {
 	u32 vdd, sd;
@@ -1481,7 +1481,7 @@ static void vsc8584_get_base_addr(struct phy_device *phydev)
 	struct vsc8531_private *vsc8531 = phydev->priv;
 	u16 val, addr;
 
-	mutex_lock(&phydev->mdio.bus->mdio_lock);
+	phy_lock_mdio_bus(phydev);
 	__phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_EXTENDED);
 
 	addr = __phy_read(phydev, MSCC_PHY_EXT_PHY_CNTL_4);
@@ -1490,7 +1490,7 @@ static void vsc8584_get_base_addr(struct phy_device *phydev)
 	val = __phy_read(phydev, MSCC_PHY_ACTIPHY_CNTL);
 
 	__phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 
 	/* In the package, there are two pairs of PHYs (PHY0 + PHY2 and
 	 * PHY1 + PHY3). The first PHY of each pair (PHY0 and PHY1) is
@@ -1524,7 +1524,7 @@ static int vsc8584_config_init(struct phy_device *phydev)
 
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
 
-	mutex_lock(&phydev->mdio.bus->mdio_lock);
+	phy_lock_mdio_bus(phydev);
 
 	/* Some parts of the init sequence are identical for every PHY in the
 	 * package. Some parts are modifying the GPIO register bank which is a
@@ -1568,8 +1568,10 @@ static int vsc8584_config_init(struct phy_device *phydev)
 			goto err;
 	}
 
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
-		       MSCC_PHY_PAGE_EXTENDED_GPIO);
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_EXTENDED_GPIO);
+	if (ret)
+		goto err;
 
 	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
 	val &= ~MAC_CFG_MASK;
@@ -1585,6 +1587,11 @@ static int vsc8584_config_init(struct phy_device *phydev)
 	}
 
 	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
+	if (ret)
+		goto err;
+
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_STANDARD);
 	if (ret)
 		goto err;
 
@@ -1605,7 +1612,7 @@ static int vsc8584_config_init(struct phy_device *phydev)
 
 	/* Disable SerDes for 100Base-FX */
 	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
-			  PROC_CMD_FIBER_PORT(vsc8531->base_addr) |
+			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
 			  PROC_CMD_FIBER_DISABLE |
 			  PROC_CMD_READ_MOD_WRITE_PORT |
 			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_100BASE_FX);
@@ -1614,14 +1621,14 @@ static int vsc8584_config_init(struct phy_device *phydev)
 
 	/* Disable SerDes for 1000Base-X */
 	ret = vsc8584_cmd(phydev, PROC_CMD_FIBER_MEDIA_CONF |
-			  PROC_CMD_FIBER_PORT(vsc8531->base_addr) |
+			  PROC_CMD_FIBER_PORT(vsc8531->addr) |
 			  PROC_CMD_FIBER_DISABLE |
 			  PROC_CMD_READ_MOD_WRITE_PORT |
 			  PROC_CMD_RST_CONF_PORT | PROC_CMD_FIBER_1000BASE_X);
 	if (ret)
 		goto err;
 
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 
 	ret = vsc8584_macsec_init(phydev);
 	if (ret)
@@ -1629,9 +1636,7 @@ static int vsc8584_config_init(struct phy_device *phydev)
 
 	ret = vsc8584_ptp_init(phydev);
 	if (ret)
-		goto err;
-
-	phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
+		return ret;
 
 	val = phy_read(phydev, MSCC_PHY_EXT_PHY_CNTL_1);
 	val &= ~(MEDIA_OP_MODE_MASK | VSC8584_MAC_IF_SELECTION_MASK);
@@ -1662,7 +1667,7 @@ static int vsc8584_config_init(struct phy_device *phydev)
 	return 0;
 
 err:
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 	return ret;
 }
 
@@ -1839,13 +1844,13 @@ static int __phy_write_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb,
 	return 0;
 }
 
-/* Trigger a read to the spcified MCB */
+/* Trigger a read to the specified MCB */
 static int phy_update_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb)
 {
 	return __phy_write_mcb_s6g(phydev, reg, mcb, PHY_MCB_S6G_READ);
 }
 
-/* Trigger a write to the spcified MCB */
+/* Trigger a write to the specified MCB */
 static int phy_commit_mcb_s6g(struct phy_device *phydev, u32 reg, u8 mcb)
 {
 	return __phy_write_mcb_s6g(phydev, reg, mcb, PHY_MCB_S6G_WRITE);
@@ -1861,7 +1866,7 @@ static int vsc8514_config_init(struct phy_device *phydev)
 
 	phydev->mdix_ctrl = ETH_TP_MDI_AUTO;
 
-	mutex_lock(&phydev->mdio.bus->mdio_lock);
+	phy_lock_mdio_bus(phydev);
 
 	/* Some parts of the init sequence are identical for every PHY in the
 	 * package. Some parts are modifying the GPIO register bank which is a
@@ -1877,15 +1882,21 @@ static int vsc8514_config_init(struct phy_device *phydev)
 	if (phy_package_init_once(phydev))
 		vsc8514_config_pre_init(phydev);
 
-	phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
-		       MSCC_PHY_PAGE_EXTENDED_GPIO);
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_EXTENDED_GPIO);
+	if (ret)
+		goto err;
 
 	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
 
 	val &= ~MAC_CFG_MASK;
 	val |= MAC_CFG_QSGMII;
 	ret = phy_base_write(phydev, MSCC_PHY_MAC_CFG_FASTLINK, val);
+	if (ret)
+		goto err;
 
+	ret = phy_base_write(phydev, MSCC_EXT_PAGE_ACCESS,
+			     MSCC_PHY_PAGE_STANDARD);
 	if (ret)
 		goto err;
 
@@ -1949,14 +1960,14 @@ static int vsc8514_config_init(struct phy_device *phydev)
 		reg = vsc85xx_csr_read(phydev, PHY_MCB_TARGET,
 				       PHY_S6G_PLL_STATUS);
 		if (reg == 0xffffffff) {
-			mutex_unlock(&phydev->mdio.bus->mdio_lock);
+			phy_unlock_mdio_bus(phydev);
 			return -EIO;
 		}
 
 	} while (time_before(jiffies, deadline) && (reg & BIT(12)));
 
 	if (reg & BIT(12)) {
-		mutex_unlock(&phydev->mdio.bus->mdio_lock);
+		phy_unlock_mdio_bus(phydev);
 		return -ETIMEDOUT;
 	}
 
@@ -1976,23 +1987,18 @@ static int vsc8514_config_init(struct phy_device *phydev)
 		reg = vsc85xx_csr_read(phydev, PHY_MCB_TARGET,
 				       PHY_S6G_IB_STATUS0);
 		if (reg == 0xffffffff) {
-			mutex_unlock(&phydev->mdio.bus->mdio_lock);
+			phy_unlock_mdio_bus(phydev);
 			return -EIO;
 		}
 
 	} while (time_before(jiffies, deadline) && !(reg & BIT(8)));
 
 	if (!(reg & BIT(8))) {
-		mutex_unlock(&phydev->mdio.bus->mdio_lock);
+		phy_unlock_mdio_bus(phydev);
 		return -ETIMEDOUT;
 	}
 
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
-
-	ret = phy_write(phydev, MSCC_EXT_PAGE_ACCESS, MSCC_PHY_PAGE_STANDARD);
-
-	if (ret)
-		return ret;
+	phy_unlock_mdio_bus(phydev);
 
 	ret = phy_modify(phydev, MSCC_PHY_EXT_PHY_CNTL_1, MEDIA_OP_MODE_MASK,
 			 MEDIA_OP_MODE_COPPER << MEDIA_OP_MODE_POS);
@@ -2014,7 +2020,7 @@ static int vsc8514_config_init(struct phy_device *phydev)
 	return ret;
 
 err:
-	mutex_unlock(&phydev->mdio.bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 	return ret;
 }
 
@@ -2111,6 +2117,10 @@ static int vsc8574_probe(struct phy_device *phydev)
 		return -ENOMEM;
 
 	phydev->priv = vsc8531;
+
+	vsc8584_get_base_addr(phydev);
+	devm_phy_package_join(&phydev->mdio.dev, phydev,
+			      vsc8531->base_addr, 0);
 
 	vsc8531->nleds = 4;
 	vsc8531->supp_led_modes = VSC8584_SUPP_LED_MODES;
@@ -2574,3 +2584,6 @@ MODULE_DEVICE_TABLE(mdio, vsc85xx_tbl);
 MODULE_DESCRIPTION("Microsemi VSC85xx PHY driver");
 MODULE_AUTHOR("Nagaraju Lakkaraju");
 MODULE_LICENSE("Dual MIT/GPL");
+
+MODULE_FIRMWARE(MSCC_VSC8584_REVB_INT8051_FW);
+MODULE_FIRMWARE(MSCC_VSC8574_REVB_INT8051_FW);

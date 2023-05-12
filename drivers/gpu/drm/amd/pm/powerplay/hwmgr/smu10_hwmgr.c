@@ -242,6 +242,34 @@ static int smu10_set_hard_min_fclk_by_freq(struct pp_hwmgr *hwmgr, uint32_t cloc
 	return 0;
 }
 
+static int smu10_set_hard_min_gfxclk_by_freq(struct pp_hwmgr *hwmgr, uint32_t clock)
+{
+	struct smu10_hwmgr *smu10_data = (struct smu10_hwmgr *)(hwmgr->backend);
+
+	if (clock && smu10_data->gfx_actual_soft_min_freq != clock) {
+		smu10_data->gfx_actual_soft_min_freq = clock;
+		smum_send_msg_to_smc_with_parameter(hwmgr,
+					PPSMC_MSG_SetHardMinGfxClk,
+					smu10_data->gfx_actual_soft_min_freq,
+					NULL);
+	}
+	return 0;
+}
+
+static int smu10_set_soft_max_gfxclk_by_freq(struct pp_hwmgr *hwmgr, uint32_t clock)
+{
+	struct smu10_hwmgr *smu10_data = (struct smu10_hwmgr *)(hwmgr->backend);
+
+	if (clock && smu10_data->gfx_max_freq_limit != (clock * 100))  {
+		smu10_data->gfx_max_freq_limit = clock * 100;
+		smum_send_msg_to_smc_with_parameter(hwmgr,
+					PPSMC_MSG_SetSoftMaxGfxClk,
+					clock,
+					NULL);
+	}
+	return 0;
+}
+
 static int smu10_set_active_display_count(struct pp_hwmgr *hwmgr, uint32_t count)
 {
 	struct smu10_hwmgr *smu10_data = (struct smu10_hwmgr *)(hwmgr->backend);
@@ -527,6 +555,9 @@ static int smu10_hwmgr_backend_init(struct pp_hwmgr *hwmgr)
 	hwmgr->pstate_sclk = SMU10_UMD_PSTATE_GFXCLK * 100;
 	hwmgr->pstate_mclk = SMU10_UMD_PSTATE_FCLK * 100;
 
+	/* enable the pp_od_clk_voltage sysfs file */
+	hwmgr->od_enabled = 1;
+
 	return result;
 }
 
@@ -650,7 +681,7 @@ static int smu10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 						NULL);
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetHardMinVcn,
-						SMU10_UMD_PSTATE_VCE,
+						SMU10_UMD_PSTATE_PROFILE_VCE,
 						NULL);
 
 		smum_send_msg_to_smc_with_parameter(hwmgr,
@@ -667,7 +698,7 @@ static int smu10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 						NULL);
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetSoftMaxVcn,
-						SMU10_UMD_PSTATE_VCE,
+						SMU10_UMD_PSTATE_PROFILE_VCE,
 						NULL);
 		break;
 	case AMD_DPM_FORCED_LEVEL_AUTO:
@@ -678,13 +709,13 @@ static int smu10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetHardMinFclkByFreq,
 						hwmgr->display_config->num_display > 3 ?
-						data->clock_vol_info.vdd_dep_on_fclk->entries[0].clk :
+						(data->clock_vol_info.vdd_dep_on_fclk->entries[0].clk / 100) :
 						min_mclk,
 						NULL);
 
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetHardMinSocclkByFreq,
-						data->clock_vol_info.vdd_dep_on_socclk->entries[0].clk,
+						data->clock_vol_info.vdd_dep_on_socclk->entries[0].clk / 100,
 						NULL);
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetHardMinVcn,
@@ -697,11 +728,11 @@ static int smu10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 						NULL);
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetSoftMaxFclkByFreq,
-						data->clock_vol_info.vdd_dep_on_fclk->entries[index_fclk].clk,
+						data->clock_vol_info.vdd_dep_on_fclk->entries[index_fclk].clk / 100,
 						NULL);
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetSoftMaxSocclkByFreq,
-						data->clock_vol_info.vdd_dep_on_socclk->entries[index_socclk].clk,
+						data->clock_vol_info.vdd_dep_on_socclk->entries[index_socclk].clk / 100,
 						NULL);
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 						PPSMC_MSG_SetSoftMaxVcn,
@@ -949,6 +980,26 @@ static int smu10_print_clock_levels(struct pp_hwmgr *hwmgr,
 					((mclk_table->entries[i].clk / 100)
 					 == now) ? "*" : "");
 		break;
+	case OD_SCLK:
+		if (hwmgr->od_enabled) {
+			size = sprintf(buf, "%s:\n", "OD_SCLK");
+
+			size += sprintf(buf + size, "0: %10uMhz\n",
+			(data->gfx_actual_soft_min_freq > 0) ? data->gfx_actual_soft_min_freq : data->gfx_min_freq_limit/100);
+			size += sprintf(buf + size, "1: %10uMhz\n", data->gfx_max_freq_limit/100);
+		}
+		break;
+	case OD_RANGE:
+		if (hwmgr->od_enabled) {
+			uint32_t min_freq, max_freq = 0;
+			smum_send_msg_to_smc(hwmgr, PPSMC_MSG_GetMinGfxclkFrequency, &min_freq);
+			smum_send_msg_to_smc(hwmgr, PPSMC_MSG_GetMaxGfxclkFrequency, &max_freq);
+
+			size = sprintf(buf, "%s:\n", "OD_RANGE");
+			size += sprintf(buf + size, "SCLK: %7uMHz %10uMHz\n",
+				min_freq, max_freq);
+		}
+		break;
 	default:
 		break;
 	}
@@ -1183,8 +1234,19 @@ static int smu10_set_watermarks_for_clocks_ranges(struct pp_hwmgr *hwmgr,
 	struct smu10_hwmgr *data = hwmgr->backend;
 	struct dm_pp_wm_sets_with_clock_ranges_soc15 *wm_with_clock_ranges = clock_ranges;
 	Watermarks_t *table = &(data->water_marks_table);
+	struct amdgpu_device *adev = hwmgr->adev;
+	int i;
 
 	smu_set_watermarks_for_clocks_ranges(table,wm_with_clock_ranges);
+
+	if (adev->apu_flags & AMD_APU_IS_RAVEN2) {
+		for (i = 0; i < NUM_WM_RANGES; i++)
+			table->WatermarkRow[WM_DCFCLK][i].WmType = (uint8_t)0;
+
+		for (i = 0; i < NUM_WM_RANGES; i++)
+			table->WatermarkRow[WM_SOCCLK][i].WmType = (uint8_t)0;
+	}
+
 	smum_smc_table_manager(hwmgr, (uint8_t *)table, (uint16_t)SMU10_WMTABLE, false);
 	data->water_marks_exist = true;
 	return 0;
@@ -1235,14 +1297,8 @@ static int conv_power_profile_to_pplib_workload(int power_profile)
 	int pplib_workload = 0;
 
 	switch (power_profile) {
-	case PP_SMC_POWER_PROFILE_BOOTUP_DEFAULT:
-		pplib_workload = WORKLOAD_DEFAULT_BIT;
-		break;
 	case PP_SMC_POWER_PROFILE_FULLSCREEN3D:
 		pplib_workload = WORKLOAD_PPLIB_FULL_SCREEN_3D_BIT;
-		break;
-	case PP_SMC_POWER_PROFILE_POWERSAVING:
-		pplib_workload = WORKLOAD_PPLIB_POWER_SAVING_BIT;
 		break;
 	case PP_SMC_POWER_PROFILE_VIDEO:
 		pplib_workload = WORKLOAD_PPLIB_VIDEO_BIT;
@@ -1252,6 +1308,9 @@ static int conv_power_profile_to_pplib_workload(int power_profile)
 		break;
 	case PP_SMC_POWER_PROFILE_COMPUTE:
 		pplib_workload = WORKLOAD_PPLIB_COMPUTE_BIT;
+		break;
+	case PP_SMC_POWER_PROFILE_CUSTOM:
+		pplib_workload = WORKLOAD_PPLIB_CUSTOM_BIT;
 		break;
 	}
 
@@ -1350,6 +1409,32 @@ static int smu10_asic_reset(struct pp_hwmgr *hwmgr, enum SMU_ASIC_RESET_MODE mod
 						   NULL);
 }
 
+static int smu10_set_fine_grain_clk_vol(struct pp_hwmgr *hwmgr,
+					enum PP_OD_DPM_TABLE_COMMAND type,
+					long *input, uint32_t size)
+{
+	if (!hwmgr->od_enabled) {
+		pr_err("Fine grain not support\n");
+		return -EINVAL;
+	}
+
+	if (size != 2) {
+		pr_err("Input parameter number not correct\n");
+		return -EINVAL;
+	}
+
+	if (type == PP_OD_EDIT_SCLK_VDDC_TABLE) {
+		if (input[0] == 0)
+			smu10_set_hard_min_gfxclk_by_freq(hwmgr, input[1]);
+		else if (input[0] == 1)
+			smu10_set_soft_max_gfxclk_by_freq(hwmgr, input[1]);
+		else
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct pp_hwmgr_func smu10_hwmgr_funcs = {
 	.backend_init = smu10_hwmgr_backend_init,
 	.backend_fini = smu10_hwmgr_backend_fini,
@@ -1390,9 +1475,12 @@ static const struct pp_hwmgr_func smu10_hwmgr_funcs = {
 	.powergate_sdma = smu10_powergate_sdma,
 	.set_hard_min_dcefclk_by_freq = smu10_set_hard_min_dcefclk_by_freq,
 	.set_hard_min_fclk_by_freq = smu10_set_hard_min_fclk_by_freq,
+	.set_hard_min_gfxclk_by_freq = smu10_set_hard_min_gfxclk_by_freq,
+	.set_soft_max_gfxclk_by_freq = smu10_set_soft_max_gfxclk_by_freq,
 	.get_power_profile_mode = smu10_get_power_profile_mode,
 	.set_power_profile_mode = smu10_set_power_profile_mode,
 	.asic_reset = smu10_asic_reset,
+	.set_fine_grain_clk_vol = smu10_set_fine_grain_clk_vol,
 };
 
 int smu10_init_function_pointers(struct pp_hwmgr *hwmgr)

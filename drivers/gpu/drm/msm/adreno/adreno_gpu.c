@@ -209,7 +209,7 @@ adreno_iommu_create_address_space(struct msm_gpu *gpu,
 	size = iommu->geometry.aperture_end - start + 1;
 
 	aspace = msm_gem_address_space_create(mmu, "gpu",
-		start & GENMASK(48, 0), size);
+		start & GENMASK_ULL(48, 0), size);
 
 	if (IS_ERR(aspace) && !IS_ERR(mmu))
 		mmu->funcs->destroy(mmu);
@@ -960,7 +960,8 @@ void adreno_gpu_cleanup(struct adreno_gpu *adreno_gpu)
 	for (i = 0; i < ARRAY_SIZE(adreno_gpu->info->fw); i++)
 		release_firmware(adreno_gpu->fw[i]);
 
-	pm_runtime_disable(&priv->gpu_pdev->dev);
+	if (pm_runtime_enabled(&priv->gpu_pdev->dev))
+		pm_runtime_disable(&priv->gpu_pdev->dev);
 
 	msm_gpu_cleanup(&adreno_gpu->base);
 

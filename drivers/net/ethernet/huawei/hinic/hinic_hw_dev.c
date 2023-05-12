@@ -162,7 +162,6 @@ static int init_msix(struct hinic_hwdev *hwdev)
 	struct hinic_hwif *hwif = hwdev->hwif;
 	struct pci_dev *pdev = hwif->pdev;
 	int nr_irqs, num_aeqs, num_ceqs;
-	size_t msix_entries_size;
 	int i, err;
 
 	num_aeqs = HINIC_HWIF_NUM_AEQS(hwif);
@@ -171,8 +170,8 @@ static int init_msix(struct hinic_hwdev *hwdev)
 	if (nr_irqs > HINIC_HWIF_NUM_IRQS(hwif))
 		nr_irqs = HINIC_HWIF_NUM_IRQS(hwif);
 
-	msix_entries_size = nr_irqs * sizeof(*hwdev->msix_entries);
-	hwdev->msix_entries = devm_kzalloc(&pdev->dev, msix_entries_size,
+	hwdev->msix_entries = devm_kcalloc(&pdev->dev, nr_irqs,
+					   sizeof(*hwdev->msix_entries),
 					   GFP_KERNEL);
 	if (!hwdev->msix_entries)
 		return -ENOMEM;
@@ -437,6 +436,8 @@ static int get_base_qpn(struct hinic_hwdev *hwdev, u16 *base_qpn)
 /**
  * hinic_hwdev_ifup - Preparing the HW for passing IO
  * @hwdev: the NIC HW device
+ * @sq_depth: the send queue depth
+ * @rq_depth: the receive queue depth
  *
  * Return 0 - Success, negative - Failure
  **/
@@ -582,6 +583,7 @@ void hinic_hwdev_cb_unregister(struct hinic_hwdev *hwdev,
 /**
  * nic_mgmt_msg_handler - nic mgmt event handler
  * @handle: private data for the handler
+ * @cmd: message command
  * @buf_in: input buffer
  * @in_size: input size
  * @buf_out: output buffer
@@ -890,7 +892,7 @@ int hinic_set_interrupt_cfg(struct hinic_hwdev *hwdev,
 	if (err)
 		return -EINVAL;
 
-	interrupt_info->lli_credit_cnt = temp_info.lli_timer_cnt;
+	interrupt_info->lli_credit_cnt = temp_info.lli_credit_cnt;
 	interrupt_info->lli_timer_cnt = temp_info.lli_timer_cnt;
 
 	err = hinic_msg_to_mgmt(&pfhwdev->pf_to_mgmt, HINIC_MOD_COMM,
@@ -909,6 +911,7 @@ int hinic_set_interrupt_cfg(struct hinic_hwdev *hwdev,
 /**
  * hinic_init_hwdev - Initialize the NIC HW
  * @pdev: the NIC pci device
+ * @devlink: the poniter of hinic devlink
  *
  * Return initialized NIC HW device
  *
@@ -1121,7 +1124,7 @@ int hinic_hwdev_msix_cnt_set(struct hinic_hwdev *hwdev, u16 msix_index)
  * @msix_index: msix_index
  * @pending_limit: the maximum pending interrupt events (unit 8)
  * @coalesc_timer: coalesc period for interrupt (unit 8 us)
- * @lli_timer: replenishing period for low latency credit (unit 8 us)
+ * @lli_timer_cfg: replenishing period for low latency credit (unit 8 us)
  * @lli_credit_limit: maximum credits for low latency msix messages (unit 8)
  * @resend_timer: maximum wait for resending msix (unit coalesc period)
  *

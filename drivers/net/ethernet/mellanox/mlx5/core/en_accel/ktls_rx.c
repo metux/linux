@@ -202,7 +202,7 @@ static int post_rx_param_wqes(struct mlx5e_channel *c,
 
 	err = 0;
 	sq = &c->async_icosq;
-	spin_lock(&c->async_icosq_lock);
+	spin_lock_bh(&c->async_icosq_lock);
 
 	cseg = post_static_params(sq, priv_rx);
 	if (IS_ERR(cseg))
@@ -213,7 +213,7 @@ static int post_rx_param_wqes(struct mlx5e_channel *c,
 
 	mlx5e_notify_hw(&sq->wq, sq->pc, sq->uar_map, cseg);
 unlock:
-	spin_unlock(&c->async_icosq_lock);
+	spin_unlock_bh(&c->async_icosq_lock);
 
 	return err;
 
@@ -231,8 +231,7 @@ mlx5e_set_ktls_rx_priv_ctx(struct tls_context *tls_ctx,
 	struct mlx5e_ktls_offload_context_rx **ctx =
 		__tls_driver_ctx(tls_ctx, TLS_OFFLOAD_CTX_DIR_RX);
 
-	BUILD_BUG_ON(sizeof(struct mlx5e_ktls_offload_context_rx *) >
-		     TLS_OFFLOAD_CONTEXT_SIZE_RX);
+	BUILD_BUG_ON(sizeof(priv_rx) > TLS_DRIVER_STATE_SIZE_RX);
 
 	*ctx = priv_rx;
 }
@@ -279,10 +278,10 @@ resync_post_get_progress_params(struct mlx5e_icosq *sq,
 
 	BUILD_BUG_ON(MLX5E_KTLS_GET_PROGRESS_WQEBBS != 1);
 
-	spin_lock(&sq->channel->async_icosq_lock);
+	spin_lock_bh(&sq->channel->async_icosq_lock);
 
 	if (unlikely(!mlx5e_wqc_has_room_for(&sq->wq, sq->cc, sq->pc, 1))) {
-		spin_unlock(&sq->channel->async_icosq_lock);
+		spin_unlock_bh(&sq->channel->async_icosq_lock);
 		err = -ENOSPC;
 		goto err_dma_unmap;
 	}
@@ -313,7 +312,7 @@ resync_post_get_progress_params(struct mlx5e_icosq *sq,
 	icosq_fill_wi(sq, pi, &wi);
 	sq->pc++;
 	mlx5e_notify_hw(&sq->wq, sq->pc, sq->uar_map, cseg);
-	spin_unlock(&sq->channel->async_icosq_lock);
+	spin_unlock_bh(&sq->channel->async_icosq_lock);
 
 	return 0;
 
@@ -374,7 +373,7 @@ static int resync_handle_seq_match(struct mlx5e_ktls_offload_context_rx *priv_rx
 	err = 0;
 
 	sq = &c->async_icosq;
-	spin_lock(&c->async_icosq_lock);
+	spin_lock_bh(&c->async_icosq_lock);
 
 	cseg = post_static_params(sq, priv_rx);
 	if (IS_ERR(cseg)) {
@@ -386,7 +385,7 @@ static int resync_handle_seq_match(struct mlx5e_ktls_offload_context_rx *priv_rx
 	mlx5e_notify_hw(&sq->wq, sq->pc, sq->uar_map, cseg);
 	priv_rx->stats->tls_resync_res_ok++;
 unlock:
-	spin_unlock(&c->async_icosq_lock);
+	spin_unlock_bh(&c->async_icosq_lock);
 
 	return err;
 }
@@ -494,19 +493,22 @@ static void resync_update_sn(struct mlx5e_rq *rq, struct sk_buff *skb)
 
 	depth += sizeof(struct tcphdr);
 
-	if (unlikely(!sk || sk->sk_state == TCP_TIME_WAIT))
+	if (unlikely(!sk))
 		return;
+
+	if (unlikely(sk->sk_state == TCP_TIME_WAIT))
+		goto unref;
 
 	if (unlikely(!resync_queue_get_psv(sk)))
-		return;
-
-	skb->sk = sk;
-	skb->destructor = sock_edemux;
+		goto unref;
 
 	seq = th->seq;
 	datalen = skb->len - depth;
 	tls_offload_rx_resync_async_request_start(sk, seq, datalen);
 	rq->stats->tls_resync_req_start++;
+
+unref:
+	sock_gen_put(sk);
 }
 
 void mlx5e_ktls_rx_resync(struct net_device *netdev, struct sock *sk,

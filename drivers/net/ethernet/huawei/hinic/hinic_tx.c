@@ -97,17 +97,15 @@ void hinic_txq_get_stats(struct hinic_txq *txq, struct hinic_txq_stats *stats)
 	struct hinic_txq_stats *txq_stats = &txq->txq_stats;
 	unsigned int start;
 
-	u64_stats_update_begin(&stats->syncp);
 	do {
-		start = u64_stats_fetch_begin(&txq_stats->syncp);
+		start = u64_stats_fetch_begin_irq(&txq_stats->syncp);
 		stats->pkts    = txq_stats->pkts;
 		stats->bytes   = txq_stats->bytes;
 		stats->tx_busy = txq_stats->tx_busy;
 		stats->tx_wake = txq_stats->tx_wake;
 		stats->tx_dropped = txq_stats->tx_dropped;
 		stats->big_frags_pkts = txq_stats->big_frags_pkts;
-	} while (u64_stats_fetch_retry(&txq_stats->syncp, start));
-	u64_stats_update_end(&stats->syncp);
+	} while (u64_stats_fetch_retry_irq(&txq_stats->syncp, start));
 }
 
 /**
@@ -488,6 +486,67 @@ static int hinic_tx_offload(struct sk_buff *skb, struct hinic_sq_task *task,
 	return 0;
 }
 
+netdev_tx_t hinic_lb_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
+{
+	struct hinic_dev *nic_dev = netdev_priv(netdev);
+	u16 prod_idx, q_id = skb->queue_mapping;
+	struct netdev_queue *netdev_txq;
+	int nr_sges, err = NETDEV_TX_OK;
+	struct hinic_sq_wqe *sq_wqe;
+	unsigned int wqe_size;
+	struct hinic_txq *txq;
+	struct hinic_qp *qp;
+
+	txq = &nic_dev->txqs[q_id];
+	qp = container_of(txq->sq, struct hinic_qp, sq);
+	nr_sges = skb_shinfo(skb)->nr_frags + 1;
+
+	err = tx_map_skb(nic_dev, skb, txq->sges);
+	if (err)
+		goto skb_error;
+
+	wqe_size = HINIC_SQ_WQE_SIZE(nr_sges);
+
+	sq_wqe = hinic_sq_get_wqe(txq->sq, wqe_size, &prod_idx);
+	if (!sq_wqe) {
+		netif_stop_subqueue(netdev, qp->q_id);
+
+		sq_wqe = hinic_sq_get_wqe(txq->sq, wqe_size, &prod_idx);
+		if (sq_wqe) {
+			netif_wake_subqueue(nic_dev->netdev, qp->q_id);
+			goto process_sq_wqe;
+		}
+
+		tx_unmap_skb(nic_dev, skb, txq->sges);
+
+		u64_stats_update_begin(&txq->txq_stats.syncp);
+		txq->txq_stats.tx_busy++;
+		u64_stats_update_end(&txq->txq_stats.syncp);
+		err = NETDEV_TX_BUSY;
+		wqe_size = 0;
+		goto flush_skbs;
+	}
+
+process_sq_wqe:
+	hinic_sq_prepare_wqe(txq->sq, prod_idx, sq_wqe, txq->sges, nr_sges);
+	hinic_sq_write_wqe(txq->sq, prod_idx, sq_wqe, skb, wqe_size);
+
+flush_skbs:
+	netdev_txq = netdev_get_tx_queue(netdev, q_id);
+	if ((!netdev_xmit_more()) || (netif_xmit_stopped(netdev_txq)))
+		hinic_sq_write_db(txq->sq, prod_idx, wqe_size, 0);
+
+	return err;
+
+skb_error:
+	dev_kfree_skb_any(skb);
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.tx_dropped++;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+
+	return NETDEV_TX_OK;
+}
+
 netdev_tx_t hinic_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
@@ -685,8 +744,8 @@ static int free_tx_poll(struct napi_struct *napi, int budget)
 		netdev_txq = netdev_get_tx_queue(txq->netdev, qp->q_id);
 
 		__netif_tx_lock(netdev_txq, smp_processor_id());
-
-		netif_wake_subqueue(nic_dev->netdev, qp->q_id);
+		if (!netif_testing(nic_dev->netdev))
+			netif_wake_subqueue(nic_dev->netdev, qp->q_id);
 
 		__netif_tx_unlock(netdev_txq);
 
@@ -800,7 +859,6 @@ int hinic_init_txq(struct hinic_txq *txq, struct hinic_sq *sq,
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
 	struct hinic_hwdev *hwdev = nic_dev->hwdev;
 	int err, irqname_len;
-	size_t sges_size;
 
 	txq->netdev = netdev;
 	txq->sq = sq;
@@ -809,13 +867,13 @@ int hinic_init_txq(struct hinic_txq *txq, struct hinic_sq *sq,
 
 	txq->max_sges = HINIC_MAX_SQ_BUFDESCS;
 
-	sges_size = txq->max_sges * sizeof(*txq->sges);
-	txq->sges = devm_kzalloc(&netdev->dev, sges_size, GFP_KERNEL);
+	txq->sges = devm_kcalloc(&netdev->dev, txq->max_sges,
+				 sizeof(*txq->sges), GFP_KERNEL);
 	if (!txq->sges)
 		return -ENOMEM;
 
-	sges_size = txq->max_sges * sizeof(*txq->free_sges);
-	txq->free_sges = devm_kzalloc(&netdev->dev, sges_size, GFP_KERNEL);
+	txq->free_sges = devm_kcalloc(&netdev->dev, txq->max_sges,
+				      sizeof(*txq->free_sges), GFP_KERNEL);
 	if (!txq->free_sges) {
 		err = -ENOMEM;
 		goto err_alloc_free_sges;

@@ -4,6 +4,9 @@
    Copyright (C) 2001 Rusty Russell, 2002, 2010 Rusty Russell IBM.
 
 */
+
+#define INCLUDE_VERMAGIC
+
 #include <linux/export.h>
 #include <linux/extable.h>
 #include <linux/moduleloader.h>
@@ -2068,20 +2071,7 @@ static void frob_writable_data(const struct module_layout *layout,
 		   (layout->size - layout->ro_after_init_size) >> PAGE_SHIFT);
 }
 
-/* livepatching wants to disable read-only so it can frob module. */
-void module_disable_ro(const struct module *mod)
-{
-	if (!rodata_enabled)
-		return;
-
-	frob_text(&mod->core_layout, set_memory_rw);
-	frob_rodata(&mod->core_layout, set_memory_rw);
-	frob_ro_after_init(&mod->core_layout, set_memory_rw);
-	frob_text(&mod->init_layout, set_memory_rw);
-	frob_rodata(&mod->init_layout, set_memory_rw);
-}
-
-void module_enable_ro(const struct module *mod, bool after_init)
+static void module_enable_ro(const struct module *mod, bool after_init)
 {
 	if (!rodata_enabled)
 		return;
@@ -2125,8 +2115,8 @@ static int module_enforce_rwx_sections(Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
 }
 
 #else /* !CONFIG_STRICT_MODULE_RWX */
-/* module_{enable,disable}_ro() stubs are in module.h */
 static void module_enable_nx(const struct module *mod) { }
+static void module_enable_ro(const struct module *mod, bool after_init) {}
 static int module_enforce_rwx_sections(Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
 				       char *secstrings, struct module *mod)
 {
@@ -2307,6 +2297,15 @@ void *__symbol_get(const char *symbol)
 }
 EXPORT_SYMBOL_GPL(__symbol_get);
 
+static bool module_init_layout_section(const char *sname)
+{
+#ifndef CONFIG_MODULE_UNLOAD
+	if (module_exit_section(sname))
+		return true;
+#endif
+	return module_init_section(sname);
+}
+
 /*
  * Ensure that an exported symbol [global namespace] does not already exist
  * in the kernel or in some other module's exported symbol table.
@@ -2448,11 +2447,13 @@ static int apply_relocations(struct module *mod, const struct load_info *info)
 		if (!(info->sechdrs[infosec].sh_flags & SHF_ALLOC))
 			continue;
 
-		/* Livepatch relocation sections are applied by livepatch */
 		if (info->sechdrs[i].sh_flags & SHF_RELA_LIVEPATCH)
-			continue;
-
-		if (info->sechdrs[i].sh_type == SHT_REL)
+			err = klp_apply_section_relocs(mod, info->sechdrs,
+						       info->secstrings,
+						       info->strtab,
+						       info->index.sym, i,
+						       NULL);
+		else if (info->sechdrs[i].sh_type == SHT_REL)
 			err = apply_relocate(info->sechdrs, info->strtab,
 					     info->index.sym, i, mod);
 		else if (info->sechdrs[i].sh_type == SHT_RELA)
@@ -2514,7 +2515,7 @@ static void layout_sections(struct module *mod, struct load_info *info)
 			if ((s->sh_flags & masks[m][0]) != masks[m][0]
 			    || (s->sh_flags & masks[m][1])
 			    || s->sh_entsize != ~0UL
-			    || strstarts(sname, ".init"))
+			    || module_init_layout_section(sname))
 				continue;
 			s->sh_entsize = get_offset(mod, &mod->core_layout.size, s, i);
 			pr_debug("\t%s\n", sname);
@@ -2547,7 +2548,7 @@ static void layout_sections(struct module *mod, struct load_info *info)
 			if ((s->sh_flags & masks[m][0]) != masks[m][0]
 			    || (s->sh_flags & masks[m][1])
 			    || s->sh_entsize != ~0UL
-			    || !strstarts(sname, ".init"))
+			    || !module_init_layout_section(sname))
 				continue;
 			s->sh_entsize = (get_offset(mod, &mod->init_layout.size, s, i)
 					 | INIT_OFFSET_MASK);
@@ -2884,6 +2885,11 @@ void * __weak module_alloc(unsigned long size)
 			NUMA_NO_NODE, __builtin_return_address(0));
 }
 
+bool __weak module_init_section(const char *name)
+{
+	return strstarts(name, ".init");
+}
+
 bool __weak module_exit_section(const char *name)
 {
 	return strstarts(name, ".exit");
@@ -3154,8 +3160,7 @@ static int copy_module_from_user(const void __user *umod, unsigned long len,
 		return err;
 
 	/* Suck in entire file: we'll want most of it. */
-	info->hdr = __vmalloc(info->len,
-			GFP_KERNEL | __GFP_NOWARN, PAGE_KERNEL);
+	info->hdr = __vmalloc(info->len, GFP_KERNEL | __GFP_NOWARN);
 	if (!info->hdr)
 		return -ENOMEM;
 
@@ -3192,11 +3197,6 @@ static int rewrite_section_headers(struct load_info *info, int flags)
 		   temporary image. */
 		shdr->sh_addr = (size_t)info->hdr + shdr->sh_offset;
 
-#ifndef CONFIG_MODULE_UNLOAD
-		/* Don't load .exit sections */
-		if (module_exit_section(info->secstrings+shdr->sh_name))
-			shdr->sh_flags &= ~(unsigned long)SHF_ALLOC;
-#endif
 	}
 
 	/* Track but don't keep modinfo and version sections. */
@@ -3354,6 +3354,9 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 	}
 #endif
 
+	mod->noinstr_text_start = section_objs(info, ".noinstr.text", 1,
+						&mod->noinstr_text_size);
+
 #ifdef CONFIG_TRACEPOINTS
 	mod->tracepoints_ptrs = section_objs(info, "__tracepoints_ptrs",
 					     sizeof(*mod->tracepoints_ptrs),
@@ -3397,6 +3400,13 @@ static int find_module_sections(struct module *mod, struct load_info *info)
 	mod->ei_funcs = section_objs(info, "_error_injection_whitelist",
 					    sizeof(*mod->ei_funcs),
 					    &mod->num_ei_funcs);
+#endif
+#ifdef CONFIG_KPROBES
+	mod->kprobes_text_start = section_objs(info, ".kprobes.text", 1,
+						&mod->kprobes_text_size);
+	mod->kprobe_blacklist = section_objs(info, "_kprobe_blacklist",
+						sizeof(unsigned long),
+						&mod->num_kprobe_blacklist);
 #endif
 #ifdef CONFIG_HAVE_STATIC_CALL_INLINE
 	mod->static_call_sites = section_objs(info, ".static_call_sites",
@@ -3733,12 +3743,6 @@ static noinline int do_init_module(struct module *mod)
 	}
 	freeinit->module_init = mod->init_layout.base;
 
-	/*
-	 * We want to find out whether @mod uses async during init.  Clear
-	 * PF_USED_ASYNC.  async_schedule*() will set it.
-	 */
-	current->flags &= ~PF_USED_ASYNC;
-
 	do_mod_ctors(mod);
 	/* Start the module */
 	if (mod->init != NULL)
@@ -3764,22 +3768,13 @@ static noinline int do_init_module(struct module *mod)
 
 	/*
 	 * We need to finish all async code before the module init sequence
-	 * is done.  This has potential to deadlock.  For example, a newly
-	 * detected block device can trigger request_module() of the
-	 * default iosched from async probing task.  Once userland helper
-	 * reaches here, async_synchronize_full() will wait on the async
-	 * task waiting on request_module() and deadlock.
+	 * is done. This has potential to deadlock if synchronous module
+	 * loading is requested from async (which is not allowed!).
 	 *
-	 * This deadlock is avoided by perfomring async_synchronize_full()
-	 * iff module init queued any async jobs.  This isn't a full
-	 * solution as it will deadlock the same if module loading from
-	 * async jobs nests more than once; however, due to the various
-	 * constraints, this hack seems to be the best option for now.
-	 * Please refer to the following thread for details.
-	 *
-	 * http://thread.gmane.org/gmane.linux.kernel/1420814
+	 * See commit 0fdff3ec6d87 ("async, kmod: warn on synchronous
+	 * request_module() from async workers") for more details.
 	 */
-	if (!mod->async_probe_requested && (current->flags & PF_USED_ASYNC))
+	if (!mod->async_probe_requested)
 		async_synchronize_full();
 
 	ftrace_free_mem(mod, mod->init_layout.base, mod->init_layout.base +

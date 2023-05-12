@@ -8,8 +8,21 @@
 #include <linux/tracepoint.h>
 #include <trace/hooks/vendor_hooks.h>
 
+struct cgroup_taskset;
+#if defined(__GENKSYMS__) || !IS_ENABLED(CONFIG_CGROUPS)
+struct cgroup_subsys;
+#else
+/* struct cgroup_subsys */
+#include <linux/cgroup-defs.h>
+#endif
+
 #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
+#ifdef __GENKSYMS__
 struct task_struct;
+#else
+/* struct task_struct */
+#include <linux/sched.h>
+#endif /* __GENKSYMS__ */
 DECLARE_HOOK(android_vh_cgroup_set_task,
 	TP_PROTO(int ret, struct task_struct *task),
 	TP_ARGS(ret, task));
@@ -26,8 +39,6 @@ DECLARE_RESTRICTED_HOOK(android_rvh_refrigerator,
 #define trace_android_vh_cgroup_set_task(ret, task)
 #endif
 
-struct cgroup_subsys;
-struct cgroup_taskset;
 DECLARE_HOOK(android_vh_cgroup_attach,
 	TP_PROTO(struct cgroup_subsys *ss, struct cgroup_taskset *tset),
 	TP_ARGS(ss, tset))

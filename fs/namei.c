@@ -3758,16 +3758,18 @@ out:
 	return error;
 }
 
-static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
+static struct file * do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 {
 	struct path path;
 	int error = path_lookupat(nd, flags, &path);
-	if (!error) {
-		audit_inode(nd->name, path.dentry, 0);
-		error = vfs_open(&path, file);
-		path_put(&path);
+	if (error) {
+		return ERR_PTR(error);
 	}
-	return error;
+
+	audit_inode(nd->name, path.dentry, 0);
+	error = vfs_open(&path, file);
+	path_put(&path);
+	return file;
 }
 
 static struct file *path_openat(struct nameidata *nd,
@@ -3783,7 +3785,10 @@ static struct file *path_openat(struct nameidata *nd,
 	if (unlikely(flags & __O_TMPFILE)) {
 		error = do_tmpfile(nd, flags, op, file);
 	} else if (unlikely(flags & O_PATH)) {
-		error = do_o_path(nd, flags, file);
+		struct file *f2 = do_o_path(nd, flags, file);
+		error = PTR_ERR(file);
+		if (!error)
+			file = f2;
 	} else {
 		const char *s = path_init(nd, flags);
 		while (!(error = link_path_walk(s, nd)) &&

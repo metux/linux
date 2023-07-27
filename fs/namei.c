@@ -3770,7 +3770,7 @@ static struct file * do_o_path(struct nameidata *nd, unsigned flags, struct file
 	audit_inode(nd->name, path.dentry, 0);
 	error = vfs_open(&path, file);
 	path_put(&path);
-	return file;
+	return error ? ERR_PTR(error) : file;
 }
 
 static struct file *path_openat(struct nameidata *nd,

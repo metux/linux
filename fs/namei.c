@@ -3589,7 +3589,7 @@ finish_lookup:
 /*
  * Handle the last step of open()
  */
-static int do_open(struct nameidata *nd,
+static struct file * do_open(struct nameidata *nd,
 		   struct file *file, const struct open_flags *op)
 {
 	struct mnt_idmap *idmap;
@@ -3601,23 +3601,23 @@ static int do_open(struct nameidata *nd,
 	if (!(file->f_mode & (FMODE_OPENED | FMODE_CREATED))) {
 		error = complete_walk(nd);
 		if (error)
-			return error;
+			return ERR_PTR(error);
 	}
 	if (!(file->f_mode & FMODE_CREATED))
 		audit_inode(nd->name, nd->path.dentry, 0);
 	idmap = mnt_idmap(nd->path.mnt);
 	if (open_flag & O_CREAT) {
 		if ((open_flag & O_EXCL) && !(file->f_mode & FMODE_CREATED))
-			return -EEXIST;
+			return ERR_PTR(-EEXIST);
 		if (d_is_dir(nd->path.dentry))
-			return -EISDIR;
+			return ERR_PTR(-EISDIR);
 		error = may_create_in_sticky(idmap, nd,
 					     d_backing_inode(nd->path.dentry));
 		if (unlikely(error))
-			return error;
+			return ERR_PTR(error);
 	}
 	if ((nd->flags & LOOKUP_DIRECTORY) && !d_can_lookup(nd->path.dentry))
-		return -ENOTDIR;
+		return ERR_PTR(-ENOTDIR);
 
 	do_truncate = false;
 	acc_mode = op->acc_mode;
@@ -3628,7 +3628,7 @@ static int do_open(struct nameidata *nd,
 	} else if (d_is_reg(nd->path.dentry) && open_flag & O_TRUNC) {
 		error = mnt_want_write(nd->path.mnt);
 		if (error)
-			return error;
+			return ERR_PTR(error);
 		do_truncate = true;
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
@@ -3644,7 +3644,8 @@ static int do_open(struct nameidata *nd,
 	}
 	if (do_truncate)
 		mnt_drop_write(nd->path.mnt);
-	return error;
+
+	return error ? ERR_PTR(error) : file;
 }
 
 /**
@@ -3794,8 +3795,12 @@ static struct file *path_openat(struct nameidata *nd,
 		while (!(error = link_path_walk(s, nd)) &&
 		       (s = open_last_lookups(nd, file, op)) != NULL)
 			;
-		if (!error)
-			error = do_open(nd, file, op);
+		if (!error) {
+			struct file *f2 = do_open(nd, file, op);
+			error = PTR_ERR(file);
+			if (!error)
+				file = f2;
+		}
 		terminate_walk(nd);
 	}
 	if (likely(!error)) {

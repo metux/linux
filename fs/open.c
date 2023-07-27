@@ -1042,17 +1042,18 @@ EXPORT_SYMBOL(file_path);
  * @path: path to open
  * @file: newly allocated file with f_flag initialized
  */
-int vfs_open(const struct path *path, struct file *file)
+struct file * vfs_open(const struct path *path, struct file *file)
 {
+	int err;
 	file->f_path = *path;
-	return do_dentry_open(file, d_backing_inode(path->dentry), NULL);
+	err = do_dentry_open(file, d_backing_inode(path->dentry), NULL);
+	return err ? ERR_PTR(err) : file;
 }
 
 struct file *dentry_open(const struct path *path, int flags,
 			 const struct cred *cred)
 {
-	int error;
-	struct file *f;
+	struct file *f, *f2;
 
 	validate_creds(cred);
 
@@ -1060,14 +1061,14 @@ struct file *dentry_open(const struct path *path, int flags,
 	BUG_ON(!path->mnt);
 
 	f = alloc_empty_file(flags, cred);
-	if (!IS_ERR(f)) {
-		error = vfs_open(path, f);
-		if (error) {
-			fput(f);
-			f = ERR_PTR(error);
-		}
-	}
-	return f;
+	if (IS_ERR(f))
+		return f;
+
+	f2 = vfs_open(path, f);
+	if (PTR_ERR(f2))
+		fput(f);
+
+	return f2;
 }
 EXPORT_SYMBOL(dentry_open);
 
@@ -1091,25 +1092,23 @@ EXPORT_SYMBOL(dentry_open);
 struct file *dentry_create(const struct path *path, int flags, umode_t mode,
 			   const struct cred *cred)
 {
-	struct file *f;
-	int error;
+	struct file *f, *f2;
 
 	validate_creds(cred);
 	f = alloc_empty_file(flags, cred);
 	if (IS_ERR(f))
 		return f;
 
-	error = vfs_create(mnt_idmap(path->mnt),
+	f2 = ERR_PTR(vfs_create(mnt_idmap(path->mnt),
 			   d_inode(path->dentry->d_parent),
-			   path->dentry, mode, true);
-	if (!error)
-		error = vfs_open(path, f);
+			   path->dentry, mode, true));
+	if (!IS_ERR(f2))
+		f2 = vfs_open(path, f);
 
-	if (unlikely(error)) {
+	if (unlikely(IS_ERR(f2)))
 		fput(f);
-		return ERR_PTR(error);
-	}
-	return f;
+
+	return f2;
 }
 EXPORT_SYMBOL(dentry_create);
 

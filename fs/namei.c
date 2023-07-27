@@ -3632,8 +3632,13 @@ static struct file * do_open(struct nameidata *nd,
 		do_truncate = true;
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
-	if (!error && !(file->f_mode & FMODE_OPENED))
-		error = vfs_open(&nd->path, file);
+	if (!error && !(file->f_mode & FMODE_OPENED)) {
+		struct file *f2 = vfs_open(&nd->path, file);
+		if (IS_ERR(f2))
+			error = PTR_ERR(f2);
+		else
+			file = f2;
+	}
 	if (!error)
 		error = ima_file_check(file, op->acc_mode);
 	if (!error && do_truncate)
@@ -3768,9 +3773,9 @@ static struct file * do_o_path(struct nameidata *nd, unsigned flags, struct file
 	}
 
 	audit_inode(nd->name, path.dentry, 0);
-	error = vfs_open(&path, file);
+	file = vfs_open(&path, file);
 	path_put(&path);
-	return error ? ERR_PTR(error) : file;
+	return file;
 }
 
 static struct file *path_openat(struct nameidata *nd,

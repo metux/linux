@@ -11,6 +11,7 @@
 #include "net_driver.h"
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <net/gre.h>
 #include "efx_common.h"
 #include "efx_channels.h"
 #include "efx.h"
@@ -541,6 +542,8 @@ void efx_start_all(struct efx_nic *efx)
 	/* Start the hardware monitor if there is one */
 	efx_start_monitor(efx);
 
+	efx_selftest_async_start(efx);
+
 	/* Link state detection is normally event-driven; we have
 	 * to poll now because we could have missed a change
 	 */
@@ -601,7 +604,7 @@ void efx_net_stats(struct net_device *net_dev, struct rtnl_link_stats64 *stats)
 	struct efx_nic *efx = netdev_priv(net_dev);
 
 	spin_lock_bh(&efx->stats_lock);
-	efx->type->update_stats(efx, NULL, stats);
+	efx_nic_update_stats_atomic(efx, NULL, stats);
 	spin_unlock_bh(&efx->stats_lock);
 }
 
@@ -896,7 +899,7 @@ static void efx_reset_work(struct work_struct *data)
 	 * have changed by now.  Now that we have the RTNL lock,
 	 * it cannot change again.
 	 */
-	if (efx->state == STATE_READY)
+	if (efx_net_active(efx->state))
 		(void)efx_reset(efx, method);
 
 	rtnl_unlock();
@@ -906,7 +909,7 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 {
 	enum reset_type method;
 
-	if (efx->state == STATE_RECOVERY) {
+	if (efx_recovering(efx->state)) {
 		netif_dbg(efx, drv, efx->net_dev,
 			  "recovering: skip scheduling %s reset\n",
 			  RESET_TYPE(type));
@@ -941,7 +944,7 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 	/* If we're not READY then just leave the flags set as the cue
 	 * to abort probing or reschedule the reset later.
 	 */
-	if (READ_ONCE(efx->state) != STATE_READY)
+	if (!efx_net_active(READ_ONCE(efx->state)))
 		return;
 
 	/* efx_process_channel() will no longer read events once a
@@ -1013,6 +1016,7 @@ int efx_init_struct(struct efx_nic *efx,
 	efx->num_mac_stats = MC_CMD_MAC_NSTATS;
 	BUILD_BUG_ON(MC_CMD_MAC_NSTATS - 1 != MC_CMD_MAC_GENERATION_END);
 	mutex_init(&efx->mac_lock);
+	init_rwsem(&efx->filter_sem);
 #ifdef CONFIG_RFS_ACCEL
 	mutex_init(&efx->rps_mutex);
 	spin_lock_init(&efx->rps_hash_lock);
@@ -1086,17 +1090,7 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask,
 
 	pci_set_master(pci_dev);
 
-	/* Set the PCI DMA mask.  Try all possibilities from our
-	 * genuine mask down to 32 bits, because some architectures
-	 * (e.g. x86_64 with iommu_sac_force set) will allow 40 bit
-	 * masks event though they reject 46 bit masks.
-	 */
-	while (dma_mask > 0x7fffffffUL) {
-		rc = dma_set_mask_and_coherent(&pci_dev->dev, dma_mask);
-		if (rc == 0)
-			break;
-		dma_mask >>= 1;
-	}
+	rc = dma_set_mask_and_coherent(&pci_dev->dev, dma_mask);
 	if (rc) {
 		netif_err(efx, probe, efx->net_dev,
 			  "could not find a suitable DMA mask\n");
@@ -1211,7 +1205,7 @@ void efx_fini_mcdi_logging(struct efx_nic *efx)
  * Stop the software path and request a slot reset.
  */
 static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
-					      pci_channel_state_t state)
+					      enum pci_channel_state state)
 {
 	pci_ers_result_t status = PCI_ERS_RESULT_RECOVERED;
 	struct efx_nic *efx = pci_get_drvdata(pdev);
@@ -1222,7 +1216,7 @@ static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
 	rtnl_lock();
 
 	if (efx->state != STATE_DISABLED) {
-		efx->state = STATE_RECOVERY;
+		efx->state = efx_recover(efx->state);
 		efx->reset_pending = 0;
 
 		efx_device_detach_sync(efx);
@@ -1276,7 +1270,7 @@ static void efx_io_resume(struct pci_dev *pdev)
 		netif_err(efx, hw, efx->net_dev,
 			  "efx_reset failed after PCI error (%d)\n", rc);
 	} else {
-		efx->state = STATE_READY;
+		efx->state = efx_recovered(efx->state);
 		netif_dbg(efx, hw, efx->net_dev,
 			  "Done resetting and resuming IO after PCI error.\n");
 	}
@@ -1296,6 +1290,89 @@ const struct pci_error_handlers efx_err_handlers = {
 	.slot_reset	= efx_io_slot_reset,
 	.resume		= efx_io_resume,
 };
+
+/* Determine whether the NIC will be able to handle TX offloads for a given
+ * encapsulated packet.
+ */
+static bool efx_can_encap_offloads(struct efx_nic *efx, struct sk_buff *skb)
+{
+	struct gre_base_hdr *greh;
+	__be16 dst_port;
+	u8 ipproto;
+
+	/* Does the NIC support encap offloads?
+	 * If not, we should never get here, because we shouldn't have
+	 * advertised encap offload feature flags in the first place.
+	 */
+	if (WARN_ON_ONCE(!efx->type->udp_tnl_has_port))
+		return false;
+
+	/* Determine encapsulation protocol in use */
+	switch (skb->protocol) {
+	case htons(ETH_P_IP):
+		ipproto = ip_hdr(skb)->protocol;
+		break;
+	case htons(ETH_P_IPV6):
+		/* If there are extension headers, this will cause us to
+		 * think we can't offload something that we maybe could have.
+		 */
+		ipproto = ipv6_hdr(skb)->nexthdr;
+		break;
+	default:
+		/* Not IP, so can't offload it */
+		return false;
+	}
+	switch (ipproto) {
+	case IPPROTO_GRE:
+		/* We support NVGRE but not IP over GRE or random gretaps.
+		 * Specifically, the NIC will accept GRE as encapsulated if
+		 * the inner protocol is Ethernet, but only handle it
+		 * correctly if the GRE header is 8 bytes long.  Moreover,
+		 * it will not update the Checksum or Sequence Number fields
+		 * if they are present.  (The Routing Present flag,
+		 * GRE_ROUTING, cannot be set else the header would be more
+		 * than 8 bytes long; so we don't have to worry about it.)
+		 */
+		if (skb->inner_protocol_type != ENCAP_TYPE_ETHER)
+			return false;
+		if (ntohs(skb->inner_protocol) != ETH_P_TEB)
+			return false;
+		if (skb_inner_mac_header(skb) - skb_transport_header(skb) != 8)
+			return false;
+		greh = (struct gre_base_hdr *)skb_transport_header(skb);
+		return !(greh->flags & (GRE_CSUM | GRE_SEQ));
+	case IPPROTO_UDP:
+		/* If the port is registered for a UDP tunnel, we assume the
+		 * packet is for that tunnel, and the NIC will handle it as
+		 * such.  If not, the NIC won't know what to do with it.
+		 */
+		dst_port = udp_hdr(skb)->dest;
+		return efx->type->udp_tnl_has_port(efx, dst_port);
+	default:
+		return false;
+	}
+}
+
+netdev_features_t efx_features_check(struct sk_buff *skb, struct net_device *dev,
+				     netdev_features_t features)
+{
+	struct efx_nic *efx = netdev_priv(dev);
+
+	if (skb->encapsulation) {
+		if (features & NETIF_F_GSO_MASK)
+			/* Hardware can only do TSO with at most 208 bytes
+			 * of headers.
+			 */
+			if (skb_inner_transport_offset(skb) >
+			    EFX_TSO2_MAX_HDRLEN)
+				features &= ~(NETIF_F_GSO_MASK);
+		if (features & (NETIF_F_GSO_MASK | NETIF_F_CSUM_MASK))
+			if (!efx_can_encap_offloads(efx, skb))
+				features &= ~(NETIF_F_GSO_MASK |
+					      NETIF_F_CSUM_MASK);
+	}
+	return features;
+}
 
 int efx_get_phys_port_id(struct net_device *net_dev,
 			 struct netdev_phys_item_id *ppid)

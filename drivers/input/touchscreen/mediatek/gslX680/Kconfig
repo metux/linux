@@ -1,0 +1,13 @@
+config TOUCHSCREEN_MTK_GSLX680
+	tristate "GSLX680 I2C touchscreen"
+	help
+	  Say Y here if you have the GSLX680 touchscreen 
+	  To compile this driver as a module, choose M here: the
+	  module will be called GSLX680.
+
+config TOUCHSCREEN_MTK_GSLX680_TPGESTURE
+	bool "gslX680 for Mediatek package gseture"
+	help
+	  Say Y here if you have gslX680 touch panel.
+
+	  If unsure, say N.

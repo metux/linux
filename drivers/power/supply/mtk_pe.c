@@ -949,7 +949,7 @@ static int mtk_pe_probe(struct platform_device *pdev)
 	pe->ta_vchr_org = 5000000;
 
 	mtk_pe_parse_dt(pe, &pdev->dev);
-	pe->bat_psy = power_supply_get_by_name("battery");
+	pe->bat_psy = devm_power_supply_get_by_phandle(&pdev->dev, "gauge");
 	if (IS_ERR_OR_NULL(pe->bat_psy))
 		pe_err("%s: devm power fail to get bat_psy\n", __func__);
 
@@ -971,7 +971,11 @@ static void mtk_pe_shutdown(struct platform_device *dev)
 }
 
 static const struct of_device_id mtk_pe_of_match[] = {
+#if IS_ENABLED(CONFIG_WB_FAST_CHARGE_ONLY_PD) //Leo 20230401
+	{.compatible = "mediatek,charger,pe_disable",},
+#else
 	{.compatible = "mediatek,charger,pe",},
+#endif
 	{},
 };
 

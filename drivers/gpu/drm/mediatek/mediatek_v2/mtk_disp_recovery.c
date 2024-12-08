@@ -35,6 +35,10 @@
 #include "mtk_disp_bdg.h"
 #include "mtk_dsi.h"
 
+#if IS_ENABLED(CONFIG_DRM_WB_EXTERN_ESD) //Leo 20231114
+#include "mtk_extern_esd.h"
+#endif
+
 #define ESD_TRY_CNT 5
 #define ESD_CHECK_PERIOD 2000 /* ms */
 static DEFINE_MUTEX(pinctrl_lock);
@@ -480,7 +484,20 @@ static int mtk_drm_esd_check(struct drm_crtc *crtc)
 		ret = _mtk_esd_check_eint(crtc);
 	} else { /* READ LCM CMD  */
 		CRTC_MMP_MARK(drm_crtc_index(crtc), esd_check, 2, 0);
+#if IS_ENABLED(CONFIG_DRM_WB_EXTERN_ESD) //Leo 20231115
+		if (0) {
+			ret = _mtk_esd_check_read(crtc);
+		}
+#if defined(M100TBUR120_YK_1486) //Leo 20241023
 		ret = _mtk_esd_check_read(crtc);
+		ret |= mtk_drm_get_extern_esd_status(EXTERN_ESD_FTS_I2C);
+#else
+		ret = mtk_drm_get_extern_esd_status(EXTERN_ESD_FTS_SPI); //Leo 20231104
+#endif
+#else
+		ret = _mtk_esd_check_read(crtc);
+#endif
+
 	}
 
 	/* switch ESD check mode */

@@ -1,0 +1,70 @@
+/*
+ * Copyright (C) 2010 - 2022 Novatek, Inc.
+ *
+ * $Revision$
+ * $Date$
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+
+&spi0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi_pins_0>;
+
+	goodix-berlin@0 {
+        compatible = "goodix,brl-b";
+        reg = <0>;
+        spi-max-frequency = <1000000>;
+    
+    
+        goodix,reset-gpio = <&pio 152 0>;
+        goodix,irq-gpio = <&pio 9 0>;
+        goodix,irq-flags = <2>; /* 1:trigger rising, 2:trigger falling; */
+        goodix,panel-max-x = <2560>;
+        goodix,panel-max-y = <1600>;
+        goodix,panel-max-w = <255>;
+    
+        /* optional properties */
+        //goodix,panel-max-p = <4096>; /* max pressure that pen device supported */
+        //goodix,pen-enable; /* support active stylus device*/
+        //goodix.sleep-enable; /* enter sleep mode */
+        goodix,firmware-name = "goodix_firmware.bin";
+        goodix,config-name = "goodix_cfg_group.bin";
+    };
+};
+
+&pio{
+	spi_pins_0:spi0@1{
+		pins_cmd_dat{
+			pinmux = <PINMUX_GPIO30__FUNC_SPI0_CLK>,
+					 <PINMUX_GPIO32__FUNC_SPI0_MO>,
+					 <PINMUX_GPIO33__FUNC_SPI0_MI>;
+			drive-strength = <2>;
+		};
+	};
+
+    himax_spi_pull_down_ctrl: himax_spi_pull_down_ctrl {
+		pins_cmd_dat {
+            pinmux = <PINMUX_GPIO31__FUNC_GPIO31>;
+            output-low;
+        };
+    };
+
+    himax_spi_pull_up_ctrl: himax_spi_pull_up_ctrl {
+        pins_cmd_dat {
+            pinmux = <PINMUX_GPIO31__FUNC_SPI0_CSB>;
+            drive-strength = <2>;
+        };
+    };
+};

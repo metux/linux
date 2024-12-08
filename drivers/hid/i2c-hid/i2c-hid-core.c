@@ -37,12 +37,43 @@
 #include <linux/mutex.h>
 #include <linux/acpi.h>
 #include <linux/of.h>
+#include <linux/pm_wakeup.h>
 #include <linux/regulator/consumer.h>
+
 
 #include <linux/platform_data/i2c-hid.h>
 
 #include "../hid-ids.h"
 #include "i2c-hid.h"
+
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT) //Leo 20240408
+#include <mt-plat/cust_gpios.h>
+#endif
+
+#if IS_ENABLED(CONFIG_DRM_MEDIATEK) //Leo 20220505
+#include "mtk_disp_notify.h"
+#include <linux/fb.h>
+#endif
+
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT)
+#include "cust_i2c_hid_desc.h"
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+extern int cust_mid_misc_is_boot_completed(void);
+#endif
+#if IS_ENABLED(CONFIG_DRM_MEDIATEK)
+static struct notifier_block i2c_hid_notifier;
+static int i2c_hid_notifier_callback(
+			struct notifier_block *self,unsigned long event, void *data);
+static void i2c_hid_resume_work(struct work_struct *work);
+#endif
+
+//#define WB_I2C_WAKELOCK_SUPPORT //Leo 20240409
+#endif
+
+
+#if !IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+#define cust_gpio_set_value(x,y)	pr_info("__func__ no implement! \n",__func__)
+#endif
 
 /* quirks to control the device */
 #define I2C_HID_QUIRK_SET_PWR_WAKEUP_DEV	BIT(0)
@@ -69,7 +100,7 @@ MODULE_PARM_DESC(debug, "print a lot of debug information");
 #define i2c_hid_dbg(ihid, fmt, arg...)					  \
 do {									  \
 	if (debug)							  \
-		dev_printk(KERN_DEBUG, &(ihid)->client->dev, fmt, ##arg); \
+		dev_printk(KERN_INFO, &(ihid)->client->dev, fmt, ##arg); \
 } while (0)
 
 struct i2c_hid_desc {
@@ -161,7 +192,20 @@ struct i2c_hid {
 
 	bool			irq_wake_enabled;
 	struct mutex		reset_lock;
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	const char *hid_name;
+	int is_need_skip_i2c;
+	bool is_resume;
+	struct delayed_work resume_work;
+#if defined(WB_I2C_WAKELOCK_SUPPORT)
+	struct wakeup_source *suspend_lock;
+#endif
+#endif
 };
+
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+static struct i2c_hid *g_ihid = NULL;
+#endif
 
 static const struct i2c_hid_quirks {
 	__u16 idVendor;
@@ -226,6 +270,15 @@ static int __i2c_hid_command(struct i2c_client *client,
 	int length = command->length;
 	bool wait = command->wait;
 	unsigned int registerIndex = command->registerIndex;
+
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+	if ((cust_mid_misc_is_boot_completed() == 0) && ihid->is_need_skip_i2c == true) {
+		i2c_hid_dbg(ihid, "%s:keyboard disconnect and boot uncompleted,just return !\n",__func__);
+		return 0;
+	}
+#endif
+#endif
 
 	/* special case for hid_descr_cmd */
 	if (command == &hid_descr_cmd) {
@@ -538,9 +591,16 @@ static irqreturn_t i2c_hid_irq(int irq, void *dev_id)
 {
 	struct i2c_hid *ihid = dev_id;
 
-	if (test_bit(I2C_HID_READ_PENDING, &ihid->flags))
+	if (test_bit(I2C_HID_READ_PENDING, &ihid->flags)) {
+		i2c_hid_dbg(ihid, "i2c_hid_irq I2C_HID_READ_PENDING return ! \n");
 		return IRQ_HANDLED;
+	}
 
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT)
+#if defined(WB_I2C_WAKELOCK_SUPPORT)
+	__pm_wakeup_event(ihid->suspend_lock, 500);
+#endif
+#endif
 	i2c_hid_get_input(ihid);
 
 	return IRQ_HANDLED;
@@ -741,8 +801,18 @@ static int i2c_hid_parse(struct hid_device *hid)
 	if (ret)
 		return ret;
 
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	if (ihid->hid_name) {
+		use_override = i2c_hid_get_cust_hid_report_desc_override(ihid->hid_name,
+								&rsize);
+	} else {
+		use_override = i2c_hid_get_cust_hid_report_desc_override("elan",
+								&rsize);
+	}
+#else
 	use_override = i2c_hid_get_dmi_hid_report_desc_override(client->name,
 								&rsize);
+#endif
 
 	if (use_override) {
 		rdesc = use_override;
@@ -871,6 +941,30 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 	int ret;
 
 	/* i2c hid fetch using a fixed descriptor size (30 bytes) */
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	ret = i2c_smbus_read_byte(client);
+	if (ret < 0) {
+		dev_dbg(&client->dev, "nothing at this address: use default hid_desc %d\n", ret);
+		ihid->is_need_skip_i2c = true;
+		if (ihid->hid_name) {
+			ihid->hdesc =
+				*i2c_hid_get_cust_i2c_hid_desc_override(ihid->hid_name);
+		} else {
+			ihid->hdesc =
+				*i2c_hid_get_cust_i2c_hid_desc_override("elan");
+		}
+	} else {
+		i2c_hid_dbg(ihid, "Fetching the HID descriptor\n");
+		ihid->is_need_skip_i2c = false;
+		ret = i2c_hid_command(client, &hid_descr_cmd,
+				      ihid->hdesc_buffer,
+				      sizeof(struct i2c_hid_desc));
+		if (ret) {
+			dev_err(&client->dev, "hid_descr_cmd failed\n");
+			return -ENODEV;
+		}
+	}
+#else
 	if (i2c_hid_get_dmi_i2c_hid_desc_override(client->name)) {
 		i2c_hid_dbg(ihid, "Using a HID descriptor override\n");
 		ihid->hdesc =
@@ -885,6 +979,7 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 			return -ENODEV;
 		}
 	}
+#endif
 
 	/* Validate the length of HID descriptor, the 4 first bytes:
 	 * bytes 0-1 -> length
@@ -906,6 +1001,8 @@ static int i2c_hid_fetch_hid_descriptor(struct i2c_hid *ihid)
 	}
 	i2c_hid_dbg(ihid, "HID Descriptor: %*ph\n", dsize, ihid->hdesc_buffer);
 	return 0;
+
+
 }
 
 #ifdef CONFIG_ACPI
@@ -1081,19 +1178,29 @@ static int i2c_hid_probe(struct i2c_client *client,
 	/* Parse platform agnostic common properties from ACPI / device tree */
 	i2c_hid_fwnode_probe(client, &ihid->pdata);
 
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	ret = of_property_read_string(client->dev.of_node, "hid_name", (const char **)&ihid->hid_name);
+	if (ret) {
+		pr_err("[%s]: of_property_read_string hid_name failed: %d\n",
+				__func__, ret);
+	}
+	cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, VALUE_ON);
+	//device_init_wakeup(&client->dev, true);
+#else
 	ihid->pdata.supplies[0].supply = "vdd";
 	ihid->pdata.supplies[1].supply = "vddl";
-
+	
 	ret = devm_regulator_bulk_get(&client->dev,
 				      ARRAY_SIZE(ihid->pdata.supplies),
 				      ihid->pdata.supplies);
 	if (ret)
 		return ret;
-
+	
 	ret = regulator_bulk_enable(ARRAY_SIZE(ihid->pdata.supplies),
 				    ihid->pdata.supplies);
 	if (ret < 0)
 		return ret;
+#endif
 
 	if (ihid->pdata.post_power_delay_ms)
 		msleep(ihid->pdata.post_power_delay_ms);
@@ -1122,17 +1229,29 @@ static int i2c_hid_probe(struct i2c_client *client,
 	device_enable_async_suspend(&client->dev);
 
 	/* Make sure there is something at this address */
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	if (0) {
+		ret = i2c_smbus_read_byte(client);
+		if (ret < 0) {
+			dev_dbg(&client->dev, "nothing at this address: %d\n", ret);
+			ret = -ENXIO;
+			goto err_regulator;
+		}
+	}
+#else
 	ret = i2c_smbus_read_byte(client);
 	if (ret < 0) {
 		dev_dbg(&client->dev, "nothing at this address: %d\n", ret);
 		ret = -ENXIO;
 		goto err_regulator;
 	}
+	
+#endif
 
 	ret = i2c_hid_fetch_hid_descriptor(ihid);
 	if (ret < 0)
 		goto err_regulator;
-
+	
 	ret = i2c_hid_init_irq(client);
 	if (ret < 0)
 		goto err_regulator;
@@ -1166,6 +1285,25 @@ static int i2c_hid_probe(struct i2c_client *client,
 		goto err_mem_free;
 	}
 
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240409
+	g_ihid = ihid;
+
+#if defined(WB_I2C_WAKELOCK_SUPPORT)
+	ihid->suspend_lock = wakeup_source_register(NULL, "i2c_hid wakelock");
+	if (!ihid->suspend_lock) {
+		hid_err(client,"wakeup source init failed.\n");
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_DRM_MEDIATEK)
+	INIT_DELAYED_WORK(&g_ihid->resume_work, i2c_hid_resume_work);
+	i2c_hid_notifier.notifier_call = i2c_hid_notifier_callback;
+	if (mtk_disp_notifier_register("i2c_hid", &i2c_hid_notifier))
+		i2c_hid_dbg(ihid,"register mtk_disp_notifier_register fail!\n");
+#endif /*CONFIG_DRM_MEDIATEK*/
+#endif
+
+	pr_info("i2c_hid probe done! \n");
 	return 0;
 
 err_mem_free:
@@ -1175,8 +1313,12 @@ err_irq:
 	free_irq(client->irq, ihid);
 
 err_regulator:
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, VALUE_OFF);
+#else
 	regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
 			       ihid->pdata.supplies);
+#endif
 	i2c_hid_free_buffers(ihid);
 	return ret;
 }
@@ -1194,8 +1336,19 @@ static int i2c_hid_remove(struct i2c_client *client)
 	if (ihid->bufsize)
 		i2c_hid_free_buffers(ihid);
 
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+	cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, VALUE_OFF);
+#if defined(WB_I2C_WAKELOCK_SUPPORT)
+	if (ihid->suspend_lock)
+		wakeup_source_unregister(ihid->suspend_lock);
+#endif
+#if IS_ENABLED(CONFIG_DRM_MEDIATEK) //Leo 20220505
+	mtk_disp_notifier_unregister(&i2c_hid_notifier);
+#endif
+#else
 	regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
 			       ihid->pdata.supplies);
+#endif
 
 	return 0;
 }
@@ -1235,11 +1388,15 @@ static int i2c_hid_suspend(struct device *dev)
 		if (!wake_status)
 			ihid->irq_wake_enabled = true;
 		else
-			hid_warn(hid, "Failed to enable irq wake: %d\n",
+			i2c_hid_dbg(ihid, "Failed to enable irq wake: %d\n",
 				wake_status);
 	} else {
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+		cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, VALUE_OFF);
+#else
 		regulator_bulk_disable(ARRAY_SIZE(ihid->pdata.supplies),
 				       ihid->pdata.supplies);
+#endif
 	}
 
 	return 0;
@@ -1254,24 +1411,28 @@ static int i2c_hid_resume(struct device *dev)
 	int wake_status;
 
 	if (!device_may_wakeup(&client->dev)) {
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240408
+		cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, VALUE_ON);
+#else
 		ret = regulator_bulk_enable(ARRAY_SIZE(ihid->pdata.supplies),
 					    ihid->pdata.supplies);
 		if (ret)
-			hid_warn(hid, "Failed to enable supplies: %d\n", ret);
+			i2c_hid_dbg(ihid, "Failed to enable supplies: %d\n", ret);
+#endif
 
 		if (ihid->pdata.post_power_delay_ms)
 			msleep(ihid->pdata.post_power_delay_ms);
+
 	} else if (ihid->irq_wake_enabled) {
 		wake_status = disable_irq_wake(client->irq);
 		if (!wake_status)
 			ihid->irq_wake_enabled = false;
 		else
-			hid_warn(hid, "Failed to disable irq wake: %d\n",
+			i2c_hid_dbg(ihid, "Failed to disable irq wake: %d\n",
 				wake_status);
 	}
 
 	enable_irq(client->irq);
-
 	/* Instead of resetting device, simply powers the device on. This
 	 * solves "incomplete reports" on Raydium devices 2386:3118 and
 	 * 2386:4B33 and fixes various SIS touchscreens no longer sending
@@ -1297,9 +1458,57 @@ static int i2c_hid_resume(struct device *dev)
 }
 #endif
 
+
+#if IS_ENABLED(CONFIG_WB_I2C_HID_DESC_SUPPORT) //Leo 20240409
+#if IS_ENABLED(CONFIG_DRM_MEDIATEK)
+static void i2c_hid_resume_work(struct work_struct *work)
+{
+	if (g_ihid->is_resume == true) {
+		i2c_hid_resume(&g_ihid->client->dev);
+	} else {
+		i2c_hid_suspend(&g_ihid->client->dev);
+	}
+}
+
+static int i2c_hid_notifier_callback(
+			struct notifier_block *self,
+			unsigned long event, void *data)
+{
+	int blank;
+
+	pr_info("%s\n", __func__);
+
+	/* If we aren't interested in this event, skip it immediately ... */
+	if (event != MTK_DISP_EVENT_BLANK)
+		return 0;
+
+	blank = *(int *)data;
+	pr_info("fb_notify(blank=%d)\n", blank);
+	
+	switch (blank) {
+	case FB_BLANK_UNBLANK:
+		pr_info("Leo LCD ON Notify\n");
+		g_ihid->is_resume = true;
+		schedule_delayed_work(&g_ihid->resume_work, msecs_to_jiffies(0));
+		break;
+	case MTK_DISP_BLANK_POWERDOWN:
+		pr_info("LCD OFF Notify\n");
+		g_ihid->is_resume = false;
+		schedule_delayed_work(&g_ihid->resume_work, msecs_to_jiffies(0));
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+#endif
+#endif
+
+#if !IS_ENABLED(CONFIG_DRM_MEDIATEK) //Leo 20240409
 static const struct dev_pm_ops i2c_hid_pm = {
 	SET_SYSTEM_SLEEP_PM_OPS(i2c_hid_suspend, i2c_hid_resume)
 };
+#endif
 
 static const struct i2c_device_id i2c_hid_id_table[] = {
 	{ "hid", 0 },
@@ -1312,7 +1521,9 @@ MODULE_DEVICE_TABLE(i2c, i2c_hid_id_table);
 static struct i2c_driver i2c_hid_driver = {
 	.driver = {
 		.name	= "i2c_hid",
+#if !IS_ENABLED(CONFIG_DRM_MEDIATEK) //Leo 20240409
 		.pm	= &i2c_hid_pm,
+#endif
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.acpi_match_table = ACPI_PTR(i2c_hid_acpi_match),
 		.of_match_table = of_match_ptr(i2c_hid_of_match),

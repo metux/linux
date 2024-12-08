@@ -1,0 +1,24 @@
+#
+# Focaltech Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_FTS_SPI
+    tristate "Focaltech chipset SPI touchscreen"
+    default n
+    help
+      Say Y here if you have Focaltech touch panel.
+      If unsure, say N.
+      
+config TOUCHSCREEN_FTS_X_REVERSE
+    bool "Focaltech Touchscreen X reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen X reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_Y_REVERSE
+    bool "Focaltech Touchscreen Y reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Y reverse.
+      If unsure, say N.

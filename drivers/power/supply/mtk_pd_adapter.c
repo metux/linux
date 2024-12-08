@@ -47,6 +47,11 @@
 #define PHY_MODE_DPDMPULLDOWN_SET 3
 #define PHY_MODE_DPDMPULLDOWN_CLR 4
 
+#if !defined(M100TB_DG_P3PRO_527) //Leo 20230921
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+extern void set_other_pd_reset_state(bool state);
+#endif
+#endif
 
 struct mtk_pd_adapter_info {
 	struct tcpc_device *tcpc;
@@ -71,7 +76,11 @@ struct apdo_pps_range {
 
 static struct apdo_pps_range apdo_pps_tbl[] = {
 	{5000, 3300, 5900},	/* 5VProg */
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+	{9000, 9000, 10000},	/* 9VProg */
+#else
 	{9000, 3300, 11000},	/* 9VProg */
+#endif
 	{15000, 3300, 16000},	/* 15VProg */
 	{20000, 3300, 21000},	/* 20VProg */
 };
@@ -165,6 +174,9 @@ static int usb_dpdm_pulldown(struct adapter_device *adapter,
 		return 0;
 }
 
+#if defined(M100TBR210_KJ_965) //Leo 20231212
+extern int is_pd_adapter;
+#endif
 
 static int pd_tcp_notifier_call(struct notifier_block *pnb,
 				unsigned long event, void *data)
@@ -180,6 +192,16 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 	pr_notice("PD charger event:%d %d\n", (int)event,
 		(int)noti->pd_state.connected);
 
+#if defined(M100TBR210_KJ_965) //Leo 20231212
+	if ((event == 14) && (noti->pd_state.connected == 7)) {
+		is_pd_adapter = true;
+		pr_info("PD charger is_pd_adapter true\n");
+	} else if ((event == 14) && (noti->pd_state.connected == 5)) {
+		is_pd_adapter = false;
+		pr_info("PD charger is_pd_adapter false\n");
+	}
+#endif
+
 	switch (event) {
 	case TCP_NOTIFY_PD_STATE:
 		switch (noti->pd_state.connected) {
@@ -189,6 +211,11 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 				MTK_PD_CONNECT_NONE, NULL);
 //			notify_adapter_event(MTK_PD_ADAPTER,
 //				MTK_PD_CONNECT_NONE, NULL);
+#if !defined(M100TB_DG_P3PRO_527) //Leo 20230921
+			#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+			set_other_pd_reset_state(false);
+			#endif
+#endif
 			break;
 
 		case PD_CONNECT_HARD_RESET:
@@ -213,6 +240,11 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 				MTK_PD_CONNECT_PE_READY_SNK_PD30, NULL);
 //			notify_adapter_event(MTK_PD_ADAPTER,
 //				MTK_PD_CONNECT_PE_READY_SNK_PD30, NULL);
+#if !defined(M100TB_DG_P3PRO_527) //Leo 20230921
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)//LQ
+			set_other_pd_reset_state(true);
+#endif
+#endif
 			break;
 
 		case PD_CONNECT_PE_READY_SNK_APDO:
@@ -221,6 +253,11 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 				MTK_PD_CONNECT_PE_READY_SNK_APDO, NULL);
 //			notify_adapter_event(MTK_PD_ADAPTER,
 //				MTK_PD_CONNECT_PE_READY_SNK_APDO, NULL);
+#if !defined(M100TB_DG_P3PRO_527) //Leo 20230921
+			#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+			set_other_pd_reset_state(true);
+			#endif
+#endif
 			break;
 
 		case PD_CONNECT_TYPEC_ONLY_SNK_DFT:
@@ -351,7 +388,7 @@ static int pd_set_cap(struct adapter_device *dev, enum adapter_cap_type type,
 	if (tcpm_ret == TCP_DPM_RET_REJECT)
 		return MTK_ADAPTER_REJECT;
 	else if (tcpm_ret != 0)
-		return MTK_ADAPTER_ERROR;
+		return MTK_ADAPTER_ERROR; //4 //Leo
 
 	return ret;
 }
@@ -431,7 +468,7 @@ static int pd_get_cap(struct adapter_device *dev,
 	if (info == NULL || info->tcpc == NULL)
 		return MTK_ADAPTER_ERROR;
 
-	if (type == MTK_PD_APDO) {
+	if (type == MTK_PD_APDO) { //Leo 20230417
 		while (1) {
 			ret = tcpm_inquire_pd_source_apdo(info->tcpc,
 					TCPM_POWER_CAP_APDO_TYPE_PPS,
@@ -458,6 +495,10 @@ static int pd_get_cap(struct adapter_device *dev,
 			/* If TA has PDP, we set pwr_limit as true */
 			if (tacap->pdp > 0 && !tacap->pwr_limit[idx])
 				tacap->pwr_limit[idx] = 1;
+#if 0//defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+			apdo_cap.max_mv = 10000;
+			apdo_cap.min_mv = 9000;
+#endif
 			tacap->ma[idx] = apdo_cap.ma;
 			tacap->max_mv[idx] = apdo_cap.max_mv;
 			tacap->min_mv[idx] = apdo_cap.min_mv;

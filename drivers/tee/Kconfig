@@ -31,6 +31,7 @@ source "drivers/tee/amdtee/Kconfig"
 source "drivers/tee/teeperf/Kconfig"
 source "drivers/tee/gud/Kconfig"
 source "drivers/tee/teei/Kconfig"
+source "drivers/tee/tkcore/Kconfig"
 
 
 endmenu

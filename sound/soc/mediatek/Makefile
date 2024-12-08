@@ -54,10 +54,14 @@ obj-$(CONFIG_MTK_ULTRASND_PROXIMITY) += ultrasound/
 
 obj-$(CONFIG_MTK_SCP_AUDIO) += audio_scp/
 
+obj-$(CONFIG_SND_SOC_AW882XX) += aw882xx/
+
 # include path
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include
 
+obj-$(CONFIG_SND_SOC_AW87XXX) += aw87xxx/
+obj-$(CONFIG_SND_SOC_AW883XX_NEW) += aw883xx_new/
 # New architecture
 ifeq ($(CONFIG_MTK_SND_SOC_NEW_ARCH),y)
 obj-$(CONFIG_SND_SOC_MTK_BTCVSD) += common/

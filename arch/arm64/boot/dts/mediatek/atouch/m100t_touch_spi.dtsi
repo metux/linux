@@ -1,0 +1,10 @@
+
+#include <generated/autoconf.h>
+
+#if (defined(CONFIG_TOUCHSCREEN_NT36xxx_HOSTDL_SPI) || defined(CONFIG_TOUCHSCREEN_NT36xxx_HOSTDL_SPI_MODULE))
+//#include "mediatek/atouch/novatek-nt36xxx-spi0.dtsi"
+#endif
+
+//#if defined(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET_SPI_MODULE)
+#include "mediatek/atouch/himax.dtsi"
+//#endif

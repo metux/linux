@@ -150,10 +150,7 @@ enum {
 	UFSHCD_STATE_EH_SCHEDULED_NON_FATAL,
 };
 
-/* UFSHCD error handling flags */
-enum {
-	UFSHCD_EH_IN_PROGRESS = (1 << 0),
-};
+
 
 /* UFSHCD UIC layer error flags */
 enum {
@@ -166,12 +163,6 @@ enum {
 	UFSHCD_UIC_PA_GENERIC_ERROR = (1 << 6), /* Generic PA error */
 };
 
-#define ufshcd_set_eh_in_progress(h) \
-	((h)->eh_flags |= UFSHCD_EH_IN_PROGRESS)
-#define ufshcd_eh_in_progress(h) \
-	((h)->eh_flags & UFSHCD_EH_IN_PROGRESS)
-#define ufshcd_clear_eh_in_progress(h) \
-	((h)->eh_flags &= ~UFSHCD_EH_IN_PROGRESS)
 
 struct ufs_pm_lvl_states ufs_pm_lvl_states[] = {
 	{UFS_ACTIVE_PWR_MODE, UIC_LINK_ACTIVE_STATE},
@@ -733,16 +724,6 @@ static inline void ufshcd_utmrl_clear(struct ufs_hba *hba, u32 pos)
 		ufshcd_writel(hba, (1 << pos), REG_UTP_TASK_REQ_LIST_CLEAR);
 	else
 		ufshcd_writel(hba, ~(1 << pos), REG_UTP_TASK_REQ_LIST_CLEAR);
-}
-
-/**
- * ufshcd_outstanding_req_clear - Clear a bit in outstanding request field
- * @hba: per adapter instance
- * @tag: position of the bit to be cleared
- */
-static inline void ufshcd_outstanding_req_clear(struct ufs_hba *hba, int tag)
-{
-	clear_bit(tag, &hba->outstanding_reqs);
 }
 
 /**
@@ -2120,6 +2101,7 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	}
 	/* Make sure that doorbell is committed immediately */
 	wmb();
+	trace_android_vh_ufs_send_command_post_change(hba, lrbp);
 }
 
 /**
@@ -2785,7 +2767,9 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	}
 	/* Make sure descriptors are ready before ringing the doorbell */
 	wmb();
-
+	trace_android_vh_ufs_perf_huristic_ctrl(hba, lrbp, &err);
+	if (err)
+		goto out;
 	ufshcd_send_command(hba, tag);
 out:
 	up_read(&hba->clk_scaling_lock);
@@ -2887,37 +2871,76 @@ ufshcd_dev_cmd_completion(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 static int ufshcd_wait_for_dev_cmd(struct ufs_hba *hba,
 		struct ufshcd_lrb *lrbp, int max_timeout)
 {
-	int err = 0;
-	unsigned long time_left;
+	unsigned long time_left = msecs_to_jiffies(max_timeout);
 	unsigned long flags;
+	bool pending;
+	int err;
 
+retry:
 	time_left = wait_for_completion_timeout(hba->dev_cmd.complete,
-			msecs_to_jiffies(max_timeout));
+					time_left);
 
 	/* Make sure descriptors are ready before ringing the doorbell */
 	wmb();
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	hba->dev_cmd.complete = NULL;
 	if (likely(time_left)) {
+		/*
+		* The completion handler called complete() and the caller of
+		* this function still owns the @lrbp tag so the code below does
+		* not trigger any race conditions.
+		*/
+		hba->dev_cmd.complete = NULL;
 		err = ufshcd_get_tr_ocs(lrbp);
 		if (!err)
 			err = ufshcd_dev_cmd_completion(hba, lrbp);
-	}
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-
-	if (!time_left) {
+	} else {
 		err = -ETIMEDOUT;
 		dev_dbg(hba->dev, "%s: dev_cmd request timedout, tag %d\n",
 			__func__, lrbp->task_tag);
-		if (!ufshcd_clear_cmd(hba, lrbp->task_tag))
+		if (ufshcd_clear_cmd(hba, lrbp->task_tag) == 0) {
 			/* successfully cleared the command, retry if needed */
 			err = -EAGAIN;
-		/*
-		 * in case of an error, after clearing the doorbell,
-		 * we also need to clear the outstanding_request
-		 * field in hba
-		 */
-		ufshcd_outstanding_req_clear(hba, lrbp->task_tag);
+			/*
+			* Since clearing the command succeeded we also need to
+			* clear the task tag bit from the outstanding_reqs
+			* variable.
+			*/
+			spin_lock_irqsave(hba->host->host_lock, flags);
+			pending = test_bit(lrbp->task_tag,
+						&hba->outstanding_reqs);
+			if (pending) {
+					hba->dev_cmd.complete = NULL;
+					__clear_bit(lrbp->task_tag,
+							&hba->outstanding_reqs);
+			}
+			spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+			if (!pending) {
+				/*
+				* The completion handler ran while we tried to
+				* clear the command.
+				*/
+				time_left = 1;
+				goto retry;
+			}
+		} else {
+			dev_err(hba->dev, "%s: failed to clear tag %d\n",
+				__func__, lrbp->task_tag);
+			spin_lock_irqsave(hba->host->host_lock, flags);
+			pending = test_bit(lrbp->task_tag,
+					   &hba->outstanding_reqs);
+			if (pending)
+				hba->dev_cmd.complete = NULL;
+			spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+			if (!pending) {
+				/*
+				 * The completion handler ran while we tried to
+				 * clear the command.
+				 */
+				time_left = 1;
+				goto retry;
+			}
+		}
 	}
 
 	return err;
@@ -5180,7 +5203,7 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 }
 
 /* Release the resources allocated for processing a SCSI command. */
-static void ufshcd_release_scsi_cmd(struct ufs_hba *hba,
+void ufshcd_release_scsi_cmd(struct ufs_hba *hba,
 				    struct ufshcd_lrb *lrbp)
 {
 	struct scsi_cmnd *cmd = lrbp->cmd;
@@ -5191,6 +5214,7 @@ static void ufshcd_release_scsi_cmd(struct ufs_hba *hba,
 	ufshcd_release(hba);
 	ufshcd_clk_scaling_update_busy(hba);
 }
+EXPORT_SYMBOL_GPL(ufshcd_release_scsi_cmd);
 
 /**
  * __ufshcd_transfer_req_compl - handle SCSI and query command completion
@@ -5211,9 +5235,13 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 		lrbp->compl_time_stamp = ktime_get();
 		cmd = lrbp->cmd;
 		if (cmd) {
+			bool done = false;
 			if (unlikely(ufshcd_should_inform_monitor(hba, lrbp)))
 				ufshcd_update_monitor(hba, lrbp);
 			trace_android_vh_ufs_compl_command(hba, lrbp);
+			trace_android_vh_ufs_compl_rsp_check_done(hba, lrbp, &done);
+			if (done)
+				return;
 			ufshcd_add_command_trace(hba, index, "complete");
 			cmd->result = ufshcd_transfer_rsp_status(hba, lrbp);
 			ufshcd_release_scsi_cmd(hba, lrbp);
@@ -5780,11 +5808,13 @@ out:
 }
 
 /* Complete requests that have door-bell cleared */
-static void ufshcd_complete_requests(struct ufs_hba *hba)
+void ufshcd_complete_requests(struct ufs_hba *hba)
 {
 	ufshcd_trc_handler(hba, false);
 	ufshcd_tmc_handler(hba);
 }
+EXPORT_SYMBOL_GPL(ufshcd_complete_requests);
+
 
 /**
  * ufshcd_quirk_dl_nac_errors - This function checks if error handling is
@@ -5898,7 +5928,7 @@ static void ufshcd_clk_scaling_suspend(struct ufs_hba *hba, bool suspend)
 	}
 }
 
-static void ufshcd_err_handling_prepare(struct ufs_hba *hba)
+void ufshcd_err_handling_prepare(struct ufs_hba *hba)
 {
 	pm_runtime_get_sync(hba->dev);
 	if (pm_runtime_status_suspended(hba->dev) || hba->is_sys_suspended) {
@@ -5933,8 +5963,9 @@ static void ufshcd_err_handling_prepare(struct ufs_hba *hba)
 	up_write(&hba->clk_scaling_lock);
 	cancel_work_sync(&hba->eeh_work);
 }
+EXPORT_SYMBOL_GPL(ufshcd_err_handling_prepare);
 
-static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
+void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
 {
 	ufshcd_scsi_unblock_requests(hba);
 	ufshcd_release(hba);
@@ -5942,6 +5973,7 @@ static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
 		ufshcd_clk_scaling_suspend(hba, false);
 	pm_runtime_put(hba->dev);
 }
+EXPORT_SYMBOL_GPL(ufshcd_err_handling_unprepare);
 
 static inline bool ufshcd_err_handling_should_stop(struct ufs_hba *hba)
 {
@@ -6014,9 +6046,15 @@ static void ufshcd_err_handler(struct work_struct *work)
 	bool err_tm = false;
 	int err = 0, pmc_err;
 	int tag;
+	bool err_handled = false;
 	bool needs_reset = false, needs_restore = false;
 
 	hba = container_of(work, struct ufs_hba, eh_work);
+
+	trace_android_vh_ufs_err_handler(hba, &err_handled);
+
+	if (err_handled)
+		return;
 
 	down(&hba->host_sem);
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -6323,14 +6361,16 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba, u32 intr_status)
 		 * update the transfer error masks to sticky bits, let's do this
 		 * irrespective of current ufshcd_state.
 		 */
+		bool skip = false;
 		hba->saved_err |= hba->errors;
 		hba->saved_uic_err |= hba->uic_error;
 
+		trace_android_vh_ufs_err_print_ctrl(hba, &skip);
 		/* dump controller state before resetting */
-		if ((hba->saved_err &
+		if (!skip &&((hba->saved_err &
 		     (INT_FATAL_ERRORS | UFSHCD_UIC_HIBERN8_MASK)) ||
 		    (hba->saved_uic_err &&
-		     (hba->saved_uic_err != UFSHCD_UIC_PA_GENERIC_ERROR))) {
+		     (hba->saved_uic_err != UFSHCD_UIC_PA_GENERIC_ERROR)))) {
 			dev_err(hba->dev, "%s: saved_err 0x%x saved_uic_err 0x%x\n",
 					__func__, hba->saved_err,
 					hba->saved_uic_err);
@@ -6395,6 +6435,7 @@ static irqreturn_t ufshcd_tmc_handler(struct ufs_hba *hba)
 static irqreturn_t ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status)
 {
 	irqreturn_t retval = IRQ_NONE;
+	bool err_check = false;
 
 	if (intr_status & UFSHCD_UIC_MASK)
 		retval |= ufshcd_uic_cmd_compl(hba, intr_status);
@@ -6405,8 +6446,13 @@ static irqreturn_t ufshcd_sl_intr(struct ufs_hba *hba, u32 intr_status)
 	if (intr_status & UTP_TASK_REQ_COMPL)
 		retval |= ufshcd_tmc_handler(hba);
 
-	if (intr_status & UTP_TRANSFER_REQ_COMPL)
+	if (intr_status & UTP_TRANSFER_REQ_COMPL) {
 		retval |= ufshcd_trc_handler(hba, ufshcd_has_utrlcnr(hba));
+
+		trace_android_vh_ufs_err_check_ctrl(hba, &err_check);
+		if (err_check)
+			ufshcd_check_errors(hba, hba->errors);
+	}
 
 	return retval;
 }
@@ -7025,8 +7071,10 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	outstanding = __test_and_clear_bit(tag, &hba->outstanding_reqs);
 	spin_unlock_irqrestore(host->host_lock, flags);
 
-	if (outstanding)
+	if (outstanding) {
 		ufshcd_release_scsi_cmd(hba, lrbp);
+		trace_android_vh_ufs_abort_success_ctrl(hba, lrbp);
+	}
 
 	err = SUCCESS;
 

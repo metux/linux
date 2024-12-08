@@ -471,7 +471,9 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 		return ret;
 	return __kernel_read(file, buf, count, pos);
 }
-EXPORT_SYMBOL_NS(kernel_read, ANDROID_GKI_VFS_EXPORT_ONLY);
+#if defined(M101TB_DG_PT2_531) //Leo 20231009
+EXPORT_SYMBOL_NS(kernel_read, ANDROID_GKI_VFS_EXPORT_ONLY); //Leo 20230328
+#endif
 
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
@@ -580,7 +582,9 @@ ssize_t kernel_write(struct file *file, const void *buf, size_t count,
 	file_end_write(file);
 	return ret;
 }
-EXPORT_SYMBOL_NS(kernel_write, ANDROID_GKI_VFS_EXPORT_ONLY);
+#if defined(M101TB_DG_PT2_531) //Leo 20231009
+EXPORT_SYMBOL_NS(kernel_write, ANDROID_GKI_VFS_EXPORT_ONLY); //Leo for sync to gki 20230328
+#endif
 
 ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {

@@ -1,5 +1,20 @@
 # SPDX-License-Identifier: GPL-2.0
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
+ccflags-y += -I$(srctree)/drivers/gpu/drm/panel
+##Leo add start 20220422
+#MTK_PLATFORM := $(subst ",,$(CONFIG_ARCH_MTK_PROJECT))
+MTK_PLATFORM := mt8781
+KBUILD_CPPFLAGS += -DWB_DRM_PAMEL_COMMON_H=\"$(MTK_PLATFORM)/panel_common.h\"
+ccflags-$(CONFIG_WB_DRM_LCM_SUPPORT) += -I$(srctree)/drivers/gpu/drm/panel/$(MTK_PLATFORM)
+LCM_SRCS := $(notdir $(wildcard $(srctree)/drivers/gpu/drm/panel/$(MTK_PLATFORM)/*.c))
+LCM_LISTS := $(addprefix $(MTK_PLATFORM)/,$(patsubst %.c, %.o, $(LCM_SRCS)))
+obj-$(CONFIG_WB_DRM_LCM_SUPPORT) += cust_panel.o
+cust_panel-$(CONFIG_WB_DRM_LCM_SUPPORT) += $(LCM_LISTS)
+
+##Leo 20220420
+obj-$(CONFIG_WB_DRM_LCM_SUPPORT) += panel_wb_common_lcm.o
+#Leo add end 20220422
 
 obj-$(CONFIG_DRM_PANEL_ARM_VERSATILE) += panel-arm-versatile.o
 obj-$(CONFIG_DRM_PANEL_ASUS_Z00T_TM5P5_NT35596) += panel-asus-z00t-tm5p5-n35596.o
@@ -85,6 +100,7 @@ obj-$(CONFIG_DRM_PANEL_TIANMA_R66451_CMD_120HZ) += panel-tianma-r66451-cmd-120hz
 obj-$(CONFIG_DRM_PANEL_TIANMA_R66451_CMD_120HZ_WA) += panel-tianma-r66451-cmd-120hz-wa.o
 obj-$(CONFIG_DRM_PANEL_TIANMA_NT36672E_VDO_120HZ_HFP) += panel-tianma-nt36672e-vdo-120hz-hfp.o
 obj-$(CONFIG_DRM_PANEL_TIANMA_NT36672E_VDO_120HZ_VFP_6382) += panel-tianma-nt36672e-vdo-120hz-vfp-6382.o
+obj-$(CONFIG_DRM_PANEL_TIANMA_NT36672C_VDO_144HZ) += panel-tianma-nt36672c-vdo-144hz.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_CPHY_VDO) += panel-alpha-jdi-nt36672e-cphy-vdo.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_120HZ) += panel-alpha-jdi-nt36672e-vdo-120hz.o
 obj-$(CONFIG_DRM_PANEL_ALPHA_JDI_NT36672E_VDO_144HZ) += panel-alpha-jdi-nt36672e-vdo-144hz.o
@@ -108,7 +124,19 @@ obj-$(CONFIG_DRM_PANEL_TIANMA_HX83102J_VDO) += panel-tianma-hx83102j-vdo.o
 
 obj-$(CONFIG_BACKLIGHT_KTZ8866)         += ktz8866.o
 obj-$(CONFIG_DRM_PANEL_EDO_HX5329_CMD_120) += panel-edo-hx5329-cmd-120hz.o
+
+obj-$(CONFIG_DRM_PANEL_FT8201AB_HJR110016D_WUXGA2000) += panel-ft8201ab_hjr110016d_wuxga2000.o
+obj-$(CONFIG_DRM_PANEL_IT6112_TV108QDM_NH4_WQXGA) += panel-it6112_tv108qdm_nh4_wqxga.o
+obj-$(CONFIG_DRM_PANEL_IT6112) += it6112.o
+
+ifneq ($(filter y m, $(CONFIG_IT6113_GM87553C_SUPPORT)),)
+it6112-$(CONFIG_DRM_PANEL_IT6112) += it6113.o gm8773c_ic.o
+else
+it6112-$(CONFIG_DRM_PANEL_IT6112) += it6112_ic.o gm8773c_ic.o
+endif
+
 obj-$(CONFIG_DRM_MTK_GENERAL_PANEL_DRV) += mtk-drm-general-panel-driver.o
+
 
 mediatek-drm-gateic-y := mtk_drm_panel_i2c.o \
 		  mtk_drm_gateic_rt4801h.o \

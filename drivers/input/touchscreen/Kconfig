@@ -9,6 +9,7 @@ menuconfig INPUT_TOUCHSCREEN
 	  This option doesn't affect the kernel.
 
 	  If unsure, say Y.
+source "drivers/input/touchscreen/mediatek/Kconfig"
 
 if INPUT_TOUCHSCREEN
 
@@ -1393,8 +1394,38 @@ config TOUCHSCREEN_HIMAX_CHIPSET
 
           If unsure, say N.
 
+config TOUCHSCREEN_FTS
+	tristate "Focaltech Touchscreen"
+	help
+	  Say Y here if you have Focaltech touch panel.
+	  If unsure, say N.
+
+config TOUCHSCREEN_JADARD_MODULE
+    tristate "JDTECH jd9366"
+    help
+        Say Y here if you have a Novatek NT36xxx touchscreen connected
+        to your system.
+        If unsure, say N.
+
+
+config FTS_FW_REQUEST_SUPPORT
+    bool "Focaltech FTS_FW_REQUEST_SUPPORT "
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Y boot update FW.
+      If unsure, say N.
+
+
+source "drivers/input/touchscreen/focaltech_touch/Kconfig"
+source "drivers/input/touchscreen/gt9xx_goodix/Kconfig"
+
 source "drivers/input/touchscreen/hxchipset/Kconfig"
 source "drivers/input/touchscreen/GT9966/Kconfig"
+source "drivers/input/touchscreen/jdchipset/Kconfig"
+source "drivers/input/touchscreen/mediatek/hxchipset_spi/Kconfig"
+source "drivers/input/touchscreen/mediatek/focaltech_touch_spi/Kconfig"
+source "drivers/input/touchscreen/mediatek/hxchipset_83122/Kconfig"
+source "drivers/input/touchscreen/mediatek/hxchipset_i2c/Kconfig"
 
 endif
 

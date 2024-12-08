@@ -170,7 +170,7 @@ static struct gpio_leds_priv *gpio_leds_create(struct platform_device *pdev)
 				led.default_state = LEDS_GPIO_DEFSTATE_OFF;
 		}
 
-		if (fwnode_property_present(child, "retain-state-suspended"))
+		//if (fwnode_property_present(child, "retain-state-suspended"))
 			led.retain_state_suspended = 1;
 		if (fwnode_property_present(child, "retain-state-shutdown"))
 			led.retain_state_shutdown = 1;

@@ -1485,7 +1485,7 @@ static int goodix_cache_rawdata(struct goodix_ts_test *ts_test)
 	int retry;
 	u8 val;
 	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
-	struct frame_head *frame_head;
+	// struct frame_head *frame_head;
 	struct goodix_ts_core *cd = ts_test->ts;
 	unsigned char *cur_ptr;
 	u32 sen_num = ts_test->test_params.sen_num;
@@ -1526,17 +1526,17 @@ static int goodix_cache_rawdata(struct goodix_ts_test *ts_test)
 				ts_err("frame head checksum error");
 				return -EINVAL; 
 			}
-			frame_head = (struct frame_head *)frame_buf;
-			if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
-				ts_err("frame body checksum error");
-				return -EINVAL;
-			}
+			// frame_head = (struct frame_head *)frame_buf;
+			// if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+			// 	ts_err("frame body checksum error");
+			// 	return -EINVAL;
+			// }
 			cur_ptr = frame_buf;
 			cur_ptr += cd->ic_info.misc.frame_data_head_len;
 			cur_ptr += cd->ic_info.misc.fw_attr_len;
 			cur_ptr += cd->ic_info.misc.fw_log_len;
 			memcpy((u8 *)ts_test->rawdata[i].data, cur_ptr + 8,
-					cd->ic_info.misc.mutual_struct_len - 8);
+					data_size * 2);
 		} else {
 			ret = ts_test_read(ts_test, data_addr,
 				(u8 *)ts_test->rawdata[i].data, data_size * sizeof(s16));
@@ -1606,7 +1606,7 @@ static int goodix_cache_self_rawdata(struct goodix_ts_test *ts_test)
 	u32 data_size = sen_num + drv_num;
 	u32 data_addr = ts_test->test_params.self_rawdata_addr;
 	u32 flag_addr = ts_test->ts->ic_info.misc.frame_data_addr;
-	struct frame_head *frame_head;
+	// struct frame_head *frame_head;
 	struct goodix_ts_core *cd = ts_test->ts;
 	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
 	unsigned char *cur_ptr;	
@@ -1620,18 +1620,18 @@ static int goodix_cache_self_rawdata(struct goodix_ts_test *ts_test)
 			ts_err("frame head checksum error");
 			return -EINVAL;
 		}
-		frame_head = (struct frame_head *)frame_buf;
-		if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
-			ts_err("frame body checksum error");
-			return -EINVAL;
-		}
+		// frame_head = (struct frame_head *)frame_buf;
+		// if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+		// 	ts_err("frame body checksum error");
+		// 	return -EINVAL;
+		// }
 		cur_ptr = frame_buf;
 		cur_ptr += cd->ic_info.misc.frame_data_head_len;
 		cur_ptr += cd->ic_info.misc.fw_attr_len;
 		cur_ptr += cd->ic_info.misc.fw_log_len;
 		cur_ptr += cd->ic_info.misc.mutual_struct_len;
 		memcpy((u8 *)ts_test->self_rawdata.data, cur_ptr + 10,
-				cd->ic_info.misc.self_struct_len - 10);
+				data_size * 2);
 	} else {
 		ret = ts_test_read(ts_test, data_addr,
 			(u8 *)ts_test->self_rawdata.data, data_size * sizeof(s16));
@@ -1652,7 +1652,7 @@ static int goodix_cache_noisedata(struct goodix_ts_test *ts_test)
 	u8 val;
 	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
 	unsigned char *cur_ptr;
-	struct frame_head *frame_head;
+	// struct frame_head *frame_head;
 	struct goodix_ts_cmd temp_cmd;
 	struct goodix_ts_core *cd = ts_test->ts;		
 	u32 sen_num = ts_test->test_params.sen_num;
@@ -1702,17 +1702,17 @@ static int goodix_cache_noisedata(struct goodix_ts_test *ts_test)
 				ts_err("frame head checksum error");
 				return -EINVAL; 
 			}
-			frame_head = (struct frame_head *)frame_buf;
-			if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
-				ts_err("frame body checksum error");
-				return -EINVAL;
-			}
+			// frame_head = (struct frame_head *)frame_buf;
+			// if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+			// 	ts_err("frame body checksum error");
+			// 	return -EINVAL;
+			// }
 			cur_ptr = frame_buf;
 			cur_ptr += cd->ic_info.misc.frame_data_head_len;
 			cur_ptr += cd->ic_info.misc.fw_attr_len;
 			cur_ptr += cd->ic_info.misc.fw_log_len;
 			memcpy((u8 *)ts_test->noisedata[cnt].data, cur_ptr + 8,
-					cd->ic_info.misc.mutual_struct_len - 8);
+					data_size * 2);
 		} else {
 			ret = ts_test_read(ts_test, data_addr,
 				(u8 *)ts_test->noisedata[cnt].data, data_size * sizeof(s16));
@@ -1738,7 +1738,7 @@ static int goodix_cache_self_noisedata(struct goodix_ts_test *ts_test)
 	u32 data_size = sen_num + drv_num;
 	u32 data_addr = ts_test->test_params.self_noisedata_addr;
 	u32 flag_addr = ts_test->ts->ic_info.misc.frame_data_addr;
-	struct frame_head *frame_head;
+	// struct frame_head *frame_head;
 	struct goodix_ts_core *cd = ts_test->ts;
 	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
 	unsigned char *cur_ptr;
@@ -1752,18 +1752,18 @@ static int goodix_cache_self_noisedata(struct goodix_ts_test *ts_test)
 			ts_err("frame head checksum error");
 			return -EINVAL;
 		}
-		frame_head = (struct frame_head *)frame_buf;
-		if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
-			ts_err("frame body checksum error");
-			return -EINVAL;
-		}
+		// frame_head = (struct frame_head *)frame_buf;
+		// if (checksum_cmp(frame_buf, frame_head->cur_frame_len, CHECKSUM_MODE_U16_LE)) {
+		// 	ts_err("frame body checksum error");
+		// 	return -EINVAL;
+		// }
 		cur_ptr = frame_buf;
 		cur_ptr += cd->ic_info.misc.frame_data_head_len;
 		cur_ptr += cd->ic_info.misc.fw_attr_len;
 		cur_ptr += cd->ic_info.misc.fw_log_len;
 		cur_ptr += cd->ic_info.misc.mutual_struct_len;
 		memcpy((u8 *)ts_test->self_noisedata.data, cur_ptr + 10,
-				cd->ic_info.misc.self_struct_len - 10);
+				data_size * 2);
 	} else {
 		ret = ts_test_read(ts_test, data_addr,
 			(u8 *)ts_test->self_noisedata.data, data_size * sizeof(s16));

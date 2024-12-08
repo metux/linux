@@ -208,7 +208,6 @@ static int brl_power_on(struct goodix_ts_core *cd, bool on)
 	int ret = 0;
 	int iovdd_gpio = cd->board_data.iovdd_gpio;
 	int avdd_gpio = cd->board_data.avdd_gpio;
-	int avdd_evt_gpio = cd->board_data.avdd_evt_gpio;
 	int reset_gpio = cd->board_data.reset_gpio;
 
 	if (on) {
@@ -222,9 +221,6 @@ static int brl_power_on(struct goodix_ts_core *cd, bool on)
 			}
 		}
 		usleep_range(3000, 3100);
-		if (avdd_evt_gpio > 0) {
-			gpio_direction_output(avdd_evt_gpio, 1);
-		}
 		if (avdd_gpio > 0) {
 			gpio_direction_output(avdd_gpio, 1);
 		} else if (cd->avdd) {
@@ -254,13 +250,10 @@ power_off:
 		gpio_direction_output(iovdd_gpio, 0);
 	else if (cd->iovdd)
 		regulator_disable(cd->iovdd);
-	if (avdd_gpio > 0) {
+	if (avdd_gpio > 0)
 		gpio_direction_output(avdd_gpio, 0);
-	} else if (cd->avdd)
+	else if (cd->avdd)
 		regulator_disable(cd->avdd);
-	if (avdd_evt_gpio > 0) {
-		gpio_direction_output(avdd_evt_gpio, 0);
-	}
 	return ret;
 }
 
@@ -351,6 +344,7 @@ static int brl_write(struct goodix_ts_core *cd, unsigned int addr,
 #define CMD_ACK_OK               0x80
 
 #define GOODIX_CMD_RETRY 6
+static DEFINE_MUTEX(cmd_mutex);
 static int brl_send_cmd(struct goodix_ts_core *cd,
 	struct goodix_ts_cmd *cmd)
 {
@@ -358,6 +352,7 @@ static int brl_send_cmd(struct goodix_ts_core *cd,
 	struct goodix_ts_cmd cmd_ack;
 	struct goodix_ic_info_misc *misc = &cd->ic_info.misc;
 	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
+	mutex_lock(&cmd_mutex);
 
 	cmd->state = 0;
 	cmd->ack = 0;
@@ -371,7 +366,7 @@ static int brl_send_cmd(struct goodix_ts_core *cd,
 				    cmd->buf, sizeof(*cmd));
 		if (ret < 0) {
 			ts_err("failed write command");
-			return ret;
+			goto exit;
 		}
 		for (i = 0; i < GOODIX_CMD_RETRY; i++) {
 			/* check command result */
@@ -379,13 +374,14 @@ static int brl_send_cmd(struct goodix_ts_core *cd,
 				cmd_ack.buf, sizeof(cmd_ack));
 			if (ret < 0) {
 				ts_err("failed read command ack, %d", ret);
-				return ret;
+				goto exit;
 			}
 			ts_debug("cmd ack data %*ph",
 				 (int)sizeof(cmd_ack), cmd_ack.buf);
 			if (cmd_ack.ack == CMD_ACK_OK) {
 				msleep(40);		// wait for cmd response
-				return 0;
+				ret = 0;
+				goto exit;
 			}
 			if (cmd_ack.ack == CMD_ACK_BUSY ||
 			    cmd_ack.ack == 0x00) {
@@ -399,7 +395,115 @@ static int brl_send_cmd(struct goodix_ts_core *cd,
 		}
 	}
 	ts_err("failed get valid cmd ack");
-	return -EINVAL;
+	ret = -EINVAL;
+exit:
+	mutex_unlock(&cmd_mutex);
+	return ret;
+}
+#define FLASH_CMD_R_START           0x09 
+#define FLASH_CMD_W_START           0x0A
+#define FLASH_CMD_RW_FINISH         0x0B
+#define FLASH_CMD_STATE_READY       0x04
+#define FLASH_CMD_STATE_CHECKERR    0x05
+#define FLASH_CMD_STATE_DENY        0x06
+#define FLASH_CMD_STATE_OKAY        0x07
+static int goodix_flash_cmd(struct goodix_ts_core *cd,
+						uint8_t cmd, uint8_t status,
+						int retry_count)
+{
+	u32 cmd_addr = cd->ic_info.misc.cmd_addr;
+	struct goodix_ts_cmd temp_cmd;
+    int ret;
+    int i;
+    u8 rcv_buf[2];
+
+	temp_cmd.state = 0;
+	temp_cmd.ack = 0;
+    temp_cmd.len = 4;
+    temp_cmd.cmd = cmd;
+	goodix_append_checksum(&temp_cmd.buf[2], temp_cmd.len - 2,
+		CHECKSUM_MODE_U8_LE);
+	ret = brl_write(cd, cmd_addr, temp_cmd.buf, temp_cmd.len + 2);
+	if (ret < 0) {
+		ts_err("send flash cmd[%x] failed", cmd);
+		return ret;
+	}
+
+    for (i = 0; i < retry_count; i++) {
+		msleep(20);
+        ret = brl_read(cd, cmd_addr, rcv_buf, 2);
+        if (rcv_buf[0] == status && rcv_buf[1] == 0x80)
+            return 0;
+    }
+
+    ts_err("r_sta[0x%x] != status[0x%x]", rcv_buf[0], status);
+    return -EINVAL;
+}
+
+static int brl_flash_read(struct goodix_ts_core *cd,
+						unsigned int addr, unsigned char *buf,
+						unsigned int len)
+{
+    int i;
+    int ret;
+    u8 *tmp_buf;
+    u32 buffer_addr = cd->ic_info.misc.fw_buffer_addr;
+    struct goodix_ts_cmd temp_cmd;
+    uint32_t checksum = 0;
+    struct flash_head head_info;
+    u8 *p = (u8 *)&head_info.address;
+
+    tmp_buf = kzalloc(len + sizeof(head_info), GFP_KERNEL);
+    if (!tmp_buf)
+        return -ENOMEM;
+
+    head_info.address = cpu_to_le32(addr);
+    head_info.length = cpu_to_le32(len);
+    for (i = 0; i < 8; i += 2)
+        checksum += p[i] | (p[i + 1] << 8);
+    head_info.checksum = checksum;
+
+    ret = goodix_flash_cmd(cd, FLASH_CMD_R_START, FLASH_CMD_STATE_READY, 15);
+    if (ret < 0) {
+        ts_err("failed enter flash read state");
+        goto read_end;
+    }
+
+    ret = brl_write(cd, buffer_addr, (u8 *)&head_info, sizeof(head_info));
+    if (ret < 0) {
+        ts_err("failed write flash head info");
+        goto read_end;   
+    }
+
+    ret = goodix_flash_cmd(cd, FLASH_CMD_RW_FINISH, FLASH_CMD_STATE_OKAY, 50);
+    if (ret) {
+        ts_err("faild read flash ready state");
+        goto read_end;
+    }
+
+    ret = brl_read(cd, buffer_addr, tmp_buf, len + sizeof(head_info));
+    if (ret < 0) {
+        ts_err("failed read data len %lu", len + sizeof(head_info));
+        goto read_end;
+    }
+
+    checksum = 0;
+    for (i = 0; i < len + sizeof(head_info) - 4; i += 2)
+        checksum += tmp_buf[4 + i] | (tmp_buf[5 + i] << 8);
+
+    if (checksum != le32_to_cpup((__le32 *)tmp_buf)) {
+        ts_err("read back data checksum error");
+        ret = -EINVAL;
+        goto read_end;
+    }
+
+    memcpy(buf, tmp_buf + sizeof(head_info), len);
+    ret = 0;    
+read_end:
+    temp_cmd.len = 4;
+    temp_cmd.cmd = 0x0C;
+    brl_send_cmd(cd, &temp_cmd);
+    return ret;
 }
 
 #pragma  pack(1)
@@ -1233,10 +1337,12 @@ static int brld_get_framedata(struct goodix_ts_core *cd,
 	int ret;
 	unsigned char val;
 	int retry = 20;
-	struct frame_head *frame_head;
+	// struct frame_head *frame_head;
 	unsigned char frame_buf[GOODIX_MAX_FRAMEDATA_LEN];
 	unsigned char *cur_ptr;
 	unsigned int flag_addr = cd->ic_info.misc.frame_data_addr;
+	int tx = cd->ic_info.parm.drv_num;
+	int rx = cd->ic_info.parm.sen_num;
 
 	/* clean touch event flag */
 	val = 0;
@@ -1269,18 +1375,18 @@ static int brld_get_framedata(struct goodix_ts_core *cd,
 		return -EINVAL;
 	}
 
-	frame_head = (struct frame_head *)frame_buf;
-	if (checksum_cmp(frame_buf, frame_head->cur_frame_len,
-			CHECKSUM_MODE_U16_LE)) {
-		ts_err("frame body checksum error");
-		return -EINVAL;
-	}
+	// frame_head = (struct frame_head *)frame_buf;
+	// if (checksum_cmp(frame_buf, frame_head->cur_frame_len,
+	// 		CHECKSUM_MODE_U16_LE)) {
+	// 	ts_err("frame body checksum error");
+	// 	return -EINVAL;
+	// }
 	cur_ptr = frame_buf;
 	cur_ptr += cd->ic_info.misc.frame_data_head_len;
 	cur_ptr += cd->ic_info.misc.fw_attr_len;
 	cur_ptr += cd->ic_info.misc.fw_log_len;
 	memcpy((u8 *)(info->buff + info->used_size), cur_ptr + 8,
-			cd->ic_info.misc.mutual_struct_len - 8);
+			tx * rx * 2);
 
 	return 0;
 }
@@ -1450,6 +1556,7 @@ static struct goodix_ts_hw_ops brl_hw_ops = {
 	.irq_enable = brl_irq_enbale,
 	.read = brl_read,
 	.write = brl_write,
+	.read_flash = brl_flash_read,
 	.send_cmd = brl_send_cmd,
 	.send_config = brl_send_config,
 	.read_config = brl_read_config,

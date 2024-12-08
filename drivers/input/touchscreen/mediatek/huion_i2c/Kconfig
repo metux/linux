@@ -1,0 +1,50 @@
+#
+# Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_HUION_PANELS
+	tristate "HUION I2C touchscreen"
+	help
+	  Say Y here if you have the HUION touchscreen
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called HUION.
+
+menuconfig TOUCHSCREEN_HUION_PANELS
+	bool "Support for huion Panels"
+
+if TOUCHSCREEN_HUION_PANELS
+
+config TOUCHSCREEN_GT9XX
+	tristate "huion touchscreen driver"
+	depends on I2C
+	default n
+	help
+	  Say Y here if you have the HUION touchscreen.
+
+	  If unsure, say N.
+
+choice
+prompt "Select Touch Protocol"
+depends on TOUCHSCREEN_GT9XX
+default TOUCHSCREEN_PROT_SINGLE
+
+config TOUCHSCREEN_PROT_MT_SYNC
+	bool "Multi-touch Protocol A"
+	help
+	  This enables the stateless type A protocol for QT + tslib.
+
+config TOUCHSCREEN_PROT_MT_SLOT
+	bool "Multi-touch Protocol B"
+	help
+	  This enables the stateful type B slot protocol for Android.
+
+config TOUCHSCREEN_PROT_SINGLE
+	bool "Single-touch Protocol"
+	help
+	  This disables multi-touch mode for Debian (xserver-xorg-input-evdev).
+
+endchoice
+
+endif

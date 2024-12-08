@@ -39,7 +39,7 @@
 			/*1:ACC mode, 2:low cost without in bias, 6:low cost with in bias*/
 			accdet-mic-mode = <1>;
 			/* eint_level_trigger: 8,LEVEL_LOW(DEF) ;4,LV_HIGH;others,LV_LOW */
-			headset-eint-level-pol = <8>;
+			headset-eint-level-pol = <4>;
 			/*0--MD_MAX--UP_MAX--DW_MAX*/
 			headset-three-key-threshold = <0 80 220 400>;
 			headset-three-key-threshold-CDD = <0 121 192 600>;
@@ -128,9 +128,11 @@
 				linux,keycodes = <116>;
 				wakeup-source;
 			};
+			/*
 			home {
 				linux,keycodes = <115>;
 			};
+			*/
 		};
 
 		mt6358regulator: mt6358regulator {
@@ -549,7 +551,7 @@
 
 		mt6358rtc: mt6358rtc {
 			compatible = "mediatek,mt6358-rtc";
-
+			skip-lpsd-solution;
 			#address-cells = <1>;
 			#size-cells = <1>;
 

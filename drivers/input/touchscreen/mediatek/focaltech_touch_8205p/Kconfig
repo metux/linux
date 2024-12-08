@@ -1,0 +1,37 @@
+#
+# Focaltech Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_FTS_SPI_8205P
+    tristate "Focaltech spi 8205p Touchscreen"
+    default n
+    help
+      Say Y here if you have Focaltech touch panel.
+      If unsure, say N.
+config TOUCHSCREEN_FTS_X_REVERSE
+    bool "Focaltech Touchscreen X reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen X reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_Y_REVERSE
+    bool "Focaltech Touchscreen Y reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Y reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_PEN_X_REVERSE
+    bool "Focaltech Touchscreen X reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen X reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_PEN_Y_REVERSE
+    bool "Focaltech Touchscreen Y reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Y reverse.
+      If unsure, say N.

@@ -37,6 +37,8 @@ ifneq ($(filter y m, $(CONFIG_TEE)),)
     include $(srctree)/drivers/tee/gud/Makefile.include
   else ifneq ($(filter y m, $(CONFIG_MICROTRUST_TEE_SUPPORT)),)
     include $(srctree)/drivers/tee/teei/Makefile.include
+  else ifneq ($(filter y m, $(CONFIG_TRUSTKERNEL_TEE_SUPPORT)),)
+    include $(srctree)/drivers/tee/tkcore/Makefile.include
   #else ifeq ($(CONFIG_BLOWFISH_TEE_SUPPORT),y)
   # ccflags-y += -I$(srctree)/drivers/misc/tzdev
   else

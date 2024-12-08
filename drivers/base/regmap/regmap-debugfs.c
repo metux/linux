@@ -291,6 +291,7 @@ static ssize_t regmap_map_read_file(struct file *file, char __user *user_buf,
 }
 
 #undef REGMAP_ALLOW_WRITE_DEBUGFS
+#define REGMAP_ALLOW_WRITE_DEBUGFS //Leo add for default 20240111
 #ifdef REGMAP_ALLOW_WRITE_DEBUGFS
 /*
  * This can be dangerous especially when we have clients such as

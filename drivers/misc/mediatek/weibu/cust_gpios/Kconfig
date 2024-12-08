@@ -1,0 +1,11 @@
+config CM_CUST_GPIOS_SUPPORT
+        tristate "cust_gpios support"
+        default n
+        help
+          CONFIG_CM_CUST_GPIOS_SUPPORT=y
+
+config CM_CUST_GPIOS_EXT_SUPPORT
+        tristate "cust_gpios extend support"
+        default y
+        help
+          CONFIG_CM_CUST_GPIOS_EXT_SUPPORT=y

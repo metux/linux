@@ -4,7 +4,7 @@
 #
 
 # Each configuration option enables a list of files.
-
+obj-$(CONFIG_MID_UART_KEYBOARD)		+= mid_uart_dock.o
 obj-$(CONFIG_KEYBOARD_ADC)		+= adc-keys.o
 obj-$(CONFIG_KEYBOARD_ADP5520)		+= adp5520-keys.o
 obj-$(CONFIG_KEYBOARD_ADP5588)		+= adp5588-keys.o

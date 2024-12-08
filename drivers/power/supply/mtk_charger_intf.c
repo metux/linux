@@ -62,6 +62,17 @@
 
 #include "mtk_charger.h"
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+#include <mt-plat/csci.h>
+#endif
+
+
+#if IS_ENABLED(CONFIG_WB_CUSTOM_GET_VBUS_VALUE)
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+extern void cust_mid_misc_set_vbus(int vbus);
+#endif
+#endif
+
 int get_uisoc(struct mtk_charger *info)
 {
 	union power_supply_propval prop;
@@ -72,7 +83,7 @@ int get_uisoc(struct mtk_charger *info)
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		chr_err("%s retry to get bat_psy\n", __func__);
-		bat_psy = power_supply_get_by_name("battery");
+		bat_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "gauge");
 		info->bat_psy = bat_psy;
 	}
 
@@ -84,6 +95,13 @@ int get_uisoc(struct mtk_charger *info)
 			POWER_SUPPLY_PROP_CAPACITY, &prop);
 		ret = prop.intval;
 	}
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+	if (csci_exist("battery.ui_soc")) {
+		ret = csci_integer("battery.ui_soc",0);
+		printk("csci get battery.ui_soc=%d\n",ret);
+	}
+#endif
 
 	chr_debug("%s:%d\n", __func__,
 		ret);
@@ -100,7 +118,7 @@ int get_battery_voltage(struct mtk_charger *info)
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		chr_err("%s retry to get bat_psy\n", __func__);
-		bat_psy = power_supply_get_by_name("battery");
+		bat_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "gauge");
 		info->bat_psy = bat_psy;
 	}
 
@@ -129,7 +147,7 @@ int get_battery_temperature(struct mtk_charger *info)
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		chr_err("%s retry to get bat_psy\n", __func__);
-		bat_psy = power_supply_get_by_name("battery");
+		bat_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "gauge");
 		info->bat_psy = bat_psy;
 	}
 
@@ -158,7 +176,7 @@ int get_battery_current(struct mtk_charger *info)
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		chr_err("%s retry to get bat_psy\n", __func__);
-		bat_psy = power_supply_get_by_name("battery");
+		bat_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "gauge");
 		info->bat_psy = bat_psy;
 	}
 
@@ -175,7 +193,8 @@ int get_battery_current(struct mtk_charger *info)
 		ret);
 	return ret;
 }
-
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) || IS_ENABLED(CONFIG_CHARGER_SGM415XX)//Leo 20230630
+#else
 static int get_pmic_vbus(struct mtk_charger *info, int *vchr)
 {
 	union power_supply_propval prop;
@@ -183,7 +202,7 @@ static int get_pmic_vbus(struct mtk_charger *info, int *vchr)
 	int ret;
 
 	if (chg_psy == NULL)
-		chg_psy = power_supply_get_by_name("primary_chg");
+		chg_psy = power_supply_get_by_name("mtk_charger_type");
 	if (chg_psy == NULL || IS_ERR(chg_psy)) {
 		chr_err("%s Couldn't get chg_psy\n", __func__);
 		ret = -1;
@@ -197,6 +216,100 @@ static int get_pmic_vbus(struct mtk_charger *info, int *vchr)
 		prop.intval);
 	return ret;
 }
+#endif
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) 
+static int get_sc8551_vbus(int *vchr)
+{
+	union power_supply_propval prop;
+	static struct power_supply *chg_psy;
+	int ret;
+
+	if (chg_psy == NULL)
+		chg_psy = power_supply_get_by_name("sc8551-standalone");
+	if (chg_psy == NULL || IS_ERR(chg_psy)) {
+		chr_err("%s Couldn't get sc8551-standalone chg_psy\n", __func__);
+		ret = -1;
+	} else {
+		ret = power_supply_get_property(chg_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_NOW, &prop);
+	}
+	*vchr = prop.intval;
+
+	chr_debug("%s vbus:%d\n", __func__,
+		prop.intval);
+	return ret;
+}
+
+static int get_sc8551_ibus(int *ibus)
+{
+	union power_supply_propval prop;
+	static struct power_supply *chg_psy;
+	int ret;
+
+	if (chg_psy == NULL)
+		chg_psy = power_supply_get_by_name("sc8551-standalone");
+	if (chg_psy == NULL || IS_ERR(chg_psy)) {
+		chr_err("%s Couldn't get sc8551-standalone chg_psy\n", __func__);
+		ret = -1;
+	} else {
+		ret = power_supply_get_property(chg_psy,
+			POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
+	}
+	*ibus = prop.intval * 1000;
+
+	chr_debug("%s vbus:%d\n", __func__,
+		prop.intval);
+	return ret;
+}
+
+static int get_sc8551_ibat(int *ibat)
+{
+	union power_supply_propval prop;
+	static struct power_supply *chg_psy;
+	int ret;
+
+	if (chg_psy == NULL)
+		chg_psy = power_supply_get_by_name("sc8551-standalone");
+	if (chg_psy == NULL || IS_ERR(chg_psy)) {
+		chr_err("%s Couldn't get sc8551-standalone chg_psy\n", __func__);
+		ret = -1;
+	} else {
+		ret = power_supply_get_property(chg_psy,
+			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, &prop);
+	}
+	
+	*ibat = prop.intval * 1000;
+
+	chr_debug("%s vbus:%d\n", __func__,
+		prop.intval);
+	return ret;
+}
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8960X) //Leo 20230630
+static int get_sc8960_online(struct mtk_charger *info)
+{
+	union power_supply_propval prop;
+	static struct power_supply *chg_psy;
+	int ret;
+
+	if (chg_psy == NULL)
+		chg_psy = devm_power_supply_get_by_phandle(&info->pdev->dev,
+						       "charger");
+	if (chg_psy == NULL || IS_ERR(chg_psy)) {
+		chr_err("%s Couldn't get sc8960 chg_psy\n", __func__);
+		ret = -1;
+	} else {
+		ret = power_supply_get_property(chg_psy,
+			POWER_SUPPLY_PROP_ONLINE, &prop);
+	}
+
+	chr_debug("%s vbus:%d\n", __func__,
+		prop.intval);
+	return prop.intval;
+}
+#endif
+#endif
 
 int get_vbus(struct mtk_charger *info)
 {
@@ -207,11 +320,43 @@ int get_vbus(struct mtk_charger *info)
 		return 0;
 	ret = charger_dev_get_vbus(info->chg1_dev, &vchr);
 	if (ret < 0) {
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) 
+		ret = get_vbus_voltage(info, &vchr);
+		if (ret < 0) {
+			ret = get_sc8551_vbus(&vchr);
+			if (ret < 0) {
+				chr_err("%s: get vbus failed: %d\n", __func__, ret);
+			} else {
+#if IS_ENABLED(CONFIG_CHARGER_SC8960X) //Leo 20230630
+				if (vchr < 3000) {
+					if (get_sc8960_online(info) == true) {
+						vchr = 5000;
+					}
+				}
+#endif
+			}
+		}
+#else
+#if IS_ENABLED(CONFIG_CHARGER_SGM415XX) 
+			ret = get_vbus_voltage(info, &vchr);
+			if (ret < 0) {
+				chr_err("%s: get_vbus_voltage failed: %d\n", __func__, ret);
+			}
+#else
+
 		ret = get_pmic_vbus(info, &vchr);
 		if (ret < 0)
 			chr_err("%s: get vbus failed: %d\n", __func__, ret);
+#endif		
+#endif
 	} else
 		vchr /= 1000;
+
+#if IS_ENABLED(CONFIG_WB_CUSTOM_GET_VBUS_VALUE)
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+	cust_mid_misc_set_vbus(vchr);
+#endif
+#endif
 
 	return vchr;
 }
@@ -224,8 +369,16 @@ int get_ibat(struct mtk_charger *info)
 	if (info == NULL)
 		return -EINVAL;
 	ret = charger_dev_get_ibat(info->chg1_dev, &ibat);
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) //Leo 20230703
+	if (ret < 0) {
+		ret = get_sc8551_ibat(&ibat);
+		if (ret < 0) 
+			chr_err("%s: get ibat failed: %d\n", __func__, ret);
+	}
+#else
 	if (ret < 0)
 		chr_err("%s: get ibat failed: %d\n", __func__, ret);
+#endif
 
 	return ibat / 1000;
 }
@@ -238,8 +391,16 @@ int get_ibus(struct mtk_charger *info)
 	if (info == NULL)
 		return -EINVAL;
 	ret = charger_dev_get_ibus(info->chg1_dev, &ibus);
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) //Leo 20230703
+	if (ret < 0) {
+		ret = get_sc8551_ibus(&ibus);
+		if (ret < 0) 
+			chr_err("%s: get ibus failed: %d\n", __func__, ret);
+	}
+#else
 	if (ret < 0)
 		chr_err("%s: get ibus failed: %d\n", __func__, ret);
+#endif
 
 	return ibus / 1000;
 }
@@ -255,7 +416,7 @@ bool is_battery_exist(struct mtk_charger *info)
 
 	if (bat_psy == NULL || IS_ERR(bat_psy)) {
 		chr_err("%s retry to get bat_psy\n", __func__);
-		bat_psy = power_supply_get_by_name("battery");
+		bat_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "gauge");
 		info->bat_psy = bat_psy;
 	}
 
@@ -284,7 +445,7 @@ bool is_charger_exist(struct mtk_charger *info)
 
 	if (chg_psy == NULL || IS_ERR(chg_psy)) {
 		chr_err("%s retry to get chg_psy\n", __func__);
-		chg_psy = power_supply_get_by_name("primary_chg");
+		chg_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "charger");
 		info->chg_psy = chg_psy;
 	}
 
@@ -302,6 +463,62 @@ bool is_charger_exist(struct mtk_charger *info)
 	return ret;
 }
 
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20221117
+#include <linux/of_platform.h>
+#include "extcon-mtk-usb.h"
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/extcon.h>
+#include <linux/of_platform.h>
+
+static struct mtk_extcon_info *g_extcon = NULL;
+static bool get_is_docking(void)
+{
+	if (g_extcon != NULL) {
+		return !gpio_get_value(g_extcon->docking_det_gpio);
+	}
+	
+	return false;
+}
+
+static bool get_mtk_extcon_info(void)
+{
+	struct device_node *pnode = NULL;
+	struct platform_device *pdev = NULL;
+	struct mtk_extcon_info *extcon = NULL;
+
+	if (g_extcon != NULL) {
+		return 0;
+	}
+
+	pnode = of_find_compatible_node(NULL, NULL, "mediatek,extcon-usb");
+	if (!pnode) {
+		pr_err("%s :failed to get pnode\n",__func__);
+		return -ENODEV;
+	}
+
+	pdev = of_find_device_by_node(pnode);
+	if (WARN_ON(!pdev)) {
+		of_node_put(pnode);
+		pr_err("%s :failed to get pdev\n",__func__);
+		return -ENODEV;
+	};
+
+	extcon = (struct mtk_extcon_info *)platform_get_drvdata(pdev);
+
+	if (extcon == NULL) {
+		pr_err("%s :failed to get extcon\n",__func__);
+		return -ENODEV;
+	}
+
+	g_extcon = extcon;
+	
+	return 0;
+}
+#endif
+
+
 int get_charger_type(struct mtk_charger *info)
 {
 	union power_supply_propval prop = {0};
@@ -314,7 +531,7 @@ int get_charger_type(struct mtk_charger *info)
 
 	if (chg_psy == NULL || IS_ERR(chg_psy)) {
 		chr_err("%s retry to get chg_psy\n", __func__);
-		chg_psy = power_supply_get_by_name("primary_chg");
+		chg_psy = devm_power_supply_get_by_phandle(&info->pdev->dev, "charger");
 		info->chg_psy = chg_psy;
 	}
 
@@ -333,7 +550,19 @@ int get_charger_type(struct mtk_charger *info)
 		if (prop.intval == 0 ||
 		    (prop2.intval == POWER_SUPPLY_TYPE_USB &&
 		    prop3.intval == POWER_SUPPLY_USB_TYPE_UNKNOWN))
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230111
+		{
+			get_mtk_extcon_info();
+			if (get_is_docking()) {
+				prop2.intval = POWER_SUPPLY_TYPE_USB_CDP;
+			} else {
+				prop2.intval = POWER_SUPPLY_TYPE_UNKNOWN;
+			}
+		}
+#else
 			prop2.intval = POWER_SUPPLY_TYPE_UNKNOWN;
+#endif
+
 	}
 
 	chr_debug("%s online:%d type:%d usb_type:%d\n", __func__,
@@ -355,7 +584,8 @@ int get_usb_type(struct mtk_charger *info)
 
 	if (chg_psy == NULL || IS_ERR(chg_psy)) {
 		chr_err("%s retry to get chg_psy\n", __func__);
-		chg_psy = power_supply_get_by_name("primary_chg");
+		chg_psy = devm_power_supply_get_by_phandle(&info->pdev->dev,
+						       "charger");
 		info->chg_psy = chg_psy;
 	}
 	if (chg_psy == NULL || IS_ERR(chg_psy)) {

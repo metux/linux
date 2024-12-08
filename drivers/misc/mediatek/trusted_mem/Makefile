@@ -61,7 +61,8 @@ ccflags-y += -DTEE_DEVICES_SUPPORT
 trusted_mem-y += tee_impl/tee_invoke.o
 
 ifneq ($(filter y m,$(CONFIG_MICROTRUST_TEE_SUPPORT)\
-				  $(CONFIG_TRUSTONIC_TEE_SUPPORT)),)
+				  $(CONFIG_TRUSTONIC_TEE_SUPPORT) \
+				  $(CONFIG_TRUSTKERNEL_TEE_SUPPORT)),)
 trusted_mem-y += tee_impl/tee_ops.o
 endif
 
@@ -107,6 +108,12 @@ ifneq ($(filter y m,$(CONFIG_TRUSTONIC_TEE_SUPPORT)),)
 ccflags-y += -I$(srctree)/drivers/tee/gud/$(CONFIG_TRUSTONIC_TEE_VERSION)/MobiCoreDriver/public
 ccflags-y += -I$(srctree)/drivers/tee/gud/$(CONFIG_TRUSTONIC_TEE_VERSION)/MobiCoreDriver/public/GP
 endif # !CONFIG_TRUSTONIC_TEE_SUPPORT
+
+# trustkernel L1 patch start
+ifneq ($(filter y m,$(CONFIG_TRUSTKERNEL_TEE_SUPPORT)),)
+ccflags-y += -I$(srctree)/drivers/tee/tkcore/include/linux
+endif # !CONFIG_TRUSTKERNEL_TEE_SUPPORT
+# trustkernel L1 patch end
 
 ifneq ($(filter y m,$(CONFIG_MICROTRUST_TEE_SUPPORT)),)
 ccflags-y += -I$(srctree)/drivers/tee/teei/$(CONFIG_MICROTRUST_TEE_VERSION)/common/include

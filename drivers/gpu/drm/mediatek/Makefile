@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
+
 ifeq (y, $(filter y, $(CONFIG_DRM_MEDIATEK_V2)))
 obj-$(CONFIG_DRM_MEDIATEK) += mediatek_v2/
 obj-$(CONFIG_DRM_MEDIATEK) += mml/

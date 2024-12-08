@@ -1,0 +1,25 @@
+&i2c6{
+	sc8989x_chg: sc8989x@6A {
+	    charger = <&sc8989x_chg>;
+		compatible = "sc,sc8989x_charger";
+		reg = <0x6A>;
+		status = "okay";
+		eint_name = "chr_stat";
+		sc,intr-gpio = <&pio 12 IRQ_TYPE_EDGE_FALLING>;
+		sc,sc8989x,usb-vlim = <4600>;
+		sc,sc8989x,usb-ilim = <500>;
+		sc,sc8989x,usb-vreg = <4400>;
+		sc,sc8989x,usb-ichg = <500>;
+		sc,sc8989x,precharge-current = <180>;
+		sc,sc8989x,termination-current = <60>;
+		sc,sc8989x,boost-voltage = <5150>;
+		sc,sc8989x,boost-current = <1200>;
+		sc,sc8989x,ichg_limit = <3600>;//max:5000
+		sc,drvbus-gpio = <&pio 103 0>;
+		chg_name = "primary_chg";
+		phys = <&u2port0 PHY_TYPE_USB2>;
+		phy-names = "usb2-phy";
+		usb = <&usb>;
+		extcon = <&fusb0>;
+    };
+};

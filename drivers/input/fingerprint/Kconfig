@@ -1,0 +1,1 @@
+source "drivers/input/fingerprint/microarray_fp/Kconfig"

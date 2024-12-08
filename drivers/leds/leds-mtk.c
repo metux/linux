@@ -15,8 +15,14 @@
 #include <linux/sched/clock.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #include <leds-mtk.h>
 
+//caozy add begin 20230906
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+#include <linux/csci.h>
+#endif
+//caozy add end 20230906
 
 /****************************************************************************
  * variables
@@ -311,6 +317,15 @@ static int mtk_set_brightness(struct led_classdev *led_cdev,
 	if (led_dat->last_brightness == brightness)
 		return 0;
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)  //jnier add 20240122
+	if(led_dat->last_brightness == 0){
+		if(csci_exist("kernel_lcm_brightness_delay")){
+			mdelay(csci_integer("kernel_lcm_brightness_delay", 0));
+			printk("kernel %s mdelay brightness %d \n",__func__,csci_integer("kernel_lcm_brightness_delay", 0));
+		}
+	}
+#endif
+
 	led_dat->last_brightness = brightness;
 
 	trans_level = brightness_maptolevel(led_conf, brightness);
@@ -375,6 +390,19 @@ int mt_leds_parse_dt(struct mt_led_data *mdev, struct fwnode_handle *fwnode)
 	const char *state;
 	struct mt_leds_desp_info *nleds_info;
 
+//caozy add begin 20230906
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+	int kernel_lcm_brightness = 0;
+	if (csci_exist("kernel_lcm_brightness")) {
+		if (csci_integer("kernel_lcm_brightness", 0) > 0) {
+			kernel_lcm_brightness = csci_integer("kernel_lcm_brightness", 0);
+			printk("csci get kernel_lcm_brightness=%d\n", kernel_lcm_brightness);
+		}
+	}
+	printk("---begin kernel_lcm_brightness=%d---\n",kernel_lcm_brightness);
+#endif
+//caozy add end 20230906
+
 	ret = fwnode_property_read_string(fwnode, "label", &(mdev->conf.cdev.name));
 	if (ret)
 		return -EINVAL;
@@ -422,6 +450,15 @@ int mt_leds_parse_dt(struct mt_led_data *mdev, struct fwnode_handle *fwnode)
 		pr_info("No min-brightness, use default value 1");
 		mdev->conf.min_brightness = 1;
 	}
+
+//caozy add begin 20230906
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+	if(kernel_lcm_brightness > 0){
+		mdev->conf.cdev.brightness = kernel_lcm_brightness;
+	}
+	printk("---end kernel_lcm_brightness=%d---\n",kernel_lcm_brightness);
+#endif
+//caozy add end 20230906
 
 	strlcpy(mdev->desp.name, mdev->conf.cdev.name,
 		sizeof(mdev->desp.name));

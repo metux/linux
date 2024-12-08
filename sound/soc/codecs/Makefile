@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 
 ifneq ($(CONFIG_MTK_TINYSYS_SCP_SUPPORT),)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/scp/include

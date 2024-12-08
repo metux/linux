@@ -1,0 +1,27 @@
+/*
+ * SGM SGM415XX charger driver by SUYI
+ *
+ * Copyright (C) 2021 SGMicro Corporation
+ *
+ */
+/*
+    I2C Slave Address of SGM41513/SGM41513A/SGM41513D is: 0x1A
+ 	I2C Slave Address of SGM41541/SGM41542 is: 0x3B
+    I2C Slave Address of SGM41516/SGM41516D is: 0x6B 
+*/
+&i2c6{
+	sgm415xx_chg: sgm415xx@1A {
+		status = "okay";
+		compatible = "sgm,sgm4154x";
+		reg = <0x1A>;
+		//interrupt-parent = <&pio>;
+		//interrupts = <20 IRQ_TYPE_EDGE_FALLING 20 0>;
+		charger_name = "primary_chg";
+		charger = <&sgm415xx_chg>;
+		sgm,irq-gpio = <&pio 12 0>;    //irq num base on hardware design
+		sgm,chg-en-gpio = <&pio 48 0>;  //gpio num base on hardware design  1.MTK parent node name is pio  2.QUALCOMM parent node name is tlmm or other
+		phys = <&u2port0 PHY_TYPE_USB2>;
+		phy-names = "usb2-phy";
+		usb = <&usb>;
+ 	};
+};

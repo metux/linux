@@ -109,7 +109,7 @@ static int goodix_read_cfg_bin(struct device *dev, const char *cfg_name,
 {
 	const struct firmware *firmware = NULL;
 	int ret;
-	int retry = GOODIX_RETRY_3;
+	int retry = GOODIX_RETRY_10;
 
 	ts_info("cfg_bin_name:%s", cfg_name);
 
@@ -117,8 +117,8 @@ static int goodix_read_cfg_bin(struct device *dev, const char *cfg_name,
 		ret = request_firmware(&firmware, cfg_name, dev);
 		if (!ret)
 			break;
-		ts_info("get cfg bin retry:[%d]", GOODIX_RETRY_3 - retry);
-		msleep(200);
+		ts_info("get cfg bin retry:[%d]", GOODIX_RETRY_10 - retry);
+		msleep(500);
 	}
 	if (retry < 0) {
 		ts_err("failed get cfg bin[%s] error:%d", cfg_name, ret);

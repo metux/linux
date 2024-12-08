@@ -496,6 +496,9 @@ struct musb {
 	u32 mtk_usb_phy_offset;
 	unsigned is_gadget_ready:1;
 	unsigned async_callbacks:1;
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20240304
+	atomic_t is_do_host_work;
+#endif
 };
 
 static inline struct musb *gadget_to_musb(struct usb_gadget *g)

@@ -637,6 +637,23 @@ void mtk_disp_mipi_ccci_callback(unsigned int en, unsigned int usrdata)
 }
 EXPORT_SYMBOL(mtk_disp_mipi_ccci_callback);
 
+void mtk_disp_mipi_clk_change(int msg, unsigned int en)
+{
+	struct mtk_drm_private *priv;
+
+	priv = drm_dev->dev_private;
+	if (IS_ERR_OR_NULL(priv)) {
+		DDPMSG("%s, priv is null!\n", __func__);
+		return;
+	}
+
+	if (priv->data->mmsys_id == MMSYS_MT6768 || priv->data->mmsys_id == MMSYS_MT6765) {
+		DDPMSG("%s, msg:%d, en:%d\n", __func__, msg, en);
+		mtk_disp_mipi_ccci_callback(en, (unsigned int)msg);
+	}
+}
+EXPORT_SYMBOL(mtk_disp_mipi_clk_change);
+
 void mtk_disp_osc_ccci_callback(unsigned int en, unsigned int usrdata)
 {
 	struct drm_crtc *crtc;
@@ -2184,6 +2201,64 @@ int mtk_drm_ioctl_pq_get_persist_property(struct drm_device *dev, void *data,
 	return ret;
 }
 
+static void mtk_get_panels_info(void)
+{
+	struct mtk_drm_private *priv = drm_dev->dev_private;
+	struct mtk_ddp_comp *output_comp;
+	struct mtk_drm_panels_info *panel_ctx;
+	int i;
+
+	output_comp = mtk_ddp_comp_request_output(to_mtk_crtc(priv->crtc[0]));
+	panel_ctx = vzalloc(sizeof(struct mtk_drm_panels_info));
+	if (!panel_ctx) {
+		DDPPR_ERR("%s panel_info alloc failed\n", __func__);
+		return;
+	}
+
+	/* notify driver user does not know how many DSI connector exist */
+	panel_ctx->connector_cnt = -1;
+
+	mtk_ddp_comp_io_cmd(output_comp, NULL, GET_ALL_CONNECTOR_PANEL_NAME, panel_ctx);
+
+	DDPMSG("get panel_info_ctx connector_cnt %d default %d\n",
+			panel_ctx->connector_cnt, panel_ctx->default_connector_id);
+	if (panel_ctx->connector_cnt <= 0) {
+		DDPPR_ERR("%s invalid connector cnt\n", __func__);
+		goto out2;
+	}
+
+	panel_ctx->connector_obj_id = vmalloc(sizeof(unsigned int) * panel_ctx->connector_cnt);
+	panel_ctx->panel_name = vmalloc(sizeof(char *) * panel_ctx->connector_cnt);
+	if (!panel_ctx->connector_obj_id || !panel_ctx->panel_name) {
+		DDPPR_ERR("%s ojb_id or panel_name alloc fail\n", __func__);
+		goto out1;
+	}
+
+	for (i = 0 ; i < panel_ctx->connector_cnt ; ++i) {
+		panel_ctx->panel_name[i] = vmalloc(sizeof(char) * 64);
+		if (!panel_ctx->panel_name[i]) {
+			DDPPR_ERR("%s alloc panel_name fail\n", __func__);
+			goto out0;
+		}
+	}
+
+	mtk_ddp_comp_io_cmd(output_comp, NULL, GET_ALL_CONNECTOR_PANEL_NAME, panel_ctx);
+
+	for (i = 0 ; i < panel_ctx->connector_cnt ; ++i)
+		DDPMSG("%s get connector_id %d, panel_name %s, panel_id %u\n", __func__,
+				panel_ctx->connector_obj_id[i], panel_ctx->panel_name[i],
+				panel_ctx->panel_id);
+
+out0:
+	for (i = 0 ; i < panel_ctx->connector_cnt ; ++i)
+		vfree(panel_ctx->panel_name[i]);
+out1:
+	vfree(panel_ctx->panel_name);
+	vfree(panel_ctx->connector_obj_id);
+out2:
+	vfree(panel_ctx);
+}
+
 static void process_dbg_opt(const char *opt)
 {
 	DDPINFO("display_debug cmd %s\n", opt);
@@ -2197,16 +2272,13 @@ static void process_dbg_opt(const char *opt)
 		/*ex: echo helper:DISP_OPT_BYPASS_OVL,0 > /d/mtkfb */
 		char option[100] = "";
 		char *tmp;
-		int value, i, limited;
+		int value, i;
 		enum MTK_DRM_HELPER_OPT helper_opt;
 		struct mtk_drm_private *priv = drm_dev->dev_private;
 		int ret;
 
 		tmp = (char *)(opt + 7);
-		limited = strlen(tmp);
 		for (i = 0; i < 99; i++) {    /* option[99] should be '\0' to aviod oob */
-			if (i >= limited)
-				return;
 			if (tmp[i] != ',' && tmp[i] != ' ')
 				option[i] = tmp[i];
 			else
@@ -2758,8 +2830,8 @@ static void process_dbg_opt(const char *opt)
 
 		ddic_dsi_read_cmd_test(case_num);
 	} else if (strncmp(opt, "ddic_page_switch:", 17) == 0) {
-		u8 addr, val1, val2, val3;
-		u8 val4, val5, val6;
+		unsigned int addr, val1, val2, val3;
+		unsigned int val4, val5, val6;
 		unsigned int cmd_num, ret;
 
 		ret = sscanf(opt, "ddic_page_switch:%d,%x,%x,%x,%x,%x,%x,%x\n",
@@ -2774,10 +2846,10 @@ static void process_dbg_opt(const char *opt)
 
 		DDPMSG("ddic_spr_switch:%d\n", cmd_num);
 
-		ddic_dsi_send_switch_pgt(cmd_num, addr, val1, val2, val3,
-			val4, val5, val6);
+		ddic_dsi_send_switch_pgt(cmd_num, (u8)addr, (u8)val1,
+			(u8)val2, (u8)val3, (u8)val4, (u8)val5, (u8)val6);
 	} else if (strncmp(opt, "read_cm:", 8) == 0) {
-		u8 addr;
+		unsigned int addr;
 		unsigned int ret;
 
 		ret = sscanf(opt, "read_cm:%x\n", &addr);
@@ -2787,7 +2859,7 @@ static void process_dbg_opt(const char *opt)
 			return;
 		}
 		DDPMSG("read_cm:%d\n", addr);
-		ddic_dsi_read_cm_cmd(addr);
+		ddic_dsi_read_cm_cmd((u8)addr);
 	} else if (strncmp(opt, "ap_spr_cm_bypass:", 17) == 0) {
 		unsigned int spr_bypass, cm_bypass, ret;
 
@@ -3313,6 +3385,8 @@ static void process_dbg_opt(const char *opt)
 
 		if (mtk_crtc)
 			mtk_crtc->mml_cmd_ir = mml_cmd_ir;
+	} else if (strncmp(opt, "get_panels_info", 15) == 0) {
+		mtk_get_panels_info();
 	} else if (strncmp(opt, "conn_obj_id", 11) == 0) {
 		unsigned int value;
 		int ret;

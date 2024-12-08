@@ -13,6 +13,10 @@ menuconfig INPUT_KEYBOARD
 
 if INPUT_KEYBOARD
 
+config MID_UART_KEYBOARD
+	tristate "mid uart dock support add by kzhkzh "
+	default n
+
 config KEYBOARD_ADC
 	tristate "ADC Ladder Buttons"
 	depends on IIO

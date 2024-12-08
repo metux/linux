@@ -1204,7 +1204,11 @@ static const struct mtk_afe_i2s_priv mt6789_i2s_priv[DAI_I2S_NUM] = {
 		.id = MT6789_DAI_I2S_0,
 		.mclk_id = MT6789_I2S0_MCK,
 		.share_property_name = "i2s0-share",
+#if IS_ENABLED(CONFIG_WB_PCB_M101_MT7902)
+		.share_i2s_id = MT6789_DAI_I2S_3,
+#else
 		.share_i2s_id = -1,
+#endif
 	},
 	[DAI_I2S1] = {
 		.id = MT6789_DAI_I2S_1,

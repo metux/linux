@@ -36,6 +36,10 @@
 
 #define BMLOG_DEFAULT_LEVEL BMLOG_DEBUG_LEVEL
 
+#define WB_BATTERY_DUMPINFO_SUPPORT //Leo 20221208
+
+//#define WB_SC8551X_CP_SUPPORT
+
 #define bm_err(fmt, args...)   \
 do {\
 	if (bat_get_debug_level() >= BMLOG_ERROR_LEVEL) {\
@@ -120,6 +124,9 @@ struct battery_data {
 	struct power_supply_config psy_cfg;
 	struct power_supply *psy;
 	struct power_supply *chg_psy;
+#if defined(WB_SC8551X_CP_SUPPORT) //Leo 20230619
+	struct power_supply *cp_psy;
+#endif
 	struct notifier_block battery_nb;
 	int bat_status;
 	int bat_health;
@@ -811,7 +818,16 @@ struct simulator_log {
 #define SHUTDOWN_TIME 40
 #define AVGVBAT_ARRAY_SIZE 30
 #define INIT_VOLTAGE 3450
+#if (CONFIG_WB_BATTERY_SHUTDOWN_TEMPERATURE > 40)
+#define BATTERY_SHUTDOWN_TEMPERATURE CONFIG_WB_BATTERY_SHUTDOWN_TEMPERATURE
+#else
 #define BATTERY_SHUTDOWN_TEMPERATURE 60
+#endif
+#if (CONFIG_WB_BATTERY_SHUTDOWN_LOW_TEMPERATURE > -25)
+#define BATTERY_SHUTDOWN_LOW_TEMPERATURE CONFIG_WB_BATTERY_SHUTDOWN_LOW_TEMPERATURE
+#else
+#define BATTERY_SHUTDOWN_LOW_TEMPERATURE -30
+#endif
 
 struct shutdown_condition {
 	bool is_overheat;
@@ -1076,6 +1092,9 @@ struct mtk_battery {
 	int (*resume)(struct mtk_battery *gm);
 
 	int log_level;
+#ifdef WB_BATTERY_DUMPINFO_SUPPORT //Leo 20221208
+	int proc_cmd_id;
+#endif
 };
 
 struct mtk_battery_sysfs_field_info {

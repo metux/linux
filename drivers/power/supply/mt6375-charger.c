@@ -648,7 +648,11 @@ static const struct mt6375_chg_platform_data mt6375_chg_pdata_def = {
 	.aicr = 3225,
 	.mivr = 4400,
 	.ichg = 2000,
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230419
+	.ieoc = 350,
+#else
 	.ieoc = 150,
+#endif
 	.cv = 4200,
 	.wdt = 40000,
 	.vbus_ov = 14500,
@@ -893,6 +897,7 @@ static int mt6375_chg_set_usbsw(struct mt6375_chg_data *ddata,
 					       PHY_MODE_BC11_CLR;
 
 	mt_dbg(ddata->dev, "usbsw=%d\n", usbsw);
+	
 	phy = phy_get(ddata->dev, "usb2-phy");
 	if (IS_ERR_OR_NULL(phy)) {
 		dev_err(ddata->dev, "failed to get usb2-phy\n");
@@ -951,6 +956,76 @@ static int mt6375_chg_enable_bc12(struct mt6375_chg_data *ddata, bool en)
 		return ret;
 	return mt6375_chg_field_set(ddata, F_BC12_EN, en);
 }
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20221117
+#include <linux/of_platform.h>
+#include "extcon-mtk-usb.h"
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/extcon.h>
+#include <linux/of_platform.h>
+
+static struct mtk_extcon_info *g_extcon = NULL;
+static struct mt6375_chg_data *g_data = NULL;
+
+int cust_set_bc12_en(int en)
+{
+	int ret;
+
+	if (!g_data) 
+		return -ENODEV;
+
+	ret = mt6375_chg_set_usbsw(g_data, en ? USBSW_CHG : USBSW_USB);
+	if (ret)
+		return ret;
+	return mt6375_chg_field_set(g_data, F_BC12_EN, en);
+}
+EXPORT_SYMBOL(cust_set_bc12_en);
+
+static bool get_is_docking(void)
+{
+	if (g_extcon != NULL) {
+		return !gpio_get_value(g_extcon->docking_det_gpio);
+	}
+	
+	return false;
+}
+
+static bool get_mtk_extcon_info(void)
+{
+	struct device_node *pnode = NULL;
+	struct platform_device *pdev = NULL;
+	struct mtk_extcon_info *extcon = NULL;
+
+	if (g_extcon != NULL) {
+		return 0;
+	}
+
+	pnode = of_find_compatible_node(NULL, NULL, "mediatek,extcon-usb");
+	if (!pnode) {
+		pr_err("%s :failed to get pnode\n",__func__);
+		return -ENODEV;
+	}
+
+	pdev = of_find_device_by_node(pnode);
+	if (WARN_ON(!pdev)) {
+		of_node_put(pnode);
+		pr_err("%s :failed to get pdev\n",__func__);
+		return -ENODEV;
+	};
+
+	extcon = (struct mtk_extcon_info *)platform_get_drvdata(pdev);
+
+	if (extcon == NULL) {
+		pr_err("%s :failed to get extcon\n",__func__);
+		return -ENODEV;
+	}
+
+	g_extcon = extcon;
+	
+	return 0;
+}
+#endif
 
 static void mt6375_chg_bc12_work_func(struct work_struct *work)
 {
@@ -1045,8 +1120,20 @@ static void mt6375_chg_bc12_work_func(struct work_struct *work)
 	mt_dbg(ddata->dev, "port stat = %s\n", mt6375_port_stat_names[val]);
 out:
 	mutex_unlock(&ddata->attach_lock);
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230110
+	get_mtk_extcon_info();
+	if (get_is_docking()) {
+		//mt6375_chg_set_usbsw(ddata, USBSW_USB);
+		rpt_psy = true;
+	} else {
+		if (bc12_ctrl && (mt6375_chg_enable_bc12(ddata, bc12_en) < 0))
+			dev_err(ddata->dev, "failed to set bc12 = %d\n", bc12_en);
+	}
+#else
 	if (bc12_ctrl && (mt6375_chg_enable_bc12(ddata, bc12_en) < 0))
 		dev_err(ddata->dev, "failed to set bc12 = %d\n", bc12_en);
+#endif
 	if (rpt_psy)
 		power_supply_changed(ddata->psy);
 }
@@ -1495,6 +1582,7 @@ static int mt6375_reset_eoc_state(struct charger_device *chgdev)
 	return mt6375_chg_field_set(ddata, F_EOC_RST, 1);
 }
 
+//Leo 20230419
 static int mt6375_sw_check_eoc(struct charger_device *chgdev, u32 uA)
 {
 	int ret, ibat;
@@ -2475,7 +2563,6 @@ static int mt6375_chg_get_iio_adc(struct mt6375_chg_data *ddata)
 
 static int mt6375_chg_init_psy(struct mt6375_chg_data *ddata)
 {
-	struct mt6375_chg_platform_data *pdata = dev_get_platdata(ddata->dev);
 	struct power_supply_config cfg = {
 		.drv_data = ddata,
 		.of_node = ddata->dev->of_node,
@@ -2485,8 +2572,7 @@ static int mt6375_chg_init_psy(struct mt6375_chg_data *ddata)
 
 	mt_dbg(ddata->dev, "%s\n", __func__);
 	memcpy(&ddata->psy_desc, &mt6375_psy_desc, sizeof(ddata->psy_desc));
-	ddata->psy_desc.name = pdata->chg_name;
-
+	ddata->psy_desc.name = dev_name(ddata->dev);
 	ddata->psy = devm_power_supply_register(ddata->dev, &ddata->psy_desc,
 						&cfg);
 	return IS_ERR(ddata->psy) ? PTR_ERR(ddata->psy) : 0;
@@ -2628,6 +2714,10 @@ static int mt6375_chg_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to get regmap\n");
 		return -ENODEV;
 	}
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230202
+	g_data = ddata;
+#endif
 
 	for (i = 0; i < F_MAX; i++) {
 		ddata->rmap_fields[i] = devm_regmap_field_alloc(dev,

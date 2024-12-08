@@ -1,0 +1,486 @@
+config WB_BOARD_M618
+        bool "CONFIG_WB_BOARD_M618"
+        default n
+        help
+          CONFIG_WB_BOARD_M618=y
+
+config WB_MT6370_CHG_ENB_SUPPORT
+        bool "CONFIG_WB_MT6370_CHG_ENB_SUPPORT"
+        default n
+        help
+          CONFIG_WB_MT6370_CHG_ENB_SUPPORT=y
+
+config WB_DISP_PWM_100KHZ
+        bool "CONFIG_WB_DISP_PWM_100KHZ"
+        default n
+        help
+          CONFIG_WB_DISP_PWM_100KHZ=y
+
+config WB_MIN_BACKLIGHT_SUPPORT
+        bool "CONFIG_WB_MIN_BACKLIGHT_SUPPORT"
+        default n
+        help
+          CONFIG_WB_MIN_BACKLIGHT_SUPPORT=y
+config WB_FIXED_TBAT_25
+        bool "CONFIG_WB_FIXED_TBAT_25"
+        default n
+        help
+          CONFIG_WB_FIXED_TBAT_25=y
+
+
+config WB_MT6370_FLED_LEVEL
+	int "Mt6370 fled log LEVEL "
+	range 0 16
+	default 0
+	help
+	  WB_MT6370_FLED_LEVEL=0.
+	  current table: 25 ,50 ,75 ,100,125,150,175,200,225,250,
+	                 275,300,325,350,375,400,450,500,550,600,
+	                 650,700,750,800,850,900,950,1000,1050,1100
+
+config BOARD_M401YR100
+        bool " for board M401YR100 Macro"
+        default n
+        help
+          CONFIG_BOARD_M401YR100=y
+		  
+config BOARD_M100YBRR100
+        bool " for board M100YBRR100 Macro"
+        default n
+        help
+          CONFIG_BOARD_M100YBRR100=y
+		  
+config WB_TYPEC_EARPIECE
+        bool " for typec earpiece"
+        default n
+        help
+          CONFIG_WB_TYPEC_EARPIECE=y
+
+config WB_TYPEC_DOCKING_SUPPORT
+        bool " for typec cc logic with docking"
+        depends on MTK_USB_TYPEC
+        default n
+        help
+          CONFIG_WB_TYPEC_DOCKING_SUPPORT=y
+
+config WB_LCM_DEFAULT_PHYSICAL_SIZE
+        bool " for lcm default physical size"
+        default y
+
+config WB_BOARD_M618_CC_33_WUXGA
+        bool " for customer  M618_CC_33"
+        default n
+		
+config WEIBU_EXIAMP_MODE
+        int "exiamp audio pa modem set 1 2 3 4"
+        range 0 4
+        default 0
+        help
+            only for audio exiamp modem	
+
+config CUSTOM_KERNEL_PS
+        bool "for touch ps"
+        default n
+        help	
+			only for for touch ps
+			
+config FIXED_TBAT_25
+       bool "enable for not ntc battery"
+       default n
+	   
+config M133S_DUAL_CHARGER_SUPPORT
+        bool " for m133s dual charge support"
+        default n
+        help
+          CONFIG_M133S_DUAL_CHARGER_SUPPORT=y
+
+config WB_IMGSENSOR_INDEX_SUPPORT
+        bool "CONFIG_WB_IMGSENSOR_INDEX_SUPPORT=y"
+        default y
+        help
+          CONFIG_WB_IMGSENSOR_INDEX_SUPPORT=y
+
+config WB_HIGH_BATTERY_SUPPORT
+        bool "CONFIG_WB_HIGH_BATTERY_SUPPORT=y"
+        default n
+        help
+          CONFIG_WB_HIGH_BATTERY_SUPPORT=y
+		  
+config WB_HIGH_4V4_BATTERY_SUPPORT
+        bool "CONFIG_WB_HIGH_4V4_BATTERY_SUPPORT=y"
+        default n
+        help
+          CONFIG_WB_HIGH_4V4_BATTERY_SUPPORT=y
+
+config WEIBU_LCM_SUSPEND_MOVE_UP
+    bool "CONFIG_WEIBU_LCM_SUSPEND_MOVE_UP"
+    default n
+    help
+        use for lcm usspend move up
+
+config WB_OTG_VBUS_USE_EXT_LDO
+       bool "otg vbus use ext ldo"
+       default n
+
+config WB_DC_USB_INPUT_CHARGER_SUPPORT
+  bool "WB_DC_USB_INPUT_CHARGER_SUPPORT"
+  default n
+  help
+    This is to enable MediaTek DC USB dual input charging.
+    The feature can charge battery and use otg device
+    at the same time with specific hardware.
+
+config WB_HOST_CHARGE_ENABLE
+  bool "WB_HOST_CHARGE_ENABLE"
+  default n
+  help
+    Say Yes to enable
+    The device can be charged in host mode
+
+config WB_UISOC_USE_SOC
+  bool "CONFIG_WB_UISOC_USE_SOC=y"
+  default n
+  help
+    Say Yes to enable
+    uisoc equals soc
+
+config WB_DOCKING_SUPPORT
+        bool "for docking device"
+        default n
+        help
+          CONFIG_WB_DOCKING_SUPPORT=y
+
+config WB_DOCKING_TYPEC_OTG_SUPPORT
+        bool "for docking and typec port support"
+        default n
+        help
+          CONFIG_WB_DOCKING_TYPEC_OTG_SUPPORT=y
+
+config WB_EXTCON_WAKELOCK
+        bool "for docking wakelock"
+        default n
+        help
+          CONFIG_WB_EXTCON_WAKELOCK=y		  
+
+config MTK_LCM_COMPATIBLE
+       bool "CONFIG_MTK_LCM_COMPATIBLE=y"
+       default n
+
+config WB_DULASPK_CALL_GAIN_MAX
+       bool "CONFIG_WB_DULASPK_CALL_GAIN_MAX=y"
+       default n
+	   
+config WB_BOARD_M866U
+        bool "CONFIG_WB_BOARD_M866U"
+        default n
+        help
+          CONFIG_WB_BOARD_M866U=y	
+
+config WB_BOARD_M212U
+        bool "CONFIG_WB_BOARD_M212U"
+        default n
+        help
+          CONFIG_WB_BOARD_M212U=y
+	  
+config WB_BAT_NTC_USER_AUXIN1
+        bool "CONFIG_WB_BAT_NTC_USER_AUXIN1"
+        default n
+        help
+          CONFIG_WB_BAT_NTC_USER_AUXIN1=y	 
+
+config WB_TYPEC_EARPIECE
+        bool "CONFIG_WB_TYPEC_EARPIECE"
+        default n
+        help
+          CONFIG_WB_TYPEC_EARPIECE=y 	
+
+config WB_CAMERA_ONLY_PND_CONTROL
+        bool "CONFIG_WB_CAMERA_ONLY_PND_CONTROL"
+        default n
+        help
+          CONFIG_WB_CAMERA_ONLY_PND_CONTROL=y 		
+	  
+config WB_RECHARGE_SET_OFFSET_VOLTAGE
+		bool "CONFIG_WB_RECHARGE_SET_OFFSET_VOLTAGE"
+		default n
+		help
+			CONFIG_WB_RECHARGE_SET_OFFSET_VOLTAGE
+			
+config WB_USE_UFS
+		bool "CONFIG_WB_USE_UFS"
+		default n
+		help
+			CONFIG_WB_USE_UFS
+
+config WB_MT6370_HOST_MODE_WORK_FAILE
+    bool "CONFIG_WB_MT6370_HOST_MODE_WORK_FAILE"
+    default n
+    help
+      This is to enable mt6370_host_workqueue.
+	  
+config WB_ACCDET_EINT_TYPE_HIGH
+    bool "CONFIG_WB_ACCDET_EINT_TYPE_HIGH"
+    default n
+    help
+      This is to accdet eint type high	  
+
+config WB_WIFI_CC_SUPPORT
+        bool "CONFIG_WB_WIFI_CC_SUPPORT=y"
+        default n
+
+config WB_BACKLIGHT_DELAY
+        bool "CONFIG_WB_BACKLIGHT_DELAY=y"
+        default n		
+
+config WB_BACKLIGHT_DELAY_ONLY_MS
+	int "backlihgt delay only ms"
+	range -1 2000
+	default -1
+
+config WB_ATA_HALL_KEY_TEST
+  bool "CONFIG_WB_ATA_HALL_KEY_TEST=y"
+  default n
+
+config WB_KPOC_WAKELOCK_SUPPORT
+        bool "CONFIG_WB_KPOC_WAKELOCK_SUPPORT=y"
+        default y
+
+config WB_TP_INCELL_SUPPORT
+        bool "CONFIG_WB_TP_INCELL_SUPPORT=y"
+        default n
+
+config WB_NO_HUB_SUPPORT
+    bool "CONFIG_WB_NO_HUB_SUPPORT=y"
+    default n
+
+
+config WB_MIN_CHARGE_TEMP
+        int "CONFIG_WB_MIN_CHARGE_TEMP=0"
+        range -100 100
+        default -100
+
+config WB_MIN_CHARGE_TEMP_PLUS_X_DEGREE
+        int "CONFIG_WB_MIN_CHARGE_TEMP_PLUS_X_DEGREE=0"
+        range -100 100
+        default -100
+
+config WB_MAX_CHARGE_TEMP
+        int "CONFIG_WB_MAX_CHARGE_TEMP=60"
+        range -100 100
+        default -100
+
+config WB_MAX_CHARGE_TEMP_PLUS_X_DEGREE
+        int "CONFIG_WB_MAX_CHARGE_TEMP_PLUS_X_DEGREE=60"
+        range -100 100
+        default -100
+
+config WB_BATTERY_SHUTDOWN_TEMPERATURE
+        int "CONFIG_WB_BATTERY_SHUTDOWN_TEMPERATURE=60"
+        range -1 100
+        default -1
+
+config WB_BATTERY_SHUTDOWN_LOW_TEMPERATURE
+        int "CONFIG_WB_BATTERY_SHUTDOWN_LOW_TEMPERATURE=-30"
+        range -50 100
+        default -30
+
+config WB_MAX_CHARGE_NOTIFIER
+        int "CONFIG_WB_MAX_CHARGE_NOTIFIER=55"
+        range -1 100
+        default -1
+
+config WB_BAT_LT_SHUTDOWN_NOTIFIER
+        int "CONFIG_WB_BAT_LT_SHUTDOWN_NOTIFIER=-25"
+        range -100 100 
+        default -100
+
+config WB_BAT_OV_SHUTDOWN_NOTIFIER
+        int "CONFIG_WB_BAT_OV_SHUTDOWN_NOTIFIER=65"
+        range -100 100
+        default -100
+
+config WB_FAST_CHARGE_ONLY_PD
+    bool "CONFIG_WB_FAST_CHARGE_ONLY_PD=y"
+    default n
+
+config WB_PD_9V3A_ONLY_SUPPORT
+    bool "CONFIG_WB_PD_9V3A_ONLY_SUPPORT=y"
+    default n
+
+config WB_DG_CUST_SUPPORT
+    bool "CONFIG_WB_DG_CUST_SUPPORT=y"
+    default n
+
+config WB_MIPI_HS_MODE_SUPPORT
+    bool "CONFIG_WB_MIPI_HS_MODE_SUPPORT=y"
+    default n
+
+config IT6112_GM87553C_SUPPORT
+    bool "CONFIG_IT6112_GM87553C_SUPPORT=y"
+    default n
+
+config IT6113_GM87553C_SUPPORT
+    bool "CONFIG_IT6113_GM87553C_SUPPORT=y"
+    default n
+
+config WB_BOARD_ID_SUPPORT
+    bool "CONFIG_WB_BOARD_ID_SUPPORT=y"
+    default n
+
+config WB_PCB_M101_MT7902
+    bool "CONFIG_WB_PCB_M101_MT7902=y"
+    default n
+
+config WB_CHARGER_FULL_STATE_ENABLE
+    bool "CONFIG_WB_CHARGER_FULL_STATE_ENABLE=y"
+    default n
+
+config WB_CHARGER_FAKE_FULL_STATE_TIME
+    int "CONFIG_WB_CHARGER_FAKE_FULL_STATE_TIME=0"
+	range 0 1440 
+	default 0
+
+config TOUCHSCREEN_FTS_PINCTRL
+    bool "CONFIG_TOUCHSCREEN_FTS_PINCTRL=y"
+    default n
+
+config TOUCHSCREEN_WB_TOUCH
+       string "Touch IC name for weibu package"
+       help
+         Set touch IC name if you have touch panel.
+
+         To compile this dirver for used touch IC.
+
+config TOUCHSCREEN_FTS_GESTURE
+    bool "CONFIG_TOUCHSCREEN_FTS_GESTURE=y"
+    default n
+
+config TOUCHSCREEN_FTS_ESDCHECK
+    bool "CONFIG_TOUCHSCREEN_FTS_ESDCHECK=y"
+    default n
+
+config DRM_WB_EXTERN_ESD
+    tristate "CONFIG_DRM_WB_EXTERN_ESD=y/m"
+    default n
+
+config WB_DOCKING_POLLING_TRACK_SUPPORT
+    tristate "WB_DOCKING_POLLING_TRACK_SUPPORT=y"
+    default n
+
+config WB_DUALMIPI_NO_USE_COMMON_DISPLAY_ON
+    tristate "CONFIG_WB_DUALMIPI_NO_USE_COMMON_DISPLAY_ON=y"
+    default n
+
+config WB_DOUBLE_CLICK_WAKEUP
+   tristate "CONFIG_WB_DOUBLE_CLICK_WAKEUP=y"
+   default n
+
+config DUALMIPI_NO_USE_COMMON_DISPLAY_ON
+   tristate "CONFIG_DUALMIPI_NO_USE_COMMON_DISPLAY_ON=y"
+   default n
+   
+config WB_TD_CUST_SUPPORT
+    bool "CONFIG_WB_TD_CUST_SUPPORT=y"
+    default n
+
+config WB_PD_ALGO_SUPPORT
+    bool "CONFIG_WB_PD_ALGO_SUPPORT=y"
+    default n
+
+config WB_LT8911EXB
+   tristate "CONFIG_WB_LT8911EXB=y"
+   default n
+
+config WB_DELAY_READ_BAT_TMEP
+   tristate "CONFIG_WB_DELAY_READ_BAT_TMEP=y"
+   default n
+
+config WB_PD_NO_VSAFE0V_SUPPORT
+   tristate "CONFIG_WB_PD_NO_VSAFE0V_SUPPORT=y"
+   default n
+
+config WB_MAIN2_LYING_GC6153
+   tristate "CONFIG_WB_MAIN2_LYING_GC6153=y"
+   default n
+
+config WB_MAIN2_LYING_GC05A2
+   tristate "CONFIG_WB_MAIN2_LYING_GC05A2=y"
+   default n
+
+config WB_IT6112_I2C_SUSPEND_LOW
+   tristate "CONFIG_WB_IT6112_I2C_SUSPEND_LOW=y"
+   default n
+
+config WB_TOUCH_I2C_SUSPEND_LOW
+   tristate "CONFIG_WB_TOUCH_I2C_SUSPEND_LOW=y"
+   default n
+
+config WB_BAT_LOW_SETMAXBRIGHTNESS_EN
+   bool "CONFIG_WB_BAT_LOW_SETMAXBRIGHTNESS_EN=y"
+   default n
+
+config WB_BAT_LOW_SETMAXBRIGHTNESS_PERCENT
+    int "CONFIG_WB_BAT_LOW_SETMAXBRIGHTNESS_PERCENT=0"
+	range 0 100
+	default 0
+
+config WB_BAT_LOW_SETMAXBRIGHTNESS_SOC
+    int "CONFIG_WB_BAT_LOW_SETMAXBRIGHTNESS_SOC=0"
+	range 0 100
+	default 0
+
+config WB_I2C_HID_DESC_SUPPORT
+   tristate "CONFIG_WB_I2C_HID_DESC_SUPPORT=y"
+   default n
+
+config WB_OLED_BACKLIGHT_SUPPROT
+   tristate "CONFIG_WB_OLED_BACKLIGHT_SUPPROT=y"
+   default n
+
+config WB_LT9711_SUPPROT
+   tristate "CONFIG_WB_LT9711_SUPPROT=y"
+   default n
+
+config WB_BIAS_SUPPORT
+   tristate "CONFIG_WB_BIAS_SUPPORT=y"
+   default n
+
+config WB_TRUE_FLASHLIGHT_SUPPORT
+   tristate "CONFIG_WB_TRUE_FLASHLIGHT_SUPPORT=y"
+   default n
+
+config WB_AW87390_COMPAT_AW87391
+   tristate "CONFIG_WB_AW87390_COMPAT_AW87391=y"
+  default n
+
+config WB_IT6151FN
+   tristate "CONFIG_WB_IT6151FN_SUPPROT=y"
+   default n
+
+config WB_NO_IDDIG_SUPPORT
+   tristate "CONFIG_WB_NO_IDDIG_SUPPORT=y"
+   default n   
+
+config WB_BOARD_M307TCR110
+        bool "CONFIG_WB_BOARD_M307TCR110"
+        default n
+        help
+          CONFIG_WB_BOARD_M307TCR110=y
+
+config WB_CUSTOM_FAST_CHARGER_CHG_STATE
+    bool "CONFIG_WB_CUSTOM_FAST_CHARGER_CHG_STATE"
+    default n
+    help
+      CONFIG_WB_CUSTOM_FAST_CHARGER_CHG_STATE=y
+
+config WB_CUSTOM_GET_VBUS_VALUE
+    bool "CONFIG_WB_CUSTOM_GET_VBUS_VALUE"
+    default n
+    help
+      CONFIG_WB_CUSTOM_GET_VBUS_VALUE=y
+
+config WB_SGM415XX_USE_NEW_CHARGER
+    bool "CONFIG_WB_SGM415XX_USE_NEW_CHARGER"
+    default n
+    help
+      CONFIG_WB_SGM415XX_USE_NEW_CHARGER=y

@@ -519,6 +519,18 @@ static void imgsensor_init_sensor_list(void)
 	}
 }
 
+#if 1 //Leo 20211108
+extern enum IMGSENSOR_SENSOR_IDX cust_get_imgsensor_alive_idx(void);
+enum IMGSENSOR_SENSOR_IDX curr_imgsensor_alive_idx = 0;
+enum IMGSENSOR_SENSOR_IDX cust_get_imgsensor_alive_idx(void)
+{
+	return curr_imgsensor_alive_idx;
+}
+static void cust_set_imgsensor_alive_idx(enum IMGSENSOR_SENSOR_IDX index) 
+{
+	curr_imgsensor_alive_idx = index;
+}
+#endif
 /******************************************************************************
  * imgsensor_check_is_alive
  ******************************************************************************/
@@ -532,6 +544,9 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 	struct IMGSENSOR_SENSOR_INST *psensor_inst = &psensor->inst;
 
 	IMGSENSOR_PROFILE_INIT(&psensor_inst->profile_time);
+	#if 1 //Leo 20211108
+	cust_set_imgsensor_alive_idx(psensor->inst.sensor_idx);
+	#endif
 	ret = imgsensor_hw_power(&pimgsensor->hw,
 			psensor,
 			IMGSENSOR_HW_POWER_STATUS_ON);
@@ -548,6 +563,27 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 		PK_DBG("Fail to get sensor ID %x\n", sensorID);
 		err = ERROR_SENSOR_CONNECT_FAIL;
 	} else {
+		#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT) //Leo 20210827
+		{
+			extern void Hwinfo_update_info_cust(int hw_type, char *name);
+			#define HW_TYPE_MAIN_CAM    3
+			
+			if (IMGSENSOR_SENSOR_IDX_MAIN == psensor->inst.sensor_idx ) {
+				Hwinfo_update_info_cust(HW_TYPE_MAIN_CAM,
+								psensor_inst->psensor_list->name);
+			} else if (IMGSENSOR_SENSOR_IDX_SUB == psensor->inst.sensor_idx ) {
+				Hwinfo_update_info_cust(HW_TYPE_MAIN_CAM+1,
+								psensor_inst->psensor_list->name);
+			} else if (IMGSENSOR_SENSOR_IDX_MAIN2 == psensor->inst.sensor_idx ) {
+				Hwinfo_update_info_cust(HW_TYPE_MAIN_CAM+2,
+								psensor_inst->psensor_list->name);
+			} else if (IMGSENSOR_SENSOR_IDX_SUB2 == psensor->inst.sensor_idx ) {
+				Hwinfo_update_info_cust(HW_TYPE_MAIN_CAM+3,
+								psensor_inst->psensor_list->name);
+			}
+		}
+		#endif
+		
 		PK_DBG("Sensor found ID = 0x%x\n", sensorID);
 		err = ERROR_NONE;
 	}

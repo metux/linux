@@ -11,6 +11,7 @@
 #include <aee.h>
 #include <linux/types.h>
 #include <linux/dma-direction.h>
+#include <linux/math64.h>
 #include <linux/mtk_vcu_controls.h>
 #include <linux/timer.h>
 #include "vcodec_ipi_msg.h"
@@ -35,10 +36,18 @@
 #define LOG_PROPERTY_SIZE 1024
 #define ROUND_N(X, N)   (((X) + ((N)-1)) & (~((N)-1)))    //only for N is exponential of 2
 
-#if IS_ENABLED(CONFIG_MTK_TINYSYS_VCP_SUPPORT)
-#define VDEC_CHECK_ALIVE 1
-#endif
 #define MTK_VDEC_CHECK_ACTIVE_INTERVAL 2000 // ms
+
+#define SNPRINTF(args...)							\
+	do {											\
+		if (snprintf(args) < 0)						\
+			pr_notice("[ERROR] %s(),%d: snprintf error\n", __func__, __LINE__);	\
+	} while (0)
+#define SPRINTF(args...)							\
+	do {											\
+		if (sprintf(args) < 0)						\
+			pr_notice("[ERROR] %s(),%d: sprintf error\n", __func__, __LINE__);	\
+	} while (0)
 
 struct mtk_vcodec_mem {
 	size_t length;
@@ -140,12 +149,12 @@ extern int mtk_vdec_sw_mem_sec;
 #define mtk_v4l2_debug_enter()  mtk_v4l2_debug(8, "+")
 #define mtk_v4l2_debug_leave()  mtk_v4l2_debug(8, "-")
 
-#define mtk_vcodec_debug(h, fmt, args...)                               \
-	do {                                                            \
-		if (mtk_vcodec_dbg)                                  \
+#define mtk_vcodec_debug(h, fmt, args...)                     \
+	do {                                                      \
+		if (mtk_vcodec_dbg && h != NULL && h->ctx != NULL)    \
 			pr_notice("[MTK_VCODEC][%d]: %s() " fmt "\n",     \
-				((struct mtk_vcodec_ctx *)h->ctx)->id,  \
-				__func__, ##args);                      \
+				((struct mtk_vcodec_ctx *)h->ctx)->id,        \
+				__func__, ##args);                            \
 	} while (0)
 
 #define mtk_vcodec_perf_log(fmt, args...)                               \
@@ -155,9 +164,12 @@ extern int mtk_vdec_sw_mem_sec;
 	} while (0)
 
 
-#define mtk_vcodec_err(h, fmt, args...)                                 \
-	pr_notice("[MTK_VCODEC][ERROR][%d]: %s() " fmt "\n",               \
-		   ((struct mtk_vcodec_ctx *)h->ctx)->id, __func__, ##args)
+#define mtk_vcodec_err(h, fmt, args...)                                      \
+	do {                                                                     \
+		if (h != NULL && h->ctx != NULL)                                     \
+			pr_info("[MTK_VCODEC][ERROR][%d]: %s() " fmt "\n",               \
+				((struct mtk_vcodec_ctx *)h->ctx)->id, __func__, ##args);    \
+	} while (0)
 
 #define mtk_vcodec_debug_enter(h)  mtk_vcodec_debug(h, "+")
 #define mtk_vcodec_debug_leave(h)  mtk_vcodec_debug(h, "-")

@@ -1,0 +1,3 @@
+ifneq ($(filter y m, $(CONFIG_TRUSTKERNEL_TEE_SUPPORT)),)
+    ccflags-y += -I$(srctree)/drivers/tee/tkcore/include/linux
+endif

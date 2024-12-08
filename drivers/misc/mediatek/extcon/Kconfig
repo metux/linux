@@ -5,3 +5,13 @@ config EXTCON_MTK_USB
 	help
 	  Say Y here to enable extcon support for USB cable detection
 	  on the Mediatek PMIC.
+
+config ADAPT_CHARGER_V1
+	bool "MediaTek EXTCON ADAPT_CHARGER_V1"
+	help
+	  Say Y here to enable ADAPT_CHARGER_V1
+
+config USB_SWITCH_DEBUG
+	bool "MediaTek EXTCON USB_SWITCH_DEBUG"
+	help
+	  Say Y here to enable USB_SWITCH_DEBUG

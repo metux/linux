@@ -16,6 +16,8 @@ LPM_MODULE_DEBUG_COMMON += $(${BUILD_LPM_DBG_CPC_NAME}_objs:%.o=../$(MTK_LPM_CPC
 
 ccflags-y += -I$(MTK_LPM_MODULES_FOLDER)/include/
 ccflags-y += -I$(MTK_LPM_MODULES_FOLDER)/debug/$(MTK_LPM_CPC_VERSION)
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 
 obj-$(CONFIG_MTK_LOW_POWER_MODULE) += ${MTK_LPM_DBG_COMMON_NAME}.o
 ${MTK_LPM_DBG_COMMON_NAME}-objs += lpm_dbg_cpuidle_status.o

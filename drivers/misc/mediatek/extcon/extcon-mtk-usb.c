@@ -19,18 +19,92 @@
 #include <linux/usb/role.h>
 #include <linux/workqueue.h>
 #include <linux/proc_fs.h>
+#include <linux/notifier.h>
+#include <linux/fb.h>
+#include <linux/delay.h>
+#include <linux/phy/phy.h>
 
 #include "extcon-mtk-usb.h"
 
+#if IS_ENABLED(CONFIG_CM_MIDMISC_V_SUPPORT)
+#include <mt-plat/middle_misc_v.h>
+#endif
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+#include <mt-plat/csci.h>
+#endif
+
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
 #include "tcpm.h"
+
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+#include <mt-plat/cust_gpios.h>
 #endif
+#if IS_ENABLED(CONFIG_WB_EXTCON_WAKELOCK)
+#include <linux/pm_wakeup.h>
+struct wakeup_source *extcon_wakelock;
+#endif
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT)
+int docking_iddig_debounce = 50;
+static bool docking_iddig_boot = true;
+static int docking_eint_gpio;
+static int is_docking_det = false;
+static int docking_eint_num;
+struct pinctrl *extcon_pinctrl;
+struct pinctrl_state *docking_eint_default;
+static struct delayed_work docking_delay_work;
+static struct workqueue_struct *docking_wq;
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) //Leo 20231123
+static int is_typec_src = false;
+static struct delayed_work docking_delay_track_work;
+static struct workqueue_struct *docking_track_wq;
+#endif
+static struct mtk_extcon_info *docking_extcon;
+static void cust_usb_docking_otg_vbus_en(int is_on);
+static void cust_usb_switch_on(int is_on);
+static void cust_hub_enable(int is_on);
+extern bool get_is_docking(void);
+struct wakeup_source *docking_suspend_lock;
+#endif
+#endif
+
+//caozy add for usb-switch
+#if IS_ENABLED(CONFIG_USB_SWITCH_DEBUG)
+static int cur_usb_mode;
+static struct mtk_extcon_info *usb_switch_extcon;
+struct delayed_work host_mode_dwork;
+#endif
+//caozy add for usb-switch
 
 static const unsigned int usb_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
 	EXTCON_NONE,
 };
+
+#if defined(M100TB_DG_P3PRO_527) //Leo 20230525
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT)
+extern int cust_midmisc_get_board_id(void);
+static struct charger_device *sed_chgdev = NULL;
+extern int charger_dev_enable_hz(struct charger_device *chg_dev, bool en);
+extern struct charger_device *get_charger_by_name(const char *name);
+
+static void cust_enable_sed_chgdev_hz(bool en) 
+{ 
+	if (sed_chgdev == NULL) {
+		sed_chgdev = get_charger_by_name("secondary_chg");
+		pr_info("%s get secondary_chg \n",__func__);
+	}
+
+	if (cust_midmisc_get_board_id() == 2) {
+		if (sed_chgdev != NULL)
+			charger_dev_enable_hz(sed_chgdev, en);
+	}
+}
+#endif
+#endif
+
 
 static void mtk_usb_extcon_update_role(struct work_struct *work)
 {
@@ -43,7 +117,14 @@ static void mtk_usb_extcon_update_role(struct work_struct *work)
 	new_dr = role->d_role;
 
 	dev_info(extcon->dev, "cur_dr(%d) new_dr(%d)\n", cur_dr, new_dr);
-
+#ifdef CONFIG_WB_EXTCON_WAKELOCK
+	if(new_dr == USB_ROLE_HOST) {
+		__pm_stay_awake(extcon_wakelock);
+	} else {
+		if (extcon_wakelock->active)
+			__pm_relax(extcon_wakelock);
+	}
+#endif
 	/* none -> device */
 	if (cur_dr == USB_ROLE_NONE &&
 			new_dr == USB_ROLE_DEVICE) {
@@ -59,6 +140,13 @@ static void mtk_usb_extcon_update_role(struct work_struct *work)
 	/* host -> none */
 	} else if (cur_dr == USB_ROLE_HOST &&
 			new_dr == USB_ROLE_NONE) {
+//caozy add for usb-switch
+#if IS_ENABLED(CONFIG_USB_SWITCH_DEBUG)
+		if(cur_usb_mode == 1){
+			return;
+		}
+#endif
+//caozy add for usb-switch
 		extcon_set_state_sync(extcon->edev, EXTCON_USB_HOST, false);
 	/* device -> host */
 	} else if (cur_dr == USB_ROLE_DEVICE &&
@@ -68,9 +156,22 @@ static void mtk_usb_extcon_update_role(struct work_struct *work)
 	/* host -> device */
 	} else if (cur_dr == USB_ROLE_HOST &&
 			new_dr == USB_ROLE_DEVICE) {
+#if IS_ENABLED(CONFIG_USB_SWITCH_DEBUG)
+//caozy add for usb-switch
+		if(cur_usb_mode == 1){
+			return;
+		}
+#endif
+//caozy add for usb-switch
 		extcon_set_state_sync(extcon->edev, EXTCON_USB_HOST, false);
 		extcon_set_state_sync(extcon->edev, EXTCON_USB, true);
 	}
+
+#if defined(M100TB_DG_P3PRO_527) //Leo 20230525
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT)
+	cust_enable_sed_chgdev_hz((new_dr == USB_ROLE_HOST));
+#endif
+#endif
 
 	/* usb role switch */
 	if (extcon->role_sw)
@@ -136,19 +237,25 @@ static void mtk_usb_extcon_psy_detector(struct work_struct *work)
 
 	/* Workaround for PR_SWAP, IF tcpc_dev, then do not switch role. */
 	/* Since we will set USB to none when type-c plug out */
-#if IS_ENABLED(CONFIG_TCPC_CLASS)
 	if (extcon->tcpc_dev) {
 		if (usb_is_online(extcon) && extcon->c_role == USB_ROLE_NONE)
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
 	} else {
-#endif
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+		if (usb_is_online(extcon)){
+			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
+		}else{
+			if(!extcon->vbus_on){
+				mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
+			}
+		}
+#else
 		if (usb_is_online(extcon))
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
 		else
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
-#if IS_ENABLED(CONFIG_TCPC_CLASS)
-	}
 #endif
+	}
 
 }
 
@@ -180,6 +287,10 @@ static int mtk_usb_extcon_psy_init(struct mtk_extcon_info *extcon)
 
 	INIT_DELAYED_WORK(&extcon->wq_psy, mtk_usb_extcon_psy_detector);
 
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+	queue_delayed_work(extcon->extcon_wq, &extcon->wq_psy, msecs_to_jiffies(1000));
+#endif
+
 	extcon->psy_nb.notifier_call = mtk_usb_extcon_psy_notifier;
 	ret = power_supply_reg_notifier(&extcon->psy_nb);
 	if (ret)
@@ -193,23 +304,20 @@ static int mtk_usb_extcon_psy_init(struct mtk_extcon_info *extcon)
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_CHARGER_RT9458)
-/* ADAPT_CHARGER_V1 */
-#include <charger_class.h>
+#if defined ADAPT_CHARGER_V1
+#include <mt-plat/charger_class.h>
 static struct charger_device *primary_charger;
 
-static int mtk_usb_extcon_set_vbus_v1(struct mtk_extcon_info *extcon, bool is_on)
-{
-	struct device *dev = extcon->dev;
+static int mtk_usb_extcon_set_vbus_v1(bool is_on) {
 	if (!primary_charger) {
 		primary_charger = get_charger_by_name("primary_chg");
 		if (!primary_charger) {
-			dev_info(dev, "%s : get primary charger device failed\n", __func__);
+			pr_info("%s: get primary charger device failed\n", __func__);
 			return -ENODEV;
 		}
 	}
-#if IS_ENABLED(CONFIG_MTK_GAUGE_VERSION) && (CONFIG_MTK_GAUGE_VERSION == 30)
-	dev_info(dev, "%s vbus turn %s\n", __func__, is_on ? "on" : "off");
+	pr_info("%s: is_on=%d\n", __func__, is_on);
+#if defined(CONFIG_MTK_GAUGE_VERSION) && (CONFIG_MTK_GAUGE_VERSION == 30)
 	if (is_on) {
 		charger_dev_enable_otg(primary_charger, true);
 		charger_dev_set_boost_current_limit(primary_charger,
@@ -238,15 +346,30 @@ static int mtk_usb_extcon_set_vbus_v1(struct mtk_extcon_info *extcon, bool is_on
 #endif
 		return 0;
 }
-#endif
+#endif //ADAPT_CHARGER_V1
 
 static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 							bool is_on)
 {
 	int ret;
-#if IS_ENABLED(CONFIG_CHARGER_RT9458)
-	ret = mtk_usb_extcon_set_vbus_v1(extcon, is_on);
+
+
+//caozy add for usb-switch
+#if IS_ENABLED(CONFIG_USB_SWITCH_DEBUG)
+	if(cur_usb_mode == 1){
+		extcon->vbus_on = is_on;
+		usb_switch_extcon->vbus_on = is_on;
+		printk("mtk_usb_extcon_set_vbus use extern vbus\n");
+		return 0;
+	}
+#endif
+//caozy add for usb-switch
+
+#if defined ADAPT_CHARGER_V1
+	ret = mtk_usb_extcon_set_vbus_v1(is_on);
+	extcon->vbus_on = is_on;
 #else
+
 	struct regulator *vbus = extcon->vbus;
 	struct device *dev = extcon->dev;
 
@@ -256,6 +379,26 @@ static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 
 	dev_info(dev, "vbus turn %s\n", is_on ? "on" : "off");
 
+#ifdef CONFIG_WB_OTG_VBUS_USE_EXT_LDO
+	ret = 0;
+	if(is_on){
+#if IS_ENABLED(CONFIG_WB_BOARD_M307TCR110)
+		cust_gpio_set_value(CUST_GPIO_CUTOFF_VBUS, 1);
+		mdelay(50);
+#endif
+		cust_gpio_set_value(CUST_GPIO_TYPEC_OTG_EN, 1);
+		mdelay(50);
+		cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, 1);
+	}else{
+		cust_gpio_set_value(CUST_GPIO_OTG_5V_EN, 0);
+		mdelay(50);
+		cust_gpio_set_value(CUST_GPIO_TYPEC_OTG_EN, 0);
+#if IS_ENABLED(CONFIG_WB_BOARD_M307TCR110)
+		mdelay(50);
+		cust_gpio_set_value(CUST_GPIO_CUTOFF_VBUS, 0);
+#endif
+	}
+#else
 	if (is_on) {
 		if (extcon->vbus_vol) {
 			ret = regulator_set_voltage(vbus,
@@ -283,12 +426,12 @@ static int mtk_usb_extcon_set_vbus(struct mtk_extcon_info *extcon,
 	} else {
 		regulator_disable(vbus);
 	}
+#endif
 
 	extcon->vbus_on = is_on;
 
-	ret = 0;
-#endif
-	return ret;
+#endif //ADAPT_CHARGER_V1
+	return 0;
 }
 
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
@@ -315,6 +458,20 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
 			noti->typec_state.new_state == TYPEC_ATTACHED_SRC) {
 			dev_info(dev, "Type-C SRC plug in\n");
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230110
+#if IS_ENABLED(CONFIG_WB_NO_HUB_SUPPORT)
+		if (get_is_docking()){
+		} else {
+			cust_usb_switch_on(false);
+		}
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) //Leo 20231222
+		is_typec_src = true;
+#endif
+#else
+			cust_usb_switch_on(true);
+			cust_hub_enable(true);
+#endif
+#endif
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_HOST);
 		} else if (!(extcon->bypss_typec_sink) &&
 			noti->typec_state.old_state == TYPEC_UNATTACHED &&
@@ -331,7 +488,19 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 			noti->typec_state.old_state == TYPEC_ATTACHED_DBGACC_SNK) &&
 			noti->typec_state.new_state == TYPEC_UNATTACHED) {
 			dev_info(dev, "Type-C plug out\n");
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT)
+			if(get_is_docking()){
+			}else{
+				cust_usb_switch_on(false);
+				cust_hub_enable(false);
+				mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
+			}
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) //Leo 20231222
+		is_typec_src = false;
+#endif
+#else
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
+#endif
 		}
 		break;
 	case TCP_NOTIFY_DR_SWAP:
@@ -399,7 +568,15 @@ static void mtk_usb_extcon_detect_cable(struct work_struct *work)
 	/* at first we clean states which are no longer active */
 	if (id) {
 		mtk_usb_extcon_set_vbus(extcon, false);
+#if defined(CONFIG_WB_DC_USB_INPUT_CHARGER_SUPPORT)
+		if(is_dc_in()){
+			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
+		}else{
+			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
+		}
+#else
 		mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
+#endif
 	} else {
 		mtk_usb_extcon_set_vbus(extcon, true);
 		mtk_usb_extcon_set_role(extcon, USB_ROLE_HOST);
@@ -420,6 +597,11 @@ static int mtk_usb_extcon_id_pin_init(struct mtk_extcon_info *extcon)
 {
 	int ret = 0;
 	int id;
+
+#if IS_ENABLED(CONFIG_WB_NO_IDDIG_SUPPORT) //Leo 20240801
+	pr_info("%s skip id_pin init !!!\n");
+	return 0;
+#endif
 
 	extcon->id_gpiod = devm_gpiod_get(extcon->dev, "id", GPIOD_IN);
 
@@ -518,13 +700,435 @@ static int mtk_usb_extcon_procfs_init(struct mtk_extcon_info *extcon)
 }
 #endif
 
+
+#ifdef CONFIG_WB_DOCKING_TYPEC_OTG_SUPPORT
+bool get_is_typec_otg_enable(void)
+{
+	return docking_extcon->vbus_on;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT)
+#define PHY_MODE_BC11_SET 1
+#define PHY_MODE_BC11_CLR 2
+
+#if 0 //Leo 20230202
+static int cust_usb_set_usbsw(struct device *dev)
+{
+	struct phy *phy;
+	int ret, mode;
+	mode = PHY_MODE_BC11_CLR;
+	
+	phy = phy_get(dev, "usb2-phy");
+	if (IS_ERR_OR_NULL(phy)) {
+		dev_err(dev, "failed to get usb2-phy\n");
+		return -ENODEV;
+	}
+	ret = phy_set_mode_ext(phy, PHY_MODE_USB_DEVICE, mode);
+	if (ret)
+		dev_err(dev, "failed to set phy ext mode\n");
+	phy_put(dev, phy);
+	return ret;
+}
+#endif
+
+bool get_is_docking(void)
+{
+	is_docking_det= !gpio_get_value(docking_eint_gpio);
+	printk("docking %s val:%d \n",__func__,is_docking_det);
+	return is_docking_det;
+}
+
+static void cust_usb_docking_otg_vbus_en(int is_on)
+{
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+	cust_gpio_set_value(CUST_GPIO_DOCKING_EN , is_on);
+#endif
+}
+
+static void cust_usb_switch_on(int is_on)
+{
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+	cust_gpio_set_value(CUST_GPIO_USB_SWITCH, is_on);
+#endif
+}
+
+static void cust_hub_enable(int is_on) 
+{
+	cust_gpio_set_value(CUST_GPIO_OTG_5V_EN , is_on);
+	mdelay(50);
+}
+
+static void do_docking_delay_work(struct work_struct *work)
+{
+	union power_supply_propval pval;
+	union power_supply_propval prop2 = {0};
+	int ret = 0;
+	int is_docking = get_is_docking();
+	ret = power_supply_get_property(docking_extcon->usb_psy,
+				POWER_SUPPLY_PROP_ONLINE, &pval);
+		ret = power_supply_get_property(docking_extcon->usb_psy,
+			POWER_SUPPLY_PROP_TYPE, &prop2);
+
+	if (!docking_extcon) {
+		printk("docking_extcon = NULL\n");
+		return;
+	}
+
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT)
+	cancel_delayed_work_sync(&docking_delay_track_work);
+#endif
+
+#if IS_ENABLED(CONFIG_WB_NO_HUB_SUPPORT) //Leo 20230303
+	cust_usb_switch_on(is_docking);
+	cust_hub_enable(is_docking);
+#else
+	if (get_is_typec_otg_enable() == false) {
+		cust_usb_switch_on(is_docking);
+		cust_hub_enable(is_docking);
+	}
+#endif
+
+	cust_usb_docking_otg_vbus_en(is_docking);
+
+	if (get_is_docking()) {
+		printk("docking mt_usb_host_connect 1 \n");
+#if IS_ENABLED(CONFIG_CHARGER_MT6375)
+		if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+			cust_set_bc12_en(0);
+		}
+#endif
+
+#if 0//IS_ENABLED(CONFIG_CHARGER_SC8989X) //Leo 20231123
+#if IS_ENABLED(CONFIG_TCPC_HUSB311) 
+		if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+			cust_set_bc12_en_sc8989x(false);
+		}
+#endif
+#endif
+
+#ifdef CONFIG_WB_DOCKING_TYPEC_OTG_SUPPORT
+		if(!get_is_typec_otg_enable())
+			mtk_usb_extcon_set_role(docking_extcon,  USB_ROLE_HOST);
+		irq_set_irq_type(docking_eint_num, IRQF_TRIGGER_HIGH);
+#else
+		mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_HOST);
+		irq_set_irq_type(docking_eint_num, IRQF_TRIGGER_HIGH);
+#endif
+	} else {
+			printk("docking mt_usb_host_connect 0 \n");
+#if IS_ENABLED(CONFIG_CHARGER_MT6375)
+			if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+				cust_set_bc12_en(1);
+			}
+#endif
+
+#if 0//IS_ENABLED(CONFIG_CHARGER_SC8989X) //Leo 20231123
+#if IS_ENABLED(CONFIG_TCPC_HUSB311) 
+			if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+				cust_set_bc12_en_sc8989x(true);
+			}
+#endif
+#endif
+
+#ifdef CONFIG_WB_DOCKING_TYPEC_OTG_SUPPORT
+		if(!get_is_typec_otg_enable()) {
+			if(!pval.intval){
+				mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_NONE);
+			} else {
+				mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_DEVICE);
+			}
+		}
+		irq_set_irq_type(docking_eint_num, IRQF_TRIGGER_LOW);
+#else
+#if defined(M300S_XL_352) || defined(M300S_GRTY_342)
+		mtk_usb_extcon_set_role(docking_extcon, docking_extcon, USB_ROLE_NONE); //jnier 20221025
+#endif		
+		//mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_DEVICE);
+		if(!pval.intval){
+			mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_NONE);
+		}
+		irq_set_irq_type(docking_eint_num, IRQF_TRIGGER_LOW);
+#endif
+	}
+
+	enable_irq(docking_eint_num);
+
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) //Leo 20231123
+	queue_delayed_work(docking_track_wq, &docking_delay_track_work, msecs_to_jiffies(3000)); //delay 3s check again
+#endif
+
+}
+
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) //Leo 20231123
+static void do_docking_delay_track_work(struct work_struct *work)
+{
+	union power_supply_propval pval;
+	union power_supply_propval prop2 = {0};
+	int ret = 0;
+	int is_docking = get_is_docking();
+	int is_host = false;
+	ret = power_supply_get_property(docking_extcon->usb_psy,
+				POWER_SUPPLY_PROP_ONLINE, &pval);
+		ret = power_supply_get_property(docking_extcon->usb_psy,
+			POWER_SUPPLY_PROP_TYPE, &prop2);
+
+	if (!docking_extcon) {
+		printk("%s docking_extcon = NULL\n",__func__);
+		return;
+	}
+
+	is_host = extcon_get_state(docking_extcon->edev, EXTCON_USB_HOST);
+
+	pr_info("%s is_docking:%s is_host:%d \n",__func__, is_docking ? "in" : "out",is_host);
+	if (is_host < 0) {
+		pr_info("%s get host state error, return",__func__);
+		return;
+	}
+
+#if IS_ENABLED(CONFIG_WB_NO_HUB_SUPPORT) //Leo 20230303
+	cust_usb_switch_on(is_docking);
+	cust_hub_enable(is_docking);
+#else
+	if (get_is_typec_otg_enable() == false) {
+		cust_usb_switch_on(is_docking);
+		cust_hub_enable(is_docking);
+	}
+#endif
+
+	cust_usb_docking_otg_vbus_en(is_docking);
+
+	if ((is_docking == true) && (is_host == false)) {
+		pr_info("%s docking mt_usb_host_connect is_docking:%d is_host:%d\n",__func__,is_docking,is_host);
+#if IS_ENABLED(CONFIG_CHARGER_MT6375)
+		if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+			cust_set_bc12_en(0);
+		}
+#endif
+
+#if 0//IS_ENABLED(CONFIG_CHARGER_SC8989X) //Leo 20231123
+#if IS_ENABLED(CONFIG_TCPC_HUSB311) 
+		if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+			cust_set_bc12_en_sc8989x(false);
+		}
+#endif
+#endif
+
+		mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_HOST);
+	} else if ((is_docking == false) && (is_host == true)) {
+		pr_info("%s docking mt_usb_host_disconect is_docking:%d is_host:%d\n",__func__,is_docking,is_host);
+
+#ifdef CONFIG_WB_DOCKING_TYPEC_OTG_SUPPORT
+		if(!get_is_typec_otg_enable()) {
+
+			#if IS_ENABLED(CONFIG_CHARGER_MT6375)
+			if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+				cust_set_bc12_en(1);
+			}
+			#endif
+			#if 0//IS_ENABLED(CONFIG_CHARGER_SC8989X) //Leo 20231123
+			#if IS_ENABLED(CONFIG_TCPC_HUSB311) 
+			if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+				cust_set_bc12_en_sc8989x(true);
+			}
+			#endif
+			#endif
+
+			if (is_typec_src == true) {
+				return;
+			}
+
+			if(!pval.intval){
+				mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_NONE);
+			} else {
+				mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_DEVICE);
+			}
+		}
+		//irq_set_irq_type(docking_eint_num, IRQF_TRIGGER_LOW);
+#else
+		#if IS_ENABLED(CONFIG_CHARGER_MT6375)
+		if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+			cust_set_bc12_en(1);
+		}
+		#endif
+		#if 0//IS_ENABLED(CONFIG_CHARGER_SC8989X) //Leo 20231123
+		#if IS_ENABLED(CONFIG_TCPC_HUSB311) 
+		if (pval.intval && (prop2.intval == POWER_SUPPLY_TYPE_USB_DCP)) {
+			cust_set_bc12_en_sc8989x(true);
+		}
+		#endif
+		#endif
+
+		if (is_typec_src == true) {
+			return;
+		}
+
+		if (!pval.intval) {
+			mtk_usb_extcon_set_role(docking_extcon, USB_ROLE_NONE);
+		}
+		//irq_set_irq_type(docking_eint_num, IRQF_TRIGGER_LOW);
+#endif
+	}
+
+	queue_delayed_work(docking_track_wq, &docking_delay_track_work, msecs_to_jiffies(3000)); //delay 3s check again
+}
+#endif
+
+static irqreturn_t mt_usb_docking_int(int irq, void *dev_id)
+{
+
+	__pm_wakeup_event(docking_suspend_lock, 2000); //Leo 20240304
+
+	if (docking_iddig_boot) {
+		docking_iddig_debounce = 50;
+		docking_iddig_boot = false;
+	} else{
+		docking_iddig_debounce = 50;
+	}
+
+#if defined(M100TBR210_KJ_965) //Leo 20231128
+		docking_iddig_debounce = 300;
+#endif
+
+	queue_delayed_work(docking_wq, &docking_delay_work, msecs_to_jiffies(docking_iddig_debounce));
+	disable_irq_nosync(docking_eint_num);
+
+	return IRQ_HANDLED;
+}
+
+#if 0
+#define BOOT_COMPLETED_CHAIN    0x10U
+extern int register_boot_completed_notifier(struct notifier_block *nb);
+
+int musb_cust_register_eint(void)
+{
+	int ret;
+	ret = request_irq(docking_eint_num, mt_usb_docking_int,
+					IRQF_TRIGGER_LOW, "docking_det", NULL);
+	if (ret) {
+		pr_err("docking : request EINT <%d> fail, ret<%d>\n", docking_eint_num, ret);
+		return ret;
+	}
+	return ret;
+}
+
+int boot_completed_event(struct notifier_block *nb, unsigned long event,
+	void *v)
+{
+	switch(event){
+		case BOOT_COMPLETED_CHAIN:
+			musb_cust_register_eint();
+			break;
+
+		default:
+			break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block boot_completed_notifier = {
+	.notifier_call = boot_completed_event,
+};
+#endif
+#endif
+
+//caozy add for usb-switch
+//sys/bus/platform/drivers/mtk-extcon-usb/extcon_usb_mode
+#if IS_ENABLED(CONFIG_USB_SWITCH_DEBUG)
+static ssize_t extcon_usb_mode_show(struct device_driver *ddri, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "usb_mode:0-none 1-host 2-device, cur_usb_mode=%d\n", cur_usb_mode);
+}
+
+static ssize_t extcon_usb_mode_store(struct device_driver *ddri, const char *buf, size_t count)
+{
+	int error;
+	int data;
+
+    error = kstrtouint(buf, 10, &data);
+    if (error)
+    {
+		printk("invalid input");
+        return error;
+    }
+    printk("extcon_usb_mode_store vbus_on=%d\n", usb_switch_extcon->vbus_on);
+
+	if(data > 2 || data < 0){
+		cur_usb_mode = 0;
+	}else{
+		cur_usb_mode = data;
+	}
+
+	if(cur_usb_mode == 0){//none
+		printk("extcon_usb_mode_store 000000000000000000\n");
+		mtk_usb_extcon_set_role(usb_switch_extcon, USB_ROLE_NONE);
+	}else if(cur_usb_mode == 1){//host
+		printk("extcon_usb_mode_store 111111111111111111\n");
+
+		if(usb_switch_extcon->vbus_on){
+			printk("extcon_usb_mode_store close vbus5v\n");
+			mtk_usb_extcon_set_vbus_v1(false);
+		}
+
+		mtk_usb_extcon_set_role(usb_switch_extcon, USB_ROLE_HOST);
+	}else if(cur_usb_mode == 2){//device
+		printk("extcon_usb_mode_store 222222222222222222\n");
+		mtk_usb_extcon_set_role(usb_switch_extcon, USB_ROLE_DEVICE);
+	}
+
+	return count;
+}
+
+static DRIVER_ATTR_RW(extcon_usb_mode);
+
+static struct driver_attribute *extcon_attr_list[] = {
+	&driver_attr_extcon_usb_mode,
+};
+
+static int extcon_usb_switch_create_attr(struct device_driver *driver)
+{
+	int idx, err = 0;
+	int num = (int)(ARRAY_SIZE(extcon_attr_list));
+
+	if (driver == NULL)
+		return -EINVAL;
+
+	for (idx = 0; idx < num; idx++) {
+		err = driver_create_file(driver, extcon_attr_list[idx]);
+		if (err != 0) {
+			printk("driver_create_file (%s) = %d\n",
+				extcon_attr_list[idx]->attr.name, err);
+			break;
+		}
+	}
+	return err;
+}
+
+static void do_host_delay_work(struct work_struct *work)
+{
+	bool host_mode_enable = false;
+
+	if (csci_exist("host_mode_enable")) {
+	    if (csci_integer("host_mode_enable", 0) > 0) {
+	        host_mode_enable = csci_integer("host_mode_enable", 0);
+	    }
+	}
+
+	if(host_mode_enable && cust_mid_misc_v_get_boot_mode() == 0){
+		printk("----do_host_delay_work on-------\n");
+		mtk_usb_extcon_set_vbus_v1(true);
+		mtk_usb_extcon_set_role(usb_switch_extcon, USB_ROLE_HOST);
+	}
+}
+#endif
+//caozy add for usb-switch
+
 static int mtk_usb_extcon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_extcon_info *extcon;
-#if IS_ENABLED(CONFIG_TCPC_CLASS)
 	const char *tcpc_name;
-#endif
 	int ret;
 
 	extcon = devm_kzalloc(&pdev->dev, sizeof(*extcon), GFP_KERNEL);
@@ -576,6 +1180,9 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 		if (!of_property_read_u32(dev->of_node, "vbus-current",
 					&extcon->vbus_cur))
 			dev_info(dev, "vbus-current=%d", extcon->vbus_cur);
+#if defined ADAPT_CHARGER_V1  //jnier add 20230517
+		extcon->vbus_on = false;	
+#endif
 	}
 
 	extcon->bypss_typec_sink =
@@ -612,7 +1219,89 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to init tcpc\n");
 #endif
 
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT)
+	INIT_DELAYED_WORK(&docking_delay_work, do_docking_delay_work);
+	docking_wq = create_singlethread_workqueue("docking_wq");
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) //Leo 20231123
+	INIT_DELAYED_WORK(&docking_delay_track_work, do_docking_delay_track_work);
+	docking_track_wq = create_singlethread_workqueue("docking_track_wq");
+#endif
+
+	ret = of_get_named_gpio(dev->of_node, "docking_eint_gpio", 0);
+	if (ret < 0) {
+		pr_err("MUSB docking :%s no docking_eint_gpio \n", __func__);
+		return ret;
+	}
+	docking_eint_gpio = ret;
+
+	ret = gpio_request(docking_eint_gpio, "docking_eint_gpio");
+	if (ret < 0) {
+		pr_err("MUSB docking :%s : docking_eint_gpio failed!\n",__func__);
+		return ret;
+	}
+
+#if 1 //Leo add for pull up docking eint pin 20230327
+	extcon_pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(extcon_pinctrl)) {
+		ret = PTR_ERR(extcon_pinctrl);
+		dev_info(&pdev->dev, "Cannot find extcon_pinctrl!\n");
+		//return ret;
+	} else {
+		docking_eint_default = pinctrl_lookup_state(extcon_pinctrl, "default");
+		if (IS_ERR(docking_eint_default)) {
+			ret = PTR_ERR(docking_eint_default);
+			dev_info(&pdev->dev,"Cannot find pinctrl docking_eint_default %d!\n", ret);
+		} else {
+			pinctrl_select_state(extcon_pinctrl, docking_eint_default);
+		}
+	}
+#endif
+
+	docking_eint_num = irq_of_parse_and_map(dev->of_node, 0);
+	printk("docking_eint_num<%d>\n", docking_eint_num);
+	if (docking_eint_num < 0)
+		return -ENODEV;
+
+
+	ret = request_irq(docking_eint_num, mt_usb_docking_int,
+					IRQF_TRIGGER_LOW, "docking_det", NULL);
+	if (ret) {
+		pr_err("docking : request EINT <%d> fail, ret<%d>\n", docking_eint_num, ret);
+		return ret;
+	}
+	
+	irq_set_irq_wake(docking_eint_num, 1);
+
+	extcon->docking_det_gpio = docking_eint_gpio;
+
+
+	docking_suspend_lock = wakeup_source_register(NULL, "dock wakelock");
+	if (!docking_suspend_lock) {
+		pr_err("docking_suspend_lock wakeup source init failed.\n");
+		return -ENODEV;
+	}
+
+
+	docking_extcon = extcon;
+#endif
 	platform_set_drvdata(pdev, extcon);
+
+#ifdef CONFIG_WB_EXTCON_WAKELOCK
+	extcon_wakelock = wakeup_source_register(NULL, "extcon_wakelock");
+#endif
+
+//caozy add for usb-switch
+#if IS_ENABLED(CONFIG_USB_SWITCH_DEBUG)
+    ret = extcon_usb_switch_create_attr(extcon->dev->driver);
+    if (ret){
+        printk("extcon_usb_switch_create_attr to failed : %d\n", ret);
+    }
+    usb_switch_extcon = extcon;
+
+    INIT_DELAYED_WORK(&host_mode_dwork, do_host_delay_work);
+    queue_delayed_work(system_power_efficient_wq, &host_mode_dwork, msecs_to_jiffies(10000));
+#endif
+//caozy add for usb-switch
 
 	return 0;
 }
@@ -631,6 +1320,34 @@ static void mtk_usb_extcon_shutdown(struct platform_device *pdev)
 	mtk_usb_extcon_set_vbus(extcon, false);
 }
 
+static int __maybe_unused extcon_usb_suspend(struct device *dev)
+{
+	pr_info("%s Entry! \n",__func__);
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230511
+	irq_set_irq_wake(docking_eint_num, 1);
+#if defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT)
+	cancel_delayed_work_sync(&docking_delay_track_work);
+#endif
+#endif
+	return 0;
+}
+
+static int __maybe_unused extcon_usb_resume(struct device *dev)
+{
+	pr_info("%s Entry! \n",__func__);
+	
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230511
+	irq_set_irq_wake(docking_eint_num, 0);
+#if 0//defined(CONFIG_WB_DOCKING_POLLING_TRACK_SUPPORT) // only int trigger queque.
+	queue_delayed_work(docking_track_wq, &docking_delay_track_work, msecs_to_jiffies(3000)); 
+#endif
+#endif
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(extcon_usb_pm_ops, extcon_usb_suspend, extcon_usb_resume);
+
 static const struct of_device_id mtk_usb_extcon_of_match[] = {
 	{ .compatible = "mediatek,extcon-usb", },
 	{ },
@@ -644,6 +1361,7 @@ static struct platform_driver mtk_usb_extcon_driver = {
 	.driver		= {
 		.name	= "mtk-extcon-usb",
 		.of_match_table = mtk_usb_extcon_of_match,
+		.pm	= &extcon_usb_pm_ops,
 	},
 };
 

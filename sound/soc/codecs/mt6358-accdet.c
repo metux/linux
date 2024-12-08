@@ -31,6 +31,24 @@
 #include "mt6358-accdet.h"
 #include "mt6358.h"
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230712
+#include <mt-plat/csci.h>
+#if !IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) //Leo 20230110
+#define CONFIG_WB_TYPEC_EARPIECE
+#endif
+#endif
+
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE)//Leo 20230110
+#include "mt6358-typec.h"
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+#include <mt-plat/middle_misc.h>
+#endif
+#endif
+
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+#include <mt-plat/cust_gpios.h>
+#endif
+
 /* grobal variable definitions */
 #define REGISTER_VAL(x)	(x - 1)
 #define HAS_CAP(_c, _x)	(((_c) & (_x)) == (_x))
@@ -125,6 +143,20 @@ static struct mt63xx_accdet_data *accdet;
 
 static struct head_dts_data accdet_dts;
 struct pwm_deb_settings *cust_pwm_deb;
+
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //Leo 20230324
+static bool is_typec_accdet_plug_in = false;
+static bool is_boot_completed = false;
+static void cust_set_typec_accdet_status(bool status)
+{
+	is_typec_accdet_plug_in = status;
+}
+bool cust_get_typec_accdet_status(void)
+{
+	return is_typec_accdet_plug_in;
+}
+EXPORT_SYMBOL(cust_get_typec_accdet_status);
+#endif
 
 struct accdet_priv {
 	u32 caps;
@@ -1719,6 +1751,22 @@ static int accdet_get_dts_data(void)
 	     accdet_dts.mic_vol, accdet_dts.plugout_deb,
 	     accdet_dts.mic_mode, accdet_dts.eint_pol);
 
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //weibu 20230110
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230712
+	if (csci_exist("accdet.typecearpiece.disable")) { //just for debug
+		int temp = 0;
+		temp = csci_integer("accdet.typecearpiece.disable",0);
+		if (temp == 0) {
+			accdet_dts.mic_mode = 3;
+		}
+	} else {
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE)
+		accdet_dts.mic_mode = 3;
+#endif
+	}
+#endif
+#endif
+
 	ret = of_property_read_u32(node,
 			"headset-use-ap-eint", &tmp);
 	if (ret)
@@ -1921,6 +1969,36 @@ static void config_eint_init_by_mode(void)
 	}
 }
 
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //Leo 20240816
+static void cust_typec_accdet_pre_init(void)
+{
+	unsigned int reg = 0;
+	/* reset the accdet unit */
+	accdet_update_bit(RG_ACCDET_RST_ADDR,
+			RG_ACCDET_RST_SFT);
+	accdet_clear_bit(RG_ACCDET_RST_ADDR,
+			RG_ACCDET_RST_SFT);
+
+	/* init pwm frequency, duty & rise/falling delay */
+	accdet_write(ACCDET_PWM_WIDTH_ADDR,
+		REGISTER_VAL(cust_pwm_deb->pwm_width));
+	accdet_write(ACCDET_PWM_THRESH_ADDR,
+		REGISTER_VAL(cust_pwm_deb->pwm_thresh));
+	accdet_write(ACCDET_RISE_DELAY_ADDR,
+		  (cust_pwm_deb->fall_delay << 15 | cust_pwm_deb->rise_delay));
+
+	/* config micbias voltage, micbias1 vref is only controlled by accdet
+	 * if we need 2.8V, config [12:13]
+	 */
+	reg = accdet_read(RG_AUDPWDBMICBIAS1_ADDR);
+	if (accdet_dts.mic_vol <= 7) {
+		/* micbias1 <= 2.7V */
+		accdet_write(RG_AUDPWDBMICBIAS1_ADDR,
+		reg | (accdet_dts.mic_vol<<RG_AUDMICBIAS1VREF_SFT) | RG_AUDMICBIAS1LOWPEN_MASK_SFT);
+	}
+}
+#endif
+
 static void accdet_init_once(void)
 {
 	unsigned int reg = 0;
@@ -2083,6 +2161,68 @@ int mt6358_accdet_init(struct snd_soc_component *component,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mt6358_accdet_init);
+
+
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //weibu 20230110
+void typec_headphone_irq_handler(int state)
+{
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230712
+	if (csci_exist("accdet.typecearpiece.disable")) { //just for debug
+		int temp = 0;
+		temp = csci_integer("accdet.typecearpiece.disable",0);
+		if (temp == 1) {
+			return;
+		}
+	} else {
+#if !IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE)
+	return;
+#endif
+	}
+#endif /*CONFIG_MID_CSCI_SUPPORT*/
+	cust_set_typec_accdet_status(state);//jnier add 10120722
+	if ((is_boot_completed == false) && 
+		(cust_mid_misc_get_boot_mode() != FACTORY_BOOT)) {  //jnier modfy 20230703
+		cust_set_typec_accdet_status(state);
+		return;
+	}
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+	cust_gpio_set_value(CUST_GPIO_USB_HP_SW,state);//jnier add 20230822
+	cust_gpio_set_value(CUST_GPIO_AUHPR_SPK_SW,state);
+#endif
+	if(state){
+		accdet->cur_eint_state = EINT_PLUG_IN;
+	}else{
+		accdet->cur_eint_state = EINT_PLUG_OUT;
+	}
+	queue_work(accdet->eint_workqueue, &accdet->eint_work);
+}
+EXPORT_SYMBOL(typec_headphone_irq_handler);
+
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+static int boot_completed_event(struct notifier_block *nb,
+								unsigned long event, void *v)
+{
+	switch(event){
+		case BOOT_COMPLETED_CHAIN:
+			is_boot_completed = true;
+			if (cust_get_typec_accdet_status()) {
+				typec_headphone_irq_handler(true);
+			}
+			break;
+
+		default:
+			break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block boot_completed_notifier = {
+	.notifier_call = boot_completed_event,
+};
+#endif
+#endif
 
 static int mt6358_accdet_probe(struct platform_device *pdev)
 {
@@ -2313,9 +2453,33 @@ static int mt6358_accdet_probe(struct platform_device *pdev)
 		pr_notice("%s create_attr fail, ret = %d\n", __func__, ret);
 		goto err_create_workqueue;
 	}
+	
+//Leo 20240816
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE)
+	if (cust_get_typec_accdet_status()) {
+		cust_typec_accdet_pre_init();
+	}
+#elif defined(CONFIG_WB_TYPEC_EARPIECE)
+	if (csci_exist("accdet.typecearpiece.disable")) {
+		int temp = 0;
+		temp = csci_integer("accdet.typecearpiece.disable",0);
+		if (temp == 0) {
+			if (cust_get_typec_accdet_status()) {
+				cust_typec_accdet_pre_init();
+			}
+		}
+	}
+#endif
+
 	atomic_set(&accdet_first, 1);
 	mod_timer(&accdet_init_timer, (jiffies + ACCDET_INIT_WAIT_TIMER));
 	pr_info("%s done!\n", __func__);
+
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //Leo 20230324
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+	midmisc_register_boot_completed_notifier(&boot_completed_notifier);
+#endif
+#endif
 
 	return 0;
 

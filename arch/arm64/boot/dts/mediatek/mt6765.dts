@@ -3500,6 +3500,7 @@ pwrap: pwrap@1000d000 {
 		mediatek,common-id = <0>;
 		smi-common;
 		disable-gals;
+		mmsys_config = <&mmsys_config>;
 		operating-points-v2 = <&opp_table_mm>;
 		power-domains = <&scpsys MT6765_POWER_DOMAIN_DIS>;
 		clocks = <&mmsys_config CLK_MM_SMI_COMM0>,
@@ -4733,7 +4734,6 @@ pwrap: pwrap@1000d000 {
 
 &mt6370_chg {
 	charger = <&mtk_charger_type>; /*mt6370 get online status*/
-	charger_name = "mt6370-charger";
 };
 
 &mtk_charger_type {

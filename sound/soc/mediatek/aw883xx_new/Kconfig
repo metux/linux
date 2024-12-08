@@ -1,0 +1,11 @@
+config SND_SOC_AW883XX_NEW
+    tristate "SoC Audio for awinic aw883xx series"
+    depends on I2C
+    help
+      This option enables support for aw883xx series Smart PA.
+
+config WB_USE_AW883XX_NEW
+	tristate "WB_USE_AW883XX_NEW"
+	default n
+	help
+        This option enables WB_USE_AW883XX_NEW

@@ -25,6 +25,10 @@
 #include "../mtk_mipi_tx.h"
 #include "mtk_drm_6789.h"
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230831
+#include <mt-plat/csci.h>
+#endif
+
 static void mt6789_mtk_sodi_config(struct drm_device *drm, enum mtk_ddp_comp_id id,
 			struct cmdq_pkt *handle, void *data);
 
@@ -1260,11 +1264,29 @@ static int mtk_mipi_tx_pll_prepare_mt6789(struct clk_hw *hw)
 {
 	struct mtk_mipi_tx *mipi_tx = mtk_mipi_tx_from_clk_hw(hw);
 	unsigned int txdiv, txdiv0, txdiv1, tmp;
+	static int is_first = true;
 	u32 rate, rate_khz;
 
 	if (mipi_tx == NULL)
 		return -EINVAL;
 	DDPDBG("%s+\n", __func__);
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230831
+	if (csci_exist("ro.vendor.lcm.mipi_volt")) { 
+		mipi_volt = csci_integer("ro.vendor.lcm.mipi_volt",0);
+		if (mipi_volt > 15) {
+			mipi_volt = 15;
+		} else if (mipi_volt < 0) {
+			mipi_volt = 0;
+		}
+	}
+#endif
+
+	if (is_first == true) {
+		mtk_mipi_tx_update_bits(mipi_tx, MIPITX_VOLTAGE_SEL,
+				FLD_RG_DSI_HSTX_LDO_REF_SEL, mipi_volt<<6);
+		is_first = false;
+	}
 
 	/* if mipitx is on, skip it... */
 	if (mtk_is_mipi_tx_enable(hw)) {
@@ -1304,6 +1326,13 @@ static int mtk_mipi_tx_pll_prepare_mt6789(struct clk_hw *hw)
 		txdiv1 = 0;
 	} else {
 		return -EINVAL;
+	}
+
+	/* change the mipi_volt */
+	if (mipi_volt) {
+		DDPMSG("%s+ mipi_volt change: %d\n", __func__, mipi_volt);
+		mtk_mipi_tx_update_bits(mipi_tx, MIPITX_VOLTAGE_SEL,
+			FLD_RG_DSI_HSTX_LDO_REF_SEL, mipi_volt<<6);
 	}
 
 	writel(0x0, mipi_tx->regs + MIPITX_PRESERVED);
@@ -1430,6 +1459,17 @@ static int mtk_mipi_tx_pll_cphy_prepare_mt6789(struct clk_hw *hw)
 	}
 	/*set volate*/
 	writel(0x4444236A, mipi_tx->regs + MIPITX_VOLTAGE_SEL);
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230831
+	if (csci_exist("ro.vendor.lcm.mipi_volt")) { 
+		mipi_volt = csci_integer("ro.vendor.lcm.mipi_volt",0);
+		if (mipi_volt > 15) {
+			mipi_volt = 15;
+		} else if (mipi_volt < 0) {
+			mipi_volt = 0;
+		}
+	}
+#endif
 
 	/* change the mipi_volt */
 	if (mipi_volt) {

@@ -20,6 +20,10 @@
 #include <mt-plat/rt-regmap.h>
 #endif
 
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT) //Leo 20230417
+#include <mt-plat/middle_misc.h>
+#endif
+
 #include "charger_class.h"
 #include "rt9465.h"
 #define I2C_ACCESS_MAX_RETRY	5
@@ -1567,6 +1571,7 @@ static int rt9465_probe(struct i2c_client *i2c,
 	const struct i2c_device_id *dev_id)
 {
 	int ret = 0;
+
 	struct rt9465_info *info = NULL;
 
 	pr_info("%s (%s)\n", __func__, RT9465_DRV_VERSION);
@@ -1577,6 +1582,7 @@ static int rt9465_probe(struct i2c_client *i2c,
 
 	info->i2c = i2c;
 	info->dev = &i2c->dev;
+
 	mutex_init(&info->i2c_access_lock);
 	mutex_init(&info->adc_access_lock);
 	mutex_init(&info->gpio_access_lock);
@@ -1596,6 +1602,13 @@ static int rt9465_probe(struct i2c_client *i2c,
 	ret = rt9465_register_rt_regmap(info);
 	if (ret < 0)
 		goto err_register_regmap;
+#endif
+
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT) //Leo 20230417
+	if (2 == cust_midmisc_get_board_id()) {
+		ret = -ENODEV;
+		goto err_hw_not_exit;
+	}
 #endif
 
 	/* Register charger device */
@@ -1621,6 +1634,9 @@ err_register_chg_dev:
 #ifdef CONFIG_RT_REGMAP
 	rt_regmap_device_unregister(info->regmap_dev);
 err_register_regmap:
+#endif
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT) //Leo 20230417
+err_hw_not_exit: //Leo 20230417
 #endif
 err_parse_dt:
 	mutex_destroy(&info->adc_access_lock);

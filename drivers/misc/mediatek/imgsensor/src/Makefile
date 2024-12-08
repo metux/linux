@@ -3,6 +3,8 @@
 
 # MTK_PLATFORM := isp4 isp6s
 
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/
 subdir-ccflags-y += \
 	-I$(srctree)/drivers/misc/mediatek/include/ \
 	-I$(srctree)/drivers/i2c/busses/ \

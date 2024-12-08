@@ -30,6 +30,8 @@ enum mt6789_afe_gpio {
 	MT6789_AFE_GPIO_VOW_DAT_ON,
 	MT6789_AFE_GPIO_VOW_CLK_OFF,
 	MT6789_AFE_GPIO_VOW_CLK_ON,
+	MT6789_AFE_GPIO_EXTAMP_ON,
+	MT6789_AFE_GPIO_EXTAMP_OFF,
 	MT6789_AFE_GPIO_GPIO_NUM
 };
 
@@ -39,5 +41,5 @@ int mt6789_afe_gpio_init(struct mtk_base_afe *afe);
 int mt6789_afe_gpio_request(struct mtk_base_afe *afe, bool enable,
 			    int dai, int uplink);
 bool mt6789_afe_gpio_is_prepared(enum mt6789_afe_gpio type);
-
+int AudDrv_GPIO_EXTAMP_Select(int bEnable, int mode);
 #endif

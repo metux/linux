@@ -40,6 +40,17 @@
 struct goodix_module goodix_modules;
 int core_module_prob_sate = CORE_MODULE_UNPROBED;
 
+
+#include <linux/csci.h>
+int init_swap_xy = 0;
+int swap_xy = 0;
+int revert_x = 0;
+int revert_y = 0;
+int swap_revert_x = 0;
+int swap_revert_y = 0;
+extern unsigned int DISP_GetScreenWidth(void);
+extern unsigned int DISP_GetScreenHeight(void);
+
 static int goodix_send_ic_config(struct goodix_ts_core *cd, int type);
 /**
  * __do_register_ext_module - register external module
@@ -745,6 +756,26 @@ static ssize_t goodix_ts_debug_log_store(struct device *dev,
 	return count;
 }
 
+/* show mcu fab */
+#define NOT_MCU_FAB_FLASH_ADDR 0x1F314
+static ssize_t mcu_fab_show(struct device  *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct goodix_ts_core *cd = dev_get_drvdata(dev);
+	struct goodix_ts_hw_ops *hw_ops = cd->hw_ops;
+	u8 val;
+	int ret;
+
+	ret = hw_ops->read_flash(cd, NOT_MCU_FAB_FLASH_ADDR, &val, 1);
+	if (ret < 0) {
+		ts_err("read mcu fab failed");
+		return 0;
+	}
+	ts_info("mcu fab:0x%02X", val);
+
+	return snprintf(buf, PAGE_SIZE, "0x%02X\n", val);
+}
+
 static DEVICE_ATTR(driver_info, 0440,
 		driver_info_show, NULL);
 static DEVICE_ATTR(chip_info, 0440,
@@ -763,6 +794,8 @@ static DEVICE_ATTR(esd_info, 0664,
 		goodix_ts_esd_info_show, goodix_ts_esd_info_store);
 static DEVICE_ATTR(debug_log, 0664,
 		goodix_ts_debug_log_show, goodix_ts_debug_log_store);
+static DEVICE_ATTR(get_mcu_fab, 0440,
+		mcu_fab_show, NULL);
 
 static struct attribute *sysfs_attrs[] = {
 	&dev_attr_driver_info.attr,
@@ -774,6 +807,7 @@ static struct attribute *sysfs_attrs[] = {
 	&dev_attr_irq_info.attr,
 	&dev_attr_esd_info.attr,
 	&dev_attr_debug_log.attr,
+	&dev_attr_get_mcu_fab.attr,
 	NULL,
 };
 
@@ -947,6 +981,12 @@ static int goodix_parse_dt_resolution(struct device_node *node,
 		return ret;
 	}
 
+	if(init_swap_xy == 1){
+		ret = of_property_read_u32(node, "goodix,panel-max-y", &board_data->panel_max_x);
+
+		ret = of_property_read_u32(node, "goodix,panel-max-x", &board_data->panel_max_y);
+	}
+
 	ret = of_property_read_u32(node, "goodix,panel-max-w",
 				 &board_data->panel_max_w);
 	if (ret) {
@@ -990,14 +1030,6 @@ static int goodix_parse_dt(struct device_node *node,
 		board_data->avdd_gpio = r;
 	}
 
-	r = of_get_named_gpio(node, "goodix,avdd-evt-gpio", 0);
-	if (r < 0) {
-		ts_info("can't find avdd-evt-gpio, use other power supply");
-		board_data->avdd_evt_gpio = 0;
-	} else {
-		ts_info("get avdd-evt-gpio[%d] from dt", r);
-		board_data->avdd_evt_gpio = r;
-	}
 
 	r = of_get_named_gpio(node, "goodix,iovdd-gpio", 0);
 	if (r < 0) {
@@ -1112,14 +1144,40 @@ static void goodix_ts_report_pen(struct input_dev *dev,
 		struct goodix_pen_data *pen_data)
 {
 	int i;
+	unsigned int x, y, z;
 
 	mutex_lock(&dev->mutex);
 
 	if (pen_data->coords.status == TS_TOUCH) {
+		x = pen_data->coords.x;
+		y = pen_data->coords.y;
+
+		if(swap_xy == 1){
+			z = pen_data->coords.x;
+			x = pen_data->coords.y;
+			y = z;
+		}
+
+		if(revert_x == 1){
+			x = DISP_GetScreenWidth() - x;
+		}
+
+		if(swap_revert_x == 1){
+			x = DISP_GetScreenHeight() - x;
+		}
+
+		if(revert_y == 1){
+			y = DISP_GetScreenHeight() - y;
+		}
+
+		if(swap_revert_y == 1){
+			y = DISP_GetScreenWidth() - y;
+		}
+
 		input_report_key(dev, BTN_TOUCH, 1);
 		input_report_key(dev, pen_data->coords.tool_type, 1);
-		input_report_abs(dev, ABS_X, pen_data->coords.x);
-		input_report_abs(dev, ABS_Y, pen_data->coords.y);
+		input_report_abs(dev, ABS_X, x);
+		input_report_abs(dev, ABS_Y, y);
 		input_report_abs(dev, ABS_PRESSURE, pen_data->coords.p);
 		if (pen_data->coords.p == 0)
 			input_report_abs(dev, ABS_DISTANCE, 1);
@@ -1155,6 +1213,8 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 	unsigned int touch_num = touch_data->touch_num;
 	int i;
 
+	unsigned int x, y, z;
+
 	mutex_lock(&dev->mutex);
 
 	for (i = 0; i < GOODIX_MAX_TOUCH; i++) {
@@ -1165,10 +1225,36 @@ static void goodix_ts_report_finger(struct input_dev *dev,
 				touch_data->coords[i].w);
 			input_mt_slot(dev, i);
 			input_mt_report_slot_state(dev, MT_TOOL_FINGER, true);
+
+			x = touch_data->coords[i].x;
+			y = touch_data->coords[i].y;
+
+			if(swap_xy == 1){
+				z = touch_data->coords[i].x;
+				x = touch_data->coords[i].y;
+				y = z;
+			}
+
+			if(revert_x == 1){
+				x = DISP_GetScreenWidth() - x;
+			}
+
+			if(swap_revert_x == 1){
+				x = DISP_GetScreenHeight() - x;
+			}
+
+			if(revert_y == 1){
+				y = DISP_GetScreenHeight() - y;
+			}
+
+			if(swap_revert_y == 1){
+				y = DISP_GetScreenWidth() - y;
+			}
+
 			input_report_abs(dev, ABS_MT_POSITION_X,
-					touch_data->coords[i].x);
+					x);
 			input_report_abs(dev, ABS_MT_POSITION_Y,
-					touch_data->coords[i].y);
+					y);
 			input_report_abs(dev, ABS_MT_TOUCH_MAJOR,
 					touch_data->coords[i].w);
 		} else {
@@ -1251,9 +1337,7 @@ static irqreturn_t goodix_ts_threadirq_func(int irq, void *data)
 					&ts_event->pen_data);
 		}
 		if (ts_event->event_type == EVENT_REQUEST)
-		{
 			goodix_ts_request_handle(core_data, ts_event);
-		}
 	}
 
 	return IRQ_HANDLED;
@@ -1412,19 +1496,10 @@ static int goodix_ts_gpio_setup(struct goodix_ts_core *core_data)
 				GPIOF_OUT_INIT_LOW, "ts_avdd_gpio");
 		if (r < 0) {
 			ts_err("Failed to request avdd-gpio, r:%d", r);
-			//return r;
+			return r;
 		}
 	}
 
-	if (ts_bdata->avdd_evt_gpio > 0) {
-		r = devm_gpio_request_one(&core_data->pdev->dev,
-				ts_bdata->avdd_evt_gpio,
-				GPIOF_OUT_INIT_LOW, "ts_avdd_evt_gpio");
-		if (r < 0) {
-			ts_err("Failed to request avdd-evt-gpio, r:%d", r);
-			//return r;
-		}
-	}
 	if (ts_bdata->iovdd_gpio > 0) {
 		r = devm_gpio_request_one(&core_data->pdev->dev,
 				ts_bdata->iovdd_gpio,
@@ -1459,7 +1534,7 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 	core_data->input_dev = input_dev;
 	input_set_drvdata(input_dev, core_data);
 
-	input_dev->name = GOODIX_CORE_DRIVER_NAME;
+	input_dev->name = "mtk-tpd-"GOODIX_CORE_DRIVER_NAME;
 	input_dev->phys = GOOIDX_INPUT_PHYS;
 	input_dev->id.product = 0xDEAD;
 	input_dev->id.vendor = 0xBEEF;
@@ -2261,13 +2336,13 @@ static int goodix_ts_probe(struct platform_device *pdev)
 	ret = goodix_ts_power_init(core_data);
 	if (ret) {
 		ts_err("failed init power");
-		goto err_out;
+		//goto err_out;
 	}
 
 	ret = goodix_ts_power_on(core_data);
 	if (ret) {
 		ts_err("failed power on");
-		goto err_out;
+		//goto err_out;
 	}
 
 	/* generic notifier callback */
@@ -2286,6 +2361,59 @@ static int goodix_ts_probe(struct platform_device *pdev)
 
 	/* Try start a thread to get config-bin info */
 	goodix_start_later_init(core_data);
+
+
+	if (csci_exist("gtx.init_swap_xy")) {
+		if (csci_integer("gtx.init_swap_xy", 0) > 0) {
+			init_swap_xy = csci_integer("gtx.init_swap_xy", 0);
+		}
+	}
+
+	if (csci_exist("gtx.swap_xy")) {
+		if (csci_integer("gtx.swap_xy", 0) > 0) {
+			swap_xy = csci_integer("gtx.swap_xy", 0);
+		}
+	}
+
+	if (csci_exist("gtx.revert_x")) {
+		if (csci_integer("gtx.revert_x", 0) > 0) {
+			revert_x = csci_integer("gtx.revert_x", 0);
+		}
+	}
+
+	if (csci_exist("gtx.revert_y")) {
+		if (csci_integer("gtx.revert_y", 0) > 0) {
+			revert_y = csci_integer("gtx.revert_y", 0);
+		}
+	}
+
+	if (csci_exist("gtx.swap_revert_x")) {
+		if (csci_integer("gtx.swap_revert_x", 0) > 0) {
+			swap_revert_x = csci_integer("gtx.swap_revert_x", 0);
+		}
+	}
+
+	if (csci_exist("gtx.swap_revert_y")) {
+		if (csci_integer("gtx.swap_revert_y", 0) > 0) {
+			swap_revert_y = csci_integer("gtx.swap_revert_y", 0);
+		}
+	}
+
+//#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT)//Leo 20210827
+//	{
+//		char name[128];
+//		u8 fwver = 0;
+//		extern void Hwinfo_update_info_cust(int hw_type, char *name);
+//		#define HW_TYPE_TP    2
+//		//fts_read_reg(FTS_REG_FW_VER, &fwver);
+//		if (fwver != 0) {
+//			sprintf(name,"%s ver:0x%02x",THIS_MODULE->name, fwver);
+//		} else {
+//			sprintf(name,"%s ",THIS_MODULE->name);
+//		}
+//		Hwinfo_update_info_cust(HW_TYPE_TP, name);
+//	}
+//#endif
 
 	ts_info("goodix_ts_core probe success");
 	return 0;
@@ -2370,10 +2498,10 @@ static int __init goodix_ts_core_init(void)
 	int ret;
 
 	ts_info("Core layer init:%s", GOODIX_DRIVER_VERSION);
-#if	1
-	ret = goodix_spi_bus_init();
-#else
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_GOODIX_BRL_I2C)
 	ret = goodix_i2c_bus_init();
+#else
+	ret = goodix_spi_bus_init();
 #endif
 	if (ret) {
 		ts_err("failed add bus driver");
@@ -2386,10 +2514,11 @@ static void __exit goodix_ts_core_exit(void)
 {
 	ts_info("Core layer exit");
 	platform_driver_unregister(&goodix_ts_driver);
-#if	1
-	goodix_spi_bus_exit();
-#else
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_GOODIX_BRL_I2C)
 	goodix_i2c_bus_exit();
+#else
+	goodix_spi_bus_exit();
+
 #endif
 }
 

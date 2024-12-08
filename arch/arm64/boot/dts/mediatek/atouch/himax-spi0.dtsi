@@ -1,0 +1,19 @@
+&spi0 {
+	status = "okay";
+
+	himax@0 {
+		compatible = "himax,hxcommon";
+		reg = <0>; //Same as CS ID
+		status = "ok";
+
+		spi-max-frequency = <9600000>;	//4800000,9600000,15000000,19200000
+		spi-cpha;
+		interrupt-parent = <&pio>;
+		//himax,3v3-gpio = <&pio 174 0>;
+		himax,rst-gpio = <&pio 152 0>;
+		himax,irq-gpio = <&pio 9 0>;
+		himax,panel-coords = <0 1200 0 2000>;
+		himax,display-coords = <0 1200 0 2000>;
+		report_type = <1>;
+	};
+};

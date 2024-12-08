@@ -388,6 +388,7 @@ void mtk_cpuidle_state_enable(bool en)
 
 	cpuidle_resume_and_unlock();
 }
+EXPORT_SYMBOL(mtk_cpuidle_state_enable);
 
 int mtk_s2idle_state_enable(bool en)
 {

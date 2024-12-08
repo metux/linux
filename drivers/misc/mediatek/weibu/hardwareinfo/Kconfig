@@ -1,0 +1,9 @@
+config CM_HARDWAREINFO_SUPPORT
+        tristate "Hardwareinfo For misc info"
+        default n
+        help
+          CONFIG_CM_HARDWAREINFO_SUPPORT=y
+
+
+
+

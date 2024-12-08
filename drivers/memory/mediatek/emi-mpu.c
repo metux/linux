@@ -52,9 +52,6 @@ static void clear_violation(
 
 	set_regs(mpu->clear_reg,
 		mpu->clear_reg_cnt, emi_cen_base);
-
-	if (mpu->post_clear)
-		mpu->post_clear(emi_id);
 }
 
 static void emimpu_vio_dump(struct work_struct *work)
@@ -76,6 +73,49 @@ static void emimpu_vio_dump(struct work_struct *work)
 	mpu->in_msg_dump = 0;
 }
 static DECLARE_WORK(emimpu_work, emimpu_vio_dump);
+
+/**
+ * Check whether devmpu.
+ *		CONFIG_MTK_DEVMPU_EMI is only on for mt6893 & mt6885.
+ *		Check 0x1fc[21] || 0x1fc[22]; Suppose 0x1fc at mpu->dump_reg[2];
+ */
+static bool is_devmpu_violation(unsigned int emi_id,
+		struct reg_info_t *dump_reg, unsigned int dump_cnt)
+{
+	bool is_devmpu_vio = false;
+
+#if IS_ENABLED(CONFIG_MTK_DEVMPU_EMI)	// only on for mt6893 & mt6885
+	unsigned int target_dump_bit = 0;
+
+	if (dump_cnt >= 2 && dump_reg[2].offset == 0x1fc) {
+		target_dump_bit = (dump_reg[2].value >> 21) & 0x3;
+		pr_info("%s:%d emi(%d), offset(0x%lx), value(0x%lx)\n", __func__,
+				__LINE__, emi_id, dump_reg[2].offset, dump_reg[2].value);
+	}
+	if (target_dump_bit)
+		is_devmpu_vio = true;
+#endif
+	return is_devmpu_vio;
+}
+
+/**
+ * Clear devmpu violation at emi directly.
+ *		clear DEVMPU related registers,
+ *		common reigsters will be cleared in clear_violation().
+ */
+static void devmpu_vio_clear_atemi(unsigned int emi_id)
+{
+#if IS_ENABLED(CONFIG_MTK_DEVMPU_EMI)
+	struct arm_smccc_res smc_res;
+
+	arm_smccc_smc(MTK_SIP_KERNEL_DEVMPU_VIO_CLR, emi_id, 0, 0, 0, 0, 0, 0,
+		&smc_res);
+	if (smc_res.a0) {
+		pr_info("%s:%d failed to clear violation, ret=0x%lx\n", __func__,
+			__LINE__, smc_res.a0);
+	}
+#endif
+}
 
 static irqreturn_t emimpu_violation_irq(int irq, void *dev_id)
 {
@@ -127,13 +167,14 @@ static irqreturn_t emimpu_violation_irq(int irq, void *dev_id)
 		 * If the handler has processed DEVAPC interrupt (and
 		 * returns IRQ_HANDLED), just skip dumping and exit.
 		 */
-		if (mpu->pre_handler)
-			if (mpu->pre_handler(emi_id, dump_reg,
-					mpu->dump_cnt) == IRQ_HANDLED) {
-				clear_violation(mpu, emi_id);
-				mtk_clear_md_violation();
-				continue;
-			}
+		if (is_devmpu_violation(emi_id, dump_reg, mpu->dump_cnt)) {
+			if (mpu->pre_handler)
+				mpu->pre_handler(emi_id, dump_reg, mpu->dump_cnt);
+			clear_violation(mpu, emi_id);
+			devmpu_vio_clear_atemi(emi_id);
+			mtk_clear_md_violation();
+			continue;
+		}
 
 		nr_vio++;
 

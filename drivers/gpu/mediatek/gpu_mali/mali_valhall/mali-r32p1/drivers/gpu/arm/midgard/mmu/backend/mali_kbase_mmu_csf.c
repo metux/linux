@@ -31,7 +31,7 @@
 #include <mmu/mali_kbase_mmu_internal.h>
 #if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
 #include <mtk_gpufreq.h>
-#include "platform/mtk_platform_common.h"
+#include <platform/mtk_platform_common.h>
 #endif
 
 void kbase_mmu_get_as_setup(struct kbase_mmu_table *mmut,
@@ -95,7 +95,7 @@ static void submit_work_pagefault(struct kbase_device *kbdev, u32 as_nr,
 		if (!queue_work(as->pf_wq, &as->work_pagefault))
 			kbase_ctx_sched_release_ctx(kctx);
 		else {
-			dev_dbg(kbdev->dev,
+			dev_vdbg(kbdev->dev,
 				"Page fault is already pending for as %u\n",
 				as_nr);
 			atomic_inc(&kbdev->faults_pending);
@@ -126,6 +126,21 @@ void kbase_mmu_report_mcu_as_fault_and_reset(struct kbase_device *kbdev,
 		access_type, kbase_gpu_access_type_name(fault->status),
 		source_id);
 
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
+	ged_log_buf_print2(
+		kbdev->ged_log_buf_hnd_kbase, GED_LOG_ATTR_TIME,
+		"Unexpected Page fault in firmware address space at VA 0x%016llX\n"
+		"raw fault status: 0x%X\n"
+		"exception type 0x%X: %s\n"
+		"access type 0x%X: %s\n"
+		"source id 0x%X\n",
+		fault->addr,
+		fault->status,
+		exception_type, kbase_gpu_exception_name(exception_type),
+		access_type, kbase_gpu_access_type_name(fault->status),
+		source_id);
+#endif
+
 	/* Report MMU fault for all address spaces (except MCU_AS_NR) */
 	for (as_no = 1; as_no < kbdev->nr_hw_address_spaces; as_no++)
 		submit_work_pagefault(kbdev, as_no, fault);
@@ -152,9 +167,28 @@ void kbase_gpu_report_bus_fault_and_kill(struct kbase_context *kctx,
 					"true" : "false";
 	int as_no = as->number;
 	unsigned long flags;
+	const uintptr_t fault_addr = fault->addr;
 
 	/* terminal fault, print info about the fault */
 	dev_err(kbdev->dev,
+		"GPU bus fault in AS%d at PA %pK\n"
+		"PA_VALID: %s\n"
+		"raw fault status: 0x%X\n"
+		"exception type 0x%X: %s\n"
+		"access type 0x%X: %s\n"
+		"source id 0x%X\n"
+		"pid: %d\n",
+		as_no, (void *)fault_addr,
+		addr_valid,
+		status,
+		exception_type, kbase_gpu_exception_name(exception_type),
+		access_type, kbase_gpu_access_type_name(access_type),
+		source_id,
+		kctx->pid);
+
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
+	ged_log_buf_print2(
+		kbdev->ged_log_buf_hnd_kbase, GED_LOG_ATTR_TIME,
 		"GPU bus fault in AS%d at VA 0x%016llX\n"
 		"VA_VALID: %s\n"
 		"raw fault status: 0x%X\n"
@@ -169,6 +203,7 @@ void kbase_gpu_report_bus_fault_and_kill(struct kbase_context *kctx,
 		access_type, kbase_gpu_access_type_name(access_type),
 		source_id,
 		kctx->pid);
+#endif
 
 	/* AS transaction begin */
 	mutex_lock(&kbdev->mmu_hw_mutex);
@@ -223,6 +258,7 @@ void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 
 #if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
 	if (!mtk_common_gpufreq_bringup()) {
+		mtk_common_debug_dump();
 #if defined(CONFIG_MTK_GPUFREQ_V2)
 		gpufreq_dump_infra_status();
 #else
@@ -247,6 +283,25 @@ void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 		access_type, kbase_gpu_access_type_name(status),
 		source_id,
 		kctx->pid);
+
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
+	ged_log_buf_print2(
+		kbdev->ged_log_buf_hnd_kbase, GED_LOG_ATTR_TIME,
+		"Unhandled Page fault in AS%d at VA 0x%016llX\n"
+		"Reason: %s\n"
+		"raw fault status: 0x%X\n"
+		"exception type 0x%X: %s\n"
+		"access type 0x%X: %s\n"
+		"source id 0x%X\n"
+		"pid: %d\n",
+		as_no, fault->addr,
+		reason_str,
+		status,
+		exception_type, kbase_gpu_exception_name(exception_type),
+		access_type, kbase_gpu_access_type_name(status),
+		source_id,
+		kctx->pid);
+#endif
 
 	/* AS transaction begin */
 	mutex_lock(&kbdev->mmu_hw_mutex);

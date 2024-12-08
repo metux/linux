@@ -12,6 +12,9 @@
 #include "inc/tcpci_event.h"
 #include "inc/pd_policy_engine.h"
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230401
+#include <mt-plat/csci.h>
+#endif
 /* From DTS */
 
 #if CONFIG_USB_PD_REV30_BAT_INFO
@@ -353,6 +356,10 @@ static int pd_parse_pdata(struct pd_port *pd_port)
 	struct device_node *np;
 	int ret = 0, i;
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230401
+	int temp;
+#endif
+
 	pr_info("%s\n", __func__);
 	np = of_find_node_by_name(pd_port->tcpc->dev.of_node, "pd-data");
 
@@ -384,6 +391,38 @@ static int pd_parse_pdata(struct pd_port *pd_port)
 				pd_port->local_snk_cap.nr);
 		if (ret < 0)
 			pr_err("%s get sink pdo data fail\n", __func__);
+
+/*
+				 * Fixed 5V, 500 mA <0x00019032>
+				 * Fixed 5V, 1A <0x00019064>
+				 * Fixed 5V, 2A <0x000190c8>
+				 * Fixed 5V, 3A <0x0001912c>
+				 * Fixed 9V, 500 mA <0x0002d032>
+				 * Fixed 9V, 1A <0x0002d064>
+				 * Fixed 5V, 1.5A <0x00019096>
+				 * Fixed 9V, 2A <0x0002d0c8>
+				 * Fixed 9V, 3A <0x0002d12c>
+				 * Fixed 12V, 3A <0x0003c12c>
+				 * Variable 5-9V, 1A <0x8642d064>
+				 * Variable 5-9V, 2A <0x8642d0c8>
+				 * Variable 5-9V, 3A <0x8642d12c>
+				 * PPS 3V~5.9V, 3A <0xC0761E3C>
+*/
+
+#if IS_ENABLED(CONFIG_WB_PD_9V3A_ONLY_SUPPORT) //Leo 20230401
+		pd_port->local_snk_cap.nr = 1;
+		pd_port->local_snk_cap.pdos[0] = 0x0002d12c;
+#endif
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230401
+	if (csci_exist("ro.vendor.pd.local_snk_cap.pdos")) { 
+		temp = csci_integer("ro.vendor.pd.local_snk_cap.pdos",0);
+		if (temp != 0) {
+			pd_port->local_snk_cap.nr = 1;
+			pd_port->local_snk_cap.pdos[0] = temp;
+		}
+	}
+#endif
 
 		pr_info("%s snk pdo data =\n", __func__);
 		for (i = 0; i < pd_port->local_snk_cap.nr; i++) {

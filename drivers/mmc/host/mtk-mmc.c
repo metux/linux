@@ -7,10 +7,10 @@
 #include "mtk-mmc-vcore.h"
 #include "mtk-mmc-dbg.h"
 #include "rpmb-mtk.h"
+#include "../core/core.h"
 #include "../core/card.h"
 #include "../core/mmc_ops.h"
 #include <linux/arm-smccc.h>
-#include "../core/core.h"
 #include <linux/regulator/consumer.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 #include <mt-plat/dvfsrc-exp.h>
@@ -27,6 +27,7 @@ static void msdc_request_done(struct msdc_host *host, struct mmc_request *mrq);
 #if IS_ENABLED(CONFIG_MMC_DEBUG)
 static void msdc_gpio_of_parse(struct msdc_host *host);
 #endif
+
 static int msdc_get_gpio_version(void)
 {
 	struct device_node *of_chosen = NULL;
@@ -235,6 +236,23 @@ static const struct mtk_mmc_compatible mt6765_compat = {
 	.support_64g = true,
 	.need_gate_cg = true,
 	.set_crypto_enable_in_sw = true,
+	.autok_ver = 0x17122125,
+};
+
+static const struct mtk_mmc_compatible mt6761_compat = {
+	.clk_div_bits = 12,
+	.recheck_sdio_irq = false,
+	.hs400_tune = false,
+	.pad_tune_reg = MSDC_PAD_TUNE0,
+	.async_fifo = true,
+	.data_tune = true,
+	.busy_check = true,
+	.stop_clk_fix = true,
+	.enhance_rx = true,
+	.support_64g = true,
+	.need_gate_cg = true,
+	.set_crypto_enable_in_sw = true,
+	.autok_ver = 0x17122120,
 };
 
 static const struct mtk_mmc_compatible mt6768_compat = {
@@ -249,6 +267,7 @@ static const struct mtk_mmc_compatible mt6768_compat = {
 	.enhance_rx = true,
 	.support_64g = true,
 	.need_gate_cg = true,
+	.autok_ver = 0x18110817,
 };
 
 static const struct mtk_mmc_compatible common_compat = {
@@ -294,6 +313,7 @@ static const struct of_device_id msdc_of_ids[] = {
 	{ .compatible = "mediatek,mt7620-mmc", .data = &mt7620_compat},
 	{ .compatible = "mediatek,mt6779-mmc", .data = &mt6779_compat},
 	{ .compatible = "mediatek,mt6765-mmc", .data = &mt6765_compat},
+	{ .compatible = "mediatek,mt6761-mmc", .data = &mt6761_compat},
 	{ .compatible = "mediatek,mt6768-mmc", .data = &mt6768_compat},
 	{ .compatible = "mediatek,mt6789-mmc", .data = &mt6789_compat},
 	{ .compatible = "mediatek,mt6833-mmc", .data = &mt6833_compat},
@@ -992,6 +1012,7 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 	bool sbc_error;
 	unsigned long flags;
 	u32 *rsp;
+	struct mmc_host *mmc = mmc_from_priv(host);
 
 	if (mrq->sbc && cmd == mrq->cmd &&
 	    (events & (MSDC_INT_ACMDRDY | MSDC_INT_ACMDCRCERR
@@ -1041,6 +1062,16 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 			cmd->error = -EILSEQ;
 			host->error |= REQ_CMD_EIO;
 			host->need_tune = TUNE_CMD_CRC;
+
+			if (!(mmc->retune_crc_disable)
+					&& cmd->opcode != MMC_SEND_TUNING_BLOCK
+					&& cmd->opcode != MMC_SEND_TUNING_BLOCK_HS200
+					&& cmd->opcode != MMC_SEND_STATUS) {
+				dev_info(host->dev, "need retune since cmd%d crc error\n", cmd->opcode);
+				if (mmc->ios.timing == MMC_TIMING_MMC_HS200)
+					host->is_skip_hs200_tune = 0;
+				mmc_retune_needed(mmc);
+			}
 		} else if (events & MSDC_INT_CMDTMO) {
 			cmd->error = -ETIMEDOUT;
 			host->error |= REQ_CMD_TMO;
@@ -1054,9 +1085,9 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 	}
 	if (cmd->error)
 		dev_info(host->dev,
-				"%s: cmd=%d arg=%08X; rsp %08X; cmd_error=%d\n",
+				"%s: cmd=%d arg=%08X; rsp %08X; cmd_error=%d; events=%08x\n",
 				__func__, cmd->opcode, cmd->arg, rsp[0],
-				cmd->error);
+				cmd->error, events);
 
 	if (cmd->opcode == MMC_CMDQ_TASK_MGMT) {
 		/* if resp is incorrect for cmd48, return a error to reset MMC device */
@@ -1176,9 +1207,10 @@ static void msdc_start_command(struct msdc_host *host,
 	rawcmd = msdc_cmd_prepare_raw_cmd(host, mrq, cmd);
 
 	spin_lock_irqsave(&host->lock, flags);
-	if (host->use_cmd_intr)
+	if (host->use_cmd_intr) {
+		sdr_set_bits(host->base + MSDC_PATCH_BIT1, MSDC_PB1_BUSY_CHECK_SEL);
 		sdr_set_bits(host->base + MSDC_INTEN, cmd_ints_mask);
-	else
+	} else
 		sdr_clr_bits(host->base + MSDC_INTEN, cmd_ints_mask);
 	spin_unlock_irqrestore(&host->lock, flags);
 
@@ -1217,6 +1249,7 @@ static inline bool msdc_op_cmdq_on_tran(struct mmc_command *cmd)
 static unsigned int msdc_cmdq_command_start(struct msdc_host *host,
 	struct mmc_command *cmd, unsigned long timeout)
 {
+	unsigned long flags;
 	unsigned long tmo;
 
 	cmd->error = 0;
@@ -1227,10 +1260,16 @@ static unsigned int msdc_cmdq_command_start(struct msdc_host *host,
 			!msdc_cmd_is_ready(host, host->mrq, cmd)) {
 			dev_err(host->dev, "cmd_busy timeout: before CMD<%d>",
 				 cmd->opcode);
-			cmd->error = (unsigned int)-ETIMEDOUT;
+			cmd->error = -ETIMEDOUT;
 			return cmd->error;
 		}
 	}
+
+	/* disable cmd interrupts for cq cmd */
+	spin_lock_irqsave(&host->lock, flags);
+	host->use_cmd_intr = false;
+	sdr_clr_bits(host->base + MSDC_INTEN, cmd_ints_mask);
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	sdr_set_field(host->base + EMMC51_CFG0, EMMC51_CMDQ_MASK,
 			(0x81) | (cmd->opcode << 1));
@@ -1273,7 +1312,7 @@ static unsigned int msdc_cmdq_command_resp_polling(struct msdc_host *host,
 				dev_err(host->dev,
 					"[%s]: CMD<%d> polling_for_completion timeout ARG<0x%.8x>",
 					__func__, cmd->opcode, cmd->arg);
-				cmd->error = (unsigned int)-ETIMEDOUT;
+				cmd->error = -ETIMEDOUT;
 			}
 			goto out;
 		}
@@ -1284,12 +1323,12 @@ static unsigned int msdc_cmdq_command_resp_polling(struct msdc_host *host,
 		if (events & MSDC_INT_CMDRDY) {
 			cmd->resp[0] = readl(host->base + SDC_RESP0);
 		} else if (events & MSDC_INT_RSPCRCERR) {
-			cmd->error = (unsigned int)-EILSEQ;
+			cmd->error = -EILSEQ;
 			dev_err(host->dev,
 				"[%s]: XXX CMD<%d> MSDC_INT_RSPCRCERR Arg<0x%.8x>",
 				__func__, cmd->opcode, cmd->arg);
 		} else if (events & MSDC_INT_CMDTMO) {
-			cmd->error = (unsigned int)-ETIMEDOUT;
+			cmd->error = -ETIMEDOUT;
 			dev_err(host->dev, "[%s]: XXX CMD<%d> MSDC_INT_CMDTMO Arg<0x%.8x>",
 				__func__, cmd->opcode, cmd->arg);
 		}
@@ -1364,19 +1403,9 @@ static void msdc_ops_request(struct mmc_host *mmc, struct mmc_request *mrq)
 #if IS_ENABLED(CONFIG_MMC_MTK_SW_CQHCI)
 	if (msdc_op_cmdq_on_tran(mrq->cmd))
 		msdc_start_request_cmdq(mmc, mrq);
-	else {
+	else
 #endif
 		msdc_start_request_legacy(mmc, mrq);
-		/* Flag re-tuning needed on CRC errors */
-		if (mrq->cmd->error == -EILSEQ && !mmc->retune_crc_disable
-			&& mrq->cmd->opcode != MMC_SEND_TUNING_BLOCK
-			&& mrq->cmd->opcode != MMC_SEND_TUNING_BLOCK_HS200
-			&& mrq->cmd->opcode != MMC_SEND_STATUS)
-			mmc_retune_needed(mmc);
-#if IS_ENABLED(CONFIG_MMC_MTK_SW_CQHCI)
-	}
-#endif
-
 }
 
 static void msdc_pre_req(struct mmc_host *mmc, struct mmc_request *mrq)
@@ -1421,14 +1450,16 @@ static void msdc_data_xfer_next(struct msdc_host *host,
 		}
 	}
 #endif
-	if (mmc_op_multi(mrq->cmd->opcode) && mrq->stop && !mrq->stop->error &&
-	    !mrq->sbc) {
-		msdc_start_command(host, mrq, mrq->stop);
-		if (!host->use_cmd_intr)
-			msdc_command_resp_polling(host, mrq,
-				mrq->stop, CMD_TIMEOUT);
-	} else
-		msdc_request_done(host, mrq);
+	if (mrq && mrq->cmd) {
+		if (mmc_op_multi(mrq->cmd->opcode)
+			&& mrq->stop && !mrq->stop->error && !mrq->sbc) {
+			msdc_start_command(host, mrq, mrq->stop);
+			if (!host->use_cmd_intr)
+				msdc_command_resp_polling(host, mrq,
+					mrq->stop, CMD_TIMEOUT);
+		} else
+			msdc_request_done(host, mrq);
+	}
 }
 
 static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
@@ -1474,7 +1505,9 @@ static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
 			dev_dbg(host->dev, "interrupt events: %x\n", events);
 			msdc_reset_hw(host);
 
-			if (mrq->data->flags & MMC_DATA_WRITE)
+			if (mrq && mrq->data && mrq->data->flags & MMC_DATA_WRITE)
+				host->need_tune = TUNE_DATA_WRITE;
+			else if (data->flags & MMC_DATA_WRITE)
 				host->need_tune = TUNE_DATA_WRITE;
 			else
 				host->need_tune = TUNE_DATA_READ;
@@ -1490,10 +1523,14 @@ static bool msdc_data_xfer_done(struct msdc_host *host, u32 events,
 				data->error = -EILSEQ;
 			}
 
-			dev_info(host->dev, "%s: cmd=%d; blocks=%d",
-				__func__, mrq->cmd->opcode, data->blocks);
-			dev_info(host->dev, "data_error=%d xfer_size=%d\n",
-				(int)data->error, data->bytes_xfered);
+			if (mrq && mrq->cmd)
+				dev_info(host->dev, "%s: cmd=%d blocks=%u data_error=%d xfer_size=%d",
+						__func__, mrq->cmd->opcode, data->blocks,
+						data->error, data->bytes_xfered);
+			else
+				dev_info(host->dev, "%s: flags=0x%x blocks=%u data_error=%d xfer_size=%d",
+						__func__, data->flags, data->blocks,
+						data->error, data->bytes_xfered);
 		}
 
 		msdc_data_xfer_next(host, mrq, data);
@@ -2472,9 +2509,18 @@ static void msdc_ops_card_event(struct mmc_host *mmc)
 	host->power_cycle_cnt = 0;
 	host->data_timeout_cont = 0;
 	host->is_autok_done = 0;
+	host->is_skip_hs200_tune = 0;
 	msdc_reset_bad_sd_detecter(host);
 
 	msdc_get_cd(mmc);
+}
+
+static void msdc_ops_init_card(struct mmc_host *mmc, struct mmc_card *card)
+{
+	struct msdc_host *host = mmc_priv(mmc);
+
+	/* when the card is inited or re-inited, the flag should be reset to retune hs200 */
+	host->is_skip_hs200_tune = 0;
 }
 
 void msdc_set_bad_card_and_remove(struct msdc_host *host)
@@ -2926,6 +2972,7 @@ static const struct mmc_host_ops mt_msdc_ops = {
 	.prepare_hs400_tuning = msdc_prepare_hs400_tuning,
 	.hw_reset = msdc_hw_reset,
 	.card_event = msdc_ops_card_event,
+	.init_card = msdc_ops_init_card,
 };
 
 static const struct cqhci_host_ops msdc_cmdq_ops = {
@@ -3175,32 +3222,59 @@ static void sdcard_oc_handler(struct work_struct *work)
 }
 
 #if IS_ENABLED(CONFIG_MMC_MTK_SW_CQHCI)
-void msdc_swcq_dump(struct mmc_host *mmc)
+static void msdc_swcq_dump(struct mmc_host *mmc)
 {
 	struct msdc_host *host = mmc_priv(mmc);
 
 	msdc_dump_info(NULL, 0, NULL, host);
 }
 
-void  msdc_swcq_err_handle(struct mmc_host *mmc)
+static void  msdc_swcq_err_handle(struct mmc_host *mmc)
 {
 
 }
 
-void msdc_swcq_prepare_tuning(struct mmc_host *mmc)
+static void msdc_swcq_prepare_tuning(struct mmc_host *mmc)
 {
 #if IS_ENABLED(CONFIG_MMC_AUTOK)
 	struct msdc_host *host = mmc_priv(mmc);
 
 	if (mmc->ios.timing == MMC_TIMING_MMC_HS200)
-		host->is_autok_done = 0;
+		host->is_skip_hs200_tune = 0;
 #endif
+}
+
+static void msdc_swcq_cqe_enable(struct mmc_host *mmc, struct mmc_card *card)
+{
+	struct msdc_host *host = mmc_priv(mmc);
+
+	/* enable busy check */
+	sdr_set_bits(host->base + MSDC_PATCH_BIT1, MSDC_PB1_BUSY_CHECK_SEL);
+	/* default write data / busy timeout 20s */
+	msdc_set_busy_timeout(host, 20 * 1000000000ULL, 0);
+	/* default read data timeout 1s */
+	msdc_set_timeout(host, 1000000000ULL, 0);
+	/* set the rst pin to enable device reset n function*/
+	msdc_enable_rst_n_func(mmc, card);
+}
+
+static void msdc_swcq_cqe_disable(struct mmc_host *mmc)
+{
+	struct msdc_host *host = mmc_priv(mmc);
+	u32 val;
+
+	val = readl(host->base + MSDC_INT);
+	writel(val, host->base + MSDC_INT);
+	/* disable busy check */
+	sdr_clr_bits(host->base + MSDC_PATCH_BIT1, MSDC_PB1_BUSY_CHECK_SEL);
 }
 
 static const struct swcq_host_ops msdc_swcq_ops = {
 	.dump_info = msdc_swcq_dump,
 	.err_handle = msdc_swcq_err_handle,
 	.prepare_tuning = msdc_swcq_prepare_tuning,
+	.enable = msdc_swcq_cqe_enable,
+	.disable = msdc_swcq_cqe_disable,
 };
 #endif
 
@@ -3877,11 +3951,19 @@ static int __maybe_unused msdc_suspend(struct device *dev)
 			return ret;
 	}
 
+	dev_dbg(host->dev,"%s, GPIO set cd wake enable",__func__);
+	mmc_gpio_set_cd_wake(mmc, true);
+
 	return pm_runtime_force_suspend(dev);
 }
 
 static int __maybe_unused msdc_resume(struct device *dev)
 {
+	struct mmc_host *mmc = dev_get_drvdata(dev);
+	struct msdc_host *host = mmc_priv(mmc);
+
+	dev_dbg(host->dev,"%s, GPIO set cd wake disable",__func__);
+	mmc_gpio_set_cd_wake(mmc, false);
 	return pm_runtime_force_resume(dev);
 }
 

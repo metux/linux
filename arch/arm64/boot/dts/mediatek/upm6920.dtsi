@@ -1,0 +1,15 @@
+&i2c5{
+	upm6920_chg: upm6920@6a {
+		status = "okay";
+		compatible = "upm,upm6920";
+		chg_name = "primary_chg";
+		upm,drvbus-gpio = <&pio 105 0>;
+		reg = <0x6a>;
+		upm,intr_gpio = <&pio 12 0>;
+		upm,upm6920,usb-vlim = <4600>;
+		upm,upm6920,termination-current = <240>;
+		upm,upm6920,boost-voltage = <5000>;
+		upm,upm6920,boost-current = <1200>;
+		upm,upm6920,const-voltage = <4450>;
+	};
+};

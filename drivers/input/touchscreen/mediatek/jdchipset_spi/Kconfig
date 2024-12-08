@@ -1,0 +1,24 @@
+#
+# Jadard SPI Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_JADARD_SPI_MODULE
+    tristate "Jadard SPI touchscreen"
+    default n
+    help
+      Say Y here if you have Jadard SPI touch panel.
+      If unsure, say N.
+      
+config TOUCHSCREEN_JADARD_SPI_MODULE_X_REVERSE
+    bool "Jadard SPI Touchscreen X reverse"
+    default n
+    help
+      Say Y here Support Jadard SPI Touchscreen X reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_JADARD_SPI_MODULE_Y_REVERSE
+    bool "Jadard SPI Touchscreen Y reverse"
+    default n
+    help
+      Say Y here Support Jadard SPI Touchscreen Y reverse.
+      If unsure, say N.

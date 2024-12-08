@@ -59,6 +59,16 @@
 
 #include "mtk_charger.h"
 
+#if defined(M101TB_DG_PT2_531) //Leo 20230706
+#ifndef CONFIG_WB_DG_CUST_SUPPORT
+#define CONFIG_WB_DG_CUST_SUPPORT
+#endif
+#endif
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20220630
+#include <mt-plat/csci.h>
+#endif
+
 static int _uA_to_mA(int uA)
 {
 	if (uA == -1)
@@ -101,19 +111,34 @@ static bool support_fast_charging(struct mtk_charger *info)
 	int i = 0, state = 0;
 	bool ret = false;
 
+	pr_info("%s entry !\n", __func__);
+
 	for (i = 0; i < MAX_ALG_NO; i++) {
 		alg = info->alg[i];
-		if (alg == NULL)
+		if (alg == NULL) {
 			continue;
+		};
 
 		if (info->enable_fast_charging_indicator &&
-		    ((alg->alg_id & info->fast_charging_indicator) == 0))
+		    ((alg->alg_id & info->fast_charging_indicator) == 0)) {
 			continue;
+		}
 
 		chg_alg_set_current_limit(alg, &info->setting);
 		state = chg_alg_is_algo_ready(alg);
-		chr_debug("%s %s ret:%s\n", __func__, dev_name(&alg->dev),
+		pr_info("%s %s ret:%s\n", __func__, dev_name(&alg->dev),
 			chg_alg_state_to_str(state));
+
+#if IS_ENABLED(CONFIG_TCPC_FUSB302) //Leo 20240801
+#if IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT)
+		pr_info("%s %s get_other_pd_reset_state:%d \n", __func__, dev_name(&alg->dev),get_other_pd_reset_state());
+		if (get_other_pd_reset_state() == true) {
+			if ((i == PE2_ID) || (i == PE_ID)) {
+				state = ALG_NOT_READY;
+			}
+		}
+#endif
+#endif
 
 		if (state == ALG_READY || state == ALG_RUNNING) {
 			ret = true;
@@ -131,6 +156,11 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	u32 ichg1_min = 0, aicr1_min = 0;
 	int ret;
 
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	int temp = info->battery_temp;
+	pr_info("%s pd charge Leo temp:%d \n",__func__,temp);
+#endif
+
 	select_cv(info);
 
 	pdata = &info->chg_data[CHG1_SETTING];
@@ -143,6 +173,7 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 		pdata->charging_current_limit =
 					info->data.ac_charger_current;
 		is_basic = true;
+		pr_info("%s info->usb_unlimited == true, goto done \n",__func__);
 		goto done;
 	}
 
@@ -150,6 +181,7 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 		pdata->input_current_limit = info->data.usb_charger_current;
 		pdata->charging_current_limit = info->data.usb_charger_current;
 		is_basic = true;
+		pr_info("%s info->water_detected == true, goto done \n",__func__);
 		goto done;
 	}
 
@@ -157,6 +189,7 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	    (info->bootmode == 5)) && info->enable_meta_current_limit != 0) {
 		pdata->input_current_limit = 200000; // 200mA
 		is_basic = true;
+		pr_info("%s info->bootmode == 1/5, goto done \n",__func__);
 		goto done;
 	}
 
@@ -166,6 +199,7 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 		) {
 		pdata->input_current_limit = 100000; /* 100mA */
 		is_basic = true;
+		pr_info("%s info->atm_enabled == true, goto done \n",__func__);
 		goto done;
 	}
 
@@ -211,7 +245,8 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 		is_basic = true;
 	}
 
-	if (support_fast_charging(info))
+
+	if (support_fast_charging(info)) //Leo 20230407
 		is_basic = false;
 	else {
 		is_basic = true;
@@ -260,6 +295,24 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	}
 
 	sc_select_charging_current(info, pdata);
+
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230506
+	if ((temp >= 0) && (temp <= 56)) {
+		pdata->thermal_charging_current_limit = -1;
+		pdata->thermal_input_current_limit = -1;
+
+		pdata2->thermal_charging_current_limit = -1;
+		pdata2->thermal_input_current_limit = -1;
+	} 
+#endif
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)  //jnier add 20240115
+	if(csci_exist("charge.thermal.current_limit.disable"))
+			if(csci_integer("charge.thermal.current_limit.disable",0) == 1) {
+					pdata->thermal_charging_current_limit = -1;
+					pdata->thermal_input_current_limit = -1;
+					printk("jnier test charge.thermal.current_limit.disable = 1 \n");
+			}
+#endif
 
 	if (pdata->thermal_charging_current_limit != -1) {
 		if (pdata->thermal_charging_current_limit <=
@@ -318,6 +371,68 @@ static bool select_charging_current_limit(struct mtk_charger *info,
 	info->setting.input_current_limit_dvchg1 =
 		pdata_dvchg->thermal_input_current_limit;
 
+//caozy add begin 20230418
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+    if(get_other_pd_reset_state()){
+#if IS_ENABLED(CONFIG_WB_TD_CUST_SUPPORT)||IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT)
+		pr_info("---get_other_pd_reset_state = true---\n");
+		info->setting.input_current_limit1 = -1;
+		info->setting.charging_current_limit1 = -1;
+		pdata->input_current_limit = info->setting.input_current_limit1;
+		pdata->charging_current_limit = info->setting.charging_current_limit1;
+		info->setting.input_current_limit2 = -1;
+		info->setting.charging_current_limit2 = -1;
+		pdata2->input_current_limit = -1;
+		pdata2->charging_current_limit = -1;
+#else
+		pr_info("---get_other_pd_reset_state = true---\n");
+		info->setting.input_current_limit1 = info->data.ac_charger_input_current;
+		info->setting.charging_current_limit1 = info->data.ac_charger_current;
+		pdata->input_current_limit = info->setting.input_current_limit1;
+		pdata->charging_current_limit = info->setting.charging_current_limit1;
+		info->setting.input_current_limit2 = 0;
+		info->setting.charging_current_limit2 = 0;
+		pdata2->input_current_limit = 0;
+		pdata2->charging_current_limit = 0;
+#endif
+    }
+#endif
+
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	if ((temp >= -10) && (temp < 0)) {
+		pr_info("%s charge Leo(temp >= -10) && (temp < 0) \n",__func__);
+		info->setting.input_current_limit1 = 700000;
+		info->setting.charging_current_limit1 = 700000;
+		pdata->input_current_limit = info->setting.input_current_limit1;
+		pdata->charging_current_limit = info->setting.charging_current_limit1;
+		info->setting.input_current_limit2 = 0;
+		info->setting.charging_current_limit2 = 0;
+		pdata2->input_current_limit = 0;
+		pdata2->charging_current_limit = 0;
+	} else if ((temp > 56) && (temp <= 60)) {
+		pr_info("%s charge Leo (temp > 56) && (temp <= 60) \n",__func__);
+		info->setting.input_current_limit1 = 1600000;
+		info->setting.charging_current_limit1 = 1600000;
+		pdata->input_current_limit = info->setting.input_current_limit1;
+		pdata->charging_current_limit = info->setting.charging_current_limit1;
+		info->setting.input_current_limit2 = 0;
+		info->setting.charging_current_limit2 = 0;
+		pdata2->input_current_limit = 0;
+		pdata2->charging_current_limit = 0;
+	} else if ((temp > 60) || (temp < -10)) {
+		pr_info("%s charge Leo(temp > 60) || (temp < -10) \n",__func__);
+		info->setting.input_current_limit1 = 0;
+		info->setting.charging_current_limit1 = 0;
+		pdata->input_current_limit = info->setting.input_current_limit1;
+		pdata->charging_current_limit = info->setting.charging_current_limit1;
+		info->setting.input_current_limit2 = 0;
+		info->setting.charging_current_limit2 = 0;
+		pdata2->input_current_limit = 0;
+		pdata2->charging_current_limit = 0;
+	}
+#endif
+
+
 done:
 
 	ret = charger_dev_get_min_charging_current(info->chg1_dev, &ichg1_min);
@@ -338,6 +453,7 @@ done:
 		is_basic = true;
 	}
 	/* For TC_018, pleasae don't modify the format */
+	/*m:0 chg1:-1,-1,2050,2050 chg2:-1,-1,0,0 dvchg1:-1 sc:2050000 -1 0 type:5:0 usb_unlimited:0 usbif:0 usbsm:0 aicl:-1 atm:0 bm:0 b:1*/
 	chr_err("m:%d chg1:%d,%d,%d,%d chg2:%d,%d,%d,%d dvchg1:%d sc:%d %d %d type:%d:%d usb_unlimited:%d usbif:%d usbsm:%d aicl:%d atm:%d bm:%d b:%d\n",
 		info->config,
 		_uA_to_mA(pdata->thermal_input_current_limit),
@@ -357,7 +473,6 @@ done:
 		IS_ENABLED(CONFIG_USBIF_COMPLIANCE), info->usb_state,
 		pdata->input_current_limit_by_aicl, info->atm_enabled,
 		info->bootmode, is_basic);
-
 	return is_basic;
 }
 
@@ -374,7 +489,7 @@ static int do_algorithm(struct mtk_charger *info)
 
 	pdata = &info->chg_data[CHG1_SETTING];
 	charger_dev_is_charging_done(info->chg1_dev, &chg_done);
-	is_basic = select_charging_current_limit(info, &info->setting);
+	is_basic = select_charging_current_limit(info, &info->setting); //Leo 20230407
 
 	if (info->is_chg_done != chg_done) {
 		if (chg_done) {
@@ -399,7 +514,10 @@ static int do_algorithm(struct mtk_charger *info)
 			if (info->enable_fast_charging_indicator &&
 			    ((alg->alg_id & info->fast_charging_indicator) == 0))
 				continue;
-
+#if IS_ENABLED(CONFIG_WB_TD_CUST_SUPPORT)||IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT)//jnier 20240116
+			chr_err("%s: %d %d %d %d \n", __func__,info->enable_hv_charging,
+					pdata->input_current_limit,  pdata->charging_current_limit);
+#else
 			if (!info->enable_hv_charging ||
 			    pdata->charging_current_limit == 0 ||
 			    pdata->input_current_limit == 0) {
@@ -410,7 +528,7 @@ static int do_algorithm(struct mtk_charger *info)
 					dev_name(&alg->dev), val);
 				continue;
 			}
-
+#endif
 			if (chg_done != info->is_chg_done) {
 				if (chg_done) {
 					notify.evt = EVT_FULL;
@@ -423,7 +541,7 @@ static int do_algorithm(struct mtk_charger *info)
 				chr_err("%s notify:%d\n", __func__, notify.evt);
 			}
 
-			chg_alg_set_current_limit(alg, &info->setting);
+			chg_alg_set_current_limit(alg, &info->setting); //Leo 20230314
 			ret = chg_alg_is_algo_ready(alg);
 
 			chr_err("%s %s ret:%s\n", __func__,
@@ -441,7 +559,7 @@ static int do_algorithm(struct mtk_charger *info)
 			} else if (ret == ALG_READY || ret == ALG_RUNNING) {
 				is_basic = false;
 				//chg_alg_set_setting(alg, &info->setting);
-				chg_alg_start_algo(alg);
+				chg_alg_start_algo(alg); //Leo 20230314
 				break;
 			} else {
 				chr_err("algorithm ret is error");
@@ -470,6 +588,9 @@ static int do_algorithm(struct mtk_charger *info)
 	info->is_chg_done = chg_done;
 
 	if (is_basic == true) {
+		if(info->wb_stop_charging_current) { //jnier add 20240829 for bypass mode
+			pdata->charging_current_limit=0;
+		}
 		charger_dev_set_input_current(info->chg1_dev,
 			pdata->input_current_limit);
 		charger_dev_set_charging_current(info->chg1_dev,

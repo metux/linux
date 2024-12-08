@@ -18,6 +18,21 @@
 
 #define RT_PD_MANAGER_VERSION	"1.0.8"
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20230712
+#if !IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) //Leo 20230110
+#define CONFIG_WB_TYPEC_EARPIECE
+#endif
+#endif
+
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //weibu 20230110
+#include "mt6358-typec.h"
+#endif
+
+#if defined(CONFIG_WB_DELAY_READ_BAT_TMEP) //Leo 20240112
+bool is_block_bat_temp = false;
+EXPORT_SYMBOL_GPL(is_block_bat_temp);
+#endif
+
 struct typec_port {
 	unsigned int			id;
 	struct device			dev;
@@ -62,12 +77,77 @@ struct rt_pd_manager_data {
 	struct typec_partner *partner;
 	struct typec_partner_desc partner_desc;
 	struct usb_pd_identity partner_identity;
+#if defined(CONFIG_WB_DELAY_READ_BAT_TMEP) //Leo 20240112
+	struct delayed_work plug_work;
+#endif
 };
 
 void usb_dpdm_pulldown(bool enable)
 {
 	pr_notice("%s is not defined\n", __func__);
 }
+
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20221117
+#include <linux/of_platform.h>
+#include "extcon-mtk-usb.h"
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#include <linux/extcon.h>
+#include <linux/of_platform.h>
+
+static struct mtk_extcon_info *g_extcon = NULL;
+static bool get_is_docking(void)
+{
+	if (g_extcon != NULL) {
+		return !gpio_get_value(g_extcon->docking_det_gpio);
+	}
+	
+	return false;
+}
+
+static bool get_mtk_extcon_info(void)
+{
+	struct device_node *pnode = NULL;
+	struct platform_device *pdev = NULL;
+	struct mtk_extcon_info *extcon = NULL;
+
+	if (g_extcon != NULL) {
+		return 0;
+	}
+
+	pnode = of_find_compatible_node(NULL, NULL, "mediatek,extcon-usb");
+	if (!pnode) {
+		pr_err("%s :failed to get pnode\n",__func__);
+		return -ENODEV;
+	}
+
+	pdev = of_find_device_by_node(pnode);
+	if (WARN_ON(!pdev)) {
+		of_node_put(pnode);
+		pr_err("%s :failed to get pdev\n",__func__);
+		return -ENODEV;
+	};
+
+	extcon = (struct mtk_extcon_info *)platform_get_drvdata(pdev);
+
+	if (extcon == NULL) {
+		pr_err("%s :failed to get extcon\n",__func__);
+		return -ENODEV;
+	}
+
+	g_extcon = extcon;
+	
+	return 0;
+}
+#endif
+
+#if defined(CONFIG_WB_DELAY_READ_BAT_TMEP) //Leo 20240112
+static void plug_work_delay_handler(struct work_struct *work)
+{
+	is_block_bat_temp = false;
+}
+#endif
 
 static int pd_tcp_notifier_call(struct notifier_block *nb,
 				unsigned long event, void *data)
@@ -109,7 +189,10 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			 * start charger type detection,
 			 * and enable device connection
 			 */
-
+#if defined(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230109
+		get_mtk_extcon_info();
+		if(get_is_docking() == true){
+		}else{
 			typec_set_data_role(rpmd->typec_port, TYPEC_DEVICE);
 			typec_set_pwr_role(rpmd->typec_port, TYPEC_SINK);
 			typec_set_pwr_opmode(rpmd->typec_port,
@@ -121,12 +204,32 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 					noti->typec_state.polarity ?
 					TYPEC_ORIENTATION_NORMAL :
 					TYPEC_ORIENTATION_REVERSE);
+		}
+#else
+			typec_set_data_role(rpmd->typec_port, TYPEC_DEVICE);
+			typec_set_pwr_role(rpmd->typec_port, TYPEC_SINK);
+			typec_set_pwr_opmode(rpmd->typec_port,
+					     noti->typec_state.rp_level -
+					     TYPEC_CC_VOLT_SNK_DFT);
+			typec_set_vconn_role(rpmd->typec_port, TYPEC_SINK);
+			/* set typec switch orientation */
+			typec_set_orientation(rpmd->typec_port,
+					noti->typec_state.polarity ?
+					TYPEC_ORIENTATION_NORMAL :
+					TYPEC_ORIENTATION_REVERSE);
+#endif
 		} else if ((old_state == TYPEC_ATTACHED_SNK ||
 			    old_state == TYPEC_ATTACHED_NORP_SRC ||
 			    old_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 			    old_state == TYPEC_ATTACHED_DBGACC_SNK) &&
 			    new_state == TYPEC_UNATTACHED) {
 			dev_info(rpmd->dev, "%s Charger plug out\n", __func__);
+		#if defined(CONFIG_WB_DELAY_READ_BAT_TMEP) //Leo 20240112
+			is_block_bat_temp = true;
+			cancel_delayed_work_sync(&rpmd->plug_work);
+			schedule_delayed_work(&rpmd->plug_work, msecs_to_jiffies(10* 1000));
+		#endif
+
 			/*
 			 * report charger plug-out,
 			 * and disable device connection
@@ -169,10 +272,16 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			   new_state == TYPEC_ATTACHED_AUDIO) {
 			dev_info(rpmd->dev, "%s Audio plug in\n", __func__);
 			/* enable AudioAccessory connection */
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //weibu 20230110
+			typec_headphone_irq_handler(1);
+#endif
 		} else if (old_state == TYPEC_ATTACHED_AUDIO &&
 			   new_state == TYPEC_UNATTACHED) {
 			dev_info(rpmd->dev, "%s Audio plug out\n", __func__);
 			/* disable AudioAccessory connection */
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //weibu 20230110
+			typec_headphone_irq_handler(0);
+#endif
 		}
 
 		if (new_state == TYPEC_UNATTACHED) {
@@ -654,6 +763,10 @@ static int rt_pd_manager_probe(struct platform_device *pdev)
 				      __func__, ret);
 		goto err_reg_tcpc_notifier;
 	}
+	
+#if defined(CONFIG_WB_DELAY_READ_BAT_TMEP) //Leo 20240112
+	INIT_DELAYED_WORK(&rpmd->plug_work, plug_work_delay_handler);
+#endif
 
 	platform_set_drvdata(pdev, rpmd);
 	dev_info(rpmd->dev, "%s OK!!\n", __func__);

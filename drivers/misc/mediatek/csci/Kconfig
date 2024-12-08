@@ -1,0 +1,5 @@
+config MID_CSCI_SUPPORT
+        tristate "mid csci support" 
+	default y
+        help
+          Say Y or M to enable

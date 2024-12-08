@@ -1,0 +1,1 @@
+../../weibu/hardwareinfo/hardwareinfo.h

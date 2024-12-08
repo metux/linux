@@ -40,6 +40,20 @@ int musb_port_suspend(struct musb *musb, bool do_suspend)
 	if (!is_host_active(musb))
 		return 0;
 
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo add when suspend plug out docking ,usb crash 20240304
+	{
+		int i;
+		for (i = 0; i <= 5; i++) {
+			if (atomic_read(&musb->is_do_host_work) == 1) {
+				mdelay(50);
+			}
+		}
+	}
+	DBG(0, "is_do_host_work:%d \n",atomic_read(&musb->is_do_host_work));
+	down(&musb->musb_lock);
+#endif
+
+
 	DBG(0, "%s\n", do_suspend ? "suspend" : "resume");
 
 	/* NOTE:  this doesn't necessarily put PHY into low power mode,
@@ -47,12 +61,17 @@ int musb_port_suspend(struct musb *musb, bool do_suspend)
 	 * MUSB_POWER_ENSUSPEND.  PHY may need a clock (sigh) to detect
 	 * SE0 changing to connect (J) or wakeup (K) states.
 	 */
+
 	power = musb_readb(mbase, MUSB_POWER);
 	if (do_suspend) {
 		int retries = 10000;
 
-		if (power & MUSB_POWER_RESUME)
+		if (power & MUSB_POWER_RESUME) {
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo add when suspend plug out docking ,usb crash 20240304
+			up(&musb->musb_lock);
+#endif
 			return -EBUSY;
+		}
 
 		if (!(power & MUSB_POWER_SUSPENDM)) {
 			power |= MUSB_POWER_SUSPENDM;
@@ -99,6 +118,11 @@ int musb_port_suspend(struct musb *musb, bool do_suspend)
 		musb->port1_status |= MUSB_PORT_STAT_RESUME;
 		musb->rh_timer = jiffies + msecs_to_jiffies(20);
 	}
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo add when suspend plug out docking ,usb crash 20240304
+	up(&musb->musb_lock);
+#endif
+
 	return 0;
 }
 
@@ -261,14 +285,9 @@ int musb_hub_control(struct usb_hcd *hcd,
 
 	spin_lock_irqsave(&musb->lock, flags);
 
-	if (!musb->is_active) {
-		retval = -EACCES;
-		goto shutdown;
-	}
-
 	if (unlikely(!HCD_HW_ACCESSIBLE(hcd))) {
-		retval = -ESHUTDOWN;
-		goto shutdown;
+		spin_unlock_irqrestore(&musb->lock, flags);
+		return -ESHUTDOWN;
 	}
 
 	/* hub features:  always zero, setting is a NOP
@@ -457,7 +476,6 @@ error:
 		/* "protocol stall" on error */
 		retval = -EPIPE;
 	}
-shutdown:
 	spin_unlock_irqrestore(&musb->lock, flags);
 
 	musb_platform_unprepare_clk(musb);

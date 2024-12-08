@@ -236,16 +236,6 @@ struct dsc_rc_range_parameters {
 	u8 range_bpg_offset;
 };
 
-struct mtk_panel_dsc_pps {
-	unsigned int dsc_pps_idx;
-	unsigned int dsc_pps_para;
-};
-
-struct mtk_panel_dsc_pps_params {
-	unsigned int count;
-	struct mtk_panel_dsc_pps dsc_pps_params[20];
-};
-
 struct mtk_panel_dsc_params {
 	unsigned int enable;
 	unsigned int dual_dsc_enable;
@@ -284,7 +274,6 @@ struct mtk_panel_dsc_params {
 	unsigned int rc_tgt_offset_lo;
 	unsigned int rc_buf_thresh[14];
 	struct dsc_rc_range_parameters rc_range_parameters[15];
-	struct mtk_panel_dsc_pps_params pps_list;
 };
 struct mtk_dsi_phy_timcon {
 	unsigned int hs_trail;
@@ -317,6 +306,7 @@ struct dynamic_mipi_params {
 	unsigned int hsa;
 	unsigned int hbp;
 	unsigned int hfp;
+	unsigned int mipi_hopping_sta; //Leo add for debug 20230912
 	/*Msync 2.0*/
 	unsigned int max_vfp_for_msync_dyn;
 };
@@ -470,7 +460,6 @@ struct mtk_panel_params {
 	struct mtk_panel_cm_params cm_params;
 	struct mtk_panel_spr_params spr_params;
 	enum MTK_PANEL_ROTATION rotate;
-	unsigned int te_delay;
 };
 
 struct mtk_panel_ext {
@@ -500,8 +489,6 @@ struct mtk_panel_funcs {
 	int (*set_backlight_grp_cmdq)(void *dsi_drv, dcs_grp_write_gce cb,
 		void *handle, unsigned int level);
 	int (*reset)(struct drm_panel *panel, int on);
-	int (*init_power)(struct drm_panel *panel);
-	int (*power_down)(struct drm_panel *panel);
 	int (*ata_check)(struct drm_panel *panel);
 	int (*ext_param_set)(struct drm_panel *panel,
 		struct drm_connector *connector, unsigned int mode);

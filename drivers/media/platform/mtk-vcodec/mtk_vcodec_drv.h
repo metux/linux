@@ -701,6 +701,7 @@ struct mtk_vcodec_dev {
 
 	unsigned int svp_mtee;
 	unsigned int unique_domain;
+	int num_of_cores;
 };
 
 static inline struct mtk_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)

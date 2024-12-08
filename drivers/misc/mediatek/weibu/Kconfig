@@ -1,0 +1,4 @@
+source "drivers/misc/mediatek/weibu/hardwareinfo/Kconfig"
+#source "drivers/misc/mediatek/weibu/dcam_sensor/Kconfig"
+source "drivers/misc/mediatek/weibu/cust_gpios/Kconfig"
+source "drivers/misc/mediatek/weibu/middle_misc/Kconfig"

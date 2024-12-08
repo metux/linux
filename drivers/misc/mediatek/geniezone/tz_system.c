@@ -837,9 +837,14 @@ TZ_RESULT _Gz_KreeServiceCall_body(KREE_SESSION_HANDLE handle, uint32_t command,
 
 #if IS_ENABLED(CONFIG_TEE)
 	case REE_SERVICE_CMD_TEE_INIT_CTX:
+#if IS_ENABLED(CONFIG_TRUSTKERNEL_TEE_SUPPORT)
+		ret = TEEC_InitializeContext(NULL,
+			(struct TEEC_Context *)param[1].mem.buffer);
+#else
 		ret = TEEC_InitializeContext(
 			(char *)param[0].mem.buffer,
 			(struct TEEC_Context *)param[1].mem.buffer);
+#endif
 		if (ret != TEEC_SUCCESS)
 			KREE_ERR("[ERROR] TEEC_InitializeContext failed: %x\n",
 				 ret);

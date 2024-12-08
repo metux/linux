@@ -1,0 +1,23 @@
+&i2c5{
+	sc8960x_chg: sc8960x@6B {
+		compatible = "sc,sc89601d";
+		reg = <0x6B>;
+		//interrupt-parent = <&pio>;
+		//interrupts = <12 IRQ_TYPE_EDGE_FALLING 12 0>;
+		charger_name = "primary_chg";
+		sc,intr-gpio = <&pio 12 IRQ_TYPE_EDGE_FALLING>;
+		sc,sc8960x,charge-detect-enable;
+		sc,sc8960x,usb-vlim = <4600>;
+		sc,sc8960x,usb-ilim = <500>;
+		sc,sc8960x,usb-vreg = <4400>;
+		sc,sc8960x,usb-ichg = <500>;
+		sc,sc8960x,precharge-current = <240>;
+		sc,sc8960x,termination-current = <450>;
+		sc,sc8960x,boost-voltage = <5100>;
+		sc,sc8960x,boost-current = <1200>;
+		sc,sc8960x,enable_term;
+		sc,sc8960x,stat-pin-ctrl = <3>;
+		sc,sc8960x,vac-ovp-threshold = <14200>;
+		//chg_en=gpio48
+	};
+};

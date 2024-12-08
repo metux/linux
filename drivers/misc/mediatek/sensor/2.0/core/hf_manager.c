@@ -327,6 +327,31 @@ int hf_manager_create(struct hf_device *device)
 	for (i = 0; i < device->support_size; ++i) {
 		sensor_type = device->support_list[i].sensor_type;
 		gain = device->support_list[i].gain;
+	
+		#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT)//Leo 20210827
+		{
+			#define HW_TYPE_GSENSOR    7
+			#define HW_TYPE_MSENSOR    8
+			#define HW_TYPE_GYROSENSOR 9
+			#define HW_TYPE_ALSPS      10
+			extern void Hwinfo_update_info_cust(int hw_type, char *name);
+			char name[128];
+
+			memset(name, 0x00, strlen(name));
+			sprintf(name,"%s", device->support_list[i].name);
+
+			if (sensor_type == SENSOR_TYPE_ACCELEROMETER) {
+				Hwinfo_update_info_cust(HW_TYPE_GSENSOR, name);
+			} else if (sensor_type == SENSOR_TYPE_GYROSCOPE) {
+				Hwinfo_update_info_cust(HW_TYPE_GYROSENSOR, name);
+			} else if (sensor_type == SENSOR_TYPE_MAGNETIC_FIELD) {
+				Hwinfo_update_info_cust(HW_TYPE_MSENSOR, name);
+			} else if (sensor_type == SENSOR_TYPE_PROXIMITY) {
+				Hwinfo_update_info_cust(HW_TYPE_ALSPS, name);
+			}
+		} 
+		#endif
+		
 		if (unlikely(sensor_type >= SENSOR_TYPE_SENSOR_MAX || !gain)) {
 			pr_err("Device:%s register failed, %u invalid gain\n",
 				device->dev_name, sensor_type);

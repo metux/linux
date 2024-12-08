@@ -592,7 +592,8 @@ static int venc_vcp_backup(struct venc_inst *inst)
 	int err = 0;
 
 	mtk_vcodec_debug_enter(inst);
-
+	if( inst == NULL)
+		return -EINVAL;
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_id = AP_IPIMSG_ENC_BACKUP;
 	msg.venc_inst = inst->vcu_inst.inst_addr;
@@ -1111,12 +1112,14 @@ static void venc_get_free_buffers(struct venc_inst *inst,
 	pResult->is_key_frm = list->is_key_frm[list->read_idx];
 	pResult->bs_va = list->venc_bs_va_list[list->read_idx];
 	pResult->frm_va = list->venc_fb_va_list[list->read_idx];
+	pResult->flags = list->flags[list->read_idx];
 
-	mtk_vcodec_debug(inst, "bsva %lx frva %lx bssize %d iskey %d",
+	mtk_vcodec_debug(inst, "bsva %lx frva %lx bssize %d iskey %d flags 0x%x",
 		pResult->bs_va,
 		pResult->frm_va,
 		pResult->bs_size,
-		pResult->is_key_frm);
+		pResult->is_key_frm,
+		pResult->flags);
 
 	list->read_idx = (list->read_idx == VENC_MAX_FB_NUM - 1U) ?
 			 0U : list->read_idx + 1U;

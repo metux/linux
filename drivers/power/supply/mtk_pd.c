@@ -60,9 +60,21 @@
 #include "mtk_pd.h"
 #include "mtk_charger_algorithm_class.h"
 
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20220630
+#include <mt-plat/csci.h>
+#endif
+
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT) //Leo 20230417
+#include <mt-plat/middle_misc.h>
+#endif
+
 static int pd_dbg_level = PD_DEBUG_LEVEL;
 #define PD_VBUS_IR_DROP_THRESHOLD 1200
 
+
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230423
+static bool is_need_limit = false;
+#endif
 
 int pd_get_debug_level(void)
 {
@@ -149,8 +161,13 @@ static int _pd_is_algo_ready(struct chg_alg_device *alg)
 	struct mtk_pd *pd = dev_get_drvdata(&alg->dev);
 	int ret_value;
 	int uisoc;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT)
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT) //Leo 20230417
+	bool is_chr_en;
+#endif
+#endif
 
-	pd_dbg("%s %d\n", __func__, pd->state);
+	pr_info("%s %d\n", __func__, pd->state);
 	switch (pd->state) {
 	case PD_HW_UNINIT:
 	case PD_HW_FAIL:
@@ -165,8 +182,54 @@ static int _pd_is_algo_ready(struct chg_alg_device *alg)
 				pd->input_current_limit2 != -1 ||
 				pd->charging_current_limit2 != -1 ||
 				uisoc >= pd->pd_stop_battery_soc ||
-				(uisoc == -1 && pd->ref_vbat > pd->vbat_threshold))
+				(uisoc == -1 && pd->ref_vbat > pd->vbat_threshold)) {
+				#if defined(DEBUG_BUILD) //Leo 20230330
+				pr_info("%s pdc charger Leo: pd->input_current_limit1:%d "
+					"pd->charging_current_limit1:%d pd->input_current_limit2:%d "
+					"pd->charging_current_limit2:%d pd->ref_vbat:%d "
+					" pd->vbat_threshold:%d \n",__func__, pd->input_current_limit1,
+					pd->charging_current_limit1, pd->input_current_limit2,
+					pd->charging_current_limit2, pd->ref_vbat, pd->vbat_threshold);
+				#endif
 				ret_value = ALG_NOT_READY;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+				if ((pd_hal_get_vbus(alg) > 8000000) && uisoc >= pd->pd_stop_battery_soc) {
+					if (pd_hal_set_adapter_cap(alg, 5000, 3000) == 0) {
+						pd_hal_set_mivr(alg, CHG1, 4200 * 1000);
+					} else {
+						if (pd_hal_set_adapter_cap(alg, 5000, 2000) == 0) {
+							pd_hal_set_mivr(alg, CHG1, 4200 * 1000);
+						} else {
+							if (pd_hal_set_adapter_cap(alg, pd->cap.max_mv[0],
+								pd->cap.ma[0]) == 0) {
+								pd_hal_set_mivr(alg, CHG1, (pd->cap.max_mv[0] - 800) * 1000);
+							}
+						}
+					}
+				} else if (uisoc >= pd->pd_stop_battery_soc) {
+#if IS_ENABLED(CONFIG_WB_BOARD_ID_SUPPORT) //Leo 20230417
+					if (2 == cust_midmisc_get_board_id()) {
+						pd_hal_is_charger_enable(alg, CHG2, &is_chr_en);
+						if (is_chr_en == true) {
+							pd_hal_charger_enable_chip(alg, CHG2, false);
+							pd_hal_enable_charger(alg, CHG2, false);
+						}
+					} else {
+						if (pd_hal_is_chip_enable(alg, CHG2)) {
+							pd_hal_charger_enable_chip(alg, CHG2, false);
+							pd_hal_enable_charger(alg, CHG2, false);
+						}
+					}
+#else
+					if (pd_hal_is_chip_enable(alg, CHG2)) {
+						pd_hal_charger_enable_chip(alg, CHG2, false);
+						pd_hal_enable_charger(alg, CHG2, false);
+					}
+#endif
+					pd_hal_enable_termination(alg, CHG1, true);
+				}
+#endif
+			}
 		} else if (ret_value == ALG_TA_NOT_SUPPORT)
 			pd->state = PD_TA_NOT_SUPPORT;
 		else if (ret_value == ALG_TA_CHECKING)
@@ -182,6 +245,14 @@ static int _pd_is_algo_ready(struct chg_alg_device *alg)
 	case PD_TUNING:
 	case PD_POSTCC:
 		ret_value = ALG_RUNNING;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+		uisoc = pd_hal_get_uisoc(alg);
+		if (uisoc >= pd->pd_stop_battery_soc) {
+			ret_value = ALG_NOT_READY;
+			pd->state = PD_HW_READY;
+			pd_hal_enable_termination(alg, CHG1, true);
+		}
+#endif
 		break;
 	default:
 		pd_err("PD unknown state:%d\n", pd->state);
@@ -364,6 +435,9 @@ int __mtk_pdc_setup(struct chg_alg_device *alg, int idx)
 	unsigned int oldmA = 3000000;
 	bool force_update = false;
 	int chg_cnt, is_chip_enabled, i;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230423
+	int uisoc;
+#endif
 
 	struct mtk_pd *pd = dev_get_drvdata(&alg->dev);
 
@@ -421,6 +495,18 @@ int __mtk_pdc_setup(struct chg_alg_device *alg, int idx)
 
 		ret = pd_hal_set_adapter_cap(alg, pd->cap.max_mv[idx],
 			pd->cap.ma[idx]);
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230423
+		uisoc = pd_hal_get_uisoc(alg);
+		if ((pd->cap.max_mv[idx] == 9000) && pd->cap.ma[idx] == 2220) {
+			is_need_limit = true;
+			pd_hal_enable_charger(alg, CHG2, false);
+		} else {
+			is_need_limit = false;
+			if (uisoc <= 90) {
+				pd_hal_enable_charger(alg, CHG2, true);
+			}
+		}
+#endif
 
 		if (ret == 0) {
 #ifdef FIXME
@@ -436,7 +522,7 @@ int __mtk_pdc_setup(struct chg_alg_device *alg, int idx)
 						pd->cap.ma[idx] * 1000);
 #endif
 
-			if (oldmA < pd->cap.ma[idx])
+			if (oldmA < pd->cap.ma[idx]  && !pd->enable_inductor_protect)
 				pd_hal_set_input_current(alg, CHG1,
 					pd->cap.ma[idx] * 1000);
 
@@ -492,6 +578,23 @@ void mtk_pdc_reset(struct chg_alg_device *alg)
 	pd->old_cv = 0;
 }
 
+int mtk_pd_input_current_protection(struct chg_alg_device *alg, int vbus)
+{
+	struct mtk_pd *pd = dev_get_drvdata(&alg->dev);
+
+	switch (vbus) {
+	case 5000:
+		pd->input_current_limit1 = 3000000;
+		break;
+	case 9000:
+		pd->input_current_limit1 = 1500000;
+		break;
+	}
+	pd_hal_set_input_current(alg,
+		CHG1, pd->input_current_limit1);
+	pd_dbg("%s run: vbus: %d, ibus_limit: %d", __func__, vbus, pd->input_current_limit1);
+	return 0;
+}
 
 int __mtk_pdc_get_setting(struct chg_alg_device *alg, int *newvbus, int *newcur,
 			int *newidx)
@@ -509,7 +612,8 @@ int __mtk_pdc_get_setting(struct chg_alg_device *alg, int *newvbus, int *newcur,
 	bool chg1_mivr = false;
 	bool chg2_mivr = false;
 	int chg_cnt, i, is_chip_enabled;
-
+	int pd_stop_battery_soc = 99;
+	int pd_stop_vbus = 8000;
 
 	__mtk_pdc_init_table(alg);
 	__mtk_pdc_get_reset_idx(alg);
@@ -629,8 +733,27 @@ int __mtk_pdc_get_setting(struct chg_alg_device *alg, int *newvbus, int *newcur,
 		buck = false;
 	}
 
+#if IS_ENABLED(CONFIG_TCPC_HUSB311)  //jnier add 20230817
+	*newidx=selected_idx;
+#endif
+
 	*newvbus = cap->max_mv[*newidx];
 	*newcur = cap->ma[*newidx];
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+	if(csci_exist("pd_stop_battery_soc")||csci_exist("pd_stop_vbus")){
+			pd_stop_battery_soc = csci_integer("pd_stop_battery_soc", 0);
+			pd_stop_vbus =csci_integer("pd_stop_vbus", 0);
+	}
+#endif
+#if IS_ENABLED(CONFIG_WB_TD_CUST_SUPPORT)||IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT)
+	if((pd_hal_get_uisoc(alg)>pd_stop_battery_soc)&&(vbus>pd_stop_vbus)){
+			pd_err("[%s] uisoc =(%d) vbus=(%d) exceed pd_stop_battery_soc(%d) and pd_stop_vbus(%d), STOP PD!!!\n"
+					,__func__,
+					pd_hal_get_uisoc(alg),vbus,pd_stop_battery_soc,pd_stop_vbus);
+			*newidx=0;  //use default idx[0]  5v3A
+	}
+#endif
 
 	pd_err("[%s]watt:%d,%d,%d up:%d,%d vbus:%d ibus:%d, mivr:%d,%d\n",
 		__func__,
@@ -670,12 +793,9 @@ static int pd_sc_set_charger(struct chg_alg_device *alg)
 	mutex_lock(&pd->data_lock);
 	if (pd->charging_current_limit1 != -1) {
 		if (pd->charging_current_limit1 <
-			pd->sc_charger_current){
+			pd->sc_charger_current)
 			pd->charging_current1 =
 				pd->charging_current_limit1;
-		} else {
-			pd->charging_current1 = pd->sc_charger_current;
-		}
 		ret = pd_hal_get_min_charging_current(alg, CHG1, &ichg1_min);
 		if (ret != -EOPNOTSUPP &&
 			pd->charging_current_limit1 < ichg1_min)
@@ -800,27 +920,57 @@ static int pd_dcs_set_charger(struct chg_alg_device *alg)
 	pd_err("chg2_en:%d %d %d\n",
 		chg2_enable, chg2_chip_enabled, pd->state);
 	if (pd->state == PD_RUN) {
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230423
+		if (is_need_limit == false) {
+			if (!chg2_chip_enabled) {
+				pd_hal_charger_enable_chip(alg, CHG2, true);
+			}
+			pd_hal_enable_charger(alg, CHG2, true);
+		}
+#else
 		if (!chg2_chip_enabled)
 			pd_hal_charger_enable_chip(alg, CHG2, true);
 		pd_hal_enable_charger(alg, CHG2, true);
+#endif
 		pd_hal_set_input_current(alg,
 			CHG2, pd->charging_current2);
 		pd_hal_set_charging_current(alg,
 			CHG2, pd->charging_current2);
+
+#if 1 //Leo 20230209
+		pd->input_current2 = pd->charging_current2;
+		pd_hal_set_input_current(alg,
+			CHG2, pd->input_current2);
+		pd_hal_set_cv(alg,
+			CHG2, pd->cv);
+#endif
 
 		pd_hal_set_eoc_current(alg, CHG1,
 			pd->dual_polling_ieoc);
 		pd_hal_enable_termination(alg, CHG1, false);
 		pd_hal_safety_check(alg, pd->dual_polling_ieoc);
 	} else if (pd->state == PD_TUNING) {
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230423
+		if (is_need_limit == false) {
+			if (!chg2_chip_enabled) {
+				pd_hal_charger_enable_chip(alg, CHG2, true);
+			}
+			pd_hal_enable_charger(alg, CHG2, true);
+		}
+#else
 		if (!chg2_chip_enabled)
 			pd_hal_charger_enable_chip(alg, CHG2, true);
 		pd_hal_enable_charger(alg, CHG2, true);
+#endif
 		pd_hal_set_eoc_current(alg, CHG1, pd->dual_polling_ieoc);
 		pd_hal_enable_termination(alg, CHG1, false);
 		pd_hal_safety_check(alg, pd->dual_polling_ieoc);
 	} else if (pd->state == PD_POSTCC) {
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230419
+		pd_hal_set_eoc_current(alg, CHG1, pd->dual_polling_ieoc);
+#else
 		pd_hal_set_eoc_current(alg, CHG1, 150000);
+#endif
 		pd_hal_enable_termination(alg, CHG1, true);
 	} else {
 		pd_err("%s state error!", __func__);
@@ -854,9 +1004,13 @@ static int pd_dcs_set_charger(struct chg_alg_device *alg)
 static int __pd_run(struct chg_alg_device *alg)
 {
 	struct mtk_pd *pd = dev_get_drvdata(&alg->dev);
-	int vbus, cur, idx, ret, ret_value = ALG_RUNNING;
+	int vbus = 0;
+	int cur, idx, ret, ret_value = ALG_RUNNING;
 
 	ret = __mtk_pdc_get_setting(alg, &vbus, &cur, &idx);
+
+	if (pd->enable_inductor_protect)
+		mtk_pd_input_current_protection(alg, vbus);
 
 	if (ret != -1 && idx != -1) {
 		if ((pd->input_current_limit1 != -1 &&
@@ -869,6 +1023,10 @@ static int __pd_run(struct chg_alg_device *alg)
 		pd->charging_current_limit1 =
 			PD_FAIL_CURRENT;
 	}
+
+	#if 0//defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	pd->input_current_limit1 = 3000000;
+	#endif
 
 	if (alg->config == DUAL_CHARGERS_IN_SERIES) {
 		if (pd_dcs_set_charger(alg) != 0) {
@@ -919,6 +1077,22 @@ static int _pd_start_algo(struct chg_alg_device *alg)
 					uisoc >= pd->pd_stop_battery_soc ||
 					(uisoc == -1 && pd->ref_vbat > pd->vbat_threshold))
 					ret_value = ALG_NOT_READY;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+				if ((pd_hal_get_vbus(alg) > 8000000) && uisoc >= pd->pd_stop_battery_soc) {
+					if (pd_hal_set_adapter_cap(alg, 5000, 3000) == 0) {
+						pd_hal_set_mivr(alg, CHG1, 4200 * 1000);
+					} else {
+						if (pd_hal_set_adapter_cap(alg, 5000, 2000) == 0) {
+							pd_hal_set_mivr(alg, CHG1, 4200 * 1000);
+						} else {
+							if (pd_hal_set_adapter_cap(alg, pd->cap.max_mv[0],
+								pd->cap.ma[0]) == 0) {
+								pd_hal_set_mivr(alg, CHG1, (pd->cap.max_mv[0] - 800) * 1000);
+							}
+						}
+					}
+				}
+#endif
 				else {
 					pd->state = PD_RUN;
 					again = true;
@@ -932,6 +1106,7 @@ static int _pd_start_algo(struct chg_alg_device *alg)
 		case PD_TUNING:
 		case PD_POSTCC:
 			ret_value = __pd_run(alg);
+//Leo 20230418
 			break;
 		default:
 			pd_err("PD unknown state:%d\n", pd->state);
@@ -1047,8 +1222,13 @@ static int pd_full_evt(struct chg_alg_device *alg)
 					pd->state = PD_POSTCC;
 					pd_hal_enable_charger(alg,
 						CHG2, false);
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230419
+					pd_hal_set_eoc_current(alg,
+						CHG1, pd->dual_polling_ieoc);
+#else
 					pd_hal_set_eoc_current(alg,
 						CHG1, 150000);
+#endif
 					pd_hal_enable_termination(alg,
 						CHG1, true);
 				} else {
@@ -1263,6 +1443,12 @@ static void mtk_pd_parse_dt(struct mtk_pd *pd,
 		pd->vbat_threshold = DISABLE_VBAT_THRESHOLD;
 	}
 
+	pd->enable_inductor_protect = false;
+	if (of_property_read_u32(np, "enable-inductor-protect", &val) >= 0)
+		pd->enable_inductor_protect = !!val;
+
+	if (!pd->enable_inductor_protect)
+		pr_notice("disable inductor protection\n");
 }
 
 int _pd_get_prop(struct chg_alg_device *alg,
@@ -1281,14 +1467,18 @@ int _pd_set_setting(struct chg_alg_device *alg_dev,
 	struct chg_limit_setting *setting)
 {
 	struct mtk_pd *pd;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 2023040
+	int temp;
+#endif
 
-	pd_dbg("%s cv:%d icl:%d,%d cc:%d,%d\n",
+	pr_info("charge Leo %s cv:%d icl:%d,%d cc:%d,%d\n",
 		__func__,
 		setting->cv,
 		setting->input_current_limit1,
 		setting->input_current_limit2,
 		setting->charging_current_limit1,
 		setting->charging_current_limit2);
+
 	pd = dev_get_drvdata(&alg_dev->dev);
 
 	mutex_lock(&pd->access_lock);
@@ -1298,7 +1488,62 @@ int _pd_set_setting(struct chg_alg_device *alg_dev,
 	pd->charging_current_limit1 = setting->charging_current_limit1;
 	pd->input_current_limit2 = setting->input_current_limit2;
 	pd->charging_current_limit2 = setting->charging_current_limit2;
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	temp = pd_hal_get_battery_temperature(alg_dev);
+	pr_info("%s pd charge Leo temp:%d \n",__func__,temp);
+
+	if ((temp >= 0) && (temp <= 56)) {
+		//pr_info("%s charge Leo (temp >= 0) && (temp <= 56) \n",__func__);
+		pd->input_current_limit1 = (setting->input_current_limit1 == 0) ? 0 : -1;
+		pd->charging_current_limit1 = (setting->charging_current_limit1 == 0) ? 0 : -1;
+		pd->input_current_limit2 = (setting->input_current_limit2 == 0) ? 0 : -1;
+		pd->charging_current_limit2 = (setting->charging_current_limit2 == 0) ? 0 : -1;
+		pd->input_current1 = 3000000;
+		pd->input_current2 = 3000000;
+	} else if ((temp >= -10) && (temp < 0)) {
+		pr_info("%s charge Leo (temp >= -10) && (temp < 0) \n",__func__);
+		pd->input_current_limit1 = 700000;
+		pd->charging_current_limit1 = 700000;
+		pd->input_current1 = 700000;
+		pd->input_current_limit2 = 0;
+		pd->charging_current_limit2 = 0;
+		pd->charging_current2 = 0;
+		pd_hal_set_charging_current(alg_dev,
+			CHG2, pd->charging_current2);
+	} else if ((temp > 56) && (temp <= 60)) {
+		pr_info("%s charge Leo (temp > 56) && (temp <= 60) \n",__func__);
+		pd->input_current_limit1 = 1600000;
+		pd->charging_current_limit1 = 1600000;
+		pd->input_current1 = 1600000;
+		pd->input_current_limit2 = 0;
+		pd->charging_current_limit2 = 0;
+		pd->input_current2 = 0;
+	} else if ((temp > 60) || (temp < -10)) {
+		pr_info("%s charge Leo (temp > 60) || (temp < -10) \n",__func__);
+		pd->input_current_limit1 = 0;
+		pd->charging_current_limit1 = 0;
+		pd->input_current_limit2 = 0;
+		pd->charging_current_limit2 = 0;
+		pd->input_current1 = 0;
+		pd->charging_current2 = 0;
+		pd_hal_set_charging_current(alg_dev,
+			CHG2, pd->charging_current2);
+	} else {
+		pr_info("%s charge Leo else \n",__func__);
+		pd->input_current_limit1 = (setting->input_current_limit1 == 0) ? 0 : -1;
+		pd->charging_current_limit1 = (setting->charging_current_limit1 == 0) ? 0 : -1;
+		pd->input_current_limit2 = (setting->input_current_limit2 == 0) ? 0 : -1;
+		pd->charging_current_limit2 = (setting->charging_current_limit2 == 0) ? 0 : -1;
+		pd->input_current1 = 3000000;
+		pd->input_current2 = 3000000;
+	}
+	pd_hal_set_input_current(alg_dev,
+		CHG1, pd->input_current1);
+#endif
 	mutex_unlock(&pd->access_lock);
+
+
+
 
 	return 0;
 }
@@ -1353,7 +1598,7 @@ static int mtk_pd_probe(struct platform_device *pdev)
 	mutex_init(&pd->access_lock);
 	mutex_init(&pd->data_lock);
 	mtk_pd_parse_dt(pd, &pdev->dev);
-	pd->bat_psy = power_supply_get_by_name("battery");
+	pd->bat_psy = devm_power_supply_get_by_phandle(&pdev->dev, "gauge");
 	if (IS_ERR_OR_NULL(pd->bat_psy))
 		pd_err("%s: devm power fail to get bat_psy\n", __func__);
 

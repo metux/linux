@@ -38,6 +38,8 @@ static struct audio_gpio_attr aud_gpios[MT6789_AFE_GPIO_GPIO_NUM] = {
 	[MT6789_AFE_GPIO_VOW_DAT_ON] = {"vow_dat_miso_on", false, NULL},
 	[MT6789_AFE_GPIO_VOW_CLK_OFF] = {"vow_clk_miso_off", false, NULL},
 	[MT6789_AFE_GPIO_VOW_CLK_ON] = {"vow_clk_miso_on", false, NULL},
+	[MT6789_AFE_GPIO_EXTAMP_ON] = {"extamp_pullhigh", false, NULL},
+	[MT6789_AFE_GPIO_EXTAMP_OFF] = {"extamp_pulllow", false, NULL},
 };
 
 static DEFINE_MUTEX(gpio_request_mutex);
@@ -77,6 +79,53 @@ int mt6789_afe_gpio_init(struct mtk_base_afe *afe)
 
 	return 0;
 }
+
+int AudDrv_GPIO_EXTAMP_Select(int bEnable, int mode)
+{
+	int retval = 0;
+
+	int extamp_mode;
+	int i;
+
+	mutex_lock(&gpio_request_mutex);
+	if (bEnable == 1) {
+		if (mode == 1)
+			extamp_mode = 1;
+		else if (mode == 2)
+			extamp_mode = 2;
+		else
+			extamp_mode = 3; /* default mode is 3 */
+
+		if (aud_gpios[MT6789_AFE_GPIO_EXTAMP_ON].gpio_prepare) {
+			for (i = 0; i < extamp_mode; i++) {
+				retval = pinctrl_select_state(
+					aud_pinctrl,
+					aud_gpios[MT6789_AFE_GPIO_EXTAMP_OFF].gpioctrl);
+				if (retval)
+					pr_info("could not set aud_gpios[MT6789_AFE_GPIO_EXTAMP_OFF] pins\n");
+				udelay(2);
+				retval = pinctrl_select_state(
+					aud_pinctrl,
+					aud_gpios[MT6789_AFE_GPIO_EXTAMP_ON].gpioctrl);
+				if (retval)
+					pr_info("could not set aud_gpios[MT6789_AFE_GPIO_EXTAMP_ON] pins\n");
+				udelay(2);
+			}
+		}
+	} else {
+		if (aud_gpios[MT6789_AFE_GPIO_EXTAMP_OFF].gpio_prepare) {
+			retval = pinctrl_select_state(
+				aud_pinctrl,
+				aud_gpios[MT6789_AFE_GPIO_EXTAMP_OFF].gpioctrl);
+			if (retval)
+				pr_info("could not set aud_gpios[MT6789_AFE_GPIO_EXTAMP_OFF] pins\n");
+		}
+	}
+	mutex_unlock(&gpio_request_mutex);
+
+	return retval;
+}
+EXPORT_SYMBOL(AudDrv_GPIO_EXTAMP_Select);
 
 bool mt6789_afe_gpio_is_prepared(enum mt6789_afe_gpio type)
 {
@@ -190,6 +239,12 @@ int mt6789_afe_gpio_request(struct mtk_base_afe *afe, bool enable,
 			mt6789_afe_gpio_select(afe,
 					       MT6789_AFE_GPIO_VOW_DAT_OFF);
 		}
+		break;
+	case MT6789_DAI_EXTAMP:
+		if (enable)
+			mt6789_afe_gpio_select(afe, MT6789_AFE_GPIO_EXTAMP_ON);
+		else
+			mt6789_afe_gpio_select(afe, MT6789_AFE_GPIO_EXTAMP_OFF);
 		break;
 	default:
 		mutex_unlock(&gpio_request_mutex);

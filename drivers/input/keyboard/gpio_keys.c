@@ -28,6 +28,7 @@
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
 #include <dt-bindings/input/gpio-keys.h>
+#include <trace/hooks/wakeupbypass.h>
 
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
@@ -57,6 +58,14 @@ struct gpio_keys_drvdata {
 	unsigned short *keymap;
 	struct gpio_button_data data[];
 };
+#ifdef CONFIG_WB_ATA_HALL_KEY_TEST
+struct tag_bootmode {
+	u32 size;
+	u32 tag;
+	u32 bootmode;
+	u32 boottype;
+};
+#endif
 
 /*
  * SYSFS interface for enabling/disabling keys and switches:
@@ -679,6 +688,27 @@ static void gpio_keys_close(struct input_dev *input)
 		pdata->disable(input->dev.parent);
 }
 
+#ifdef CONFIG_WB_ATA_HALL_KEY_TEST
+static int  gpio_get_bootmode(struct device *dev)
+{
+	struct device_node *boot_node = NULL;
+	const struct tag_bootmode *tag = NULL;
+
+	boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+	if (!boot_node) {
+		return -1;
+	}
+
+	tag = of_get_property(boot_node, "atag,boot", NULL);
+	if (!tag) {
+		return -1;
+	}
+
+	return tag->bootmode;
+}
+#endif
+
+
 /*
  * Handlers for alternative sources of platform_data
  */
@@ -717,7 +747,13 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 		if (is_of_node(child))
 			button->irq =
 				irq_of_parse_and_map(to_of_node(child), 0);
-
+#ifdef CONFIG_WB_ATA_HALL_KEY_TEST
+		//FACTORY_BOOT=4
+		if(gpio_get_bootmode(dev) == 4){
+			button->code = KEY_F10;
+			fwnode_property_read_string(child, "label", &button->desc);
+			button->type = EV_KEY;
+		}else{
 		if (fwnode_property_read_u32(child, "linux,code",
 					     &button->code)) {
 			dev_err(dev, "Button without keycode\n");
@@ -730,6 +766,21 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 		if (fwnode_property_read_u32(child, "linux,input-type",
 					     &button->type))
 			button->type = EV_KEY;
+		}
+#else
+		if (fwnode_property_read_u32(child, "linux,code",
+					     &button->code)) {
+			dev_err(dev, "Button without keycode\n");
+			fwnode_handle_put(child);
+			return ERR_PTR(-EINVAL);
+		}
+
+		fwnode_property_read_string(child, "label", &button->desc);
+
+		if (fwnode_property_read_u32(child, "linux,input-type",
+					     &button->type))
+			button->type = EV_KEY;
+#endif
 
 		button->wakeup =
 			fwnode_property_read_bool(child, "wakeup-source") ||
@@ -958,11 +1009,16 @@ static int __maybe_unused gpio_keys_suspend(struct device *dev)
 	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
 	struct input_dev *input = ddata->input;
 	int error;
+	int wakeup_bypass_enabled = 0;
+
+	trace_android_vh_wakeup_bypass(&wakeup_bypass_enabled);
 
 	if (device_may_wakeup(dev)) {
-		error = gpio_keys_enable_wakeup(ddata);
-		if (error)
-			return error;
+		if (!wakeup_bypass_enabled) {
+			error = gpio_keys_enable_wakeup(ddata);
+			if (error)
+				return error;
+		}
 	} else {
 		mutex_lock(&input->mutex);
 		if (input->users)
@@ -978,9 +1034,13 @@ static int __maybe_unused gpio_keys_resume(struct device *dev)
 	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
 	struct input_dev *input = ddata->input;
 	int error = 0;
+	int wakeup_bypass_enabled = 0;
+
+	trace_android_vh_wakeup_bypass(&wakeup_bypass_enabled);
 
 	if (device_may_wakeup(dev)) {
-		gpio_keys_disable_wakeup(ddata);
+		if (!wakeup_bypass_enabled)
+			gpio_keys_disable_wakeup(ddata);
 	} else {
 		mutex_lock(&input->mutex);
 		if (input->users)

@@ -463,7 +463,7 @@ int g_temperature[MAX_TABLE] = {
 #define BIF_NTC_R 16000
 
 #if (BAT_NTC_10 == 1)
-struct fg_temp fg_temp_table[21] = {
+struct fg_temp fg_temp_table[24] = {
 		{-40, 195652},
 		{-35, 148171},
 		{-30, 113347},
@@ -484,12 +484,15 @@ struct fg_temp fg_temp_table[21] = {
 		{45, 4917},
 		{50, 4161},
 		{55, 3535},
-		{60, 3014}
+		{60, 3014},
+		{65, 2615},
+		{70, 2261},
+		{70, 1962},
 };
 #endif
 
 #if (BAT_NTC_47 == 1)
-struct fg_temp fg_temp_table[21] = {
+struct fg_temp fg_temp_table[24] = {
 		{-40, 1747920},
 		{-35, 1245428},
 		{-30, 898485},
@@ -510,7 +513,10 @@ struct fg_temp fg_temp_table[21] = {
 		{45, 20048},
 		{50, 16433},
 		{55, 13539},
-		{60, 11210}
+		{60, 11210},
+		{65, 9404},
+		{70, 7711},
+		{75, 6607}
 };
 #endif
 

@@ -1,0 +1,1 @@
+../../drivers/misc/mediatek/weibu/hardwareinfo/hardwareinfo.h

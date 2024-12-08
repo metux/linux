@@ -1,0 +1,40 @@
+ARCH ?=arm
+CROSS_COMPILE ?=/home/cyt/mtk/alps/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
+
+CC := $(CROSS_COMPILE)gcc 
+LD := $(CROSS_COMPILE)ld
+TARGET = ht.ko
+obj-y :=ht.o
+ht-y	+= huiontablet.o
+ht-y	+= huiontablet_update.o
+ht-y	+= huion_tool.o
+ht-y	+= dfu.o
+ht-y	+= dvb_math.o
+
+KDIR :=/home/cyt/mtk/alps/kernel-4.19
+PWD  :=$(shell pwd)
+LIB_DIR :=/home/cyt/mtk/alps/kernel-4.19
+
+EXTRA_CFLAGS += -I $(LIB_DIR)/arch/arm/include
+EXTRA_CFLAGS += -I $(LIB_DIR)/arch/arm/include/generated/asm/
+EXTRA_CFLAGS += -I $(LIB_DIR)/arch/arm/include/uapi/
+EXTRA_CFLAGS += -Wno-error=date-time
+EXTRA_CFLAGS += -Wno-date-time
+
+default:
+	$(MAKE) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KDIR) SUBDIRS=$(PWD) modules $(EXTRA_CFLAGS)
+	#cp $(TARGET) ~/nfsroot/
+
+clean:
+	rm *.ko *.o *.mod.c .*.cmd modules.order Module.symvers
+
+#
+# Makefile test.
+#
+# obj-y	+=	huiontablet.o
+# obj-y :=ht.o
+# obj-y	+= huiontablet.o
+# obj-y	+= huiontablet_update.o
+# obj-y	+= huion_tool.o
+# obj-y	+= dfu.o
+# obj-y	+= dvb_math.o

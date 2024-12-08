@@ -477,9 +477,13 @@ int tcpc_device_irq_enable(struct tcpc_device *tcpc)
 		pr_err("%s : tcpc typec init fail\n", __func__);
 		return ret;
 	}
-
+#if IS_ENABLED(CONFIG_TCPC_HUSB311)  //jnier add 20230817
+	schedule_delayed_work(
+		&tcpc->event_init_work, msecs_to_jiffies(1*1000));
+#else
 	schedule_delayed_work(
 		&tcpc->event_init_work, msecs_to_jiffies(10*1000));
+#endif
 
 	pr_info("%s : tcpc irq enable OK!\n", __func__);
 	return 0;

@@ -1,0 +1,285 @@
+#ifndef __PANEL_LIST_
+#define __PANEL_LIST_
+
+extern struct cust_drm_lcm default_lcm;
+extern struct cust_drm_lcm m100t_ft8201ab_ts124qdm_ls0_wqxga;
+extern struct cust_drm_lcm m100t_hx83102e_sl110pm36d3437a00_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_jt110wul009a01_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102e_c00zj1197207001_wuxga2000;
+extern struct cust_drm_lcm m100t_icnl9951r_jt109wxl001_a02_wxga;
+extern struct cust_drm_lcm m100t_nt36532_ts114arm_lp0_wqxga2408_90hz;
+extern struct cust_drm_lcm m100t_ft8201ab_jlt087hi22199p45_wxga1340;
+extern struct cust_drm_lcm m100t_hx83102_jlt104in20235p51_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8201ab_hjr110016d_wuxga2000;
+extern struct cust_drm_lcm m862p_jd9365_sat_sat101bo40i28y03_wxga_101;
+extern struct cust_drm_lcm m100t_it6112_tv108qdm_nh4_wqxga;
+extern struct cust_drm_lcm m100t_ft8205_sq110aq7dz512_wuxga2000;
+extern struct cust_drm_lcm m100t_it6112_xzgrn0819a_wqxga;
+extern struct cust_drm_lcm m100t_ft8201_xy2210d4001a_wuxga2000;
+extern struct cust_drm_lcm m100t_jd9366ts_sq110dx5ez51285h501_wuxga;
+extern struct cust_drm_lcm m100t_ft8205_sy_m110hsd_in51_a1_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_hlx_2080105hfh036001_50f_wuxga;
+extern struct cust_drm_lcm m100t_jd9366tc_sq110aq7ez51394l501_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8205_sq110aq7dz514_pen_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102e_tv084wums0_wuxga;
+extern struct cust_drm_lcm m100t_hx83102e_tv101wum_wuxga;
+extern struct cust_drm_lcm m100t_ft8201p_jlt101fqi19226p51_cmd_wuxga;
+extern struct cust_drm_lcm m100t_hx83102_zc_sl104pn36d2007_wuxga2000;
+extern struct cust_drm_lcm m100t_it6112_nt35523_lq079l1sx01_wqxga;
+extern struct cust_drm_lcm m100t_ft8201ab_jlt_jlt101fqi19226p51_wuxga;
+extern struct cust_drm_lcm m100t_ft8201ab_jttd_jpf105u001_wuxga;
+extern struct cust_drm_lcm m100t_hx83102_xy_2082109qfh036002_wuxga2000;
+extern struct cust_drm_lcm m100t_it6112_zcsl126pm45d3154a00_wqxga;
+extern struct cust_drm_lcm m100t_ft8201_xy2210d4001a_wuxga2000_pt2;
+extern struct cust_drm_lcm m100bs_hx83102_spi_kd104n05_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102e_sat111hs51i36xx1_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102e_hads_tx101wumlw4_wuxga;
+extern struct cust_drm_lcm m100t_nt36523_c00zjp103a7hw11_wuxga2000;
+extern struct cust_drm_lcm m100t_hra_nt36523_zj_boe_wuxga2000;
+extern struct cust_drm_lcm m100t_jd9366tc_sq110ah7ez51294l501_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102e_boe_cyx110wufst002n_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8201p_cyx110fh51ta0011q_wuxga;
+extern struct cust_drm_lcm m100t_ft8201_cyx110fhfst001q_wuxga;
+extern struct cust_drm_lcm m100t_ft8201ab_jlt109in20247p5136d0513y_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8201ab_jlt109in20244p5136d0513y_wuxga;
+extern struct cust_drm_lcm m100t_nt36523_hx105fn01_wuxga;
+extern struct cust_drm_lcm m100t_ft8201ab_jlt105hn20235p4136d01_wuxga;
+extern struct cust_drm_lcm m100t_hx83102_hjr110055d_wuxga2000;
+extern struct cust_drm_lcm m100t_jd9366tc_sq110aq7ez51394l501_wuxga2000_jst_864;
+extern struct cust_drm_lcm m100t_it6112_zcsl126pm45d3154a00_new_wqxga;
+extern struct cust_drm_lcm m100t_jd9366tc_b009_wuxga2000;
+extern struct cust_drm_lcm m100t_nt36523_tv120c9m_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8201aa_jlt104in20235p51_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_zc_sl110pn36d3221_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8201ab_kd110n00_wuxga2000;
+extern struct cust_drm_lcm m100t_icnl9951r_hkc_hjr110066d_wuxga_90hz;
+extern struct cust_drm_lcm m100t_hx83102_kd110n0051Iha001_wuxga2000_90hz;
+extern struct cust_drm_lcm m100t_hx83102_kd104n0651llA002_wuxga2000_90hz;
+extern struct cust_drm_lcm m100t_hx83122a_jlt115hn19251p51_fhd2200_90hz;
+extern struct cust_drm_lcm m100t_jd9366tc_sq110ah7eI51158h501_wuxga2000;
+extern struct cust_drm_lcm m100t_k080mm2b803_wuxga_8;
+extern struct cust_drm_lcm m100t_ft8205_sq104aq7e1511_pen_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_djn9w3l0a4_wuxga2000;
+extern struct cust_drm_lcm m100t_ft8201ab_sat129bo51im0003_wuxga;
+extern struct cust_drm_lcm m100t_ft8201ab_sat129hs51lm0005_wuxga;
+extern struct cust_drm_lcm m100t_hx83102e_sat129hs51im0007_wuxga;
+extern struct cust_drm_lcm m100t_hx83102e_boe_tv106c9m_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_jt120wul001a03_wuxga2000;
+extern struct cust_drm_lcm m100t_icnl9951r_zc_sl110pm40d3410_wuxga;
+extern struct cust_drm_lcm m100t_hx83102_hjr104096da0_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_9w3l0a9w038c_wuxga2000;
+extern struct cust_drm_lcm m206t_it6112_tv127xut_wuxganl2176;
+extern struct cust_drm_lcm m100t_ft8201ab_c00zj105201a801_wuxga;
+extern struct cust_drm_lcm m100t_ili9882u_n020396812427r501084a_wxga1340;
+extern struct cust_drm_lcm m100t_hx83102e_c00zj868yk22501_wxga1340;
+extern struct cust_drm_lcm m100t_ft8201ab_te110lhm_lw0_wuxga1840_11;
+extern struct cust_drm_lcm m100t_hx83102e_boe_te138qdm_wqxga;
+extern struct cust_drm_lcm m100t_jd9366tc_wcl_w1043438iaa_wuxga2000;
+extern struct cust_drm_lcm dts_lcm_panel;
+extern struct cust_drm_lcm m100t_hx83102e_c00zj084h211001_wuxga;
+//extern struct cust_drm_lcm m100t_nv_lt8911exb_wuxga;
+extern struct cust_drm_lcm m100t_sharp_lt8911exb_lq150p1jx01_wqxga2496;
+extern struct cust_drm_lcm m100t_ol_lt8911exb_sl140pn50d3381a00_wuxga;
+extern struct cust_drm_lcm m100t_hx83102e_boe_tv084wum_lw0_wuxga;
+extern struct cust_drm_lcm m100t_sharp_lt9711_lq150p1jx01_wqxga2496;
+extern struct cust_drm_lcm m169t_icnl9951r_hjr110077d_wuxga_90hz;
+extern struct cust_drm_lcm m100t_hx8279d_1000B096_wuxga1600;
+extern struct cust_drm_lcm m100t_jd9366tc_ym109rusa05h5gq_wuxga;
+extern struct cust_drm_lcm m100t_hx83102_hjr087005d_wuxga1340;
+extern struct cust_drm_lcm m100t_icnl9951r_jt101wxl119_a01_wxga;
+extern struct cust_drm_lcm m100t_icnl9951r_jlt087hi22199p45_wxga1340;
+extern struct cust_drm_lcm m100t_icnl9951r_jlt087sI22199p45_wxga1340_90hz;
+extern struct cust_drm_lcm m100t_ft8206_bns115x51fhd826d169a_wuxga2200;
+extern struct cust_drm_lcm m100t_icnl9951r_zc_sl110pm40d3410_wuxga_90hz;
+extern struct cust_drm_lcm m100t_ol_it6151_sl140pn50d3381a00_wuxga;
+extern struct cust_drm_lcm m100t_it6112_g123003i061_wqxga;
+extern struct cust_drm_lcm m100t_hx83102_zcbns101j45fhd831d128a_wuxga;
+extern struct cust_drm_lcm m100t_ft8205_jt104wuf060a01_pen_wuxga2000;
+extern struct cust_drm_lcm m100t_icnl9951r_zc_sl120pm42d3504a00_wuxga2000;
+extern struct cust_drm_lcm m100t_hx83102_jt120wul005_pen_wuxga2000_90hz;
+extern struct cust_drm_lcm m100t_hx83102_zc_sl110pm40d3511_wuxga;
+extern struct cust_drm_lcm m100t_icnl9951r_sat111hk51Im0012_wuxga_90hz;
+extern struct cust_drm_lcm m100t_ft8201p_jlt101fqi19226p51_wuxga_90hz;
+extern struct cust_drm_lcm m100t_ft8201p_sat129bo51im0009_wuxga;
+extern struct cust_drm_lcm m100t_ft8201p_jlt129hn20289p5148d01_wuxga;
+extern struct cust_drm_lcm m100t_ft8205_jt130wuf001a01_pen_wuxga;
+extern struct cust_drm_lcm m100t_ft8206_jlt115sn19251p51_wuxga2200;
+extern struct cust_drm_lcm m100t_ili9881c_bns101b40hd981d113e_wxga;
+extern struct cust_drm_lcm m100t_it6112_hjr130002da0_wqxga;
+extern struct cust_drm_lcm m100t_hx83102_jt120wul001a03_wuxga2000_90hz;
+extern struct cust_drm_lcm m100t_hx83102e_jt084wuh003_wuxga;
+extern struct cust_drm_lcm m117t_icnl9951r_jlt109mn20244p51_wuxga;
+extern struct cust_drm_lcm m117t_icnl9951r_hjr110093d_wuxga;
+extern struct cust_drm_lcm m117t_icnl9951r_hkc_hjr110066d_wuxga_90hz;
+extern struct cust_drm_lcm m100t_hx83102e_sat111at51m0014_wuxga;
+extern struct cust_drm_lcm m100t_it6112_ts137xumlw0d8p0_wuxga2176;
+extern struct cust_drm_lcm m100t_na_lt9711_p140zkabz1_wuxganl2160;
+extern struct cust_drm_lcm m323t_hx8279_k101mm2qa01b_wuxga;
+extern struct cust_drm_lcm m117t_icnl9951r_jlt_jlt109mn20244p5140d18_wuxga_90hz;
+
+struct cust_drm_lcm *lcm_driver_list[] = {
+	&default_lcm,
+	&dts_lcm_panel,
+	//m100t
+	&m100t_hx83102_jt120wul001a03_wuxga2000_90hz,
+	&m100t_ft8201ab_ts124qdm_ls0_wqxga,
+	&m100t_ft8206_jlt115sn19251p51_wuxga2200,
+	&m100t_ft8205_jt130wuf001a01_pen_wuxga,
+	&m100t_ft8201p_sat129bo51im0009_wuxga,
+	&m100t_ft8201p_jlt129hn20289p5148d01_wuxga,
+	&m100t_ft8201p_jlt101fqi19226p51_wuxga_90hz,
+	&m100t_icnl9951r_sat111hk51Im0012_wuxga_90hz,
+	&m100t_nt36532_ts114arm_lp0_wqxga2408_90hz,
+	&m100t_hx83102_jt120wul005_pen_wuxga2000_90hz,
+	&m100t_hx83102e_sl110pm36d3437a00_wuxga2000,
+	&m100t_ft8206_bns115x51fhd826d169a_wuxga2200,
+	&m100t_hx83102_hjr087005d_wuxga1340,
+	&m100t_hx83102_jt110wul009a01_wuxga2000,
+	&m100t_hx83102e_c00zj1197207001_wuxga2000,
+	&m100t_icnl9951r_jt109wxl001_a02_wxga,
+	&m100t_ft8201ab_jlt087hi22199p45_wxga1340,
+	&m100t_icnl9951r_zc_sl110pm40d3410_wuxga,
+	&m100t_ft8201ab_sat129bo51im0003_wuxga,
+	&m100t_ft8201ab_sat129hs51lm0005_wuxga,
+	&m100t_hx83102e_sat129hs51im0007_wuxga,
+	&m100t_hx83102_jlt104in20235p51_wuxga2000,
+	&m100t_k080mm2b803_wuxga_8,
+	&m100t_hx83102_kd110n0051Iha001_wuxga2000_90hz,
+	&m100t_hx83102_kd104n0651llA002_wuxga2000_90hz,
+	&m100t_icnl9951r_hkc_hjr110066d_wuxga_90hz,
+	&m100t_hx83122a_jlt115hn19251p51_fhd2200_90hz,
+	&m100t_jd9366tc_b009_wuxga2000,
+	&m100t_jd9366tc_sq110aq7ez51394l501_wuxga2000_jst_864,
+	&m100t_jd9366ts_sq110dx5ez51285h501_wuxga,
+	&m100t_hx83102_hjr110055d_wuxga2000,
+	&m100t_ft8201ab_jlt105hn20235p4136d01_wuxga,
+	&m100t_ft8201ab_jlt109in20247p5136d0513y_wuxga2000,
+	&m100t_ft8201ab_jlt109in20244p5136d0513y_wuxga,
+	&m100t_hx83102e_boe_cyx110wufst002n_wuxga2000,
+	&m100t_ft8201p_cyx110fh51ta0011q_wuxga,
+	&m100t_ft8201_cyx110fhfst001q_wuxga,
+	&m100t_hx83102e_hads_tx101wumlw4_wuxga,
+	&m100t_hx83102_hlx_2080105hfh036001_50f_wuxga,
+	&m100t_ft8205_sy_m110hsd_in51_a1_wuxga2000,
+	&m100t_ft8201ab_hjr110016d_wuxga2000,
+	&m100t_ft8205_sq110aq7dz512_wuxga2000,
+	&m100t_ft8201_xy2210d4001a_wuxga2000,
+	&m100t_jd9366tc_sq110aq7ez51394l501_wuxga2000,
+	&m100t_ft8205_sq110aq7dz514_pen_wuxga2000,
+	&m100t_hx83102e_tv084wums0_wuxga,
+	&m100t_hx83102e_tv101wum_wuxga,
+	&m100t_ft8201p_jlt101fqi19226p51_cmd_wuxga,
+	&m100t_hx83102_zc_sl104pn36d2007_wuxga2000,
+	&m100t_ft8201ab_jlt_jlt101fqi19226p51_wuxga,
+	&m100t_ft8201ab_jttd_jpf105u001_wuxga,
+	&m100t_hx83102_xy_2082109qfh036002_wuxga2000,
+	&m100t_ft8201_xy2210d4001a_wuxga2000_pt2,
+	&m100bs_hx83102_spi_kd104n05_wuxga2000,
+	&m100t_hx83102e_sat111hs51i36xx1_wuxga2000,
+	&m100t_nt36523_c00zjp103a7hw11_wuxga2000,
+	&m100t_hra_nt36523_zj_boe_wuxga2000,	
+	&m100t_jd9366tc_sq110ah7ez51294l501_wuxga2000,
+	&m100t_nt36523_hx105fn01_wuxga,
+	&m100t_nt36523_tv120c9m_wuxga2000,
+	&m100t_ft8201aa_jlt104in20235p51_wuxga2000,
+	&m100t_hx83102_zc_sl110pn36d3221_wuxga2000,
+	&m100t_ft8201ab_kd110n00_wuxga2000,
+	&m100t_jd9366tc_sq110ah7eI51158h501_wuxga2000,
+	&m100t_ft8205_sq104aq7e1511_pen_wuxga2000,
+	&m100t_hx83102_djn9w3l0a4_wuxga2000,
+	&m100t_hx83102e_boe_tv106c9m_wuxga2000,
+	&m100t_hx83102_jt120wul001a03_wuxga2000,
+	&m100t_ft8201ab_c00zj105201a801_wuxga,
+	&m100t_hx83102_hjr104096da0_wuxga2000,
+	&m100t_hx83102_9w3l0a9w038c_wuxga2000,
+	&m100t_ili9882u_n020396812427r501084a_wxga1340,
+	&m100t_hx83102e_c00zj868yk22501_wxga1340,
+	&m100t_hx83102e_boe_tv084wum_lw0_wuxga,
+	&m100t_sharp_lt9711_lq150p1jx01_wqxga2496,
+	&m100t_ft8201ab_te110lhm_lw0_wuxga1840_11,
+	&m206t_it6112_tv127xut_wuxganl2176,
+	&m100t_hx83102e_boe_tv106c9m_wuxga2000,
+	&m169t_icnl9951r_hjr110077d_wuxga_90hz,
+	&m100t_jd9366tc_wcl_w1043438iaa_wuxga2000,
+	&m100t_hx8279d_1000B096_wuxga1600,
+	&m100t_hx83102e_c00zj084h211001_wuxga,
+	&m100t_hx83102e_boe_te138qdm_wqxga,
+	&m100t_jd9366tc_ym109rusa05h5gq_wuxga,
+	&m100t_icnl9951r_jt101wxl119_a01_wxga,
+	&m100t_icnl9951r_jlt087hi22199p45_wxga1340,
+	&m100t_icnl9951r_jlt087sI22199p45_wxga1340_90hz,
+	&m100t_icnl9951r_zc_sl110pm40d3410_wuxga_90hz,
+	&m100t_hx83102_zcbns101j45fhd831d128a_wuxga,
+	&m100t_ft8205_jt104wuf060a01_pen_wuxga2000,
+	&m100t_icnl9951r_zc_sl120pm42d3504a00_wuxga2000,
+	&m100t_hx83102_zc_sl110pm40d3511_wuxga,
+	&m100t_ili9881c_bns101b40hd981d113e_wxga,
+	&m100t_it6112_hjr130002da0_wqxga,
+	&m100t_hx83102e_jt084wuh003_wuxga,
+	&m100t_na_lt9711_p140zkabz1_wuxganl2160,
+	//m117t
+	&m117t_icnl9951r_jlt109mn20244p51_wuxga,
+	&m117t_icnl9951r_hjr110093d_wuxga,
+	&m117t_icnl9951r_hkc_hjr110066d_wuxga_90hz,
+	&m117t_icnl9951r_jlt_jlt109mn20244p5140d18_wuxga_90hz,
+	&m100t_hx83102e_sat111at51m0014_wuxga,
+	&m100t_it6112_ts137xumlw0d8p0_wuxga2176,
+	//m323t
+	&m323t_hx8279_k101mm2qa01b_wuxga,
+
+#if IS_ENABLED(CONFIG_DRM_PANEL_IT6112) //Leo 20230110
+	&m100t_it6112_tv108qdm_nh4_wqxga,
+	&m100t_it6112_xzgrn0819a_wqxga,
+	&m100t_it6112_nt35523_lq079l1sx01_wqxga,
+	&m100t_it6112_zcsl126pm45d3154a00_wqxga,
+	&m100t_it6112_zcsl126pm45d3154a00_new_wqxga,
+	&m100t_it6112_g123003i061_wqxga,
+#endif
+#if IS_ENABLED(CONFIG_WB_LT8911EXB) //Leo 20231221
+	//&m100t_nv_lt8911exb_wuxga,
+	&m100t_sharp_lt8911exb_lq150p1jx01_wqxga2496,
+	&m100t_ol_lt8911exb_sl140pn50d3381a00_wuxga,
+#endif
+#if IS_ENABLED(CONFIG_WB_IT6151FN)
+	&m100t_ol_it6151_sl140pn50d3381a00_wuxga,
+#endif
+	NULL,// it should be the end fo lcm_driver_list[];
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#endif

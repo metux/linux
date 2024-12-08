@@ -1,0 +1,20 @@
+#
+# Jadard Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_JADARD_MODULE
+	tristate "Jadard chipset module fuction"
+	help
+	  This switch whether to compile into a kernel module.
+
+config TOUCHSCREEN_JDCHIPSET_X_REVERSE
+    bool "JDTECH jd9366 X reverse"
+    default n
+    help
+        This enables support for jd9366 driver coor x reverse.
+
+config TOUCHSCREEN_JDCHIPSET_Y_REVERSE
+    bool "JDTECH jd9366 Y reverse"
+    default n
+    help
+        This enables support for jd9366 driver coor Y reverse.

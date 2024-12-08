@@ -7,6 +7,10 @@
 #include "inc/tcpci.h"
 #include "inc/tcpci_typec.h"
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+#include "aw35615csr/aw35615_global.h"
+#endif
+
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 #include "inc/pd_core.h"
 #include "inc/pd_dpm_core.h"
@@ -15,6 +19,372 @@
 #include "inc/pd_dpm_pdo_select.h"
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+int aw35615_chip_id=0;
+int AW35615_ID = 0x344f;
+int aw35615_getchip_id(void){
+	pr_err("AWINIC  %s 0x%x \n", __func__,aw35615_chip_id);
+	return aw35615_chip_id;
+}
+
+int aw35615_setchip_id(int chip_id){
+	pr_err("AWINIC  %s 0x%x \n", __func__,chip_id);
+	aw35615_chip_id=chip_id;
+	return aw35615_chip_id;
+}
+EXPORT_SYMBOL(aw35615_setchip_id);
+
+static int aw_get_pps_status(struct tcpc_device *tcpc, struct pd_pps_status *pps_status)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	pps_status->output_mv = -1;
+	pps_status->output_ma = -1;
+	pps_status->real_time_flags = 1;
+
+	return 0;
+}
+
+static int aw_pd_get_status(struct tcpc_device *tcpc, struct pd_status *status)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+	status->event_flags = chip->port.Registers.Status.OVRTEMP;
+	status->internal_temp = chip->port.Registers.Status.OVRTEMP;
+	return 0;
+}
+
+static int aw_request_dr_swap(struct tcpc_device *tcpc, uint8_t role)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	AW_LOG("enter\n");
+
+	chip->port.USBPDTxFlag = AW_TRUE;
+	chip->port.PDTransmitHeader.word = 0;
+	chip->port.PDTransmitHeader.MessageType = CMTDR_Swap;
+	chip->port.PDTransmitHeader.NumDataObjects = 0;
+
+	if ((!chip->queued) && (chip->port.PolicyState == peSinkReady ||
+			chip->port.PolicyState == peSourceReady)) {
+		chip->queued = AW_TRUE;
+		queue_work(chip->highpri_wq, &chip->sm_worker);
+		usleep_range(4000, 5000);
+		AW_LOG("queue_work --> send pd message type CMTDR_Swap\n");
+		do {
+			if ((chip->port.PolicyState == peSinkSendSoftReset) ||
+				(chip->port.PolicyState == peDisabled)) {
+				AW_LOG("CMTDR_Swap fail\n");
+				return 1;
+			}
+			usleep_range(500, 1000);
+		} while (!(chip->port.PolicyState == peSinkReady ||
+				chip->port.PolicyState == peSourceReady));
+		return 0;
+	}
+
+	return 1;
+}
+
+static int aw_request_pr_swap(struct tcpc_device *tcpc, uint8_t role)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	AW_LOG("enter\n");
+
+	chip->port.USBPDTxFlag = AW_TRUE;
+	chip->port.PDTransmitHeader.word = 0;
+	chip->port.PDTransmitHeader.MessageType = CMTPR_Swap;
+	chip->port.PDTransmitHeader.NumDataObjects = 0;
+
+	if ((!chip->queued) && (chip->port.PolicyState == peSinkReady ||
+				chip->port.PolicyState == peSourceReady)) {
+		chip->queued = AW_TRUE;
+		queue_work(chip->highpri_wq, &chip->sm_worker);
+		usleep_range(4000, 5000);
+		AW_LOG("queue_work --> send pd message type CMTPR_Swap\n");
+		do {
+			if ((chip->port.PolicyState == peSinkSendSoftReset ||
+				chip->port.PolicyState == peErrorRecovery) ||
+				(chip->port.PolicyState == peDisabled)) {
+				AW_LOG("CMTPR_Swap fail\n");
+				return 1;
+			}
+			usleep_range(500, 1000);
+		} while (!(chip->port.PolicyState == peSinkReady ||
+				chip->port.PolicyState == peSourceReady));
+		return 0;
+	}
+
+	return 1;
+}
+
+static int aw_request_pdo(struct tcpc_device *tcpc, AW_U16 pdo_vol, AW_U16 pdo_cur)
+{
+	int i;
+	AW_U8 pdo_num = 0;
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	AW_LOG("Received.NumDataObjects = %d\n",
+			chip->port.SrcCapsHeaderReceived.NumDataObjects);
+
+	for (i = 0; i < chip->port.SrcCapsHeaderReceived.NumDataObjects; i++) {
+		if (chip->port.SrcCapsReceived[i].PDO.SupplyType == pdoTypeFixed) {
+			if ((chip->port.SrcCapsReceived[i].FPDOSupply.Voltage * 50 == pdo_vol) &&
+				(chip->port.SrcCapsReceived[i].FPDOSupply.MaxCurrent * 10 >= pdo_cur)) {
+				pdo_num = i + 1;
+				break;
+			}
+		}
+	}
+
+	AW_LOG("pdo_num = %d\n", pdo_num);
+	if (pdo_num == 0) {
+		AW_LOG("find fixed error\n");
+		return 1;
+	}
+
+	chip->port.USBPDTxFlag = AW_TRUE;
+	chip->port.PDTransmitHeader.word = 0;
+	chip->port.PDTransmitHeader.MessageType = DMTRequest;
+	chip->port.PDTransmitHeader.NumDataObjects = 1;
+
+	chip->port.PDTransmitObjects[0].object = 0;
+	chip->port.PDTransmitObjects[0].FVRDO.ObjectPosition = pdo_num;
+	chip->port.PDTransmitObjects[0].FVRDO.GiveBack =
+			chip->port.PortConfig.SinkGotoMinCompatible;
+	chip->port.PDTransmitObjects[0].FVRDO.CapabilityMismatch = AW_FALSE;
+	chip->port.PDTransmitObjects[0].FVRDO.USBCommCapable =
+			chip->port.PortConfig.SinkUSBCommCapable;
+	chip->port.PDTransmitObjects[0].FVRDO.NoUSBSuspend =
+			chip->port.PortConfig.SinkUSBSuspendOperation;
+	chip->port.PDTransmitObjects[0].FVRDO.UnChnkExtMsgSupport = AW_FALSE;
+	chip->port.PDTransmitObjects[0].FVRDO.OpCurrent = pdo_cur / 10;
+	chip->port.PDTransmitObjects[0].FVRDO.MinMaxCurrent =
+			chip->port.SrcCapsReceived[pdo_num - 1].FPDOSupply.MaxCurrent;
+
+	if ((!chip->queued) && (chip->port.PolicyState == peSinkReady)) {
+		chip->queued = AW_TRUE;
+		queue_work(chip->highpri_wq, &chip->sm_worker);
+		usleep_range(4000, 5000);
+		AW_LOG("queue_work --> send request pdo\n");
+		do {
+			if ((chip->port.PolicyState == peSinkSendHardReset) ||
+					(chip->port.PolicyState == peSinkSoftReset) ||
+					(chip->port.PolicyState == peSinkSendSoftReset) ||
+					(chip->port.PolicyState == peDisabled)) {
+				AW_LOG("request pdo fail\n");
+				return 1;
+			}
+			usleep_range(500, 1000);
+		} while ((chip->port.PolicyState != peSinkReady) || (chip->queued == AW_TRUE));
+		return 0;
+	}
+
+	return 1;
+}
+
+static int aw_request_apdo(struct tcpc_device *tcpc, AW_U16 apdo_vol, AW_U16 apdo_cur)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+	AW_U8 i = 0;
+	AW_U8 apdo_num = 0;
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	AW_LOG("Received.NumDataObjects = %d\n", chip->port.SrcCapsHeaderReceived.NumDataObjects);
+
+	for (i = 0; i < chip->port.SrcCapsHeaderReceived.NumDataObjects; i++) {
+		if (chip->port.SrcCapsReceived[i].PDO.SupplyType == pdoTypeAugmented) {
+			if (((chip->port.SrcCapsReceived[i].PPSAPDO.MaxVoltage * 100 >= apdo_vol) &&
+				(chip->port.SrcCapsReceived[i].PPSAPDO.MinVoltage * 100 <= apdo_vol)) &&
+				(chip->port.SrcCapsReceived[i].PPSAPDO.MaxCurrent * 50 >= apdo_cur)) {
+				apdo_num = i + 1;
+				break;
+			}
+		}
+	}
+
+	AW_LOG("apdo_num = %d\n", apdo_num);
+	if (apdo_num == 0) {
+		AW_LOG("The source does not support the PPS function\n");
+		return 1;
+	}
+
+	chip->port.USBPDTxFlag = AW_TRUE;
+	chip->port.PDTransmitHeader.word = 0;
+	chip->port.PDTransmitHeader.MessageType = DMTRequest;
+	chip->port.PDTransmitHeader.NumDataObjects = 1;
+
+	chip->port.PDTransmitObjects[0].object = 0;
+	chip->port.PDTransmitObjects[0].PPSRDO.ObjectPosition = apdo_num;
+	chip->port.PDTransmitObjects[0].PPSRDO.CapabilityMismatch = AW_FALSE;
+	chip->port.PDTransmitObjects[0].PPSRDO.USBCommCapable =
+			chip->port.PortConfig.SinkUSBCommCapable;
+	chip->port.PDTransmitObjects[0].PPSRDO.NoUSBSuspend =
+			chip->port.PortConfig.SinkUSBSuspendOperation;
+	chip->port.PDTransmitObjects[0].PPSRDO.UnChnkExtMsgSupport = AW_FALSE;
+	chip->port.PDTransmitObjects[0].PPSRDO.Voltage = apdo_vol / 20;
+	chip->port.PDTransmitObjects[0].PPSRDO.OpCurrent = apdo_cur / 50;
+
+	if ((!chip->queued) && (chip->port.PolicyState == peSinkReady)) {
+		chip->queued = AW_TRUE;
+		queue_work(chip->highpri_wq, &chip->sm_worker);
+		usleep_range(4000, 5000);
+		AW_LOG("queue_work --> send pd message type apdo\n");
+		do {
+			if ((chip->port.PolicyState == peSinkSendHardReset) ||
+					(chip->port.PolicyState == peSinkSoftReset) ||
+					(chip->port.PolicyState == peSinkSendSoftReset) ||
+					(chip->port.PolicyState == peDisabled)) {
+				AW_LOG("request apdo fail\n");
+				return 1;
+			}
+			usleep_range(500, 1000);
+		} while ((chip->port.PolicyState != peSinkReady) || (chip->queued == AW_TRUE));
+		return 0;
+	}
+
+	return 1;
+}
+
+static int aw_get_power_cap(struct tcpc_device *tcpc,
+		struct tcpm_remote_power_cap *remote_cap)
+{
+	struct pd_port *pd_port = &tcpc->pd_port;
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+	AW_U8 i = 0;
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	AW_LOG("Received.NumDataObjects = %d\n", chip->port.SrcCapsHeaderReceived.NumDataObjects);
+
+	mutex_lock(&pd_port->pd_lock);
+	remote_cap->selected_cap_idx = chip->port.SinkRequest.FVRDO.ObjectPosition;
+	for (i = 0; i < chip->port.SrcCapsHeaderReceived.NumDataObjects; i++) {
+		if (chip->port.SrcCapsReceived[i].PDO.SupplyType == pdoTypeFixed) {
+			remote_cap->max_mv[i] = chip->port.SrcCapsReceived[i].FPDOSupply.Voltage * 50;
+			remote_cap->min_mv[i] = chip->port.SrcCapsReceived[i].FPDOSupply.Voltage * 50;
+			remote_cap->ma[i] = chip->port.SrcCapsReceived[i].FPDOSupply.MaxCurrent * 10;
+			remote_cap->type[i] = pdoTypeFixed;
+			remote_cap->nr++;
+		}
+	}
+	mutex_unlock(&pd_port->pd_lock);
+
+	return TCPM_SUCCESS;
+}
+
+static int aw_pd_pe_ready(struct tcpc_device *tcpc)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	return chip->port.src_support_pps;
+}
+
+static int aw_get_source_apdo(struct tcpc_device *tcpc,
+		uint8_t apdo_type, uint8_t *cap_i, struct tcpm_power_cap_val *cap_val)
+{
+	struct pd_port *pd_port = &tcpc->pd_port;
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+	AW_U8 i = 0;
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	AW_LOG("Received.NumDataObjects = %d cap_i = %d\n", chip->port.SrcCapsHeaderReceived.NumDataObjects, *cap_i);
+
+	mutex_lock(&pd_port->pd_lock);
+	for (i = *cap_i; i < chip->port.SrcCapsHeaderReceived.NumDataObjects; i++) {
+		if (chip->port.SrcCapsReceived[i].PDO.SupplyType == pdoTypeAugmented) {
+			cap_val->type = chip->port.SrcCapsReceived[i].PDO.SupplyType;
+			cap_val->min_mv = chip->port.SrcCapsReceived[i].PPSAPDO.MinVoltage * 100;
+			cap_val->max_mv = chip->port.SrcCapsReceived[i].PPSAPDO.MaxVoltage * 100;
+
+			if (cap_val->type == DPM_PDO_TYPE_BAT)
+				cap_val->uw = chip->port.SrcCapsReceived[i].BPDO.MaxPower * 250;
+			else
+				cap_val->ma = chip->port.SrcCapsReceived[i].PPSAPDO.MaxCurrent * 50;
+
+#if IS_ENABLED(CONFIG_USB_PD_REV30)
+
+			if (cap_val->type == DPM_PDO_TYPE_APDO) {
+				cap_val->apdo_type = chip->port.SrcCapsReceived[i].PDO.SupplyType;
+				cap_val->pwr_limit = (chip->port.SrcCapsReceived[i].object >> 27) & 0x1;
+			}
+#endif	/* CONFIG_USB_PD_REV30 */
+
+			*cap_i = i + 1;
+			mutex_unlock(&pd_port->pd_lock);
+			return TCPM_SUCCESS;
+		}
+	}
+	mutex_unlock(&pd_port->pd_lock);
+
+	return 1;
+}
+
+static int aw_pd_pd_connected(struct tcpc_device *tcpc)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	return chip->port.src_support_pd;
+}
+
+static int aw_pd_comm_capable(struct tcpc_device *tcpc)
+{
+	struct aw35615_chip *chip = tcpc_get_dev_data(tcpc);
+
+	if (chip->chip_id != AW35615_ID) {
+		AW_LOG("AWINIC %s - Chip structure is NULL!\n", __func__);
+		return -1;
+	}
+
+	return chip->port.usb_commcapable;
+}
+#endif
 
 /* Check status */
 static int tcpm_check_typec_attached(struct tcpc_device *tcpc)
@@ -347,6 +717,19 @@ bool tcpm_inquire_pd_connected(
 {
 	struct pd_port *pd_port = &tcpc->pd_port;
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_pd_pd_connected(tcpc);
+		if (ret >= 0) {
+			if (ret)
+				return true;
+			else
+				return false;
+		}
+	}
+#endif
+
 	return pd_port->pe_data.pd_connected;
 }
 EXPORT_SYMBOL(tcpm_inquire_pd_connected);
@@ -391,6 +774,19 @@ uint8_t tcpm_inquire_pd_pe_ready(
 	struct tcpc_device *tcpc)
 {
 	struct pd_port *pd_port = &tcpc->pd_port;
+
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_pd_pe_ready(tcpc);
+		if (ret >= 0) {
+			if (ret)
+				return true;
+			else
+				return false;
+		}
+	}
+#endif
 
 	return pd_port->pe_data.pe_ready;
 }
@@ -682,6 +1078,19 @@ int tcpm_get_remote_power_cap(struct tcpc_device *tcpc,
 	struct tcpm_power_cap_val cap;
 	int i;
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_get_power_cap(tcpc, remote_cap);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	}
+#endif
+
 	mutex_lock(&pd_port->pd_lock);
 	remote_cap->selected_cap_idx = pd_port->pe_data.remote_selected_cap;
 	remote_cap->nr = pd_port->pe_data.remote_src_cap.nr;
@@ -799,6 +1208,30 @@ int tcpm_dpm_pd_power_swap(struct tcpc_device *tcpc,
 	struct tcp_dpm_event tcp_event = {
 		.event_id = TCP_DPM_EVT_PR_SWAP_AS_SNK + role,
 	};
+#if IS_ENABLED(CONFIG_AW35615_PD) || IS_ENABLED(CONFIG_TCPC_HUSB311) //jnier modfy 20240305
+	int ret;
+#endif
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_request_pr_swap(tcpc, role);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	} 
+#endif
+
+#if IS_ENABLED(CONFIG_TCPC_HUSB311)
+	ret = tcpm_typec_role_swap(tcpc);
+	if (ret >= 0) {
+		if (ret == 0)
+			return TCPM_SUCCESS;
+		else
+			return TCPM_ERROR_UNKNOWN;
+	}
+#endif
 
 	return tcpm_put_tcp_dpm_event_cbk1(
 		tcpc, &tcp_event, cb_data, TCPM_BK_PR_SWAP_TOUT);
@@ -811,6 +1244,19 @@ int tcpm_dpm_pd_data_swap(struct tcpc_device *tcpc,
 	struct tcp_dpm_event tcp_event = {
 		.event_id = TCP_DPM_EVT_DR_SWAP_AS_UFP + role,
 	};
+
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+	ret = aw_request_dr_swap(tcpc, role);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	}
+#endif
 
 	return tcpm_put_tcp_dpm_event_cbk1(
 		tcpc, &tcp_event, cb_data, TCPM_BK_PD_CMD_TOUT);
@@ -885,6 +1331,28 @@ int tcpm_dpm_pd_request(struct tcpc_device *tcpc,
 		.tcp_dpm_data.pd_req.mv = mv,
 		.tcp_dpm_data.pd_req.ma = ma,
 	};
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+		if (tcpc->pd_port.dpm_charging_policy == DPM_CHARGING_POLICY_PPS) {
+			ret = aw_request_apdo(tcpc, (uint16_t)mv, (uint16_t)ma);
+			if (ret >= 0) {
+				if (ret == 0)
+					return TCPM_SUCCESS;
+				else
+					return TCPM_ERROR_UNKNOWN;
+			}
+		} else {
+			ret = aw_request_pdo(tcpc, (uint16_t)mv, (uint16_t)ma);
+			if (ret >= 0) {
+				if (ret == 0)
+					return TCPM_SUCCESS;
+				else
+					return TCPM_ERROR_UNKNOWN;
+			}
+		}
+	}
+#endif
 
 	return tcpm_put_tcp_dpm_event_cbk1(
 		tcpc, &tcp_event, cb_data, TCPM_BK_REQUEST_TOUT);
@@ -967,6 +1435,19 @@ int tcpm_dpm_pd_get_status(struct tcpc_device *tcpc,
 		.event_id = TCP_DPM_EVT_GET_STATUS,
 	};
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_pd_get_status(tcpc, status);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	}
+#endif
+
 	return tcpm_put_tcp_dpm_event_cbk2(
 		tcpc, &tcp_event, cb_data, TCPM_BK_PD_CMD_TOUT,
 		(uint8_t *) status, PD_SDB_SIZE);
@@ -993,6 +1474,18 @@ int tcpm_dpm_pd_get_pps_status(struct tcpc_device *tcpc,
 {
 	int ret;
 	struct pd_pps_status_raw pps_status_raw;
+
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_get_pps_status(tcpc, pps_status);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	}
+#endif
 
 	ret = tcpm_dpm_pd_get_pps_status_raw(
 		tcpc, cb_data, &pps_status_raw);
@@ -1249,6 +1742,9 @@ int tcpm_inquire_dp_ufp_u_state(
 	int ret;
 	struct pd_port *pd_port = &tcpc->pd_port;
 
+	if (pd_get_dp_data(pd_port) == NULL)
+		return TCPM_ERROR_UNKNOWN;
+
 	ret = tcpm_check_pd_attached(tcpc);
 	if (ret != TCPM_SUCCESS)
 		return ret;
@@ -1286,6 +1782,9 @@ int tcpm_inquire_dp_dfp_u_state(
 {
 	int ret;
 	struct pd_port *pd_port = &tcpc->pd_port;
+
+	if (pd_get_dp_data(pd_port) == NULL)
+		return TCPM_ERROR_UNKNOWN;
 
 	ret = tcpm_check_pd_attached(tcpc);
 	if (ret != TCPM_SUCCESS)
@@ -1408,6 +1907,7 @@ int tcpm_put_tcp_dpm_event(
 	struct pd_port *pd_port = &tcpc->pd_port;
 
 	ret = tcpm_check_pd_attached(tcpc);
+
 	if (ret != TCPM_SUCCESS &&
 		(imme && ret == TCPM_ERROR_UNATTACHED))
 		return ret;
@@ -1492,9 +1992,26 @@ int tcpm_set_pd_charging_policy(struct tcpc_device *tcpc,
 
 	struct pd_port *pd_port = &tcpc->pd_port;
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+#endif
 	/* PPS should call another function ... */
 	if ((policy & DPM_CHARGING_POLICY_MASK) >= DPM_CHARGING_POLICY_PPS)
 		return TCPM_ERROR_PARAMETER;
+
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	if (aw35615_getchip_id() == AW35615_ID) {
+		pd_port->dpm_charging_policy = policy;
+
+		ret = aw_request_pdo(tcpc, 5000, 2000);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	}
+#endif
 
 	mutex_lock(&pd_port->pd_lock);
 	if (pd_port->dpm_charging_policy == policy) {
@@ -1569,10 +2086,25 @@ int tcpm_set_apdo_charging_policy(struct tcpc_device *tcpc,
 	};
 
 	struct pd_port *pd_port = &tcpc->pd_port;
-
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+#endif
 	/* Not PPS should call another function ... */
 	if ((policy & DPM_CHARGING_POLICY_MASK) < DPM_CHARGING_POLICY_PPS)
 		return TCPM_ERROR_PARAMETER;
+
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_request_apdo(tcpc, (uint16_t)mv, (uint16_t)ma);
+		if (ret >= 0) {
+			pd_port->dpm_charging_policy = policy;
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_UNKNOWN;
+		}
+	}
+#endif
 
 	mutex_lock(&pd_port->pd_lock);
 	if (pd_port->dpm_charging_policy == policy) {
@@ -1603,6 +2135,18 @@ int tcpm_inquire_pd_source_apdo(struct tcpc_device *tcpc,
 	int ret;
 	uint8_t i;
 	struct tcpm_power_cap cap;
+
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_get_source_apdo(tcpc, apdo_type, cap_i, cap_val);
+		if (ret >= 0) {
+			if (ret == 0)
+				return TCPM_SUCCESS;
+			else
+				return TCPM_ERROR_NOT_FOUND;
+		}
+	}
+#endif
 
 	ret = tcpm_inquire_pd_source_cap(tcpc, &cap);
 	if (ret != TCPM_SUCCESS)
@@ -1931,6 +2475,19 @@ bool tcpm_is_comm_capable(struct tcpc_device *tcpc)
 {
 	struct pd_port *pd_port = &tcpc->pd_port;
 
+#if IS_ENABLED(CONFIG_AW35615_PD)
+	int ret;
+	if (aw35615_getchip_id() == AW35615_ID) {
+		ret = aw_pd_comm_capable(tcpc);
+		if (ret >= 0) {
+			if (ret)
+				return true;
+			else
+				return false;
+		}
+	}
+#endif
+
 	return pd_port->pe_data.dpm_flags & DPM_FLAGS_PARTNER_USB_COMM;
 }
 EXPORT_SYMBOL(tcpm_is_comm_capable);
@@ -1973,6 +2530,9 @@ static const char * const bk_event_ret_name[] = {
 static inline void tcpm_dpm_bk_copy_data(struct pd_port *pd_port)
 {
 	uint8_t size = pd_port->tcpm_bk_cb_data_max;
+
+	if (pd_get_msg_data_payload(pd_port) == NULL)
+		return;
 
 	if (size >= pd_get_msg_data_size(pd_port))
 		size = pd_get_msg_data_size(pd_port);

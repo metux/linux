@@ -40,9 +40,9 @@
 #include <linux/fb.h>
 #endif
 
-#define GOODIX_CORE_DRIVER_NAME			"mtk-tpd"
+#define GOODIX_CORE_DRIVER_NAME			"goodix_ts"
 #define GOODIX_PEN_DRIVER_NAME			"goodix_ts,pen"
-#define GOODIX_DRIVER_VERSION			"v1.2.6"
+#define GOODIX_DRIVER_VERSION			"v1.3.3"
 #define GOODIX_MAX_TOUCH				10
 #define GOODIX_PEN_MAX_PRESSURE			4096
 #define GOODIX_MAX_PEN_KEY				2
@@ -50,7 +50,7 @@
 #define GOODIX_CFG_MAX_SIZE				4096
 #define GOODIX_FW_MAX_SIEZE				(300 * 1024)
 #define GOODIX_MAX_STR_LABLE_LEN		32
-#define GOODIX_MAX_FRAMEDATA_LEN		1700
+#define GOODIX_MAX_FRAMEDATA_LEN		2000
 #define GOODIX_GESTURE_DATA_LEN			16
 
 #define GOODIX_NORMAL_RESET_DELAY_MS	100
@@ -131,6 +131,12 @@ enum CHECKSUM_MODE {
 #define MAX_FREQ_NUM_STYLUS          8
 #define MAX_STYLUS_SCAN_FREQ_NUM     6
 #pragma pack(1)
+struct flash_head {
+    uint32_t checksum;
+    uint32_t address;
+    uint32_t length;
+};
+
 struct frame_head {
 	uint8_t sync;
 	uint16_t frame_index;
@@ -291,7 +297,6 @@ struct goodix_ts_board_data {
 	int reset_gpio;
 	int irq_gpio;
 	int avdd_gpio;
-	int avdd_evt_gpio;
 	int iovdd_gpio;
 	unsigned int  irq_flags;
 
@@ -440,6 +445,8 @@ struct goodix_ts_hw_ops {
 	int (*read)(struct goodix_ts_core *cd, unsigned int addr,
 		    unsigned char *data, unsigned int len);
 	int (*write)(struct goodix_ts_core *cd, unsigned int addr,
+		     unsigned char *data, unsigned int len);
+	int (*read_flash)(struct goodix_ts_core *cd, unsigned int addr,
 		     unsigned char *data, unsigned int len);
 	int (*send_cmd)(struct goodix_ts_core *cd,
 			struct goodix_ts_cmd *cmd);

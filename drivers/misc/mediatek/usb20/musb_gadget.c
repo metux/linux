@@ -39,6 +39,10 @@
 
 #include "u_fs.h"
 
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+extern void cust_mid_misc_set_usb_connect_state(bool state);
+#endif
+
 /* workaround for f_fs use after free issue */
 struct ffs_ep {
 	struct usb_ep *ep;
@@ -1564,6 +1568,10 @@ static int musb_gadget_enable
 
 	trace_musb_gadget_enable(musb_ep);
 
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+	cust_mid_misc_set_usb_connect_state(true);
+#endif
+
 fail:
 	spin_unlock_irqrestore(&musb->lock, flags);
 
@@ -2739,6 +2747,10 @@ static int musb_gadget_stop(struct usb_gadget *g)
 	 */
 
 	pm_runtime_put(musb->controller);
+
+#if IS_ENABLED(CONFIG_CM_MIDMISC_SUPPORT)
+	cust_mid_misc_set_usb_connect_state(false);
+#endif
 
 	return 0;
 }

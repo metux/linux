@@ -766,6 +766,52 @@ include/config/auto.conf:
 
 endif # may-sync-config
 endif # need-config
+##Leo add for debug build 20211203
+ifneq ($(strip $(TARGET_BUILD_VARIANT)),user)
+KBUILD_CPPFLAGS += -DDEBUG_BUILD
+endif
+
+ifneq ($(filter WB_REKRN, $(WB_BUILD_ARGS)),)
+WB_REKRN := 1
+endif
+
+##Leo add start 20220214
+CUSTOM_WB_FLAGS := -DWEIBU_SUPPORT
+KBUILD_CPPFLAGS += -DCUST_BUILD_PROJECT=\"${CUSTOM_PROJECT}_$(shell date '+%Y%m%d%H%M')\"
+ifneq ($(strip $(CUSTOM_PCB)),)
+CUSTOM_WB_FLAGS += $(addprefix -D, $(shell echo \
+             $(CUSTOM_PCB) | tr a-z A-Z))
+endif
+
+#ifneq ($(strip $(CUSTOM_PROJECT)),)
+#CUSTOM_WB_FLAGS := $(addprefix -D, $(shell echo \
+#             $(CUSTOM_PROJECT) | tr a-z A-Z))
+#endif
+
+ifneq ($(strip $(WB_BOARD_CONFIG)),)
+CUSTOM_WB_FLAGS += $(addprefix -D, $(shell echo \
+             $(WB_BOARD_CONFIG) | tr a-z A-Z))
+endif
+
+ifneq ($(strip $(WB_CUSTOMER_CONFIG)),)
+CUSTOM_WB_FLAGS += $(addprefix -D, $(shell echo \
+             $(WB_CUSTOMER_CONFIG) | tr a-z A-Z))
+endif
+KBUILD_CPPFLAGS += $(CUSTOM_WB_FLAGS)
+
+define wb.generate-macros
+$(shell if [ -e $(2) ];then rm  $(2); fi ;\
+					touch $(2))
+wb_temp := $(foreach var, $(1),$(shell if [ -e $(2) ];\
+					then echo $(var) >> $(2); fi;))
+$(shell if [ -e $(2) ];then \
+					sed -i "s/\-D/\#define /g" $(2);fi)
+endef
+
+WB_CONFIG_FILE  := include/generated/wb_config.h
+wb_temp := $(call wb.generate-macros,$(CUSTOM_WB_FLAGS),$(WB_CONFIG_FILE))
+##Leo add end 
+
 
 KBUILD_CFLAGS	+= $(call cc-option,-fno-delete-null-pointer-checks,)
 KBUILD_CFLAGS	+= $(call cc-disable-warning,frame-address,)
@@ -1304,9 +1350,14 @@ cmd_link-vmlinux =                                                 \
 	$(CONFIG_SHELL) $< "$(LD)" "$(KBUILD_LDFLAGS)" "$(LDFLAGS_vmlinux)";    \
 	$(if $(ARCH_POSTLINK), $(MAKE) -f $(ARCH_POSTLINK) $@, true)
 
+##Leo 20240319
+ifndef WB_REKRN
 ifndef KBUILD_MIXED_TREE
 vmlinux: scripts/link-vmlinux.sh autoksyms_recursive $(vmlinux-deps) FORCE
 	+$(call if_changed,link-vmlinux)
+else
+$(info weibu gki remake kernel support !!!!!!)
+endif
 endif
 
 targets := vmlinux

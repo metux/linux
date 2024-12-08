@@ -1,0 +1,23 @@
+&i2c6{
+	hl7015_chg: hl7015@6b {
+	    charger = <&hl7015_chg>;
+		compatible = "mtk,hl7015";
+		reg = <0x6b>;
+		status = "okay";
+
+		charger_name = "primary_chg";
+		eint_name = "chr_stat";
+		irq-gpio = <&pio 12 IRQ_TYPE_EDGE_FALLING>;
+		chg-en-gpio = <&pio 48 0>;
+		h1,h17015,usb-vlim = <4600>;
+		hl,h17015,usb-ilim= <500>;
+		hl,h17015,usb-vreg= <4400>;
+		hl,h17015,usb-ichg = <500>;
+		hl,h17015,precharge-current = <180>;
+		hl,h17015,termination-current = <240>;
+		hl,h17015,boost-voltage = <5150>;
+		h1.h17015,boost-current = <1200>;
+		h1.h17015,drvbus-gpio = <&pio 86 0>;
+		extcon = <&fusb0>;
+    };
+};

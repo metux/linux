@@ -386,7 +386,7 @@ EXPORT_SYMBOL_GPL(mtk_vcodec_gce_timeout_dump);
 void mtk_vcodec_enc_timeout_dump(void *ctx)
 {
 	unsigned long value;
-	int i = 0, j = 0;
+	int i = 0, j = 0, core_ids = 0;
 
 	struct mtk_vcodec_ctx *curr_ctx = ctx;
 	struct mtk_vcodec_dev *dev = NULL;
@@ -418,11 +418,12 @@ void mtk_vcodec_enc_timeout_dump(void *ctx)
 	}
 
 	dev = curr_ctx->dev;
+	core_ids = (dev->num_of_cores  != -1) ? dev->num_of_cores : MTK_VENC_CORE_1;
 
-	mtk_v4l2_debug(0, "ctx: %p, is_codec_suspending: %d",
-	    ctx, dev->is_codec_suspending);
+	mtk_v4l2_debug(0, "ctx: %p, is_codec_suspending: %d, core_ids:%d",
+	    ctx, dev->is_codec_suspending, core_ids);
 
-	for (j = 0; j < MTK_VENC_CORE_1; j++) {
+	for (j = 0; j < core_ids; j++) {
 		for (i = 0; i < REG1_COUNT; i++) {
 			value = readl(dev->enc_reg_base[j] + Reg_1[i]);
 			mtk_v4l2_debug(0, "[%d] 0x%x = 0x%lx",
@@ -430,10 +431,14 @@ void mtk_vcodec_enc_timeout_dump(void *ctx)
 		}
 	}
 
-	writel(1, dev->enc_reg_base[0] + 0xEC);
-	writel(0, dev->enc_reg_base[0] + 0xF4);
+	for (j = 0; j < core_ids; j++) {
+		writel(1, dev->enc_reg_base[j] + 0xEC);
+	}
+	for (j = 0; j < core_ids; j++) {
+		writel(0, dev->enc_reg_base[j] + 0xF4);
+	}
 
-	for (j = 0; j < MTK_VENC_CORE_1; j++) {
+	for (j = 0; j < core_ids; j++) {
 		for (i = 0; i < REG2_COUNT; i++) {
 			value = readl(dev->enc_reg_base[j] + Reg_2[i]);
 			mtk_v4l2_debug(0, "[%d] 0x%x = 0x%lx",

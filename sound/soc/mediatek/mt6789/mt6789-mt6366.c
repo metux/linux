@@ -21,6 +21,10 @@
 #include "../../codecs/mt6358-accdet.h"
 #endif
 
+#if IS_ENABLED(CONFIG_CM_CUST_GPIOS_SUPPORT)
+#include <mt-plat/cust_gpios.h>
+#endif
+
 #include "../common/mtk-sp-spk-amp.h"
 
 /*
@@ -30,11 +34,28 @@
  */
 #define EXT_SPK_AMP_W_NAME "Ext_Speaker_Amp"
 
+
+extern int aw87xxx_set_profile(int dev_index, char *profile);
+
+static char *aw_profile[] = {"Music", "Off"};
+enum aw87xxx_dev_index {
+       AW_DEV_0 = 0,
+       AW_DEV_1 = 1,   
+       AW_DEV_2 = 2,
+       AW_DEV_3 = 3,
+};
+
+static int g_extamp_mode = 1;
+
 static const char *const mt6789_spk_type_str[] = {MTK_SPK_NOT_SMARTPA_STR,
 						  MTK_SPK_RICHTEK_RT5509_STR,
 						  MTK_SPK_MEDIATEK_MT6660_STR,
+						  MTK_SPK_GOODIX_TFA98XX_STR,
 						  MTK_SPK_RICHTEK_RT5512_STR,
-						  MTK_SPK_GOODIX_TFA98XX_STR};
+						  MTK_SPK_AWINIC_AW883XX_STR,
+						  MTK_SPK_FOURSEMI_FS18XX_STR,
+						  MTK_SPK_CIRRUS_CS35L45_STR,
+						  MTK_SPK_AWINIC_AW882XX_STR};
 static const char *const
 	mt6789_spk_i2s_type_str[] = {MTK_SPK_I2S_0_STR,
 				     MTK_SPK_I2S_1_STR,
@@ -55,7 +76,7 @@ static int mt6789_spk_type_get(struct snd_kcontrol *kcontrol,
 {
 	int idx = mtk_spk_get_type();
 
-	pr_debug("%s() = %d\n", __func__, idx);
+	printk("%s() = %d\n", __func__, idx);
 	ucontrol->value.integer.value[0] = idx;
 	return 0;
 }
@@ -65,7 +86,7 @@ static int mt6789_spk_i2s_out_type_get(struct snd_kcontrol *kcontrol,
 {
 	int idx = mtk_spk_get_i2s_out_type();
 
-	pr_debug("%s() = %d\n", __func__, idx);
+	printk("%s() = %d\n", __func__, idx);
 	ucontrol->value.integer.value[0] = idx;
 	return 0;
 }
@@ -75,11 +96,13 @@ static int mt6789_spk_i2s_in_type_get(struct snd_kcontrol *kcontrol,
 {
 	int idx = mtk_spk_get_i2s_in_type();
 
-	pr_debug("%s() = %d\n", __func__, idx);
+	printk("%s() = %d\n", __func__, idx);
 	ucontrol->value.integer.value[0] = idx;
 	return 0;
 }
-
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //jnier 20230829
+extern bool cust_get_typec_accdet_status(void);
+#endif
 static int mt6789_mt6366_spk_amp_event(struct snd_soc_dapm_widget *w,
 					struct snd_kcontrol *kcontrol,
 					int event)
@@ -92,9 +115,33 @@ static int mt6789_mt6366_spk_amp_event(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		/* spk amp on control */
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //jnier 20230829
+		if(cust_get_typec_accdet_status()) {
+			printk("%s accdet spk amp on\n",__func__);
+			cust_gpio_set_value(CUST_GPIO_AUHPR_SPK_SW, 0);
+			cust_gpio_set_value(CUST_GPIO_USB_HP_SW,0);
+		}
+#endif
+		AudDrv_GPIO_EXTAMP_Select(true, g_extamp_mode);
+        aw87xxx_set_profile(AW_DEV_0, aw_profile[0]);
+        aw87xxx_set_profile(AW_DEV_1, aw_profile[0]);
+        aw87xxx_set_profile(AW_DEV_2, aw_profile[0]);
+        aw87xxx_set_profile(AW_DEV_3, aw_profile[0]);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		/* spk amp off control */
+		AudDrv_GPIO_EXTAMP_Select(false, g_extamp_mode);
+        aw87xxx_set_profile(AW_DEV_0, aw_profile[1]);
+        aw87xxx_set_profile(AW_DEV_1, aw_profile[1]);
+        aw87xxx_set_profile(AW_DEV_2, aw_profile[1]);
+        aw87xxx_set_profile(AW_DEV_3, aw_profile[1]);
+#if IS_ENABLED(CONFIG_WB_TYPEC_EARPIECE) || defined(CONFIG_WB_TYPEC_EARPIECE) //jnier 20230829
+		if(cust_get_typec_accdet_status()) {
+			printk("%s accdet spk amp off \n",__func__);
+			cust_gpio_set_value(CUST_GPIO_AUHPR_SPK_SW, 1);
+			cust_gpio_set_value(CUST_GPIO_USB_HP_SW,1);
+		}
+#endif
 		break;
 	default:
 		break;
@@ -519,19 +566,40 @@ SND_SOC_DAILINK_DEFS(ap_dmic,
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(i2s0,
 	DAILINK_COMP_ARRAY(COMP_CPU("I2S0")),
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+	DAILINK_COMP_ARRAY(COMP_CODEC("aw882xx_smartpa.7-0034","aw882xx-aif-7-34"),
+						COMP_CODEC("aw882xx_smartpa.7-0035","aw882xx-aif-7-35")),
+#else
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+#endif
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(i2s1,
 	DAILINK_COMP_ARRAY(COMP_CPU("I2S1")),
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+	DAILINK_COMP_ARRAY(COMP_CODEC("aw882xx_smartpa.7-0034","aw882xx-aif-7-34"),
+						COMP_CODEC("aw882xx_smartpa.7-0035","aw882xx-aif-7-35")),
+#else
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+#endif
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(i2s2,
 	DAILINK_COMP_ARRAY(COMP_CPU("I2S2")),
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+	DAILINK_COMP_ARRAY(COMP_CODEC("aw882xx_smartpa.7-0034","aw882xx-aif-7-34"),
+						COMP_CODEC("aw882xx_smartpa.7-0035","aw882xx-aif-7-35")),
+#else
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+#endif
+
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(i2s3,
 	DAILINK_COMP_ARRAY(COMP_CPU("I2S3")),
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+	DAILINK_COMP_ARRAY(COMP_CODEC("aw882xx_smartpa.7-0034","aw882xx-aif-7-34"),
+						COMP_CODEC("aw882xx_smartpa.7-0035","aw882xx-aif-7-35")),
+#else
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+#endif
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(hw_gain1,
 	DAILINK_COMP_ARRAY(COMP_CPU("HW Gain 1")),
@@ -611,6 +679,26 @@ SND_SOC_DAILINK_DEFS(scpspkprocess,
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()));
 #endif
+
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+/**************** Awinic Start***********************/
+struct snd_soc_dai_link_component awinic_codecs[] = {
+	{
+		.of_node = NULL,
+		.dai_name = "aw882xx-aif-7-34",
+		.name = "aw882xx_smartpa.7-0034",
+
+	},
+	{
+		.of_node = NULL,
+		.dai_name = "aw882xx-aif-7-35",
+		.name = "aw882xx_smartpa.7-0035",
+
+	},
+};
+/**************** Awinic End***********************/
+#endif
+
 
 static struct snd_soc_dai_link mt6789_mt6366_dai_links[] = {
 	/* Front End DAI links */
@@ -903,6 +991,10 @@ static struct snd_soc_dai_link mt6789_mt6366_dai_links[] = {
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
 			| SND_SOC_DAIFMT_GATED,
 		.ops = &mt6789_mt6366_i2s_ops,
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+		.num_codecs = ARRAY_SIZE(awinic_codecs),
+		.codecs = awinic_codecs,
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.ignore_suspend = 1,
@@ -915,6 +1007,10 @@ static struct snd_soc_dai_link mt6789_mt6366_dai_links[] = {
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
 			| SND_SOC_DAIFMT_GATED,
 		.ops = &mt6789_mt6366_i2s_ops,
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+		.num_codecs = ARRAY_SIZE(awinic_codecs),
+		.codecs = awinic_codecs,
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.ignore_suspend = 1,
@@ -926,6 +1022,10 @@ static struct snd_soc_dai_link mt6789_mt6366_dai_links[] = {
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
 			| SND_SOC_DAIFMT_GATED,
 		.ops = &mt6789_mt6366_i2s_ops,
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+		.num_codecs = ARRAY_SIZE(awinic_codecs),
+		.codecs = awinic_codecs,
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.ignore_suspend = 1,
@@ -937,6 +1037,10 @@ static struct snd_soc_dai_link mt6789_mt6366_dai_links[] = {
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
 			| SND_SOC_DAIFMT_GATED,
 		.ops = &mt6789_mt6366_i2s_ops,
+#if IS_ENABLED(CONFIG_SND_SOC_AW882XX)
+		.num_codecs = ARRAY_SIZE(awinic_codecs),
+		.codecs = awinic_codecs,
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.ignore_suspend = 1,
@@ -1196,12 +1300,18 @@ static int mt6789_mt6366_dev_probe(struct platform_device *pdev)
 	}
 #endif
 
+	if (of_property_read_u32(pdev->dev.of_node, "extamp_mode", &g_extamp_mode)) {
+		g_extamp_mode = 1;
+		dev_err(&pdev->dev, "Not find extamp_mode\n");
+	}
+
 	card->dev = &pdev->dev;
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret)
 		dev_err(&pdev->dev, "%s snd_soc_register_card fail %d\n",
 			__func__, ret);
+
 	return ret;
 }
 

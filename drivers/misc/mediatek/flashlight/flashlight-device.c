@@ -5,7 +5,9 @@
 
 #include "flashlight-core.h"
 
-#if IS_ENABLED(CONFIG_MTK_FLASHLIGHT_RT4505)
+//#if IS_ENABLED(CONFIG_MTK_FLASHLIGHT_RT4505)
+#if 0
+#if defined(mt6739)
 const struct flashlight_device_id flashlight_id[] = {
 	/* {TYPE, CT, PART, "NAME", CHANNEL, DECOUPLE} */
 	{0, 0, 0, "flashlights-rt4505", 0, 0},
@@ -82,6 +84,11 @@ const struct flashlight_device_id flashlight_id[] = {
 	/* {TYPE, CT, PART, "NAME", CHANNEL, DECOUPLE} */
 	{0, 0, 0, "flashlights-lm3642", 0, 0},
 };
+#elif defined(CONFIG_MTK_FLASHLIGHT_CP2155)
+const struct flashlight_device_id flashlight_id[] = {
+	/* {TYPE, CT, PART, "NAME", CHANNEL, DECOUPLE} */
+	{0, 0, 0, "flashlights_cp2155", 0, 0},
+};
 #else
 const struct flashlight_device_id flashlight_id[] = {
 	/* {TYPE, CT, PART, "NAME", CHANNEL, DECOUPLE} */
@@ -93,6 +100,14 @@ const struct flashlight_device_id flashlight_id[] = {
 	{0, 1, 1, "flashlights-none", -1, 0},
 	{1, 0, 1, "flashlights-none", -1, 0},
 	{1, 1, 1, "flashlights-none", -1, 0},
+};
+#endif
+#endif
+
+#if 1
+const struct flashlight_device_id flashlight_id[] = {
+	/* {TYPE, CT, PART, "NAME", CHANNEL, DECOUPLE} */
+	{0, 0, 0, "flashlights_cp2155", 0, 0},
 };
 #endif
 

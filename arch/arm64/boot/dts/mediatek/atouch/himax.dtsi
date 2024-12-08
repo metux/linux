@@ -1,0 +1,68 @@
+/*
+ * Copyright (C) 2010 - 2022 Novatek, Inc.
+ *
+ * $Revision$
+ * $Date$
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
+
+&spi0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi_pins_0>;
+
+	himax@0 {
+		compatible = "himax,hxcommon";
+		reg = <0>; //Same as CS ID
+		status = "ok";
+		pinctrl-names = "spi_pull_down", "spi_pull_up";
+        pinctrl-0 = <&himax_spi_pull_down_ctrl>;
+        pinctrl-1 = <&himax_spi_pull_up_ctrl>;
+
+		spi-max-frequency = <9600000>;	//4800000,9600000,15000000,19200000
+		spi-cpha;
+		interrupt-parent = <&pio>;
+		//himax,3v3-gpio = <&pio 174 0>;
+		himax,rst-gpio = <&pio 152 0>;
+		himax,irq-gpio = <&pio 9 0>;
+		himax,panel-coords = <0 1200 0 2000>;
+		himax,display-coords = <0 1200 0 2000>;
+		report_type = <1>;
+	};
+};
+
+&pio{
+	spi_pins_0:spi0@1{
+		pins_cmd_dat{
+			pinmux = <PINMUX_GPIO30__FUNC_SPI0_CLK>,
+					 <PINMUX_GPIO32__FUNC_SPI0_MO>,
+					 <PINMUX_GPIO33__FUNC_SPI0_MI>;
+			drive-strength = <2>;
+		};
+	};
+
+    himax_spi_pull_down_ctrl: himax_spi_pull_down_ctrl {
+		pins_cmd_dat {
+            pinmux = <PINMUX_GPIO31__FUNC_GPIO31>;
+            output-low;
+        };
+    };
+
+    himax_spi_pull_up_ctrl: himax_spi_pull_up_ctrl {
+        pins_cmd_dat {
+            pinmux = <PINMUX_GPIO31__FUNC_SPI0_CSB>;
+            drive-strength = <2>;
+        };
+    };
+};

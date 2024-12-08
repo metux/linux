@@ -4,6 +4,10 @@ subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/usb20
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/power_throttling
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/extcon
 
 power_supply-y				:= power_supply_core.o
 power_supply-$(CONFIG_SYSFS)		+= power_supply_sysfs.o
@@ -112,7 +116,6 @@ obj-$(CONFIG_CHARGER_BD99954)	+= bd99954-charger.o
 obj-$(CONFIG_CHARGER_WILCO)	+= wilco-charger.o
 obj-$(CONFIG_RN5T618_POWER)	+= rn5t618_power.o
 obj-$(CONFIG_CHARGER_MT6360)	+= mt6360_pmu_chg.o
-obj-$(CONFIG_CHARGER_MT6370)	+= mt6370_pmu_chg.o
 obj-$(CONFIG_CHARGER_MT6362)	+= mt6362-chg.o
 obj-$(CONFIG_CHARGER_MT6370)	+= mt6370-charger.o
 obj-$(CONFIG_CHARGER_MT6375)	+= mt6375-charger.o
@@ -135,9 +138,20 @@ obj-$(CONFIG_MTK_PUMP_EXPRESS_PLUS_SUPPORT) += mtk_pep.o
 mtk_pep-objs := mtk_pe.o mtk_pe_hal.o
 obj-$(CONFIG_MTK_PUMP_EXPRESS_40_SUPPORT) += mtk_pep40.o
 mtk_pep40-objs := mtk_pe4.o mtk_pe4_hal.o
+obj-$(CONFIG_MTK_PUMP_EXPRESS_45_SUPPORT) += mtk_pep45.o
+mtk_pep45-objs := mtk_pe4_5.o mtk_pe4_5_hal.o
 obj-$(CONFIG_MTK_PUMP_EXPRESS_50_SUPPORT) += mtk_pep50.o
 mtk_pep50-objs := mtk_pe5.o mtk_pe5_hal.o
 
 ifneq ($(wildcard $(srctree)/$(src)/k6983v1_64_alpha),)
 obj-$(CONFIG_GAUGE_MT6983_ALPHA_SUPPORT) += k6983v1_64_alpha/
 endif
+
+obj-$(CONFIG_CHARGER_SC8960X)	+= sc8960x_charger.o
+obj-$(CONFIG_CHARGER_SC8989X)    +=sc8989x_charger.o
+obj-$(CONFIG_CHARGER_SC8851) 	+= sc8551_charger.o pd_policy_manager.o
+
+obj-$(CONFIG_CHARGER_HL7015)    += hl7015-charger.o
+
+obj-$(CONFIG_CHARGER_UPM6920)    += upm6920-charger.o
+obj-$(CONFIG_CHARGER_SGM415XX) += sgm415xx.o

@@ -134,7 +134,7 @@ int pd_hal_is_pd_adapter_ready(struct chg_alg_device *alg)
 	hal = chg_alg_dev_get_drv_hal_data(alg);
 	type = adapter_dev_get_property(hal->adapter, PD_TYPE);
 
-	pd_dbg("%s type:%d\n", __func__, type);
+	pr_info("%s Leo charge type:%d\n", __func__, type);
 
 	if (type == MTK_PD_CONNECT_PE_READY_SNK ||
 		type == MTK_PD_CONNECT_PE_READY_SNK_PD30 ||
@@ -184,7 +184,7 @@ static int get_pmic_vbus(int *vchr)
 	int ret;
 
 	if (chg_psy == NULL)
-		chg_psy = power_supply_get_by_name("primary_chg");
+		chg_psy = power_supply_get_by_name("mtk_charger_type");
 	if (chg_psy == NULL) {
 		pd_err("%s Couldn't get chg_psy\n", __func__);
 		ret = -1;
@@ -636,7 +636,7 @@ int pd_hal_get_uisoc(struct chg_alg_device *alg)
 
 	if (bat_psy == NULL) {
 		pr_notice("%s retry to get bat_psy\n", __func__);
-		bat_psy = power_supply_get_by_name("battery");
+		bat_psy = devm_power_supply_get_by_phandle(&pd->pdev->dev, "gauge");
 		pd->bat_psy = bat_psy;
 	}
 
@@ -676,5 +676,38 @@ int pd_hal_get_log_level(struct chg_alg_device *alg)
 		ret = info->log_level;
 	}
 
+	return ret;
+}
+
+int pd_hal_get_battery_temperature(struct chg_alg_device *alg)
+{
+	union power_supply_propval prop = {0};
+	struct power_supply *bat_psy = NULL;
+	int ret;
+	struct mtk_pd *pd;
+
+	if (alg == NULL)
+		return -EINVAL;
+
+	pd = dev_get_drvdata(&alg->dev);
+	bat_psy = pd->bat_psy;
+
+	if (bat_psy == NULL) {
+		pr_notice("%s retry to get bat_psy\n", __func__);
+		bat_psy = devm_power_supply_get_by_phandle(&pd->pdev->dev, "gauge");
+		pd->bat_psy = bat_psy;
+	}
+
+	if (bat_psy == NULL || IS_ERR(bat_psy)) {
+		pd_dbg("%s Couldn't get bat_psy\n", __func__);
+		ret = 27;
+	} else {
+		ret = power_supply_get_property(bat_psy,
+			POWER_SUPPLY_PROP_TEMP, &prop);
+		ret = prop.intval / 10;
+	}
+
+	pd_dbg("%s:%d\n", __func__,
+		ret);
 	return ret;
 }

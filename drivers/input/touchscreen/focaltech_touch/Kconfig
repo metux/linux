@@ -1,0 +1,38 @@
+#
+# Focaltech Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_FTS
+    bool "Focaltech Touchscreen"
+    default n
+    help
+      Say Y here if you have Focaltech touch panel.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_X_REVERSE
+    bool "Focaltech Touchscreen X reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen X reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_Y_REVERSE
+    bool "Focaltech Touchscreen Y reverse"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Y reverse.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_PEN
+    bool "Focaltech Touchscreen Pen"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Pen.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_GLOVE
+    bool "Focaltech Touchscreen GLOVE"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Pen.
+      If unsure, say N.

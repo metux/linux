@@ -186,7 +186,7 @@ int goodix_get_ic_type(struct device_node *node,
 		}
 		return 0;
 	}
-	if (strstr(ic_name, "brl-d") || strstr(ic_name, "9966")) {
+	if (strstr(ic_name, "brl-d")) {
 		ts_info("ic type is brl-d");
 		bus_inf->ic_type = IC_TYPE_BERLIN_D;
 		return 0;
@@ -198,6 +198,6 @@ int goodix_get_ic_type(struct device_node *node,
 	}
 
 	ts_err("unsupported ic type %s", ic_name);
-	return 0;
+	return -EINVAL;
 }
 

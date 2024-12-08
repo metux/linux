@@ -1,0 +1,1 @@
+../../../../../../vendor/mediatek/proprietary/bootable/bootloader/lk2/dev/lcm/include/dualmipi.h

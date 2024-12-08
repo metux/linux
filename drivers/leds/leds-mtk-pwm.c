@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 
 #include <leds-mtk.h>
+#include "../drivers/gpu/drm/mediatek/mediatek_v2/mtk_panel_ext.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME " %s(%d) :" fmt"\n", __func__, __LINE__
@@ -50,6 +51,10 @@ static int led_pwm_set(struct mt_led_data *mdev,
 		container_of(mdev, struct led_pwm_data, m_led);
 	unsigned int max = mdev->conf.max_hw_brightness;
 	unsigned long long duty = led_dat->pwmstate.period;
+
+#if IS_ENABLED(CONFIG_WB_OLED_BACKLIGHT_SUPPROT) //Leo 20240419
+	mtkfb_set_backlight_level(brightness);
+#endif
 
 	duty *= brightness;
 	do_div(duty, max);

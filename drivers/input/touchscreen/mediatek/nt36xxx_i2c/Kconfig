@@ -1,0 +1,24 @@
+#
+# Novatek NT36xxx touchscreen driver configuration
+#
+
+config TOUCHSCREEN_MTK_NT36xxx
+	tristate "Novatek NT36xxx"
+	default y
+	help
+	  Say Y here if you have a Novatek NT36xxx touchscreen connected
+	  to your system.
+
+	  If unsure, say N.
+
+config TOUCHSCREEN_MTK_NT36xxx_X_REVERSE
+	bool "NT36xxx driver coor x reverse"
+	depends on TOUCHSCREEN_MTK_NT36xxx
+	help
+	  This enables support for NT36xxx driver coor x reverse.
+
+config TOUCHSCREEN_MTK_NT36xxx_Y_REVERSE
+	bool "NT36xxx driver coor y reverse"
+	depends on TOUCHSCREEN_MTK_NT36xxx
+	help
+	  This enables support for NT36xxx driver coor y reverse.

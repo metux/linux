@@ -346,6 +346,20 @@ static void do_host_plug_test_work(struct work_struct *data)
 
 #define ID_PIN_WORK_RECHECK_TIME 30	/* 30 ms */
 #define ID_PIN_WORK_BLOCK_TIMEOUT 30000 /* 30000 ms */
+struct usb_role_switch {
+	struct device dev;
+	struct mutex lock; /* device lock*/
+	enum usb_role role;
+
+	/* From descriptor */
+	struct device *usb2_port;
+	struct device *usb3_port;
+	struct device *udc;
+	usb_role_switch_set_t set;
+	usb_role_switch_get_t get;
+	bool allow_userspace_control;
+};
+
 static void do_host_work(struct work_struct *data)
 {
 	u8 devctl = 0;
@@ -362,6 +376,11 @@ static void do_host_work(struct work_struct *data)
 	 * kernel_init_done should be set in
 	 * early-init stage through init.$platform.usb.rc
 	 */
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20240304
+	atomic_set(&mtk_musb->is_do_host_work, 1);
+#endif
+
 	while (!inited && !kernel_init_done &&
 		   !mtk_musb->is_ready && !timeout) {
 		ktime_end = ktime_get();
@@ -501,6 +520,8 @@ static void do_host_work(struct work_struct *data)
 	DBG(0, "work end, is_host=%d\n", mtk_musb->is_host);
 	up(&mtk_musb->musb_lock);
 
+	kobject_uevent(&glue->otg_sx.role_sw->dev.kobj, KOBJ_CHANGE);
+
 	/* Wait for irq All done */
 	synchronize_irq(mtk_musb->nIrq);
 
@@ -512,6 +533,10 @@ static void do_host_work(struct work_struct *data)
 		/* clock no change : clk_prepare_cnt -1 */
 		usb_prepare_clock(false);
 	}
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20240304
+	atomic_set(&mtk_musb->is_do_host_work, 0);
+#endif
 	/* free mt_usb_work */
 	kfree(work);
 }

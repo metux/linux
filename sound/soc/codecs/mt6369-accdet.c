@@ -1859,7 +1859,7 @@ static void accdet_work_callback(struct work_struct *work)
 {
 	u32 pre_cable_type = accdet->cable_type;
 
-	__pm_wakeup_event(accdet->wake_lock,accdet_dts.app_wakelock_time);
+	__pm_stay_awake(accdet->wake_lock);
 	check_cable_type();
 
 	mutex_lock(&accdet->res_lock);
@@ -1868,6 +1868,8 @@ static void accdet_work_callback(struct work_struct *work)
 			send_status_event(accdet->cable_type, 1);
 	}
 	mutex_unlock(&accdet->res_lock);
+
+	__pm_relax(accdet->wake_lock);
 }
 
 static void accdet_queue_work(void)
@@ -2184,6 +2186,7 @@ static inline int ext_eint_setup(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct device_node *node = pdev->dev.of_node;
+	struct irq_data *irq_data;
 
 	if (!node)
 		return -ENODEV;
@@ -2200,7 +2203,9 @@ static inline int ext_eint_setup(struct platform_device *pdev)
 		ret = PTR_ERR(accdet->pins_eint);
 		return ret;
 	}
-	pinctrl_select_state(accdet->pinctrl, accdet->pins_eint);
+	ret = pinctrl_select_state(accdet->pinctrl, accdet->pins_eint);
+	if (ret < 0)
+		return ret;
 
 	accdet->gpiopin = of_get_named_gpio(node, "deb-gpios", 0);
 	if (!gpio_is_valid(accdet->gpiopin))
@@ -2219,7 +2224,11 @@ static inline int ext_eint_setup(struct platform_device *pdev)
 		return accdet->gpioirq;
 	}
 
-	accdet->accdet_eint_type = irqd_get_trigger_type(irq_get_irq_data(accdet->gpioirq));
+	irq_data = irq_get_irq_data(accdet->gpioirq);
+	if (!irq_data)
+		dev_info(&pdev->dev, "irq_data is null\n");
+	else
+		accdet->accdet_eint_type = irqd_get_trigger_type(irq_data);
 
 	/* Enable interrupt when acccet init done */
 	irq_set_status_flags(accdet->gpioirq, IRQ_NOAUTOEN);
@@ -2437,14 +2446,6 @@ static int accdet_get_dts_data(void)
 		pr_info("Moisture_INT support water_r=%d, int_r=%d\n",
 		     accdet->water_r, accdet->moisture_int_r);
 	}
-
-	ret = of_property_read_u32(node, "app-wakelock-time",
-		&accdet_dts.app_wakelock_time);
-
-	/* make sure app-wakelock-time >= 1sec to avoid known issue */
-	if (ret || (accdet_dts.app_wakelock_time < 0x3E8))
-		accdet_dts.app_wakelock_time = 0x3E8;
-
 	return 0;
 }
 

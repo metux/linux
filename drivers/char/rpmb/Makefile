@@ -2,6 +2,9 @@ ifneq ($(findstring $(CONFIG_TRUSTONIC_TEE_SUPPORT), y m),)
 ccflags-y += -I$(srctree)/drivers/char/rpmb/drrpmb_gp/public
 ccflags-y += -I$(srctree)/drivers/tee/gud/500/MobiCoreDriver/public/
 endif
+ifneq ($(findstring $(CONFIG_TRUSTKERNEL_TEE_SUPPORT), y m),)
+ccflags-y += -I$(srctree)/drivers/char/rpmb/drrpmb_gp/public
+endif
 ccflags-y += -I$(srctree)/drivers/scsi/ufs
 ccflags-y += -I$(srctree)/drivers/scsi/ufs/vendor
 

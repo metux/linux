@@ -821,7 +821,6 @@ static int mt635x_auxadc_read_raw(struct iio_dev *indio_dev,
 	const struct auxadc_channels *auxadc_chan;
 	int auxadc_out = 0;
 	int ret;
-	static DEFINE_RATELIMIT_STATE(ratelimit, 1 * HZ, 5);
 
 	mutex_lock(&adc_dev->lock);
 	pm_stay_awake(adc_dev->dev);
@@ -872,12 +871,6 @@ static int mt635x_auxadc_read_raw(struct iio_dev *indio_dev,
 	}
 	if (chan->channel == AUXADC_IMP)
 		ret = IIO_VAL_INT_MULTIPLE;
-	if (__ratelimit(&ratelimit)) {
-		dev_info(adc_dev->dev,
-			"name:%s, channel=%d, adc_out=0x%x, adc_result=%d\n",
-			auxadc_chan->ch_name, auxadc_chan->ch_num,
-			auxadc_out, *val);
-	}
 err:
 	return ret;
 }
@@ -1294,6 +1287,36 @@ static int auxadc_init_imix_r(struct mt635x_auxadc_device *adc_dev,
 	return 0;
 }
 
+static int pmic_auxadc_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	struct mt6397_chip *chip = dev_get_drvdata(pdev->dev.parent);
+
+	switch (chip->chip_id) {
+	case MT6359P_CHIP_ID:
+		/*enable MDRT wakeup when enter suspend */
+		regmap_write(chip->regmap, MT6359P_AUXADC_MDRT_2, 0x4);
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+static int pmic_auxadc_resume(struct platform_device *pdev)
+{
+	struct mt6397_chip *chip = dev_get_drvdata(pdev->dev.parent);
+
+	switch (chip->chip_id) {
+	case MT6359P_CHIP_ID:
+		/* disable MDRT when resume */
+		regmap_write(chip->regmap, MT6359P_AUXADC_MDRT_2, 0);
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
 static int auxadc_suspend_enter(void)
 {
 	auxadc_cali_imix_r(NULL);
@@ -1452,6 +1475,12 @@ static int mt635x_auxadc_probe(struct platform_device *pdev)
 		auxadc_set_cali_fn(AUXADC_BATADC, mt6358_batadc_cali);
 		auxadc_set_cali_fn(AUXADC_BAT_TEMP, mt635x_bat_temp_cali);
 		break;
+	case MT6359P_CHIP_ID:
+		/* disable MDRT */
+		regmap_write(adc_dev->regmap, MT6359P_AUXADC_MDRT_2, 0);
+		/* set MDRT_WAKEUP AVG_NUM to the same with Ch7(128 samples) */
+		regmap_write(adc_dev->regmap, MT6359P_AUXADC_CON10, 0x2637);
+		break;
 	default:
 		break;
 	}
@@ -1483,6 +1512,8 @@ static struct platform_driver mt635x_auxadc_driver = {
 		.of_match_table = mt635x_auxadc_of_match,
 	},
 	.probe	= mt635x_auxadc_probe,
+	.suspend = pmic_auxadc_suspend,
+	.resume =  pmic_auxadc_resume,
 };
 module_platform_driver(mt635x_auxadc_driver);
 

@@ -31,6 +31,17 @@ config MTK_FLASHLIGHT_AW3644
 
 	  Say M here if you want to compile this driver as a module.
 
+config MTK_FLASHLIGHT_CP2155
+	tristate "Mediatek flashlight cp2155 gpio driver"
+	depends on MTK_FLASHLIGHT
+	help
+		This is flashlight cp2155 gpio driver for camera.
+
+		Say Y here if you want a driver IC with GPIO interface.
+		Select this only if your board has this IC.
+
+		Say M here if you want to compile this driver as a module.
+
 config MTK_FLASHLIGHT_LED191
 	tristate "Mediatek flashlight led191 gpio driver"
 	depends on MTK_FLASHLIGHT
@@ -192,3 +203,13 @@ config MTK_FLASHLIGHT_DLPT
 	  the current of battary dynamicly. It will start by request
 	  and notice user by kernel notifier.
 
+config MTK_FLASHLIGHT_OCP81373
+	tristate "Mediatek flashlight with driver IC (OCP81373)"
+	depends on MTK_FLASHLIGHT
+	help
+	  This is for the flashlight driver IC (OCP81373).
+
+	  Say Y here if you want a flashlight driver IC OCP81373.
+	  Select this only if your board has this IC.
+
+	  Say M here if you want to compile this driver as a module.

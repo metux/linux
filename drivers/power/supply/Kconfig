@@ -189,7 +189,6 @@ config BATTERY_MT6358
 config BATTERY_MT6359P
 	tristate "MT6359P fuel gauge support"
 	depends on MFD_MT6397
-	default m
 	help
 	  Say Y to enable support for MT6359P battery driver.
 	  it measure battery current and temperature to provide
@@ -969,6 +968,17 @@ config MTK_PUMP_EXPRESS_40_SUPPORT
 	  Set Yes to enable PE 4.0
 	  Set No to disable PE 4.0
 
+config MTK_PUMP_EXPRESS_45_SUPPORT
+	tristate "MediaTek PUMP EXPRESS 4.0 PLUS"
+	depends on MTK_CHARGER
+	help
+	  Fast charging technology supports request adjustments of source output
+	  voltage in increments as small as 50 mV to achive better charging ability.
+	  It has higher charging efficiency and has better thermal performance than
+	  PE+/PE+2.0.
+	  Set Yes to enable PE 4.5
+	  Set No to disable PE 4.5
+
 config MTK_PUMP_EXPRESS_50_SUPPORT
 	tristate "MediaTek PUMP EXPRESS 5.0"
 	depends on MTK_CHARGER
@@ -1004,5 +1014,47 @@ config GAUGE_MT6983_ALPHA_SUPPORT
 	  To compile this dirver for used touch IC.
 	  Set Y or M to select this feature for specific platform-mt6983,
 	  and set N to disable.
+
+config CHARGER_SC8960X
+	tristate "Charger Driver for SOUTHCHIP SC8960X Charger IC"
+	depends on MTK_CHARGER
+	help
+	  Say Y here to enable support for battery charging with SC8960X
+	  PMIC chips.
+
+config CHARGER_SC8989X
+	tristate "Spreadtrum SC8989x charger driver"
+	depends on MTK_CHARGER
+	help
+	  Say Y here to enable support for battery charging with SC8989x
+	  PMIC chips.
+
+config CHARGER_SC8851
+	tristate "CHARGER_SC8851"
+	depends on MTK_CHARGER
+	help
+	  This is to enable MediaTek supports to SC8851.
+	  Set to Yes if SC8851 is used.	
+
+config CHARGER_HL7015
+	tristate "CHARGER_HL7015"
+	depends on MTK_CHARGER
+	help
+	  This is to enable MediaTek supports to HL7015.
+	  Set to Yes if HL7015 is used.	
+
+config CHARGER_UPM6920
+	tristate "CHARGER_UPM6920"
+	depends on MTK_CHARGER
+	help
+	  This is to enable MediaTek supports to UPM6920.
+	  Set to Yes if UPM6920 is used.
+	  
+config CHARGER_SGM415XX
+	tristate "CHARGER_SGM415XX"
+	depends on MTK_CHARGER
+	help
+	  This is to enable MediaTek supports to sgm415xx.
+	  Set to Yes if SGM415XX is used.
 
 endif # POWER_SUPPLY

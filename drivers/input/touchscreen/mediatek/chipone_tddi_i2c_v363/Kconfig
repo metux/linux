@@ -1,0 +1,6 @@
+config TOUCHSCREEN_CHIPONE_I2C
+	tristate "Chipone TDDI I2C touchscreen for Mediatek package"
+	default n
+	help
+	  Say y here if you have chipone TDDI touch panel.
+	  If unsure, say N.

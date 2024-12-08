@@ -1,0 +1,1 @@
+obj-$(CONFIG_MICROARRAY_FINGERPRINT) += microarray_fp/

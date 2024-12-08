@@ -1,0 +1,85 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/*  Himax Android Driver Sample Code for HX83122A chipset
+ *
+ *  Copyright (C) 2022 Himax Corporation.
+ *
+ *  This software is licensed under the terms of the GNU General Public
+ *  License version 2,  as published by the Free Software Foundation,  and
+ *  may be copied,  distributed,  and modified under those terms.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ */
+
+#include "himax_platform.h"
+#include "himax_common.h"
+#include "himax_ic_core.h"
+#include <linux/slab.h>
+
+
+
+#define HX83122A_DATA_ADC_NUM 48
+
+
+
+#define HX83122A_ADDR_TCON_ON_RST 0x80020004
+
+#define HX83122A_REG_ICID 0x900000d0
+#define HX83122A_ISRAM_SZ 131072
+#define HX83122A_DSRAM_SZ 131072
+#define HX83122A_FLASH_SIZE 261120
+
+
+#define HX83122A_ADDR_EN_HW_CRC 0x80010000
+#define HX83122A_DATA_EN_HW_CRC 0x0000ECCE
+
+#define HX122A_CFG_BASE  0X10000400 //0x10007000
+#define HX122A_FUNC_BASE 0X10000100 //0x10007F00
+#define HX83112A_FUNC_HSEN                 (HX122A_FUNC_BASE+0x14) //0x10007F14
+#define HX83112A_FUNC_SMWP                 (HX122A_FUNC_BASE+0x10) //0x10007F10
+#define HX83112A_FUNC_USB_DETECT           (HX122A_FUNC_BASE+0x38) //0x10007F38
+#define HX83112A_FUNC_AP_NOTIFY_FW_SUS     (HX122A_FUNC_BASE+0xD0) //0x10007FD0
+#define HX83122A_ADDR_RAWOUT_SEL           (HX122A_CFG_BASE+0x2EC) //0x100072EC
+// 0x10007F18
+// #define hx122a_fw_addr_selftest_addr_en     (HX122A_FUNC_BASE+0x18)
+// 0x10007f24
+// #define hx122a_fw_addr_selftest_result_addr (HX122A_FUNC_BASE+0x24)
+// 0x10007f1c
+// #define hx122a_fw_addr_criteria_addr        (HX122A_FUNC_BASE+0x1C)
+#define HX83122A_ADDR_SET_FRAME            (HX122A_CFG_BASE+0x294) //0x10007294
+#define HX83122A_ADDR_SORTING_MODE_EN      (HX122A_FUNC_BASE+0x04) //0x10007f04
+#define HX83122A_ADDR_FW_MODE_STATUS       (HX122A_CFG_BASE+0x88) //0x10007088
+#define HX83122A_ADDR_FW_VER               (HX122A_CFG_BASE+0x04) //0x10007004
+#define HX83122A_ADDR_FW_CFG               (HX122A_CFG_BASE+0x84) //0x10007084
+#define HX83122A_ADDR_FW_VENDOR            (HX122A_CFG_BASE) //0x10007000
+#define HX83122A_ADDR_CUS_INFO             (HX122A_CFG_BASE+0x08) //0x10007008
+#define HX83122A_ADDR_PROJ_INFO            (HX122A_CFG_BASE+0x14) //0x10007014
+#define HX83122A_ADDR_FW_DBG_MSG           (HX122A_FUNC_BASE+0x40) //0x10007f40
+
+#define HX83122A_ADDR_CTRL_MPAP_OVL        (HX122A_CFG_BASE+0x3EC) //0x100073EC
+
+#define HX83122A_ADDR_MKEY                 (HX122A_CFG_BASE+0xE8) //0x100070E8
+#define HX83122A_ADDR_RAWDATA_BUF          0x10000A00
+
+#define HX83122A_ADDR_CHK_FW_RELOAD        (HX122A_FUNC_BASE) //0x10007f00
+#define HX83122A_ADDR_CHK_FW_RELOAD2       (HX122A_CFG_BASE+0x2C0) //0x100072c0
+#define HX83122A_ADDR_CHK_IRQ_EDGE         (HX122A_CFG_BASE+0x88) //0x10007088
+#define HX83122A_ADDR_INFO_CHANNEL_NUM     (HX122A_CFG_BASE+0xF4) //0x100070f4
+#define HX83122A_ADDR_INFO_MAX_PT          (HX122A_CFG_BASE+0xF8) //0x100070f8
+#define HX83122A_ADDR_INFO_DEF_STYLUS	   (HX122A_CFG_BASE+0x19C) //0x1000719c
+#define HX83122A_ADDR_INFO_STYLUS_RATIO	   (HX122A_CFG_BASE+0x1fc) //0x100071fc
+
+#define HX83122A_ADDR_NORMAL_NOISE_THX   (HX122A_CFG_BASE+0x8C) //0x1000708C
+#define HX83122A_ADDR_LPWUG_NOISE_THX    (HX122A_CFG_BASE+0x90) //0x10007090
+#define HX83122A_ADDR_NOISE_SCALE        (HX122A_CFG_BASE+0x94) //0x10007094
+#define HX83122A_ADDR_RECAL_THX          (HX122A_CFG_BASE+0x90) //0x10007090
+#define HX83122A_ADDR_PALM_NUM           (HX122A_CFG_BASE+0xA8) //0x100070A8
+#define HX83122A_ADDR_WEIGHT_SUP         (HX122A_CFG_BASE+0x2C8) //0x100072C8
+#define HX83122A_ADDR_NORMAL_WEIGHT_A    (HX122A_CFG_BASE+0x9C) //0x1000709C
+#define HX83122A_ADDR_LPWUG_WEIGHT_A     (HX122A_CFG_BASE+0xA0) //0x100070A0
+#define HX83122A_ADDR_WEIGHT_B           (HX122A_CFG_BASE+0x94) //0x10007094
+#define HX83122A_ADDR_MAX_DC             (HX122A_FUNC_BASE+0xC8) //0x10007FC8
+#define HX83122A_ADDR_SKIP_FRAME         (HX122A_CFG_BASE+0xF4) //0x100070F4
+#define HX83122A_ADDR_NEG_NOISE_SUP      (HX122A_FUNC_BASE+0xD8) //0x10007FD8

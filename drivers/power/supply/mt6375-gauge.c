@@ -2285,11 +2285,11 @@ static int nafg_dltv_get(struct mtk_gauge *gauge, struct mtk_gauge_sysfs_field_i
 
 	/*AUXADC_NAG_4*/
 	regmap_raw_read(gauge->regmap, RG_AUXADC_NAG_11, &nag_dltv_reg_value,
-			sizeof(reg_value));
+			sizeof(nag_dltv_reg_value));
 
 	reg_value = nag_dltv_reg_value & 0xffff;
 
-	nag_dltv_mv_value = reg_to_mv_value(nag_dltv_reg_value);
+	nag_dltv_mv_value = reg_to_mv_value(reg_value);
 	*nag_dltv = nag_dltv_mv_value;
 
 	bm_debug("[fg_bat_nafg][%s] mV:Reg [%d:%d] [%d:%d]\n", __func__, nag_dltv_mv_value,
@@ -2620,9 +2620,9 @@ static int rtc_ui_soc_get(struct mtk_gauge *gauge, struct mtk_gauge_sysfs_field_
 	*val = rtc_ui_soc;
 
 	if (rtc_ui_soc > 100 || rtc_ui_soc < 0)
-		bm_err("[%s]ERR!rtc=0x%x,ui_soc=%d\n", rtc_value, rtc_ui_soc);
+		bm_err("[%s]ERR!rtc=0x%x,ui_soc=%d\n", __func__, rtc_value, rtc_ui_soc);
 	else
-		bm_debug("[%s]rtc=0x%x,ui_soc=%d\n", rtc_value, rtc_ui_soc);
+		bm_debug("[%s]rtc=0x%x,ui_soc=%d\n", __func__, rtc_value, rtc_ui_soc);
 
 	return 0;
 }
@@ -2803,7 +2803,7 @@ static int mt6375_get_vbat_mon_rpt(struct mt6375_priv *priv, int *vbat)
 	int ret;
 	u16 data;
 
-	psy = power_supply_get_by_name("primary_chg");
+	psy = devm_power_supply_get_by_phandle(priv->dev, "charger");
 	if (psy) {
 		ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_CALIBRATE, &val);
 		if (ret >= 0)

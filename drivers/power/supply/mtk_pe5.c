@@ -4181,7 +4181,11 @@ static int __maybe_unused pe50_resume(struct device *dev)
 static SIMPLE_DEV_PM_OPS(pe50_pm_ops, pe50_suspend, pe50_resume);
 
 static const struct of_device_id mtk_pe50_of_match[] = {
+#if IS_ENABLED(CONFIG_WB_FAST_CHARGE_ONLY_PD) //Leo 20230401
+	{.compatible = "mediatek,charger,pe5_disable",},
+#else
 	{ .compatible = "mediatek,charger,pe5", },
+#endif
 	{},
 };
 MODULE_DEVICE_TABLE(of, mtk_pe50_of_match);

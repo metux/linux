@@ -15,11 +15,6 @@
 #include "ufsfeature.h"
 #endif
 
-/* UFSHCD error handling flags */
-enum {
-	UFSHCD_EH_IN_PROGRESS = (1 << 0),
-};
-
 #define ufshcd_eh_in_progress(h) \
 	((h)->eh_flags & UFSHCD_EH_IN_PROGRESS)
 
@@ -276,6 +271,7 @@ struct ufs_ioctl_query_data {
 	 * Please check include/uapi/scsi/ufs/ufs.h for the definition of it.
 	 */
 	__u8 idn;
+	__u8 idx;
 	/*
 	 * User should specify the size of the buffer (buffer[0] below) where
 	 * it wants to read the query data (attribute/flag/descriptor).
@@ -290,7 +286,7 @@ struct ufs_ioctl_query_data {
 	 * For Read/Write Attribute you will have to allocate 4 bytes
 	 * For Read/Write Flag you will have to allocate 1 byte
 	 */
-	__u8 buffer[0];
+	__u8 *buffer;
 };
 
 enum {

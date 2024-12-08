@@ -1,0 +1,17 @@
+#
+# TypeC Port Controller Device Configuration
+#
+
+config TCPC_FUSB302
+	tristate "TypeC Port Controller Device Class"
+	help
+	  Say Y to enable
+	  Typec Port
+	  Controller Device
+	  Class
+
+config FUSB302_SHUTDOWN_DIS_CC
+	bool "fusb302 pd connected, shutdown dis cc"
+	depends on TCPC_FUSB302
+	help
+          Say Y to enable

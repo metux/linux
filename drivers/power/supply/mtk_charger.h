@@ -47,6 +47,9 @@ do {								\
 
 struct mtk_charger;
 struct charger_data;
+
+#define WB_MTK_CHARGER_DELAY_WORK //Leo 20231122
+
 #define BATTERY_CV 4350000
 #define V_CHARGER_MAX 6500000 /* 6.5 V */
 #define V_CHARGER_MIN 4600000 /* 4.6 V */
@@ -68,6 +71,7 @@ struct charger_data;
 /* battery warning */
 #define BATTERY_NOTIFY_CASE_0001_VCHARGER
 #define BATTERY_NOTIFY_CASE_0002_VBATTEMP
+#define BAT_LOW_TEMP_PROTECT_ENABLE
 
 /* charging abnormal status */
 #define CHG_VBUS_OV_STATUS	(1 << 0)
@@ -77,12 +81,20 @@ struct charger_data;
 #define CHG_ST_TMO_STATUS	(1 << 4)
 #define CHG_BAT_LT_STATUS	(1 << 5)
 #define CHG_TYPEC_WD_STATUS	(1 << 6)
+#define CHG_BAT_ONLY_OT_STATUS	(1 << 7) //Leo for high temp notfied,but not stop charger
+#define CHG_BAT_OV_SHUTDOWN	(1 << 8) //Leo add for high temp notife to shutdown
+#define CHG_BAT_LT_SHUTDOWN	(1 << 9) //Leo add for low temp notife to shutdown
 
 /* Battery Temperature Protection */
 #define MIN_CHARGE_TEMP  0
 #define MIN_CHARGE_TEMP_PLUS_X_DEGREE	6
 #define MAX_CHARGE_TEMP  50
 #define MAX_CHARGE_TEMP_MINUS_X_DEGREE	47
+#if (CONFIG_WB_MAX_CHARGE_NOTIFIER > 45) //Leo 20230222
+#define MAX_CHARGE_NOTIFIER CONFIG_WB_MAX_CHARGE_NOTIFIER
+#else
+#define MAX_CHARGE_NOTIFIER 53
+#endif
 
 #define MAX_ALG_NO 10
 
@@ -105,6 +117,9 @@ struct battery_thermal_protection_data {
 	int min_charge_temp_plus_x_degree;
 	int max_charge_temp;
 	int max_charge_temp_minus_x_degree;
+#if (CONFIG_WB_MAX_CHARGE_NOTIFIER > 45) //Leo 20230222
+	int max_charge_notifier;
+#endif
 };
 
 /* sw jeita */
@@ -169,6 +184,7 @@ struct charger_custom_data {
 	int max_charger_voltage;
 	int max_charger_voltage_setting;
 	int min_charger_voltage;
+	int vbus_sw_ovp_voltage;
 
 	int usb_charger_current;
 	int ac_charger_current;
@@ -371,12 +387,24 @@ struct mtk_charger {
 
 	/*charger IC charging status*/
 	bool is_charging;
-
+#if IS_ENABLED(CONFIG_WB_KPOC_WAKELOCK_SUPPORT) //Leo 20220908
+	struct wakeup_source *kpoc_wakelock;
+#endif
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) || IS_ENABLED(CONFIG_CHARGER_SGM415XX) //Leo 20230630
+	struct iio_channel *chan_vbus;
+#endif
 	ktime_t uevent_time_check;
+
+#if defined(WB_MTK_CHARGER_DELAY_WORK) //Leo 20231121
+	struct delayed_work mtk_charger_dwork;
+	struct workqueue_struct *mtk_charger_wq;
+#endif
 
 	bool force_disable_pp[CHG2_SETTING + 1];
 	bool enable_pp[CHG2_SETTING + 1];
 	struct mutex pp_lock[CHG2_SETTING + 1];
+
+	bool wb_stop_charging_current;//jnier add 20240829 for bypass mode
 };
 
 static inline int mtk_chg_alg_notify_call(struct mtk_charger *info,
@@ -424,5 +452,11 @@ extern void _wake_up_charger(struct mtk_charger *info);
 /* functions for other */
 extern int mtk_chg_enable_vbus_ovp(bool enable);
 
-
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+extern void set_other_pd_reset_state(bool state);
+extern bool get_other_pd_reset_state(void);
+#endif
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) || IS_ENABLED(CONFIG_CHARGER_SGM415XX)//Leo 20230630
+int get_vbus_voltage(struct mtk_charger *info, int *val);
+#endif
 #endif /* __MTK_CHARGER_H */

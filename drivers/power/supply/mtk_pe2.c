@@ -361,8 +361,28 @@ static int pe20_set_ta_vchr(struct chg_alg_device *alg, u32 chr_volt)
 		vchr_before = pe2_hal_get_vbus(alg);
 		ret = _pe20_set_ta_vchr(alg, chr_volt);
 		vchr_after = pe2_hal_get_vbus(alg);
-
 		vchr_delta = abs(vchr_after - chr_volt);
+
+		//Leo add for try some times 20240612
+		if (vchr_delta >= 500000) {
+			msleep(250); //Leo 20240612
+			vchr_after = pe2_hal_get_vbus(alg);
+			vchr_delta = abs(vchr_after - chr_volt);
+		}
+
+
+		if (vchr_delta >= 500000) {
+			msleep(250); //Leo 20240612
+			vchr_after = pe2_hal_get_vbus(alg);
+			vchr_delta = abs(vchr_after - chr_volt);
+		}
+
+		if (vchr_delta >= 500000) {
+			msleep(250); 
+			vchr_after = pe2_hal_get_vbus(alg);
+			vchr_delta = abs(vchr_after - chr_volt);
+		}
+		//Leo add end 20240612
 
 		/*
 		 * It is successful if VBUS difference to target is
@@ -632,12 +652,14 @@ static int _pe2_is_algo_ready(struct chg_alg_device *alg)
 		if (pe2_hal_get_charger_type(alg) !=
 			POWER_SUPPLY_TYPE_USB_DCP) {
 			ret_value = ALG_TA_NOT_SUPPORT;
+			//pr_info("Leo pe2_hal_get_charger_type(alg) != POWER_SUPPLY_TYPE_USB_DCP \n");
 		} else if ((uisoc < pe2->ta_start_battery_soc &&
 			    pe2->ref_vbat > pe2->vbat_threshold) ||
 			uisoc >= pe2->ta_stop_battery_soc ||
 			pe2->charging_current_limit1 != -1 ||
 			pe2->charging_current_limit2 != -1) {
 			ret_value = ALG_NOT_READY;
+			//pr_info("Leo uisoc:%d %d %d %d %d %d %d \n",uisoc, pe2->ta_start_battery_soc, pe2->ref_vbat, pe2->vbat_threshold, pe2->ta_stop_battery_soc,pe2->charging_current_limit1, pe2->charging_current_limit2);
 		} else {
 			ret_value = ALG_READY;
 		}
@@ -1424,7 +1446,7 @@ static int mtk_pe2_probe(struct platform_device *pdev)
 	pe2->vbus = 5000000;
 	pe2->state = PE2_HW_UNINIT;
 	mtk_pe2_parse_dt(pe2, &pdev->dev);
-	pe2->bat_psy = power_supply_get_by_name("battery");
+	pe2->bat_psy = devm_power_supply_get_by_phandle(&pdev->dev, "gauge");
 
 	if (IS_ERR_OR_NULL(pe2->bat_psy))
 		pe2_err("%s: devm power fail to get bat_psy\n", __func__);
@@ -1480,7 +1502,11 @@ static void mtk_pe2_shutdown(struct platform_device *dev)
 }
 
 static const struct of_device_id mtk_pe2_of_match[] = {
+#if IS_ENABLED(CONFIG_WB_FAST_CHARGE_ONLY_PD) //Leo 20230401
+	{.compatible = "mediatek,charger,pe2_disable",},
+#else
 	{.compatible = "mediatek,charger,pe2",},
+#endif
 	{},
 };
 

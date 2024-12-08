@@ -39,6 +39,10 @@
 #define OCP96011_DELAY_L_AGND    0x10
 #define OCP96011_RESET           0x1E
 
+
+#define WB_OCP96011_SUPPORT //Leo 20240817
+//#define DUMP_ALL_REGS //LQ
+
 struct ocp96011_priv *fsa_priv;
 struct ocp96011_priv *fsa_priv_sub;
 struct ocp96011_priv *fsa_priv_sub_temp;
@@ -95,6 +99,10 @@ EXPORT_SYMBOL(ocp96011_get_headset_status);
 static void ocp96011_usbc_update_settings(struct ocp96011_priv *fsa_priv,
 		u32 switch_control, u32 switch_enable)
 {
+#ifdef DUMP_ALL_REGS
+	u32 temp_value = 0;
+	u32 reg;
+#endif
     dev_info(fsa_priv->dev," %s enter switch_control=0x%x switch_enable=0x%x\n", __func__, switch_control, switch_enable);
 	if (!fsa_priv->regmap) {
 		dev_info(fsa_priv->dev, "%s: regmap invalid\n", __func__);
@@ -107,6 +115,13 @@ static void ocp96011_usbc_update_settings(struct ocp96011_priv *fsa_priv,
 	usleep_range(50, 55);
 	regmap_write(fsa_priv->regmap, OCP96011_SWITCH_SETTINGS, switch_enable);
     dev_info(fsa_priv->dev," %s end\n", __func__);
+
+#ifdef DUMP_ALL_REGS
+	for (reg = 0x0; reg <= 0x1F; reg++) {
+		regmap_read(fsa_priv->regmap, reg, &temp_value);
+		printk("LQ >>> %s REG[0x%x]=0x%x \n",__func__,reg,temp_value);
+    }
+#endif
 
 }
 #if 0
@@ -263,7 +278,10 @@ int ocp96011_switch_event( enum fsa_function event, struct ocp96011_priv *fsa_pr
 {
 	int reg12 = 0;
 	int reg4b7 = 0;
+#if defined(WB_OCP96011_SUPPORT) //Leo 20240817
+#else
 	int i = 0;
+#endif
 
 	if (!fsa_priv)
 		return -EINVAL;
@@ -277,6 +295,11 @@ int ocp96011_switch_event( enum fsa_function event, struct ocp96011_priv *fsa_pr
 
 	switch (event) {
 	case FSA_SWITCH_TO_USB://config as USB switch
+#if defined(WB_OCP96011_SUPPORT) //Leo 20240817
+		regmap_write(fsa_priv->regmap, 0x12, 0x00);
+		ocp96011_usbc_update_settings(fsa_priv, 0x18, 0x98);
+		return ocp96011_validate_display_port_settings(fsa_priv);
+#else
 		ocp96011_usbc_update_settings(fsa_priv, 0x18, 0x98);
 		if(ocp96011_headset_count > 0)
 			ocp96011_headset_count--;
@@ -286,7 +309,12 @@ int ocp96011_switch_event( enum fsa_function event, struct ocp96011_priv *fsa_pr
 			headset_value = 1;
 		blocking_notifier_call_chain(&fsa_priv->ocp96011_notifier, event, NULL);
 		return ocp96011_validate_display_port_settings(fsa_priv);
+#endif
 	case FSA_SWITCH_TO_AUDIO://config as Audio switch
+#if defined(WB_OCP96011_SUPPORT) //Leo 20240817
+		ocp96011_usbc_update_settings(fsa_priv, 0x00, 0x9F);
+		regmap_write(fsa_priv->regmap, 0x12, 0x01);
+#else
 		regmap_write(fsa_priv->regmap, 0x1e, 0x01);
 		usleep_range(1000, 1005);
 		regmap_write(fsa_priv->regmap, 0x12, 0x45);
@@ -300,6 +328,7 @@ int ocp96011_switch_event( enum fsa_function event, struct ocp96011_priv *fsa_pr
 			i++;
 		}
 		blocking_notifier_call_chain(&fsa_priv->ocp96011_notifier, event, NULL);
+#endif
 		break;
 	case FSA_USBC_ORIENTATION_CC1:
 		ocp96011_usbc_update_settings(fsa_priv, 0x18, 0xF8);
@@ -389,7 +418,7 @@ static int ocp96011_tcpc_notifier(struct notifier_block *nb,
 		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
 			noti->typec_state.new_state == TYPEC_ATTACHED_AUDIO) {
 			dev_info(rpmd->dev, "accdet Audio plug in\n");
-			ocp96011_switch_event(FSA_SWITCH_TO_AUDIO, rpmd);			
+			ocp96011_switch_event(FSA_SWITCH_TO_AUDIO, rpmd);
 			break;
 		}
 
@@ -461,7 +490,8 @@ static int ocp96011_probe(struct i2c_client *i2c,
 	int ret;
 	struct device_node *np = i2c->dev.of_node;
 	const char *tcpc_name;
-
+	u32 value = 0;
+	//ADDR=L  addr=0x42  ADDR=H  addr=0x43 
 	pr_notice("[KE/ocp96011] name=%s addr=0x%x\n",i2c->name, i2c->addr);
 
 	ret = i2c_check_functionality(i2c->adapter,I2C_FUNC_SMBUS_I2C_BLOCK |I2C_FUNC_SMBUS_BYTE_DATA);
@@ -485,14 +515,6 @@ static int ocp96011_probe(struct i2c_client *i2c,
 		return -ENOMEM;
 	fsa_priv->dev = &i2c->dev;
 	fsa_priv->addr = i2c->addr;
-	fsa_priv->usb_psy = power_supply_get_by_name("usb");
-	if (!fsa_priv->usb_psy) {
-		rc = -EPROBE_DEFER;
-		dev_info(fsa_priv->dev,
-			"%s: could not get USB psy info: %d\n",
-			__func__, rc);
-		//goto err_data;
-	}
 	fsa_priv->regmap = devm_regmap_init_i2c(i2c, &ocp96011_regmap_config);
 	if (IS_ERR_OR_NULL(fsa_priv->regmap)) {
 		dev_info(fsa_priv->dev, "%s: Failed to initialize regmap: %d\n",
@@ -504,6 +526,27 @@ static int ocp96011_probe(struct i2c_client *i2c,
 		rc = PTR_ERR(fsa_priv->regmap);
 		goto err_supply;
 	}
+
+	//add by LQ for read device id start
+	regmap_read(fsa_priv->regmap, 0x00, &value);
+	if(value==0x59){
+		pr_notice("[KE/ocp96011] find device id success !\n");
+	}else{
+		pr_notice("[KE/ocp96011] find device id failed ,value=0x%x !\n",value);
+		goto err_data;
+	}
+	//add by LQ end
+	
+	fsa_priv->usb_psy = power_supply_get_by_name("usb");
+	if (!fsa_priv->usb_psy) {
+		rc = -EPROBE_DEFER;
+		dev_info(fsa_priv->dev,
+			"%s: could not get USB psy info: %d\n",
+			__func__, rc);
+		//goto err_data;
+	}
+
+	
 	ocp96011_i2c_reset(fsa_priv);
 	ocp96011_update_reg_defaults(fsa_priv->regmap);
 #if 0
@@ -534,7 +577,7 @@ static int ocp96011_probe(struct i2c_client *i2c,
 
 err_supply:
 	power_supply_put(fsa_priv->usb_psy);
-//err_data: z17 add
+err_data: 
 	devm_kfree(&i2c->dev, fsa_priv);
 	if (!fsa_priv_sub_temp)
 	{

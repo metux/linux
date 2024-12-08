@@ -25,6 +25,9 @@ struct mtk_extcon_info {
 	struct gpio_desc *id_gpiod;
 	int id_irq;
 	struct delayed_work wq_detcable;
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230109
+	int docking_det_gpio;
+#endif
 };
 
 struct usb_role_info {
@@ -44,3 +47,16 @@ enum {
 	DUAL_PROP_PR_SNK,
 	DUAL_PROP_PR_NONE,
 };
+
+#if IS_ENABLED(CONFIG_WB_DOCKING_SUPPORT) //Leo 20230109
+#if IS_ENABLED(CONFIG_CHARGER_MT6375)
+extern int cust_set_bc12_en(int en);
+#endif
+
+#if 0//IS_ENABLED(CONFIG_CHARGER_SC8989X) //Leo 20231123
+#if IS_ENABLED(CONFIG_TCPC_HUSB311) 
+extern int cust_set_bc12_en_sc8989x(int en);
+#endif
+#endif
+
+#endif

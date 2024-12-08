@@ -1,0 +1,31 @@
+#include <dt-bindings/display/cust_drm.h>
+
+/ {
+	fragment {
+		target-path = "/";
+		__overlay__ {
+			lcds {
+
+				cust_lk_panel: cust_lk_panel {
+					
+					display-timings {
+						native-mode = <&cust_lk_panel_timing>;
+
+						cust_lk_panel_timing: timing0 {
+							clock-frequency = <153600000>;
+							hactive = <800>;
+							vactive = <1280>;
+							hback-porch = <80>;
+							hfront-porch = <80>;
+							vback-porch = <40>;
+							vfront-porch = <30>;
+							hsync-len = <12>;
+							vsync-len = <4>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
+

@@ -1081,16 +1081,28 @@ static void ddp_color_cal_split_window(struct mtk_ddp_comp *comp,
 	unsigned int split_window_x = 0xFFFF0000;
 	unsigned int split_window_y = 0xFFFF0000;
 	int id = index_of_color(comp->id);
+	struct mtk_panel_params *params = NULL;
+
+	params = mtk_drm_get_lcm_ext_params(&comp->mtk_crtc->base);
 
 	/* save to global, can be applied on following PQ param updating. */
 	if (g_color_dst_w[id] == 0 || g_color_dst_h[id] == 0) {
 		DDPINFO("g_color0_dst_w/h not init, return default settings\n");
 	} else if (g_split_en) {
 		/* TODO: CONFIG_MTK_LCM_PHYSICAL_ROTATION other case */
-		split_window_y =
+		if (params && params->rotate == MTK_PANEL_ROTATE_180) {
+			split_window_x =
+			((g_color_dst_w[id] - g_split_window_x_start) << 16) |
+			(g_color_dst_w[id] - g_split_window_x_end);
+			split_window_y =
+			((g_color_dst_h[id] - g_split_window_y_start) << 16) |
+			(g_color_dst_h[id] - g_split_window_y_end);
+		} else {
+			split_window_y =
 			(g_split_window_y_end << 16) | g_split_window_y_start;
-		split_window_x = (g_split_window_x_end << 16) |
+			split_window_x = (g_split_window_x_end << 16) |
 			g_split_window_x_start;
+		}
 	}
 
 	*p_split_window_x = split_window_x;

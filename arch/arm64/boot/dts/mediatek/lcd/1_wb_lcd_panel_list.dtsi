@@ -1,0 +1,3 @@
+#include "mediatek/lcd/cust_lk_panel.dtsi"
+#include "mediatek/lcd/m100t_ft8201_xy2210d4001a_wuxga2000_pt2.dtsi"
+#include "mediatek/lcd/m100t_jd9366tc_sq110aq7ez51394l501_wuxga2000_jst_864.dtsi"

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
  * (C) COPYRIGHT 2011-2021 ARM Limited. All rights reserved.
@@ -152,6 +152,7 @@ unsigned int *kernel_dump;
 //check the mtk tool using now
 int mtk_pm_tool = pm_non;
 int ds5_used = 1;
+static DEFINE_MUTEX(gpu_vinstr_mtk_lock);
 
 static struct kbase_vinstr_client *mtk_cli = NULL;
 struct mtk_gpu_perf{
@@ -962,7 +963,8 @@ static long kbasep_vinstr_hwcnt_reader_ioctl_get_hwver(
 }
 
 /**
- * The hwcnt reader's ioctl command - get API version.
+ * kbasep_vinstr_hwcnt_reader_ioctl_get_api_version() - get API version ioctl
+ *                                                      command.
  * @cli:    The non-NULL pointer to the client
  * @arg:    Command's argument.
  * @size:   Size of arg.
@@ -1222,12 +1224,14 @@ int MTK_kbase_vinstr_hwcnt_reader_setup(
 
 	/* Add the new client. No need to reschedule worker, as not periodic */
 	mutex_lock(&vctx->lock);
+	mutex_lock(&gpu_vinstr_mtk_lock);
 
 	vctx->client_count++;
 	list_add(&vcli->node, &vctx->clients);
 	mtk_cli = vcli;
 	ds5_used = 0;
 	mutex_unlock(&vctx->lock);
+	mutex_unlock(&gpu_vinstr_mtk_lock);
 	return fd;
 error:
 	kbasep_vinstr_client_destroy(vcli);
@@ -1237,15 +1241,18 @@ error:
 
 void MTK_kbasep_vinstr_hwcnt_set_interval(unsigned int interval)
 {
+	mutex_lock(&gpu_vinstr_mtk_lock);
 	if (mtk_cli != NULL) {
 		kbasep_vinstr_hwcnt_reader_ioctl_set_interval(mtk_cli, interval);
 	}
+	mutex_unlock(&gpu_vinstr_mtk_lock);
 }
 
 void MTK_kbasep_vinstr_hwcnt_release(void)
 {
 	mtk_pm_tool = pm_non;
 	ds5_used = 1;
+	mutex_lock(&gpu_vinstr_mtk_lock);
 	if (mtk_cli != NULL) {
 		mutex_lock(&mtk_cli->vctx->lock);
 		mtk_cli->vctx->suspend_count = 0;
@@ -1254,7 +1261,9 @@ void MTK_kbasep_vinstr_hwcnt_release(void)
 		mutex_unlock(&mtk_cli->vctx->lock);
 
 		kbasep_vinstr_client_destroy(mtk_cli);
+		mtk_cli = NULL;
 	}
+	mutex_unlock(&gpu_vinstr_mtk_lock);
 }
 
 void MTK_update_gpu_LTR(void)
@@ -1264,14 +1273,11 @@ void MTK_update_gpu_LTR(void)
 	unsigned int stall_counter[4] = {0};
 	int i = 0;
 	mtk_get_gpu_loading(&pm_gpu_loading);
-#if defined(CONFIG_MTK_GPUFREQ_V2)
 	gpu_perf_counter.counter[VINSTR_GPU_FREQ] = gpufreq_get_cur_freq(TARGET_DEFAULT);
 	gpu_perf_counter.counter[VINSTR_GPU_VOLT] = gpufreq_get_cur_volt(TARGET_DEFAULT);
-#else
-	gpu_perf_counter.counter[VINSTR_GPU_FREQ] = mt_gpufreq_get_cur_freq();
-	gpu_perf_counter.counter[VINSTR_GPU_VOLT] = mt_gpufreq_get_cur_volt();
-#endif
 	gpu_perf_counter.counter[VINSTR_GPU_LOADING] = pm_gpu_loading;
+
+
 	for (i = VINSTR_GPU_ACTIVE; i <= VINSTR_JS1_ACTIVE; i++) {
 		int pmu_index = gpu_pmu_index[i] & 0x1FF;
 		int index_cnt = gpu_pmu_index[i] >> 9;
@@ -1281,7 +1287,6 @@ void MTK_update_gpu_LTR(void)
 			pmu_index += 64;
 		}
 	}
-	mtk_GPU_STALL_RAW(stall_counter, 4);
 	gpu_perf_counter.counter[VINSTR_STALL0] = stall_counter[0];
 	gpu_perf_counter.counter[VINSTR_STALL1] = stall_counter[1];
 	gpu_perf_counter.counter[VINSTR_STALL2] = stall_counter[2];

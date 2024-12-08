@@ -193,6 +193,9 @@ struct charger_ops {
 	int (*enable_hidden_mode)(struct charger_device *dev, bool en);
 	int (*get_ctd_dischg_status)(struct charger_device *dev, u8 *status);
 	int (*enable_hz)(struct charger_device *dev, bool en);
+#if IS_ENABLED(CONFIG_CHARGER_SC8960X) //Leo 20240103
+	int (*get_hz_status)(struct charger_device *dev, bool *en);
+#endif
 
 	int (*set_property)(struct charger_device *dev,
 			    enum charger_property prop,
@@ -301,6 +304,10 @@ extern int charger_dev_safety_check(
 	struct charger_device *charger_dev, u32 polling_ieoc);
 extern int charger_dev_enable_hz(
 	struct charger_device *charger_dev, bool en);
+#if IS_ENABLED(CONFIG_CHARGER_SC8960X) //Leo 20240103
+extern int charger_dev_get_hz_status(
+	struct charger_device *charger_dev, bool *en);
+#endif
 
 /* PE+/PE+2.0 */
 extern int charger_dev_send_ta_current_pattern(

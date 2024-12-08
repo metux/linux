@@ -21,6 +21,11 @@
 #include "inc/tcpci_core.h"
 #include "inc/std_tcpci_v10.h"
 
+#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT)
+#include <mt-plat/hardwareinfo.h>
+extern void Hwinfo_update_info_cust(int hw_type, char *name);
+#endif
+
 #define MT6375_INFO_EN	1
 #define MT6375_DBGINFO_EN	1
 #define MT6375_WD1_EN	1
@@ -2717,6 +2722,10 @@ static int mt6375_tcpc_probe(struct platform_device *pdev)
 		dev_err(ddata->dev, "failed to init irq\n");
 		goto err;
 	}
+
+#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT)
+	Hwinfo_update_info_cust(HW_TYPE_CC, "mt6375");
+#endif
 
 	dev_info(ddata->dev, "%s successfully!\n", __func__);
 	return 0;

@@ -254,11 +254,11 @@ static int lm3643_enable_ctrl(struct lm3643_flash *flash,
 	}
 	pr_info_ratelimited("%s led:%d enable:%d", __func__, led_no, on);
 
-	flashlight_kicker_pbm(on);
-	if (flashlight_pt_is_low()) {
-		pr_info_ratelimited("pt is low\n");
-		return 0;
-	}
+//	flashlight_kicker_pbm(on);
+//	if (flashlight_pt_is_low()) {
+//		pr_info_ratelimited("pt is low\n");
+//		return 0;
+//	}
 
 	if (led_no == LM3643_LED0) {
 		if (on)

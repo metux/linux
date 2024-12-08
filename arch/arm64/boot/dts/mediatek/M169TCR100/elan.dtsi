@@ -1,0 +1,24 @@
+&i2c3 {
+	elan: elan@2c {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&open_touch>;
+
+		interrupt-parent = <&pio>;
+		interrupts = <10 IRQ_TYPE_EDGE_FALLING>;
+		hid_name = "elan";
+		post-power-on-delay-ms = <10>;
+		hid-descr-addr = <0x0020>;
+	};
+};
+
+&pio {
+	open_touch: open_touch {
+		irq_pin {
+			pinmux = <PINMUX_GPIO10__FUNC_GPIO10>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+};

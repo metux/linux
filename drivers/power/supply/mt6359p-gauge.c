@@ -1969,6 +1969,17 @@ static int psy_gauge_set_property(struct power_supply *psy,
 		if (gm != NULL && val->intval == 1)
 			set_shutdown_cond(gm, DLPT_SHUTDOWN);
 		break;
+	case POWER_SUPPLY_PROP_ENERGY_EMPTY_DESIGN:
+		gm = gauge->gm;
+		if (gm != NULL && val->intval != 0) {
+			gm->imix = val->intval;
+			if (gm->imix > 5500) {
+				gm->imix = 5500;
+				pr_notice("imix check limit 5500:%d\n",
+					val->intval);
+			}
+		}
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -2582,9 +2593,9 @@ static int rtc_ui_soc_get(struct mtk_gauge *gauge,
 	*val = rtc_ui_soc;
 
 	if (rtc_ui_soc > 100 || rtc_ui_soc < 0)
-		bm_err("[%s]ERR!rtc=0x%x,ui_soc=%d\n", rtc_value, rtc_ui_soc);
+		bm_err("[%s]ERR!rtc=0x%x,ui_soc=%d\n", __func__, rtc_value, rtc_ui_soc);
 	else
-		bm_debug("[%s]rtc=0x%x,ui_soc=%d\n", rtc_value, rtc_ui_soc);
+		bm_debug("[%s]rtc=0x%x,ui_soc=%d\n", __func__, rtc_value, rtc_ui_soc);
 
 	return 0;
 }

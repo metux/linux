@@ -53,6 +53,9 @@ mediatek-drm-y := mtk_drm_drv.o \
 		  mtk_mmlsys_bypass_mode.o \
 		  platform/mtk_drm_6789.o \
 
+ifneq ($(filter y m,$(CONFIG_DRM_WB_EXTERN_ESD)),)
+mediatek-drm-y += mtk_extern_esd.o
+endif
 #ccflags-y += -DDRM_CMDQ_DISABLE
 #mediatek-drm-y += mtk_cmdq_dummy.o
 

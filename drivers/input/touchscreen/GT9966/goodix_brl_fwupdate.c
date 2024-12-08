@@ -82,6 +82,9 @@
 #define CHIP_TYPE_BRB					0x97
 #define CHIP_TYPE_BRD					0x98
 
+#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT) //Leo 20240412
+struct goodix_ts_core *g_core = NULL;
+#endif
 
 struct update_info_t {
 	int header_size;
@@ -1281,6 +1284,31 @@ out:
 		goodix_ts_blocking_notify(NOTIFY_FWUPDATE_SUCCESS, NULL);
 	}
 
+#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT)//Leo 20210827
+	{
+		int ret;
+		char name[128];
+		u8 fwver = 0;
+		struct goodix_ic_info ic_info;
+		extern void Hwinfo_update_info_cust(int hw_type, char *name);
+		#define HW_TYPE_TP    2
+
+		if (g_core->hw_ops->get_ic_info) {
+			ret = g_core->hw_ops->get_ic_info(g_core, &ic_info);
+			if (!ret) {
+				fwver = ic_info.version.config_version;
+			}
+		}
+
+		if (fwver != 0) {
+			sprintf(name,"%s ver:0x%02x",THIS_MODULE->name, fwver);
+		} else {
+			sprintf(name,"%s ",THIS_MODULE->name);
+		}
+		Hwinfo_update_info_cust(HW_TYPE_TP, name);
+	}
+#endif
+
 	end = ktime_get();
 	fwu_ctrl->spend_time = ktime_to_ms(ktime_sub(end, start));
 
@@ -1326,6 +1354,10 @@ int goodix_fw_update_init(struct goodix_ts_core *core_data)
 		ts_err("core_data && hw_ops cann't be null");
 		return -ENODEV;
 	}
+
+#if IS_ENABLED(CONFIG_CM_HARDWAREINFO_SUPPORT) //Leo 20240412
+	g_core = core_data;
+#endif
 
 	mutex_init(&goodix_fw_update_ctrl.mutex);
 	goodix_fw_update_ctrl.core_data = core_data;

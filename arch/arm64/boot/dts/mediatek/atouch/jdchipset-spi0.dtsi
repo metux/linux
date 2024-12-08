@@ -1,0 +1,18 @@
+&spi0 {
+	status = "okay";
+
+	jadard@0 {
+		compatible = "jadard,jdcommon";
+		reg = <0>; //Same as CS ID
+		status = "okay";
+		spi-max-frequency = <8000000>;	//4800000,9600000,15000000,19200000
+		interrupt-parent = <&pio>;
+        interrupts = <9 IRQ_TYPE_EDGE_FALLING>;
+		jadard,panel-sense-nums = <32 48>;
+		jadard,panel-coords = <0 1200 0 1920>;
+		jadard,panel-max-points = <10>;
+		jadard,int-is-edge = <1>;
+		jadard,irq-gpio = <&pio 9 0>;
+		//jadard,rst-gpio = <&pio 152 0>;
+	};
+};

@@ -965,6 +965,9 @@ void pd_put_vbus_changed_event(struct tcpc_device *tcpc, bool from_ic)
 		break;
 
 	case PD_WAIT_VBUS_INVALID_ONCE:
+#if defined(CONFIG_WB_PD_NO_VSAFE0V_SUPPORT)||defined(CONFIG_WB_TD_CUST_SUPPORT) //Leo 20240116
+		vbus_valid = false;
+#endif
 		if (!vbus_valid) {
 			tcpc->pd_wait_vbus_once = PD_WAIT_VBUS_DISABLE;
 			__pd_put_hw_event(tcpc, PD_HW_VBUS_ABSENT);

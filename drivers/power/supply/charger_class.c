@@ -15,6 +15,20 @@
 
 static struct class *charger_class;
 
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) //Leo 20230707
+bool is_sw_can_charge = true;
+void charger_dev_set_sw_can_charge(bool status)
+{
+	is_sw_can_charge = status;
+}
+EXPORT_SYMBOL(charger_dev_set_sw_can_charge);
+
+bool charger_dev_get_sw_can_charge(void)
+{
+	return is_sw_can_charge;
+}
+#endif
+
 static ssize_t name_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
@@ -34,6 +48,11 @@ static void charger_device_release(struct device *dev)
 
 int charger_dev_enable(struct charger_device *chg_dev, bool en)
 {
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) //Leo 20230707
+	if ((charger_dev_get_sw_can_charge() == false) && (en == true))
+		return 0;
+#endif
+
 	if (chg_dev != NULL && chg_dev->ops != NULL && chg_dev->ops->enable)
 		return chg_dev->ops->enable(chg_dev, en);
 
@@ -43,6 +62,7 @@ EXPORT_SYMBOL(charger_dev_enable);
 
 int charger_dev_is_enabled(struct charger_device *chg_dev, bool *en)
 {
+
 	if (chg_dev != NULL && chg_dev->ops != NULL && chg_dev->ops->is_enabled)
 		return chg_dev->ops->is_enabled(chg_dev, en);
 
@@ -367,6 +387,18 @@ int charger_dev_enable_hz(struct charger_device *chg_dev, bool en)
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(charger_dev_enable_hz);
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8960X) //Leo 20230103
+int charger_dev_get_hz_status(struct charger_device *chg_dev, bool *en) 
+{
+        if (chg_dev != NULL && chg_dev->ops != NULL &&
+            chg_dev->ops->get_hz_status)
+                return chg_dev->ops->get_hz_status(chg_dev, en);
+
+        return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL(charger_dev_get_hz_status);
+#endif
 
 int charger_dev_get_adc(struct charger_device *charger_dev,
 	enum adc_channel chan, int *min, int *max)

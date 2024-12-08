@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
  * (C) COPYRIGHT 2019-2021 ARM Limited. All rights reserved.
@@ -67,15 +67,16 @@ void kbase_gpu_report_bus_fault_and_kill(struct kbase_context *kctx,
 	u32 const exception_data = (status >> 8) & 0xFFFFFF;
 	int const as_no = as->number;
 	unsigned long flags;
+	const uintptr_t fault_addr = fault->addr;
 
 	/* terminal fault, print info about the fault */
 	dev_err(kbdev->dev,
-		"GPU bus fault in AS%d at VA 0x%016llX\n"
+		"GPU bus fault in AS%d at PA %pK\n"
 		"raw fault status: 0x%X\n"
 		"exception type 0x%X: %s\n"
 		"exception data 0x%X\n"
 		"pid: %d\n",
-		as_no, fault->addr,
+		as_no, (void *)fault_addr,
 		status,
 		exception_type, kbase_gpu_exception_name(exception_type),
 		exception_data,
@@ -131,6 +132,7 @@ void kbase_mmu_report_fault_and_kill(struct kbase_context *kctx,
 
 #if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
 	if (!mtk_common_gpufreq_bringup()) {
+		mtk_common_debug_dump();
 #if defined(CONFIG_MTK_GPUFREQ_V2)
 		gpufreq_dump_infra_status();
 #else
@@ -219,7 +221,7 @@ static void kbase_mmu_interrupt_process(struct kbase_device *kbdev,
 
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 
-	dev_dbg(kbdev->dev,
+	dev_vdbg(kbdev->dev,
 		"Entering %s kctx %pK, as %pK\n",
 		__func__, (void *)kctx, (void *)as);
 
@@ -285,7 +287,7 @@ static void kbase_mmu_interrupt_process(struct kbase_device *kbdev,
 		atomic_inc(&kbdev->faults_pending);
 	}
 
-	dev_dbg(kbdev->dev,
+	dev_vdbg(kbdev->dev,
 		"Leaving %s kctx %pK, as %pK\n",
 		__func__, (void *)kctx, (void *)as);
 }
@@ -321,7 +323,7 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 	u32 new_mask;
 	u32 tmp, bf_bits, pf_bits;
 
-	dev_dbg(kbdev->dev, "Entering %s irq_stat %u\n",
+	dev_vdbg(kbdev->dev, "Entering %s irq_stat %u\n",
 		__func__, irq_stat);
 	/* bus faults */
 	bf_bits = (irq_stat >> busfault_shift) & as_bit_mask;
@@ -422,14 +424,14 @@ void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat)
 	kbase_reg_write(kbdev, MMU_REG(MMU_IRQ_MASK), new_mask);
 	spin_unlock_irqrestore(&kbdev->mmu_mask_change, flags);
 
-	dev_dbg(kbdev->dev, "Leaving %s irq_stat %u\n",
+	dev_vdbg(kbdev->dev, "Leaving %s irq_stat %u\n",
 		__func__, irq_stat);
 }
 
 int kbase_mmu_switch_to_ir(struct kbase_context *const kctx,
 	struct kbase_va_region *const reg)
 {
-	dev_dbg(kctx->kbdev->dev,
+	dev_vdbg(kctx->kbdev->dev,
 		"Switching to incremental rendering for region %pK\n",
 		(void *)reg);
 	return kbase_job_slot_softstop_start_rp(kctx, reg);

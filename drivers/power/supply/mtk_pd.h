@@ -14,7 +14,11 @@
 /* pd */
 #define PD_VBUS_UPPER_BOUND		10000000	/* uv */
 #define PD_VBUS_LOW_BOUND		5000000	/* uv */
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+#define PD_FAIL_CURRENT			3000000	/* 3000mA */
+#else
 #define PD_FAIL_CURRENT			500000	/* 500mA */
+#endif
 
 #define PD_SC_INPUT_CURRENT		3000000	/* 3000mA */
 #define PD_SC_CHARGER_CURRENT	3000000	/* 3000mA */
@@ -152,7 +156,7 @@ struct mtk_pd {
 	bool is_connect;
 	bool is_enabled;
 
-
+	int enable_inductor_protect;
 };
 
 extern int pd_hal_init_hardware(struct chg_alg_device *alg);
@@ -203,4 +207,7 @@ extern int pd_hal_charger_enable_chip(struct chg_alg_device *alg,
 	enum chg_idx chgidx, bool enable);
 extern int pd_hal_get_uisoc(struct chg_alg_device *alg);
 extern int pd_hal_get_log_level(struct chg_alg_device *alg);
+//Leo add start 20230407
+extern int pd_hal_get_battery_temperature(struct chg_alg_device *alg);
+//Leo add end 20230407
 #endif /* __MTK_PD_H */

@@ -83,6 +83,16 @@ config TCPC_MT6375
 	  Type-C Port Controller Manager to provide USB PD and USB
 	  Type-C functionalities.
 
+config TCPC_HUSB311
+	tristate "MediaTek HUSB311 TypeC port Controller Driver"
+	depends on TCPC_CLASS
+	default n
+	help
+	  Say Y to enable MediaTek HUSB311
+	  TypeC port Controller
+	  Also Support Power Delivery
+	  Say N to disable
+
 config WAIT_TX_RETRY_DONE
 	bool "Wait TX DONE to send Hardreset"
 	depends on TCPC_CLASS
@@ -130,3 +140,5 @@ config MTK_TYPEC_WATER_DETECT_BY_PCB
 	  need to be enabled.
 	  Say Yes to let PCB decides enabling water detection or not.
 	  If unsure, say N.
+
+source "drivers/misc/mediatek/typec/tcpc/aw35615csr/Kconfig"

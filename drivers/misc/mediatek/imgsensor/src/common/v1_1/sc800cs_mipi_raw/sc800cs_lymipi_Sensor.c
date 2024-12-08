@@ -29,7 +29,7 @@
 static DEFINE_SPINLOCK(imgsensor_drv_lock);
 
 static struct imgsensor_info_struct imgsensor_info = {
-	.sensor_id = SC800CS_LY_SENSOR_ID,
+	.sensor_id = SC800CS_SENSOR_ID,
 	.checksum_value = 0xf7375923,        //checksum value for Camera Auto Test
 
 	.pre = {
@@ -1100,10 +1100,10 @@ static kal_uint32 get_imgsensor_id(UINT32 *sensor_id)
 			do {
 				*sensor_id =return_sensor_id();
 				if (*sensor_id == imgsensor_info.sensor_id) {				
-					LOG_INF("i2c write id  : 0x%x, sensor id: 0x%x\n", imgsensor.i2c_write_id,*sensor_id);	  
+					printk("sc800sc i2c write id  : 0x%x, sensor id: 0x%x\n", imgsensor.i2c_write_id,*sensor_id);	  
 					return ERROR_NONE;
 				}	
-				LOG_INF("get_imgsensor_id Read sensor id fail, i2c write id: 0x%x,sensor id: 0x%x\n", imgsensor.i2c_write_id,*sensor_id);
+				printk("sc800sc get_imgsensor_id Read sensor id fail, i2c write id: 0x%x,sensor id: 0x%x\n", imgsensor.i2c_write_id,*sensor_id);
 				retry--;
 			} while(retry > 0);
 			i++;
@@ -1146,10 +1146,10 @@ static kal_uint32 open(void)
 		do {
 			sensor_id = return_sensor_id();
 			if (sensor_id == imgsensor_info.sensor_id) {				
-				LOG_INF("i2c write id: 0x%x, sensor id: 0x%x\n", imgsensor.i2c_write_id,sensor_id);	  
+				printk("sc800sc open i2c write id: 0x%x, sensor id: 0x%x\n", imgsensor.i2c_write_id,sensor_id);	  
 				break;
 			}	
-			LOG_INF("open:Read sensor id fail open i2c write id: 0x%x, id: 0x%x\n", imgsensor.i2c_write_id,sensor_id);
+			printk("sc800sc open:Read sensor id fail open i2c write id: 0x%x, id: 0x%x\n", imgsensor.i2c_write_id,sensor_id);
 			retry--;
 		} while(retry > 0);
 		i++;

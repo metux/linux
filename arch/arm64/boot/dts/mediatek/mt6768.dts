@@ -1380,8 +1380,8 @@ transparent_hugepage=never";
 		compatible = "mediatek,dcm";
 	};
 
-	hacc@1000a000 {
-		compatible = "mediatek,hacc";
+	masp@1000a000 {
+		compatible = "mediatek,masp";
 		reg = <0 0x1000a000 0 0x1000>;
 		interrupts = <GIC_SPI 203 IRQ_TYPE_LEVEL_HIGH 0>;
 	};
@@ -3779,6 +3779,8 @@ transparent_hugepage=never";
 		reg = <0 0x14002000 0 0x1000>;
 		mediatek,common-id = <0>;
 		smi-common;
+		disable-gals;
+		mmsys_config = <&mmsys_config>;
 		operating-points-v2 = <&opp_table_mm>;
 		power-domains = <&scpsys MT6768_POWER_DOMAIN_DISP>;
 		clocks = <&mmsys_config CLK_MM_SMI_COMM0>,

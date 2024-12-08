@@ -1,0 +1,34 @@
+&spi0 {
+	status = "okay";
+
+	focaltech@0 {
+		compatible = "focaltech,fts";
+		reg = <0>; //Same as CS ID
+		pinctrl-names = "fts_spi0_cs_pull_down", "fts_spi0_cs_pull_up";
+		pinctrl-0 = <&fts_spi_pull_down_ctrl>;
+		pinctrl-1 = <&fts_spi_pull_up_ctrl>;
+		status = "okay";
+
+		spi-max-frequency = <6000000>;	//4800000,9600000,15000000,19200000
+		focaltech,reset-gpio = <&pio 152 0>;
+		focaltech,irq-gpio = <&pio 9 0>;
+		focaltech,max-touch-number = <10>;
+		focaltech,display-coords = <0 0 1200 2000>;
+	};
+};
+
+&pio{
+	fts_spi_pull_down_ctrl: fts_spi_pull_down_ctrl {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO31__FUNC_GPIO31>;
+			output-low;
+		};
+	};
+
+	fts_spi_pull_up_ctrl: fts_spi_pull_up_ctrl {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO31__FUNC_SPI0_CSB>;
+			drive-strength = <2>;
+		};
+	};
+};

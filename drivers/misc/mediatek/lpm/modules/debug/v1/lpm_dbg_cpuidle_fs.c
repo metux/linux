@@ -17,6 +17,10 @@
 #include "mtk_cpuidle_status.h"
 #include "mtk_cpuidle_cpc.h"
 
+#if IS_ENABLED(CONFIG_DRM_PANEL_IT6112) //Leo 20230308
+#include <mt-plat/middle_misc_v.h>
+#endif
+
 static ssize_t cpuidle_info_read(char *ToUserBuf, size_t sz, void *priv)
 {
 	char *p = ToUserBuf;
@@ -127,6 +131,15 @@ int lpm_cpuidle_fs_init(void)
 	lpm_cpuidle_profile_init();
 
 	lpm_cpuidle_state_init();
+
+#if IS_ENABLED(CONFIG_DRM_PANEL_IT6112) //Leo 20230308
+	{
+		int bootmode = cust_mid_misc_v_get_boot_mode();
+		if ((bootmode == 8) || (bootmode == 9)) {
+			mtk_cpuidle_state_enable(0);
+		}
+	}
+#endif
 
 	return 0;
 }

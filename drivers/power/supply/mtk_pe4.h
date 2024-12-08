@@ -13,6 +13,7 @@
 
 /* pe4 */
 #define PE40_MAX_VBUS 11000
+#define PE40_MIN_VBUS 5000  //Leo 20230418
 #define PE40_MAX_IBUS 3000
 #define HIGH_TEMP_TO_LEAVE_PE40 46
 #define HIGH_TEMP_TO_ENTER_PE40 39
@@ -130,6 +131,9 @@ struct mtk_pe40 {
 
 	int max_charger_ibus;
 	int max_vbus;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	int min_vbus;
+#endif
 	int max_ibus;
 	/* limitation by cable*/
 	int pe4_input_current_limit;
@@ -164,6 +168,9 @@ struct mtk_pe40 {
 
 	int min_charger_voltage;
 	int pe40_max_vbus;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	int pe40_min_vbus;
+#endif
 	int pe40_max_ibus;
 	int pe40_stop_battery_soc;
 	int high_temp_to_leave_pe40;

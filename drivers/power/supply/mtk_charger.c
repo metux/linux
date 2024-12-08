@@ -58,11 +58,33 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #include <linux/reboot.h>
+#include <linux/miscdevice.h>
+#include <linux/iio/consumer.h>
 
 #include <asm/setup.h>
 
 #include "mtk_charger.h"
 #include "mtk_battery.h"
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT) //Leo 20220630
+#include <mt-plat/csci.h>
+#endif
+
+//caozy add begin 20230418
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+#if IS_ENABLED(CONFIG_WB_TD_CUST_SUPPORT)||IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT)
+#else
+static bool other_pd_reset = false;
+#endif
+#endif
+//caozy add end 20230418
+
+
+//caozy add for start/stop charge begin
+static bool wb_stop_charger = false;
+static bool wb_stop_ov_charger = false;
+static bool wb_stop_charging_current = false;
+//caozy add for start/stop charge end
 
 struct tag_bootmode {
 	u32 size;
@@ -131,6 +153,26 @@ int chr_get_debug_level(void)
 }
 EXPORT_SYMBOL(chr_get_debug_level);
 
+
+//caozy add begin 20230418
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+#if IS_ENABLED(CONFIG_WB_TD_CUST_SUPPORT)||IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT)
+#else
+void set_other_pd_reset_state(bool state)
+{
+	other_pd_reset = state;
+}
+EXPORT_SYMBOL(set_other_pd_reset_state);
+
+bool get_other_pd_reset_state(void)
+{
+	return other_pd_reset;
+}
+EXPORT_SYMBOL(get_other_pd_reset_state);
+#endif
+#endif
+//caozy add end 20230418
+
 void _wake_up_charger(struct mtk_charger *info)
 {
 	unsigned long flags;
@@ -164,6 +206,7 @@ int _mtk_enable_charging(struct mtk_charger *info,
 	bool en)
 {
 	chr_debug("%s en:%d\n", __func__, en);
+
 	if (info->algo.enable_charging != NULL)
 		return info->algo.enable_charging(info, en);
 	return false;
@@ -481,6 +524,10 @@ static void mtk_charger_parse_dt(struct mtk_charger *info,
 	info->enable_dynamic_mivr =
 			of_property_read_bool(np, "enable_dynamic_mivr");
 
+#if defined(M101TB_DG_PT2_531) //Leo 20230706
+	info->enable_dynamic_mivr = false;
+#endif
+
 	if (of_property_read_u32(np, "min_charger_voltage_1", &val) >= 0)
 		info->data.min_charger_voltage_1 = val;
 	else {
@@ -506,6 +553,119 @@ static void mtk_charger_parse_dt(struct mtk_charger *info,
 	/* fast charging algo support indicator */
 	info->enable_fast_charging_indicator =
 			of_property_read_bool(np, "enable_fast_charging_indicator");
+#if 0
+	/*Leo add for indicator fast charging indicator*/
+	if (of_property_read_u32(np, "fast_charging_indicator", &val) >= 0)
+		info->fast_charging_indicator = val;
+	else {
+		info->fast_charging_indicator = PDC_ID | PE5_ID | PE4_ID | PE2_ID | PE_ID;
+	}
+#endif
+
+#if defined(CONFIG_WB_HIGH_4V4_BATTERY_SUPPORT)
+	info->data.battery_cv = 4400000;
+#elif defined(CONFIG_WB_HIGH_BATTERY_SUPPORT)
+	info->data.battery_cv = 4350000;
+#else
+	info->data.battery_cv = 4200000;
+#endif
+
+#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
+	if (csci_exist("usb_charger_current")) {
+		if (csci_integer("usb_charger_current", 0) > 0) {
+			info->data.usb_charger_current =csci_integer("usb_charger_current", 0);
+			printk("csci get usb_charger_current=%d\n",info->data.usb_charger_current);					
+		}
+	}
+	
+	if (csci_exist("ac_charger_current")) {
+		if (csci_integer("ac_charger_current", 0) > 0) {
+			info->data.ac_charger_current = csci_integer("ac_charger_current", 0);
+			printk("csci get ac_charger_current=%d\n",info->data.ac_charger_current);
+		}
+	}
+
+	if (csci_exist("ac_charger_input_current")) {
+		if (csci_integer("ac_charger_input_current", 0) > 0) {
+			info->data.ac_charger_input_current = csci_integer("ac_charger_input_current", 0);
+			printk("csci get ac_charger_input_current=%d\n",info->data.ac_charger_input_current);
+		}
+	}
+
+	if (csci_exist("charging_host_charger_current")) {
+		if (csci_integer("charging_host_charger_current", 0) > 0) {
+			info->data.charging_host_charger_current =	csci_integer("charging_host_charger_current", 0);
+			printk("csci get charging_host_charger_current=%d\n",info->data.charging_host_charger_current);
+		}
+	}
+
+	if (csci_exist("battery_cv")) {
+		if (csci_integer("battery_cv", 0) > 0) {
+			info->data.battery_cv =	csci_integer("battery_cv", 0);
+			printk("csci get battery_cv=%d\n",info->data.battery_cv);
+		}
+	}
+
+	if (csci_exist("charger_configuration")) {
+		if (csci_integer("charger_configuration", 0) > 0) {
+			info->config = csci_integer("charger_configuration", 0);
+			printk("csci get charger_configuration=%d\n",info->config);
+		}
+	}
+
+	if (csci_exist("min_charge_temp")) {
+			info->thermal.min_charge_temp = csci_integer("min_charge_temp", 0);
+			printk("csci get min_charge_temp=%d\n",info->thermal.min_charge_temp);
+	}
+
+	if (csci_exist("min_charge_temp_plus_x_degree")) {
+			info->thermal.min_charge_temp_plus_x_degree = csci_integer("min_charge_temp_plus_x_degree", 0);
+			printk("csci get min_charge_temp_plus_x_degree=%d\n",info->thermal.min_charge_temp_plus_x_degree);
+	}
+
+	if (csci_exist("max_charge_temp")) {
+		if (csci_integer("max_charge_temp", 0) > 0) {
+			info->thermal.max_charge_temp = csci_integer("max_charge_temp", 0);
+			printk("csci get max_charge_temp=%d\n",info->thermal.max_charge_temp);
+		}
+	}
+
+	if (csci_exist("max_charge_temp_minus_x_degree")) {
+		if (csci_integer("max_charge_temp_minus_x_degree", 0) > 0) {
+			info->thermal.max_charge_temp_minus_x_degree = csci_integer("max_charge_temp_minus_x_degree", 0);
+			printk("csci get max_charge_temp_minus_x_degree=%d\n",info->thermal.max_charge_temp_minus_x_degree);
+		}
+	}
+#endif
+
+//Leo add for cust charger temp
+#if (CONFIG_WB_MIN_CHARGE_TEMP > -99)
+		info->thermal.min_charge_temp = CONFIG_WB_MIN_CHARGE_TEMP;
+		#if (CONFIG_WB_MIN_CHARGE_TEMP_PLUS_X_DEGREE > -99)
+		info->thermal.min_charge_temp_plus_x_degree = CONFIG_WB_MIN_CHARGE_TEMP_PLUS_X_DEGREE;
+		#else
+		info->thermal.min_charge_temp_plus_x_degree = CONFIG_WB_MIN_CHARGE_TEMP + 3;
+		#endif
+#endif
+#if (CONFIG_WB_MAX_CHARGE_TEMP > -99)
+		info->thermal.max_charge_temp = CONFIG_WB_MAX_CHARGE_TEMP;
+		#if (CONFIG_WB_MAX_CHARGE_TEMP_PLUS_X_DEGREE > -99)
+		info->thermal.max_charge_temp_minus_x_degree = CONFIG_WB_MAX_CHARGE_TEMP_PLUS_X_DEGREE;
+		#else
+		info->thermal.max_charge_temp_minus_x_degree = CONFIG_WB_MAX_CHARGE_TEMP - 3;
+		#endif
+#endif
+
+#if (CONFIG_WB_MAX_CHARGE_NOTIFIER > 45) //Leo 20230222
+		info->thermal.max_charge_notifier = MAX_CHARGE_NOTIFIER;
+#endif
+
+	chr_info("%s: charger currnet usb:%d ac:%d ac_input:%d charging_host:%d"
+	 "min_chrarge_temp:%d max_charge_temp:%d \n",
+		__func__,info->data.usb_charger_current, info->data.ac_charger_current,
+		info->data.ac_charger_input_current, info->data.charging_host_charger_current
+		,info->thermal.min_charge_temp, info->thermal.max_charge_temp);
+
 }
 
 static void mtk_charger_start_timer(struct mtk_charger *info)
@@ -775,6 +935,36 @@ static ssize_t sw_jeita_store(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_RW(sw_jeita);
 /* sw jeita end*/
 
+static ssize_t sw_ovp_threshold_show(struct device *dev, struct device_attribute *attr,
+					       char *buf)
+{
+	struct mtk_charger *pinfo = dev->driver_data;
+
+	chr_err("%s: %d\n", __func__, pinfo->data.max_charger_voltage);
+	return sprintf(buf, "%d\n", pinfo->data.max_charger_voltage);
+}
+
+static ssize_t sw_ovp_threshold_store(struct device *dev, struct device_attribute *attr,
+						const char *buf, size_t size)
+{
+	struct mtk_charger *pinfo = dev->driver_data;
+	signed int temp;
+
+	if (kstrtoint(buf, 10, &temp) == 0) {
+		if (temp < 0)
+			pinfo->data.max_charger_voltage = pinfo->data.vbus_sw_ovp_voltage;
+		else
+			pinfo->data.max_charger_voltage = temp;
+		chr_err("%s: %d\n", __func__, pinfo->data.max_charger_voltage);
+
+	} else {
+		chr_err("%s: format error!\n", __func__);
+	}
+	return size;
+}
+
+static DEVICE_ATTR_RW(sw_ovp_threshold);
+
 static ssize_t chr_type_show(struct device *dev, struct device_attribute *attr,
 					       char *buf)
 {
@@ -829,6 +1019,59 @@ static ssize_t pd_type_show(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_RO(pd_type);
 
+//Leo 20230703
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) 
+static unsigned int g_notify_code = 0;
+
+static int get_sc8551_online(void)
+{
+	union power_supply_propval prop;
+	static struct power_supply *chg_psy;
+	int ret;
+
+	if (chg_psy == NULL)
+		chg_psy = power_supply_get_by_name("sc8551-standalone");
+	if (chg_psy == NULL || IS_ERR(chg_psy)) {
+		chr_err("%s Couldn't get sc8551-standalone chg_psy\n", __func__);
+		ret = -1;
+	} else {
+		ret = power_supply_get_property(chg_psy,
+			POWER_SUPPLY_PROP_ONLINE, &prop);
+	}
+
+	chr_debug("%s vbus:%d\n", __func__,
+		prop.intval);
+	return prop.intval;
+}
+
+static void cust_set_chr_notfy_code(unsigned int notify_code)
+{
+	g_notify_code = notify_code;
+}
+
+static unsigned int cust_get_chr_notfy_code(void)
+{
+	return g_notify_code;
+}
+
+static int cust_main_psy_changed(void)
+{
+	static struct power_supply *chg_psy;
+	int ret = 0;
+
+	if (chg_psy == NULL)
+		chg_psy = power_supply_get_by_name("charger");
+
+	if (chg_psy == NULL || IS_ERR(chg_psy)) {
+		chr_err("%s Couldn't get sc8960-standalone chg_psy\n", __func__);
+		ret = -1;
+	} else {
+		power_supply_changed(chg_psy);
+	}
+
+	return ret;
+}
+#endif
 
 static ssize_t Pump_Express_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
@@ -853,6 +1096,29 @@ static ssize_t Pump_Express_show(struct device *dev,
 			break;
 		}
 	}
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) //Leo 20230703
+	is_ta_detected = (get_sc8551_online() == 1) ? true : false;
+#endif
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)//jnier 20231109
+	is_ta_detected = get_other_pd_reset_state();
+#if IS_ENABLED(CONFIG_WB_TD_CUST_SUPPORT)||IS_ENABLED(CONFIG_WB_PD_ALGO_SUPPORT) //jnier add 20231222
+	if(is_ta_detected) {
+		if (pinfo->bootmode == 0) {
+			if(get_vbus(pinfo) < 8000) {
+				is_ta_detected=false;
+			}
+		}
+	}
+#endif
+#endif
+
+#if IS_ENABLED(CONFIG_WB_CUSTOM_FAST_CHARGER_CHG_STATE)
+	if(get_vbus(pinfo) > 8000) {
+		is_ta_detected = true;
+	}
+#endif
+
 	chr_err("%s: idx = %d, detect = %d\n", __func__, i, is_ta_detected);
 	return sprintf(buf, "%d\n", is_ta_detected);
 }
@@ -1947,6 +2213,12 @@ static bool mtk_chg_check_vbus(struct mtk_charger *info)
 	int vchr = 0;
 
 	vchr = get_vbus(info) * 1000; /* uV */
+
+	if(vchr > info->data.max_charger_voltage){
+		msleep(150);
+		vchr = get_vbus(info) * 1000;
+	}
+
 	if (vchr > info->data.max_charger_voltage) {
 		chr_err("%s: vbus(%d mV) > %d mV\n", __func__, vchr / 1000,
 			info->data.max_charger_voltage / 1000);
@@ -1961,12 +2233,20 @@ static void mtk_battery_notify_VCharger_check(struct mtk_charger *info)
 	int vchr = 0;
 
 	vchr = get_vbus(info) * 1000; /* uV */
-	if (vchr < info->data.max_charger_voltage)
+
+	if(vchr > info->data.max_charger_voltage){
+		msleep(150);
+		vchr = get_vbus(info) * 1000;
+	}
+
+	if (vchr < info->data.max_charger_voltage) {
 		info->notify_code &= ~CHG_VBUS_OV_STATUS;
-	else {
+		wb_stop_ov_charger= false;//Leo 20240617
+	} else {
 		info->notify_code |= CHG_VBUS_OV_STATUS;
 		chr_err("[BATTERY] charger_vol(%d mV) > %d mV\n",
 			vchr / 1000, info->data.max_charger_voltage / 1000);
+		wb_stop_ov_charger = true;//Leo 20240617
 		mtk_chgstat_notify(info);
 	}
 #endif
@@ -1975,7 +2255,15 @@ static void mtk_battery_notify_VCharger_check(struct mtk_charger *info)
 static void mtk_battery_notify_VBatTemp_check(struct mtk_charger *info)
 {
 #if defined(BATTERY_NOTIFY_CASE_0002_VBATTEMP)
+#if (CONFIG_WB_BAT_OV_SHUTDOWN_NOTIFIER > -99) //Leo 20211223
+	if ((info->battery_temp >= info->thermal.max_charge_temp)
+		&& info->battery_temp < CONFIG_WB_BAT_OV_SHUTDOWN_NOTIFIER) {
+#else
 	if (info->battery_temp >= info->thermal.max_charge_temp) {
+#endif
+#if (CONFIG_WB_BAT_OV_SHUTDOWN_NOTIFIER > -99) //Leo 20211223
+		info->notify_code &= ~CHG_BAT_OV_SHUTDOWN;
+#endif
 		info->notify_code |= CHG_BAT_OT_STATUS;
 		chr_err("[BATTERY] bat_temp(%d) out of range(too high)\n",
 			info->battery_temp);
@@ -1995,7 +2283,15 @@ static void mtk_battery_notify_VBatTemp_check(struct mtk_charger *info)
 		}
 	} else {
 #ifdef BAT_LOW_TEMP_PROTECT_ENABLE
-		if (info->battery_temp < info->thermal.min_charge_temp) {
+#if (CONFIG_WB_BAT_LT_SHUTDOWN_NOTIFIER > -99) //Leo 20211223
+	if ((info->battery_temp <= info->thermal.min_charge_temp)
+		&& info->battery_temp > CONFIG_WB_BAT_LT_SHUTDOWN_NOTIFIER) {
+#else
+		if (info->battery_temp <= info->thermal.min_charge_temp) {
+#endif
+#if (CONFIG_WB_BAT_LT_SHUTDOWN_NOTIFIER > -99) //Leo 20211223
+			info->notify_code &= ~CHG_BAT_LT_SHUTDOWN;
+#endif
 			info->notify_code |= CHG_BAT_LT_STATUS;
 			chr_err("bat_temp(%d) out of range(too low)\n",
 				info->battery_temp);
@@ -2004,6 +2300,45 @@ static void mtk_battery_notify_VBatTemp_check(struct mtk_charger *info)
 			info->notify_code &= ~CHG_BAT_LT_STATUS;
 		}
 #endif
+
+//Leo add start 20230222
+#if (CONFIG_WB_MAX_CHARGE_NOTIFIER > 45) //Leo 20230222
+		if (info->battery_temp >= info->thermal.max_charge_notifier
+				&& info->battery_temp < info->thermal.max_charge_temp) {
+			info->notify_code |= CHG_BAT_ONLY_OT_STATUS;
+			chr_err("bat_temp(%d) out of range(too low)\n",
+				info->battery_temp);
+			mtk_chgstat_notify(info);
+		} else {
+			info->notify_code &= ~CHG_BAT_ONLY_OT_STATUS;
+		}
+#endif
+//Leo add end 20230222
+
+#if (CONFIG_WB_BAT_LT_SHUTDOWN_NOTIFIER > -99) //Leo 20211223
+	if (info->battery_temp <= CONFIG_WB_BAT_LT_SHUTDOWN_NOTIFIER) {
+		info->notify_code &= ~CHG_BAT_LT_STATUS;
+		info->notify_code |= CHG_BAT_LT_SHUTDOWN;
+		chr_err("[BATTERY] CHG_BAT_LT_SHUTDOWN bat_temp(%d) out of range(too low)\n",
+				info->battery_temp);
+		mtk_chgstat_notify(info);
+	} else {
+		info->notify_code &= ~CHG_BAT_LT_SHUTDOWN;
+	}
+#endif
+
+#if (CONFIG_WB_BAT_OV_SHUTDOWN_NOTIFIER > -99) //Leo 20211223
+	if (info->battery_temp >= CONFIG_WB_BAT_OV_SHUTDOWN_NOTIFIER) {
+		info->notify_code &= ~CHG_BAT_OT_STATUS;
+		info->notify_code |= CHG_BAT_OV_SHUTDOWN;
+		chr_err("[BATTERY] CHG_BAT_OV_SHUTDOWN bat_temp(%d) out of range(too high)\n",
+				info->battery_temp);
+		mtk_chgstat_notify(info);
+	} else {
+		info->notify_code &= ~CHG_BAT_OV_SHUTDOWN;
+	}
+#endif
+
 	}
 #endif
 }
@@ -2051,6 +2386,15 @@ static void mtk_battery_notify_check(struct mtk_charger *info)
 	if (info->notify_test_mode == 0x0000) {
 		mtk_battery_notify_VCharger_check(info);
 		mtk_battery_notify_VBatTemp_check(info);
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) //Leo 20230814
+		if (info->batpro_done ==  true) {
+			if (info->notify_code != cust_get_chr_notfy_code()) {
+				cust_main_psy_changed();
+			}
+		}
+
+		cust_set_chr_notfy_code(info->notify_code);
+#endif
 	} else {
 		mtk_battery_notify_UI_test(info);
 	}
@@ -2149,7 +2493,7 @@ static void charger_check_status(struct mtk_charger *info)
 	} else {
 
 		if (thermal->enable_min_charge_temp) {
-			if (temperature < thermal->min_charge_temp) {
+			if (temperature <= thermal->min_charge_temp) {
 				chr_err("Battery Under Temperature or NTC fail %d %d\n",
 					temperature, thermal->min_charge_temp);
 				thermal->sm = BAT_TEMP_LOW;
@@ -2178,7 +2522,7 @@ static void charger_check_status(struct mtk_charger *info)
 			goto stop_charging;
 		} else if (thermal->sm == BAT_TEMP_HIGH) {
 			if (temperature
-			    < thermal->max_charge_temp_minus_x_degree) {
+			    <= thermal->max_charge_temp_minus_x_degree) {
 				chr_err("Battery Temperature raise from %d to %d(%d), allow charging!!\n",
 				thermal->max_charge_temp,
 				temperature,
@@ -2206,8 +2550,27 @@ static void charger_check_status(struct mtk_charger *info)
 		charging = false;
 	if (info->sc.disable_charger == true)
 		charging = false;
+	//caozy add for start/stop charge begin
+	if(wb_stop_charger){
+		charging = false;
+	}
+	info->wb_stop_charging_current=wb_stop_charging_current; //jnier add 20240829 for bypass mode
+	//caozy add for start/stop charge end
+
 stop_charging:
+//#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230410
+//	if (charging == false) {
+//		charger_dev_enable_powerpath(info->chg1_dev, charging);
+//	} else {
+//		charger_dev_enable_powerpath(info->chg1_dev, true);
+//	}
+//#endif
+
 	mtk_battery_notify_check(info);
+
+	if(wb_stop_ov_charger){
+		charging = false;
+	}
 
 	if (charging && uisoc < 80 && info->batpro_done == true) {
 		info->setting.vbat_mon_en = true;
@@ -2215,13 +2578,13 @@ stop_charging:
 		info->stop_6pin_re_en = false;
 	}
 
-	chr_err("tmp:%d (jeita:%d sm:%d cv:%d en:%d) (sm:%d) en:%d c:%d s:%d ov:%d sc:%d %d %d saf_cmd:%d bat_mon:%d %d\n",
+	chr_err("tmp:%d (jeita:%d sm:%d cv:%d en:%d) (sm:%d) en:%d c:%d s:%d ov:%d sc:%d %d %d saf_cmd:%d bat_mon:%d %d wb_ov:%d\n",
 		temperature, info->enable_sw_jeita, info->sw_jeita.sm,
 		info->sw_jeita.cv, info->sw_jeita.charging, thermal->sm,
 		charging, info->cmd_discharging, info->safety_timeout,
 		info->vbusov_stat, info->sc.disable_charger,
 		info->can_charging, charging, info->safety_timer_cmd,
-		info->enable_vbat_mon, info->batpro_done);
+		info->enable_vbat_mon, info->batpro_done,wb_stop_ov_charger);
 
 	charger_dev_is_enabled(info->chg1_dev, &chg_dev_chgen);
 
@@ -2229,6 +2592,12 @@ stop_charging:
 		_mtk_enable_charging(info, charging);
 	else if (charging == false && chg_dev_chgen == true)
 		_mtk_enable_charging(info, charging);
+
+	if (charging == false) {
+		charger_dev_enable_powerpath(info->chg1_dev, charging);
+	} else {
+		charger_dev_enable_powerpath(info->chg1_dev, true);
+	}
 
 	info->can_charging = charging;
 }
@@ -2255,6 +2624,20 @@ static bool charger_init_algo(struct mtk_charger *info)
 		chr_err("get pe5 success\n");
 		alg->config = info->config;
 		alg->alg_id = PE5_ID;
+		chg_alg_init_algo(alg);
+		register_chg_alg_notifier(alg, &info->chg_alg_nb);
+	}
+	idx++;
+
+
+	alg = get_chg_alg_by_name("pe45");
+	info->alg[idx] = alg;
+	if (alg == NULL)
+		chr_err("get pe45 fail\n");
+	else {
+		chr_err("get pe45 success\n");
+		alg->config = info->config;
+		alg->alg_id = PE4_ID;
 		chg_alg_init_algo(alg);
 		register_chg_alg_notifier(alg, &info->chg_alg_nb);
 	}
@@ -2515,7 +2898,16 @@ static void kpoc_power_off_check(struct mtk_charger *info)
 	/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
 	if (boot_mode == 8 || boot_mode == 9) {
 		vbus = get_vbus(info);
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) || IS_ENABLED(CONFIG_CHARGER_SGM415XX) //Leo 20230703
+		msleep(1000);
+#endif
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+		msleep(2000);
+		if (vbus >= 0 && vbus < 2500 && !mtk_is_charger_on(info) && !info->pd_reset && !get_other_pd_reset_state()) {
+#else
 		if (vbus >= 0 && vbus < 2500 && !mtk_is_charger_on(info) && !info->pd_reset) {
+#endif
 			chr_err("Unplug Charger/USB in KPOC mode, vbus=%d, shutdown\n", vbus);
 			while (1) {
 				if (counter >= 20000) {
@@ -2544,7 +2936,8 @@ static void charger_status_check(struct mtk_charger *info)
 	int ret;
 	bool charging = true;
 
-	chg_psy = power_supply_get_by_name("primary_chg");
+	chg_psy = devm_power_supply_get_by_phandle(&info->pdev->dev,
+						       "charger");
 	if (IS_ERR_OR_NULL(chg_psy)) {
 		chr_err("%s Couldn't get chg_psy\n", __func__);
 	} else {
@@ -2602,6 +2995,13 @@ static int charger_routine_thread(void *arg)
 	while (1) {
 		ret = wait_event_interruptible(info->wait_que,
 			(info->charger_thread_timeout == true));
+
+		//Leo add start for batterywarning undisplay 20221128
+		if (info->notify_code != 0) {
+			msleep(1000*10);
+		}
+		//Leo add end
+
 		if (ret < 0) {
 			chr_err("%s: wait event been interrupted(%d)\n", __func__, ret);
 			continue;
@@ -2779,6 +3179,10 @@ static int mtk_charger_setup_files(struct platform_device *pdev)
 	struct mtk_charger *info = platform_get_drvdata(pdev);
 
 	ret = device_create_file(&(pdev->dev), &dev_attr_sw_jeita);
+	if (ret)
+		goto _out;
+
+	ret = device_create_file(&(pdev->dev), &dev_attr_sw_ovp_threshold);
 	if (ret)
 		goto _out;
 
@@ -3220,7 +3624,8 @@ static void mtk_charger_external_power_changed(struct power_supply *psy)
 
 	if (IS_ERR_OR_NULL(chg_psy)) {
 		pr_notice("%s Couldn't get chg_psy\n", __func__);
-		chg_psy = power_supply_get_by_name("primary_chg");
+		chg_psy = devm_power_supply_get_by_phandle(&info->pdev->dev,
+						       "charger");
 		info->chg_psy = chg_psy;
 	} else {
 		ret = power_supply_get_property(chg_psy,
@@ -3264,6 +3669,11 @@ int notify_adapter_event(struct notifier_block *notifier,
 		chr_err("PD Notify Detach\n");
 		pinfo->pd_type = MTK_PD_CONNECT_NONE;
 		pinfo->pd_reset = false;
+#if 0//!defined(M100TB_DG_P3PRO_527) //Leo 20230921
+			#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+			set_other_pd_reset_state(false);
+			#endif
+#endif
 		mutex_unlock(&pinfo->pd_lock);
 		mtk_chg_alg_notify_call(pinfo, EVT_DETACH, 0);
 		/* reset PE40 */
@@ -3294,6 +3704,11 @@ int notify_adapter_event(struct notifier_block *notifier,
 		chr_err("PD Notify PD30 ready\r\n");
 		pinfo->pd_type = MTK_PD_CONNECT_PE_READY_SNK_PD30;
 		pinfo->pd_reset = false;
+#if 0//!defined(M100TB_DG_P3PRO_527) //Leo 20230921
+#if IS_ENABLED(CONFIG_TCPC_FUSB302)//LQ
+			set_other_pd_reset_state(true);
+#endif
+#endif
 		mutex_unlock(&pinfo->pd_lock);
 		/* PD30 is ready */
 		break;
@@ -3303,6 +3718,11 @@ int notify_adapter_event(struct notifier_block *notifier,
 		chr_err("PD Notify APDO Ready\n");
 		pinfo->pd_type = MTK_PD_CONNECT_PE_READY_SNK_APDO;
 		pinfo->pd_reset = false;
+#if 0//!defined(M100TB_DG_P3PRO_527) //Leo 20230921
+			#if IS_ENABLED(CONFIG_TCPC_FUSB302)
+			set_other_pd_reset_state(true);
+			#endif
+#endif
 		mutex_unlock(&pinfo->pd_lock);
 		/* PE40 is ready */
 		_wake_up_charger(pinfo);
@@ -3343,6 +3763,124 @@ static char *mtk_charger_supplied_to[] = {
 	"battery"
 };
 
+//caozy add for start/stop charge begin
+static int wb_charger_open(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
+
+static int wb_charger_release(struct inode *node, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t wb_charger_read(struct file *file, char __user *buff, size_t count, loff_t * offset)
+{
+	return 0;
+}
+
+static ssize_t wb_charger_write(struct file *file, const char __user *buff, size_t count, loff_t * offset)
+{
+    char data[3];
+	memset(data,0,3);
+	if (copy_from_user(data, buff, count)){
+		return count;
+	}
+
+	printk("%s %s \n", __func__, data);
+
+    if (data[0] == '1')
+    {
+		printk("!!!weibu start charge!!!\n");
+		wb_stop_charger = false;
+    }
+    else if (data[0] == '0')
+    {
+		printk("!!!weibu start stop!!!\n");
+		wb_stop_charger = true;
+    }
+	else if  (data[0] == '2')
+    {
+		printk("!!!weibu start charging_current!!!\n");
+		wb_stop_charging_current = false;
+    }
+    else if (data[0] == '3')
+    {
+		printk("!!!weibu stop charging_current!!!\n");
+		wb_stop_charging_current = true;
+    }
+
+    return count;
+}
+
+static struct file_operations wb_charger_ops = {
+	.owner   = THIS_MODULE,
+	.open    = wb_charger_open,
+	.release = wb_charger_release,
+	.read    = wb_charger_read,
+	.write   = wb_charger_write,
+};
+
+static struct miscdevice wb_charger_dev = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "wb_charger_control",
+	.fops = &wb_charger_ops,
+};
+//caozy add for start/stop charge end
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) ||  IS_ENABLED(CONFIG_CHARGER_SGM415XX) //Leo 20230630
+#if IS_ENABLED(CONFIG_CHARGER_SGM415XX)
+#define R_CHARGER_1	1200
+#define R_CHARGER_2	100
+#else
+#define R_CHARGER_1	330
+#define R_CHARGER_2	39
+#endif
+int get_vbus_voltage(struct mtk_charger *info, int *val)
+{
+	int ret = -1;
+
+	if (!IS_ERR(info->chan_vbus)) {
+		ret = iio_read_channel_processed(info->chan_vbus, val);
+		if (ret < 0)
+			pr_notice("[%s]read fail,ret=%d\n", __func__, ret);
+	} else {
+		info->chan_vbus = devm_iio_channel_get(&info->pdev->dev, "pmic_vbus");
+		if (!IS_ERR(info->chan_vbus)) {
+			ret = iio_read_channel_processed(info->chan_vbus, val);
+			if (ret < 0)
+				pr_notice("[%s]read fail,ret=%d\n", __func__, ret);
+
+		} else {
+			pr_notice("[%s]chan error %d\n", __func__, info->chan_vbus);
+			ret = -EOPNOTSUPP;
+		}
+	}
+
+	*val = (((R_CHARGER_1 +
+			R_CHARGER_2) * 100 * *val) /
+			R_CHARGER_2) / 100;
+
+	return ret;
+}
+#endif
+
+#if defined(WB_MTK_CHARGER_DELAY_WORK) //Leo 20231121
+static void mtk_charger_delay_handler(struct work_struct *work)
+{
+	struct mtk_charger *info = (struct mtk_charger *)container_of(work, struct mtk_charger, mtk_charger_dwork.work);
+
+	info->pd_adapter = get_adapter_by_name("pd_adapter");
+	if (!info->pd_adapter) {
+		chr_err("%s: No pd adapter found\n", __func__);
+	} else {
+		info->pd_nb.notifier_call = notify_adapter_event;
+		register_adapter_device_notifier(info->pd_adapter,
+						 &info->pd_nb);
+	}
+}
+#endif
+
 static int mtk_charger_probe(struct platform_device *pdev)
 {
 	struct mtk_charger *info = NULL;
@@ -3371,6 +3909,23 @@ static int mtk_charger_probe(struct platform_device *pdev)
 		"charger suspend wakelock");
 	info->charger_wakelock =
 		wakeup_source_register(NULL, name);
+
+#if IS_ENABLED(CONFIG_WB_KPOC_WAKELOCK_SUPPORT) //Leo add kpoc keep wakeup 20220908
+	info->kpoc_wakelock =
+		wakeup_source_register(NULL, "kpoc_charger");
+		
+	if (info->bootmode == 8 || info->bootmode == 9) {
+		if (!info->kpoc_wakelock->active)
+			__pm_stay_awake(info->kpoc_wakelock);
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_CHARGER_SC8851) || IS_ENABLED(CONFIG_CHARGER_SGM415XX) //Leo 20230630
+	info->chan_vbus = devm_iio_channel_get(&pdev->dev, "pmic_vbus");
+	if (IS_ERR(info->chan_vbus))
+		chr_err("%s: get chan_vbus  failed\n", __func__);
+#endif
+
 	spin_lock_init(&info->slock);
 
 	init_waitqueue_head(&info->wait_que);
@@ -3410,11 +3965,13 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	info->psy1 = power_supply_register(&pdev->dev, &info->psy_desc1,
 			&info->psy_cfg1);
 
-	info->chg_psy = power_supply_get_by_name("primary_chg");
+	info->chg_psy = devm_power_supply_get_by_phandle(&pdev->dev,
+		"charger");
 	if (IS_ERR_OR_NULL(info->chg_psy))
 		chr_err("%s: devm power fail to get chg_psy\n", __func__);
 
-	info->bat_psy = power_supply_get_by_name("battery");
+	info->bat_psy = devm_power_supply_get_by_phandle(&pdev->dev,
+		"gauge");
 	if (IS_ERR_OR_NULL(info->bat_psy))
 		chr_err("%s: devm power fail to get bat_psy\n", __func__);
 
@@ -3474,10 +4031,18 @@ static int mtk_charger_probe(struct platform_device *pdev)
 
 	info->log_level = CHRLOG_ERROR_LEVEL;
 
+#if defined(WB_MTK_CHARGER_DELAY_WORK) //Leo 20231121
+	info->mtk_charger_wq = create_singlethread_workqueue("mtk_charger_wq");
+	INIT_DELAYED_WORK(&info->mtk_charger_dwork, mtk_charger_delay_handler);
+#endif
+
 	info->pd_adapter = get_adapter_by_name("pd_adapter");
-	if (!info->pd_adapter)
+	if (!info->pd_adapter) {
+#if defined(WB_MTK_CHARGER_DELAY_WORK) //Leo 20231121
+		queue_delayed_work(info->mtk_charger_wq, &info->mtk_charger_dwork, msecs_to_jiffies(5000));
+#endif
 		chr_err("%s: No pd adapter found\n", __func__);
-	else {
+	} else {
 		info->pd_nb.notifier_call = notify_adapter_event;
 		register_adapter_device_notifier(info->pd_adapter,
 						 &info->pd_nb);
@@ -3491,10 +4056,16 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	info->is_charging = false;
 	info->safety_timer_cmd = -1;
 
+	charger_dev_enable_safety_timer(info->chg1_dev, info->enable_sw_safety_timer); //jnier add 20230831
+
 	/* 8 = KERNEL_POWER_OFF_CHARGING_BOOT */
 	/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
 	if (info != NULL && info->bootmode != 8 && info->bootmode != 9)
 		mtk_charger_force_disable_power_path(info, CHG1_SETTING, true);
+
+	//caozy add for start/stop charge begin
+	misc_register(&wb_charger_dev);
+	//caozy add for start/stop charge end
 
 	kthread_run(charger_routine_thread, info, "charger_thread");
 

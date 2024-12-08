@@ -472,3 +472,7 @@ config MTK_SCP_AUDIO
 	  that can be used with other platforms
 	  Select Y if you have such device.
 	  If unsure select "N".
+
+source "sound/soc/mediatek/aw87xxx/Kconfig"
+source "sound/soc/mediatek/aw882xx/Kconfig"
+source "sound/soc/mediatek/aw883xx_new/Kconfig"

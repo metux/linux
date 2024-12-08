@@ -60,7 +60,11 @@
 #include "mtk_pe4.h"
 #include "mtk_charger_algorithm_class.h"
 
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230421
+#define PE40_VBUS_STEP 20
+#else
 #define PE40_VBUS_STEP 50
+#endif
 #define PE40_MIN_WATT 5000000
 #define PE40_VBUS_IR_DROP_THRESHOLD 1200
 
@@ -79,7 +83,13 @@ void mtk_pe40_reset(struct chg_alg_device *alg)
 
 	if (pe40->state == PE4_RUN || pe40->state == PE4_INIT ||
 	    pe40->state == PE4_TUNING || pe40->state == PE4_POSTCC) {
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+		if (pe4_hal_set_adapter_cap_end(alg, 5000, 3000) !=0) {
+			pe4_hal_set_adapter_cap_end(alg, 5000, 2000);
+		}
+#else
 		pe4_hal_set_adapter_cap_end(alg, 5000, 2000);
+#endif
 
 		pe4_hal_set_mivr(alg, CHG1, pe40->min_charger_voltage);
 		pe4_hal_enable_vbus_ovp(alg, true);
@@ -101,6 +111,9 @@ void mtk_pe40_reset(struct chg_alg_device *alg)
 	pe40->pe4_input_current_limit = -1;
 	pe40->pe4_input_current_limit_setting = -1;
 	pe40->max_vbus = pe40->pe40_max_vbus;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	pe40->min_vbus = pe40->pe40_min_vbus;
+#endif
 	pe40->max_ibus = pe40->pe40_max_ibus;
 	pe40->max_charger_ibus = pe40->pe40_max_ibus *
 				(100 - pe40->ibus_err) / 100;
@@ -216,6 +229,13 @@ static int _pe4_is_algo_ready(struct chg_alg_device *alg)
 				tmp > pe4->high_temp_to_enter_pe40 ||
 				tmp < pe4->low_temp_to_enter_pe40) {
 				ret_value = ALG_NOT_READY;
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+				if (pe4_hal_get_vbus(alg) > 8000) {
+					if (pe4_hal_set_adapter_cap_end(alg, 5000, 3000) !=0) {
+						pe4_hal_set_adapter_cap_end(alg, 5000, 2000);
+					}
+				}
+#endif
 			}
 		} else if (ret == ALG_TA_NOT_SUPPORT)
 			pe4->state = PE4_TA_NOT_SUPPORT;
@@ -263,6 +283,7 @@ int mtk_pe40_get_setting_by_watt(struct chg_alg_device *alg, int *voltage,
 	int vbus = 0, ibus = 0, ibus_setting = 0;
 	int idx = 0, ta_ibus = 0;
 
+
 	pe40 = dev_get_drvdata(&alg->dev);
 
 	pe40_cap = &pe40->cap;
@@ -278,10 +299,12 @@ int mtk_pe40_get_setting_by_watt(struct chg_alg_device *alg, int *voltage,
 		pe40_cap->pwr_limit[i],
 		pe40_cap->pdp);
 
-
 	for (i = 0; i < pe40_cap->nr; i++) {
 		int max_ibus = 0;
 		int max_vbus = 0;
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 2023041
+		int min_vbus = 0;
+#endif
 
 		/* update upper bound */
 		if (pe40_cap->ma[i] > pe40->max_ibus)
@@ -332,8 +355,26 @@ int mtk_pe40_get_setting_by_watt(struct chg_alg_device *alg, int *voltage,
 		else
 			max_vbus = pe40_cap->max_mv[i];
 
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+		min_vbus = pe40->min_vbus;
+		ibus = pe40->max_charger_ibus;
+		ibus_setting = max_ibus;
+		ta_ibus = pe40_cap->ma[i];
+		idx = 6;
+		if (*voltage != 0 && *voltage <= max_vbus && *voltage >= min_vbus) {
+			vbus = *voltage;
+			break;
+		} else if (*voltage != 0 && *voltage <= min_vbus && *voltage >= 6000) {
+			vbus = min_vbus;
+			break;
+		} else if (*voltage != 0 && *voltage >= max_vbus) {
+			vbus = max_vbus;
+			break;
+		}
+#endif
+
 		if (*voltage != 0 && *voltage <= max_vbus &&
-			*voltage >= pe40_cap->min_mv[i]) {
+			*voltage >= pe40_cap->min_mv[i]) { //Leo  min_mv < vol < max_bus
 			ibus = watt / *voltage;
 			vbus = *voltage;
 			ibus_setting = max_ibus;
@@ -535,7 +576,7 @@ int mtk_pe40_pd_request(struct chg_alg_device *alg,
 			pe4_hal_set_input_current(alg, CHG1, *adapter_ibus * 1000);
 	}
 
-	ret = pe4_hal_set_adapter_cap(alg, adapter_mv, *adapter_ibus);
+	ret = pe4_hal_set_adapter_cap(alg, adapter_mv, *adapter_ibus); //Leo 20230418
 
 	pe4_err("%s: vbus:%d ibus:%d ibus2:%d input_current:%d pdp:%d ret:%d\n",
 		__func__, adapter_mv, adapter_ma, *adapter_ibus, ma,
@@ -843,6 +884,7 @@ int mtk_pe40_init_state(struct chg_alg_device *alg)
 		voltage = 0;
 		mtk_pe40_get_setting_by_watt(alg, &voltage, &adapter_ibus,
 			&actual_current, 5000000, &input_current);
+		//Leo 20230418
 		ret = mtk_pe40_pd_request(alg, &voltage, &actual_current,
 					actual_current);
 
@@ -1225,8 +1267,11 @@ int mtk_pe40_cc_state(struct chg_alg_device *alg)
 
 		if (pe40->avbus <= 5000)
 			pe40->avbus = 5000;
-
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230421
+		if (abs(pe40->avbus - oldavbus) >= PE40_VBUS_STEP) {
+#else
 		if (abs(pe40->avbus - oldavbus) >= 50) {
+#endif
 			ret = mtk_pe40_pd_request(alg, &pe40->avbus,
 					&adapter_ibus, input_current);
 			if (ret != 0 && ret != MTK_ADAPTER_PE4_REJECT) {
@@ -1259,6 +1304,15 @@ int mtk_pe40_cc_state(struct chg_alg_device *alg)
 		goto disable_hv;
 
 	uisoc = pe4_hal_get_uisoc(alg);
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+	if (uisoc > pe40->pe40_stop_battery_soc) {
+		if (pe40->charging_current_limit1 != -1 ||
+			pe40->input_current_limit1 != -1)
+			mtk_pe40_end(alg, 1);
+		else
+			mtk_pe40_end(alg, 1);
+	}
+#else
 	if (uisoc > 80 && pe40->avbus * oldibus <= PE40_MIN_WATT) {
 		if (pe40->charging_current_limit1 != -1 ||
 			pe40->input_current_limit1 != -1)
@@ -1266,6 +1320,7 @@ int mtk_pe40_cc_state(struct chg_alg_device *alg)
 		else
 			mtk_pe40_end(alg, 1);
 	}
+#endif
 
 	return 0;
 
@@ -1469,8 +1524,12 @@ static int pe4_dcs_set_charger(struct chg_alg_device *alg)
 		pe4_hal_enable_termination(alg, CHG1, false);
 		pe4_hal_safety_check(alg, pe4->dual_polling_ieoc);
 	} else if (pe4->state == PE4_POSTCC) {
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230419
+		pe4_hal_set_eoc_current(alg, CHG1, pe4->dual_polling_ieoc);
+#else
 		pe4_hal_set_eoc_current(alg, CHG1, 150000);
 		pe4_hal_reset_eoc_state(alg);
+#endif
 		pe4_hal_enable_termination(alg, CHG1, true);
 	} else {
 		pe4_err("%s state error!", __func__);
@@ -1699,9 +1758,14 @@ static int pe4_full_evt(struct chg_alg_device *alg)
 					pe4->state = PE4_POSTCC;
 					pe4_hal_enable_charger(alg,
 						CHG2, false);
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230419
+					pe4_hal_set_eoc_current(alg,
+						CHG1, pe4->dual_polling_ieoc);
+#else
 					pe4_hal_set_eoc_current(alg,
 						CHG1, 150000);
 					pe4_hal_reset_eoc_state(alg);
+#endif
 					pe4_hal_enable_termination(alg,
 						CHG1, true);
 				} else {
@@ -1774,6 +1838,15 @@ static void mtk_pe4_parse_dt(struct mtk_pe40 *pe4,
 		pe4_err("use default pe40_max_vbus:%d\n", PE40_MAX_VBUS);
 		pe4->pe40_max_vbus = PE40_MAX_VBUS;
 	}
+
+#if IS_ENABLED(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230418
+	if (of_property_read_u32(np, "pe40_min_vbus", &val) >= 0)
+		pe4->pe40_min_vbus = val;
+	else {
+		pe4_err("use default pe40_min_vbus:%d\n", PE40_MIN_VBUS);
+		pe4->pe40_min_vbus = PE40_MIN_VBUS;
+	}
+#endif
 
 	if (of_property_read_u32(np, "pe40_max_ibus", &val) >= 0)
 		pe4->pe40_max_ibus = val;
@@ -1940,6 +2013,9 @@ int _pe4_set_setting(struct chg_alg_device *alg_dev,
 	struct chg_limit_setting *setting)
 {
 	struct mtk_pe40 *pe4;
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	int temp;
+#endif
 
 	pe4 = dev_get_drvdata(&alg_dev->dev);
 
@@ -1960,6 +2036,58 @@ int _pe4_set_setting(struct chg_alg_device *alg_dev,
 	pe4->input_current_limit2 = setting->input_current_limit2;
 	pe4->charging_current_limit1 = setting->charging_current_limit1;
 	pe4->charging_current_limit2 = setting->charging_current_limit2;
+
+#if defined(CONFIG_WB_DG_CUST_SUPPORT) //Leo 20230407
+	temp = pe4_hal_get_battery_temperature(alg_dev);
+	pr_info("%s pe4 charge Leo temp:%d \n",__func__,temp);
+
+	if ((temp >= 0) && (temp <= 56)) {
+		//pr_info("%s charge Leo (temp >= 0) && (temp <= 56) \n",__func__);
+		pe4->input_current_limit1 = (setting->input_current_limit1 == 0) ? 0 : -1;
+		pe4->charging_current_limit1 = (setting->charging_current_limit1 == 0) ? 0 : -1;
+		pe4->input_current_limit2 = (setting->input_current_limit2 == 0) ? 0 : -1;
+		pe4->charging_current_limit2 = (setting->charging_current_limit2 == 0) ? 0 : -1;
+		pe4->input_current1 = 3000000;
+		pe4->input_current2 = 3000000;
+	} else if ((temp >= -10) && (temp < 0)) {
+		pr_info("%s charge Leo (temp >= -10) && (temp < 0) \n",__func__);
+		pe4->input_current_limit1 = 700000;
+		pe4->charging_current_limit1 = 700000;
+		pe4->input_current1 = 700000;
+		pe4->input_current_limit2 = 0;
+		pe4->charging_current_limit2 = 0;
+		pe4_hal_set_charging_current(alg_dev,
+			CHG2, pe4->charging_current_limit2);
+	} else if ((temp > 56) && (temp <= 60)) {
+		pr_info("%s charge Leo (temp > 56) && (temp <= 60) \n",__func__);
+		pe4->input_current_limit1 = 1600000;
+		pe4->charging_current_limit1 = 1600000;
+		pe4->input_current1 = 1600000;
+		pe4->input_current_limit2 = 0;
+		pe4->charging_current_limit2 = 0;
+		pe4->input_current2 = 0;
+	} else if ((temp > 60) || (temp < -10)) {
+		pr_info("%s charge Leo (temp > 60) || (temp < -10) \n",__func__);
+		pe4->input_current_limit1 = 0;
+		pe4->charging_current_limit1 = 0;
+		pe4->input_current_limit2 = 0;
+		pe4->charging_current_limit2 = 0;
+		pe4->input_current1 = 0;
+		pe4_hal_set_charging_current(alg_dev,
+			CHG2, pe4->charging_current_limit2);
+	} else {
+		pr_info("%s charge Leo else \n",__func__);
+		pe4->input_current_limit1 = (setting->input_current_limit1 == 0) ? 0 : -1;
+		pe4->charging_current_limit1 = (setting->charging_current_limit1 == 0) ? 0 : -1;
+		pe4->input_current_limit2 = (setting->input_current_limit2 == 0) ? 0 : -1;
+		pe4->charging_current_limit2 = (setting->charging_current_limit2 == 0) ? 0 : -1;
+		pe4->input_current1 = 3000000;
+		pe4->input_current2 = 3000000;
+	}
+	pe4_hal_set_input_current(alg_dev,
+		CHG1, pe4->input_current1);
+#endif
+
 
 	pe4_dbg("%s cv:%d icl1:%d:%d icl2:%d:%d icl:%d:%d cc:%d:%d, pe4_6pin_en:%d\n",
 		__func__,
@@ -2032,7 +2160,7 @@ static int mtk_pe4_probe(struct platform_device *pdev)
 		wakeup_source_register(NULL, "PE4.0 suspend wakelock");
 
 	mtk_pe4_parse_dt(pe4, &pdev->dev);
-	pe4->bat_psy = power_supply_get_by_name("battery");
+	pe4->bat_psy = devm_power_supply_get_by_phandle(&pdev->dev, "gauge");
 
 	if (IS_ERR_OR_NULL(pe4->bat_psy))
 		pe4_err("%s: devm power fail to get pe4->bat_psy\n", __func__);
@@ -2054,7 +2182,11 @@ static void mtk_pe4_shutdown(struct platform_device *dev)
 }
 
 static const struct of_device_id mtk_pe4_of_match[] = {
+#if IS_ENABLED(CONFIG_WB_FAST_CHARGE_ONLY_PD) //Leo 20230401
+	{.compatible = "mediatek,charger,pe4_disable",},
+#else
 	{.compatible = "mediatek,charger,pe4",},
+#endif
 	{},
 };
 

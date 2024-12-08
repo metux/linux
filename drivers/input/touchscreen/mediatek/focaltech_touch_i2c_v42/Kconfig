@@ -1,0 +1,31 @@
+#
+# Focaltech Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_FTS_I2C_V42
+    tristate "Focaltech Touchscreen"
+    default n
+    help
+      Say Y here if you have Focaltech touch panel.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_PEN
+    bool "Focaltech Touchscreen Pen"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Pen.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_GLOVE
+    bool "Focaltech Touchscreen GLOVE"
+    default n
+    help
+      Say Y here Support Focaltech Touchscreen Pen.
+      If unsure, say N.
+
+config TOUCHSCREEN_FTS_AUTO_UPGRADE_EN
+    bool "Focaltech Touchscreen auto upgrade"
+    default n
+    help
+      Say Y here Support Focaltech auto upgrade.
+      If unsure, say N.

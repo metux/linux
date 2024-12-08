@@ -1,0 +1,20 @@
+config CM_MIDMISC_SUPPORT
+        tristate "Hardwareinfo For misc info"
+        default n
+        help
+          CONFIG_CM_MIDMISC_SUPPORT=y
+
+config CM_NOTIFY_EVENT_SUPPORT
+        bool "notify_event for usb keyboard"
+        default n
+        help
+          CONFIG_CM_NOTIFY_EVENT_SUPPORT=y
+
+config CM_MIDMISC_V_SUPPORT
+        tristate "Hardwareinfo For misc info"
+        default n
+        help
+          CONFIG_CM_MIDMISC_V_SUPPORT=y
+
+
+

@@ -6062,7 +6062,7 @@
 		extcon_usb: extcon_usb {
 			compatible = "mediatek,extcon-usb";
 		#if 1//def CONFIG_CHARGER_SC8989X
-			charger = <&upm6920_chg>;
+			charger = <&sc8989x_chg>;
 			id-gpios = <&pio 13 0x0>;
 		#else
 			vbus-supply = <&mt6375_otg_vbus>;
@@ -6524,7 +6524,7 @@
 		compatible = "mediatek,charger";
 		gauge = <&mtk_gauge>;
 		#if 1 //def CONFIG_CHARGER_SC8989X
-		charger = <&upm6920_chg>;
+		charger = <&sc8989x_chg>;
 		bootmode = <&chosen>;
 
 		algorithm_name = "Basic";
@@ -6609,7 +6609,7 @@
 	mtk_ctd: mtk_ctd {
 		compatible = "mediatek,mtk_ctd";
 #if 1 //def CONFIG_CHARGER_SC8989X
-		bc12 = <&upm6920_chg>;
+		bc12 = <&sc8989x_chg>;
 #else
 		bc12 = <&mt6375_chg>;
 #endif
@@ -7159,7 +7159,7 @@
 		int-n-gpios = <&pio 46 0>;
 		vbus-5v-gpios = <&pio 86 0>;
 		iddig-c-gpios = <&pio 43 0>;
-	    charge-dev = <&upm6920_chg>;
+	    charge-dev = <&sc8989x_chg>;
 	    tcpc,name = "type_c_port0";
 	    tcpc,max_vol = <9000>;//charger ic support max vol
 	    tcpc,max_cur = <3000>;//charger ic support max cur
@@ -7175,7 +7175,7 @@
 #include "mediatek/mt6789-clkitg.dtsi"
 #include "mediatek/mt6789-disable-unused.dtsi"
 #if 1 //def CONFIG_CHARGER_SC8989X
-#include "mediatek/M100TBR200/upm6920.dtsi"
+#include "mediatek/M100TBR200/sc8989x.dtsi"
 #endif
 
 #if 1 //def CONFIG_TCPC_HUSB311
@@ -7231,7 +7231,7 @@
 
 &mtk_gauge {
 #if 1 //def CONFIG_CHARGER_SC8989X
-	charger = <&upm6920_chg>;
+	charger = <&sc8989x_chg>;
 #else
 	charger = <&mt6375_chg>;
 #endif

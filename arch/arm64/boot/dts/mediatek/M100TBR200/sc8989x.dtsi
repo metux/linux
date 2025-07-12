@@ -20,6 +20,6 @@
 		phys = <&u2port0 PHY_TYPE_USB2>;
 		phy-names = "usb2-phy";
 		usb = <&usb>;
-//		extcon = <&fusb0>;
+/*		extcon = <&fusb0>;*/
     };
 };

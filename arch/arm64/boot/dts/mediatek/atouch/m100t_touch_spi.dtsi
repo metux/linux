@@ -6,5 +6,5 @@
 #endif
 
 //#if defined(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET_SPI_MODULE)
-#include "mediatek/atouch/himax.dtsi"
+#include "mediatek/atouch/himax-fts.dtsi"
 //#endif

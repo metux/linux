@@ -25,6 +25,7 @@ obj-$(CONFIG_TOUCHSCREEN_HUION_PANELS) += huion_i2c/
 obj-$(CONFIG_TOUCHSCREEN_JADARD_SPI_MODULE) += jdchipset_spi/
 obj-$(CONFIG_TOUCHSCREEN_FTS_I2C_5726) += focaltech_touch_5726/
 obj-$(CONFIG_CHSC5XXX_TOUCHPANEL_DRIVER)       +=  chsc5xxx/
+obj-$(CONFIG_TOUCHSCREEN_FTS_SPI_V42_8208) += focaltech_touch_spi_v42_8208/
 
 TOUCH_LISTS := $(subst ",,$(CONFIG_TOUCHSCREEN_WB_TOUCH))
 obj-y += $(foreach TOUCH,$(TOUCH_LISTS),$(TOUCH)/)

@@ -111,13 +111,13 @@
 		/*pins_cmd_dat {
 			pinmux = <PINMUX_GPIO51__FUNC_GPIO51>;
 		};*/
-	};    
+	};
 
 	mtkfb_pins_tp_rst_gpio: tp_rst_gpio {
 		pins_cmd_dat {
 			pinmux = <PINMUX_GPIO152__FUNC_GPIO152>;
 		};
-	};    
+	};
 };
 
 &mtkfb {
@@ -130,7 +130,7 @@
 	pinctrl-0 = <&mtkfb_pins_lcd_bias_enp1>;
 	pinctrl-1 = <&mtkfb_pins_lcd_bias_enp0>;
 	pinctrl-2 = <&mtkfb_pins_lcd_bias_enn1>;
-	pinctrl-3 = <&mtkfb_pins_lcd_bias_enn0>;        
+	pinctrl-3 = <&mtkfb_pins_lcd_bias_enn0>;
 	pinctrl-4 = <&mtkfb_pins_lcm_led_en1>;
 	pinctrl-5 = <&mtkfb_pins_lcm_led_en0>;
 	pinctrl-6 = <&mtkfb_pins_lcm_rst_out1_gpio>;
@@ -167,7 +167,7 @@
 			};
 		};
 	};
-	
+
 	ports {
 		port {
 			dsi_out: endpoint {
@@ -293,7 +293,7 @@
 //#include "mediatek/cust_mt6789_camera_v4l2.dtsi"
 
 &i2c0 {
-//        focaltech@38{ 
+//        focaltech@38{
 //            pinctrl-names = "i2c0_pull_down", "i2c0_pull_up";
 //            pinctrl-0 = <&i2c0_pull_down_ctrl>;
 //            pinctrl-1 = <&i2c0_pull_up_ctrl>;
@@ -301,12 +301,12 @@
 //            reg = <0x38>;
 //            interrupt-parent = <&pio>;
 //            interrupts = <9 IRQ_TYPE_EDGE_FALLING 9 0>;
-//            focaltech,reset-gpio = <&pio 152 0>; 
+//            focaltech,reset-gpio = <&pio 152 0>;
 //            focaltech,irq-gpio = <&pio 9 IRQ_TYPE_EDGE_FALLING>;
 //            focaltech,max-touch-number = <10>;
 //            focaltech,display-coords =  <0 0 1200 2000>;
 //        };
-// 
+//
 //        jadard@68{
 //            compatible = "jadard,jdcommon";
 //            reg = <0x68>;
@@ -356,7 +356,7 @@
         reg = <0x58>;
         dev_index = <0>;
         status = "okay";
-    }; 
+    };
     aw87xxx@59 {
         compatible = "awinic,aw87xxx_pa";
         reg = <0x59>;
@@ -369,11 +369,11 @@
 &i2c3 {
 	it6112@56 {
 		compatible = "ite,it6112";
-		reg = <0x56>;                      
+		reg = <0x56>;
 		status = "okay";
 	};
 };
-    
+
 &i2c6 {
 #if 0
     rt9465@4b {
@@ -403,7 +403,7 @@
         reg = <0x58>;
         dev_index = <1>;
         status = "okay";
-    }; 
+    };
     aw87xxx@59 {
         compatible = "awinic,aw87xxx_pa";
         reg = <0x59>;
@@ -471,7 +471,7 @@
 
 &charger {
 	/*min_charger_voltage_1 = <4300000>;*/
-	/*max_dmivr_charger_current = <3000000>;*/	
+	/*max_dmivr_charger_current = <3000000>;*/
 	max_charger_voltage = <13000000>;
 	min_charger_voltage = <4800000>;
 	charger_configuration= <0>;
@@ -583,6 +583,6 @@
 
 };
 #include "mediatek/M100TBR200/aw35615.dtsi"
-#include "mediatek/atouch/m100t_touch_spi.dtsi"
+#include "mediatek/atouch/focaltech-spi0.dtsi"
 #include <tb8781p1_64/cust.dtsi>
 /*End of this file, DO NOT ADD ANYTHING HERE*/

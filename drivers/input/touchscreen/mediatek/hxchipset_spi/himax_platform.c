@@ -1249,20 +1249,6 @@ int himax_chip_common_probe(struct spi_device *spi)
 {
 	struct himax_ts_data *ts;
 	int ret = 0;
-	int himax_spi_support = 0;
-
-#if IS_ENABLED(CONFIG_MID_CSCI_SUPPORT)
-	if (csci_exist("touchpanel.himax.spi")) {
-		if (csci_integer("touchpanel.himax.spi", 0) > 0) {
-			himax_spi_support = csci_integer("touchpanel.himax.spi", 0);
-		}
-	}
-#endif
-
-	if(himax_spi_support == 0){
-		I("do not support touchpanel himax spi %s\n", __func__);
-		return -EINVAL;
-	}
 
 	I("Enter %s\n", __func__);
 	if (spi->master->flags & SPI_MASTER_HALF_DUPLEX) {

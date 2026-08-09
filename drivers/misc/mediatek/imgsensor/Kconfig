@@ -1,0 +1,303 @@
+config MTK_IMGSENSOR
+	tristate "MediaTek image sensor support"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_isp6s.
+
+config CUSTOM_KERNEL_IMGSENSOR
+	string "Custom image sensor driver"
+	help
+	  Kernel space image sensor driver. Define  project used all image
+	  sensors .The value is combination of CUSTOM_KERNEL_MAIN_IMGSENSOR,
+	  CUSTOM_KERNEL_MAIN_BACKUP_IMGSENSOR, CUSTOM_KERNEL_SUB_IMGSENSOR,
+	  and CUSTOM_KERNEL_SUB_BACKUP_IMGSENSOR
+
+config MTK_IMGSENSOR_PLATFORM_SUPPORT
+	bool "MTK PLATFORM for ALL PLATFORM"
+	help
+	  This is a config for the MediaTek
+	  image sensors with layer decoupling 2.0.
+	  To compare to legacy config, this new option type is boolean.
+	  To compile all platform driver as modules, choose y here.
+
+config MTK_IMGSENSOR_MT6853
+	tristate "MTK PLATFORM for MT6853"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_mt6853.
+
+config MTK_SENSOR_PROJECT
+    string "MTK camera sensor project folder name"
+	help
+	  This config is set as project folder name
+	  which imgsenor driver used for.
+	  When MTK_SENSOR_PROJECT is set, imgsensor
+	  will use the driver in this project folder.
+
+config MTK_IMGSENSOR_MT6893
+	tristate "MTK PLATFORM for MT6893"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_mt6893.
+
+config MTK_IMGSENSOR_ISP3_Z
+	tristate "MediaTek image sensor support"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_isp3_z.
+
+config MTK_IMGSENSOR_ISP4
+	tristate "MediaTek image sensor support"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_isp4.
+
+config MTK_IMGSENSOR_ISP4_C
+	tristate "MediaTek image sensor support"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_isp4_c.
+
+config MTK_IMGSENSOR_ISP3_M
+	tristate "MediaTek image sensor support"
+	help
+	  This is a driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module will be called imgsensor_isp3_m.
+
+config MTK_IMGSENSOR_PLATFORM
+	string "set imgsensor platform name"
+	default MTK_PLATFORM if MTK_PLATFORM != ""
+	help
+	  This config is set as platform name
+	  which imgsenor driver used for.
+	  When MTK_PLATFORM is not set, imgsensor
+	  will use the config.
+
+config MTK_V4L2_IMGSENSOR
+	tristate "MediaTek v4l2 image sensor support"
+	select VIDEO_V4L2_SUBDEV_API
+	select MEDIA_CONTROLLER
+	select V4L2_FWNODE
+	select I2C
+	help
+	  This is a Video4Linux2 sensor-level driver for the MediaTek
+	  image sensors.
+	  To compile this driver as a module, choose M here: the
+	  module wll be called imgsensor.
+
+
+config GC5025_MIRROR_H
+	bool "CONFIG_GC5025_MIRROR_H"
+	help
+	  CONFIG_GC5025_MIRROR_H
+	  
+config GC5025_MIRROR_V
+	bool "CONFIG_GC5025_MIRROR_V"
+	help
+	  CONFIG_GC5025_MIRROR_V
+	  
+config GC5025_MIRROR_HV
+	bool "CONFIG_GC5025_MIRROR_HV"
+	help
+	  CONFIG_GC5025_MIRROR_HV
+	  
+config GC5025F_MIRROR_H
+	bool "CONFIG_GC5025F_MIRROR_H"
+	help
+	  CONFIG_GC5025F_MIRROR_H
+	  
+config GC5025F_MIRROR_V
+	bool "CONFIG_GC5025F_MIRROR_V"
+	help
+	  CONFIG_GC5025F_MIRROR_V
+	  
+config GC5025F_MIRROR_HV
+	bool "CONFIG_GC5025F_MIRROR_HV"
+	help
+	  CONFIG_GC5025F_MIRROR_HV
+	  
+config GC02M2_MIRROR_V
+	bool "CONFIG_GC02M2_MIRROR_V"
+	help
+	  CONFIG_GC02M2_MIRROR_V
+	  
+config GC02M2_MIRROR_H
+	bool "CONFIG_GC02M2_MIRROR_H"
+	help
+	  CONFIG_GC02M2_MIRROR_H
+ 
+config GC02M2_MIRROR_HV
+	bool "CONFIG_GC02M2_MIRROR_HV"
+	help
+	  CONFIG_GC02M2_MIRROR_HV
+
+config GC02M1_MIRROR_NORMAL
+	bool "CONFIG_GC02M1_MIRROR_NORMAL"
+	help
+	  CONFIG_GC02M1_MIRROR_NORMAL
+
+config GC02M1_MIRROR_V
+	bool "CONFIG_GC02M1_MIRROR_V"
+	help
+	  CONFIG_GC02M1_MIRROR_V
+	  
+config GC02M1_MIRROR_H
+	bool "CONFIG_GC02M1_MIRROR_H"
+	help
+	  CONFIG_GC02M1_MIRROR_H
+ 
+config GC02M1_MIRROR_HV
+	bool "CONFIG_GC02M1_MIRROR_HV"
+	help
+	  CONFIG_GC02M1_MIRROR_HV
+
+config GC02M1F_MIRROR_NORMAL
+	bool "CONFIG_GC02M1F_MIRROR_NORMAL"
+	help
+	  CONFIG_GC02M1F_MIRROR_NORMAL"
+
+config GC02M1F_MIRROR_V
+	bool "CONFIG_GC02M1F_MIRROR_V"
+	help
+	  CONFIG_GC02M1F_MIRROR_V
+	  
+config GC02M1F_MIRROR_H
+	bool "CONFIG_GC02M1F_MIRROR_H“
+	help
+	  CONFIG_GC02M1F_MIRROR_H
+ 
+config GC02M1F_MIRROR_HV
+	bool "CONFIG_GC02M1F_MIRROR_HV”
+	help
+	  CONFIG_GC02M1F_MIRROR_HV	  
+	  
+config GC5035_MIRROR_FLIP_ENABLE
+	bool "CONFIG_GC5035_MIRROR_FLIP_ENABLE“
+	help
+	  CONFIG_GC5035_MIRROR_FLIP_ENABLE
+	  
+config GC5035F_MIRROR_FLIP_ENABLE
+	bool "CONFIG_GC5035F_MIRROR_FLIP_ENABLE”
+	help
+	  CONFIG_GC5035F_MIRROR_FLIP_ENABLE	  
+	  
+config GC2385_MIRROR_H
+	bool "CONFIG_GC2385_MIRROR_H“
+	help
+	  CONFIG_GC2385_MIRROR_H
+	  
+config GC2385_MIRROR_V
+	bool "CONFIG_GC2385_MIRROR_V”
+	help
+	  CONFIG_GC2385_MIRROR_V
+	  
+config GC2385_MIRROR_HV
+	bool "CONFIG_GC2385_MIRROR_HV“
+	help
+	  CONFIG_GC2385_MIRROR_HV
+
+config GC2385F_MIRROR_FLIP
+	bool "CONFIG_GC2385F_MIRROR_FLIP”
+	help
+	  CONFIG_GC2385F_MIRROR_FLIP
+
+config OV8858_MIRROR_HV
+	bool "CONFIG_OV8858_MIRROR_HV“
+	help
+	  CONFIG_OV8858_MIRROR_HV
+	  
+config OV8858_MIPI_RAW_R1
+	bool "CONFIG_OV8858_MIPI_RAW_R1”
+	help
+	  CONFIG_OV8858_MIPI_RAW_R1	  
+
+config OV8858_MIPI_RAW_4LINE
+	bool "CONFIG_OV8858_MIPI_RAW_4LINE”
+        help
+          CONFIG_OV8858_MIPI_RAW_4LINE
+
+config IMX319_MIRROR_HV
+	bool "CONFIG_IMX319_MIRROR_HV“
+	help
+	  CONFIG_IMX319_MIRROR_HV
+
+config OV13850_MIRROR_HV
+	bool "CONFIG_OV13850_MIRROR_HV”
+	help
+	  CONFIG_OV13850_MIRROR_HV
+
+config OV5648_MIRROR_HV
+	bool "CONFIG_OV5648_MIRROR_HV“
+	help
+	  CONFIG_OV5648_MIRROR_HV
+	  
+config IMX135_MIRROR_HV
+	bool "CONFIG_IMX135_MIRROR_HV”
+	help
+	  CONFIG_IMX135_MIRROR_HV	  
+	  
+config S5K5E8YX_MIRROR_HV
+	bool "CONFIG_S5K5E8YX_MIRROR_HV“
+	help
+	  CONFIG_S5K5E8YX_MIRROR_HV	
+
+config S5K3P3SX_MIRROR_HV
+	bool "CONFIG_S5K3P3SX_MIRROR_HV"
+	help
+	  CONFIG_S5K3P3SX_MIRROR_HV
+
+config S5K3P3SXF_MIRROR_HV
+	bool "CONFIG_S5K3P3SXF_MIRROR_HV"
+	help
+	  CONFIG_S5K3P3SXF_MIRROR_HV
+
+config S5KJN1_MIRROR_HV
+	bool "CONFIG_S5KJN1_MIRROR_HV"
+	help
+	  CONFIG_S5KJN1_MIRROR_HV
+
+config GC13A0_MIRROR_HV
+	bool "CONFIG_GC13A0_MIRROR_HV"
+	help
+	  CONFIG_GC13A0_MIRROR_HV
+
+config S5K3P3SM_MIPI_RAW_FULL_SIZE
+	bool "CONFIG_S5K3P3SM_MIPI_RAW_FULL_SIZE"
+	help
+	  CONFIG_S5K3P3SM_MIPI_RAW_FULL_SIZE
+
+config OV8856F_2LAN
+	bool "CONFIG_OV8856F_2LAN"
+	help
+	  CONFIG_OV8856F_2LAN
+
+config OV8856F_RST_LOW
+	bool "CONFIG_OV8856F_RST_LOW"
+	help
+	  CONFIG_OV8856F_RST_LOW
+
+config S5K3M2_MIRROR_HV
+       bool "CONFIG_S5K3M2_MIRROR_HV"
+       help
+         CONFIG_S5K3M2_MIRROR_HV
+
+config WB_MIPI_SWITCH_SUPPORT
+       bool "CONFIG_WB_MIPI_SWITCH_SUPPORT"
+       help
+         CONFIG_WB_MIPI_SWITCH_SUPPORT
+
+source "drivers/misc/mediatek/imgsensor/src/Kconfig"

@@ -51,11 +51,10 @@
 #define _ARM_V7S_LVL_BITS(lvl, cfg)	((lvl) == 1 ? ((cfg)->ias - 20) : 8)
 #define ARM_V7S_LVL_SHIFT(lvl)		((lvl) == 1 ? 20 : 12)
 #define ARM_V7S_TABLE_SHIFT		10
-#define ARM_V7S_PTES_PER_LVL(lvl, cfg) (!arm_v7s_is_mtk_enabled(cfg) ?\
-       (1 << _ARM_V7S_LVL_BITS(lvl)) : (1 << _ARM_V7S_LVL_BITS_MTK(lvl)))
+
+#define ARM_V7S_PTES_PER_LVL(lvl, cfg)	(1 << _ARM_V7S_LVL_BITS(lvl, cfg))
 #define ARM_V7S_TABLE_SIZE(lvl, cfg)						\
-#define _ARM_V7S_LVL_BITS(lvl)		(16 - (lvl) * 4)
-/* MediaTek. 1st 14 bit; 2nd: 8bits */
+	(ARM_V7S_PTES_PER_LVL(lvl, cfg) * sizeof(arm_v7s_iopte))
 
 #define ARM_V7S_BLOCK_SIZE(lvl)		(1UL << ARM_V7S_LVL_SHIFT(lvl))
 #define ARM_V7S_LVL_MASK(lvl)		((u32)(~0U << ARM_V7S_LVL_SHIFT(lvl)))

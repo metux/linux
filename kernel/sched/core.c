@@ -1554,6 +1554,7 @@ static void __setscheduler_uclamp(struct task_struct *p,
 			value = uclamp_none(clamp_id);
 
 		uclamp_se_set(uc_se, value, false);
+
 	}
 
 	if (likely(!(attr->sched_flags & SCHED_FLAG_UTIL_CLAMP)))
@@ -5246,7 +5247,6 @@ void set_user_nice(struct task_struct *p, long nice)
 	struct rq *rq;
 
 	trace_android_rvh_set_user_nice(p, &nice, &allowed);
-	trace_android_vh_nice_check(&nice, &allowed);
 	if ((task_nice(p) == nice || nice < MIN_NICE || nice > MAX_NICE) && !allowed)
 		return;
 	/*

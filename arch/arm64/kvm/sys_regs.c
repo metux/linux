@@ -9,6 +9,7 @@
  *          Christoffer Dall <c.dall@virtualopensystems.com>
  */
 
+#include <linux/bitfield.h>
 #include <linux/bsearch.h>
 #include <linux/kvm_host.h>
 #include <linux/mm.h>
@@ -1025,6 +1026,8 @@ static bool access_arch_timer(struct kvm_vcpu *vcpu,
 	return true;
 }
 
+#define FEATURE(x)	(GENMASK_ULL(x##_SHIFT + 3, x##_SHIFT))
+
 /* Read a sanitised cpufeature ID register by sys_reg_desc */
 static u64 read_id_reg(const struct kvm_vcpu *vcpu,
 		struct sys_reg_desc const *r, bool raz)
@@ -1032,44 +1035,41 @@ static u64 read_id_reg(const struct kvm_vcpu *vcpu,
 	u32 id = reg_to_encoding(r);
 	u64 val = raz ? 0 : read_sanitised_ftr_reg(id);
 
-	if (id == SYS_ID_AA64PFR0_EL1) {
+	switch (id) {
+	case SYS_ID_AA64PFR0_EL1:
 		if (!vcpu_has_sve(vcpu))
-			val &= ~(0xfUL << ID_AA64PFR0_SVE_SHIFT);
-		val &= ~(0xfUL << ID_AA64PFR0_AMU_SHIFT);
-		if (!(val & (0xfUL << ID_AA64PFR0_CSV2_SHIFT)) &&
-		    arm64_get_spectre_v2_state() == SPECTRE_UNAFFECTED)
-			val |= (1UL << ID_AA64PFR0_CSV2_SHIFT);
-
-		if (!kvm_system_supports_32bit_el0()) {
-			/*
-			 * We could be running on asym aarch32 system.
-			 * Override to present a aarch64 only system.
-			 */
-			val &= ~(0xfUL << ID_AA64PFR0_EL0_SHIFT);
-			val |= (ID_AA64PFR0_EL0_64BIT_ONLY << ID_AA64PFR0_EL0_SHIFT);
-		}
-	} else if (id == SYS_ID_AA64PFR1_EL1) {
-		val &= ~(0xfUL << ID_AA64PFR1_MTE_SHIFT);
-	} else if (id == SYS_ID_AA64ISAR1_EL1 && !vcpu_has_ptrauth(vcpu)) {
-		val &= ~((0xfUL << ID_AA64ISAR1_APA_SHIFT) |
-			 (0xfUL << ID_AA64ISAR1_API_SHIFT) |
-			 (0xfUL << ID_AA64ISAR1_GPA_SHIFT) |
-			 (0xfUL << ID_AA64ISAR1_GPI_SHIFT));
-	} else if (id == SYS_ID_AA64DFR0_EL1) {
-		u64 cap = 0;
-
-		/* Limit guests to PMUv3 for ARMv8.1 */
-		if (kvm_vcpu_has_pmu(vcpu))
-			cap = ID_AA64DFR0_PMUVER_8_1;
-
+			val &= ~FEATURE(ID_AA64PFR0_SVE);
+		val &= ~FEATURE(ID_AA64PFR0_AMU);
+		val &= ~FEATURE(ID_AA64PFR0_CSV2);
+		val |= FIELD_PREP(FEATURE(ID_AA64PFR0_CSV2), (u64)vcpu->kvm->arch.pfr0_csv2);
+		val &= ~FEATURE(ID_AA64PFR0_CSV3);
+		val |= FIELD_PREP(FEATURE(ID_AA64PFR0_CSV3), (u64)vcpu->kvm->arch.pfr0_csv3);
+		break;
+	case SYS_ID_AA64PFR1_EL1:
+		val &= ~FEATURE(ID_AA64PFR1_MTE);
+		break;
+	case SYS_ID_AA64ISAR1_EL1:
+		if (!vcpu_has_ptrauth(vcpu))
+			val &= ~(FEATURE(ID_AA64ISAR1_APA) |
+				 FEATURE(ID_AA64ISAR1_API) |
+				 FEATURE(ID_AA64ISAR1_GPA) |
+				 FEATURE(ID_AA64ISAR1_GPI));
+		break;
+	case SYS_ID_AA64DFR0_EL1:
+		/* Limit debug to ARMv8.0 */
+		val &= ~FEATURE(ID_AA64DFR0_DEBUGVER);
+		val |= FIELD_PREP(FEATURE(ID_AA64DFR0_DEBUGVER), 6);
+		/* Limit guests to PMUv3 for ARMv8.4 */
 		val = cpuid_feature_cap_perfmon_field(val,
-						ID_AA64DFR0_PMUVER_SHIFT,
-						cap);
-	} else if (id == SYS_ID_DFR0_EL1) {
-		/* Limit guests to PMUv3 for ARMv8.1 */
+						      ID_AA64DFR0_PMUVER_SHIFT,
+						      kvm_vcpu_has_pmu(vcpu) ? ID_AA64DFR0_PMUVER_8_4 : 0);
+		break;
+	case SYS_ID_DFR0_EL1:
+		/* Limit guests to PMUv3 for ARMv8.4 */
 		val = cpuid_feature_cap_perfmon_field(val,
 						      ID_DFR0_PERFMON_SHIFT,
-						      kvm_vcpu_has_pmu(vcpu) ? ID_DFR0_PERFMON_8_1 : 0);
+						      kvm_vcpu_has_pmu(vcpu) ? ID_DFR0_PERFMON_8_4 : 0);
+		break;
 	}
 
 	return val;
@@ -1506,6 +1506,7 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	  .access = access_pminten, .reg = PMINTENSET_EL1 },
 	{ PMU_SYS_REG(SYS_PMINTENCLR_EL1),
 	  .access = access_pminten, .reg = PMINTENSET_EL1 },
+	{ SYS_DESC(SYS_PMMIR_EL1), trap_raz_wi },
 
 	{ SYS_DESC(SYS_MAIR_EL1), access_vm_reg, reset_unknown, MAIR_EL1 },
 	{ SYS_DESC(SYS_AMAIR_EL1), access_vm_reg, reset_amair_el1, AMAIR_EL1 },
@@ -1942,6 +1943,8 @@ static const struct sys_reg_desc cp15_regs[] = {
 	{ Op1( 0), CRn( 9), CRm(14), Op2( 3), access_pmovs },
 	{ AA32(HI), Op1( 0), CRn( 9), CRm(14), Op2( 4), access_pmceid },
 	{ AA32(HI), Op1( 0), CRn( 9), CRm(14), Op2( 5), access_pmceid },
+	/* PMMIR */
+	{ Op1( 0), CRn( 9), CRm(14), Op2( 6), trap_raz_wi },
 
 	/* PRRR/MAIR0 */
 	{ AA32(LO), Op1( 0), CRn(10), CRm( 2), Op2( 0), access_vm_reg, NULL, MAIR_EL1 },

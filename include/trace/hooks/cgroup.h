@@ -16,7 +16,6 @@ struct cgroup_subsys;
 #include <linux/cgroup-defs.h>
 #endif
 
-#if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
 #ifdef __GENKSYMS__
 struct task_struct;
 #else
@@ -35,9 +34,6 @@ DECLARE_RESTRICTED_HOOK(android_rvh_cgroup_force_kthread_migration,
 DECLARE_RESTRICTED_HOOK(android_rvh_refrigerator,
 	TP_PROTO(bool f),
 	TP_ARGS(f), 1);
-#else
-#define trace_android_vh_cgroup_set_task(ret, task)
-#endif
 
 DECLARE_HOOK(android_vh_cgroup_attach,
 	TP_PROTO(struct cgroup_subsys *ss, struct cgroup_taskset *tset),

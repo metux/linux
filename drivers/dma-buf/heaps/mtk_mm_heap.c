@@ -30,7 +30,6 @@
 #include "deferred-free-helper.h"
 
 #include <linux/iommu.h>
-#include <dt-bindings/memory/mtk-smi-larb-port.h>
 #include <dt-bindings/memory/mtk-memory-port.h>
 #include "mtk_heap_priv.h"
 #include "mtk_heap.h"

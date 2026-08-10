@@ -7920,45 +7920,6 @@ out:
 	return ret;
 }
 
-static int
-ufshcd_send_request_sense(struct ufs_hba *hba, struct scsi_device *sdp);
-
-static int ufshcd_clear_ua_wlun(struct ufs_hba *hba, u8 wlun)
-{
-	struct scsi_device *sdp;
-	unsigned long flags;
-	int ret = 0;
-
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	if (wlun  == UFS_UPIU_UFS_DEVICE_WLUN)
-		sdp = hba->sdev_ufs_device;
-	else if (wlun  == UFS_UPIU_RPMB_WLUN)
-		sdp = hba->sdev_rpmb;
-	else
-		return -EINVAL;
-
-	if (sdp) {
-		ret = scsi_device_get(sdp);
-		if (!ret && !scsi_device_online(sdp)) {
-			ret = -ENODEV;
-			scsi_device_put(sdp);
-		}
-	} else {
-		ret = -ENODEV;
-	}
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-	if (ret)
-		goto out_err;
-
-	ret = ufshcd_send_request_sense(hba, sdp);
-	scsi_device_put(sdp);
-out_err:
-	if (ret)
-		dev_err(hba->dev, "%s: UAC clear LU=%x ret = %d\n",
-				__func__, wlun, ret);
-	return ret;
-}
-
 /**
  * ufshcd_probe_hba - probe hba to detect device and initialize
  * @hba: per-adapter instance
@@ -9060,8 +9021,6 @@ int ufshcd_system_suspend(struct ufs_hba *hba)
 
 	if (!hba->is_powered)
 		return 0;
-
-	cancel_delayed_work_sync(&hba->rpm_dev_flush_recheck_work);
 
 	cancel_delayed_work_sync(&hba->rpm_dev_flush_recheck_work);
 

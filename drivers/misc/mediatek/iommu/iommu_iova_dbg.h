@@ -7,9 +7,7 @@
 
 #include <linux/types.h>
 #include <linux/atomic.h>
-#include <linux/iommu.h>
 #include <linux/spinlock.h>
-#include <dt-bindings/memory/mtk-memory-port.h>
 #include <linux/iova.h>
 
 struct iova_info {

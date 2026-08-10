@@ -7,7 +7,6 @@
 #define _DT_BINDINGS_MEMORY_MT8173_LARB_PORT_H_
 
 #include <dt-bindings/memory/mtk-memory-port.h>
-#include <dt-bindings/memory/mtk-smi-larb-port.h>
 
 #define M4U_LARB0_ID			0
 #define M4U_LARB1_ID			1

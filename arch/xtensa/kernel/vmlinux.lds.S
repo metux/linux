@@ -125,7 +125,7 @@ SECTIONS
     SCHED_TEXT
     CPUIDLE_TEXT
     LOCK_TEXT
-
+    *(.fixup)
   }
   _etext = .;
   PROVIDE (etext = .);
@@ -133,10 +133,6 @@ SECTIONS
   . = ALIGN(16);
 
   RO_DATA(4096)
-
-  /*  Relocation table */
-
-  .fixup   : { *(.fixup) }
 
   /* Data section */
 
@@ -342,7 +338,7 @@ SECTIONS
 
   _xip_data_start = .;
   _sdata = .;
-  RW_DATA_SECTION(XCHAL_ICACHE_LINESIZE, PAGE_SIZE, THREAD_SIZE)
+  RW_DATA(XCHAL_ICACHE_LINESIZE, PAGE_SIZE, THREAD_SIZE)
   _edata = .;
   _xip_data_end = .;
 

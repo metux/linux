@@ -1631,8 +1631,6 @@ static void goya_init_golden_registers(struct hl_device *hdev)
 
 	WREG32(mmTPC_PLL_CLK_RLX_0, 0x200020);
 
-	WREG32(mmTPC_PLL_CLK_RLX_0, 0x200020);
-
 	goya->hw_cap_initialized |= HW_CAP_GOLDEN;
 }
 

@@ -1249,13 +1249,3 @@ int __init i915_global_active_init(void)
 	i915_global_register(&global.base);
 	return 0;
 }
-
-void i915_global_active_shrink(void)
-{
-	kmem_cache_shrink(global.slab_cache);
-}
-
-void i915_global_active_exit(void)
-{
-	kmem_cache_destroy(global.slab_cache);
-}

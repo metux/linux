@@ -60,8 +60,6 @@
 #include "gt/intel_rps.h"
 
 #include "i915_drv.h"
-#include "i915_gem_clflush.h"
-#include "i915_reset.h"
 #include "i915_trace.h"
 #include "intel_acpi.h"
 #include "intel_atomic.h"
@@ -2610,7 +2608,7 @@ static unsigned int intel_fb_modifier_to_tiling(u64 fb_modifier)
  * Since cache line pairs refers to horizontally adjacent cache lines,
  * each cache line in the CCS corresponds to an area of 32x16 cache
  * lines on the main surface. Since each pixel is 4 bytes, this gives
-* us a ratio of one byte in the CCS for each 8x16 pixels in the
+ * us a ratio of one byte in the CCS for each 8x16 pixels in the
  * main surface.
  */
 static const struct drm_format_info skl_ccs_formats[] = {
@@ -12968,7 +12966,7 @@ static void
 intel_dump_infoframe(struct drm_i915_private *dev_priv,
 		     const union hdmi_infoframe *frame)
 {
-	if ((drm_debug & DRM_UT_KMS) == 0)
+	if (!drm_debug_enabled(DRM_UT_KMS))
 		return;
 
 	hdmi_infoframe_log(KERN_DEBUG, dev_priv->drm.dev, frame);
@@ -13606,7 +13604,7 @@ pipe_config_infoframe_mismatch(struct drm_i915_private *dev_priv,
 			       const union hdmi_infoframe *b)
 {
 	if (fastset) {
-		if ((drm_debug & DRM_UT_KMS) == 0)
+		if (!drm_debug_enabled(DRM_UT_KMS))
 			return;
 
 		drm_dbg_kms(&dev_priv->drm,

@@ -729,10 +729,6 @@ static int igt_ctx_exec(void *arg)
 			intel_context_put(ce);
 			kernel_context_close(ctx);
 		}
-		ncontexts++;
-	}
-	pr_info("Submitted %lu contexts (across %u engines), filling %lu dwords\n",
-		ncontexts, RUNTIME_INFO(i915)->num_engines, ndwords);
 
 		pr_info("Submitted %lu contexts to %s, filling %lu dwords\n",
 			ncontexts, engine->name, ndwords);

@@ -57,6 +57,7 @@ int live_rc6_manual(void *arg)
 	msleep(1); /* wakeup is not immediate, takes about 100us on icl */
 
 	res[0] = rc6_residency(rc6);
+
 	dt = ktime_get();
 	rc0_power = librapl_energy_uJ();
 	msleep(250);

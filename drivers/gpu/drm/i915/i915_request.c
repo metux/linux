@@ -55,11 +55,6 @@ static struct i915_global_request {
 	struct kmem_cache *slab_execute_cbs;
 } global;
 
-static struct i915_global_request {
-	struct kmem_cache *slab_requests;
-	struct kmem_cache *slab_dependencies;
-} global;
-
 static const char *i915_fence_get_driver_name(struct dma_fence *fence)
 {
 	return dev_name(to_request(fence)->engine->i915->drm.dev);
@@ -771,21 +766,6 @@ request_alloc_slow(struct intel_timeline *tl,
 out:
 	return kmem_cache_alloc(global.slab_requests, gfp);
 }
-
-static int add_timeline_barrier(struct i915_request *rq)
-{
-	return i915_request_await_active_request(rq, &rq->timeline->barrier);
-}
-
-/**
- * i915_request_alloc - allocate a request structure
- *
- * @engine: engine that we wish to issue the request on.
- * @ctx: context that the request will be associated with.
- *
- * Returns a pointer to the allocated request if successful,
- * or an error code if not.
- */
 
 static void __i915_request_ctor(void *arg)
 {
@@ -1914,16 +1894,4 @@ int __init i915_global_request_init(void)
 err_requests:
 	kmem_cache_destroy(global.slab_requests);
 	return -ENOMEM;
-}
-
-void i915_global_request_shrink(void)
-{
-	kmem_cache_shrink(global.slab_dependencies);
-	kmem_cache_shrink(global.slab_requests);
-}
-
-void i915_global_request_exit(void)
-{
-	kmem_cache_destroy(global.slab_dependencies);
-	kmem_cache_destroy(global.slab_requests);
 }

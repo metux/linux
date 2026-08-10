@@ -694,7 +694,6 @@ static void altera_pcie_irq_teardown(struct altera_pcie *pcie)
 
 static int altera_pcie_parse_dt(struct altera_pcie *pcie)
 {
-	struct device *dev = &pcie->pdev->dev;
 	struct platform_device *pdev = pcie->pdev;
 
 	pcie->cra_base = devm_platform_ioremap_resource_byname(pdev, "Cra");

@@ -345,7 +345,9 @@ static int pwm_fan_probe(struct platform_device *pdev)
 		return ret;
 	}
 	timer_setup(&ctx->rpm_timer, sample_timer, 0);
-	devm_add_action_or_reset(dev, pwm_fan_pwm_disable, ctx);
+	ret = devm_add_action_or_reset(dev, pwm_fan_pwm_disable, ctx);
+	if (ret)
+		return ret;
 
 	of_property_read_u32(dev->of_node, "pulses-per-revolution", &ppr);
 	ctx->pulses_per_revolution = ppr;

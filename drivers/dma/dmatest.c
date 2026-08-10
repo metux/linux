@@ -581,6 +581,7 @@ static int dmatest_func(void *data)
 	enum dma_ctrl_flags 	flags;
 	u8			*pq_coefs = NULL;
 	int			ret;
+	unsigned int 		buf_size;
 	struct dmatest_data	*src;
 	struct dmatest_data	*dst;
 	int			i;
@@ -652,49 +653,11 @@ static int dmatest_func(void *data)
 		goto err_free_coefs;
 	}
 
-	src->aligned = kcalloc(src->cnt + 1, sizeof(u8 *), GFP_KERNEL);
-	if (!src->aligned)
+	if (dmatest_alloc_test_data(src, buf_size, align) < 0)
 		goto err_free_coefs;
 
-	src->raw = kcalloc(src->cnt + 1, sizeof(u8 *), GFP_KERNEL);
-	if (!src->raw)
-		goto err_usrcs;
-
-	for (i = 0; i < src->cnt; i++) {
-		src->raw[i] = kmalloc(params->buf_size + align,
-					   GFP_KERNEL);
-		if (!src->raw[i])
-			goto err_srcbuf;
-
-		/* align srcs to alignment restriction */
-		if (align)
-			src->aligned[i] = PTR_ALIGN(src->raw[i], align);
-		else
-			src->aligned[i] = src->raw[i];
-	}
-	src->aligned[i] = NULL;
-
-	dst->aligned = kcalloc(dst->cnt + 1, sizeof(u8 *), GFP_KERNEL);
-	if (!dst->aligned)
-		goto err_dsts;
-
-	dst->raw = kcalloc(dst->cnt + 1, sizeof(u8 *), GFP_KERNEL);
-	if (!dst->raw)
-		goto err_udsts;
-
-	for (i = 0; i < dst->cnt; i++) {
-		dst->raw[i] = kmalloc(params->buf_size + align,
-					   GFP_KERNEL);
-		if (!dst->raw[i])
-			goto err_dstbuf;
-
-		/* align dsts to alignment restriction */
-		if (align)
-			dst->aligned[i] = PTR_ALIGN(dst->raw[i], align);
-		else
-			dst->aligned[i] = dst->raw[i];
-	}
-	dst->aligned[i] = NULL;
+	if (dmatest_alloc_test_data(dst, buf_size, align) < 0)
+		goto err_src;
 
 	set_user_nice(current, 10);
 
@@ -749,8 +712,8 @@ static int dmatest_func(void *data)
 			src->off = 0;
 			dst->off = 0;
 		} else {
-			src->off = dmatest_random() % (params->buf_size - len + 1);
-			dst->off = dmatest_random() % (params->buf_size - len + 1);
+			src->off = dmatest_random() % (buf_size - len + 1);
+			dst->off = dmatest_random() % (buf_size - len + 1);
 
 			src->off = (src->off >> align) << align;
 			dst->off = (dst->off >> align) << align;
@@ -759,9 +722,9 @@ static int dmatest_func(void *data)
 		if (!params->noverify) {
 			start = ktime_get();
 			dmatest_init_srcs(src->aligned, src->off, len,
-					  params->buf_size, is_memset);
+					  buf_size, is_memset);
 			dmatest_init_dsts(dst->aligned, dst->off, len,
-					  params->buf_size, is_memset);
+					  buf_size, is_memset);
 
 			diff = ktime_sub(ktime_get(), start);
 			filltime = ktime_add(filltime, diff);
@@ -776,7 +739,7 @@ static int dmatest_func(void *data)
 			continue;
 		}
 
-		um->len = params->buf_size;
+		um->len = buf_size;
 		for (i = 0; i < src->cnt; i++) {
 			void *buf = src->aligned[i];
 			struct page *pg = virt_to_page(buf);
@@ -834,7 +797,6 @@ static int dmatest_func(void *data)
 		}
 
 		if (!tx) {
-			dmaengine_unmap_put(um);
 			result("prep error", total_tests, src->off,
 			       dst->off, len, ret);
 			msleep(100);
@@ -849,13 +811,11 @@ static int dmatest_func(void *data)
 		cookie = tx->tx_submit(tx);
 
 		if (dma_submit_error(cookie)) {
-			dmaengine_unmap_put(um);
 			result("submit error", total_tests, src->off,
 			       dst->off, len, ret);
 			msleep(100);
 			goto error_unmap_continue;
 		}
-		dma_async_issue_pending(chan);
 
 		if (params->polled) {
 			status = dma_sync_wait(chan, cookie);
@@ -885,8 +845,7 @@ static int dmatest_func(void *data)
 			       "completion error status" :
 			       "completion busy status", total_tests, src->off,
 			       dst->off, len, ret);
-			failed_tests++;
-			continue;
+			goto error_unmap_continue;
 		}
 
 		dmaengine_unmap_put(um);
@@ -905,7 +864,7 @@ static int dmatest_func(void *data)
 				src->off + len, src->off,
 				PATTERN_SRC | PATTERN_COPY, true, is_memset);
 		error_count += dmatest_verify(src->aligned, src->off + len,
-				params->buf_size, src->off + len,
+				buf_size, src->off + len,
 				PATTERN_SRC, true, is_memset);
 
 		pr_debug("%s: verifying dest buffer...\n", current->comm);
@@ -917,7 +876,7 @@ static int dmatest_func(void *data)
 				PATTERN_SRC | PATTERN_COPY, false, is_memset);
 
 		error_count += dmatest_verify(dst->aligned, dst->off + len,
-				params->buf_size, dst->off + len,
+				buf_size, dst->off + len,
 				PATTERN_DST, false, is_memset);
 
 		diff = ktime_sub(ktime_get(), start);
@@ -947,19 +906,10 @@ error_unmap_continue:
 	kfree(dma_pq);
 err_srcs_array:
 	kfree(srcs);
-err_dstbuf:
-	for (i = 0; dst->raw[i]; i++)
-		kfree(dst->raw[i]);
-	kfree(dst->raw);
-err_udsts:
-	kfree(dst->aligned);
-err_dsts:
-err_srcbuf:
-	for (i = 0; src->raw[i]; i++)
-		kfree(src->raw[i]);
-	kfree(src->raw);
-err_usrcs:
-	kfree(src->aligned);
+err_dst:
+	dmatest_free_test_data(dst);
+err_src:
+	dmatest_free_test_data(src);
 err_free_coefs:
 	kfree(pq_coefs);
 err_thread_type:

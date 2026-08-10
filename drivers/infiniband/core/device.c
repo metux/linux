@@ -1692,14 +1692,7 @@ static int assign_client_id(struct ib_client *client)
 	 * achieve this we assign client_ids so they are sorted in
 	 * registration order.
 	 */
-	if (list_empty(&client_list)) {
-		client->client_id = 0;
-	} else {
-		struct ib_client *last;
-
-		last = list_last_entry(&client_list, struct ib_client, list);
-		client->client_id = last->client_id + 1;
-	}
+	client->client_id = highest_client_id;
 	ret = xa_insert(&clients, client->client_id, client, GFP_KERNEL);
 	if (ret)
 		goto out;

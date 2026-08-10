@@ -104,12 +104,6 @@ static __always_inline bool kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 		return false;
 }
 
-extern __visible void kvm_async_pf_vector(void);
-#ifdef CONFIG_TRACING
-#define trace_kvm_async_pf_vector kvm_async_pf_vector
-#endif
-__visible void __irq_entry kvm_async_pf_intr(struct pt_regs *regs);
-
 #ifdef CONFIG_PARAVIRT_SPINLOCKS
 void __init kvm_spinlock_init(void);
 #else /* !CONFIG_PARAVIRT_SPINLOCKS */

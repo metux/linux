@@ -1363,11 +1363,6 @@ static struct bd718xx_regulator_data bd71837_regulators[] = {
 	},
 };
 
-struct bd718xx_pmic_inits {
-	const struct bd718xx_regulator_data *r_datas;
-	unsigned int r_amount;
-};
-
 static void mark_hw_controlled(struct device *dev, struct device_node *np,
 			       struct bd718xx_regulator_data *reg_data,
 			       unsigned int num_reg_data, int *info)
@@ -1413,18 +1408,7 @@ static int bd718xx_probe(struct platform_device *pdev)
 {
 	struct bd718xx *mfd;
 	struct regulator_config config = { 0 };
-	struct bd718xx_pmic_inits pmic_regulators[ROHM_CHIP_TYPE_AMOUNT] = {
-		[ROHM_CHIP_TYPE_BD71837] = {
-			.r_datas = bd71837_regulators,
-			.r_amount = ARRAY_SIZE(bd71837_regulators),
-		},
-		[ROHM_CHIP_TYPE_BD71847] = {
-			.r_datas = bd71847_regulators,
-			.r_amount = ARRAY_SIZE(bd71847_regulators),
-		},
-	};
-
-	int i, j, err, omot_enable;
+	int i, j, err, omit_enable;
 	bool use_snvs;
 	struct bd718xx_regulator_data *reg_data;
 	unsigned int num_reg_data;
@@ -1438,8 +1422,20 @@ static int bd718xx_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	if (chip >= ROHM_CHIP_TYPE_AMOUNT || chip < 0 ||
-	    !pmic_regulators[chip].r_datas) {
+	switch (chip) {
+	case ROHM_CHIP_TYPE_BD71837:
+		reg_data = bd71837_regulators;
+		num_reg_data = ARRAY_SIZE(bd71837_regulators);
+		swops = &bd71837_swcontrol_ops[0];
+		hwops = &bd71837_hwcontrol_ops[0];
+		break;
+	case ROHM_CHIP_TYPE_BD71847:
+		reg_data = bd71847_regulators;
+		num_reg_data = ARRAY_SIZE(bd71847_regulators);
+		swops = &bd71847_swcontrol_ops[0];
+		hwops = &bd71847_hwcontrol_ops[0];
+		break;
+	default:
 		dev_err(&pdev->dev, "Unsupported chip type\n");
 		err = -EINVAL;
 		goto err;
@@ -1496,14 +1492,14 @@ static int bd718xx_probe(struct platform_device *pdev)
 	get_hw_controlled_regulators(pdev->dev.parent, reg_data, num_reg_data,
 				     &omit_enable);
 
-	for (i = 0; i < pmic_regulators[chip].r_amount; i++) {
+	for (i = 0; i < num_reg_data; i++) {
 
 		struct regulator_desc *desc;
 		struct regulator_dev *rdev;
 		struct bd718xx_regulator_data *r;
 		int no_enable_control = omit_enable & (1 << i);
 
-		r = &pmic_regulators[chip].r_datas[i];
+		r = &reg_data[i];
 		desc = &r->desc;
 
 		if (no_enable_control)

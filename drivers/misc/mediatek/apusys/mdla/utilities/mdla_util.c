@@ -162,19 +162,16 @@ static bool mdla_util_pmu_addr_is_invalid(struct apusys_cmd_handle *apusys_hd)
 		    !apusys_hd->cmdbufs[CMD_PMU_BUF_1_IDX].kva) {
 			return true;
 		}
-		mdla_pmu_debug("pmu kva: buf0 = %08llx, buf1 = %08llx
-",
+		mdla_pmu_debug("pmu kva: buf0 = %08llx, buf1 = %08llx\n",
 			       (u64)apusys_hd->cmdbufs[CMD_PMU_BUF_0_IDX].kva,
 			       (u64)apusys_hd->cmdbufs[CMD_PMU_BUF_1_IDX].kva);
 	} else {
-		mdla_pmu_debug("pmu kva: buf0 = %08llx
-",
+		mdla_pmu_debug("pmu kva: buf0 = %08llx\n",
 			       (u64)apusys_hd->cmdbufs[CMD_PMU_BUF_0_IDX].kva);
 	}
 
 	return false;
 }
-
 
 static bool apusys_pmu_support;
 

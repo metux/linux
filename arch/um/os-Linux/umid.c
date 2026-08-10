@@ -97,7 +97,7 @@ static int remove_files_and_dir(char *dir)
 	while ((ent = readdir(directory)) != NULL) {
 		if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, ".."))
 			continue;
-		len = strlen(dir) + sizeof("/") + strlen(ent->d_name) + 1;
+		len = strlen(dir) + strlen("/") + strlen(ent->d_name) + 1;
 		if (len > sizeof(file)) {
 			ret = -E2BIG;
 			goto out;
@@ -143,15 +143,7 @@ static inline int is_umdir_used(char *dir)
 	if (!file)
 		return -ENOMEM;
 
-	filelen = strlen(file);
-
-	n = snprintf(file, filelen, "%s/pid", dir);
-	if (n >= filelen) {
-		printk(UM_KERN_ERR "is_umdir_used - pid filename too long
-");
-		err = -E2BIG;
-		goto out;
-	}
+	snprintf(file, filelen, "%s/pid", dir);
 
 	dead = 0;
 	fd = open(file, O_RDONLY);
@@ -159,8 +151,7 @@ static inline int is_umdir_used(char *dir)
 		fd = -errno;
 		if (fd != -ENOENT) {
 			printk(UM_KERN_ERR "is_umdir_used : couldn't open pid "
-			       "file '%s', err = %d
-", file, -fd);
+			       "file '%s', err = %d\n", file, -fd);
 		}
 		goto out;
 	}
@@ -169,27 +160,23 @@ static inline int is_umdir_used(char *dir)
 	n = read(fd, pid, sizeof(pid));
 	if (n < 0) {
 		printk(UM_KERN_ERR "is_umdir_used : couldn't read pid file "
-		       "'%s', err = %d
-", file, errno);
+		       "'%s', err = %d\n", file, errno);
 		goto out_close;
 	} else if (n == 0) {
 		printk(UM_KERN_ERR "is_umdir_used : couldn't read pid file "
-		       "'%s', 0-byte read
-", file);
+		       "'%s', 0-byte read\n", file);
 		goto out_close;
 	}
 
-	p = strtoul(pid, &end, 0)
+	p = strtoul(pid, &end, 0);
 	if (end == pid) {
 		printk(UM_KERN_ERR "is_umdir_used : couldn't parse pid file "
-		       "'%s', errno = %d
-", file, errno);
+		       "'%s', errno = %d\n", file, errno);
 		goto out_close;
 	}
 
 	if ((kill(p, 0) == 0) || (errno != ESRCH)) {
-		printk(UM_KERN_ERR "umid "%s" is already in use by pid %d
-",
+		printk(UM_KERN_ERR "umid \"%s\" is already in use by pid %d\n",
 		       umid, p);
 		return 1;
 	}
@@ -199,7 +186,7 @@ out_close:
 out:
 	free(file);
 	return 0;
-}}
+}
 
 /*
  * Try to remove the directory @dir unless it's in use.
@@ -236,18 +223,15 @@ static void __init create_pid_file(void)
 
 	fd = open(file, O_RDWR | O_CREAT | O_EXCL, 0644);
 	if (fd < 0) {
-		printk(UM_KERN_ERR "Open of machine pid file "%s" failed: "
-		       "%s
-", file, strerror(errno));
+		printk(UM_KERN_ERR "Open of machine pid file \"%s\" failed: "
+		       "%s\n", file, strerror(errno));
 		goto out;
 	}
 
-	snprintf(pid, sizeof(pid), "%d
-", getpid());
+	snprintf(pid, sizeof(pid), "%d\n", getpid());
 	n = write(fd, pid, strlen(pid));
 	if (n != strlen(pid))
-		printk(UM_KERN_ERR "Write of pid file failed - err = %d
-",
+		printk(UM_KERN_ERR "Write of pid file failed - err = %d\n",
 		       errno);
 
 	close(fd);
@@ -407,13 +391,19 @@ __uml_setup("uml_dir=", set_uml_dir,
 
 static void remove_umid_dir(void)
 {
-	char dir[strlen(uml_dir) + UMID_LEN + 1], err;
+	char *dir, err;
+
+	dir = malloc(strlen(uml_dir) + UMID_LEN + 1);
+	if (!dir)
+		return;
 
 	sprintf(dir, "%s%s", uml_dir, umid);
 	err = remove_files_and_dir(dir);
 	if (err)
 		os_warn("%s - remove_files_and_dir failed with err = %d\n",
 			__func__, err);
+
+	free(dir);
 }
 
 __uml_exitcall(remove_umid_dir);

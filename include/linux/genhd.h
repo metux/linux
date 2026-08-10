@@ -255,18 +255,6 @@ static inline bool disk_part_scan_enabled(struct gendisk *disk)
 		!(disk->flags & GENHD_FL_NO_PART_SCAN);
 }
 
-static inline bool disk_has_partitions(struct gendisk *disk)
-{
-	bool ret = false;
-
-	rcu_read_lock();
-	if (rcu_dereference(disk->part_tbl)->len > 1)
-		ret = true;
-	rcu_read_unlock();
-
-	return ret;
-}
-
 static inline dev_t disk_devt(struct gendisk *disk)
 {
 	return MKDEV(disk->major, disk->first_minor);
@@ -312,6 +300,7 @@ extern void disk_part_iter_init(struct disk_part_iter *piter,
 				 struct gendisk *disk, unsigned int flags);
 extern struct hd_struct *disk_part_iter_next(struct disk_part_iter *piter);
 extern void disk_part_iter_exit(struct disk_part_iter *piter);
+extern bool disk_has_partitions(struct gendisk *disk);
 
 /* block/genhd.c */
 extern void device_add_disk(struct device *parent, struct gendisk *disk,

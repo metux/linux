@@ -333,11 +333,6 @@ static int gic_retrigger(struct irq_data *data)
 	return !gic_irq_set_irqchip_state(data, IRQCHIP_STATE_PENDING, true);
 }
 
-static int gic_retrigger(struct irq_data *data)
-{
-	return !gic_irq_set_irqchip_state(data, IRQCHIP_STATE_PENDING, true);
-}
-
 static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 {
 	u32 irqstat, irqnr;

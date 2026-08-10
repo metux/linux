@@ -806,9 +806,10 @@ int serdev_controller_add_platform(struct serdev_controller *ctrl, bool platform
 	if (platform)
 		ret_platform = platform_serdev_register_devices(ctrl);
 	if (ret_of && ret_acpi && ret_platform) {
-		dev_dbg(&ctrl->dev, "no devices registered: of:%pe acpi:%pe "
-				    "platform:%d\n",
-				    ret_of, ret_acpi, ret_platform);
+		dev_dbg(&ctrl->dev,
+			"no devices registered: of:%pe acpi:%pe platform:%pe\n",
+			ERR_PTR(ret_of), ERR_PTR(ret_acpi),
+			ERR_PTR(ret_platform));
 		ret = -ENODEV;
 		goto err_rpm_disable;
 	}

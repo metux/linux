@@ -13,11 +13,8 @@
 #include <linux/types.h>
 
 #include <asm/barrier.h>
-#include <asm/lse.h>
-
-#ifdef __KERNEL__
-
 #include <asm/cmpxchg.h>
+#include <asm/lse.h>
 
 #define ATOMIC_OP(op)							\
 static __always_inline void arch_##op(int i, atomic_t *v)		\
@@ -228,5 +225,4 @@ static __always_inline long arch_atomic64_dec_if_positive(atomic64_t *v)
 
 #define ARCH_ATOMIC
 
-#endif
-#endif
+#endif /* __ASM_ATOMIC_H */

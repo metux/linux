@@ -52,6 +52,11 @@
 #define LPFC_IRQ_CHANN_MAX	256
 #define LPFC_IRQ_CHANN_DEF	LPFC_IRQ_CHANN_MIN
 
+/* FCP MQ queue count limiting */
+#define LPFC_FCP_MQ_THRESHOLD_MIN	0
+#define LPFC_FCP_MQ_THRESHOLD_MAX	256
+#define LPFC_FCP_MQ_THRESHOLD_DEF	8
+
 /*
  * Provide the default FCF Record attributes used by the driver
  * when nonFIP mode is configured and there is no other default

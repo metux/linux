@@ -672,25 +672,6 @@ static umode_t queue_attr_visible(struct kobject *kobj, struct attribute *attr,
 		(!q->mq_ops || !q->mq_ops->timeout))
 			return 0;
 
-	return attr->mode;
-}
-
-static struct attribute_group queue_attr_group = {
-	.attrs = queue_attrs,
-	.is_visible = queue_attr_visible,
-};
-
-
-static umode_t queue_attr_visible(struct kobject *kobj, struct attribute *attr,
-				int n)
-{
-	struct request_queue *q =
-		container_of(kobj, struct request_queue, kobj);
-
-	if (attr == &queue_io_timeout_entry.attr &&
-		(!q->mq_ops || !q->mq_ops->timeout))
-			return 0;
-
 	if ((attr == &queue_max_open_zones_entry.attr ||
 	     attr == &queue_max_active_zones_entry.attr) &&
 	    !blk_queue_is_zoned(q))

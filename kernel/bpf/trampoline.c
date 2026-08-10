@@ -492,7 +492,6 @@ void bpf_trampoline_put(struct bpf_trampoline *tr)
 	 * fexit progs. The fentry-only trampoline will be freed via
 	 * multiple rcu callbacks.
 	 */
-	trace_android_vh_set_memory_nx((unsigned long)tr->image, 1);
 	hlist_del(&tr->hlist);
 	kfree(tr);
 out:

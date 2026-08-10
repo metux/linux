@@ -1310,55 +1310,6 @@ has_cpuid_feature(const struct arm64_cpu_capabilities *entry, int scope)
 static cpumask_t fake_cpu_32bit_el0_mask;
 #endif
 
-static int enable_mismatched_32bit_el0(unsigned int cpu)
-{
-	static int lucky_winner = -1;
-
-	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, cpu);
-	bool cpu_32bit = id_aa64pfr0_32bit_el0(info->reg_id_aa64pfr0);
-
-	if (cpu_32bit) {
-#if defined(CONFIG_FAKE_ASYM32_CPU)
-		if (!cpumask_test_cpu(cpu, &fake_cpu_32bit_el0_mask))
-			return 0;
-#endif
-		cpumask_set_cpu(cpu, cpu_32bit_el0_mask);
-		static_branch_enable_cpuslocked(&arm64_mismatched_32bit_el0);
-	}
-
-	if (cpumask_test_cpu(0, cpu_32bit_el0_mask) == cpu_32bit)
-		return 0;
-
-	if (lucky_winner >= 0)
-		return 0;
-
-	/*
-	 * We've detected a mismatch. We need to keep one of our CPUs with
-	 * 32-bit EL0 online so that is_cpu_allowed() doesn't end up rejecting
-	 * every CPU in the system for a 32-bit task.
-	 */
-	lucky_winner = cpu_32bit ? cpu : cpumask_any_and(cpu_32bit_el0_mask,
-							 cpu_active_mask);
-	get_cpu_device(lucky_winner)->offline_disabled = true;
-	pr_info("Asymmetric 32-bit EL0 support detected on CPU %u; CPU hot-unplug disabled on CPU %u\n",
-		cpu, lucky_winner);
-	return 0;
-}
-
-static int __init init_32bit_el0_mask(void)
-{
-	if (!allow_mismatched_32bit_el0)
-		return 0;
-
-	if (!zalloc_cpumask_var(&cpu_32bit_el0_mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	return cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
-				 "arm64/mismatched_32bit_el0:online",
-				 enable_mismatched_32bit_el0, NULL);
-}
-subsys_initcall_sync(init_32bit_el0_mask);
-
 const struct cpumask *system_32bit_el0_cpumask(void)
 {
 	if (!system_supports_32bit_el0())
@@ -1943,7 +1894,6 @@ static void bti_enable(const struct arm64_cpu_capabilities *__unused)
 #ifdef CONFIG_ARM64_MTE
 static void cpu_enable_mte(struct arm64_cpu_capabilities const *cap)
 {
-	static bool cleared_zero_page = false;
 	sysreg_clear_set(sctlr_el1, 0, SCTLR_ELx_ATA | SCTLR_EL1_ATA0);
 
 	mte_cpu_setup();
@@ -1952,10 +1902,8 @@ static void cpu_enable_mte(struct arm64_cpu_capabilities const *cap)
 	 * Clear the tags in the zero page. This needs to be done via the
 	 * linear map which has the Tagged attribute.
 	 */
-	if (!cleared_zero_page) {
-		cleared_zero_page = true;
+	if (!test_and_set_bit(PG_mte_tagged, &ZERO_PAGE(0)->flags))
 		mte_clear_page_tags(lm_alias(empty_zero_page));
-	}
 
 	kasan_init_hw_tags_cpu();
 }
@@ -3039,6 +2987,10 @@ static int enable_mismatched_32bit_el0(unsigned int cpu)
 	bool cpu_32bit = id_aa64pfr0_32bit_el0(info->reg_id_aa64pfr0);
 
 	if (cpu_32bit) {
+#if defined(CONFIG_FAKE_ASYM32_CPU)
+		if (!cpumask_test_cpu(cpu, &fake_cpu_32bit_el0_mask))
+			return 0;
+#endif
 		cpumask_set_cpu(cpu, cpu_32bit_el0_mask);
 		static_branch_enable_cpuslocked(&arm64_mismatched_32bit_el0);
 	}

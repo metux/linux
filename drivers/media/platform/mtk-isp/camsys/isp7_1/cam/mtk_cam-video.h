@@ -18,6 +18,7 @@
 #include "mtk_camera-videodev2.h"
 
 #define MAX_PLANE_NUM 3
+#define MAX_SUBSAMPLE_PLANE_NUM 8
 
 struct mtk_cam_device;
 struct mtk_cam_resource;

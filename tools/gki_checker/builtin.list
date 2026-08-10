@@ -1970,6 +1970,7 @@ mm/list_lru.o
 mm/maccess.o
 mm/madvise.o
 mm/memblock.o
+mm/memcontrol.o
 mm/memfd.o
 mm/memory_hotplug.o
 mm/memory.o
@@ -1987,6 +1988,7 @@ mm/mremap.o
 mm/msync.o
 mm/oom_kill.o
 mm/page_alloc.o
+mm/page_counter.o
 mm/page_ext.o
 mm/page_io.o
 mm/page_isolation.o
@@ -2007,6 +2009,7 @@ mm/slab_common.o
 mm/slub.o
 mm/sparse.o
 mm/sparse-vmemmap.o
+mm/swap_cgroup.o
 mm/swapfile.o
 mm/swap.o
 mm/swap_slots.o
@@ -2017,6 +2020,7 @@ mm/userfaultfd.o
 mm/util.o
 mm/vmacache.o
 mm/vmalloc.o
+mm/vmpressure.o
 mm/vmscan.o
 mm/vmstat.o
 mm/workingset.o
@@ -2100,6 +2104,7 @@ net/core/link_watch.o
 net/core/neighbour.o
 net/core/netevent.o
 net/core/net_namespace.o
+net/core/netprio_cgroup.o
 net/core/net-procfs.o
 net/core/net-sysfs.o
 net/core/net-traces.o

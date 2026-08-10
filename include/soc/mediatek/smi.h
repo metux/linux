@@ -8,10 +8,8 @@
 
 #include <linux/bitops.h>
 #include <linux/device.h>
-#include <dt-bindings/memory/mtk-smi-larb-port.h>
 
 #if IS_ENABLED(CONFIG_MTK_SMI)
-
 
 #define MTK_SMI_MMU_EN(port)	BIT(port)
 

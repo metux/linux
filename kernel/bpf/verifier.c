@@ -5990,7 +5990,6 @@ static int sanitize_ptr_alu(struct bpf_verifier_env *env,
 			    const struct bpf_reg_state *off_reg,
 			    struct bpf_reg_state *dst_reg,
 			    struct bpf_sanitize_info *info,
-			    struct bpf_insn_aux_data *tmp_aux,
 			    const bool commit_window)
 {
 	struct bpf_insn_aux_data *aux = commit_window ? cur_aux(env) : &info->aux;
@@ -6023,7 +6022,7 @@ static int sanitize_ptr_alu(struct bpf_verifier_env *env,
 				     (opcode == BPF_SUB && !off_is_neg);
 	}
 
-	err = retrieve_ptr_limit(ptr_reg, off_reg, &alu_limit, info->mask_to_left);
+	err = retrieve_ptr_limit(ptr_reg, &alu_limit, info->mask_to_left);
 	if (err < 0)
 		return err;
 
@@ -6031,9 +6030,8 @@ static int sanitize_ptr_alu(struct bpf_verifier_env *env,
 		/* In commit phase we narrow the masking window based on
 		 * the observed pointer move after the simulated operation.
 		 */
-		alu_state = tmp_aux->alu_state;
 		alu_state = info->aux.alu_state;
-		alu_limit = abs(tmp_aux->alu_limit - alu_limit);
+		alu_limit = abs(info->aux.alu_limit - alu_limit);
 	} else {
 		alu_state  = off_is_neg ? BPF_ALU_NEG_VALUE : 0;
 		alu_state |= off_is_imm ? BPF_ALU_IMMEDIATE : 0;
@@ -6219,7 +6217,6 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 	u64 umin_val = off_reg->umin_value, umax_val = off_reg->umax_value,
 	    umin_ptr = ptr_reg->umin_value, umax_ptr = ptr_reg->umax_value;
 	struct bpf_sanitize_info info = {};
-	struct bpf_insn_aux_data tmp_aux = {};
 	u8 opcode = BPF_OP(insn->code);
 	u32 dst = insn->dst_reg;
 	int ret;
@@ -6428,23 +6425,6 @@ reject:
 				       &info, true);
 		if (ret < 0)
 			return sanitize_err(env, insn, ret, off_reg, dst_reg);
-	}
-
-	/* For unprivileged we require that resulting offset must be in bounds
-	 * in order to be able to sanitize access later on.
-	 */
-	if (!env->bypass_spec_v1) {
-		if (dst_reg->type == PTR_TO_MAP_VALUE &&
-		    check_map_access(env, dst, dst_reg->off, 1, false)) {
-			verbose(env, "R%d pointer arithmetic of map value goes out of range, "
-				"prohibited for !root\n", dst);
-			return -EACCES;
-		} else if (dst_reg->type == PTR_TO_STACK &&
-			   check_stack_access_for_ptr_arithmetic(
-				   env, dst, dst_reg, dst_reg->off +
-				   dst_reg->var_off.value)) {
-			return -EACCES;
-		}
 	}
 
 	return 0;

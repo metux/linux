@@ -6167,6 +6167,23 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 			return sanitize_err(env, insn, ret, off_reg, dst_reg);
 	}
 
+	/* For unprivileged we require that resulting offset must be in bounds
+	 * in order to be able to sanitize access later on.
+	 */
+	if (!env->bypass_spec_v1) {
+		if (dst_reg->type == PTR_TO_MAP_VALUE &&
+		    check_map_access(env, dst, dst_reg->off, 1, false)) {
+			verbose(env, "R%d pointer arithmetic of map value goes out of range, "
+				"prohibited for !root\n", dst);
+			return -EACCES;
+		} else if (dst_reg->type == PTR_TO_STACK &&
+			   check_stack_access_for_ptr_arithmetic(
+				   env, dst, dst_reg, dst_reg->off +
+				   dst_reg->var_off.value)) {
+			return -EACCES;
+		}
+	}
+
 	return 0;
 }
 

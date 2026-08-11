@@ -2258,24 +2258,6 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 #endif
 }
 
-static void ufs_mtk_setup_xfer_req(struct ufs_hba *hba, int tag,
-				   bool is_scsi)
-{
-	struct ufshcd_lrb *lrbp;
-	struct scsi_cmnd *cmd;
-
-	if (is_scsi) {
-		lrbp = &hba->lrb[tag];
-		cmd = lrbp->cmd;
-
-		if (!ufs_mtk_is_data_cmd(cmd))
-			return;
-
-		ufs_mtk_biolog_send_command(tag, cmd);
-		ufs_mtk_biolog_check(1);
-	}
-}
-
 static void ufs_mtk_event_notify(struct ufs_hba *hba,
 				 enum ufs_event_type evt, void *data)
 {

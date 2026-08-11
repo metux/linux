@@ -209,7 +209,6 @@ struct ufs_mtk_hw_ver {
 struct ufs_mtk_host {
 	struct phy *mphy;
 	struct regulator *reg_va09;
-	struct ufs_mtk_host_cfg *cfg;
 	struct reset_control *hci_reset;
 	struct reset_control *unipro_reset;
 	struct reset_control *crypto_reset;

@@ -852,20 +852,20 @@ static int record__open(struct record *rec)
 	 * event synthesis.
 	 */
 	if (opts->initial_delay || target__has_cpu(&opts->target)) {
-		pos = perf_evlist__get_tracking_event(evlist);
-		if (!evsel__is_dummy_event(pos)) {
-			/* Set up dummy event. */
-			if (perf_evlist__add_dummy(evlist))
-				return -ENOMEM;
-			pos = evlist__last(evlist);
-			perf_evlist__set_tracking_event(evlist, pos);
-		}
+		if (evlist__add_dummy(evlist))
+			return -ENOMEM;
 
+		/* Disable tracking of mmaps on lead event. */
+		pos = evlist__first(evlist);
+		pos->tracking = 0;
+		/* Set up dummy event. */
+		pos = evlist__last(evlist);
+		pos->tracking = 1;
 		/*
 		 * Enable the dummy event when the process is forked for
 		 * initial_delay, immediately for system wide.
 		 */
-		if (opts->initial_delay && !pos->immediate)
+		if (opts->initial_delay)
 			pos->core.attr.enable_on_exec = 1;
 		else
 			pos->immediate = 1;
@@ -2722,7 +2722,7 @@ int cmd_record(int argc, const char **argv)
 		record.opts.tail_synthesize = true;
 
 	if (rec->evlist->core.nr_entries == 0 &&
-	    __perf_evlist__add_default(rec->evlist, !record.opts.no_samples) < 0) {
+	    __evlist__add_default(rec->evlist, !record.opts.no_samples) < 0) {
 		pr_err("Not enough memory for event selector list\n");
 		goto out;
 	}

@@ -1633,7 +1633,7 @@ config MFD_TPS65217
 
 config MFD_TPS68470
 	bool "TI TPS68470 Power Management / LED chips"
-depends on ACPI && I2C=y
+	depends on ACPI && PCI && I2C=y
 	depends on I2C_DESIGNWARE_PLATFORM=y
 	select MFD_CORE
 	select REGMAP_I2C

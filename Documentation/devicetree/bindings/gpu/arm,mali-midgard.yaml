@@ -45,8 +45,6 @@ properties:
               - rockchip,rk3399-mali
           - const: arm,mali-t860
 
-          # "arm,mali-t624"
-          # "arm,mali-t628"
           # "arm,mali-t830"
           # "arm,mali-t880"
 

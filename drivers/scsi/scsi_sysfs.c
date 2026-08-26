@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * scsi_sysfs.c
  *
@@ -482,13 +482,13 @@ static void scsi_device_dev_release_usercontext(struct work_struct *work)
 
 	mutex_lock(&sdev->inquiry_mutex);
 	vpd_pg0 = rcu_replace_pointer(sdev->vpd_pg0, vpd_pg0,
-			   lockdep_is_held(&sdev->inquiry_mutex));
+				       lockdep_is_held(&sdev->inquiry_mutex));
 	vpd_pg80 = rcu_replace_pointer(sdev->vpd_pg80, vpd_pg80,
 				       lockdep_is_held(&sdev->inquiry_mutex));
 	vpd_pg83 = rcu_replace_pointer(sdev->vpd_pg83, vpd_pg83,
 				       lockdep_is_held(&sdev->inquiry_mutex));
 	vpd_pg89 = rcu_replace_pointer(sdev->vpd_pg89, vpd_pg89,
-			   lockdep_is_held(&sdev->inquiry_mutex));
+				       lockdep_is_held(&sdev->inquiry_mutex));
 	mutex_unlock(&sdev->inquiry_mutex);
 
 	if (vpd_pg0)

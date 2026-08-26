@@ -29,8 +29,6 @@
 #include <linux/phy.h>
 #include <linux/sfp.h>
 
-#define MDIO_AN_10GBT_CTRL_ADV_NBT_MASK	0x01e0
-
 #define MV_PHY_ALASKA_NBT_QUIRK_MASK	0xfffffffe
 #define MV_PHY_ALASKA_NBT_QUIRK_REV	(MARVELL_PHY_ID_88X3310 | 0xa)
 

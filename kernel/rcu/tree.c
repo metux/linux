@@ -585,7 +585,6 @@ unsigned long rcu_exp_batches_completed(void)
 EXPORT_SYMBOL_GPL(rcu_exp_batches_completed);
 
 /*
-/*
  * Return the root node of the rcu_state structure.
  */
 static struct rcu_node *rcu_get_root(void)

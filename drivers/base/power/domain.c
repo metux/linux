@@ -2012,7 +2012,7 @@ int pm_genpd_init(struct generic_pm_domain *genpd,
 			if (genpd_is_cpu_domain(genpd))
 				free_cpumask_var(genpd->cpus);
 			return ret;
-}
+		}
 	} else if (!gov && genpd->state_count > 1) {
 		pr_warn("%s: no governor for states\n", genpd->name);
 	}

@@ -702,10 +702,10 @@ static int __init einj_init(void)
 
 	debugfs_create_file("available_error_type", S_IRUSR, einj_debug_dir,
 			    NULL, &available_error_type_fops);
-	debugfs_create_file("error_type", S_IRUSR | S_IWUSR, einj_debug_dir,
-			    NULL, &error_type_fops);
-	debugfs_create_file("error_inject", S_IWUSR, einj_debug_dir,
-			    NULL, &error_inject_fops);
+	debugfs_create_file_unsafe("error_type", 0600, einj_debug_dir,
+				   NULL, &error_type_fops);
+	debugfs_create_file_unsafe("error_inject", 0200, einj_debug_dir,
+				   NULL, &error_inject_fops);
 
 	apei_resources_init(&einj_resources);
 	einj_exec_ctx_init(&ctx);

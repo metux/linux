@@ -3327,11 +3327,15 @@ hisi_sas_v3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		sha->sas_port[i] = &hisi_hba->port[i].sas_port;
 	}
 
-if (hisi_hba->prot_mask) {
+	if (hisi_hba->prot_mask) {
 		dev_info(dev, "Registering for DIF/DIX prot_mask=0x%x\n",
 			 prot_mask);
 		scsi_host_set_prot(hisi_hba->shost, prot_mask);
+		if (hisi_hba->prot_mask & HISI_SAS_DIX_PROT_MASK)
+			scsi_host_set_guard(hisi_hba->shost,
+					    SHOST_DIX_GUARD_CRC);
 	}
+
 	if (hisi_sas_debugfs_enable)
 		hisi_sas_debugfs_init(hisi_hba);
 
@@ -3351,14 +3355,6 @@ if (hisi_hba->prot_mask) {
 	if (rc)
 		goto err_out_register_ha;
 
-if (hisi_hba->prot_mask) {
-		dev_info(dev, "Registering for DIF/DIX prot_mask=0x%x\n",
-			 prot_mask);
-		scsi_host_set_prot(hisi_hba->shost, prot_mask);
-		if (hisi_hba->prot_mask & HISI_SAS_DIX_PROT_MASK)
-			scsi_host_set_guard(hisi_hba->shost,
-					    SHOST_DIX_GUARD_CRC);
-	}
 	scsi_scan_host(shost);
 
 	/*

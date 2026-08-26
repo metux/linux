@@ -2283,7 +2283,8 @@ lpfc_nvme_create_localport(struct lpfc_vport *vport)
  */
 static void
 lpfc_nvme_lport_unreg_wait(struct lpfc_vport *vport,
-			   struct lpfc_nvme_lport *lport)
+			   struct lpfc_nvme_lport *lport,
+			   struct completion *lport_unreg_cmp)
 {
 	u32 wait_tmo;
 	int ret, i, pending = 0;
@@ -2298,7 +2299,7 @@ lpfc_nvme_lport_unreg_wait(struct lpfc_vport *vport,
 	 */
 	wait_tmo = msecs_to_jiffies(LPFC_NVME_WAIT_TMO * 1000);
 	while (true) {
-		ret = wait_for_completion_timeout(lport->lport_unreg_cmp, wait_tmo);
+		ret = wait_for_completion_timeout(lport_unreg_cmp, wait_tmo);
 		if (unlikely(!ret)) {
 			pending = 0;
 			abts_scsi = 0;
@@ -2366,7 +2367,8 @@ lpfc_nvme_destroy_localport(struct lpfc_vport *vport)
 	/* Wait for completion.  This either blocks
 	 * indefinitely or succeeds
 	 */
-lpfc_nvme_lport_unreg_wait(vport, lport);
+	lpfc_nvme_lport_unreg_wait(vport, lport, &lport_unreg_cmp);
+	vport->localport = NULL;
 
 	/* Regardless of the unregister upcall response, clear
 	 * nvmei_support.  All rports are unregistered and the

@@ -57,7 +57,7 @@ static void mpage_end_io(struct bio *bio)
 	struct bio_vec *bv;
 	struct bvec_iter_all iter_all;
 
-if (trace_android_fs_dataread_end_enabled() &&
+	if (trace_android_fs_dataread_end_enabled() &&
 	    (bio_data_dir(bio) == READ)) {
 		struct page *first_page = bio->bi_io_vec[0].bv_page;
 

@@ -8,9 +8,10 @@
 #define PIPE_BUF_FLAG_ATOMIC	0x02	/* was atomically mapped */
 #define PIPE_BUF_FLAG_GIFT	0x04	/* page is a gift */
 #define PIPE_BUF_FLAG_PACKET	0x08	/* read() as a packet */
-#define PIPE_BUF_FLAG_WHOLE	0x10	/* read() must return entire buffer or error */
+#define PIPE_BUF_FLAG_CAN_MERGE	0x10	/* can merge buffers */
+#define PIPE_BUF_FLAG_WHOLE	0x20	/* read() must return entire buffer or error */
 #ifdef CONFIG_WATCH_QUEUE
-#define PIPE_BUF_FLAG_LOSS	0x20	/* Message loss happened after this buffer */
+#define PIPE_BUF_FLAG_LOSS	0x40	/* Message loss happened after this buffer */
 #endif
 
 /**

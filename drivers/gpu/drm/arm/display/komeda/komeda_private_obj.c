@@ -357,7 +357,7 @@ static int komeda_pipeline_obj_add(struct komeda_kms_dev *kms,
 		return -ENOMEM;
 
 	st->pipe = pipe;
-	drm_atomic_private_obj_init(&pipe->obj, &st->obj,
+	drm_atomic_private_obj_init(&kms->base, &pipe->obj, &st->obj,
 				    &komeda_pipeline_obj_funcs);
 
 	return 0;

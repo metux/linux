@@ -47,6 +47,7 @@
 		};
 
 		hda@3510000 {
+			nvidia,model = "jetson-xavier-hda";
 			status = "okay";
 		};
 
@@ -114,11 +115,6 @@
 		};
 
 		pwm@c340000 {
-			status = "okay";
-		};
-
-		hda@3510000 {
-			nvidia,model = "jetson-xavier-hda";
 			status = "okay";
 		};
 

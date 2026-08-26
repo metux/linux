@@ -67,11 +67,6 @@ extern void smp_init_cpus(void);
 extern void set_smp_ipi_range(int ipi_base, int nr_ipi);
 
 /*
- * Register IPI interrupts with the arch SMP code
- */
-extern void set_smp_ipi_range(int ipi_base, int nr_ipi);
-
-/*
  * Called from the secondary holding pen, this is the secondary CPU entry point.
  */
 asmlinkage void secondary_start_kernel(void);

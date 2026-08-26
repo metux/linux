@@ -45,7 +45,6 @@ typedef struct {
 typedef struct {
 	__u8 b[16];
 } uuid_t;
-
 #define	UUID_STRING_LEN		36
 
 /* Big exception to the "don't include kernel headers into userspace, which
@@ -1336,7 +1335,6 @@ static int do_tee_entry(const char *filename, void *symval, char *alias)
 		uuid.b[15]);
 
 	add_wildcard(alias);
-
 	return 1;
 }
 
@@ -1358,7 +1356,6 @@ static int do_wmi_entry(const char *filename, void *symval, char *alias)
 				filename);
 		return 0;
 	}
-
 	return 1;
 }
 

@@ -24,7 +24,6 @@
 static LIST_HEAD(clocks);
 static DEFINE_MUTEX(clocks_mutex);
 
-
 /*
  * Find the correct struct clk for the device and connection ID.
  * We do slightly fuzzy matching here:

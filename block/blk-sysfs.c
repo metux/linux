@@ -661,7 +661,6 @@ static struct attribute *queue_attrs[] = {
 #endif
 	NULL,
 };
-ATTRIBUTE_GROUPS(default);
 
 static umode_t queue_attr_visible(struct kobject *kobj, struct attribute *attr,
 				int n)
@@ -831,7 +830,6 @@ static const struct sysfs_ops queue_sysfs_ops = {
 
 struct kobj_type blk_queue_ktype = {
 	.sysfs_ops	= &queue_sysfs_ops,
-	.default_groups = default_groups,
 	.release	= blk_release_queue,
 };
 

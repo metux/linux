@@ -1939,8 +1939,8 @@ qla2x00_async_tm_cmd(fc_port_t *fcport, uint32_t flags, uint32_t lun,
 		lun = (uint16_t)tm_iocb->u.tmf.lun;
 
 		/* Issue Marker IOCB */
-qla2x00_marker(vha, vha->hw->base_qpair,
-		    sp->fcport->loop_id, lun,
+		qla2x00_marker(vha, vha->hw->base_qpair,
+		    fcport->loop_id, lun,
 		    flags == TCF_LUN_RESET ? MK_SYNC_ID_LUN : MK_SYNC_ID);
 	}
 

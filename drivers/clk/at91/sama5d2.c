@@ -259,11 +259,7 @@ static void __init sama5d2_pmc_setup(struct device_node *np)
 	parent_names[1] = "mainck";
 	parent_names[2] = "plladivck";
 	parent_names[3] = "utmick";
-parent_names[0] = slck_name;
-	parent_names[1] = "mainck";
-	parent_names[2] = "plladivck";
-	parent_names[3] = "utmick";
-	parent_names[4] = "mck";
+	parent_names[4] = "masterck";
 	parent_names[5] = "audiopll_pmcck";
 	for (i = 0; i < 3; i++) {
 		char name[6];

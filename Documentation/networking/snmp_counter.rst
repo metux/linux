@@ -364,6 +364,8 @@ time client replies ACK, this socket will get another chance to move
 to the accept queue.
 
 
+TCP Fast Open
+=============
 * TcpEstabResets
 
 Defined in `RFC1213 tcpEstabResets`_.
@@ -458,7 +460,7 @@ increase 1.
 
 
 TCP abort
-========
+=========
 * TcpExtTCPAbortOnData
 
 It means TCP layer has data in flight, but need to close the

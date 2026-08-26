@@ -107,7 +107,7 @@ void do_page_fault(unsigned long address, struct pt_regs *regs)
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
 retry:
-	down_read(&mm->mmap_sem);
+	mmap_read_lock(mm);
 
 	vma = find_vma(mm, address);
 	if (!vma)
@@ -150,7 +150,7 @@ retry:
 	}
 
 bad_area:
-	up_read(&mm->mmap_sem);
+	mmap_read_unlock(mm);
 
 	/*
 	 * Major/minor page fault accounting
@@ -177,7 +177,7 @@ bad_area:
 	}
 
 	tsk->thread.fault_address = address;
-	force_sig_fault(sig, si_code, (void __user *)address, tsk);
+	force_sig_fault(sig, si_code, (void __user *)address);
 	return;
 
 no_context:

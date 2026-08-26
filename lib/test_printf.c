@@ -658,6 +658,26 @@ static void __init fwnode_pointer(void)
 }
 
 static void __init
+errptr(void)
+{
+	test("-1234", "%pe", ERR_PTR(-1234));
+
+	/* Check that %pe with a non-ERR_PTR gets treated as ordinary %p. */
+	BUILD_BUG_ON(IS_ERR(PTR));
+	test_hashed("%pe", PTR);
+
+#ifdef CONFIG_SYMBOLIC_ERRNAME
+	test("(-ENOTSOCK)", "(%pe)", ERR_PTR(-ENOTSOCK));
+	test("(-EAGAIN)", "(%pe)", ERR_PTR(-EAGAIN));
+	BUILD_BUG_ON(EAGAIN != EWOULDBLOCK);
+	test("(-EAGAIN)", "(%pe)", ERR_PTR(-EWOULDBLOCK));
+	test("[-EIO    ]", "[%-8pe]", ERR_PTR(-EIO));
+	test("[    -EIO]", "[%8pe]", ERR_PTR(-EIO));
+	test("-EPROBE_DEFER", "%pe", ERR_PTR(-EPROBE_DEFER));
+#endif
+}
+
+static void __init
 test_pointer(void)
 {
 	plain();
@@ -680,6 +700,7 @@ test_pointer(void)
 	bitmap();
 	netdev_features();
 	flags();
+	errptr();
 	fwnode_pointer();
 }
 

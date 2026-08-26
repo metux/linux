@@ -1345,6 +1345,7 @@
 	};
 
 	hda@70030000 {
+		nvidia,model = "jetson-tx1-hda";
 		status = "okay";
 	};
 
@@ -1374,11 +1375,6 @@
 		ethernet@1 {
 			reg = <1>;
 		};
-	};
-
-	hda@70030000 {
-		nvidia,model = "jetson-tx1-hda";
-		status = "okay";
 	};
 
 	padctl@7009f000 {

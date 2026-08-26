@@ -408,7 +408,6 @@ SYM_FUNC_START_LOCAL(__create_page_tables)
 
 	ret	x28
 SYM_FUNC_END(__create_page_tables)
-	.ltorg
 
 /*
  * The following fragment of code is executed with the MMU enabled.

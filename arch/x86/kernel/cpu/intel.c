@@ -573,8 +573,6 @@ detect_keyid_bits:
 	c->x86_phys_bits -= keyid_bits;
 }
 
-}
-
 static void init_cpuid_fault(struct cpuinfo_x86 *c)
 {
 	u64 msr;

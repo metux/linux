@@ -105,17 +105,11 @@ struct mlxreg_core_item {
  *
  * @data: instance private data;
  * @regmap: register map of parent device;
-/**
- * struct mlxreg_core_platform_data - platform data:
- *
- * @data: instance private data;
- * @regmap: register map of parent device;
- * @counter: number of led instances;
+ * @counter: number of instances;
  * @features: supported features of device;
  * @version: implementation version;
  * @identity: device identity name;
  * @capability: device capability register;
- */
  */
 struct mlxreg_core_platform_data {
 	struct mlxreg_core_data *data;

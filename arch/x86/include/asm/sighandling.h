@@ -15,8 +15,4 @@
 
 void signal_fault(struct pt_regs *regs, void __user *frame, char *where);
 
-#ifdef CONFIG_X86_X32_ABI
-asmlinkage long sys32_x32_rt_sigreturn(void);
-#endif
-
 #endif /* _ASM_X86_SIGHANDLING_H */

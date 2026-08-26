@@ -922,7 +922,7 @@ int mlx5e_open_xdpsq(struct mlx5e_channel *c, struct mlx5e_params *params,
 void mlx5e_close_xdpsq(struct mlx5e_xdpsq *sq);
 
 struct mlx5e_cq_param;
-int mlx5e_open_cq(struct mlx5e_channel *c, struct net_dim_cq_moder moder,
+int mlx5e_open_cq(struct mlx5e_channel *c, struct dim_cq_moder moder,
 		  struct mlx5e_cq_param *param, struct mlx5e_cq *cq);
 void mlx5e_close_cq(struct mlx5e_cq *cq);
 

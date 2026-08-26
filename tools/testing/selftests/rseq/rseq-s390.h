@@ -5,7 +5,7 @@
  * access-register mode nor the linkage stack this instruction will always
  * cause a special-operation exception (the trap-enabled bit in the DUCT
  * is and will stay 0). The instruction pattern is
- *	b2 ff 0f ff	trap4   4095(%r0)
+ *	b2 ff 0f ff	trap4	4095(%r0)
  */
 #define RSEQ_SIG	0xB2FF0FFF
 

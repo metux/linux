@@ -8,5 +8,4 @@ generic-y += kvm_types.h
 generic-y += mcs_spinlock.h
 generic-y += qrwlock.h
 generic-y += vtime.h
-generic-y += msi.h
 generic-y += early_ioremap.h

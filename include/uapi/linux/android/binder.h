@@ -69,14 +69,6 @@ enum flat_binder_object_flags {
 	FLAT_BINDER_FLAG_ACCEPTS_FDS = 0x100,
 
 	/**
-	 * @FLAT_BINDER_FLAG_TXN_SECURITY_CTX: request security contexts
-	 *
-	 * Only when set, causes senders to include their security
-	 * context
-	 */
-	FLAT_BINDER_FLAG_TXN_SECURITY_CTX = 0x1000,
-
-	/**
 	 * @FLAT_BINDER_FLAG_SCHED_POLICY_MASK: bit-mask for scheduling policy
 	 *
 	 * These two bits can be used to set the min scheduling policy at which
@@ -97,6 +89,14 @@ enum flat_binder_object_flags {
 	 * scheduling policy from the caller (for synchronous transactions).
 	 */
 	FLAT_BINDER_FLAG_INHERIT_RT = 0x800,
+
+	/**
+	 * @FLAT_BINDER_FLAG_TXN_SECURITY_CTX: request security contexts
+	 *
+	 * Only when set, causes senders to include their security
+	 * context
+	 */
+	FLAT_BINDER_FLAG_TXN_SECURITY_CTX = 0x1000,
 };
 
 #ifdef BINDER_IPC_32BIT

@@ -154,12 +154,6 @@ static __always_inline const struct vdso_data *__arch_get_vdso_data(void)
 	return ret;
 }
 
-static inline bool vdso_clocksource_ok(const struct vdso_data *vd)
-{
-	return vd->clock_mode == VDSO_CLOCKMODE_ARCHTIMER;
-}
-#define vdso_clocksource_ok	vdso_clocksource_ok
-
 #ifdef CONFIG_TIME_NS
 static __always_inline const struct vdso_data *__arch_get_timens_vdso_data(void)
 {
@@ -171,6 +165,12 @@ static __always_inline const struct vdso_data *__arch_get_timens_vdso_data(void)
 	return ret;
 }
 #endif
+
+static inline bool vdso_clocksource_ok(const struct vdso_data *vd)
+{
+	return vd->clock_mode == VDSO_CLOCKMODE_ARCHTIMER;
+}
+#define vdso_clocksource_ok	vdso_clocksource_ok
 
 #endif /* !__ASSEMBLY__ */
 

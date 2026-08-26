@@ -713,12 +713,6 @@ static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
 	__ipi_send_mask(ipi_desc[ipinr], target);
 }
 
-static void ipi_send(const struct cpumask *target, unsigned int ipi)
-{
-	trace_ipi_raise_rcuidle(target, ipi_types[ipinr]);
-	__ipi_send_mask(ipi_desc[ipinr], target);
-}
-
 static void ipi_setup(int cpu)
 {
 	int i;

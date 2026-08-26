@@ -2165,8 +2165,6 @@ static void security_load_policycaps(struct selinux_state *state,
 	state->android_netlink_route = p->android_netlink_route;
 	state->android_netlink_getneigh = p->android_netlink_getneigh;
 	selinux_nlmsg_init();
-
-	rcu_read_unlock();
 }
 
 static int security_preserve_bools(struct selinux_policy *oldpolicy,

@@ -1971,9 +1971,6 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 	if (!reload)
 		devlink_reload_enable(devlink);
 
-	if (!reload)
-		devlink_reload_enable(devlink);
-
 	return 0;
 
 err_env_init:

@@ -1627,20 +1627,13 @@ static int aic3x_probe(struct snd_soc_component *component)
 		ret = devm_regulator_register_notifier(
 						aic3x->supplies[i].consumer,
 						&aic3x->disable_nb[i].nb);
-if (ret) {
+		if (ret) {
 			dev_err(component->dev,
 				"Failed to request regulator notifier: %d\n",
 				 ret);
-			goto err_notif;
+			return ret;
 		}
 	}
-
-err_notif:
-	while (i--)
-		regulator_unregister_notifier(aic3x->supplies[i].consumer,
-					      &aic3x->disable_nb[i].nb);
-	return ret;
-}
 
 	regcache_mark_dirty(aic3x->regmap);
 	aic3x_init(component);

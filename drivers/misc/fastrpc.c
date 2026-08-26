@@ -1540,8 +1540,8 @@ static int fastrpc_cb_probe(struct platform_device *pdev)
 	struct fastrpc_session_ctx *sess;
 	struct device *dev = &pdev->dev;
 	int i, sessions = 0;
-	int rc;
 	unsigned long flags;
+	int rc;
 
 	cctx = dev_get_drvdata(dev->parent);
 	if (!cctx)

@@ -690,6 +690,7 @@ static int __init at91_pm_backup_init(void)
 
 securam_fail:
 	put_device(&pdev->dev);
+securam_fail_no_ref_dev:
 	iounmap(soc_pm.data.sfrbu);
 	soc_pm.data.sfrbu = NULL;
 	return ret;

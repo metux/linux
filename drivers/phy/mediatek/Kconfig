@@ -4,7 +4,6 @@
 #
 config PHY_MTK_TPHY
 	tristate "MediaTek T-PHY Driver"
-	depends on ARCH_MEDIATEK && OF
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	depends on OF
 	select GENERIC_PHY

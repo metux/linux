@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  sr.c Copyright (C) 1992 David Giller
  *           Copyright (C) 1993, 1994, 1995, 1999 Eric Youngdale
@@ -781,7 +781,7 @@ static int sr_probe(struct device *dev)
 	disk->private_data = &cd->driver;
 	disk->queue = sdev->request_queue;
 
-	if (register_cdrom(&cd->cdi))
+	if (register_cdrom(disk, &cd->cdi))
 		goto fail_minor;
 
 	/*

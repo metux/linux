@@ -55,14 +55,14 @@ void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
 				      u8 rep_type);
 void mlx5_eswitch_unregister_vport_reps(struct mlx5_eswitch *esw, u8 rep_type);
 void *mlx5_eswitch_get_proto_dev(struct mlx5_eswitch *esw,
-				 int vport,
+				 u16 vport_num,
 				 u8 rep_type);
 struct mlx5_eswitch_rep *mlx5_eswitch_vport_rep(struct mlx5_eswitch *esw,
-						int vport);
+						u16 vport_num);
 void *mlx5_eswitch_uplink_get_proto_dev(struct mlx5_eswitch *esw, u8 rep_type);
 struct mlx5_flow_handle *
 mlx5_eswitch_add_send_to_vport_rule(struct mlx5_eswitch *esw,
-				    int vport, u32 sqn);
+				    u16 vport_num, u32 sqn);
 
 u16 mlx5_eswitch_get_total_vports(const struct mlx5_core_dev *dev);
 

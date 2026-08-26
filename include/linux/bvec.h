@@ -157,7 +157,7 @@ static inline void bvec_advance(const struct bio_vec *bvec,
 	struct bio_vec *bv = &iter_all->bv;
 
 	if (iter_all->done) {
-		bv->bv_page = nth_page(bv->bv_page, 1);
+		bv->bv_page++;
 		bv->bv_offset = 0;
 	} else {
 		bv->bv_page = bvec->bv_page + (bvec->bv_offset >> PAGE_SHIFT);

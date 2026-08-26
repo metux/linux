@@ -842,9 +842,7 @@ static int rcar_pcie_inbound_ranges(struct rcar_pcie *pcie,
 			unsigned long nr_zeros = __ffs64(cpu_addr);
 			u64 alignment = 1ULL << nr_zeros;
 
-			size = min(range->size, alignment);
-		} else {
-			size = range->size;
+			size = min(size, alignment);
 		}
 		/* Hardware supports max 4GiB inbound region */
 		size = min(size, 1ULL << 32);

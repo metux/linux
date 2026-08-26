@@ -60,13 +60,13 @@ enum dma_transaction_type {
 	DMA_INTERRUPT,
 	DMA_PRIVATE,
 	DMA_ASYNC_TX,
-DMA_SLAVE,
+	DMA_SLAVE,
 	DMA_CYCLIC,
 	DMA_INTERLEAVE,
+	DMA_COMPLETION_NO_ORDER,
 	DMA_REPEAT,
 	DMA_LOAD_EOT,
-	DMA_COMPLETION_NO_ORDER,
-	/* last transaction type for creation of the capabilities mask */
+/* last transaction type for creation of the capabilities mask */
 	DMA_TX_TYPE_END,
 };
 

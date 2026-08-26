@@ -53,35 +53,9 @@
 /**
  * amdgpu_mn_invalidate_gfx - callback to notify about mm change
  *
- * @amn: our notifier
- * @blockable: is the notifier blockable
- */
-static int amdgpu_mn_read_lock(struct amdgpu_mn *amn, bool blockable)
-{
-	if (blockable)
-		down_read(&amn->lock);
-	else if (!down_read_trylock(&amn->lock))
-		return -EAGAIN;
-
-	return 0;
-}
-
-/**
- * amdgpu_mn_read_unlock - drop the read side lock for this notifier
- *
- * @amn: our notifier
- */
-static void amdgpu_mn_read_unlock(struct amdgpu_mn *amn)
-{
-	up_read(&amn->lock);
-}
-
-/**
- * amdgpu_mn_invalidate_node - unmap all BOs of a node
- *
- * @node: the node with the BOs to unmap
- * @start: start of address range affected
- * @end: end of address range affected
+ * @mni: the range (mm) is about to update
+ * @range: details on the invalidation
+ * @cur_seq: Value to pass to mmu_interval_set_seq()
  *
  * Block for operations on BOs to finish and mark pages as accessed and
  * potentially dirty.

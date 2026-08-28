@@ -22,8 +22,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef __INTEL_DRV_H__
-#define __INTEL_DRV_H__
+
+#ifndef __INTEL_DISPLAY_TYPES_H__
+#define __INTEL_DISPLAY_TYPES_H__
 
 #include <linux/async.h>
 #include <linux/i2c.h>
@@ -1578,6 +1579,7 @@ static inline u32 intel_plane_ggtt_offset(const struct intel_plane_state *state)
 	return i915_ggtt_offset(state->vma);
 }
 
+<<<<<<< HEAD:drivers/gpu/drm/i915/intel_drv.h
 u32 glk_plane_color_ctl(const struct intel_crtc_state *crtc_state,
 			const struct intel_plane_state *plane_state);
 u32 glk_plane_color_ctl_crtc(const struct intel_crtc_state *crtc_state);
@@ -1867,4 +1869,4 @@ static inline void intel_crtc_enable_pipe_crc(struct intel_crtc *crtc)
 }
 #endif
 
-#endif /* __INTEL_DRV_H__ */
+#endif /* __INTEL_DISPLAY_TYPES_H__ */

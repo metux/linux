@@ -55,30 +55,6 @@
 
 #define GEN8_LR_CONTEXT_OTHER_SIZE	( 2 * PAGE_SIZE)
 
-struct engine_class_info {
-	const char *name;
-	u8 uabi_class;
-};
-
-static const struct engine_class_info intel_engine_classes[] = {
-	[RENDER_CLASS] = {
-		.name = "rcs",
-		.uabi_class = I915_ENGINE_CLASS_RENDER,
-	},
-	[COPY_ENGINE_CLASS] = {
-		.name = "bcs",
-		.uabi_class = I915_ENGINE_CLASS_COPY,
-	},
-	[VIDEO_DECODE_CLASS] = {
-		.name = "vcs",
-		.uabi_class = I915_ENGINE_CLASS_VIDEO,
-	},
-	[VIDEO_ENHANCEMENT_CLASS] = {
-		.name = "vecs",
-		.uabi_class = I915_ENGINE_CLASS_VIDEO_ENHANCE,
-	},
-};
-
 #define MAX_MMIO_BASES 3
 struct engine_info {
 	unsigned int hw_id;
@@ -259,11 +235,16 @@ static u32 __engine_mmio_base(struct drm_i915_private *i915,
 	return bases[i].base;
 }
 
-static void __sprint_engine_name(char *name, const struct engine_info *info)
+static void __sprint_engine_name(struct intel_engine_cs *engine)
 {
-	WARN_ON(snprintf(name, INTEL_ENGINE_CS_MAX_NAME, "%s%u",
-			 intel_engine_classes[info->class].name,
-			 info->instance) >= INTEL_ENGINE_CS_MAX_NAME);
+	/*
+	 * Before we know what the uABI name for this engine will be,
+	 * we still would like to keep track of this engine in the debug logs.
+	 * We throw in a ' here as a reminder that this isn't its final name.
+	 */
+	GEM_WARN_ON(snprintf(engine->name, sizeof(engine->name), "%s'%u",
+			     intel_engine_class_repr(engine->class),
+			     engine->instance) >= sizeof(engine->name));
 }
 
 void intel_engine_set_hwsp_writemask(struct intel_engine_cs *engine, u32 mask)
@@ -292,8 +273,6 @@ static int intel_engine_setup(struct intel_gt *gt, enum intel_engine_id id)
 	const struct engine_info *info = &intel_engines[id];
 	struct intel_engine_cs *engine;
 
-	GEM_BUG_ON(info->class >= ARRAY_SIZE(intel_engine_classes));
-
 	BUILD_BUG_ON(MAX_ENGINE_CLASS >= BIT(GEN11_ENGINE_CLASS_WIDTH));
 	BUILD_BUG_ON(MAX_ENGINE_INSTANCE >= BIT(GEN11_ENGINE_INSTANCE_WIDTH));
 
@@ -317,11 +296,12 @@ static int intel_engine_setup(struct intel_gt *gt, enum intel_engine_id id)
 	engine->i915 = gt->i915;
 	engine->gt = gt;
 	engine->uncore = gt->uncore;
-	__sprint_engine_name(engine->name, info);
 	engine->hw_id = engine->guc_id = info->hw_id;
 	engine->mmio_base = __engine_mmio_base(gt->i915, info->mmio_bases);
+
 	engine->class = info->class;
 	engine->instance = info->instance;
+	__sprint_engine_name(engine);
 
 	/*
 	 * To be overridden by the backend on setup. However to facilitate
@@ -426,7 +406,7 @@ int intel_engines_init_mmio(struct drm_i915_private *i915)
 	WARN_ON(engine_mask &
 		GENMASK(BITS_PER_TYPE(mask) - 1, I915_NUM_ENGINES));
 
-	if (i915_inject_probe_failure())
+	if (i915_inject_probe_failure(i915))
 		return -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(intel_engines); i++) {
@@ -727,26 +707,6 @@ out_frame:
 	return dw;
 }
 
-static int pin_context(struct i915_gem_context *ctx,
-		       struct intel_engine_cs *engine,
-		       struct intel_context **out)
-{
-	struct intel_context *ce;
-	int err;
-
-	ce = i915_gem_context_get_engine(ctx, engine->id);
-	if (IS_ERR(ce))
-		return PTR_ERR(ce);
-
-	err = intel_context_pin(ce);
-	intel_context_put(ce);
-	if (err)
-		return err;
-
-	*out = ce;
-	return 0;
-}
-
 void
 intel_engine_init_active(struct intel_engine_cs *engine, unsigned int subclass)
 {
@@ -768,6 +728,25 @@ intel_engine_init_active(struct intel_engine_cs *engine, unsigned int subclass)
 #endif
 }
 
+static struct intel_context *
+create_kernel_context(struct intel_engine_cs *engine)
+{
+	struct intel_context *ce;
+	int err;
+
+	ce = intel_context_create(engine->i915->kernel_context, engine);
+	if (IS_ERR(ce))
+		return ce;
+
+	err = intel_context_pin(ce);
+	if (err) {
+		intel_context_put(ce);
+		return ERR_PTR(err);
+	}
+
+	return ce;
+}
+
 /**
  * intel_engines_init_common - initialize cengine state which might require hw access
  * @engine: Engine to initialize.
@@ -781,20 +760,24 @@ intel_engine_init_active(struct intel_engine_cs *engine, unsigned int subclass)
  */
 int intel_engine_init_common(struct intel_engine_cs *engine)
 {
-	struct drm_i915_private *i915 = engine->i915;
+	struct intel_context *ce;
 	int ret;
 
-	/* We may need to do things with the shrinker which
+	engine->set_default_submission(engine);
+
+	/*
+	 * We may need to do things with the shrinker which
 	 * require us to immediately switch back to the default
 	 * context. This can cause a problem as pinning the
 	 * default context also requires GTT space which may not
 	 * be available. To avoid this we always pin the default
 	 * context.
 	 */
-	ret = pin_context(i915->kernel_context, engine,
-			  &engine->kernel_context);
-	if (ret)
-		return ret;
+	ce = create_kernel_context(engine);
+	if (IS_ERR(ce))
+		return PTR_ERR(ce);
+
+	engine->kernel_context = ce;
 
 	ret = measure_breadcrumb_dw(engine);
 	if (ret < 0)
@@ -802,12 +785,11 @@ int intel_engine_init_common(struct intel_engine_cs *engine)
 
 	engine->emit_fini_breadcrumb_dw = ret;
 
-	engine->set_default_submission(engine);
-
 	return 0;
 
 err_unpin:
-	intel_context_unpin(engine->kernel_context);
+	intel_context_unpin(ce);
+	intel_context_put(ce);
 	return ret;
 }
 
@@ -832,6 +814,7 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 		i915_gem_object_put(engine->default_state);
 
 	intel_context_unpin(engine->kernel_context);
+	intel_context_put(engine->kernel_context);
 	GEM_BUG_ON(!llist_empty(&engine->barrier_tasks));
 
 	intel_wa_list_free(&engine->ctx_wa_list);
@@ -914,56 +897,22 @@ const char *i915_cache_level_str(struct drm_i915_private *i915, int type)
 	}
 }
 
-u32 intel_calculate_mcr_s_ss_select(struct drm_i915_private *dev_priv)
-{
-	const struct sseu_dev_info *sseu = &RUNTIME_INFO(dev_priv)->sseu;
-	unsigned int slice = fls(sseu->slice_mask) - 1;
-	unsigned int subslice;
-	u32 mcr_s_ss_select;
-
-	GEM_BUG_ON(slice >= ARRAY_SIZE(sseu->subslice_mask));
-	subslice = fls(sseu->subslice_mask[slice]);
-	GEM_BUG_ON(!subslice);
-	subslice--;
-
-	if (IS_GEN(dev_priv, 10))
-		mcr_s_ss_select = GEN8_MCR_SLICE(slice) |
-				  GEN8_MCR_SUBSLICE(subslice);
-	else if (INTEL_GEN(dev_priv) >= 11)
-		mcr_s_ss_select = GEN11_MCR_SLICE(slice) |
-				  GEN11_MCR_SUBSLICE(subslice);
-	else
-		mcr_s_ss_select = 0;
-
-	return mcr_s_ss_select;
-}
-
 static u32
 read_subslice_reg(struct intel_engine_cs *engine, int slice, int subslice,
 		  i915_reg_t reg)
 {
 	struct drm_i915_private *i915 = engine->i915;
 	struct intel_uncore *uncore = engine->uncore;
-	u32 mcr_slice_subslice_mask;
-	u32 mcr_slice_subslice_select;
-	u32 default_mcr_s_ss_select;
-	u32 mcr;
-	u32 ret;
+	u32 mcr_mask, mcr_ss, mcr, old_mcr, val;
 	enum forcewake_domains fw_domains;
 
 	if (INTEL_GEN(i915) >= 11) {
-		mcr_slice_subslice_mask = GEN11_MCR_SLICE_MASK |
-					  GEN11_MCR_SUBSLICE_MASK;
-		mcr_slice_subslice_select = GEN11_MCR_SLICE(slice) |
-					    GEN11_MCR_SUBSLICE(subslice);
+		mcr_mask = GEN11_MCR_SLICE_MASK | GEN11_MCR_SUBSLICE_MASK;
+		mcr_ss = GEN11_MCR_SLICE(slice) | GEN11_MCR_SUBSLICE(subslice);
 	} else {
-		mcr_slice_subslice_mask = GEN8_MCR_SLICE_MASK |
-					  GEN8_MCR_SUBSLICE_MASK;
-		mcr_slice_subslice_select = GEN8_MCR_SLICE(slice) |
-					    GEN8_MCR_SUBSLICE(subslice);
+		mcr_mask = GEN8_MCR_SLICE_MASK | GEN8_MCR_SUBSLICE_MASK;
+		mcr_ss = GEN8_MCR_SLICE(slice) | GEN8_MCR_SUBSLICE(subslice);
 	}
-
-	default_mcr_s_ss_select = intel_calculate_mcr_s_ss_select(i915);
 
 	fw_domains = intel_uncore_forcewake_for_reg(uncore, reg,
 						    FW_REG_READ);
@@ -974,26 +923,23 @@ read_subslice_reg(struct intel_engine_cs *engine, int slice, int subslice,
 	spin_lock_irq(&uncore->lock);
 	intel_uncore_forcewake_get__locked(uncore, fw_domains);
 
-	mcr = intel_uncore_read_fw(uncore, GEN8_MCR_SELECTOR);
+	old_mcr = mcr = intel_uncore_read_fw(uncore, GEN8_MCR_SELECTOR);
 
-	WARN_ON_ONCE((mcr & mcr_slice_subslice_mask) !=
-		     default_mcr_s_ss_select);
-
-	mcr &= ~mcr_slice_subslice_mask;
-	mcr |= mcr_slice_subslice_select;
+	mcr &= ~mcr_mask;
+	mcr |= mcr_ss;
 	intel_uncore_write_fw(uncore, GEN8_MCR_SELECTOR, mcr);
 
-	ret = intel_uncore_read_fw(uncore, reg);
+	val = intel_uncore_read_fw(uncore, reg);
 
-	mcr &= ~mcr_slice_subslice_mask;
-	mcr |= default_mcr_s_ss_select;
+	mcr &= ~mcr_mask;
+	mcr |= old_mcr & mcr_mask;
 
 	intel_uncore_write_fw(uncore, GEN8_MCR_SELECTOR, mcr);
 
 	intel_uncore_forcewake_put__locked(uncore, fw_domains);
 	spin_unlock_irq(&uncore->lock);
 
-	return ret;
+	return val;
 }
 
 /* NB: please notice the memset */
@@ -1633,5 +1579,7 @@ intel_engine_find_active_request(struct intel_engine_cs *engine)
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
+#include "mock_engine.c"
+#include "selftest_engine.c"
 #include "selftest_engine_cs.c"
 #endif

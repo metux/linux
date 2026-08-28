@@ -7,7 +7,6 @@
 #include <linux/prime_numbers.h>
 
 #include "gem/i915_gem_pm.h"
-#include "intel_gt.h"
 
 #include "../selftests/i915_random.h"
 #include "../i915_selftest.h"
@@ -689,9 +688,7 @@ static int live_hwsp_wrap(void *arg)
 
 		tl->seqno = -4u;
 
-		mutex_lock_nested(&tl->mutex, SINGLE_DEPTH_NESTING);
 		err = intel_timeline_get_seqno(tl, rq, &seqno[0]);
-		mutex_unlock(&tl->mutex);
 		if (err) {
 			i915_request_add(rq);
 			goto out;
@@ -706,9 +703,7 @@ static int live_hwsp_wrap(void *arg)
 		}
 		hwsp_seqno[0] = tl->hwsp_seqno;
 
-		mutex_lock_nested(&tl->mutex, SINGLE_DEPTH_NESTING);
 		err = intel_timeline_get_seqno(tl, rq, &seqno[1]);
-		mutex_unlock(&tl->mutex);
 		if (err) {
 			i915_request_add(rq);
 			goto out;
@@ -820,10 +815,14 @@ static int live_hwsp_recycle(void *arg)
 
 			if (err)
 				goto out;
+
+			intel_timelines_park(i915); /* Encourage recycling! */
 		} while (!__igt_timeout(end_time, NULL));
 	}
 
 out:
+	if (igt_flush_test(i915, I915_WAIT_LOCKED))
+		err = -EIO;
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 
@@ -839,8 +838,8 @@ int intel_timeline_live_selftests(struct drm_i915_private *i915)
 		SUBTEST(live_hwsp_wrap),
 	};
 
-	if (intel_gt_is_wedged(&i915->gt))
+	if (i915_terminally_wedged(i915))
 		return 0;
 
-	return i915_live_subtests(tests, i915);
+	return i915_subtests(tests, i915);
 }

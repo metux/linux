@@ -1156,7 +1156,7 @@ int intel_ring_pin(struct intel_ring *ring)
 	if (atomic_fetch_inc(&ring->pin_count))
 		return 0;
 
-	ret = i915_timeline_pin(ring->timeline);
+	ret = intel_timeline_pin(ring->timeline);
 	if (ret)
 		goto err_unpin;
 
@@ -1194,7 +1194,7 @@ int intel_ring_pin(struct intel_ring *ring)
 err_ring:
 	i915_vma_unpin(vma);
 err_timeline:
-	i915_timeline_unpin(ring->timeline);
+	intel_timeline_unpin(ring->timeline);
 err_unpin:
 	atomic_dec(&ring->pin_count);
 	return ret;
@@ -1231,19 +1231,19 @@ void intel_ring_unpin(struct intel_ring *ring)
 	ring->vma->obj->pin_global--;
 	i915_vma_unpin(ring->vma);
 
-	i915_timeline_unpin(ring->timeline);
+	intel_timeline_unpin(ring->timeline);
 }
 
-static struct i915_vma *
-intel_ring_create_vma(struct drm_i915_private *dev_priv, int size)
+static struct i915_vma *create_ring_vma(struct i915_ggtt *ggtt, int size)
 {
-	struct i915_address_space *vm = &dev_priv->ggtt.vm;
+	struct i915_address_space *vm = &ggtt->vm;
+	struct drm_i915_private *i915 = vm->i915;
 	struct drm_i915_gem_object *obj;
 	struct i915_vma *vma;
 
-	obj = i915_gem_object_create_stolen(dev_priv, size);
+	obj = i915_gem_object_create_stolen(i915, size);
 	if (!obj)
-		obj = i915_gem_object_create_internal(dev_priv, size);
+		obj = i915_gem_object_create_internal(i915, size);
 	if (IS_ERR(obj))
 		return ERR_CAST(obj);
 
@@ -1267,9 +1267,10 @@ err:
 
 struct intel_ring *
 intel_engine_create_ring(struct intel_engine_cs *engine,
-			 struct i915_timeline *timeline,
+			 struct intel_timeline *timeline,
 			 int size)
 {
+	struct drm_i915_private *i915 = engine->i915;
 	struct intel_ring *ring;
 	struct i915_vma *vma;
 
@@ -1282,7 +1283,7 @@ intel_engine_create_ring(struct intel_engine_cs *engine,
 
 	kref_init(&ring->ref);
 	INIT_LIST_HEAD(&ring->request_list);
-	ring->timeline = i915_timeline_get(timeline);
+	ring->timeline = intel_timeline_get(timeline);
 
 	ring->size = size;
 	/* Workaround an erratum on the i830 which causes a hang if
@@ -1290,12 +1291,12 @@ intel_engine_create_ring(struct intel_engine_cs *engine,
 	 * of the buffer.
 	 */
 	ring->effective_size = size;
-	if (IS_I830(engine->i915) || IS_I845G(engine->i915))
+	if (IS_I830(i915) || IS_I845G(i915))
 		ring->effective_size -= 2 * CACHELINE_BYTES;
 
 	intel_ring_update_space(ring);
 
-	vma = intel_ring_create_vma(engine->i915, size);
+	vma = create_ring_vma(engine->gt->ggtt, size);
 	if (IS_ERR(vma)) {
 		kfree(ring);
 		return ERR_CAST(vma);
@@ -1312,7 +1313,7 @@ void intel_ring_free(struct kref *ref)
 	i915_vma_close(ring->vma);
 	i915_vma_put(ring->vma);
 
-	i915_timeline_put(ring->timeline);
+	intel_timeline_put(ring->timeline);
 	kfree(ring);
 }
 
@@ -2268,11 +2269,11 @@ int intel_ring_submission_setup(struct intel_engine_cs *engine)
 
 int intel_ring_submission_init(struct intel_engine_cs *engine)
 {
-	struct i915_timeline *timeline;
+	struct intel_timeline *timeline;
 	struct intel_ring *ring;
 	int err;
 
-	timeline = i915_timeline_create(engine->i915, engine->status_page.vma);
+	timeline = intel_timeline_create(engine->gt, engine->status_page.vma);
 	if (IS_ERR(timeline)) {
 		err = PTR_ERR(timeline);
 		goto err;
@@ -2280,7 +2281,7 @@ int intel_ring_submission_init(struct intel_engine_cs *engine)
 	GEM_BUG_ON(timeline->has_initial_breadcrumb);
 
 	ring = intel_engine_create_ring(engine, timeline, 32 * PAGE_SIZE);
-	i915_timeline_put(timeline);
+	intel_timeline_put(timeline);
 	if (IS_ERR(ring)) {
 		err = PTR_ERR(ring);
 		goto err;

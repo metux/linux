@@ -266,6 +266,7 @@ static int effective_prio(const struct i915_request *rq)
 		prio |= I915_PRIORITY_NOSEMAPHORE;
 
 	/* Restrict mere WAIT boosts from triggering preemption */
+	BUILD_BUG_ON(__NO_PREEMPTION & ~I915_PRIORITY_MASK); /* only internal */
 	return prio | __NO_PREEMPTION;
 }
 
@@ -556,9 +557,6 @@ execlists_schedule_out(struct i915_request *rq)
 		intel_engine_context_out(ce->inflight);
 		execlists_context_status_change(rq, INTEL_CONTEXT_SCHEDULE_OUT);
 
-		ce->inflight = NULL;
-		intel_context_put(ce);
-
 		/*
 		 * If this is part of a virtual engine, its next request may
 		 * have been blocked waiting for access to the active context.
@@ -568,8 +566,11 @@ execlists_schedule_out(struct i915_request *rq)
 		 * request before the tasklet runs and do not need to rebuild
 		 * each virtual tree and kick everyone again.
 		 */
+		ce->inflight = NULL;
 		if (rq->engine != ce->engine)
 			kick_siblings(rq, ce);
+
+		intel_context_put(ce);
 	}
 
 	i915_request_put(rq);
@@ -830,6 +831,81 @@ last_active(const struct intel_engine_execlists *execlists)
 	return *last;
 }
 
+static void
+defer_request(struct i915_request * const rq, struct list_head * const pl)
+{
+	struct i915_dependency *p;
+
+	/*
+	 * We want to move the interrupted request to the back of
+	 * the round-robin list (i.e. its priority level), but
+	 * in doing so, we must then move all requests that were in
+	 * flight and were waiting for the interrupted request to
+	 * be run after it again.
+	 */
+	list_move_tail(&rq->sched.link, pl);
+
+	list_for_each_entry(p, &rq->sched.waiters_list, wait_link) {
+		struct i915_request *w =
+			container_of(p->waiter, typeof(*w), sched);
+
+		/* Leave semaphores spinning on the other engines */
+		if (w->engine != rq->engine)
+			continue;
+
+		/* No waiter should start before the active request completed */
+		GEM_BUG_ON(i915_request_started(w));
+
+		GEM_BUG_ON(rq_prio(w) > rq_prio(rq));
+		if (rq_prio(w) < rq_prio(rq))
+			continue;
+
+		if (list_empty(&w->sched.link))
+			continue; /* Not yet submitted; unready */
+
+		/*
+		 * This should be very shallow as it is limited by the
+		 * number of requests that can fit in a ring (<64) and
+		 * the number of contexts that can be in flight on this
+		 * engine.
+		 */
+		defer_request(w, pl);
+	}
+}
+
+static void defer_active(struct intel_engine_cs *engine)
+{
+	struct i915_request *rq;
+
+	rq = __unwind_incomplete_requests(engine);
+	if (!rq)
+		return;
+
+	defer_request(rq, i915_sched_lookup_priolist(engine, rq_prio(rq)));
+}
+
+static bool
+need_timeslice(struct intel_engine_cs *engine, const struct i915_request *rq)
+{
+	int hint;
+
+	if (list_is_last(&rq->sched.link, &engine->active.requests))
+		return false;
+
+	hint = max(rq_prio(list_next_entry(rq, sched.link)),
+		   engine->execlists.queue_priority_hint);
+
+	return hint >= rq_prio(rq);
+}
+
+static bool
+enable_timeslice(struct intel_engine_cs *engine)
+{
+	struct i915_request *last = last_active(&engine->execlists);
+
+	return last && need_timeslice(engine, last);
+}
+
 static void execlists_dequeue(struct intel_engine_cs *engine)
 {
 	struct intel_engine_execlists * const execlists = &engine->execlists;
@@ -922,6 +998,32 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 			 * end of an earlier request.
 			 */
 			last->hw_context->lrc_desc |= CTX_DESC_FORCE_RESTORE;
+			last = NULL;
+		} else if (need_timeslice(engine, last) &&
+			   !timer_pending(&engine->execlists.timer)) {
+			GEM_TRACE("%s: expired last=%llx:%lld, prio=%d, hint=%d\n",
+				  engine->name,
+				  last->fence.context,
+				  last->fence.seqno,
+				  last->sched.attr.priority,
+				  execlists->queue_priority_hint);
+
+			ring_set_paused(engine, 1);
+			defer_active(engine);
+
+			/*
+			 * Unlike for preemption, if we rewind and continue
+			 * executing the same context as previously active,
+			 * the order of execution will remain the same and
+			 * the tail will only advance. We do not need to
+			 * force a full context restore, as a lite-restore
+			 * is sufficient to resample the monotonic TAIL.
+			 *
+			 * If we switch to any other context, similarly we
+			 * will not rewind TAIL of current context, and
+			 * normal save/restore will preserve state and allow
+			 * us to later continue executing the same request.
+			 */
 			last = NULL;
 		} else {
 			/*
@@ -1337,6 +1439,9 @@ promote:
 				       sizeof(*execlists->pending));
 			execlists->pending[0] = NULL;
 
+			if (enable_timeslice(engine))
+				mod_timer(&execlists->timer, jiffies + 1);
+
 			if (!inject_preempt_hang(execlists))
 				ring_set_paused(engine, 0);
 		} else if (status & GEN8_CTX_STATUS_PREEMPTED) {
@@ -1405,6 +1510,15 @@ static void execlists_submission_tasklet(unsigned long data)
 	spin_lock_irqsave(&engine->active.lock, flags);
 	__execlists_submission_tasklet(engine);
 	spin_unlock_irqrestore(&engine->active.lock, flags);
+}
+
+static void execlists_submission_timer(struct timer_list *timer)
+{
+	struct intel_engine_cs *engine =
+		from_timer(engine, timer, execlists.timer);
+
+	/* Kick the tasklet for some interrupt coalescing and reset handling */
+	tasklet_hi_schedule(&engine->execlists.tasklet);
 }
 
 static void queue_request(struct intel_engine_cs *engine,
@@ -2632,6 +2746,7 @@ static int gen8_init_rcs_context(struct i915_request *rq)
 
 static void execlists_park(struct intel_engine_cs *engine)
 {
+	del_timer_sync(&engine->execlists.timer);
 	intel_engine_park(engine);
 }
 
@@ -2729,6 +2844,7 @@ int intel_execlists_submission_setup(struct intel_engine_cs *engine)
 
 	tasklet_init(&engine->execlists.tasklet,
 		     execlists_submission_tasklet, (unsigned long)engine);
+	timer_setup(&engine->execlists.timer, execlists_submission_timer, 0);
 
 	logical_ring_default_vfuncs(engine);
 	logical_ring_default_irqs(engine);
@@ -2979,12 +3095,13 @@ err_unpin_ctx:
 	return ret;
 }
 
-static struct i915_timeline *get_timeline(struct i915_gem_context *ctx)
+static struct intel_timeline *
+get_timeline(struct i915_gem_context *ctx, struct intel_gt *gt)
 {
 	if (ctx->timeline)
-		return i915_timeline_get(ctx->timeline);
+		return intel_timeline_get(ctx->timeline);
 	else
-		return i915_timeline_create(ctx->i915, NULL);
+		return intel_timeline_create(gt, NULL);
 }
 
 static int execlists_context_deferred_alloc(struct intel_context *ce,
@@ -2994,7 +3111,7 @@ static int execlists_context_deferred_alloc(struct intel_context *ce,
 	struct i915_vma *vma;
 	u32 context_size;
 	struct intel_ring *ring;
-	struct i915_timeline *timeline;
+	struct intel_timeline *timeline;
 	int ret;
 
 	if (ce->state)
@@ -3018,7 +3135,7 @@ static int execlists_context_deferred_alloc(struct intel_context *ce,
 		goto error_deref_obj;
 	}
 
-	timeline = get_timeline(ce->gem_context);
+	timeline = get_timeline(ce->gem_context, engine->gt);
 	if (IS_ERR(timeline)) {
 		ret = PTR_ERR(timeline);
 		goto error_deref_obj;
@@ -3027,7 +3144,7 @@ static int execlists_context_deferred_alloc(struct intel_context *ce,
 	ring = intel_engine_create_ring(engine,
 					timeline,
 					ce->gem_context->ring_size);
-	i915_timeline_put(timeline);
+	intel_timeline_put(timeline);
 	if (IS_ERR(ring)) {
 		ret = PTR_ERR(ring);
 		goto error_deref_obj;
@@ -3337,6 +3454,7 @@ intel_execlists_create_virtual(struct i915_gem_context *ctx,
 		return ERR_PTR(-ENOMEM);
 
 	ve->base.i915 = ctx->i915;
+	ve->base.gt = siblings[0]->gt;
 	ve->base.id = -1;
 	ve->base.class = OTHER_CLASS;
 	ve->base.uabi_class = I915_ENGINE_CLASS_INVALID;

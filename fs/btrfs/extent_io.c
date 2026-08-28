@@ -164,14 +164,7 @@ int __must_check submit_one_bio(struct bio *bio, int mirror_num,
 				unsigned long bio_flags)
 {
 	blk_status_t ret = 0;
-	struct bio_vec *bvec = bio_last_bvec_all(bio);
-	struct bio_vec bv;
 	struct extent_io_tree *tree = bio->bi_private;
-	u64 start;
-	struct extent_io_tree *tree = bio->bi_private;
-
-	mp_bvec_last_segment(bvec, &bv);
-	start = page_offset(bv.bv_page) + bv.bv_offset;
 
 	bio->bi_private = NULL;
 

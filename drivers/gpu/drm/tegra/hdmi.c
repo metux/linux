@@ -23,10 +23,6 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
 
-#include <sound/hda_verbs.h>
-
-#include <media/cec-notifier.h>
-
 #include "hda.h"
 #include "hdmi.h"
 #include "drm.h"

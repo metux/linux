@@ -86,15 +86,6 @@
 #include "intel_tc.h"
 #include "intel_vga.h"
 
-#include "intel_drv.h"
-#include "intel_dsi.h"
-#include "intel_frontbuffer.h"
-
-#include "i915_drv.h"
-#include "i915_gem_clflush.h"
-#include "i915_reset.h"
-#include "i915_trace.h"
-
 /* Primary plane formats for gen <= 3 */
 static const u32 i8xx_primary_formats[] = {
 	DRM_FORMAT_C8,

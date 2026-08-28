@@ -57,8 +57,8 @@ mlx5_ib_vport_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 		mlx5_ib_get_rep_netdev(dev->priv.eswitch, rep->vport);
 	ibdev->mdev = dev;
 	ibdev->num_ports = num_ports;
-	if (!__mlx5_ib_add(ibdev, profile)) {
-		ib_dealloc_device(&ibdev->ib_dev);
+
+	if (!__mlx5_ib_add(ibdev, profile))
 		return -EINVAL;
 
 	rep->rep_data[REP_IB].priv = ibdev;

@@ -15,6 +15,7 @@
 #include "i915_gpu_error.h"
 #include "i915_irq.h"
 #include "intel_engine_pm.h"
+#include "intel_gt.h"
 #include "intel_gt_pm.h"
 #include "intel_reset.h"
 
@@ -24,16 +25,6 @@
 
 /* XXX How to handle concurrent GGTT updates using tiling registers? */
 #define RESET_UNDER_STOP_MACHINE 0
-
-static void rmw_set(struct intel_uncore *uncore, i915_reg_t reg, u32 set)
-{
-	intel_uncore_rmw(uncore, reg, 0, set);
-}
-
-static void rmw_clear(struct intel_uncore *uncore, i915_reg_t reg, u32 clr)
-{
-	intel_uncore_rmw(uncore, reg, clr, 0);
-}
 
 static void rmw_set_fw(struct intel_uncore *uncore, i915_reg_t reg, u32 set)
 {
@@ -1347,7 +1338,7 @@ void i915_handle_error(struct drm_i915_private *i915,
 
 	if (flags & I915_ERROR_CAPTURE) {
 		i915_capture_error_state(i915, engine_mask, msg);
-		clear_error_registers(i915, engine_mask);
+		intel_gt_clear_error_registers(&i915->gt, engine_mask);
 	}
 
 	/*

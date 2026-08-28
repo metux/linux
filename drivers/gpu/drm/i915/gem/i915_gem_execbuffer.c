@@ -12,6 +12,7 @@
 #include <drm/drm_syncobj.h>
 #include <drm/i915_drm.h>
 
+#include "display/intel_display_types.h"
 #include "display/intel_frontbuffer.h"
 
 #include "gem/i915_gem_ioctls.h"
@@ -24,7 +25,6 @@
 #include "i915_gem_clflush.h"
 #include "i915_gem_context.h"
 #include "i915_trace.h"
-#include "intel_drv.h"
 
 enum {
 	FORCE_CPU_RELOC = 1,
@@ -224,7 +224,6 @@ struct i915_execbuffer {
 	struct intel_engine_cs *engine; /** engine to queue the request to */
 	struct intel_context *context; /* logical state for the request */
 	struct i915_gem_context *gem_context; /** caller's context */
-	struct i915_address_space *vm; /** GTT and vma for the request */
 
 	struct i915_request *request; /** our request to build */
 	struct i915_vma *batch; /** identity of the batch obj/vma */
@@ -698,7 +697,7 @@ static int eb_reserve(struct i915_execbuffer *eb)
 
 		case 1:
 			/* Too fragmented, unbind everything and retry */
-			err = i915_gem_evict_vm(eb->vm);
+			err = i915_gem_evict_vm(eb->context->vm);
 			if (err)
 				return err;
 			break;
@@ -726,12 +725,8 @@ static int eb_select_context(struct i915_execbuffer *eb)
 		return -ENOENT;
 
 	eb->gem_context = ctx;
-	if (ctx->vm) {
-		eb->vm = ctx->vm;
+	if (ctx->vm)
 		eb->invalid_flags |= EXEC_OBJECT_NEEDS_GTT;
-	} else {
-		eb->vm = &eb->i915->ggtt.vm;
-	}
 
 	eb->context_flags = 0;
 	if (test_bit(UCONTEXT_NO_ZEROMAP, &ctx->user_flags))
@@ -833,7 +828,7 @@ static int eb_lookup_vmas(struct i915_execbuffer *eb)
 			goto err_vma;
 		}
 
-		vma = i915_vma_instance(obj, eb->vm, NULL);
+		vma = i915_vma_instance(obj, eb->context->vm, NULL);
 		if (IS_ERR(vma)) {
 			err = PTR_ERR(vma);
 			goto err_obj;
@@ -1020,11 +1015,12 @@ static void reloc_cache_reset(struct reloc_cache *cache)
 		kunmap_atomic(vaddr);
 		i915_gem_object_finish_access((struct drm_i915_gem_object *)cache->node.mm);
 	} else {
-		wmb();
-		io_mapping_unmap_atomic((void __iomem *)vaddr);
-		if (cache->node.allocated) {
-			struct i915_ggtt *ggtt = cache_to_ggtt(cache);
+		struct i915_ggtt *ggtt = cache_to_ggtt(cache);
 
+		intel_gt_flush_ggtt_writes(ggtt->vm.gt);
+		io_mapping_unmap_atomic((void __iomem *)vaddr);
+
+		if (cache->node.allocated) {
 			ggtt->vm.clear_range(&ggtt->vm,
 					     cache->node.start,
 					     cache->node.size);
@@ -1079,6 +1075,7 @@ static void *reloc_iomap(struct drm_i915_gem_object *obj,
 	void *vaddr;
 
 	if (cache->vaddr) {
+		intel_gt_flush_ggtt_writes(ggtt->vm.gt);
 		io_mapping_unmap_atomic((void __force __iomem *) unmask_page(cache->vaddr));
 	} else {
 		struct i915_vma *vma;
@@ -1120,7 +1117,6 @@ static void *reloc_iomap(struct drm_i915_gem_object *obj,
 
 	offset = cache->node.start;
 	if (cache->node.allocated) {
-		wmb();
 		ggtt->vm.insert_page(&ggtt->vm,
 				     i915_gem_object_get_dma_address(obj, page),
 				     offset, I915_CACHE_NONE, 0);
@@ -2151,14 +2147,40 @@ static int eb_pin_context(struct i915_execbuffer *eb, struct intel_context *ce)
 	if (err)
 		return err;
 
+	/*
+	 * Take a local wakeref for preparing to dispatch the execbuf as
+	 * we expect to access the hardware fairly frequently in the
+	 * process, and require the engine to be kept awake between accesses.
+	 * Upon dispatch, we acquire another prolonged wakeref that we hold
+	 * until the timeline is idle, which in turn releases the wakeref
+	 * taken on the engine, and the parent device.
+	 */
+	err = intel_context_timeline_lock(ce);
+	if (err)
+		goto err_unpin;
+
+	intel_context_enter(ce);
+	intel_context_timeline_unlock(ce);
+
 	eb->engine = ce->engine;
 	eb->context = ce;
 	return 0;
+
+err_unpin:
+	intel_context_unpin(ce);
+	return err;
 }
 
 static void eb_unpin_context(struct i915_execbuffer *eb)
 {
-	intel_context_unpin(eb->context);
+	struct intel_context *ce = eb->context;
+	struct intel_timeline *tl = ce->ring->timeline;
+
+	mutex_lock(&tl->mutex);
+	intel_context_exit(ce);
+	mutex_unlock(&tl->mutex);
+
+	intel_context_unpin(ce);
 }
 
 static unsigned int
@@ -2438,18 +2460,9 @@ i915_gem_do_execbuffer(struct drm_device *dev,
 	if (unlikely(err))
 		goto err_destroy;
 
-	/*
-	 * Take a local wakeref for preparing to dispatch the execbuf as
-	 * we expect to access the hardware fairly frequently in the
-	 * process. Upon first dispatch, we acquire another prolonged
-	 * wakeref that we hold until the GPU has been idle for at least
-	 * 100ms.
-	 */
-	intel_gt_pm_get(&eb.i915->gt);
-
 	err = i915_mutex_lock_interruptible(dev);
 	if (err)
-		goto err_rpm;
+		goto err_context;
 
 	err = eb_select_engine(&eb, file, args);
 	if (unlikely(err))
@@ -2618,8 +2631,7 @@ err_engine:
 	eb_unpin_context(&eb);
 err_unlock:
 	mutex_unlock(&dev->struct_mutex);
-err_rpm:
-	intel_gt_pm_put(&eb.i915->gt);
+err_context:
 	i915_gem_context_put(eb.gem_context);
 err_destroy:
 	eb_destroy(&eb);

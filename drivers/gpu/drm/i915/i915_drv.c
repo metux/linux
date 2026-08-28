@@ -960,6 +960,7 @@ err_uc:
 	intel_uc_cleanup_early(&dev_priv->gt.uc);
 	i915_gem_cleanup_early(dev_priv);
 err_workqueues:
+	intel_gt_driver_late_release(&dev_priv->gt);
 	i915_workqueues_cleanup(dev_priv);
 err_engines:
 	i915_engines_cleanup(dev_priv);
@@ -977,6 +978,7 @@ static void i915_driver_late_release(struct drm_i915_private *dev_priv)
 	intel_power_domains_cleanup(dev_priv);
 	intel_uc_cleanup_early(&dev_priv->gt.uc);
 	i915_gem_cleanup_early(dev_priv);
+	intel_gt_driver_late_release(&dev_priv->gt);
 	i915_workqueues_cleanup(dev_priv);
 	i915_engines_cleanup(dev_priv);
 

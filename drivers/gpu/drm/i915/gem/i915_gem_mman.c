@@ -7,14 +7,15 @@
 #include <linux/mman.h>
 #include <linux/sizes.h>
 
+#include "display/intel_display_types.h"
 #include "gt/intel_gt.h"
 
 #include "i915_drv.h"
 #include "i915_gem_gtt.h"
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"
+#include "i915_trace.h"
 #include "i915_vma.h"
-#include "intel_drv.h"
 
 static inline bool
 __vma_matches(struct vm_area_struct *vma, struct file *filp,

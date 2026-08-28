@@ -21,6 +21,7 @@
  * SOFTWARE.
  */
 
+#include "display/intel_display_types.h"
 #include "i915_vgpu.h"
 
 /**
@@ -94,7 +95,6 @@ void i915_detect_vgpu(struct drm_i915_private *dev_priv)
 	dev_priv->vgpu.caps = readl(shared_area + vgtif_offset(vgt_caps));
 
 	dev_priv->vgpu.active = true;
-	mutex_init(&dev_priv->vgpu.lock);
 	DRM_INFO("Virtual GPU for Intel GVT-g detected.\n");
 
 out:

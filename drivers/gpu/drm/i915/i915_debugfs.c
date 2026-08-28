@@ -32,6 +32,7 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_fourcc.h>
 
+#include "display/intel_display_types.h"
 #include "display/intel_dp.h"
 #include "display/intel_fbc.h"
 #include "display/intel_hdcp.h"
@@ -44,8 +45,8 @@
 
 #include "i915_debugfs.h"
 #include "i915_irq.h"
+#include "i915_trace.h"
 #include "intel_csr.h"
-#include "intel_drv.h"
 #include "intel_pm.h"
 #include "intel_sideband.h"
 
@@ -1997,7 +1998,7 @@ static int i915_guc_log_dump(struct seq_file *m, void *data)
 		return -ENODEV;
 
 	if (dump_load_err)
-		obj = dev_priv->gt.uc.guc.load_err_log;
+		obj = dev_priv->gt.uc.load_err_log;
 	else if (dev_priv->gt.uc.guc.log.vma)
 		obj = dev_priv->gt.uc.guc.log.vma->obj;
 
@@ -2396,6 +2397,7 @@ static int i915_dmc_info(struct seq_file *m, void *unused)
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 	intel_wakeref_t wakeref;
 	struct intel_csr *csr;
+	i915_reg_t dc5_reg, dc6_reg = {};
 
 	if (!HAS_CSR(dev_priv))
 		return -ENODEV;
@@ -2413,15 +2415,19 @@ static int i915_dmc_info(struct seq_file *m, void *unused)
 	seq_printf(m, "version: %d.%d\n", CSR_VERSION_MAJOR(csr->version),
 		   CSR_VERSION_MINOR(csr->version));
 
-	if (WARN_ON(INTEL_GEN(dev_priv) > 11))
-		goto out;
+	if (INTEL_GEN(dev_priv) >= 12) {
+		dc5_reg = TGL_DMC_DEBUG_DC5_COUNT;
+		dc6_reg = TGL_DMC_DEBUG_DC6_COUNT;
+	} else {
+		dc5_reg = IS_BROXTON(dev_priv) ? BXT_CSR_DC3_DC5_COUNT :
+						 SKL_CSR_DC3_DC5_COUNT;
+		if (!IS_GEN9_LP(dev_priv))
+			dc6_reg = SKL_CSR_DC5_DC6_COUNT;
+	}
 
-	seq_printf(m, "DC3 -> DC5 count: %d\n",
-		   I915_READ(IS_BROXTON(dev_priv) ? BXT_CSR_DC3_DC5_COUNT :
-						    SKL_CSR_DC3_DC5_COUNT));
-	if (!IS_GEN9_LP(dev_priv))
-		seq_printf(m, "DC5 -> DC6 count: %d\n",
-			   I915_READ(SKL_CSR_DC5_DC6_COUNT));
+	seq_printf(m, "DC3 -> DC5 count: %d\n", I915_READ(dc5_reg));
+	if (dc6_reg.reg)
+		seq_printf(m, "DC5 -> DC6 count: %d\n", I915_READ(dc6_reg));
 
 out:
 	seq_printf(m, "program base: 0x%08x\n", I915_READ(CSR_PROGRAM(0)));

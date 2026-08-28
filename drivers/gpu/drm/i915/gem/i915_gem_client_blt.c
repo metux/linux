@@ -3,10 +3,8 @@
  * Copyright © 2019 Intel Corporation
  */
 
-#include "i915_drv.h"
-#include "gt/intel_context.h"
-#include "gt/intel_engine_pm.h"
-#include "gt/intel_engine_pool.h"
+#include "display/intel_display_types.h"
+
 #include "i915_gem_client_blt.h"
 #include "i915_gem_object_blt.h"
 
@@ -155,10 +153,10 @@ static void clear_pages_dma_fence_cb(struct dma_fence *fence,
 static void clear_pages_worker(struct work_struct *work)
 {
 	struct clear_pages_work *w = container_of(work, typeof(*w), work);
+	struct drm_i915_private *i915 = w->ce->engine->i915;
 	struct drm_i915_gem_object *obj = w->sleeve->vma->obj;
 	struct i915_vma *vma = w->sleeve->vma;
 	struct i915_request *rq;
-	struct i915_vma *batch;
 	int err = w->dma.error;
 
 	if (unlikely(err))
@@ -172,30 +170,22 @@ static void clear_pages_worker(struct work_struct *work)
 	obj->read_domains = I915_GEM_GPU_DOMAINS;
 	obj->write_domain = 0;
 
+	/* XXX: we need to kill this */
+	mutex_lock(&i915->drm.struct_mutex);
 	err = i915_vma_pin(vma, 0, 0, PIN_USER);
 	if (unlikely(err))
-		goto out_signal;
+		goto out_unlock;
 
-	batch = intel_emit_vma_fill_blt(w->ce, vma, w->value);
-	if (IS_ERR(batch)) {
-		err = PTR_ERR(batch);
-		goto out_unpin;
-	}
-
-	rq = intel_context_create_request(w->ce);
+	rq = i915_request_create(w->ce);
 	if (IS_ERR(rq)) {
 		err = PTR_ERR(rq);
-		goto out_batch;
+		goto out_unpin;
 	}
 
 	/* There's no way the fence has signalled */
 	if (dma_fence_add_callback(&rq->fence, &w->cb,
 				   clear_pages_dma_fence_cb))
 		GEM_BUG_ON(1);
-
-	err = intel_emit_vma_mark_active(batch, rq);
-	if (unlikely(err))
-		goto out_request;
 
 	if (w->ce->engine->emit_init_breadcrumb) {
 		err = w->ce->engine->emit_init_breadcrumb(rq);
@@ -208,13 +198,11 @@ static void clear_pages_worker(struct work_struct *work)
 	 * keep track of the GPU activity within this vma/request, and
 	 * propagate the signal from the request to w->dma.
 	 */
-	err = __i915_vma_move_to_active(vma, rq);
+	err = i915_active_ref(&vma->active, rq->fence.context, rq);
 	if (err)
 		goto out_request;
 
-	err = w->ce->engine->emit_bb_start(rq,
-					   batch->node.start, batch->node.size,
-					   0);
+	err = intel_emit_vma_fill_blt(rq, vma, w->value);
 out_request:
 	if (unlikely(err)) {
 		i915_request_skip(rq, err);
@@ -222,10 +210,10 @@ out_request:
 	}
 
 	i915_request_add(rq);
-out_batch:
-	intel_emit_vma_release(w->ce, batch);
 out_unpin:
 	i915_vma_unpin(vma);
+out_unlock:
+	mutex_unlock(&i915->drm.struct_mutex);
 out_signal:
 	if (unlikely(err)) {
 		dma_fence_set_error(&w->dma, err);
@@ -262,6 +250,7 @@ int i915_gem_schedule_fill_pages_blt(struct drm_i915_gem_object *obj,
 				     struct i915_page_sizes *page_sizes,
 				     u32 value)
 {
+	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 	struct clear_pages_work *work;
 	struct i915_sleeve *sleeve;
 	int err;
@@ -284,7 +273,11 @@ int i915_gem_schedule_fill_pages_blt(struct drm_i915_gem_object *obj,
 
 	init_irq_work(&work->irq_work, clear_pages_signal_irq_worker);
 
-	dma_fence_init(&work->dma, &clear_pages_work_ops, &fence_lock, 0, 0);
+	dma_fence_init(&work->dma,
+		       &clear_pages_work_ops,
+		       &fence_lock,
+		       i915->mm.unordered_timeline,
+		       0);
 	i915_sw_fence_init(&work->wait, clear_pages_work_notify);
 
 	i915_gem_object_lock(obj);

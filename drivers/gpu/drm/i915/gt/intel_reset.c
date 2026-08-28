@@ -7,6 +7,7 @@
 #include <linux/sched/mm.h>
 #include <linux/stop_machine.h>
 
+#include "display/intel_display_types.h"
 #include "display/intel_overlay.h"
 
 #include "gem/i915_gem_context.h"
@@ -133,47 +134,6 @@ void __i915_request_reset(struct i915_request *rq, bool guilty)
 		dma_fence_set_error(&rq->fence, -EAGAIN);
 		context_mark_innocent(rq->gem_context);
 	}
-}
-
-static void gen3_stop_engine(struct intel_engine_cs *engine)
-{
-	struct intel_uncore *uncore = engine->uncore;
-	const u32 base = engine->mmio_base;
-
-	GEM_TRACE("%s\n", engine->name);
-
-	if (intel_engine_stop_cs(engine))
-		GEM_TRACE("%s: timed out on STOP_RING\n", engine->name);
-
-	intel_uncore_write_fw(uncore,
-			      RING_HEAD(base),
-			      intel_uncore_read_fw(uncore, RING_TAIL(base)));
-	intel_uncore_posting_read_fw(uncore, RING_HEAD(base)); /* paranoia */
-
-	intel_uncore_write_fw(uncore, RING_HEAD(base), 0);
-	intel_uncore_write_fw(uncore, RING_TAIL(base), 0);
-	intel_uncore_posting_read_fw(uncore, RING_TAIL(base));
-
-	/* The ring must be empty before it is disabled */
-	intel_uncore_write_fw(uncore, RING_CTL(base), 0);
-
-	/* Check acts as a post */
-	if (intel_uncore_read_fw(uncore, RING_HEAD(base)))
-		GEM_TRACE("%s: ring head [%x] not parked\n",
-			  engine->name,
-			  intel_uncore_read_fw(uncore, RING_HEAD(base)));
-}
-
-static void stop_engines(struct intel_gt *gt, intel_engine_mask_t engine_mask)
-{
-	struct intel_engine_cs *engine;
-	intel_engine_mask_t tmp;
-
-	if (INTEL_GEN(gt->i915) < 3)
-		return;
-
-	for_each_engine_masked(engine, gt->i915, engine_mask, tmp)
-		gen3_stop_engine(engine);
 }
 
 static bool i915_in_reset(struct pci_dev *pdev)
@@ -607,23 +567,6 @@ int __intel_gt_reset(struct intel_gt *gt, intel_engine_mask_t engine_mask)
 	 */
 	intel_uncore_forcewake_get(gt->uncore, FORCEWAKE_ALL);
 	for (retry = 0; ret == -ETIMEDOUT && retry < retries; retry++) {
-		/*
-		 * We stop engines, otherwise we might get failed reset and a
-		 * dead gpu (on elk). Also as modern gpu as kbl can suffer
-		 * from system hang if batchbuffer is progressing when
-		 * the reset is issued, regardless of READY_TO_RESET ack.
-		 * Thus assume it is best to stop engines on all gens
-		 * where we have a gpu reset.
-		 *
-		 * WaKBLVECSSemaphoreWaitPoll:kbl (on ALL_ENGINES)
-		 *
-		 * WaMediaResetMainRingCleanup:ctg,elk (presumably)
-		 *
-		 * FIXME: Wa for more modern gens needs to be validated
-		 */
-		if (retry)
-			stop_engines(gt, engine_mask);
-
 		GEM_TRACE("engine_mask=%x\n", engine_mask);
 		preempt_disable();
 		ret = reset(gt, engine_mask, retry);
@@ -815,11 +758,8 @@ static void __intel_gt_set_wedged(struct intel_gt *gt)
 	if (!INTEL_INFO(gt->i915)->gpu_reset_clobbers_display)
 		__intel_gt_reset(gt, ALL_ENGINES);
 
-	for_each_engine(engine, gt->i915, id) {
+	for_each_engine(engine, gt->i915, id)
 		engine->submit_request = nop_submit_request;
-		engine->schedule = NULL;
-	}
-	gt->i915->caps.scheduler = 0;
 
 	/*
 	 * Make sure no request can slip through without getting completed by
@@ -1099,14 +1039,14 @@ int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
 			   "Resetting %s for %s\n", engine->name, msg);
 	atomic_inc(&engine->i915->gpu_error.reset_engine_count[engine->uabi_class]);
 
-	if (!engine->i915->guc.execbuf_client)
+	if (!engine->gt->uc.guc.execbuf_client)
 		ret = intel_gt_reset_engine(engine);
 	else
-		ret = intel_guc_reset_engine(&engine->i915->guc, engine);
+		ret = intel_guc_reset_engine(&engine->gt->uc.guc, engine);
 	if (ret) {
 		/* If we fail here, we expect to fallback to a global reset */
 		DRM_DEBUG_DRIVER("%sFailed to reset %s, ret=%d\n",
-				 engine->i915->guc.execbuf_client ? "GuC " : "",
+				 engine->gt->uc.guc.execbuf_client ? "GuC " : "",
 				 engine->name, ret);
 		goto out;
 	}

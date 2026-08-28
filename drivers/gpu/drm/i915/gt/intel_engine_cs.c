@@ -316,6 +316,7 @@ intel_engine_setup(struct drm_i915_private *dev_priv,
 	engine->id = id;
 	engine->mask = BIT(id);
 	engine->i915 = dev_priv;
+	engine->gt = &dev_priv->gt;
 	engine->uncore = &dev_priv->uncore;
 	__sprint_engine_name(engine->name, info);
 	engine->hw_id = engine->guc_id = info->hw_id;
@@ -723,7 +724,7 @@ void intel_engines_set_scheduler_caps(struct drm_i915_private *i915)
 
 struct measure_breadcrumb {
 	struct i915_request rq;
-	struct i915_timeline timeline;
+	struct intel_timeline timeline;
 	struct intel_ring ring;
 	u32 cs[1024];
 };
@@ -739,9 +740,9 @@ static int measure_breadcrumb_dw(struct intel_engine_cs *engine)
 	if (!frame)
 		return -ENOMEM;
 
-	if (i915_timeline_init(engine->i915,
-			       &frame->timeline,
-			       engine->status_page.vma))
+	if (intel_timeline_init(&frame->timeline,
+				engine->gt,
+				engine->status_page.vma))
 		goto out_frame;
 
 	INIT_LIST_HEAD(&frame->ring.request_list);
@@ -756,17 +757,17 @@ static int measure_breadcrumb_dw(struct intel_engine_cs *engine)
 	frame->rq.ring = &frame->ring;
 	frame->rq.timeline = &frame->timeline;
 
-	dw = i915_timeline_pin(&frame->timeline);
+	dw = intel_timeline_pin(&frame->timeline);
 	if (dw < 0)
 		goto out_timeline;
 
 	dw = engine->emit_fini_breadcrumb(&frame->rq, frame->cs) - frame->cs;
 	GEM_BUG_ON(dw & 1); /* RING_TAIL must be qword aligned */
 
-	i915_timeline_unpin(&frame->timeline);
+	intel_timeline_unpin(&frame->timeline);
 
 out_timeline:
-	i915_timeline_fini(&frame->timeline);
+	intel_timeline_fini(&frame->timeline);
 out_frame:
 	kfree(frame);
 	return dw;

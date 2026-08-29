@@ -422,13 +422,7 @@ struct i915_ggtt {
 struct i915_ppgtt {
 	struct i915_address_space vm;
 
-	intel_engine_mask_t pd_dirty_engines;
-	unsigned long pd_dirty_engines;
-	union {
-		struct i915_pml4 pml4;		/* GEN8+ & 48b PPGTT */
-		struct i915_page_directory_pointer pdp;	/* GEN8+ */
-		struct i915_page_directory pd;		/* GEN6-7 */
-	};
+	struct i915_page_directory *pd;
 };
 
 struct gen6_ppgtt {

@@ -8,6 +8,7 @@
 #include <linux/sizes.h>
 
 #include "gt/intel_gt.h"
+#include "gt/intel_gt_requests.h"
 
 #include "i915_drv.h"
 #include "i915_gem_gtt.h"
@@ -420,6 +421,7 @@ out:
 static int create_mmap_offset(struct drm_i915_gem_object *obj)
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
+	struct intel_gt *gt = &i915->gt;
 	int err;
 
 	err = drm_gem_create_mmap_offset(&obj->base);
@@ -427,19 +429,12 @@ static int create_mmap_offset(struct drm_i915_gem_object *obj)
 		return 0;
 
 	/* Attempt to reap some mmap space from dead objects */
-	do {
-		err = i915_gem_wait_for_idle(i915, MAX_SCHEDULE_TIMEOUT);
-		if (err)
-			break;
+	err = intel_gt_retire_requests_timeout(gt, MAX_SCHEDULE_TIMEOUT);
+	if (err)
+		return err;
 
-		i915_gem_drain_freed_objects(i915);
-		err = drm_gem_create_mmap_offset(&obj->base);
-		if (!err)
-			break;
-
-	} while (flush_delayed_work(&i915->gem.retire_work));
-
-	return err;
+	i915_gem_drain_freed_objects(i915);
+	return drm_gem_create_mmap_offset(&obj->base);
 }
 
 int

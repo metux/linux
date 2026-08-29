@@ -30,6 +30,7 @@
 
 #include "display/intel_display_types.h"
 #include "gem/i915_gem_context.h"
+#include "gt/intel_gt_requests.h"
 
 #include "i915_drv.h"
 #include "i915_trace.h"
@@ -38,7 +39,7 @@ I915_SELFTEST_DECLARE(static struct igt_evict_ctl {
 	bool fail_if_busy:1;
 } igt_evict_ctl;)
 
-static int ggtt_flush(struct drm_i915_private *i915)
+static int ggtt_flush(struct intel_gt *gt)
 {
 	/*
 	 * Not everything in the GGTT is tracked via vma (otherwise we
@@ -47,7 +48,7 @@ static int ggtt_flush(struct drm_i915_private *i915)
 	 * the hopes that we can then remove contexts and the like only
 	 * bound by their active reference.
 	 */
-	return i915_gem_wait_for_idle(i915, MAX_SCHEDULE_TIMEOUT);
+	return intel_gt_wait_for_idle(gt, MAX_SCHEDULE_TIMEOUT);
 }
 
 static bool
@@ -96,7 +97,6 @@ i915_gem_evict_something(struct i915_address_space *vm,
 			 u64 start, u64 end,
 			 unsigned flags)
 {
-	struct drm_i915_private *dev_priv = vm->i915;
 	struct drm_mm_scan scan;
 	struct list_head eviction_list;
 	struct i915_vma *vma, *next;
@@ -128,7 +128,7 @@ i915_gem_evict_something(struct i915_address_space *vm,
 				    min_size, alignment, color,
 				    start, end, mode);
 
-	i915_retire_requests(vm->i915);
+	intel_gt_retire_requests(vm->gt);
 
 search_again:
 	active = NULL;
@@ -201,7 +201,7 @@ search_again:
 	if (I915_SELFTEST_ONLY(igt_evict_ctl.fail_if_busy))
 		return -EBUSY;
 
-	ret = ggtt_flush(dev_priv);
+	ret = ggtt_flush(vm->gt);
 	if (ret)
 		return ret;
 
@@ -274,7 +274,7 @@ int i915_gem_evict_for_node(struct i915_address_space *vm,
 	 * a stray pin (preventing eviction) that can only be resolved by
 	 * retiring.
 	 */
-	i915_retire_requests(vm->i915);
+	intel_gt_retire_requests(vm->gt);
 
 	if (i915_vm_has_cache_coloring(vm)) {
 		/* Expand search to cover neighbouring guard pages (or lack!) */
@@ -381,7 +381,7 @@ int i915_gem_evict_vm(struct i915_address_space *vm)
 	 * switch otherwise is ineffective.
 	 */
 	if (i915_is_ggtt(vm)) {
-		ret = ggtt_flush(vm->i915);
+		ret = ggtt_flush(vm->gt);
 		if (ret)
 			return ret;
 	}

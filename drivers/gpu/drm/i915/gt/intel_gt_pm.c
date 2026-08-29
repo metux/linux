@@ -6,16 +6,18 @@
 
 #include "i915_drv.h"
 #include "i915_params.h"
+#include "intel_context.h"
 #include "intel_engine_pm.h"
 #include "intel_gt.h"
 #include "intel_gt_pm.h"
+#include "intel_gt_requests.h"
 #include "intel_pm.h"
 #include "intel_rc6.h"
 #include "intel_wakeref.h"
 
-static void pm_notify(struct drm_i915_private *i915, int state)
+static void pm_notify(struct intel_gt *gt, int state)
 {
-	blocking_notifier_call_chain(&i915->gt.pm_notifications, state, i915);
+	blocking_notifier_call_chain(&gt->pm_notifications, state, gt->i915);
 }
 
 static int __gt_unpark(struct intel_wakeref *wf)
@@ -51,21 +53,23 @@ static int __gt_unpark(struct intel_wakeref *wf)
 	i915_pmu_gt_unparked(i915);
 
 	intel_gt_queue_hangcheck(gt);
+	intel_gt_unpark_requests(gt);
 
-	pm_notify(i915, INTEL_GT_UNPARK);
+	pm_notify(gt, INTEL_GT_UNPARK);
 
 	return 0;
 }
 
 static int __gt_park(struct intel_wakeref *wf)
 {
-	struct drm_i915_private *i915 =
-		container_of(wf, typeof(*i915), gt.wakeref);
-	intel_wakeref_t wakeref = fetch_and_zero(&i915->gt.awake);
+	struct intel_gt *gt = container_of(wf, typeof(*gt), wakeref);
+	intel_wakeref_t wakeref = fetch_and_zero(&gt->awake);
+	struct drm_i915_private *i915 = gt->i915;
 
 	GEM_TRACE("\n");
 
-	pm_notify(i915, INTEL_GT_PARK);
+	pm_notify(gt, INTEL_GT_PARK);
+	intel_gt_park_requests(gt);
 
 	i915_pmu_gt_parked(i915);
 	if (INTEL_GEN(i915) >= 6)
@@ -144,7 +148,8 @@ void intel_gt_sanitize(struct intel_gt *gt, bool force)
 
 void intel_gt_pm_disable(struct intel_gt *gt)
 {
-	intel_sanitize_gt_powersave(gt->i915);
+	if (!is_mock_gt(gt))
+		intel_sanitize_gt_powersave(gt->i915);
 }
 
 void intel_gt_pm_fini(struct intel_gt *gt)
@@ -174,8 +179,12 @@ int intel_gt_resume(struct intel_gt *gt)
 		intel_engine_pm_get(engine);
 
 		ce = engine->kernel_context;
-		if (ce)
+		if (ce) {
+			GEM_BUG_ON(!intel_context_is_pinned(ce));
+			mutex_acquire(&ce->pin_mutex.dep_map, 0, 0, _THIS_IP_);
 			ce->ops->reset(ce);
+			mutex_release(&ce->pin_mutex.dep_map, 0, _THIS_IP_);
+		}
 
 		engine->serial++; /* kernel context lost */
 		err = engine->resume(engine);
@@ -198,7 +207,7 @@ int intel_gt_resume(struct intel_gt *gt)
 
 static void wait_for_idle(struct intel_gt *gt)
 {
-	if (i915_gem_wait_for_idle(gt->i915, I915_GEM_IDLE_TIMEOUT) == -ETIME) {
+	if (intel_gt_wait_for_idle(gt, I915_GEM_IDLE_TIMEOUT) == -ETIME) {
 		/*
 		 * Forcibly cancel outstanding work and leave
 		 * the gpu quiet.

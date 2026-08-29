@@ -1003,6 +1003,7 @@ void i915_gem_runtime_suspend(struct drm_i915_private *i915)
 	}
 }
 
+<<<<<<< HEAD
 bool i915_sg_trim(struct sg_table *orig_st)
 {
 	struct sg_table new_st;
@@ -1691,8 +1692,7 @@ wait_for_timelines(struct intel_gt *gt, unsigned int wait, long timeout)
 	return timeout;
 }
 
-int i915_gem_wait_for_idle(struct drm_i915_private *i915,
-			   unsigned int flags, long timeout)
+int i915_gem_wait_for_idle(struct drm_i915_private *i915, long timeout)
 {
 	struct intel_gt *gt = &i915->gt;
 
@@ -1700,18 +1700,13 @@ int i915_gem_wait_for_idle(struct drm_i915_private *i915,
 	if (!intel_gt_pm_is_awake(gt))
 		return 0;
 
-	do {
-		timeout = wait_for_timelines(gt, flags, timeout);
-		if (timeout < 0)
-			return timeout;
-
+	while ((timeout = i915_retire_requests_timeout(i915, timeout)) > 0) {
 		cond_resched();
 		if (signal_pending(current))
 			return -EINTR;
+	}
 
-	} while (i915_retire_requests(i915));
-
-	return 0;
+	return timeout;
 }
 
 struct i915_vma *

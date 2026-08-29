@@ -2288,7 +2288,7 @@ static void i915_gem_init__mm(struct drm_i915_private *i915)
 	i915_gem_init__objects(i915);
 }
 
-int i915_gem_init_early(struct drm_i915_private *dev_priv)
+void i915_gem_init_early(struct drm_i915_private *dev_priv)
 {
 	int err;
 	int err = -ENOMEM;

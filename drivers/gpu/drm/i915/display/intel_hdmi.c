@@ -720,12 +720,16 @@ intel_hdmi_compute_avi_infoframe(struct intel_encoder *encoder,
 
 	drm_hdmi_avi_infoframe_colorspace(frame, conn_state);
 
-	drm_hdmi_avi_infoframe_quant_range(frame, connector,
-					   adjusted_mode,
-					   crtc_state->limited_color_range ?
-					   HDMI_QUANTIZATION_RANGE_LIMITED :
-					   HDMI_QUANTIZATION_RANGE_FULL,
-					   intel_hdmi->rgb_quant_range_selectable);
+	if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_RGB) {
+		drm_hdmi_avi_infoframe_quant_range(frame, connector,
+						   adjusted_mode,
+						   crtc_state->limited_color_range ?
+						   HDMI_QUANTIZATION_RANGE_LIMITED :
+						   HDMI_QUANTIZATION_RANGE_FULL);
+	} else {
+		frame->quantization_range = HDMI_QUANTIZATION_RANGE_DEFAULT;
+		frame->ycc_quantization_range = HDMI_YCC_QUANTIZATION_RANGE_LIMITED;
+	}
 
 	drm_hdmi_avi_infoframe_content_type(frame, conn_state);
 
@@ -2567,12 +2571,6 @@ out:
 
 	if (status != connector_status_connected)
 		cec_notifier_phys_addr_invalidate(intel_hdmi->cec_notifier);
-
-	/*
-	 * Make sure the refs for power wells enabled during detect are
-	 * dropped to avoid a new detect cycle triggered by HPD polling.
-	 */
-	intel_display_power_flush_work(dev_priv);
 
 	return status;
 }

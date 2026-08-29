@@ -7,6 +7,7 @@
 
 #include "intel_gt.h"
 #include "intel_gt_pm.h"
+#include "intel_gt_requests.h"
 #include "intel_mocs.h"
 #include "intel_rc6.h"
 #include "intel_uncore.h"
@@ -24,6 +25,7 @@ void intel_gt_init_early(struct intel_gt *gt, struct drm_i915_private *i915)
 
 	intel_gt_init_hangcheck(gt);
 	intel_gt_init_reset(gt);
+	intel_gt_init_requests(gt);
 	intel_gt_pm_init_early(gt);
 }
 

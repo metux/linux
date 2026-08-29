@@ -26,6 +26,7 @@
 #include <linux/pm_runtime.h>
 
 #include "gt/intel_gt.h"
+#include "gt/intel_gt_requests.h"
 #include "gt/mock_engine.h"
 
 #include "mock_request.h"
@@ -44,7 +45,8 @@ void mock_device_flush(struct drm_i915_private *i915)
 	do {
 		for_each_engine(engine, i915, id)
 			mock_engine_flush(engine);
-	} while (i915_retire_requests_timeout(i915, MAX_SCHEDULE_TIMEOUT));
+	} while (intel_gt_retire_requests_timeout(&i915->gt,
+						  MAX_SCHEDULE_TIMEOUT));
 }
 
 static void mock_device_release(struct drm_device *dev)
@@ -74,9 +76,6 @@ static void mock_device_release(struct drm_device *dev)
 
 	destroy_workqueue(i915->wq);
 
-	kmem_cache_destroy(i915->vmas);
-	kmem_cache_destroy(i915->objects);
-
 	i915_gemfs_fini(i915);
 
 	drm_mode_config_cleanup(&i915->drm);
@@ -99,10 +98,6 @@ static void release_dev(struct device *dev)
 	struct pci_dev *pdev = to_pci_dev(dev);
 
 	kfree(pdev);
-}
-
-static void mock_retire_work_handler(struct work_struct *work)
-{
 }
 
 static int pm_domain_resume(struct device *dev)
@@ -184,18 +179,6 @@ struct drm_i915_private *mock_gem_device(void)
 
 	mock_init_contexts(i915);
 
-	INIT_DELAYED_WORK(&i915->gem.retire_work, mock_retire_work_handler);
-
-	i915->gt.awake = -1;
-
-	i915->objects = KMEM_CACHE(mock_object, SLAB_HWCACHE_ALIGN);
-	if (!i915->objects)
-		goto err_wq;
-
-	i915->vmas = KMEM_CACHE(i915_vma, SLAB_HWCACHE_ALIGN);
-	if (!i915->vmas)
-		goto err_objects;
-
 	intel_timelines_init(i915);
 
 	mutex_lock(&i915->drm.struct_mutex);
@@ -229,10 +212,6 @@ err_engine:
 err_unlock:
 	mutex_unlock(&i915->drm.struct_mutex);
 	intel_timelines_fini(i915);
-	kmem_cache_destroy(i915->vmas);
-err_objects:
-	kmem_cache_destroy(i915->objects);
-err_wq:
 	destroy_workqueue(i915->wq);
 err_drv:
 	drm_mode_config_cleanup(&i915->drm);

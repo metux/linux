@@ -371,14 +371,12 @@ again:
 		spin_unlock(&vnode->lock);
 		return;
 
-	case AFS_VNODE_LOCK_DELETED:
-		afs_kill_lockers_enoent(vnode);
-		spin_unlock(&vnode->lock);
-		return;
+case AFS_VNODE_LOCK_DELETED:
+    afs_kill_lockers_enoent(vnode);
+    spin_unlock(&vnode->lock);
+    return;
 
-<<<<<<< HEAD
-fallthrough;
-	default:
+default:
 		/* Looks like a lock request was withdrawn. */
 		spin_unlock(&vnode->lock);
 		_leave(" [no]");

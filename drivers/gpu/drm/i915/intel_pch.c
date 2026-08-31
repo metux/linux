@@ -72,6 +72,8 @@ intel_pch_type(const struct drm_i915_private *dev_priv, unsigned short id)
 		return PCH_CNP;
 	case INTEL_PCH_CMP_DEVICE_ID_TYPE:
 	case INTEL_PCH_CMP2_DEVICE_ID_TYPE:
+		DRM_DEBUG_KMS("Found Comet Lake PCH (CMP)\n");
+	case INTEL_PCH_CMP2_DEVICE_ID_TYPE:
 		drm_dbg_kms(&dev_priv->drm, "Found Comet Lake PCH (CMP)\n");
 		WARN_ON(!IS_COFFEELAKE(dev_priv));
 		/* CometPoint is CNP Compatible */

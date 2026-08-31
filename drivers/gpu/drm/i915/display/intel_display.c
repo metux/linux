@@ -166,13 +166,11 @@ static void vlv_prepare_pll(struct intel_crtc *crtc,
 			    const struct intel_crtc_state *pipe_config);
 static void chv_prepare_pll(struct intel_crtc *crtc,
 			    const struct intel_crtc_state *pipe_config);
-static void intel_crtc_init_scalers(struct intel_crtc *crtc,
-				    struct intel_crtc_state *crtc_state);
 static void skylake_pfit_enable(const struct intel_crtc_state *crtc_state);
-static void ironlake_pfit_disable(const struct intel_crtc_state *old_crtc_state);
 static void ironlake_pfit_enable(const struct intel_crtc_state *crtc_state);
 static void intel_modeset_setup_hw_state(struct drm_device *dev,
 					 struct drm_modeset_acquire_ctx *ctx);
+static struct intel_crtc_state *intel_crtc_state_alloc(struct intel_crtc *crtc);
 
 struct intel_limit {
 	struct {
@@ -1827,8 +1825,10 @@ static void intel_crtc_vblank_on(const struct intel_crtc_state *crtc_state)
 	drm_crtc_vblank_on(&crtc->base);
 }
 
-static void intel_crtc_vblank_off(struct intel_crtc *crtc)
+void intel_crtc_vblank_off(const struct intel_crtc_state *crtc_state)
 {
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
 	drm_crtc_vblank_off(&crtc->base);
 	assert_vblank_disabled(&crtc->base);
 }
@@ -1891,7 +1891,7 @@ static void intel_enable_pipe(const struct intel_crtc_state *new_crtc_state)
 		intel_wait_for_pipe_scanline_moving(crtc);
 }
 
-static void intel_disable_pipe(const struct intel_crtc_state *old_crtc_state)
+void intel_disable_pipe(const struct intel_crtc_state *old_crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
@@ -1936,6 +1936,58 @@ static unsigned int intel_tile_size(const struct drm_i915_private *dev_priv)
 	return IS_GEN(dev_priv, 2) ? 2048 : 4096;
 }
 
+static bool is_ccs_plane(const struct drm_framebuffer *fb, int plane)
+{
+	if (!is_ccs_modifier(fb->modifier))
+		return false;
+
+	return plane >= fb->format->num_planes / 2;
+}
+
+static bool is_gen12_ccs_modifier(u64 modifier)
+{
+	return modifier == I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS;
+}
+
+static bool is_gen12_ccs_plane(const struct drm_framebuffer *fb, int plane)
+{
+	return is_gen12_ccs_modifier(fb->modifier) && is_ccs_plane(fb, plane);
+}
+
+static bool is_aux_plane(const struct drm_framebuffer *fb, int plane)
+{
+	if (is_ccs_modifier(fb->modifier))
+		return is_ccs_plane(fb, plane);
+
+	return plane == 1;
+}
+
+static int main_to_ccs_plane(const struct drm_framebuffer *fb, int main_plane)
+{
+	WARN_ON(!is_ccs_modifier(fb->modifier) ||
+		(main_plane && main_plane >= fb->format->num_planes / 2));
+
+	return fb->format->num_planes / 2 + main_plane;
+}
+
+static int ccs_to_main_plane(const struct drm_framebuffer *fb, int ccs_plane)
+{
+	WARN_ON(!is_ccs_modifier(fb->modifier) ||
+		ccs_plane < fb->format->num_planes / 2);
+
+	return ccs_plane - fb->format->num_planes / 2;
+}
+
+/* Return either the main plane's CCS or - if not a CCS FB - UV plane */
+static int
+intel_main_to_aux_plane(const struct drm_framebuffer *fb, int main_plane)
+{
+	if (is_ccs_modifier(fb->modifier))
+		return main_to_ccs_plane(fb, main_plane);
+
+	return 1;
+}
+
 static unsigned int
 intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane)
 {
@@ -1951,8 +2003,12 @@ intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane)
 		else
 			return 512;
 	case I915_FORMAT_MOD_Y_TILED_CCS:
-		if (color_plane == 1)
+		if (is_ccs_plane(fb, color_plane))
 			return 128;
+		/* fall through */
+	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+		if (is_ccs_plane(fb, color_plane))
+			return 64;
 		/* fall through */
 	case I915_FORMAT_MOD_Y_TILED:
 		if (IS_GEN(dev_priv, 2) || HAS_128_BYTE_Y_TILING(dev_priv))
@@ -1960,7 +2016,7 @@ intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane)
 		else
 			return 512;
 	case I915_FORMAT_MOD_Yf_TILED_CCS:
-		if (color_plane == 1)
+		if (is_ccs_plane(fb, color_plane))
 			return 128;
 		/* fall through */
 	case I915_FORMAT_MOD_Yf_TILED:
@@ -1987,6 +2043,9 @@ intel_tile_width_bytes(const struct drm_framebuffer *fb, int color_plane)
 static unsigned int
 intel_tile_height(const struct drm_framebuffer *fb, int color_plane)
 {
+	if (is_gen12_ccs_plane(fb, color_plane))
+		return 1;
+
 	return intel_tile_size(to_i915(fb->dev)) /
 		intel_tile_width_bytes(fb, color_plane);
 }
@@ -2000,7 +2059,7 @@ static void intel_tile_dims(const struct drm_framebuffer *fb, int color_plane,
 	unsigned int cpp = fb->format->cpp[color_plane];
 
 	*tile_width = tile_width_bytes / cpp;
-	*tile_height = intel_tile_size(to_i915(fb->dev)) / tile_width_bytes;
+	*tile_height = intel_tile_height(fb, color_plane);
 }
 
 unsigned int
@@ -2077,7 +2136,7 @@ static unsigned int intel_surf_alignment(const struct drm_framebuffer *fb,
 	struct drm_i915_private *dev_priv = to_i915(fb->dev);
 
 	/* AUX_DIST needs only 4K alignment */
-	if (color_plane == 1)
+	if (is_aux_plane(fb, color_plane))
 		return 4096;
 
 	switch (fb->modifier) {
@@ -2087,6 +2146,8 @@ static unsigned int intel_surf_alignment(const struct drm_framebuffer *fb,
 		if (INTEL_GEN(dev_priv) >= 9)
 			return 256 * 1024;
 		return 0;
+	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+		return 16 * 1024;
 	case I915_FORMAT_MOD_Y_TILED_CCS:
 	case I915_FORMAT_MOD_Yf_TILED_CCS:
 	case I915_FORMAT_MOD_Y_TILED:
@@ -2279,9 +2340,10 @@ static u32 intel_adjust_tile_offset(int *x, int *y,
 	return new_offset;
 }
 
-static bool is_surface_linear(u64 modifier, int color_plane)
+static bool is_surface_linear(const struct drm_framebuffer *fb, int color_plane)
 {
-	return modifier == DRM_FORMAT_MOD_LINEAR;
+	return fb->modifier == DRM_FORMAT_MOD_LINEAR ||
+	       is_gen12_ccs_plane(fb, color_plane);
 }
 
 static u32 intel_adjust_aligned_offset(int *x, int *y,
@@ -2296,7 +2358,7 @@ static u32 intel_adjust_aligned_offset(int *x, int *y,
 
 	WARN_ON(new_offset > old_offset);
 
-	if (!is_surface_linear(fb->modifier, color_plane)) {
+	if (!is_surface_linear(fb, color_plane)) {
 		unsigned int tile_size, tile_width, tile_height;
 		unsigned int pitch_tiles;
 
@@ -2366,7 +2428,7 @@ static u32 intel_compute_aligned_offset(struct drm_i915_private *dev_priv,
 	if (alignment)
 		alignment--;
 
-	if (!is_surface_linear(fb->modifier, color_plane)) {
+	if (!is_surface_linear(fb, color_plane)) {
 		unsigned int tile_size, tile_width, tile_height;
 		unsigned int tile_rows, tiles, pitch_tiles;
 
@@ -2468,6 +2530,7 @@ static unsigned int intel_fb_modifier_to_tiling(u64 fb_modifier)
 		return I915_TILING_X;
 	case I915_FORMAT_MOD_Y_TILED:
 	case I915_FORMAT_MOD_Y_TILED_CCS:
+	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
 		return I915_TILING_Y;
 	default:
 		return I915_TILING_NONE;
@@ -2485,14 +2548,40 @@ static unsigned int intel_fb_modifier_to_tiling(u64 fb_modifier)
  * Since cache line pairs refers to horizontally adjacent cache lines,
  * each cache line in the CCS corresponds to an area of 32x16 cache
  * lines on the main surface. Since each pixel is 4 bytes, this gives
- * us a ratio of one byte in the CCS for each 8x16 pixels in the
+* us a ratio of one byte in the CCS for each 8x16 pixels in the
  * main surface.
  */
-static const struct drm_format_info ccs_formats[] = {
-	{ .format = DRM_FORMAT_XRGB8888, .depth = 24, .num_planes = 2, .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, },
-	{ .format = DRM_FORMAT_XBGR8888, .depth = 24, .num_planes = 2, .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, },
-	{ .format = DRM_FORMAT_ARGB8888, .depth = 32, .num_planes = 2, .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, },
-	{ .format = DRM_FORMAT_ABGR8888, .depth = 32, .num_planes = 2, .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, },
+static const struct drm_format_info skl_ccs_formats[] = {
+	{ .format = DRM_FORMAT_XRGB8888, .depth = 24, .num_planes = 2,
+	  .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, },
+	{ .format = DRM_FORMAT_XBGR8888, .depth = 24, .num_planes = 2,
+	  .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, },
+	{ .format = DRM_FORMAT_ARGB8888, .depth = 32, .num_planes = 2,
+	  .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, .has_alpha = true, },
+	{ .format = DRM_FORMAT_ABGR8888, .depth = 32, .num_planes = 2,
+	  .cpp = { 4, 1, }, .hsub = 8, .vsub = 16, .has_alpha = true, },
+};
+
+/*
+ * Gen-12 compression uses 4 bits of CCS data for each cache line pair in the
+ * main surface. And each 64B CCS cache line represents an area of 4x1 Y-tiles
+ * in the main surface. With 4 byte pixels and each Y-tile having dimensions of
+ * 32x32 pixels, the ratio turns out to 1B in the CCS for every 2x32 pixels in
+ * the main surface.
+ */
+static const struct drm_format_info gen12_ccs_formats[] = {
+	{ .format = DRM_FORMAT_XRGB8888, .depth = 24, .num_planes = 2,
+	  .char_per_block = { 4, 1 }, .block_w = { 1, 2 }, .block_h = { 1, 1 },
+	  .hsub = 1, .vsub = 1, },
+	{ .format = DRM_FORMAT_XBGR8888, .depth = 24, .num_planes = 2,
+	  .char_per_block = { 4, 1 }, .block_w = { 1, 2 }, .block_h = { 1, 1 },
+	  .hsub = 1, .vsub = 1, },
+	{ .format = DRM_FORMAT_ARGB8888, .depth = 32, .num_planes = 2,
+	  .char_per_block = { 4, 1 }, .block_w = { 1, 2 }, .block_h = { 1, 1 },
+	  .hsub = 1, .vsub = 1, .has_alpha = true },
+	{ .format = DRM_FORMAT_ABGR8888, .depth = 32, .num_planes = 2,
+	  .char_per_block = { 4, 1 }, .block_w = { 1, 2 }, .block_h = { 1, 1 },
+	  .hsub = 1, .vsub = 1, .has_alpha = true },
 };
 
 static const struct drm_format_info *
@@ -2515,8 +2604,12 @@ intel_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 	switch (cmd->modifier[0]) {
 	case I915_FORMAT_MOD_Y_TILED_CCS:
 	case I915_FORMAT_MOD_Yf_TILED_CCS:
-		return lookup_format_info(ccs_formats,
-					  ARRAY_SIZE(ccs_formats),
+		return lookup_format_info(skl_ccs_formats,
+					  ARRAY_SIZE(skl_ccs_formats),
+					  cmd->pixel_format);
+	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+		return lookup_format_info(gen12_ccs_formats,
+					  ARRAY_SIZE(gen12_ccs_formats),
 					  cmd->pixel_format);
 	default:
 		return NULL;
@@ -2525,7 +2618,8 @@ intel_get_format_info(const struct drm_mode_fb_cmd2 *cmd)
 
 bool is_ccs_modifier(u64 modifier)
 {
-	return modifier == I915_FORMAT_MOD_Y_TILED_CCS ||
+	return modifier == I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS ||
+	       modifier == I915_FORMAT_MOD_Y_TILED_CCS ||
 	       modifier == I915_FORMAT_MOD_Yf_TILED_CCS;
 }
 
@@ -2570,8 +2664,9 @@ static u32
 intel_fb_stride_alignment(const struct drm_framebuffer *fb, int color_plane)
 {
 	struct drm_i915_private *dev_priv = to_i915(fb->dev);
+	u32 tile_width;
 
-	if (fb->modifier == DRM_FORMAT_MOD_LINEAR) {
+	if (is_surface_linear(fb, color_plane)) {
 		u32 max_stride = intel_plane_fb_max_stride(dev_priv,
 							   fb->format->format,
 							   fb->modifier);
@@ -2580,13 +2675,34 @@ intel_fb_stride_alignment(const struct drm_framebuffer *fb, int color_plane)
 		 * To make remapping with linear generally feasible
 		 * we need the stride to be page aligned.
 		 */
-		if (fb->pitches[color_plane] > max_stride)
+		if (fb->pitches[color_plane] > max_stride &&
+		    !is_ccs_modifier(fb->modifier))
 			return intel_tile_size(dev_priv);
 		else
 			return 64;
-	} else {
-		return intel_tile_width_bytes(fb, color_plane);
 	}
+
+	tile_width = intel_tile_width_bytes(fb, color_plane);
+	if (is_ccs_modifier(fb->modifier) && color_plane == 0) {
+		/*
+		 * Display WA #0531: skl,bxt,kbl,glk
+		 *
+		 * Render decompression and plane width > 3840
+		 * combined with horizontal panning requires the
+		 * plane stride to be a multiple of 4. We'll just
+		 * require the entire fb to accommodate that to avoid
+		 * potential runtime errors at plane configuration time.
+		 */
+		if (IS_GEN(dev_priv, 9) && fb->width > 3840)
+			tile_width *= 4;
+		/*
+		 * The main surface pitch must be padded to a multiple of four
+		 * tile widths.
+		 */
+		else if (INTEL_GEN(dev_priv) >= 12)
+			tile_width *= 4;
+	}
+	return tile_width;
 }
 
 bool intel_plane_can_remap(const struct intel_plane_state *plane_state)
@@ -2657,6 +2773,101 @@ static bool intel_plane_needs_remap(const struct intel_plane_state *plane_state)
 	return stride > max_stride;
 }
 
+static void
+intel_fb_plane_get_subsampling(int *hsub, int *vsub,
+			       const struct drm_framebuffer *fb,
+			       int color_plane)
+{
+	int main_plane;
+
+	if (color_plane == 0) {
+		*hsub = 1;
+		*vsub = 1;
+
+		return;
+	}
+
+	/*
+	 * TODO: Deduct the subsampling from the char block for all CCS
+	 * formats and planes.
+	 */
+	if (!is_gen12_ccs_plane(fb, color_plane)) {
+		*hsub = fb->format->hsub;
+		*vsub = fb->format->vsub;
+
+		return;
+	}
+
+	main_plane = ccs_to_main_plane(fb, color_plane);
+	*hsub = drm_format_info_block_width(fb->format, color_plane) /
+		drm_format_info_block_width(fb->format, main_plane);
+
+	/*
+	 * The min stride check in the core framebuffer_check() function
+	 * assumes that format->hsub applies to every plane except for the
+	 * first plane. That's incorrect for the CCS AUX plane of the first
+	 * plane, but for the above check to pass we must define the block
+	 * width with that subsampling applied to it. Adjust the width here
+	 * accordingly, so we can calculate the actual subsampling factor.
+	 */
+	if (main_plane == 0)
+		*hsub *= fb->format->hsub;
+
+	*vsub = 32;
+}
+static int
+intel_fb_check_ccs_xy(struct drm_framebuffer *fb, int ccs_plane, int x, int y)
+{
+	struct intel_framebuffer *intel_fb = to_intel_framebuffer(fb);
+	int main_plane;
+	int hsub, vsub;
+	int tile_width, tile_height;
+	int ccs_x, ccs_y;
+	int main_x, main_y;
+
+	if (!is_ccs_plane(fb, ccs_plane))
+		return 0;
+
+	intel_tile_dims(fb, ccs_plane, &tile_width, &tile_height);
+	intel_fb_plane_get_subsampling(&hsub, &vsub, fb, ccs_plane);
+
+	tile_width *= hsub;
+	tile_height *= vsub;
+
+	ccs_x = (x * hsub) % tile_width;
+	ccs_y = (y * vsub) % tile_height;
+
+	main_plane = ccs_to_main_plane(fb, ccs_plane);
+	main_x = intel_fb->normal[main_plane].x % tile_width;
+	main_y = intel_fb->normal[main_plane].y % tile_height;
+
+	/*
+	 * CCS doesn't have its own x/y offset register, so the intra CCS tile
+	 * x/y offsets must match between CCS and the main surface.
+	 */
+	if (main_x != ccs_x || main_y != ccs_y) {
+		DRM_DEBUG_KMS("Bad CCS x/y (main %d,%d ccs %d,%d) full (main %d,%d ccs %d,%d)\n",
+			      main_x, main_y,
+			      ccs_x, ccs_y,
+			      intel_fb->normal[main_plane].x,
+			      intel_fb->normal[main_plane].y,
+			      x, y);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void
+intel_fb_plane_dims(int *w, int *h, struct drm_framebuffer *fb, int color_plane)
+{
+	int hsub, vsub;
+
+	intel_fb_plane_get_subsampling(&hsub, &vsub, fb, color_plane);
+	*w = fb->width / hsub;
+	*h = fb->height / vsub;
+}
+
 static int
 intel_fill_fb_info(struct drm_i915_private *dev_priv,
 		   struct drm_framebuffer *fb)
@@ -2677,8 +2888,7 @@ intel_fill_fb_info(struct drm_i915_private *dev_priv,
 		int ret;
 
 		cpp = fb->format->cpp[i];
-		width = drm_framebuffer_plane_width(fb->width, fb, i);
-		height = drm_framebuffer_plane_height(fb->height, fb, i);
+		intel_fb_plane_dims(&width, &height, fb, i);
 
 		ret = intel_fb_offset_to_xy(&x, &y, fb, i);
 		if (ret) {
@@ -2687,36 +2897,9 @@ intel_fill_fb_info(struct drm_i915_private *dev_priv,
 			return ret;
 		}
 
-		if (is_ccs_modifier(fb->modifier) && i == 1) {
-			int hsub = fb->format->hsub;
-			int vsub = fb->format->vsub;
-			int tile_width, tile_height;
-			int main_x, main_y;
-			int ccs_x, ccs_y;
-
-			intel_tile_dims(fb, i, &tile_width, &tile_height);
-			tile_width *= hsub;
-			tile_height *= vsub;
-
-			ccs_x = (x * hsub) % tile_width;
-			ccs_y = (y * vsub) % tile_height;
-			main_x = intel_fb->normal[0].x % tile_width;
-			main_y = intel_fb->normal[0].y % tile_height;
-
-			/*
-			 * CCS doesn't have its own x/y offset register, so the intra CCS tile
-			 * x/y offsets must match between CCS and the main surface.
-			 */
-			if (main_x != ccs_x || main_y != ccs_y) {
-				DRM_DEBUG_KMS("Bad CCS x/y (main %d,%d ccs %d,%d) full (main %d,%d ccs %d,%d)\n",
-					      main_x, main_y,
-					      ccs_x, ccs_y,
-					      intel_fb->normal[0].x,
-					      intel_fb->normal[0].y,
-					      x, y);
-				return -EINVAL;
-			}
-		}
+		ret = intel_fb_check_ccs_xy(fb, i, x, y);
+		if (ret)
+			return ret;
 
 		/*
 		 * The fence (if used) is aligned to the start of the object
@@ -2747,7 +2930,7 @@ intel_fill_fb_info(struct drm_i915_private *dev_priv,
 						      tile_size);
 		offset /= tile_size;
 
-		if (!is_surface_linear(fb->modifier, i)) {
+		if (!is_surface_linear(fb, i)) {
 			unsigned int tile_width, tile_height;
 			unsigned int pitch_tiles;
 			struct drm_rect r;
@@ -3426,13 +3609,15 @@ static bool skl_check_main_ccs_coordinates(struct intel_plane_state *plane_state
 					   int main_x, int main_y, u32 main_offset)
 {
 	const struct drm_framebuffer *fb = plane_state->hw.fb;
-	int hsub = fb->format->hsub;
-	int vsub = fb->format->vsub;
-	int aux_x = plane_state->color_plane[1].x;
-	int aux_y = plane_state->color_plane[1].y;
-	u32 aux_offset = plane_state->color_plane[1].offset;
-	u32 alignment = intel_surf_alignment(fb, 1);
+	int ccs_plane = main_to_ccs_plane(fb, 0);
+	int aux_x = plane_state->color_plane[ccs_plane].x;
+	int aux_y = plane_state->color_plane[ccs_plane].y;
+	u32 aux_offset = plane_state->color_plane[ccs_plane].offset;
+	u32 alignment = intel_surf_alignment(fb, ccs_plane);
+	int hsub;
+	int vsub;
 
+	intel_fb_plane_get_subsampling(&hsub, &vsub, fb, ccs_plane);
 	while (aux_offset >= main_offset && aux_y <= main_y) {
 		int x, y;
 
@@ -3444,8 +3629,12 @@ static bool skl_check_main_ccs_coordinates(struct intel_plane_state *plane_state
 
 		x = aux_x / hsub;
 		y = aux_y / vsub;
-		aux_offset = intel_plane_adjust_aligned_offset(&x, &y, plane_state, 1,
-							       aux_offset, aux_offset - alignment);
+		aux_offset = intel_plane_adjust_aligned_offset(&x, &y,
+							       plane_state,
+							       ccs_plane,
+							       aux_offset,
+							       aux_offset -
+								alignment);
 		aux_x = x * hsub + aux_x % hsub;
 		aux_y = y * vsub + aux_y % vsub;
 	}
@@ -3453,9 +3642,9 @@ static bool skl_check_main_ccs_coordinates(struct intel_plane_state *plane_state
 	if (aux_x != main_x || aux_y != main_y)
 		return false;
 
-	plane_state->color_plane[1].offset = aux_offset;
-	plane_state->color_plane[1].x = aux_x;
-	plane_state->color_plane[1].y = aux_y;
+	plane_state->color_plane[ccs_plane].offset = aux_offset;
+	plane_state->color_plane[ccs_plane].x = aux_x;
+	plane_state->color_plane[ccs_plane].y = aux_y;
 
 	return true;
 }
@@ -3471,7 +3660,10 @@ static int skl_check_main_surface(struct intel_plane_state *plane_state)
 	int h = drm_rect_height(&plane_state->uapi.src) >> 16;
 	int max_width;
 	int max_height;
-	u32 alignment, offset, aux_offset = plane_state->color_plane[1].offset;
+	u32 alignment;
+	u32 offset;
+	int aux_plane = intel_main_to_aux_plane(fb, 0);
+	u32 aux_offset = plane_state->color_plane[aux_plane].offset;
 
 	if (INTEL_GEN(dev_priv) >= 11)
 		max_width = icl_max_plane_width(fb, 0, rotation);
@@ -3537,7 +3729,8 @@ static int skl_check_main_surface(struct intel_plane_state *plane_state)
 								   offset, offset - alignment);
 		}
 
-		if (x != plane_state->color_plane[1].x || y != plane_state->color_plane[1].y) {
+		if (x != plane_state->color_plane[aux_plane].x ||
+		    y != plane_state->color_plane[aux_plane].y) {
 			DRM_DEBUG_KMS("Unable to find suitable display surface offset due to CCS\n");
 			return -EINVAL;
 		}
@@ -3591,12 +3784,15 @@ static int skl_check_ccs_aux_surface(struct intel_plane_state *plane_state)
 	const struct drm_framebuffer *fb = plane_state->hw.fb;
 	int src_x = plane_state->uapi.src.x1 >> 16;
 	int src_y = plane_state->uapi.src.y1 >> 16;
-	int hsub = fb->format->hsub;
-	int vsub = fb->format->vsub;
-	int x = src_x / hsub;
-	int y = src_y / vsub;
+	int hsub;
+	int vsub;
+	int x;
+	int y;
 	u32 offset;
 
+	intel_fb_plane_get_subsampling(&hsub, &vsub, fb, 1);
+	x = src_x / hsub;
+	y = src_y / vsub;
 	intel_add_fb_offsets(&x, &y, plane_state, 1);
 	offset = intel_plane_compute_aligned_offset(&x, &y, plane_state, 1);
 
@@ -4092,7 +4288,7 @@ static unsigned int skl_plane_stride_mult(const struct drm_framebuffer *fb,
 	 * The stride is either expressed as a multiple of 64 bytes chunks for
 	 * linear buffers or in number of tiles for tiled buffers.
 	 */
-	if (fb->modifier == DRM_FORMAT_MOD_LINEAR)
+	if (is_surface_linear(fb, color_plane))
 		return 64;
 	else if (drm_rotation_90_or_270(rotation))
 		return intel_tile_height(fb, color_plane);
@@ -4220,6 +4416,10 @@ static u32 skl_plane_ctl_tiling(u64 fb_modifier)
 		return PLANE_CTL_TILED_Y;
 	case I915_FORMAT_MOD_Y_TILED_CCS:
 		return PLANE_CTL_TILED_Y | PLANE_CTL_RENDER_DECOMPRESSION_ENABLE;
+	case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+		return PLANE_CTL_TILED_Y |
+		       PLANE_CTL_RENDER_DECOMPRESSION_ENABLE |
+		       PLANE_CTL_CLEAR_COLOR_DISABLE;
 	case I915_FORMAT_MOD_Yf_TILED:
 		return PLANE_CTL_TILED_YF;
 	case I915_FORMAT_MOD_Yf_TILED_CCS:
@@ -4573,25 +4773,6 @@ static void icl_enable_trans_port_sync(const struct intel_crtc_state *crtc_state
 
 	I915_WRITE(TRANS_DDI_FUNC_CTL2(crtc_state->cpu_transcoder),
 		   trans_ddi_func_ctl2_val);
-}
-
-static void icl_disable_transcoder_port_sync(const struct intel_crtc_state *old_crtc_state)
-{
-	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	i915_reg_t reg;
-	u32 trans_ddi_func_ctl2_val;
-
-	if (old_crtc_state->master_transcoder == INVALID_TRANSCODER)
-		return;
-
-	DRM_DEBUG_KMS("Disabling Transcoder Port Sync on Slave Transcoder %s\n",
-		      transcoder_name(old_crtc_state->cpu_transcoder));
-
-	reg = TRANS_DDI_FUNC_CTL2(old_crtc_state->cpu_transcoder);
-	trans_ddi_func_ctl2_val = ~(PORT_SYNC_MODE_ENABLE |
-				    PORT_SYNC_MODE_MASTER_SELECT_MASK);
-	I915_WRITE(reg, trans_ddi_func_ctl2_val);
 }
 
 static void intel_fdi_normal_train(struct intel_crtc *crtc)
@@ -5764,8 +5945,9 @@ static int skl_update_scaler_plane(struct intel_crtc_state *crtc_state,
 	return 0;
 }
 
-static void skylake_scaler_disable(struct intel_crtc *crtc)
+void skylake_scaler_disable(const struct intel_crtc_state *old_crtc_state)
 {
+	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
 	int i;
 
 	for (i = 0; i < crtc->num_scalers; i++)
@@ -6056,9 +6238,6 @@ static void intel_pre_plane_update(struct intel_atomic_state *state,
 	if (new_primary_state &&
 	    intel_fbc_pre_update(crtc, new_crtc_state, new_primary_state))
 		intel_wait_for_vblank(dev_priv, pipe);
-
-	if (new_primary_state)
-		intel_fbc_pre_update(crtc, new_crtc_state, new_primary_state);
 
 	/* Display WA 827 */
 	if (!needs_nv12_wa(old_crtc_state) &&
@@ -6660,7 +6839,7 @@ static void haswell_crtc_enable(struct intel_atomic_state *state,
 	}
 }
 
-static void ironlake_pfit_disable(const struct intel_crtc_state *old_crtc_state)
+void ironlake_pfit_disable(const struct intel_crtc_state *old_crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
@@ -6693,7 +6872,7 @@ static void ironlake_crtc_disable(struct intel_atomic_state *state,
 
 	intel_encoders_disable(state, crtc);
 
-	intel_crtc_vblank_off(crtc);
+	intel_crtc_vblank_off(old_crtc_state);
 
 	intel_disable_pipe(old_crtc_state);
 
@@ -6735,35 +6914,12 @@ static void ironlake_crtc_disable(struct intel_atomic_state *state,
 static void haswell_crtc_disable(struct intel_atomic_state *state,
 				 struct intel_crtc *crtc)
 {
-	const struct intel_crtc_state *old_crtc_state =
-		intel_atomic_get_old_crtc_state(state, crtc);
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	enum transcoder cpu_transcoder = old_crtc_state->cpu_transcoder;
-
+	/*
+	 * FIXME collapse everything to one hook.
+	 * Need care with mst->ddi interactions.
+	 */
 	intel_encoders_disable(state, crtc);
-
-	intel_crtc_vblank_off(crtc);
-
-	/* XXX: Do the pipe assertions at the right place for BXT DSI. */
-	if (!transcoder_is_dsi(cpu_transcoder))
-		intel_disable_pipe(old_crtc_state);
-
-	if (INTEL_GEN(dev_priv) >= 11)
-		icl_disable_transcoder_port_sync(old_crtc_state);
-
-	if (!transcoder_is_dsi(cpu_transcoder))
-		intel_ddi_disable_transcoder_func(old_crtc_state);
-
-	intel_dsc_disable(old_crtc_state);
-
-	if (INTEL_GEN(dev_priv) >= 9)
-		skylake_scaler_disable(crtc);
-	else
-		ironlake_pfit_disable(old_crtc_state);
-
 	intel_encoders_post_disable(state, crtc);
-
-	intel_encoders_post_pll_disable(state, crtc);
 }
 
 static void i9xx_pfit_enable(const struct intel_crtc_state *crtc_state)
@@ -7109,7 +7265,7 @@ static void i9xx_crtc_disable(struct intel_atomic_state *state,
 
 	intel_encoders_disable(state, crtc);
 
-	intel_crtc_vblank_off(crtc);
+	intel_crtc_vblank_off(old_crtc_state);
 
 	intel_disable_pipe(old_crtc_state);
 
@@ -8091,11 +8247,10 @@ int vlv_force_pll_on(struct drm_i915_private *dev_priv, enum pipe pipe,
 	struct intel_crtc *crtc = intel_get_crtc_for_pipe(dev_priv, pipe);
 	struct intel_crtc_state *pipe_config;
 
-	pipe_config = kzalloc(sizeof(*pipe_config), GFP_KERNEL);
+	pipe_config = intel_crtc_state_alloc(crtc);
 	if (!pipe_config)
 		return -ENOMEM;
 
-	pipe_config->uapi.crtc = &crtc->base;
 	pipe_config->cpu_transcoder = (enum transcoder)pipe;
 	pipe_config->pixel_multiplier = 1;
 	pipe_config->dpll = *dpll;
@@ -9996,7 +10151,9 @@ skylake_get_initial_plane_config(struct intel_crtc *crtc,
 	case PLANE_CTL_TILED_Y:
 		plane_config->tiling = I915_TILING_Y;
 		if (val & PLANE_CTL_RENDER_DECOMPRESSION_ENABLE)
-			fb->modifier = I915_FORMAT_MOD_Y_TILED_CCS;
+			fb->modifier = INTEL_GEN(dev_priv) >= 12 ?
+				I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS :
+				I915_FORMAT_MOD_Y_TILED_CCS;
 		else
 			fb->modifier = I915_FORMAT_MOD_Y_TILED;
 		break;
@@ -10422,6 +10579,9 @@ static bool hsw_get_transcoder_state(struct intel_crtc *crtc,
 		case TRANS_DDI_EDP_INPUT_C_ONOFF:
 			trans_pipe = PIPE_C;
 			break;
+		case TRANS_DDI_EDP_INPUT_D_ONOFF:
+			trans_pipe = PIPE_D;
+			break;
 		}
 
 		if (trans_pipe == crtc->pipe) {
@@ -10621,8 +10781,6 @@ static bool haswell_get_pipe_config(struct intel_crtc *crtc,
 	enum intel_display_power_domain power_domain;
 	u64 power_domain_mask;
 	bool active;
-
-	intel_crtc_init_scalers(crtc, pipe_config);
 
 	pipe_config->master_transcoder = INVALID_TRANSCODER;
 
@@ -11671,6 +11829,32 @@ static void ironlake_pch_clock_get(struct intel_crtc *crtc,
 					 &pipe_config->fdi_m_n);
 }
 
+static void intel_crtc_state_reset(struct intel_crtc_state *crtc_state,
+				   struct intel_crtc *crtc)
+{
+	memset(crtc_state, 0, sizeof(*crtc_state));
+
+	__drm_atomic_helper_crtc_state_reset(&crtc_state->uapi, &crtc->base);
+
+	crtc_state->cpu_transcoder = INVALID_TRANSCODER;
+	crtc_state->master_transcoder = INVALID_TRANSCODER;
+	crtc_state->hsw_workaround_pipe = INVALID_PIPE;
+	crtc_state->output_format = INTEL_OUTPUT_FORMAT_INVALID;
+	crtc_state->scaler_state.scaler_id = -1;
+}
+
+static struct intel_crtc_state *intel_crtc_state_alloc(struct intel_crtc *crtc)
+{
+	struct intel_crtc_state *crtc_state;
+
+	crtc_state = kmalloc(sizeof(*crtc_state), GFP_KERNEL);
+
+	if (crtc_state)
+		intel_crtc_state_reset(crtc_state, crtc);
+
+	return crtc_state;
+}
+
 /* Returns the currently programmed mode of the given encoder. */
 struct drm_display_mode *
 intel_encoder_current_mode(struct intel_encoder *encoder)
@@ -11690,13 +11874,11 @@ intel_encoder_current_mode(struct intel_encoder *encoder)
 	if (!mode)
 		return NULL;
 
-	crtc_state = kzalloc(sizeof(*crtc_state), GFP_KERNEL);
+	crtc_state = intel_crtc_state_alloc(crtc);
 	if (!crtc_state) {
 		kfree(mode);
 		return NULL;
 	}
-
-	crtc_state->uapi.crtc = &crtc->base;
 
 	if (!dev_priv->display.get_pipe_config(crtc, crtc_state)) {
 		kfree(crtc_state);
@@ -12634,11 +12816,11 @@ static void intel_crtc_copy_hw_to_uapi_state(struct intel_crtc_state *crtc_state
 static int
 intel_crtc_prepare_cleared_state(struct intel_crtc_state *crtc_state)
 {
-	struct drm_i915_private *dev_priv =
-		to_i915(crtc_state->uapi.crtc->dev);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	struct intel_crtc_state *saved_state;
 
-	saved_state = kzalloc(sizeof(*saved_state), GFP_KERNEL);
+	saved_state = intel_crtc_state_alloc(crtc);
 	if (!saved_state)
 		return -ENOMEM;
 
@@ -13548,18 +13730,14 @@ verify_crtc_state(struct intel_crtc *crtc,
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_encoder *encoder;
-	struct intel_crtc_state *pipe_config;
-	struct drm_atomic_state *state;
+	struct intel_crtc_state *pipe_config = old_crtc_state;
+	struct drm_atomic_state *state = old_crtc_state->uapi.state;
 	bool active;
 
-	state = old_crtc_state->uapi.state;
 	__drm_atomic_helper_crtc_destroy_state(&old_crtc_state->uapi);
 	intel_crtc_free_hw_state(old_crtc_state);
-
-	pipe_config = old_crtc_state;
-	memset(pipe_config, 0, sizeof(*pipe_config));
-	pipe_config->uapi.crtc = &crtc->base;
-	pipe_config->uapi.state = state;
+	intel_crtc_state_reset(old_crtc_state, crtc);
+	old_crtc_state->uapi.state = state;
 
 	DRM_DEBUG_KMS("[CRTC:%d:%s]\n", crtc->base.base.id, crtc->base.name);
 
@@ -14548,17 +14726,19 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
 	struct intel_crtc *crtc;
 	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
-	unsigned int updated = 0;
-	bool progress;
-	int i;
 	u8 hw_enabled_slices = dev_priv->wm.skl_hw.ddb.enabled_slices;
 	u8 required_slices = state->wm_results.ddb.enabled_slices;
 	struct skl_ddb_entry entries[I915_MAX_PIPES] = {};
+	u8 dirty_pipes = 0;
+	int i;
 
-	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i)
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
 		/* ignore allocations for crtc's that have been turned off. */
 		if (!needs_modeset(new_crtc_state) && new_crtc_state->hw.active)
 			entries[i] = old_crtc_state->wm.skl.ddb;
+		if (new_crtc_state->hw.active)
+			dirty_pipes |= BIT(crtc->pipe);
+	}
 
 	/* If 2nd DBuf slice required, enable it here */
 	if (INTEL_GEN(dev_priv) >= 11 && required_slices > hw_enabled_slices)
@@ -14570,15 +14750,13 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 	 * never overlap with eachother inbetween CRTC updates. Otherwise we'll
 	 * cause pipe underruns and other bad stuff.
 	 */
-	do {
-		progress = false;
-
-		for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+	while (dirty_pipes) {
+		for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
+						    new_crtc_state, i) {
 			enum pipe pipe = crtc->pipe;
-			bool vbl_wait = false;
 			bool modeset = needs_modeset(new_crtc_state);
 
-			if (updated & BIT(crtc->pipe) || !new_crtc_state->hw.active)
+			if ((dirty_pipes & BIT(pipe)) == 0)
 				continue;
 
 			if (skl_ddb_allocation_overlaps(&new_crtc_state->wm.skl.ddb,
@@ -14586,20 +14764,8 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 							INTEL_NUM_PIPES(dev_priv), i))
 				continue;
 
-			updated |= BIT(pipe);
 			entries[i] = new_crtc_state->wm.skl.ddb;
-
-			/*
-			 * If this is an already active pipe, it's DDB changed,
-			 * and this isn't the last pipe that needs updating
-			 * then we need to wait for a vblank to pass for the
-			 * new ddb allocation to take effect.
-			 */
-			if (!skl_ddb_entry_equal(&new_crtc_state->wm.skl.ddb,
-						 &old_crtc_state->wm.skl.ddb) &&
-			    !modeset &&
-			    state->wm_results.dirty_pipes != updated)
-				vbl_wait = true;
+			dirty_pipes &= ~BIT(pipe);
 
 			if (modeset && is_trans_port_sync_mode(new_crtc_state)) {
 				if (is_trans_port_sync_master(new_crtc_state))
@@ -14614,12 +14780,18 @@ static void skl_commit_modeset_enables(struct intel_atomic_state *state)
 						  new_crtc_state);
 			}
 
-			if (vbl_wait)
+			/*
+			 * If this is an already active pipe, it's DDB changed,
+			 * and this isn't the last pipe that needs updating
+			 * then we need to wait for a vblank to pass for the
+			 * new ddb allocation to take effect.
+			 */
+			if (!skl_ddb_entry_equal(&new_crtc_state->wm.skl.ddb,
+						 &old_crtc_state->wm.skl.ddb) &&
+			    !modeset && dirty_pipes)
 				intel_wait_for_vblank(dev_priv, pipe);
-
-			progress = true;
 		}
-	} while (progress);
+	}
 
 	/* If 2nd DBuf slice is no more required disable it */
 	if (INTEL_GEN(dev_priv) >= 11 && required_slices < hw_enabled_slices)
@@ -15693,28 +15865,6 @@ fail:
 	return ERR_PTR(ret);
 }
 
-static void intel_crtc_init_scalers(struct intel_crtc *crtc,
-				    struct intel_crtc_state *crtc_state)
-{
-	struct intel_crtc_scaler_state *scaler_state =
-		&crtc_state->scaler_state;
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	int i;
-
-	crtc->num_scalers = RUNTIME_INFO(dev_priv)->num_scalers[crtc->pipe];
-	if (!crtc->num_scalers)
-		return;
-
-	for (i = 0; i < crtc->num_scalers; i++) {
-		struct intel_scaler *scaler = &scaler_state->scalers[i];
-
-		scaler->in_use = 0;
-		scaler->mode = 0;
-	}
-
-	scaler_state->scaler_id = -1;
-}
-
 #define INTEL_CRTC_FUNCS \
 	.gamma_set = drm_atomic_helper_legacy_gamma_set, \
 	.set_config = drm_atomic_helper_set_config, \
@@ -15782,33 +15932,53 @@ static const struct drm_crtc_funcs i8xx_crtc_funcs = {
 	.disable_vblank = i8xx_disable_vblank,
 };
 
+static struct intel_crtc *intel_crtc_alloc(void)
+{
+	struct intel_crtc_state *crtc_state;
+	struct intel_crtc *crtc;
+
+	crtc = kzalloc(sizeof(*crtc), GFP_KERNEL);
+	if (!crtc)
+		return ERR_PTR(-ENOMEM);
+
+	crtc_state = intel_crtc_state_alloc(crtc);
+	if (!crtc_state) {
+		kfree(crtc);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	crtc->base.state = &crtc_state->uapi;
+	crtc->config = crtc_state;
+
+	return crtc;
+}
+
+static void intel_crtc_free(struct intel_crtc *crtc)
+{
+	intel_crtc_destroy_state(&crtc->base, crtc->base.state);
+	kfree(crtc);
+}
+
 static int intel_crtc_init(struct drm_i915_private *dev_priv, enum pipe pipe)
 {
+	struct intel_plane *primary, *cursor;
 	const struct drm_crtc_funcs *funcs;
-	struct intel_crtc *intel_crtc;
-	struct intel_crtc_state *crtc_state = NULL;
-	struct intel_plane *primary = NULL;
-	struct intel_plane *cursor = NULL;
+	struct intel_crtc *crtc;
 	int sprite, ret;
 
-	intel_crtc = kzalloc(sizeof(*intel_crtc), GFP_KERNEL);
-	if (!intel_crtc)
-		return -ENOMEM;
+	crtc = intel_crtc_alloc();
+	if (IS_ERR(crtc))
+		return PTR_ERR(crtc);
 
-	crtc_state = kzalloc(sizeof(*crtc_state), GFP_KERNEL);
-	if (!crtc_state) {
-		ret = -ENOMEM;
-		goto fail;
-	}
-	__drm_atomic_helper_crtc_reset(&intel_crtc->base, &crtc_state->uapi);
-	intel_crtc->config = crtc_state;
+	crtc->pipe = pipe;
+	crtc->num_scalers = RUNTIME_INFO(dev_priv)->num_scalers[pipe];
 
 	primary = intel_primary_plane_create(dev_priv, pipe);
 	if (IS_ERR(primary)) {
 		ret = PTR_ERR(primary);
 		goto fail;
 	}
-	intel_crtc->plane_ids_mask |= BIT(primary->id);
+	crtc->plane_ids_mask |= BIT(primary->id);
 
 	for_each_sprite(dev_priv, pipe, sprite) {
 		struct intel_plane *plane;
@@ -15818,7 +15988,7 @@ static int intel_crtc_init(struct drm_i915_private *dev_priv, enum pipe pipe)
 			ret = PTR_ERR(plane);
 			goto fail;
 		}
-		intel_crtc->plane_ids_mask |= BIT(plane->id);
+		crtc->plane_ids_mask |= BIT(plane->id);
 	}
 
 	cursor = intel_cursor_plane_create(dev_priv, pipe);
@@ -15826,7 +15996,7 @@ static int intel_crtc_init(struct drm_i915_private *dev_priv, enum pipe pipe)
 		ret = PTR_ERR(cursor);
 		goto fail;
 	}
-	intel_crtc->plane_ids_mask |= BIT(cursor->id);
+	crtc->plane_ids_mask |= BIT(cursor->id);
 
 	if (HAS_GMCH(dev_priv)) {
 		if (IS_CHERRYVIEW(dev_priv) ||
@@ -15847,42 +16017,32 @@ static int intel_crtc_init(struct drm_i915_private *dev_priv, enum pipe pipe)
 			funcs = &ilk_crtc_funcs;
 	}
 
-	ret = drm_crtc_init_with_planes(&dev_priv->drm, &intel_crtc->base,
+	ret = drm_crtc_init_with_planes(&dev_priv->drm, &crtc->base,
 					&primary->base, &cursor->base,
 					funcs, "pipe %c", pipe_name(pipe));
 	if (ret)
 		goto fail;
 
-	intel_crtc->pipe = pipe;
-
-	/* initialize shared scalers */
-	intel_crtc_init_scalers(intel_crtc, crtc_state);
-
 	BUG_ON(pipe >= ARRAY_SIZE(dev_priv->pipe_to_crtc_mapping) ||
 	       dev_priv->pipe_to_crtc_mapping[pipe] != NULL);
-	dev_priv->pipe_to_crtc_mapping[pipe] = intel_crtc;
+	dev_priv->pipe_to_crtc_mapping[pipe] = crtc;
 
 	if (INTEL_GEN(dev_priv) < 9) {
 		enum i9xx_plane_id i9xx_plane = primary->i9xx_plane;
 
 		BUG_ON(i9xx_plane >= ARRAY_SIZE(dev_priv->plane_to_crtc_mapping) ||
 		       dev_priv->plane_to_crtc_mapping[i9xx_plane] != NULL);
-		dev_priv->plane_to_crtc_mapping[i9xx_plane] = intel_crtc;
+		dev_priv->plane_to_crtc_mapping[i9xx_plane] = crtc;
 	}
 
-	intel_color_init(intel_crtc);
+	intel_color_init(crtc);
 
-	WARN_ON(drm_crtc_index(&intel_crtc->base) != intel_crtc->pipe);
+	WARN_ON(drm_crtc_index(&crtc->base) != crtc->pipe);
 
 	return 0;
 
 fail:
-	/*
-	 * drm_mode_config_cleanup() will free up any
-	 * crtcs/planes already initialized.
-	 */
-	kfree(crtc_state);
-	kfree(intel_crtc);
+	intel_crtc_free(crtc);
 
 	return ret;
 }
@@ -16383,20 +16543,6 @@ static int intel_framebuffer_init(struct intel_framebuffer *intel_fb,
 		}
 
 		stride_alignment = intel_fb_stride_alignment(fb, i);
-
-		/*
-		 * Display WA #0531: skl,bxt,kbl,glk
-		 *
-		 * Render decompression and plane width > 3840
-		 * combined with horizontal panning requires the
-		 * plane stride to be a multiple of 4. We'll just
-		 * require the entire fb to accommodate that to avoid
-		 * potential runtime errors at plane configuration time.
-		 */
-		if (IS_GEN(dev_priv, 9) && i == 0 && fb->width > 3840 &&
-		    is_ccs_modifier(fb->modifier))
-			stride_alignment *= 4;
-
 		if (fb->pitches[i] & (stride_alignment - 1)) {
 			DRM_DEBUG_KMS("plane %d pitch (%d) must be at least %u byte aligned\n",
 				      i, fb->pitches[i], stride_alignment);
@@ -16674,8 +16820,6 @@ void intel_init_display_hooks(struct drm_i915_private *dev_priv)
 	} else if (IS_IVYBRIDGE(dev_priv)) {
 		/* FIXME: detect B0+ stepping and use auto training */
 		dev_priv->display.fdi_link_train = ivb_manual_fdi_link_train;
-	} else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv)) {
-		dev_priv->display.fdi_link_train = hsw_fdi_link_train;
 	}
 
 	if (INTEL_GEN(dev_priv) >= 9)
@@ -17408,8 +17552,7 @@ static void intel_modeset_readout_hw_state(struct drm_device *dev)
 
 		__drm_atomic_helper_crtc_destroy_state(&crtc_state->uapi);
 		intel_crtc_free_hw_state(crtc_state);
-		memset(crtc_state, 0, sizeof(*crtc_state));
-		__drm_atomic_helper_crtc_reset(&crtc->base, &crtc_state->uapi);
+		intel_crtc_state_reset(crtc_state, crtc);
 
 		crtc_state->hw.active = crtc_state->hw.enable =
 			dev_priv->display.get_pipe_config(crtc, crtc_state);
@@ -17746,7 +17889,7 @@ intel_modeset_setup_hw_state(struct drm_device *dev,
 
 	for_each_intel_crtc(&dev_priv->drm, crtc) {
 		struct intel_crtc_state *crtc_state =
-			crtc_state = to_intel_crtc_state(crtc->base.state);
+			to_intel_crtc_state(crtc->base.state);
 
 		intel_sanitize_crtc(crtc, ctx);
 		intel_dump_pipe_config(crtc_state, NULL, "[setup_hw_state]");

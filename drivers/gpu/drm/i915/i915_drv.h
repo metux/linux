@@ -1625,6 +1625,8 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 	ENGINE_INSTANCES_MASK(dev_priv, VCS0, I915_MAX_VCS)
 #define VEBOX_MASK(dev_priv) \
 	ENGINE_INSTANCES_MASK(dev_priv, VECS0, I915_MAX_VECS)
+#define ALL_ENGINES	(~0u)
+#define HAS_ENGINE(dev_priv, id) (INTEL_INFO(dev_priv)->engine_mask & BIT(id))
 
 /*
  * The Gen7 cmdparser copies the scanned buffer to the ggtt for execution

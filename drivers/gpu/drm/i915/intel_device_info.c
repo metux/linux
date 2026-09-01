@@ -1083,6 +1083,7 @@ void intel_device_info_init_mmio(struct drm_i915_private *dev_priv)
 		}
 
 		if (!(BIT(i) & vdbox_mask)) {
+		if (!(BIT(i) & RUNTIME_INFO(dev_priv)->vdbox_enable)) {
 			info->engine_mask &= ~BIT(_VCS(i));
 			DRM_DEBUG_DRIVER("vcs%u fused off\n", i);
 			continue;
@@ -1107,6 +1108,7 @@ void intel_device_info_init_mmio(struct drm_i915_private *dev_priv)
 		}
 
 		if (!(BIT(i) & vebox_mask)) {
+		if (!(BIT(i) & RUNTIME_INFO(dev_priv)->vebox_enable)) {
 			info->engine_mask &= ~BIT(_VECS(i));
 			DRM_DEBUG_DRIVER("vecs%u fused off\n", i);
 		}

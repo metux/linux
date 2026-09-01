@@ -92,14 +92,13 @@ static void handle_single_completion(struct ib_cq *cq, struct ib_wc *wc)
 	spin_unlock_irqrestore(&gsi->lock, flags);
 }
 
-struct ib_qp *mlx5_ib_gsi_create_qp(struct ib_pd *pd,
-				    struct ib_qp_init_attr *init_attr)
+int mlx5_ib_create_gsi(struct ib_pd *pd, struct mlx5_ib_qp *mqp,
+		       struct ib_qp_init_attr *attr)
 {
 	struct mlx5_ib_dev *dev = to_mdev(pd->device);
-	struct mlx5_ib_qp *mqp;
 	struct mlx5_ib_gsi_qp *gsi;
-	struct ib_qp_init_attr hw_init_attr = *init_attr;
-	const u8 port_num = init_attr->port_num;
+	struct ib_qp_init_attr hw_init_attr = *attr;
+	const u8 port_num = attr->port_num;
 	int num_qps = 0;
 	int ret;
 
@@ -111,26 +110,19 @@ struct ib_qp *mlx5_ib_gsi_create_qp(struct ib_pd *pd,
 			num_qps = MLX5_MAX_PORTS;
 	}
 
-	mqp = kzalloc(sizeof(struct mlx5_ib_qp), GFP_KERNEL);
-	if (!mqp)
-		return ERR_PTR(-ENOMEM);
-
 	gsi = &mqp->gsi;
 	gsi->tx_qps = kcalloc(num_qps, sizeof(*gsi->tx_qps), GFP_KERNEL);
-	if (!gsi->tx_qps) {
-		ret = -ENOMEM;
-		goto err_free;
-	}
+	if (!gsi->tx_qps)
+		return -ENOMEM;
 
-	gsi->outstanding_wrs = kcalloc(init_attr->cap.max_send_wr,
-				       sizeof(*gsi->outstanding_wrs),
-				       GFP_KERNEL);
+	gsi->outstanding_wrs =
+		kcalloc(attr->cap.max_send_wr, sizeof(*gsi->outstanding_wrs),
+			GFP_KERNEL);
 	if (!gsi->outstanding_wrs) {
 		ret = -ENOMEM;
 		goto err_free_tx;
 	}
 
-	mutex_init(&gsi->mutex);
 
 	mutex_lock(&dev->devr.mutex);
 
@@ -143,12 +135,11 @@ struct ib_qp *mlx5_ib_gsi_create_qp(struct ib_pd *pd,
 	gsi->num_qps = num_qps;
 	spin_lock_init(&gsi->lock);
 
-	gsi->cap = init_attr->cap;
-	gsi->sq_sig_type = init_attr->sq_sig_type;
-	gsi->ibqp.qp_num = 1;
+	gsi->cap = attr->cap;
+	gsi->sq_sig_type = attr->sq_sig_type;
 	gsi->port_num = port_num;
 
-	gsi->cq = ib_alloc_cq(pd->device, gsi, init_attr->cap.max_send_wr, 0,
+	gsi->cq = ib_alloc_cq(pd->device, gsi, attr->cap.max_send_wr, 0,
 			      IB_POLL_SOFTIRQ);
 	if (IS_ERR(gsi->cq)) {
 		mlx5_ib_warn(dev, "unable to create send CQ for GSI QP. error %ld\n",
@@ -184,11 +175,11 @@ struct ib_qp *mlx5_ib_gsi_create_qp(struct ib_pd *pd,
 	INIT_LIST_HEAD(&gsi->rx_qp->rdma_mrs);
 	INIT_LIST_HEAD(&gsi->rx_qp->sig_mrs);
 
-	dev->devr.ports[init_attr->port_num - 1].gsi = gsi;
+	dev->devr.ports[attr->port_num - 1].gsi = gsi;
 
 	mutex_unlock(&dev->devr.mutex);
 
-	return &gsi->ibqp;
+	return 0;
 
 err_destroy_cq:
 	ib_free_cq(gsi->cq);
@@ -197,9 +188,7 @@ err_free_wrs:
 	kfree(gsi->outstanding_wrs);
 err_free_tx:
 	kfree(gsi->tx_qps);
-err_free:
-	kfree(mqp);
-	return ERR_PTR(ret);
+	return ret;
 }
 
 int mlx5_ib_destroy_gsi(struct mlx5_ib_qp *mqp)

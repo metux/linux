@@ -825,6 +825,7 @@ release_pd_entry(struct i915_page_directory * const pd,
 static void mark_tlbs_dirty(struct i915_ppgtt *ppgtt)
 {
 	ppgtt->pd_dirty_engines = ALL_ENGINES;
+	ppgtt->pd_dirty_engines = INTEL_INFO(ppgtt->vm.i915)->engine_mask;
 }
 
 static void gen8_ppgtt_notify_vgt(struct i915_ppgtt *ppgtt, bool create)

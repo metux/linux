@@ -1704,7 +1704,11 @@ gen8_update_reg_state_unlocked(struct i915_perf_stream *stream,
 
 	CTX_REG(reg_state,
 		CTX_R_PWR_CLK_STATE, GEN8_R_PWR_CLK_STATE,
-		intel_sseu_make_rpcs(i915, &ce->sseu));
+		gen8_make_rpcs(i915, &ce->sseu));
+	CTX_REG(reg_state, CTX_R_PWR_CLK_STATE, GEN8_R_PWR_CLK_STATE,
+		gen8_make_rpcs(dev_priv,
+			       &to_intel_context(ctx,
+						 dev_priv->engine[RCS0])->sseu));
 }
 
 struct flex {

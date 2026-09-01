@@ -15,6 +15,7 @@
 #include "i915_selftest.h"
 #include "gt/intel_timeline.h"
 #include "intel_engine_types.h"
+#include "intel_device_info.h"
 #include "intel_gpu_commands.h"
 #include "intel_workarounds.h"
 
@@ -122,3 +123,5 @@ hangcheck_action_to_str(const enum intel_engine_hangcheck_action a)
 	return "unknown";
 }
 
+
+#endif /* _INTEL_RINGBUFFER_H_ */

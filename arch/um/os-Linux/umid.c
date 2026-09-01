@@ -137,11 +137,11 @@ static inline int is_umdir_used(char *dir)
 {
 	char pid[sizeof("nnnnnnnnn")], *end, *file;
 	int dead, fd, p, n, err;
-	size_t filelen;
+	size_t filelen = strlen(dir) + sizeof("/pid") + 1;
 
-	err = asprintf(&file, "%s/pid", dir);
-	if (err < 0)
-		return 0;
+	file = malloc(filelen);
+	if (!file)
+		return -ENOMEM;
 
 	filelen = strlen(file);
 

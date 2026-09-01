@@ -761,6 +761,7 @@ static void init_pd(struct i915_address_space *vm,
 static void mark_tlbs_dirty(struct i915_ppgtt *ppgtt)
 {
 	ppgtt->pd_dirty_engines = ALL_ENGINES;
+	ppgtt->pd_dirty_engines = INTEL_INFO(ppgtt->vm.i915)->engine_mask;
 }
 
 /* Removes entries from a single page table, releasing it if it's empty.

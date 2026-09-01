@@ -1252,6 +1252,7 @@ static void gen6_check_faults(struct drm_i915_private *dev_priv)
 					 RING_FAULT_SRCID(fault),
 					 RING_FAULT_FAULT_TYPE(fault));
 		}
+		POSTING_READ(RING_FAULT_REG(dev_priv->engine[RCS0]));
 	}
 }
 

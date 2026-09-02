@@ -28,6 +28,9 @@
 #include <linux/dma-fence.h>
 #include <linux/lockdep.h>
 
+#include "gt/intel_context_types.h"
+#include "gt/intel_engine_types.h"
+
 #include "i915_gem.h"
 #include "i915_scheduler.h"
 #include "i915_selftest.h"
@@ -156,6 +159,7 @@ struct i915_request {
 	 */
 	struct i915_sched_node sched;
 	struct i915_dependency dep;
+	intel_engine_mask_t execution_mask;
 
 	/*
 	 * A convenience pointer to the current breadcrumb value stored in
@@ -214,7 +218,7 @@ struct i915_request {
 
 	bool waitboost;
 
-	/** engine->request_list entry for this request */
+	/** timeline->request entry for this request */
 	struct list_head link;
 
 	/** ring->request_list entry for this request */
@@ -246,9 +250,6 @@ i915_request_create(struct intel_context *ce);
 
 struct i915_request *__i915_request_commit(struct i915_request *request);
 
-struct i915_request * __must_check
-i915_request_alloc(struct intel_engine_cs *engine,
-		   struct i915_gem_context *ctx);
 void i915_request_retire_upto(struct i915_request *rq);
 
 static inline struct i915_request *
@@ -283,6 +284,10 @@ int i915_request_await_object(struct i915_request *to,
 			      bool write);
 int i915_request_await_dma_fence(struct i915_request *rq,
 				 struct dma_fence *fence);
+int i915_request_await_execution(struct i915_request *rq,
+				 struct dma_fence *fence,
+				 void (*hook)(struct i915_request *rq,
+					      struct dma_fence *signal));
 
 void i915_request_add(struct i915_request *rq);
 

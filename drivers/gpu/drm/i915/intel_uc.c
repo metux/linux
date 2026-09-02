@@ -75,7 +75,8 @@ static int __get_default_guc_log_level(struct drm_i915_private *i915)
 {
 	int guc_log_level;
 
-	if (!HAS_GUC(i915) || !intel_uc_is_using_guc(i915))
+	if (!intel_uc_fw_supported(&i915->guc.fw) ||
+	    !intel_uc_is_using_guc(i915))
 		guc_log_level = GUC_LOG_LEVEL_DISABLED;
 	else if (IS_ENABLED(CONFIG_DRM_I915_DEBUG) ||
 		 IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM))
@@ -123,16 +124,16 @@ static void sanitize_options_early(struct drm_i915_private *i915)
 	if (intel_uc_is_using_guc(i915) && !intel_uc_fw_is_selected(guc_fw)) {
 		DRM_WARN("Incompatible option detected: %s=%d, %s!\n",
 			 "enable_guc", i915_modparams.enable_guc,
-			 !HAS_GUC(i915) ? "no GuC hardware" :
-					  "no GuC firmware");
+			 !intel_uc_fw_supported(guc_fw) ?
+				"no GuC hardware" : "no GuC firmware");
 	}
 
 	/* Verify HuC firmware availability */
 	if (intel_uc_is_using_huc(i915) && !intel_uc_fw_is_selected(huc_fw)) {
 		DRM_WARN("Incompatible option detected: %s=%d, %s!\n",
 			 "enable_guc", i915_modparams.enable_guc,
-			 !HAS_HUC(i915) ? "no HuC hardware" :
-					  "no HuC firmware");
+			 !intel_uc_fw_supported(huc_fw) ?
+				"no HuC hardware" : "no HuC firmware");
 	}
 
 	/* XXX: GuC submission is unavailable for now */
@@ -152,8 +153,8 @@ static void sanitize_options_early(struct drm_i915_private *i915)
 	if (i915_modparams.guc_log_level > 0 && !intel_uc_is_using_guc(i915)) {
 		DRM_WARN("Incompatible option detected: %s=%d, %s!\n",
 			 "guc_log_level", i915_modparams.guc_log_level,
-			 !HAS_GUC(i915) ? "no GuC hardware" :
-					  "GuC not enabled");
+			 !intel_uc_fw_supported(guc_fw) ?
+				"no GuC hardware" : "GuC not enabled");
 		i915_modparams.guc_log_level = 0;
 	}
 
@@ -271,17 +272,17 @@ static void guc_handle_mmio_msg(struct intel_guc *guc)
 
 static void guc_reset_interrupts(struct intel_guc *guc)
 {
-	guc->interrupts.reset(guc_to_i915(guc));
+	guc->interrupts.reset(guc);
 }
 
 static void guc_enable_interrupts(struct intel_guc *guc)
 {
-	guc->interrupts.enable(guc_to_i915(guc));
+	guc->interrupts.enable(guc);
 }
 
 static void guc_disable_interrupts(struct intel_guc *guc)
 {
-	guc->interrupts.disable(guc_to_i915(guc));
+	guc->interrupts.disable(guc);
 }
 
 static int guc_enable_communication(struct intel_guc *guc)
@@ -349,44 +350,26 @@ static void guc_disable_communication(struct intel_guc *guc)
 	DRM_INFO("GuC communication disabled\n");
 }
 
-int intel_uc_init_misc(struct drm_i915_private *i915)
+void intel_uc_fetch_firmwares(struct drm_i915_private *i915)
 {
-	struct intel_guc *guc = &i915->guc;
-	struct intel_huc *huc = &i915->huc;
-	int ret;
-
 	if (!USES_GUC(i915))
-		return 0;
+		return;
 
-	ret = intel_guc_init_misc(guc);
-	if (ret)
-		return ret;
+	intel_uc_fw_fetch(i915, &i915->guc.fw);
 
-	if (USES_HUC(i915)) {
-		ret = intel_huc_init_misc(huc);
-		if (ret)
-			goto err_guc;
-	}
-
-	return 0;
-
-err_guc:
-	intel_guc_fini_misc(guc);
-	return ret;
+	if (USES_HUC(i915))
+		intel_uc_fw_fetch(i915, &i915->huc.fw);
 }
 
-void intel_uc_fini_misc(struct drm_i915_private *i915)
+void intel_uc_cleanup_firmwares(struct drm_i915_private *i915)
 {
-	struct intel_guc *guc = &i915->guc;
-	struct intel_huc *huc = &i915->huc;
-
 	if (!USES_GUC(i915))
 		return;
 
 	if (USES_HUC(i915))
-		intel_huc_fini_misc(huc);
+		intel_uc_fw_cleanup_fetch(&i915->huc.fw);
 
-	intel_guc_fini_misc(guc);
+	intel_uc_fw_cleanup_fetch(&i915->guc.fw);
 }
 
 int intel_uc_init(struct drm_i915_private *i915)
@@ -398,7 +381,7 @@ int intel_uc_init(struct drm_i915_private *i915)
 	if (!USES_GUC(i915))
 		return 0;
 
-	if (!HAS_GUC(i915))
+	if (!intel_uc_fw_supported(&guc->fw))
 		return -ENODEV;
 
 	/* XXX: GuC submission is unavailable for now */
@@ -441,7 +424,7 @@ void intel_uc_fini(struct drm_i915_private *i915)
 	if (!USES_GUC(i915))
 		return;
 
-	GEM_BUG_ON(!HAS_GUC(i915));
+	GEM_BUG_ON(!intel_uc_fw_supported(&guc->fw));
 
 	if (USES_GUC_SUBMISSION(i915))
 		intel_guc_submission_fini(guc);
@@ -457,7 +440,7 @@ static void __uc_sanitize(struct drm_i915_private *i915)
 	struct intel_guc *guc = &i915->guc;
 	struct intel_huc *huc = &i915->huc;
 
-	GEM_BUG_ON(!HAS_GUC(i915));
+	GEM_BUG_ON(!intel_uc_fw_supported(&guc->fw));
 
 	intel_huc_sanitize(huc);
 	intel_guc_sanitize(guc);
@@ -482,7 +465,7 @@ int intel_uc_init_hw(struct drm_i915_private *i915)
 	if (!USES_GUC(i915))
 		return 0;
 
-	GEM_BUG_ON(!HAS_GUC(i915));
+	GEM_BUG_ON(!intel_uc_fw_supported(&guc->fw));
 
 	guc_reset_interrupts(guc);
 
@@ -579,7 +562,7 @@ void intel_uc_fini_hw(struct drm_i915_private *i915)
 	if (!intel_guc_is_loaded(guc))
 		return;
 
-	GEM_BUG_ON(!HAS_GUC(i915));
+	GEM_BUG_ON(!intel_uc_fw_supported(&guc->fw));
 
 	if (USES_GUC_SUBMISSION(i915))
 		intel_guc_submission_disable(guc);

@@ -52,7 +52,8 @@ struct drm_printer;
 #define ENGINE_READ16(...)	__ENGINE_READ_OP(read16, __VA_ARGS__)
 #define ENGINE_READ(...)	__ENGINE_READ_OP(read, __VA_ARGS__)
 #define ENGINE_READ_FW(...)	__ENGINE_READ_OP(read_fw, __VA_ARGS__)
-#define ENGINE_POSTING_READ(...) __ENGINE_READ_OP(posting_read, __VA_ARGS__)
+#define ENGINE_POSTING_READ(...) __ENGINE_READ_OP(posting_read_fw, __VA_ARGS__)
+#define ENGINE_POSTING_READ16(...) __ENGINE_READ_OP(posting_read16, __VA_ARGS__)
 
 #define ENGINE_READ64(engine__, lower_reg__, upper_reg__) \
 	__ENGINE_REG_OP(read64_2x32, (engine__), \
@@ -675,8 +676,6 @@ intel_write_status_page(struct intel_engine_cs *engine, int reg, u32 value)
  */
 #define I915_GEM_HWS_PREEMPT		0x32
 #define I915_GEM_HWS_PREEMPT_ADDR	(I915_GEM_HWS_PREEMPT * sizeof(u32))
-#define I915_GEM_HWS_HANGCHECK		0x34
-#define I915_GEM_HWS_HANGCHECK_ADDR	(I915_GEM_HWS_HANGCHECK * sizeof(u32))
 #define I915_GEM_HWS_SEQNO		0x40
 #define I915_GEM_HWS_SEQNO_ADDR		(I915_GEM_HWS_SEQNO * sizeof(u32))
 #define I915_GEM_HWS_SCRATCH		0x80
@@ -804,14 +803,16 @@ __intel_ring_space(unsigned int head, unsigned int tail, unsigned int size)
 	return (head - tail - CACHELINE_BYTES) & (size - 1);
 }
 
-int intel_engine_setup_common(struct intel_engine_cs *engine);
+int intel_engines_init_mmio(struct drm_i915_private *i915);
+int intel_engines_setup(struct drm_i915_private *i915);
+int intel_engines_init(struct drm_i915_private *i915);
+void intel_engines_cleanup(struct drm_i915_private *i915);
+
 int intel_engine_init_common(struct intel_engine_cs *engine);
 void intel_engine_cleanup_common(struct intel_engine_cs *engine);
 
-int intel_init_render_ring_buffer(struct intel_engine_cs *engine);
-int intel_init_bsd_ring_buffer(struct intel_engine_cs *engine);
-int intel_init_blt_ring_buffer(struct intel_engine_cs *engine);
-int intel_init_vebox_ring_buffer(struct intel_engine_cs *engine);
+int intel_ring_submission_setup(struct intel_engine_cs *engine);
+int intel_ring_submission_init(struct intel_engine_cs *engine);
 
 int intel_engine_stop_cs(struct intel_engine_cs *engine);
 void intel_engine_cancel_stop_cs(struct intel_engine_cs *engine);
@@ -1006,17 +1007,10 @@ static inline bool inject_preempt_hang(struct intel_engine_execlists *execlists)
 
 #endif
 
-static inline u32
-intel_engine_next_hangcheck_seqno(struct intel_engine_cs *engine)
-{
-	return engine->hangcheck.next_seqno =
-		next_pseudo_random32(engine->hangcheck.next_seqno);
-}
-
-static inline u32
-intel_engine_get_hangcheck_seqno(struct intel_engine_cs *engine)
-{
-	return intel_read_status_page(engine, I915_GEM_HWS_HANGCHECK);
-}
+void intel_engine_init_active(struct intel_engine_cs *engine,
+			      unsigned int subclass);
+#define ENGINE_PHYSICAL	0
+#define ENGINE_MOCK	1
+#define ENGINE_VIRTUAL	2
 
 #endif /* _INTEL_RINGBUFFER_H_ */

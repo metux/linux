@@ -2,8 +2,6 @@
 #ifndef __KVM_X86_PMU_H
 #define __KVM_X86_PMU_H
 
-#include <linux/nospec.h>
-
 #define vcpu_to_pmu(vcpu) (&(vcpu)->arch.pmu)
 #define pmu_to_vcpu(pmu)  (container_of((pmu), struct kvm_vcpu, arch.pmu))
 #define pmc_to_pmu(pmc)   (&(pmc)->vcpu->arch.pmu)
@@ -64,7 +62,6 @@ static inline void pmc_release_perf_event(struct kvm_pmc *pmc)
 		perf_event_release_kernel(pmc->perf_event);
 		pmc->perf_event = NULL;
 		pmc->current_config = 0;
-		pmc_to_pmu(pmc)->event_count--;
 	}
 }
 
@@ -91,12 +88,6 @@ static inline bool pmc_is_enabled(struct kvm_pmc *pmc)
 	return kvm_x86_ops->pmu_ops->pmc_is_enabled(pmc);
 }
 
-static inline bool kvm_valid_perf_global_ctrl(struct kvm_pmu *pmu,
-						 u64 data)
-{
-	return !(pmu->global_ctrl_mask & data);
-}
-
 /* returns general purpose PMC with the specified MSR. Note that it can be
  * used for both PERFCTRn and EVNTSELn; that is why it accepts base as a
  * paramenter to tell them apart.
@@ -104,12 +95,8 @@ static inline bool kvm_valid_perf_global_ctrl(struct kvm_pmu *pmu,
 static inline struct kvm_pmc *get_gp_pmc(struct kvm_pmu *pmu, u32 msr,
 					 u32 base)
 {
-	if (msr >= base && msr < base + pmu->nr_arch_gp_counters) {
-		u32 index = array_index_nospec(msr - base,
-					       pmu->nr_arch_gp_counters);
-
-		return &pmu->gp_counters[index];
-	}
+	if (msr >= base && msr < base + pmu->nr_arch_gp_counters)
+		return &pmu->gp_counters[msr - base];
 
 	return NULL;
 }
@@ -119,12 +106,8 @@ static inline struct kvm_pmc *get_fixed_pmc(struct kvm_pmu *pmu, u32 msr)
 {
 	int base = MSR_CORE_PERF_FIXED_CTR0;
 
-	if (msr >= base && msr < base + pmu->nr_arch_fixed_counters) {
-		u32 index = array_index_nospec(msr - base,
-					       pmu->nr_arch_fixed_counters);
-
-		return &pmu->fixed_counters[index];
-	}
+	if (msr >= base && msr < base + pmu->nr_arch_fixed_counters)
+		return &pmu->fixed_counters[msr - base];
 
 	return NULL;
 }
@@ -143,7 +126,6 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info);
 void kvm_pmu_refresh(struct kvm_vcpu *vcpu);
 void kvm_pmu_reset(struct kvm_vcpu *vcpu);
 void kvm_pmu_init(struct kvm_vcpu *vcpu);
-void kvm_pmu_cleanup(struct kvm_vcpu *vcpu);
 void kvm_pmu_destroy(struct kvm_vcpu *vcpu);
 int kvm_vm_ioctl_set_pmu_event_filter(struct kvm *kvm, void __user *argp);
 

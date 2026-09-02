@@ -1982,7 +1982,7 @@ assert_rpm_wakelock_held(struct drm_i915_private *i915)
 
 /**
  * disable_rpm_wakeref_asserts - disable the RPM assert checks
- * @i915: i915 device instance
+ * @rpm: the i915_runtime_pm structure
  *
  * This function disable asserts that check if we hold an RPM wakelock
  * reference, while keeping the device-not-suspended checks still enabled.
@@ -1999,15 +1999,15 @@ assert_rpm_wakelock_held(struct drm_i915_private *i915)
  * enable_rpm_wakeref_asserts().
  */
 static inline void
-disable_rpm_wakeref_asserts(struct drm_i915_private *i915)
+disable_rpm_wakeref_asserts(struct i915_runtime_pm *rpm)
 {
 	atomic_add(INTEL_RPM_WAKELOCK_BIAS + 1,
-		   &i915->runtime_pm.wakeref_count);
+		   &rpm->wakeref_count);
 }
 
 /**
  * enable_rpm_wakeref_asserts - re-enable the RPM assert checks
- * @i915: i915 device instance
+ * @rpm: the i915_runtime_pm structure
  *
  * This function re-enables the RPM assert checks after disabling them with
  * disable_rpm_wakeref_asserts. It's meant to be used only in special
@@ -2017,10 +2017,10 @@ disable_rpm_wakeref_asserts(struct drm_i915_private *i915)
  * disable_rpm_wakeref_asserts().
  */
 static inline void
-enable_rpm_wakeref_asserts(struct drm_i915_private *i915)
+enable_rpm_wakeref_asserts(struct i915_runtime_pm *rpm)
 {
 	atomic_sub(INTEL_RPM_WAKELOCK_BIAS + 1,
-		   &i915->runtime_pm.wakeref_count);
+		   &rpm->wakeref_count);
 }
 
 intel_wakeref_t intel_runtime_pm_get(struct drm_i915_private *i915);

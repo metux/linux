@@ -364,23 +364,26 @@ static void release_shadow_wa_ctx(struct intel_shadow_wa_ctx *wa_ctx)
 	wa_ctx->indirect_ctx.shadow_va = NULL;
 }
 
-static void set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
-					  struct i915_gem_context *ctx)
+static int set_context_ppgtt_from_shadow(struct intel_vgpu_workload *workload,
+					 struct i915_gem_context *ctx)
 {
 	struct intel_vgpu_mm *mm = workload->shadow_mm;
-	struct i915_ppgtt *ppgtt = i915_vm_to_ppgtt(ctx->vm);
+	struct i915_hw_ppgtt *ppgtt = i915_vm_to_ppgtt(ctx->vm);
 	int i = 0;
 
+	if (mm->type != INTEL_GVT_MM_PPGTT || !mm->ppgtt_mm.shadowed)
+		return -EINVAL;
+
 	if (mm->ppgtt_mm.root_entry_type == GTT_TYPE_PPGTT_ROOT_L4_ENTRY) {
-		px_dma(ppgtt->pd) = mm->ppgtt_mm.shadow_pdps[0];
+		px_dma(&ppgtt->pml4) = mm->ppgtt_mm.shadow_pdps[0];
 	} else {
 		for (i = 0; i < GVT_RING_CTX_NR_PDPS; i++) {
-			struct i915_page_directory * const pd =
-				i915_pd_entry(ppgtt->pd, i);
-
-			px_dma(pd) = mm->ppgtt_mm.shadow_pdps[i];
+			px_dma(ppgtt->pdp.page_directory[i]) =
+				mm->ppgtt_mm.shadow_pdps[i];
 		}
 	}
+
+	return 0;
 }
 
 static int
@@ -609,8 +612,6 @@ static void release_shadow_batch_buffer(struct intel_vgpu_workload *workload)
 static int prepare_workload(struct intel_vgpu_workload *workload)
 {
 	struct intel_vgpu *vgpu = workload->vgpu;
-	struct intel_vgpu_submission *s = &vgpu->submission;
-	int ring = workload->ring_id;
 	int ret = 0;
 
 	ret = intel_vgpu_pin_mm(workload->shadow_mm);
@@ -619,15 +620,7 @@ static int prepare_workload(struct intel_vgpu_workload *workload)
 		return ret;
 	}
 
-	if (workload->shadow_mm->type != INTEL_GVT_MM_PPGTT ||
-	    !workload->shadow_mm->ppgtt_mm.shadowed) {
-		gvt_vgpu_err("workload shadow ppgtt isn't ready\n");
-		return -EINVAL;
-	}
-
 	update_shadow_pdps(workload);
-
-	set_context_ppgtt_from_shadow(workload, s->shadow[ring]->gem_context);
 
 	ret = intel_vgpu_sync_oos_pages(workload->vgpu);
 	if (ret) {
@@ -679,6 +672,7 @@ static int dispatch_workload(struct intel_vgpu_workload *workload)
 {
 	struct intel_vgpu *vgpu = workload->vgpu;
 	struct drm_i915_private *dev_priv = vgpu->gvt->dev_priv;
+	struct intel_vgpu_submission *s = &vgpu->submission;
 	struct i915_request *rq;
 	int ring_id = workload->ring_id;
 	int ret;
@@ -688,6 +682,13 @@ static int dispatch_workload(struct intel_vgpu_workload *workload)
 
 	mutex_lock(&vgpu->vgpu_lock);
 	mutex_lock(&dev_priv->drm.struct_mutex);
+
+	ret = set_context_ppgtt_from_shadow(workload,
+					    s->shadow[ring_id]->gem_context);
+	if (ret < 0) {
+		gvt_vgpu_err("workload shadow ppgtt isn't ready\n");
+		goto err_req;
+	}
 
 	ret = intel_gvt_workload_req_alloc(workload);
 	if (ret)
@@ -987,7 +988,6 @@ static int workload_thread(void *priv)
 	int ret;
 	bool need_force_wake = (INTEL_GEN(gvt->dev_priv) >= 9);
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
-	struct intel_runtime_pm *rpm = &gvt->dev_priv->runtime_pm;
 
 	kfree(p);
 
@@ -1010,8 +1010,6 @@ static int workload_thread(void *priv)
 		gvt_dbg_sched("ring id %d next workload %p vgpu %d\n",
 				workload->ring_id, workload,
 				workload->vgpu->id);
-
-		intel_runtime_pm_get(rpm);
 
 		gvt_dbg_sched("ring id %d will dispatch workload %p\n",
 				workload->ring_id, workload);
@@ -1042,7 +1040,6 @@ complete:
 			intel_uncore_forcewake_put(&gvt->dev_priv->uncore,
 					FORCEWAKE_ALL);
 
-		intel_runtime_pm_put_unchecked(rpm);
 		if (ret && (vgpu_is_vm_unhealthy(ret)))
 			enter_failsafe_mode(vgpu, GVT_FAILSAFE_GUEST_ERR);
 	}
@@ -1126,19 +1123,16 @@ err:
 
 static void
 i915_context_ppgtt_root_restore(struct intel_vgpu_submission *s,
-				struct i915_ppgtt *ppgtt)
+				struct i915_hw_ppgtt *ppgtt)
 {
 	int i;
 
 	if (i915_vm_is_4lvl(&ppgtt->vm)) {
-		px_dma(ppgtt->pd) = s->i915_context_pml4;
+		px_dma(&ppgtt->pml4) = s->i915_context_pml4;
 	} else {
-		for (i = 0; i < GEN8_3LVL_PDPES; i++) {
-			struct i915_page_directory * const pd =
-				i915_pd_entry(ppgtt->pd, i);
-
-			px_dma(pd) = s->i915_context_pdps[i];
-		}
+		for (i = 0; i < GEN8_3LVL_PDPES; i++)
+			px_dma(ppgtt->pdp.page_directory[i]) =
+				s->i915_context_pdps[i];
 	}
 }
 
@@ -1187,19 +1181,16 @@ void intel_vgpu_reset_submission(struct intel_vgpu *vgpu,
 
 static void
 i915_context_ppgtt_root_save(struct intel_vgpu_submission *s,
-			     struct i915_ppgtt *ppgtt)
+			     struct i915_hw_ppgtt *ppgtt)
 {
 	int i;
 
 	if (i915_vm_is_4lvl(&ppgtt->vm)) {
-		s->i915_context_pml4 = px_dma(ppgtt->pd);
+		s->i915_context_pml4 = px_dma(&ppgtt->pml4);
 	} else {
-		for (i = 0; i < GEN8_3LVL_PDPES; i++) {
-			struct i915_page_directory * const pd =
-				i915_pd_entry(ppgtt->pd, i);
-
-			s->i915_context_pdps[i] = px_dma(pd);
-		}
+		for (i = 0; i < GEN8_3LVL_PDPES; i++)
+			s->i915_context_pdps[i] =
+				px_dma(ppgtt->pdp.page_directory[i]);
 	}
 }
 
@@ -1493,12 +1484,6 @@ intel_vgpu_create_workload(struct intel_vgpu *vgpu, int ring_id,
 	intel_gvt_hypervisor_read_gpa(vgpu, ring_context_gpa +
 			RING_CTX_OFF(ctx_ctrl.val), &ctx_ctl, 4);
 
-	if (!intel_gvt_ggtt_validate_range(vgpu, start,
-				_RING_CTL_BUF_SIZE(ctl))) {
-		gvt_vgpu_err("context contain invalid rb at: 0x%x\n", start);
-		return ERR_PTR(-EINVAL);
-	}
-
 	workload = alloc_workload(vgpu);
 	if (IS_ERR(workload))
 		return workload;
@@ -1523,31 +1508,9 @@ intel_vgpu_create_workload(struct intel_vgpu *vgpu, int ring_id,
 		workload->wa_ctx.indirect_ctx.size =
 			(indirect_ctx & INDIRECT_CTX_SIZE_MASK) *
 			CACHELINE_BYTES;
-
-		if (workload->wa_ctx.indirect_ctx.size != 0) {
-			if (!intel_gvt_ggtt_validate_range(vgpu,
-				workload->wa_ctx.indirect_ctx.guest_gma,
-				workload->wa_ctx.indirect_ctx.size)) {
-				gvt_vgpu_err("invalid wa_ctx at: 0x%lx\n",
-				    workload->wa_ctx.indirect_ctx.guest_gma);
-				kmem_cache_free(s->workloads, workload);
-				return ERR_PTR(-EINVAL);
-			}
-		}
-
 		workload->wa_ctx.per_ctx.guest_gma =
 			per_ctx & PER_CTX_ADDR_MASK;
 		workload->wa_ctx.per_ctx.valid = per_ctx & 1;
-		if (workload->wa_ctx.per_ctx.valid) {
-			if (!intel_gvt_ggtt_validate_range(vgpu,
-				workload->wa_ctx.per_ctx.guest_gma,
-				CACHELINE_BYTES)) {
-				gvt_vgpu_err("invalid per_ctx at: 0x%lx\n",
-					workload->wa_ctx.per_ctx.guest_gma);
-				kmem_cache_free(s->workloads, workload);
-				return ERR_PTR(-EINVAL);
-			}
-		}
 	}
 
 	gvt_dbg_el("workload %p ring id %d head %x tail %x start %x ctl %x\n",
@@ -1563,11 +1526,11 @@ intel_vgpu_create_workload(struct intel_vgpu *vgpu, int ring_id,
 	 * as there is only one pre-allocated buf-obj for shadow.
 	 */
 	if (list_empty(workload_q_head(vgpu, ring_id))) {
-		intel_runtime_pm_get(&dev_priv->runtime_pm);
+		intel_runtime_pm_get(dev_priv);
 		mutex_lock(&dev_priv->drm.struct_mutex);
 		ret = intel_gvt_scan_and_shadow_workload(workload);
 		mutex_unlock(&dev_priv->drm.struct_mutex);
-		intel_runtime_pm_put_unchecked(&dev_priv->runtime_pm);
+		intel_runtime_pm_put_unchecked(dev_priv);
 	}
 
 	if (ret) {

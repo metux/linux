@@ -8,8 +8,8 @@ one of the parameters.
 
 Two different PM QoS frameworks are available:
 1. PM QoS classes for cpu_dma_latency
-2. The per-device PM QoS framework provides the API to manage the
-   per-device latency constraints and PM QoS flags.
+2. the per-device PM QoS framework provides the API to manage the per-device latency
+constraints and PM QoS flags.
 
 Each parameters have defined units:
 
@@ -47,14 +47,14 @@ void pm_qos_add_request(handle, param_class, target_value):
   pm_qos API functions.
 
 void pm_qos_update_request(handle, new_target_value):
-  Will update the list element pointed to by the handle with the new target
-  value and recompute the new aggregated target, calling the notification tree
-  if the target is changed.
+  Will update the list element pointed to by the handle with the new target value
+  and recompute the new aggregated target, calling the notification tree if the
+  target is changed.
 
 void pm_qos_remove_request(handle):
-  Will remove the element.  After removal it will update the aggregate target
-  and call the notification tree if the target was changed as a result of
-  removing the request.
+  Will remove the element.  After removal it will update the aggregate target and
+  call the notification tree if the target was changed as a result of removing
+  the request.
 
 int pm_qos_request(param_class):
   Returns the aggregated value for a given PM QoS class.
@@ -128,7 +128,7 @@ int dev_pm_qos_remove_request(handle):
   and call the notification trees if the target was changed as a result of
   removing the request.
 
-s32 dev_pm_qos_read_value(device, type):
+s32 dev_pm_qos_read_value(device):
   Returns the aggregated value for a given device's constraints list.
 
 enum pm_qos_flags_status dev_pm_qos_flags(device, mask)
@@ -167,22 +167,20 @@ int dev_pm_qos_expose_flags(device, value)
   change the value of the PM_QOS_FLAG_NO_POWER_OFF flag.
 
 void dev_pm_qos_hide_flags(device)
-  Drop the request added by dev_pm_qos_expose_flags() from the device's PM QoS
-  list of flags and remove sysfs attribute pm_qos_no_power_off from the device's
-  power directory.
+  Drop the request added by dev_pm_qos_expose_flags() from the device's PM QoS list
+  of flags and remove sysfs attribute pm_qos_no_power_off from the device's power
+  directory.
 
 Notification mechanisms:
 
 The per-device PM QoS framework has a per-device notification tree.
 
-int dev_pm_qos_add_notifier(device, notifier, type):
-  Adds a notification callback function for the device for a particular request
-  type.
+int dev_pm_qos_add_notifier(device, notifier):
+  Adds a notification callback function for the device.
+  The callback is called when the aggregated value of the device constraints list
+  is changed (for resume latency device PM QoS only).
 
-  The callback is called when the aggregated value of the device constraints
-  list is changed.
-
-int dev_pm_qos_remove_notifier(device, notifier, type):
+int dev_pm_qos_remove_notifier(device, notifier):
   Removes the notification callback function for the device.
 
 

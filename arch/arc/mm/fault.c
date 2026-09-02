@@ -69,9 +69,9 @@ void do_page_fault(unsigned long address, struct pt_regs *regs)
 	struct vm_area_struct *vma = NULL;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
-	int sig, si_code = SEGV_MAPERR;
+	int si_code = SEGV_MAPERR;
 	unsigned int write = 0, exec = 0, mask;
-	vm_fault_t fault = VM_FAULT_SIGSEGV;	/* handle_mm_fault() output */
+	vm_fault_t fault;			/* handle_mm_fault() output */
 	unsigned int flags;			/* handle_mm_fault() input */
 
 	/*
@@ -158,9 +158,6 @@ retry:
 		}
 	}
 
-bad_area:
-	up_read(&mm->mmap_sem);
-
 	/*
 	 * Major/minor page fault accounting
 	 * (in case of retry we only land here once)
@@ -179,27 +176,52 @@ bad_area:
 		}
 
 		/* Normal return path: fault Handled Gracefully */
+		up_read(&mm->mmap_sem);
 		return;
 	}
 
-	if (!user_mode(regs))
-		goto no_context;
+	if (fault & VM_FAULT_OOM)
+		goto out_of_memory;
+	else if (fault & VM_FAULT_SIGSEGV)
+		goto bad_area;
+	else if (fault & VM_FAULT_SIGBUS)
+		goto do_sigbus;
 
-	if (fault & VM_FAULT_OOM) {
+	/* no man's land */
+	BUG();
+
+	/*
+	 * Something tried to access memory that isn't in our memory map..
+	 * Fix it, but check if it's kernel or user first..
+	 */
+bad_area:
+	up_read(&mm->mmap_sem);
+
+	/* User mode accesses just cause a SIGSEGV */
+	if (user_mode(regs)) {
+		tsk->thread.fault_address = address;
+		force_sig_fault(SIGSEGV, si_code, (void __user *)address, tsk);
+		return;
+	}
+
+out_of_memory:
+	up_read(&mm->mmap_sem);
+
+	if (user_mode(regs)) {
 		pagefault_out_of_memory();
 		return;
 	}
 
-	if (fault & VM_FAULT_SIGBUS) {
-		sig = SIGBUS;
-		si_code = BUS_ADRERR;
-	}
-	else {
-		sig = SIGSEGV;
-	}
+	goto no_context;
+
+do_sigbus:
+	up_read(&mm->mmap_sem);
+
+	if (!user_mode(regs))
+		goto no_context;
 
 	tsk->thread.fault_address = address;
-	force_sig_fault(sig, si_code, (void __user *)address);
+	force_sig_fault(SIGBUS, BUS_ADRERR, (void __user *)address, tsk);
 	return;
 
 no_context:

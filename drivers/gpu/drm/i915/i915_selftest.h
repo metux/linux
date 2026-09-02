@@ -24,8 +24,6 @@
 #ifndef __I915_SELFTEST_H__
 #define __I915_SELFTEST_H__
 
-#include <linux/types.h>
-
 struct pci_dev;
 struct drm_i915_private;
 
@@ -77,9 +75,6 @@ int __i915_nop_teardown(int err, void *data);
 int __i915_live_setup(void *data);
 int __i915_live_teardown(int err, void *data);
 
-int __intel_gt_live_setup(void *data);
-int __intel_gt_live_teardown(int err, void *data);
-
 int __i915_subtests(const char *caller,
 		    int (*setup)(void *data),
 		    int (*teardown)(int err, void *data),
@@ -94,12 +89,6 @@ int __i915_subtests(const char *caller,
 	typecheck(struct drm_i915_private *, data); \
 	__i915_subtests(__func__, \
 			__i915_live_setup, __i915_live_teardown, \
-			T, ARRAY_SIZE(T), data); \
-})
-#define intel_gt_live_subtests(T, data) ({ \
-	typecheck(struct intel_gt *, data); \
-	__i915_subtests(__func__, \
-			__intel_gt_live_setup, __intel_gt_live_teardown, \
 			T, ARRAY_SIZE(T), data); \
 })
 

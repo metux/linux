@@ -43,12 +43,12 @@ static int pool_active(struct i915_active *ref)
 {
 	struct intel_engine_pool_node *node =
 		container_of(ref, typeof(*node), active);
-	struct dma_resv *resv = node->obj->base.resv;
+	struct reservation_object *resv = node->obj->base.resv;
 	int err;
 
-	if (dma_resv_trylock(resv)) {
-		dma_resv_add_excl_fence(resv, NULL);
-		dma_resv_unlock(resv);
+	if (reservation_object_trylock(resv)) {
+		reservation_object_add_excl_fence(resv, NULL);
+		reservation_object_unlock(resv);
 	}
 
 	err = i915_gem_object_pin_pages(node->obj);
@@ -103,8 +103,6 @@ node_create(struct intel_engine_pool *pool, size_t sz)
 		kfree(node);
 		return ERR_CAST(obj);
 	}
-
-	i915_gem_object_set_readonly(obj);
 
 	node->obj = obj;
 	return node;

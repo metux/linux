@@ -915,6 +915,9 @@ struct snd_soc_dai_link {
 	struct snd_soc_dai_link_component *cpus;
 	unsigned int num_cpus;
 
+	struct snd_soc_dai_link_component *cpus;
+	unsigned int num_cpus;
+
 	/*
 	 * You MUST specify the link's codec, either by device name, or by
 	 * DT/OF node, but not both.
@@ -988,6 +991,13 @@ struct snd_soc_dai_link {
 
 	/* Do not create a PCM for this DAI link (Backend link) */
 	unsigned int ignore:1;
+
+	/*
+	 * This driver uses legacy platform naming. Set by the core, machine
+	 * drivers should not modify this value.
+	 */
+	unsigned int legacy_platform:1;
+	unsigned int legacy_cpu:1;
 
 	struct list_head list; /* DAI link list of the soc card */
 	struct snd_soc_dobj dobj; /* For topology */

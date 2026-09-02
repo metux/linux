@@ -855,56 +855,44 @@ static void mga_set_start_address(struct drm_crtc *crtc, unsigned offset)
 	WREG_ECRT(0x0, ((u8)(addr >> 16) & 0xf) | crtcext0);
 }
 
-
-/* ast is different - we will force move buffers out of VRAM */
 static int mga_crtc_do_set_base(struct drm_crtc *crtc,
 				struct drm_framebuffer *fb,
 				int x, int y, int atomic)
 {
 	struct mga_device *mdev = crtc->dev->dev_private;
-	struct drm_gem_object *obj;
-	struct mga_framebuffer *mga_fb;
 	struct drm_gem_vram_object *gbo;
 	int ret;
 	s64 gpu_addr;
+	void *base;
 
-	/* push the previous fb to system ram */
 	if (!atomic && fb) {
-		mga_fb = to_mga_framebuffer(fb);
-		obj = mga_fb->obj;
-		gbo = drm_gem_vram_of_gem(obj);
-		ret = drm_gem_vram_reserve(gbo, false);
-		if (ret)
-			return ret;
-		drm_gem_vram_push_to_system(gbo);
-		drm_gem_vram_unreserve(gbo);
+		gbo = drm_gem_vram_of_gem(fb->obj[0]);
+
+		/* unmap if console */
+		if (mdev->mfbdev->helper.fb == fb)
+			drm_gem_vram_kunmap(gbo);
+		drm_gem_vram_unpin(gbo);
 	}
 
-	mga_fb = to_mga_framebuffer(crtc->primary->fb);
-	obj = mga_fb->obj;
-	gbo = drm_gem_vram_of_gem(obj);
-
-	ret = drm_gem_vram_reserve(gbo, false);
-	if (ret)
-		return ret;
+	gbo = drm_gem_vram_of_gem(crtc->primary->fb->obj[0]);
 
 	ret = drm_gem_vram_pin(gbo, DRM_GEM_VRAM_PL_FLAG_VRAM);
 	if (ret)
-		goto err_drm_gem_vram_unreserve;
+		return ret;
 	gpu_addr = drm_gem_vram_offset(gbo);
 	if (gpu_addr < 0) {
 		ret = (int)gpu_addr;
 		goto err_drm_gem_vram_unpin;
 	}
 
-	if (&mdev->mfbdev->mfb == mga_fb) {
+	if (mdev->mfbdev->helper.fb == crtc->primary->fb) {
 		/* if pushing console in kmap it */
-		ret = ttm_bo_kmap(&gbo->bo, 0, gbo->bo.num_pages, &gbo->kmap);
-		if (ret)
+		base = drm_gem_vram_kmap(gbo, true, NULL);
+		if (IS_ERR(base)) {
+			ret = PTR_ERR(base);
 			DRM_ERROR("failed to kmap fbcon\n");
-
+		}
 	}
-	drm_gem_vram_unreserve(gbo);
 
 	mga_set_start_address(crtc, (u32)gpu_addr);
 
@@ -912,8 +900,6 @@ static int mga_crtc_do_set_base(struct drm_crtc *crtc,
 
 err_drm_gem_vram_unpin:
 	drm_gem_vram_unpin(gbo);
-err_drm_gem_vram_unreserve:
-	drm_gem_vram_unreserve(gbo);
 	return ret;
 }
 
@@ -1428,19 +1414,18 @@ static void mga_crtc_destroy(struct drm_crtc *crtc)
 
 static void mga_crtc_disable(struct drm_crtc *crtc)
 {
-	int ret;
 	DRM_DEBUG_KMS("\n");
 	mga_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
 	if (crtc->primary->fb) {
-		struct mga_framebuffer *mga_fb = to_mga_framebuffer(crtc->primary->fb);
-		struct drm_gem_object *obj = mga_fb->obj;
-		struct drm_gem_vram_object *gbo = drm_gem_vram_of_gem(obj);
+		struct mga_device *mdev = crtc->dev->dev_private;
+		struct drm_framebuffer *fb = crtc->primary->fb;
+		struct drm_gem_vram_object *gbo =
+			drm_gem_vram_of_gem(fb->obj[0]);
 
-		ret = drm_gem_vram_reserve(gbo, false);
-		if (ret)
-			return;
-		drm_gem_vram_push_to_system(gbo);
-		drm_gem_vram_unreserve(gbo);
+		/* unmap if console */
+		if (mdev->mfbdev->helper.fb == fb)
+			drm_gem_vram_kunmap(gbo);
+		drm_gem_vram_unpin(gbo);
 	}
 	crtc->primary->fb = NULL;
 }

@@ -2,7 +2,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/types.h>
-#include <linux/io.h>
+#include <asm/io.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
@@ -27,7 +27,6 @@ void  ndd_irq_worker(struct work_struct *ws)
 {
 	struct kpc_dma_descriptor *cur;
 	struct kpc_dma_device *eng = container_of(ws, struct kpc_dma_device, irq_work);
-
 	lock_engine(eng);
 
 	if (GetEngineCompletePtr(eng) == 0)
@@ -68,6 +67,7 @@ void  ndd_irq_worker(struct work_struct *ws)
 	unlock_engine(eng);
 }
 
+
 /**********  DMA Engine Init/Teardown  **********/
 void  start_dma_engine(struct kpc_dma_device *eng)
 {
@@ -91,10 +91,11 @@ int  setup_dma_engine(struct kpc_dma_device *eng, u32 desc_cnt)
 	dma_addr_t head_handle;
 	unsigned int i;
 	int rv;
+	dev_dbg(&eng->pldev->dev, "Setting up DMA engine [%p]\n", eng);
 
 	caps = GetEngineCapabilities(eng);
 
-	if (WARN(!(caps & ENG_CAP_PRESENT), "%s() called for DMA Engine at %p which isn't present in hardware!\n", __func__, eng))
+	if (WARN(!(caps & ENG_CAP_PRESENT), "setup_dma_engine() called for DMA Engine at %p which isn't present in hardware!\n", eng))
 		return -ENXIO;
 
 	if (caps & ENG_CAP_DIRECTION) {
@@ -108,7 +109,7 @@ int  setup_dma_engine(struct kpc_dma_device *eng, u32 desc_cnt)
 
 	eng->desc_pool_first = dma_pool_alloc(eng->desc_pool, GFP_KERNEL | GFP_DMA, &head_handle);
 	if (!eng->desc_pool_first) {
-		dev_err(&eng->pldev->dev, "%s: couldn't allocate desc_pool_first!\n", __func__);
+		dev_err(&eng->pldev->dev, "setup_dma_engine: couldn't allocate desc_pool_first!\n");
 		dma_pool_destroy(eng->desc_pool);
 		return -ENOMEM;
 	}
@@ -119,7 +120,7 @@ int  setup_dma_engine(struct kpc_dma_device *eng, u32 desc_cnt)
 	cur = eng->desc_pool_first;
 	for (i = 1 ; i < eng->desc_pool_cnt ; i++) {
 		next = dma_pool_alloc(eng->desc_pool, GFP_KERNEL | GFP_DMA, &next_handle);
-		if (!next)
+		if (next == NULL)
 			goto done_alloc;
 
 		clear_desc(next);
@@ -144,7 +145,7 @@ int  setup_dma_engine(struct kpc_dma_device *eng, u32 desc_cnt)
 	// Grab IRQ line
 	rv = request_irq(eng->irq, ndd_irq_handler, IRQF_SHARED, KP_DRIVER_NAME_DMA_CONTROLLER, eng);
 	if (rv) {
-		dev_err(&eng->pldev->dev, "%s: failed to request_irq: %d\n", __func__, rv);
+		dev_err(&eng->pldev->dev, "setup_dma_engine: failed to request_irq: %d\n", rv);
 		return rv;
 	}
 
@@ -158,6 +159,7 @@ int  setup_dma_engine(struct kpc_dma_device *eng, u32 desc_cnt)
 void  stop_dma_engine(struct kpc_dma_device *eng)
 {
 	unsigned long timeout;
+	dev_dbg(&eng->pldev->dev, "Destroying DMA engine [%p]\n", eng);
 
 	// Disable the descriptor engine
 	WriteEngineControl(eng, 0);
@@ -218,7 +220,6 @@ void  destroy_dma_engine(struct kpc_dma_device *eng)
 	for (i = 0 ; i < eng->desc_pool_cnt ; i++) {
 		struct kpc_dma_descriptor *next = cur->Next;
 		dma_addr_t next_handle = cur->DescNextDescPtr;
-
 		dma_pool_free(eng->desc_pool, cur, cur_handle);
 		cur_handle = next_handle;
 		cur = next;
@@ -229,12 +230,13 @@ void  destroy_dma_engine(struct kpc_dma_device *eng)
 	free_irq(eng->irq, eng);
 }
 
+
+
 /**********  Helper Functions  **********/
 int  count_descriptors_available(struct kpc_dma_device *eng)
 {
 	u32 count = 0;
 	struct kpc_dma_descriptor *cur = eng->desc_next;
-
 	while (cur != eng->desc_completed) {
 		BUG_ON(cur == NULL);
 		count++;
@@ -245,7 +247,7 @@ int  count_descriptors_available(struct kpc_dma_device *eng)
 
 void  clear_desc(struct kpc_dma_descriptor *desc)
 {
-	if (!desc)
+	if (desc == NULL)
 		return;
 	desc->DescByteCount         = 0;
 	desc->DescStatusErrorFlags  = 0;

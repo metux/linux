@@ -41,10 +41,6 @@ static void aq_nic_update_ndev_stats(struct aq_nic_s *self);
 
 static void aq_nic_rss_init(struct aq_nic_s *self, unsigned int num_rss_queues)
 {
-	struct aq_nic_cfg_s *cfg = &self->aq_nic_cfg;
-	struct aq_rss_parameters *rss_params = &cfg->aq_rss;
-	int i = 0;
-
 	static u8 rss_key[AQ_CFG_RSS_HASHKEY_SIZE] = {
 		0x1e, 0xad, 0x71, 0x87, 0x65, 0xfc, 0x26, 0x7d,
 		0x0d, 0x45, 0x67, 0x74, 0xcd, 0x06, 0x1a, 0x18,
@@ -52,6 +48,11 @@ static void aq_nic_rss_init(struct aq_nic_s *self, unsigned int num_rss_queues)
 		0x19, 0x13, 0x4b, 0xa9, 0xd0, 0x3e, 0xfe, 0x70,
 		0x25, 0x03, 0xab, 0x50, 0x6a, 0x8b, 0x82, 0x0c
 	};
+	struct aq_nic_cfg_s *cfg = &self->aq_nic_cfg;
+	struct aq_rss_parameters *rss_params;
+	int i = 0;
+
+	rss_params = &cfg->aq_rss;
 
 	rss_params->hash_secret_key_size = sizeof(rss_key);
 	memcpy(rss_params->hash_secret_key, rss_key, sizeof(rss_key));
@@ -179,6 +180,7 @@ static int aq_nic_update_link_status(struct aq_nic_s *self)
 		netif_tx_disable(self->ndev);
 		aq_utils_obj_set(&self->flags, AQ_NIC_LINK_DOWN);
 	}
+
 	return 0;
 }
 
@@ -193,6 +195,7 @@ static irqreturn_t aq_linkstate_threaded_isr(int irq, void *private)
 
 	self->aq_hw_ops->hw_irq_enable(self->aq_hw,
 				       BIT(self->aq_nic_cfg.link_irq_vec));
+
 	return IRQ_HANDLED;
 }
 
@@ -223,7 +226,8 @@ static void aq_nic_service_timer_cb(struct timer_list *t)
 {
 	struct aq_nic_s *self = from_timer(self, t, service_timer);
 
-	mod_timer(&self->service_timer, jiffies + AQ_CFG_SERVICE_TIMER_INTERVAL);
+	mod_timer(&self->service_timer,
+		  jiffies + AQ_CFG_SERVICE_TIMER_INTERVAL);
 
 	aq_ndev_schedule_work(&self->service_task);
 }
@@ -325,8 +329,8 @@ struct net_device *aq_nic_get_ndev(struct aq_nic_s *self)
 int aq_nic_init(struct aq_nic_s *self)
 {
 	struct aq_vec_s *aq_vec = NULL;
-	int err = 0;
 	unsigned int i = 0U;
+	int err = 0;
 
 	self->power_state = AQ_HW_POWER_STATE_D0;
 	mutex_lock(&self->fwreq_mutex);
@@ -370,8 +374,8 @@ err_exit:
 int aq_nic_start(struct aq_nic_s *self)
 {
 	struct aq_vec_s *aq_vec = NULL;
-	int err = 0;
 	unsigned int i = 0U;
+	int err = 0;
 
 	err = self->aq_hw_ops->hw_multicast_list_set(self->aq_hw,
 						     self->mc_list.ar,
@@ -433,7 +437,7 @@ int aq_nic_start(struct aq_nic_s *self)
 						   self->aq_nic_cfg.link_irq_vec);
 			err = request_threaded_irq(irqvec, NULL,
 						   aq_linkstate_threaded_isr,
-						   IRQF_SHARED,
+						   IRQF_SHARED | IRQF_ONESHOT,
 						   self->ndev->name, self);
 			if (err < 0)
 				goto err_exit;
@@ -463,32 +467,45 @@ err_exit:
 unsigned int aq_nic_map_skb(struct aq_nic_s *self, struct sk_buff *skb,
 			    struct aq_ring_s *ring)
 {
-	unsigned int ret = 0U;
 	unsigned int nr_frags = skb_shinfo(skb)->nr_frags;
-	unsigned int frag_count = 0U;
-	unsigned int dx = ring->sw_tail;
 	struct aq_ring_buff_s *first = NULL;
-	struct aq_ring_buff_s *dx_buff = &ring->buff_ring[dx];
+	struct aq_ring_buff_s *dx_buff;
+	bool need_context_tag = false;
+	unsigned int frag_count = 0U;
+	unsigned int ret = 0U;
+	unsigned int dx;
+
+	dx = ring->sw_tail;
+	dx_buff = &ring->buff_ring[dx];
+	dx_buff->flags = 0U;
 
 	if (unlikely(skb_is_gso(skb))) {
-		dx_buff->flags = 0U;
+		dx_buff->mss = skb_shinfo(skb)->gso_size;
+		dx_buff->is_gso = 1U;
 		dx_buff->len_pkt = skb->len;
 		dx_buff->len_l2 = ETH_HLEN;
 		dx_buff->len_l3 = ip_hdrlen(skb);
 		dx_buff->len_l4 = tcp_hdrlen(skb);
-		dx_buff->mss = skb_shinfo(skb)->gso_size;
-		dx_buff->is_gso = 1U;
 		dx_buff->eop_index = 0xffffU;
-
 		dx_buff->is_ipv6 =
 			(ip_hdr(skb)->version == 6) ? 1U : 0U;
+		need_context_tag = true;
+	}
 
+	if (self->aq_nic_cfg.is_vlan_tx_insert && skb_vlan_tag_present(skb)) {
+		dx_buff->vlan_tx_tag = skb_vlan_tag_get(skb);
+		dx_buff->len_pkt = skb->len;
+		dx_buff->is_vlan = 1U;
+		need_context_tag = true;
+	}
+
+	if (need_context_tag) {
 		dx = aq_ring_next_dx(ring, dx);
 		dx_buff = &ring->buff_ring[dx];
+		dx_buff->flags = 0U;
 		++ret;
 	}
 
-	dx_buff->flags = 0U;
 	dx_buff->len = skb_headlen(skb);
 	dx_buff->pa = dma_map_single(aq_nic_get_dev(self),
 				     skb->data,
@@ -577,7 +594,7 @@ mapping_error:
 	     --ret, dx = aq_ring_next_dx(ring, dx)) {
 		dx_buff = &ring->buff_ring[dx];
 
-		if (!dx_buff->is_gso && dx_buff->pa) {
+		if (!dx_buff->is_gso && !dx_buff->is_vlan && dx_buff->pa) {
 			if (unlikely(dx_buff->is_sop)) {
 				dma_unmap_single(aq_nic_get_dev(self),
 						 dx_buff->pa,
@@ -598,11 +615,11 @@ exit:
 
 int aq_nic_xmit(struct aq_nic_s *self, struct sk_buff *skb)
 {
+	unsigned int vec = skb->queue_mapping % self->aq_nic_cfg.vecs;
 	struct aq_ring_s *ring = NULL;
 	unsigned int frags = 0U;
-	unsigned int vec = skb->queue_mapping % self->aq_nic_cfg.vecs;
-	unsigned int tc = 0U;
 	int err = NETDEV_TX_OK;
+	unsigned int tc = 0U;
 
 	frags = skb_shinfo(skb)->nr_frags + 1;
 
@@ -700,6 +717,7 @@ int aq_nic_set_multicast_list(struct aq_nic_s *self, struct net_device *ndev)
 		if (err < 0)
 			return err;
 	}
+
 	return aq_nic_set_packet_filter(self, packet_filter);
 }
 
@@ -744,10 +762,10 @@ int aq_nic_get_regs_count(struct aq_nic_s *self)
 
 void aq_nic_get_stats(struct aq_nic_s *self, u64 *data)
 {
-	unsigned int i = 0U;
-	unsigned int count = 0U;
 	struct aq_vec_s *aq_vec = NULL;
 	struct aq_stats_s *stats;
+	unsigned int count = 0U;
+	unsigned int i = 0U;
 
 	if (self->aq_fw_ops->update_stats) {
 		mutex_lock(&self->fwreq_mutex);
@@ -797,8 +815,8 @@ err_exit:;
 
 static void aq_nic_update_ndev_stats(struct aq_nic_s *self)
 {
-	struct net_device *ndev = self->ndev;
 	struct aq_stats_s *stats = self->aq_hw_ops->hw_get_hw_stats(self->aq_hw);
+	struct net_device *ndev = self->ndev;
 
 	ndev->stats.rx_packets = stats->dma_pkt_rc;
 	ndev->stats.rx_bytes = stats->dma_oct_rc;

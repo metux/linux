@@ -17,9 +17,11 @@ ccflags-y := -fPIC -fno-common -fno-builtin -fno-stack-protector
 ccflags-y += -DDISABLE_BRANCH_PROFILING -DBUILD_VDSO32
 
 ldflags-$(CONFIG_CPU_ENDIAN_BE8) := --be8
-ldflags-y := -Bsymbolic --no-undefined -soname=linux-vdso.so.1 \
-	    -z max-page-size=4096 -nostdlib -shared $(ldflags-y) \
-	    --hash-style=sysv --build-id \
+ldflags-y = -Bsymbolic --no-undefined -soname=linux-vdso.so.1 
+	    -z max-page-size=4096 -nostdlib -shared 
+	    $(call ld-option, --hash-style=sysv) 
+	    $(call ld-option, --build-id) 
+	    -T
 	    -T
 
 obj-$(CONFIG_VDSO) += vdso.o

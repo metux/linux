@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  linux/kernel/fork.c
  *
@@ -94,7 +93,6 @@
 #include <linux/livepatch.h>
 #include <linux/thread_info.h>
 #include <linux/stackleak.h>
-#include <linux/cpufreq_times.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -124,7 +122,7 @@
 unsigned long total_forks;	/* Handle normal Linux uptimes. */
 int nr_threads;			/* The idle threads do not count.. */
 
-static int max_threads;		/* tunable limit on nr_threads */
+int max_threads;		/* tunable limit on nr_threads */
 
 DEFINE_PER_CPU(unsigned long, process_counts) = 0;
 
@@ -249,11 +247,7 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 	struct page *page = alloc_pages_node(node, THREADINFO_GFP,
 					     THREAD_SIZE_ORDER);
 
-	if (likely(page)) {
-		tsk->stack = page_address(page);
-		return tsk->stack;
-	}
-	return NULL;
+	return page ? page_address(page) : NULL;
 #endif
 }
 
@@ -443,8 +437,6 @@ void put_task_stack(struct task_struct *tsk)
 
 void free_task(struct task_struct *tsk)
 {
-	cpufreq_task_times_exit(tsk);
-
 #ifndef CONFIG_THREAD_INFO_IN_TASK
 	/*
 	 * The task is finally done with both the stack and thread_info,
@@ -680,6 +672,7 @@ void __mmdrop(struct mm_struct *mm)
 	WARN_ON_ONCE(mm == current->active_mm);
 	mm_free_pgd(mm);
 	destroy_context(mm);
+	hmm_mm_destroy(mm);
 	mmu_notifier_mm_destroy(mm);
 	check_mm(mm);
 	put_user_ns(mm->user_ns);
@@ -729,7 +722,7 @@ void __put_task_struct(struct task_struct *tsk)
 	WARN_ON(tsk == current);
 
 	cgroup_free(tsk);
-	task_numa_free(tsk, true);
+	task_numa_free(tsk);
 	security_task_free(tsk);
 	exit_creds(tsk);
 	delayacct_tsk_free(tsk);
@@ -900,8 +893,6 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_STACKPROTECTOR
 	tsk->stack_canary = get_random_canary();
 #endif
-	if (orig->cpus_ptr == &orig->cpus_mask)
-		tsk->cpus_ptr = &tsk->cpus_mask;
 
 	/*
 	 * One for us, one for whoever does the "release_task()" (usually
@@ -1713,38 +1704,37 @@ static void pidfd_show_fdinfo(struct seq_file *m, struct file *f)
 }
 #endif
 
-/*
- * Poll support for process exit notification.
- */
-static unsigned int pidfd_poll(struct file *file, struct poll_table_struct *pts)
-{
-	struct task_struct *task;
-	struct pid *pid = file->private_data;
-	int poll_flags = 0;
-
-	poll_wait(file, &pid->wait_pidfd, pts);
-
-	rcu_read_lock();
-	task = pid_task(pid, PIDTYPE_PID);
-	/*
-	 * Inform pollers only when the whole thread group exits.
-	 * If the thread group leader exits before all other threads in the
-	 * group, then poll(2) should block, similar to the wait(2) family.
-	 */
-	if (!task || (task->exit_state && thread_group_empty(task)))
-		poll_flags = POLLIN | POLLRDNORM;
-	rcu_read_unlock();
-
-	return poll_flags;
-}
-
 const struct file_operations pidfd_fops = {
 	.release = pidfd_release,
-	.poll = pidfd_poll,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo = pidfd_show_fdinfo,
 #endif
 };
+
+/**
+ * pidfd_create() - Create a new pid file descriptor.
+ *
+ * @pid:  struct pid that the pidfd will reference
+ *
+ * This creates a new pid file descriptor with the O_CLOEXEC flag set.
+ *
+ * Note, that this function can only be called after the fd table has
+ * been unshared to avoid leaking the pidfd to the new process.
+ *
+ * Return: On success, a cloexec pidfd is returned.
+ *         On error, a negative errno number will be returned.
+ */
+static int pidfd_create(struct pid *pid)
+{
+	int fd;
+
+	fd = anon_inode_getfd("[pidfd]", &pidfd_fops, get_pid(pid),
+			      O_RDWR | O_CLOEXEC);
+	if (fd < 0)
+		put_pid(pid);
+
+	return fd;
+}
 
 static void __delayed_free_task(struct rcu_head *rhp)
 {
@@ -1778,7 +1768,6 @@ static __latent_entropy struct task_struct *copy_process(
 	int pidfd = -1, retval;
 	struct task_struct *p;
 	struct multiprocess_signals delayed;
-	struct file *pidfile = NULL;
 	u64 clone_flags = args->flags;
 
 	/*
@@ -1859,8 +1848,6 @@ static __latent_entropy struct task_struct *copy_process(
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
-
-	cpufreq_task_times_init(p);
 
 	/*
 	 * This _must_ happen before we call free_task(), i.e. before we jump
@@ -1977,6 +1964,9 @@ static __latent_entropy struct task_struct *copy_process(
 	p->pagefault_disabled = 0;
 
 #ifdef CONFIG_LOCKDEP
+	p->lockdep_depth = 0; /* no locks held yet */
+	p->curr_chain_key = 0;
+	p->lockdep_recursion = 0;
 	lockdep_init_task(p);
 #endif
 
@@ -2049,21 +2039,11 @@ static __latent_entropy struct task_struct *copy_process(
 	 * if the fd table isn't shared).
 	 */
 	if (clone_flags & CLONE_PIDFD) {
-		retval = get_unused_fd_flags(O_RDWR | O_CLOEXEC);
+		retval = pidfd_create(pid);
 		if (retval < 0)
 			goto bad_fork_free_pid;
 
 		pidfd = retval;
-
-		pidfile = anon_inode_getfile("[pidfd]", &pidfd_fops, pid,
-					      O_RDWR | O_CLOEXEC);
-		if (IS_ERR(pidfile)) {
-			put_unused_fd(pidfd);
-			retval = PTR_ERR(pidfile);
-			goto bad_fork_free_pid;
-		}
-		get_pid(pid);	/* held by pidfile now */
-
 		retval = put_user(pidfd, args->pidfd);
 		if (retval)
 			goto bad_fork_put_pidfd;
@@ -2140,7 +2120,7 @@ static __latent_entropy struct task_struct *copy_process(
 	 */
 
 	p->start_time = ktime_get_ns();
-	p->real_start_time = ktime_get_boottime_ns();
+	p->real_start_time = ktime_get_boot_ns();
 
 	/*
 	 * Make it visible to the rest of the system, but dont wake it up yet.
@@ -2181,9 +2161,6 @@ static __latent_entropy struct task_struct *copy_process(
 		goto bad_fork_cancel_cgroup;
 	}
 
-	/* past the last point of failure */
-	if (pidfile)
-		fd_install(pidfd, pidfile);
 
 	init_task_pid_links(p);
 	if (likely(p->pid)) {
@@ -2250,10 +2227,8 @@ bad_fork_cancel_cgroup:
 bad_fork_cgroup_threadgroup_change_end:
 	cgroup_threadgroup_change_end(current);
 bad_fork_put_pidfd:
-	if (clone_flags & CLONE_PIDFD) {
-		fput(pidfile);
-		put_unused_fd(pidfd);
-	}
+	if (clone_flags & CLONE_PIDFD)
+		ksys_close(pidfd);
 bad_fork_free_pid:
 	if (pid != &init_struct_pid)
 		free_pid(pid);
@@ -2343,8 +2318,6 @@ struct mm_struct *copy_init_mm(void)
  *
  * It copies the process, and if successful kick-starts
  * it and waits for it to finish using the VM if required.
- *
- * args->exit_signal is expected to be checked for sanity by the caller.
  */
 long _do_fork(struct kernel_clone_args *args)
 {
@@ -2379,8 +2352,6 @@ long _do_fork(struct kernel_clone_args *args)
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 
-	cpufreq_task_times_alloc(p);
-
 	/*
 	 * Do this prior waking up the new thread - the thread pointer
 	 * might get invalid after that point, if the thread exits quickly.
@@ -2414,16 +2385,6 @@ long _do_fork(struct kernel_clone_args *args)
 	return nr;
 }
 
-bool legacy_clone_args_valid(const struct kernel_clone_args *kargs)
-{
-	/* clone(CLONE_PIDFD) uses parent_tidptr to return a pidfd */
-	if ((kargs->flags & CLONE_PIDFD) &&
-	    (kargs->flags & CLONE_PARENT_SETTID))
-		return false;
-
-	return true;
-}
-
 #ifndef CONFIG_HAVE_COPY_THREAD_TLS
 /* For compatibility with architectures that call do_fork directly rather than
  * using the syscall entry points below. */
@@ -2435,16 +2396,12 @@ long do_fork(unsigned long clone_flags,
 {
 	struct kernel_clone_args args = {
 		.flags		= (clone_flags & ~CSIGNAL),
-		.pidfd		= parent_tidptr,
 		.child_tid	= child_tidptr,
 		.parent_tid	= parent_tidptr,
 		.exit_signal	= (clone_flags & CSIGNAL),
 		.stack		= stack_start,
 		.stack_size	= stack_size,
 	};
-
-	if (!legacy_clone_args_valid(&args))
-		return -EINVAL;
 
 	return _do_fork(&args);
 }
@@ -2527,14 +2484,13 @@ SYSCALL_DEFINE5(clone, unsigned long, clone_flags, unsigned long, newsp,
 		.tls		= tls,
 	};
 
-	if (!legacy_clone_args_valid(&args))
+	/* clone(CLONE_PIDFD) uses parent_tidptr to return a pidfd */
+	if ((clone_flags & CLONE_PIDFD) && (clone_flags & CLONE_PARENT_SETTID))
 		return -EINVAL;
 
 	return _do_fork(&args);
 }
-#endif
 
-#ifdef __ARCH_WANT_SYS_CLONE3
 noinline static int copy_clone_args_from_user(struct kernel_clone_args *kargs,
 					      struct clone_args __user *uargs,
 					      size_t size)
@@ -2570,14 +2526,6 @@ noinline static int copy_clone_args_from_user(struct kernel_clone_args *kargs,
 
 	if (copy_from_user(&args, uargs, size))
 		return -EFAULT;
-
-	/*
-	 * Verify that higher 32bits of exit_signal are unset and that
-	 * it is a valid signal
-	 */
-	if (unlikely((args.exit_signal & ~((u64)CSIGNAL)) ||
-		     !valid_signal(args.exit_signal)))
-		return -EINVAL;
 
 	*kargs = (struct kernel_clone_args){
 		.flags		= args.flags,

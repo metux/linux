@@ -67,9 +67,6 @@ struct i915_vma;
 
 typedef u32 gen6_pte_t;
 typedef u64 gen8_pte_t;
-typedef u64 gen8_pde_t;
-typedef u64 gen8_ppgtt_pdpe_t;
-typedef u64 gen8_ppgtt_pml4e_t;
 
 #define ggtt_total_entries(ggtt) ((ggtt)->vm.total >> PAGE_SHIFT)
 

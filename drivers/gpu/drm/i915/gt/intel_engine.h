@@ -909,7 +909,6 @@ bool intel_engine_is_idle(struct intel_engine_cs *engine);
 bool intel_engines_are_idle(struct intel_gt *gt);
 
 void intel_engines_reset_default_submission(struct intel_gt *gt);
-unsigned int intel_engines_has_context_isolation(struct drm_i915_private *i915);
 
 bool intel_engine_can_store_dword(struct intel_engine_cs *engine);
 
@@ -917,9 +916,6 @@ __printf(3, 4)
 void intel_engine_dump(struct intel_engine_cs *engine,
 		       struct drm_printer *m,
 		       const char *header, ...);
-
-struct intel_engine_cs *
-intel_engine_lookup_user(struct drm_i915_private *i915, u8 class, u8 instance);
 
 static inline void intel_engine_context_in(struct intel_engine_cs *engine)
 {

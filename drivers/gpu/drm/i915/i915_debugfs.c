@@ -32,10 +32,12 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_fourcc.h>
 
+#include "gem/i915_gem_context.h"
 #include "gt/intel_reset.h"
 
-#include "i915_gem_context.h"
+#include "i915_debugfs.h"
 #include "i915_irq.h"
+#include "intel_csr.h"
 #include "intel_dp.h"
 #include "intel_drv.h"
 #include "intel_fbc.h"
@@ -208,6 +210,18 @@ describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 					   vma->ggtt_view.rotated.plane[1].height,
 					   vma->ggtt_view.rotated.plane[1].stride,
 					   vma->ggtt_view.rotated.plane[1].offset);
+				break;
+
+			case I915_GGTT_VIEW_REMAPPED:
+				seq_printf(m, ", remapped [(%ux%u, stride=%u, offset=%u), (%ux%u, stride=%u, offset=%u)]",
+					   vma->ggtt_view.remapped.plane[0].width,
+					   vma->ggtt_view.remapped.plane[0].height,
+					   vma->ggtt_view.remapped.plane[0].stride,
+					   vma->ggtt_view.remapped.plane[0].offset,
+					   vma->ggtt_view.remapped.plane[1].width,
+					   vma->ggtt_view.remapped.plane[1].height,
+					   vma->ggtt_view.remapped.plane[1].stride,
+					   vma->ggtt_view.remapped.plane[1].offset);
 				break;
 
 			default:
@@ -1286,7 +1300,6 @@ static int i915_hangcheck_info(struct seq_file *m, void *unused)
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 	struct intel_engine_cs *engine;
 	u64 acthd[I915_NUM_ENGINES];
-	u32 seqno[I915_NUM_ENGINES];
 	struct intel_instdone instdone;
 	intel_wakeref_t wakeref;
 	enum intel_engine_id id;
@@ -1303,10 +1316,8 @@ static int i915_hangcheck_info(struct seq_file *m, void *unused)
 	}
 
 	with_intel_runtime_pm(dev_priv, wakeref) {
-		for_each_engine(engine, dev_priv, id) {
+		for_each_engine(engine, dev_priv, id)
 			acthd[id] = intel_engine_get_active_head(engine);
-			seqno[id] = intel_engine_get_hangcheck_seqno(engine);
-		}
 
 		intel_engine_get_instdone(dev_priv->engine[RCS0], &instdone);
 	}
@@ -1323,11 +1334,8 @@ static int i915_hangcheck_info(struct seq_file *m, void *unused)
 	seq_printf(m, "GT active? %s\n", yesno(dev_priv->gt.awake));
 
 	for_each_engine(engine, dev_priv, id) {
-		seq_printf(m, "%s:\n", engine->name);
-		seq_printf(m, "\tseqno = %x [current %x, last %x], %dms ago\n",
-			   engine->hangcheck.last_seqno,
-			   seqno[id],
-			   engine->hangcheck.next_seqno,
+		seq_printf(m, "%s: %d ms ago\n",
+			   engine->name,
 			   jiffies_to_msecs(jiffies -
 					    engine->hangcheck.action_timestamp));
 
@@ -1492,7 +1500,7 @@ static int gen6_drpc_info(struct seq_file *m)
 
 	if (INTEL_GEN(dev_priv) <= 7)
 		sandybridge_pcode_read(dev_priv, GEN6_PCODE_READ_RC6VIDS,
-				       &rc6vids);
+				       &rc6vids, NULL);
 
 	seq_printf(m, "RC1e Enabled: %s\n",
 		   yesno(rcctl1 & GEN6_RC_CTL_RC1e_ENABLE));
@@ -1775,7 +1783,7 @@ static int i915_ring_freq_table(struct seq_file *m, void *unused)
 		ia_freq = gpu_freq;
 		sandybridge_pcode_read(dev_priv,
 				       GEN6_PCODE_READ_MIN_FREQ_TABLE,
-				       &ia_freq);
+				       &ia_freq, NULL);
 		seq_printf(m, "%d\t\t%d\t\t\t\t%d\n",
 			   intel_gpu_freq(dev_priv, (gpu_freq *
 						     (IS_GEN9_BC(dev_priv) ||
@@ -3899,14 +3907,26 @@ i915_drop_caches_set(void *data, u64 val)
 
 	/* No need to check and wait for gpu resets, only libdrm auto-restarts
 	 * on ioctls on -EAGAIN. */
-	if (val & (DROP_ACTIVE | DROP_RETIRE | DROP_RESET_SEQNO)) {
+	if (val & (DROP_ACTIVE | DROP_IDLE | DROP_RETIRE | DROP_RESET_SEQNO)) {
 		int ret;
 
 		ret = mutex_lock_interruptible(&i915->drm.struct_mutex);
 		if (ret)
 			return ret;
 
-		if (val & DROP_ACTIVE)
+		/*
+		 * To finish the flush of the idle_worker, we must complete
+		 * the switch-to-kernel-context, which requires a double
+		 * pass through wait_for_idle: first queues the switch,
+		 * second waits for the switch.
+		 */
+		if (ret == 0 && val & (DROP_IDLE | DROP_ACTIVE))
+			ret = i915_gem_wait_for_idle(i915,
+						     I915_WAIT_INTERRUPTIBLE |
+						     I915_WAIT_LOCKED,
+						     MAX_SCHEDULE_TIMEOUT);
+
+		if (ret == 0 && val & DROP_IDLE)
 			ret = i915_gem_wait_for_idle(i915,
 						     I915_WAIT_INTERRUPTIBLE |
 						     I915_WAIT_LOCKED,
@@ -3933,10 +3953,8 @@ i915_drop_caches_set(void *data, u64 val)
 	fs_reclaim_release(GFP_KERNEL);
 
 	if (val & DROP_IDLE) {
-		do {
-			flush_delayed_work(&i915->gem.retire_work);
-			drain_delayed_work(&i915->gem.idle_work);
-		} while (READ_ONCE(i915->gt.awake));
+		flush_delayed_work(&i915->gem.retire_work);
+		flush_work(&i915->gem.idle_work);
 	}
 
 	if (val & DROP_FREED)
@@ -4751,6 +4769,7 @@ static int i915_hdcp_sink_capability_show(struct seq_file *m, void *data)
 {
 	struct drm_connector *connector = m->private;
 	struct intel_connector *intel_connector = to_intel_connector(connector);
+	bool hdcp_cap, hdcp2_cap;
 
 	if (connector->status != connector_status_connected)
 		return -ENODEV;
@@ -4761,8 +4780,16 @@ static int i915_hdcp_sink_capability_show(struct seq_file *m, void *data)
 
 	seq_printf(m, "%s:%d HDCP version: ", connector->name,
 		   connector->base.id);
-	seq_printf(m, "%s ", !intel_hdcp_capable(intel_connector) ?
-		   "None" : "HDCP1.4");
+	hdcp_cap = intel_hdcp_capable(intel_connector);
+	hdcp2_cap = intel_hdcp2_capable(intel_connector);
+
+	if (hdcp_cap)
+		seq_puts(m, "HDCP1.4 ");
+	if (hdcp2_cap)
+		seq_puts(m, "HDCP2.2 ");
+
+	if (!hdcp_cap && !hdcp2_cap)
+		seq_puts(m, "None");
 	seq_puts(m, "\n");
 
 	return 0;

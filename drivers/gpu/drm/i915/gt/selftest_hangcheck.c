@@ -24,6 +24,7 @@
 
 #include <linux/kthread.h>
 
+#include "gem/i915_gem_context.h"
 #include "intel_engine_pm.h"
 
 #include "i915_selftest.h"
@@ -32,8 +33,10 @@
 #include "selftests/igt_reset.h"
 #include "selftests/igt_wedge_me.h"
 
-#include "selftests/mock_context.h"
 #include "selftests/mock_drm.h"
+
+#include "gem/selftests/mock_context.h"
+#include "gem/selftests/igt_gem_utils.h"
 
 #define IGT_IDLE_TIMEOUT 50 /* ms; time to wait after flushing between tests */
 

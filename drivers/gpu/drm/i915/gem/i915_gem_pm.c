@@ -5,27 +5,10 @@
  */
 
 #include "gem/i915_gem_pm.h"
-#include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 
 #include "i915_drv.h"
 #include "i915_globals.h"
-
-static void call_idle_barriers(struct intel_engine_cs *engine)
-{
-	struct llist_node *node, *next;
-
-	llist_for_each_safe(node, next, llist_del_all(&engine->barrier_tasks)) {
-		struct i915_active_request *active =
-			container_of((struct list_head *)node,
-				     typeof(*active), link);
-
-		INIT_LIST_HEAD(&active->link);
-		RCU_INIT_POINTER(active->request, NULL);
-
-		active->retire(active, NULL);
-	}
-}
 
 static void i915_gem_park(struct drm_i915_private *i915)
 {
@@ -35,8 +18,9 @@ static void i915_gem_park(struct drm_i915_private *i915)
 	lockdep_assert_held(&i915->drm.struct_mutex);
 
 	for_each_engine(engine, i915, id)
-		call_idle_barriers(engine); /* cleanup after wedging */
+		i915_gem_batch_pool_fini(&engine->batch_pool);
 
+	i915_timelines_park(i915);
 	i915_vma_parked(i915);
 
 	i915_globals_park();
@@ -46,23 +30,23 @@ static void idle_work_handler(struct work_struct *work)
 {
 	struct drm_i915_private *i915 =
 		container_of(work, typeof(*i915), gem.idle_work);
-	bool park;
+	bool restart = true;
 
-	cancel_delayed_work_sync(&i915->gem.retire_work);
+	cancel_delayed_work(&i915->gem.retire_work);
 	mutex_lock(&i915->drm.struct_mutex);
 
 	intel_wakeref_lock(&i915->gt.wakeref);
-	park = (!intel_wakeref_is_active(&i915->gt.wakeref) &&
-		!work_pending(work));
-	intel_wakeref_unlock(&i915->gt.wakeref);
-	if (park)
+	if (!intel_wakeref_active(&i915->gt.wakeref) && !work_pending(work)) {
 		i915_gem_park(i915);
-	else
+		restart = false;
+	}
+	intel_wakeref_unlock(&i915->gt.wakeref);
+
+	mutex_unlock(&i915->drm.struct_mutex);
+	if (restart)
 		queue_delayed_work(i915->wq,
 				   &i915->gem.retire_work,
 				   round_jiffies_up_relative(HZ));
-
-	mutex_unlock(&i915->drm.struct_mutex);
 }
 
 static void retire_work_handler(struct work_struct *work)
@@ -104,18 +88,18 @@ static int pm_notifier(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static bool switch_to_kernel_context_sync(struct intel_gt *gt)
+static bool switch_to_kernel_context_sync(struct drm_i915_private *i915)
 {
-	bool result = !intel_gt_is_wedged(gt);
+	bool result = true;
 
 	do {
-		if (i915_gem_wait_for_idle(gt->i915,
+		if (i915_gem_wait_for_idle(i915,
 					   I915_WAIT_LOCKED |
 					   I915_WAIT_FOR_IDLE_BOOST,
 					   I915_GEM_IDLE_TIMEOUT) == -ETIME) {
 			/* XXX hide warning from gem_eio */
 			if (i915_modparams.reset) {
-				dev_err(gt->i915->drm.dev,
+				dev_err(i915->drm.dev,
 					"Failed to idle engines, declaring wedged!\n");
 				GEM_TRACE_DUMP();
 			}
@@ -124,27 +108,25 @@ static bool switch_to_kernel_context_sync(struct intel_gt *gt)
 			 * Forcibly cancel outstanding work and leave
 			 * the gpu quiet.
 			 */
-			intel_gt_set_wedged(gt);
+			i915_gem_set_wedged(i915);
 			result = false;
 		}
-	} while (i915_retire_requests(gt->i915) && result);
+	} while (i915_retire_requests(i915) && result);
 
-	if (intel_gt_pm_wait_for_idle(gt))
-		result = false;
-
+	GEM_BUG_ON(i915->gt.awake);
 	return result;
 }
 
 bool i915_gem_load_power_context(struct drm_i915_private *i915)
 {
-	return switch_to_kernel_context_sync(&i915->gt);
+	return switch_to_kernel_context_sync(i915);
 }
 
 void i915_gem_suspend(struct drm_i915_private *i915)
 {
 	GEM_TRACE("\n");
 
-	intel_wakeref_auto(&i915->ggtt.userfault_wakeref, 0);
+	intel_wakeref_auto(&i915->mm.userfault_wakeref, 0);
 	flush_workqueue(i915->wq);
 
 	mutex_lock(&i915->drm.struct_mutex);
@@ -158,33 +140,32 @@ void i915_gem_suspend(struct drm_i915_private *i915)
 	 * state. Fortunately, the kernel_context is disposable and we do
 	 * not rely on its state.
 	 */
-	switch_to_kernel_context_sync(&i915->gt);
+	switch_to_kernel_context_sync(i915);
 
 	mutex_unlock(&i915->drm.struct_mutex);
 
-	cancel_delayed_work_sync(&i915->gt.hangcheck.work);
+	/*
+	 * Assert that we successfully flushed all the work and
+	 * reset the GPU back to its idle, low power state.
+	 */
+	GEM_BUG_ON(i915->gt.awake);
+	flush_work(&i915->gem.idle_work);
+
+	cancel_delayed_work_sync(&i915->gpu_error.hangcheck_work);
 
 	i915_gem_drain_freed_objects(i915);
 
-	intel_uc_suspend(&i915->gt.uc);
-}
-
-static struct drm_i915_gem_object *first_mm_object(struct list_head *list)
-{
-	return list_first_entry_or_null(list,
-					struct drm_i915_gem_object,
-					mm.link);
+	intel_uc_suspend(i915);
 }
 
 void i915_gem_suspend_late(struct drm_i915_private *i915)
 {
 	struct drm_i915_gem_object *obj;
 	struct list_head *phases[] = {
-		&i915->mm.shrink_list,
-		&i915->mm.purge_list,
+		&i915->mm.unbound_list,
+		&i915->mm.bound_list,
 		NULL
 	}, **phase;
-	unsigned long flags;
 
 	/*
 	 * Neither the BIOS, ourselves or any other kernel
@@ -206,31 +187,14 @@ void i915_gem_suspend_late(struct drm_i915_private *i915)
 	 * machine in an unusable condition.
 	 */
 
-	spin_lock_irqsave(&i915->mm.obj_lock, flags);
+	mutex_lock(&i915->drm.struct_mutex);
 	for (phase = phases; *phase; phase++) {
-		LIST_HEAD(keep);
-
-		while ((obj = first_mm_object(*phase))) {
-			list_move_tail(&obj->mm.link, &keep);
-
-			/* Beware the background _i915_gem_free_objects */
-			if (!kref_get_unless_zero(&obj->base.refcount))
-				continue;
-
-			spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
-
-			i915_gem_object_lock(obj);
+		list_for_each_entry(obj, *phase, mm.link)
 			WARN_ON(i915_gem_object_set_to_gtt_domain(obj, false));
-			i915_gem_object_unlock(obj);
-			i915_gem_object_put(obj);
-
-			spin_lock_irqsave(&i915->mm.obj_lock, flags);
-		}
-
-		list_splice_tail(&keep, *phase);
 	}
-	spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
+	mutex_unlock(&i915->drm.struct_mutex);
 
+	intel_uc_sanitize(i915);
 	i915_gem_sanitize(i915);
 }
 
@@ -238,21 +202,25 @@ void i915_gem_resume(struct drm_i915_private *i915)
 {
 	GEM_TRACE("\n");
 
+	WARN_ON(i915->gt.awake);
+
 	mutex_lock(&i915->drm.struct_mutex);
 	intel_uncore_forcewake_get(&i915->uncore, FORCEWAKE_ALL);
 
-	if (i915_gem_init_hw(i915))
-		goto err_wedged;
+	i915_gem_restore_gtt_mappings(i915);
+	i915_gem_restore_fences(i915);
 
 	/*
 	 * As we didn't flush the kernel context before suspend, we cannot
 	 * guarantee that the context image is complete. So let's just reset
 	 * it and start again.
 	 */
-	if (intel_gt_resume(&i915->gt))
+	intel_gt_resume(i915);
+
+	if (i915_gem_init_hw(i915))
 		goto err_wedged;
 
-	intel_uc_resume(&i915->gt.uc);
+	intel_uc_resume(i915);
 
 	/* Always reload a context for powersaving. */
 	if (!i915_gem_load_power_context(i915))
@@ -264,10 +232,10 @@ out_unlock:
 	return;
 
 err_wedged:
-	if (!intel_gt_is_wedged(&i915->gt)) {
+	if (!i915_reset_failed(i915)) {
 		dev_err(i915->drm.dev,
 			"Failed to re-initialize GPU, declaring it wedged!\n");
-		intel_gt_set_wedged(&i915->gt);
+		i915_gem_set_wedged(i915);
 	}
 	goto out_unlock;
 }

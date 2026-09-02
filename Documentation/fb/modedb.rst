@@ -1,6 +1,6 @@
-=================================
-modedb default video mode support
-=================================
+
+
+			modedb default video mode support
 
 
 Currently all frame buffer device drivers have their own video mode databases,
@@ -18,7 +18,7 @@ When a frame buffer device receives a video= option it doesn't know, it should
 consider that to be a video mode option. If no frame buffer device is specified
 in a video= option, fbmem considers that to be a global video mode option.
 
-Valid mode specifiers (mode_option argument)::
+Valid mode specifiers (mode_option argument):
 
     <xres>x<yres>[M][R][-<bpp>][@<refresh>][i][m][eDd]
     <name>[-<bpp>][@<refresh>]
@@ -45,18 +45,27 @@ signals (e.g. HDMI and DVI-I). For other outputs it behaves like 'e'. If 'd'
 is specified the output is disabled.
 
 You can additionally specify which output the options matches to.
-To force the VGA output to be enabled and drive a specific mode say::
-
+To force the VGA output to be enabled and drive a specific mode say:
     video=VGA-1:1280x1024@60me
 
-Specifying the option multiple times for different ports is possible, e.g.::
-
+Specifying the option multiple times for different ports is possible, e.g.:
     video=LVDS-1:d video=HDMI-1:D
 
------------------------------------------------------------------------------
+Options can also be passed after the mode, using commas as separator.
+
+       Sample usage: 720x480,rotate=180 - 720x480 mode, rotated by 180 degrees
+
+Valid options are:
+
+  - reflect_x (boolean): Perform an axial symmetry on the X axis
+  - reflect_y (boolean): Perform an axial symmetry on the Y axis
+  - rotate (integer): Rotate the initial framebuffer by x
+    degrees. Valid values are 0, 90, 180 and 270.
+
+
+***** oOo ***** oOo ***** oOo ***** oOo ***** oOo ***** oOo ***** oOo *****
 
 What is the VESA(TM) Coordinated Video Timings (CVT)?
-=====================================================
 
 From the VESA(TM) Website:
 
@@ -93,14 +102,14 @@ determined from its EDID. The version 1.3 of the EDID has extra 128-byte
 blocks where additional timing information is placed.  As of this time, there
 is no support yet in the layer to parse this additional blocks.)
 
-CVT also introduced a new naming convention (should be seen from dmesg output)::
+CVT also introduced a new naming convention (should be seen from dmesg output):
 
     <pix>M<a>[-R]
 
     where: pix = total amount of pixels in MB (xres x yres)
-	   M   = always present
-	   a   = aspect ratio (3 - 4:3; 4 - 5:4; 9 - 15:9, 16:9; A - 16:10)
-	  -R   = reduced blanking
+           M   = always present
+           a   = aspect ratio (3 - 4:3; 4 - 5:4; 9 - 15:9, 16:9; A - 16:10)
+          -R   = reduced blanking
 
 	  example:  .48M3-R - 800x600 with reduced blanking
 
@@ -113,15 +122,15 @@ Note: VESA(TM) has restrictions on what is a standard CVT timing:
 If one of the above are not satisfied, the kernel will print a warning but the
 timings will still be calculated.
 
------------------------------------------------------------------------------
+***** oOo ***** oOo ***** oOo ***** oOo ***** oOo ***** oOo ***** oOo *****
 
-To find a suitable video mode, you just call::
+To find a suitable video mode, you just call
 
-  int __init fb_find_mode(struct fb_var_screeninfo *var,
-			  struct fb_info *info, const char *mode_option,
-			  const struct fb_videomode *db, unsigned int dbsize,
-			  const struct fb_videomode *default_mode,
-			  unsigned int default_bpp)
+int __init fb_find_mode(struct fb_var_screeninfo *var,
+                        struct fb_info *info, const char *mode_option,
+                        const struct fb_videomode *db, unsigned int dbsize,
+                        const struct fb_videomode *default_mode,
+                        unsigned int default_bpp)
 
 with db/dbsize your non-standard video mode database, or NULL to use the
 standard video mode database.
@@ -130,13 +139,12 @@ fb_find_mode() first tries the specified video mode (or any mode that matches,
 e.g. there can be multiple 640x480 modes, each of them is tried). If that
 fails, the default mode is tried. If that fails, it walks over all modes.
 
-To specify a video mode at bootup, use the following boot options::
-
+To specify a video mode at bootup, use the following boot options:
     video=<driver>:<xres>x<yres>[-<bpp>][@refresh]
 
 where <driver> is a name from the table below.  Valid default modes can be
 found in linux/drivers/video/modedb.c.  Check your driver's documentation.
-There may be more modes::
+There may be more modes.
 
     Drivers that support modedb boot options
     Boot Name	  Cards Supported

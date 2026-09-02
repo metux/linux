@@ -1,9 +1,27 @@
-// SPDX-License-Identifier: MIT
 /*
- * Copyright © 2014-2019 Intel Corporation
+ * Copyright © 2014-2017 Intel Corporation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
  */
 
-#include "gt/intel_gt.h"
 #include "intel_guc_ads.h"
 #include "intel_uc.h"
 #include "i915_drv.h"
@@ -54,24 +72,43 @@ static void guc_ct_pool_entries_init(struct guc_ct_pool_entry *pool, u32 num)
  */
 #define LR_HW_CONTEXT_SIZE	(80 * sizeof(u32))
 
-/* The ads obj includes the struct itself and buffers passed to GuC */
-struct __guc_ads_blob {
-	struct guc_ads ads;
-	struct guc_policies policies;
-	struct guc_mmio_reg_state reg_state;
-	struct guc_gt_system_info system_info;
-	struct guc_clients_info clients_info;
-	struct guc_ct_pool_entry ct_pool[GUC_CT_POOL_SIZE];
-	u8 reg_state_buffer[GUC_S3_SAVE_SPACE_PAGES * PAGE_SIZE];
-} __packed;
-
-static void __guc_ads_init(struct intel_guc *guc)
+/**
+ * intel_guc_ads_create() - creates GuC ADS
+ * @guc: intel_guc struct
+ *
+ */
+int intel_guc_ads_create(struct intel_guc *guc)
 {
-	struct drm_i915_private *dev_priv = guc_to_gt(guc)->i915;
-	struct __guc_ads_blob *blob = guc->ads_blob;
+	struct drm_i915_private *dev_priv = guc_to_i915(guc);
+	struct i915_vma *vma;
+	/* The ads obj includes the struct itself and buffers passed to GuC */
+	struct {
+		struct guc_ads ads;
+		struct guc_policies policies;
+		struct guc_mmio_reg_state reg_state;
+		struct guc_gt_system_info system_info;
+		struct guc_clients_info clients_info;
+		struct guc_ct_pool_entry ct_pool[GUC_CT_POOL_SIZE];
+		u8 reg_state_buffer[GUC_S3_SAVE_SPACE_PAGES * PAGE_SIZE];
+	} __packed *blob;
 	const u32 skipped_size = LRC_PPHWSP_SZ * PAGE_SIZE + LR_HW_CONTEXT_SIZE;
 	u32 base;
 	u8 engine_class;
+	int ret;
+
+	GEM_BUG_ON(guc->ads_vma);
+
+	vma = intel_guc_allocate_vma(guc, PAGE_ALIGN(sizeof(*blob)));
+	if (IS_ERR(vma))
+		return PTR_ERR(vma);
+
+	guc->ads_vma = vma;
+
+	blob = i915_gem_object_pin_map(guc->ads_vma->obj, I915_MAP_WB);
+	if (IS_ERR(blob)) {
+		ret = PTR_ERR(blob);
+		goto err_vma;
+	}
 
 	/* GuC scheduling policies */
 	guc_policies_init(&blob->policies);
@@ -93,21 +130,29 @@ static void __guc_ads_init(struct intel_guc *guc)
 		 */
 		blob->ads.golden_context_lrca[engine_class] = 0;
 		blob->ads.eng_state_size[engine_class] =
-			intel_engine_context_size(guc_to_gt(guc),
-						  engine_class) -
+			intel_engine_context_size(dev_priv, engine_class) -
 			skipped_size;
 	}
 
-	/* System info */
-	blob->system_info.slice_enabled = hweight8(RUNTIME_INFO(dev_priv)->sseu.slice_mask);
-	blob->system_info.rcs_enabled = 1;
-	blob->system_info.bcs_enabled = 1;
+	/*
+	 * The GuC requires a "Golden Context" when it reinitialises
+	 * engines after a reset. Here we use the Render ring default
+	 * context, which must already exist and be pinned in the GGTT,
+	 * so its address won't change after we've told the GuC where
+	 * to find it. Note that we have to skip our header (1 page),
+	 * because our GuC shared data is there.
+	 */
+	kernel_ctx_vma = dev_priv->engine[RCS0]->kernel_context->state;
+	kernel_ctx_vma = to_intel_context(dev_priv->kernel_context,
+					  dev_priv->engine[RCS0])->state;
+	blob->ads.golden_context_lrca =
+		intel_guc_ggtt_offset(guc, kernel_ctx_vma) + skipped_offset;
 
 	blob->system_info.vdbox_enable_mask = VDBOX_MASK(dev_priv);
 	blob->system_info.vebox_enable_mask = VEBOX_MASK(dev_priv);
 	blob->system_info.vdbox_sfc_support_mask = RUNTIME_INFO(dev_priv)->vdbox_sfc_access;
 
-	base = intel_guc_ggtt_offset(guc, guc->ads_vma);
+	base = intel_guc_ggtt_offset(guc, vma);
 
 	/* Clients info  */
 	guc_ct_pool_entries_init(blob->ct_pool, ARRAY_SIZE(blob->ct_pool));
@@ -123,50 +168,16 @@ static void __guc_ads_init(struct intel_guc *guc)
 	blob->ads.gt_system_info = base + ptr_offset(blob, system_info);
 	blob->ads.clients_info = base + ptr_offset(blob, clients_info);
 
-	i915_gem_object_flush_map(guc->ads_vma->obj);
-}
-
-/**
- * intel_guc_ads_create() - allocates and initializes GuC ADS.
- * @guc: intel_guc struct
- *
- * GuC needs memory block (Additional Data Struct), where it will store
- * some data. Allocate and initialize such memory block for GuC use.
- */
-int intel_guc_ads_create(struct intel_guc *guc)
-{
-	const u32 size = PAGE_ALIGN(sizeof(struct __guc_ads_blob));
-	int ret;
-
-	GEM_BUG_ON(guc->ads_vma);
-
-	ret = intel_guc_allocate_and_map_vma(guc, size, &guc->ads_vma,
-					     (void **)&guc->ads_blob);
-
-	if (ret)
-		return ret;
-
-	__guc_ads_init(guc);
+	i915_gem_object_unpin_map(guc->ads_vma->obj);
 
 	return 0;
+
+err_vma:
+	i915_vma_unpin_and_release(&guc->ads_vma, 0);
+	return ret;
 }
 
 void intel_guc_ads_destroy(struct intel_guc *guc)
 {
-	i915_vma_unpin_and_release(&guc->ads_vma, I915_VMA_RELEASE_MAP);
-}
-
-/**
- * intel_guc_ads_reset() - prepares GuC Additional Data Struct for reuse
- * @guc: intel_guc struct
- *
- * GuC stores some data in ADS, which might be stale after a reset.
- * Reinitialize whole ADS in case any part of it was corrupted during
- * previous GuC run.
- */
-void intel_guc_ads_reset(struct intel_guc *guc)
-{
-	if (!guc->ads_vma)
-		return;
-	__guc_ads_init(guc);
+	i915_vma_unpin_and_release(&guc->ads_vma, 0);
 }

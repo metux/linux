@@ -18,7 +18,7 @@ static int __engine_unpark(struct intel_wakeref *wf)
 
 	GEM_TRACE("%s\n", engine->name);
 
-	intel_gt_pm_get(engine->i915);
+	intel_gt_pm_get(engine->gt);
 
 	/* Pin the default state for fast resets from atomic context. */
 	map = NULL;
@@ -37,7 +37,7 @@ static int __engine_unpark(struct intel_wakeref *wf)
 
 void intel_engine_pm_get(struct intel_engine_cs *engine)
 {
-	intel_wakeref_get(engine->i915, &engine->wakeref, __engine_unpark);
+	intel_wakeref_get(&engine->i915->runtime_pm, &engine->wakeref, __engine_unpark);
 }
 
 void intel_engine_park(struct intel_engine_cs *engine)
@@ -100,6 +100,8 @@ static int __engine_park(struct intel_wakeref *wf)
 	struct intel_engine_cs *engine =
 		container_of(wf, typeof(*engine), wakeref);
 
+	engine->saturated = 0;
+
 	/*
 	 * If one and only one request is completed between pm events,
 	 * we know that we are inside the kernel context and it is
@@ -127,13 +129,13 @@ static int __engine_park(struct intel_wakeref *wf)
 
 	engine->execlists.no_priolist = false;
 
-	intel_gt_pm_put(engine->i915);
+	intel_gt_pm_put(engine->gt);
 	return 0;
 }
 
 void intel_engine_pm_put(struct intel_engine_cs *engine)
 {
-	intel_wakeref_put(engine->i915, &engine->wakeref, __engine_park);
+	intel_wakeref_put(&engine->i915->runtime_pm, &engine->wakeref, __engine_park);
 }
 
 void intel_engine_init__pm(struct intel_engine_cs *engine)
@@ -147,7 +149,7 @@ int intel_engines_resume(struct drm_i915_private *i915)
 	enum intel_engine_id id;
 	int err = 0;
 
-	intel_gt_pm_get(i915);
+	intel_gt_pm_get(&i915->gt);
 	for_each_engine(engine, i915, id) {
 		intel_engine_pm_get(engine);
 		engine->serial++; /* kernel context lost */
@@ -160,7 +162,7 @@ int intel_engines_resume(struct drm_i915_private *i915)
 			break;
 		}
 	}
-	intel_gt_pm_put(i915);
+	intel_gt_pm_put(&i915->gt);
 
 	return err;
 }

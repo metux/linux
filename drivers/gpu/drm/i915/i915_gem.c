@@ -382,12 +382,13 @@ void i915_gem_flush_ggtt_writes(struct drm_i915_private *dev_priv)
 
 	i915_gem_chipset_flush(dev_priv);
 
-	with_intel_runtime_pm(dev_priv, wakeref) {
-		spin_lock_irq(&dev_priv->uncore.lock);
+	with_intel_runtime_pm(&dev_priv->runtime_pm, wakeref) {
+		struct intel_uncore *uncore = &dev_priv->uncore;
 
-		POSTING_READ_FW(RING_HEAD(RENDER_RING_BASE));
-
-		spin_unlock_irq(&dev_priv->uncore.lock);
+		spin_lock_irq(&uncore->lock);
+		intel_uncore_posting_read_fw(uncore,
+					     RING_HEAD(RENDER_RING_BASE));
+		spin_unlock_irq(&uncore->lock);
 	}
 }
 
@@ -493,7 +494,7 @@ i915_gem_gtt_pread(struct drm_i915_gem_object *obj,
 	if (ret)
 		return ret;
 
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0,
 				       PIN_MAPPABLE |
 				       PIN_NONFAULT |
@@ -580,7 +581,7 @@ out_unpin:
 		i915_vma_unpin(vma);
 	}
 out_unlock:
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 
 	return ret;
@@ -680,6 +681,7 @@ i915_gem_gtt_pwrite_fast(struct drm_i915_gem_object *obj,
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 	struct i915_ggtt *ggtt = &i915->ggtt;
+	struct intel_runtime_pm *rpm = &i915->runtime_pm;
 	intel_wakeref_t wakeref;
 	struct drm_mm_node node;
 	struct dma_fence *fence;
@@ -700,14 +702,14 @@ i915_gem_gtt_pwrite_fast(struct drm_i915_gem_object *obj,
 		 * This easily dwarfs any performance advantage from
 		 * using the cache bypass of indirect GGTT access.
 		 */
-		wakeref = intel_runtime_pm_get_if_in_use(i915);
+		wakeref = intel_runtime_pm_get_if_in_use(rpm);
 		if (!wakeref) {
 			ret = -EFAULT;
 			goto out_unlock;
 		}
 	} else {
 		/* No backing pages, no fallback, we must force GGTT access */
-		wakeref = intel_runtime_pm_get(i915);
+		wakeref = intel_runtime_pm_get(rpm);
 	}
 
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0,
@@ -803,7 +805,7 @@ out_unpin:
 		i915_vma_unpin(vma);
 	}
 out_rpm:
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(rpm, wakeref);
 out_unlock:
 	mutex_unlock(&i915->drm.struct_mutex);
 	return ret;
@@ -1003,7 +1005,7 @@ i915_gem_sw_finish_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
-void i915_gem_runtime_suspend(struct drm_i915_private *dev_priv)
+void i915_gem_runtime_suspend(struct drm_i915_private *i915)
 {
 	struct drm_i915_gem_object *obj, *on;
 	int i;
@@ -1016,17 +1018,19 @@ void i915_gem_runtime_suspend(struct drm_i915_private *dev_priv)
 	 */
 
 	list_for_each_entry_safe(obj, on,
-				 &dev_priv->mm.userfault_list, userfault_link)
+				 &i915->ggtt.userfault_list, userfault_link)
 		__i915_gem_object_release_mmap(obj);
 
-	/* The fence will be lost when the device powers down. If any were
+	/*
+	 * The fence will be lost when the device powers down. If any were
 	 * in use by hardware (i.e. they are pinned), we should not be powering
 	 * down! All other fences will be reacquired by the user upon waking.
 	 */
-	for (i = 0; i < dev_priv->num_fence_regs; i++) {
-		struct drm_i915_fence_reg *reg = &dev_priv->fence_regs[i];
+	for (i = 0; i < i915->ggtt.num_fences; i++) {
+		struct i915_fence_reg *reg = &i915->ggtt.fence_regs[i];
 
-		/* Ideally we want to assert that the fence register is not
+		/*
+		 * Ideally we want to assert that the fence register is not
 		 * live at this point (i.e. that no piece of code will be
 		 * trying to write through fence + GTT, as that both violates
 		 * our tracking of activity and associated locking/barriers,
@@ -1886,10 +1890,8 @@ i915_gem_madvise_ioctl(struct drm_device *dev, void *data,
 
 			if (obj->mm.madv != I915_MADV_WILLNEED)
 				list = &i915->mm.purge_list;
-			else if (obj->bind_count)
-				list = &i915->mm.bound_list;
 			else
-				list = &i915->mm.unbound_list;
+				list = &i915->mm.shrink_list;
 			list_move_tail(&obj->mm.link, list);
 
 			spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
@@ -1915,7 +1917,7 @@ void i915_gem_sanitize(struct drm_i915_private *i915)
 
 	GEM_TRACE("\n");
 
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 	intel_uncore_forcewake_get(&i915->uncore, FORCEWAKE_ALL);
 
 	/*
@@ -1938,11 +1940,7 @@ void i915_gem_sanitize(struct drm_i915_private *i915)
 	intel_gt_sanitize(i915, false);
 
 	intel_uncore_forcewake_put(&i915->uncore, FORCEWAKE_ALL);
-	intel_runtime_pm_put(i915, wakeref);
-
-	mutex_lock(&i915->drm.struct_mutex);
-	i915_gem_contexts_lost(i915);
-	mutex_unlock(&i915->drm.struct_mutex);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
 void i915_gem_init_swizzling(struct drm_i915_private *dev_priv)
@@ -2430,7 +2428,7 @@ void i915_gem_fini_hw(struct drm_i915_private *dev_priv)
 {
 	GEM_BUG_ON(dev_priv->gt.awake);
 
-	intel_wakeref_auto_fini(&dev_priv->mm.userfault_wakeref);
+	intel_wakeref_auto_fini(&dev_priv->ggtt.userfault_wakeref);
 
 	i915_gem_suspend_late(dev_priv);
 	intel_disable_gt_powersave(dev_priv);
@@ -2472,38 +2470,6 @@ void i915_gem_init_mmio(struct drm_i915_private *i915)
 	i915_gem_sanitize(i915);
 }
 
-void
-i915_gem_load_init_fences(struct drm_i915_private *dev_priv)
-{
-	int i;
-
-	if (INTEL_GEN(dev_priv) >= 7 && !IS_VALLEYVIEW(dev_priv) &&
-	    !IS_CHERRYVIEW(dev_priv))
-		dev_priv->num_fence_regs = 32;
-	else if (INTEL_GEN(dev_priv) >= 4 ||
-		 IS_I945G(dev_priv) || IS_I945GM(dev_priv) ||
-		 IS_G33(dev_priv) || IS_PINEVIEW(dev_priv))
-		dev_priv->num_fence_regs = 16;
-	else
-		dev_priv->num_fence_regs = 8;
-
-	if (intel_vgpu_active(dev_priv))
-		dev_priv->num_fence_regs =
-				I915_READ(vgtif_reg(avail_rs.fence_num));
-
-	/* Initialize fence registers to zero */
-	for (i = 0; i < dev_priv->num_fence_regs; i++) {
-		struct drm_i915_fence_reg *fence = &dev_priv->fence_regs[i];
-
-		fence->i915 = dev_priv;
-		fence->id = i;
-		list_add_tail(&fence->link, &dev_priv->mm.fence_list);
-	}
-	i915_gem_restore_fences(dev_priv);
-
-	i915_gem_detect_bit_6_swizzle(dev_priv);
-}
-
 static void i915_gem_init__mm(struct drm_i915_private *i915)
 {
 	spin_lock_init(&i915->mm.obj_lock);
@@ -2512,12 +2478,7 @@ static void i915_gem_init__mm(struct drm_i915_private *i915)
 	init_llist_head(&i915->mm.free_list);
 
 	INIT_LIST_HEAD(&i915->mm.purge_list);
-	INIT_LIST_HEAD(&i915->mm.unbound_list);
-	INIT_LIST_HEAD(&i915->mm.bound_list);
-	INIT_LIST_HEAD(&i915->mm.fence_list);
-
-	INIT_LIST_HEAD(&i915->mm.userfault_list);
-	intel_wakeref_auto_init(&i915->mm.userfault_wakeref, i915);
+	INIT_LIST_HEAD(&i915->mm.shrink_list);
 
 	i915_gem_init__objects(i915);
 }
@@ -2603,11 +2564,7 @@ int i915_gem_freeze(struct drm_i915_private *dev_priv)
 int i915_gem_freeze_late(struct drm_i915_private *i915)
 {
 	struct drm_i915_gem_object *obj;
-	struct list_head *phases[] = {
-		&i915->mm.unbound_list,
-		&i915->mm.bound_list,
-		NULL
-	}, **phase;
+	intel_wakeref_t wakeref;
 
 	/*
 	 * Called just before we write the hibernation image.
@@ -2624,17 +2581,18 @@ int i915_gem_freeze_late(struct drm_i915_private *i915)
 	 * the objects as well, see i915_gem_freeze()
 	 */
 
-	i915_gem_shrink(i915, -1UL, NULL, I915_SHRINK_UNBOUND);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
+
+	i915_gem_shrink(i915, -1UL, NULL, ~0);
 	i915_gem_drain_freed_objects(i915);
 
-	for (phase = phases; *phase; phase++) {
-		list_for_each_entry(obj, *phase, mm.link) {
-			i915_gem_object_lock(obj);
-			WARN_ON(i915_gem_object_set_to_cpu_domain(obj, true));
-			i915_gem_object_unlock(obj);
-		}
+	list_for_each_entry(obj, &i915->mm.shrink_list, mm.link) {
+		i915_gem_object_lock(obj);
+		WARN_ON(i915_gem_object_set_to_cpu_domain(obj, true));
+		i915_gem_object_unlock(obj);
 	}
-	GEM_BUG_ON(!list_empty(&i915->mm.purge_list));
+
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 
 	return 0;
 }

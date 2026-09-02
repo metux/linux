@@ -36,12 +36,6 @@
 /* Flags for the clone3() syscall. */
 #define CLONE_CLEAR_SIGHAND 0x100000000ULL /* Clear any signal handler and reset to SIG_DFL. */
 
-/*
- * cloning flags intersect with CSIGNAL so can be used with unshare and clone3
- * syscalls only:
- */
-#define CLONE_NEWTIME	0x00000080	/* New time namespace */
-
 #ifndef __ASSEMBLY__
 /**
  * struct clone_args - arguments for the clone3 syscall
@@ -60,10 +54,6 @@
  *                sent when the child exits.
  * @stack:        Specify the location of the stack for the
  *                child process.
- *                Note, @stack is expected to point to the
- *                lowest address. The stack direction will be
- *                determined by the kernel and set up
- *                appropriately based on @stack_size.
  * @stack_size:   The size of the stack for the child process.
  * @tls:          If CLONE_SETTLS is set, the tls descriptor
  *                is set to tls.

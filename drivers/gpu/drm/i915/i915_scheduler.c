@@ -173,7 +173,7 @@ i915_sched_lookup_priolist(struct intel_engine_cs *engine, int prio)
 	bool first = true;
 	int idx, i;
 
-	lockdep_assert_held(&engine->active.lock);
+	lockdep_assert_held(&engine->timeline.lock);
 	assert_priolists(execlists);
 
 	/* buckets sorted from highest [in slot 0] to lowest priority */
@@ -246,26 +246,17 @@ sched_lock_engine(const struct i915_sched_node *node,
 		  struct intel_engine_cs *locked,
 		  struct sched_cache *cache)
 {
-	const struct i915_request *rq = node_to_request(node);
-	struct intel_engine_cs *engine;
+	struct intel_engine_cs *engine = node_to_request(node)->engine;
 
 	GEM_BUG_ON(!locked);
 
-	/*
-	 * Virtual engines complicate acquiring the engine timeline lock,
-	 * as their rq->engine pointer is not stable until under that
-	 * engine lock. The simple ploy we use is to take the lock then
-	 * check that the rq still belongs to the newly locked engine.
-	 */
-	while (locked != (engine = READ_ONCE(rq->engine))) {
-		spin_unlock(&locked->active.lock);
+	if (engine != locked) {
+		spin_unlock(&locked->timeline.lock);
 		memset(cache, 0, sizeof(*cache));
-		spin_lock(&engine->active.lock);
-		locked = engine;
+		spin_lock(&engine->timeline.lock);
 	}
 
-	GEM_BUG_ON(locked != engine);
-	return locked;
+	return engine;
 }
 
 static inline int rq_prio(const struct i915_request *rq)
@@ -285,7 +276,7 @@ static void kick_submission(struct intel_engine_cs *engine, int prio)
 	 * tasklet, i.e. we have not change the priority queue
 	 * sufficiently to oust the running context.
 	 */
-	if (!inflight || !i915_scheduler_need_preempt(prio, rq_prio(inflight)))
+	if (inflight && !i915_scheduler_need_preempt(prio, rq_prio(inflight)))
 		return;
 
 	tasklet_hi_schedule(&engine->execlists.tasklet);
@@ -305,10 +296,10 @@ static void __i915_schedule(struct i915_sched_node *node,
 	lockdep_assert_held(&schedule_lock);
 	GEM_BUG_ON(prio == I915_PRIORITY_INVALID);
 
-	if (prio <= READ_ONCE(node->attr.priority))
+	if (node_signaled(node))
 		return;
 
-	if (node_signaled(node))
+	if (prio <= READ_ONCE(node->attr.priority))
 		return;
 
 	stack.signaler = node;
@@ -374,26 +365,28 @@ static void __i915_schedule(struct i915_sched_node *node,
 
 	memset(&cache, 0, sizeof(cache));
 	engine = node_to_request(node)->engine;
-	spin_lock(&engine->active.lock);
+	spin_lock(&engine->timeline.lock);
 
 	/* Fifo and depth-first replacement ensure our deps execute before us */
-	engine = sched_lock_engine(node, engine, &cache);
 	list_for_each_entry_safe_reverse(dep, p, &dfs, dfs_link) {
 		INIT_LIST_HEAD(&dep->dfs_link);
 
 		node = dep->signaler;
 		engine = sched_lock_engine(node, engine, &cache);
-		lockdep_assert_held(&engine->active.lock);
+		lockdep_assert_held(&engine->timeline.lock);
 
 		/* Recheck after acquiring the engine->timeline.lock */
 		if (prio <= node->attr.priority || node_signaled(node))
 			continue;
 
-		GEM_BUG_ON(node_to_request(node)->engine != engine);
-
 		node->attr.priority = prio;
-
-		if (list_empty(&node->link)) {
+		if (!list_empty(&node->link)) {
+			if (!cache.priolist)
+				cache.priolist =
+					i915_sched_lookup_priolist(engine,
+								   prio);
+			list_move_tail(&node->link, cache.priolist);
+		} else {
 			/*
 			 * If the request is not in the priolist queue because
 			 * it is not yet runnable, then it doesn't contribute
@@ -402,16 +395,8 @@ static void __i915_schedule(struct i915_sched_node *node,
 			 * queue; but in that case we may still need to reorder
 			 * the inflight requests.
 			 */
-			continue;
-		}
-
-		if (!intel_engine_is_virtual(engine) &&
-		    !i915_request_is_active(node_to_request(node))) {
-			if (!cache.priolist)
-				cache.priolist =
-					i915_sched_lookup_priolist(engine,
-								   prio);
-			list_move_tail(&node->link, cache.priolist);
+			if (!i915_sw_fence_done(&node_to_request(node)->submit))
+				continue;
 		}
 
 		if (prio <= engine->execlists.queue_priority_hint)
@@ -423,7 +408,7 @@ static void __i915_schedule(struct i915_sched_node *node,
 		kick_submission(engine, prio);
 	}
 
-	spin_unlock(&engine->active.lock);
+	spin_unlock(&engine->timeline.lock);
 }
 
 void i915_schedule(struct i915_request *rq, const struct i915_sched_attr *attr)
@@ -536,6 +521,8 @@ int i915_sched_node_add_dependency(struct i915_sched_node *node,
 void i915_sched_node_fini(struct i915_sched_node *node)
 {
 	struct i915_dependency *dep, *tmp;
+
+	GEM_BUG_ON(!list_empty(&node->link));
 
 	spin_lock_irq(&schedule_lock);
 

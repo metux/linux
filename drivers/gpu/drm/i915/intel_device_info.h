@@ -27,11 +27,9 @@
 
 #include <uapi/drm/i915_drm.h>
 
-#include "display/intel_display.h"
-
-#include "gt/intel_engine_types.h"
-#include "gt/intel_context_types.h"
-#include "gt/intel_sseu.h"
+#include "intel_engine_types.h"
+#include "intel_display.h"
+#include "intel_sseu.h"
 
 struct drm_printer;
 struct drm_i915_private;
@@ -78,8 +76,6 @@ enum intel_platform {
 	/* gen11 */
 	INTEL_ICELAKE,
 	INTEL_ELKHARTLAKE,
-	/* gen12 */
-	INTEL_TIGERLAKE,
 	INTEL_MAX_PLATFORMS
 };
 
@@ -93,6 +89,7 @@ enum intel_platform {
 /* HSW/BDW/SKL/KBL/CFL */
 #define INTEL_SUBPLATFORM_ULT	(0)
 #define INTEL_SUBPLATFORM_ULX	(1)
+#define INTEL_SUBPLATFORM_AML	(2)
 
 /* CNL/ICL */
 #define INTEL_SUBPLATFORM_PORTF	(0)
@@ -106,15 +103,14 @@ enum intel_ppgtt_type {
 #define DEV_INFO_FOR_EACH_FLAG(func) \
 	func(is_mobile); \
 	func(is_lp); \
-	func(require_force_probe); \
-	func(is_dgfx); \
+	func(is_alpha_support); \
 	/* Keep has_* in alphabetical order */ \
 	func(has_64bit_reloc); \
 	func(gpu_reset_clobbers_display); \
 	func(has_reset_engine); \
 	func(has_fpga_dbg); \
-	func(has_global_mocs); \
-	func(has_gt_uc); \
+	func(has_guc); \
+	func(has_guc_ct); \
 	func(has_l3_dpf); \
 	func(has_llc); \
 	func(has_logical_ring_contexts); \
@@ -136,19 +132,14 @@ enum intel_ppgtt_type {
 	func(has_csr); \
 	func(has_ddi); \
 	func(has_dp_mst); \
-	func(has_dsb); \
-	func(has_dsc); \
 	func(has_fbc); \
 	func(has_gmch); \
-	func(has_hdcp); \
 	func(has_hotplug); \
 	func(has_ipc); \
-	func(has_modular_fia); \
 	func(has_overlay); \
 	func(has_psr); \
 	func(overlay_needs_physical); \
 	func(supports_tv);
-
 
 #define GEN_MAX_SLICES		(6) /* CNL upper bound */
 #define GEN_MAX_SUBSLICES	(8) /* ICL upper bound */
@@ -193,11 +184,9 @@ struct intel_device_info {
 
 	unsigned int page_sizes; /* page sizes supported by the HW */
 
-	u32 memory_regions; /* regions supported by the HW */
-
 	u32 display_mmio_offset;
 
-	u8 pipe_mask;
+	u8 num_pipes;
 
 #define DEFINE_FLAG(name) u8 name:1
 	DEV_INFO_FOR_EACH_FLAG(DEFINE_FLAG);
@@ -217,8 +206,8 @@ struct intel_device_info {
 	int cursor_offsets[I915_MAX_PIPES];
 
 	struct color_luts {
-		u32 degamma_lut_size;
-		u32 gamma_lut_size;
+		u16 degamma_lut_size;
+		u16 gamma_lut_size;
 		u32 degamma_lut_tests;
 		u32 gamma_lut_tests;
 	} color;
@@ -256,17 +245,63 @@ struct intel_driver_caps {
 	bool has_logical_contexts:1;
 };
 
+static inline unsigned int sseu_subslice_total(const struct sseu_dev_info *sseu)
+{
+	unsigned int i, total = 0;
+
+	for (i = 0; i < ARRAY_SIZE(sseu->subslice_mask); i++)
+		total += hweight8(sseu->subslice_mask[i]);
+
+	return total;
+}
+
+static inline int sseu_eu_idx(const struct sseu_dev_info *sseu,
+			      int slice, int subslice)
+{
+	int subslice_stride = DIV_ROUND_UP(sseu->max_eus_per_subslice,
+					   BITS_PER_BYTE);
+	int slice_stride = sseu->max_subslices * subslice_stride;
+
+	return slice * slice_stride + subslice * subslice_stride;
+}
+
+static inline u16 sseu_get_eus(const struct sseu_dev_info *sseu,
+			       int slice, int subslice)
+{
+	int i, offset = sseu_eu_idx(sseu, slice, subslice);
+	u16 eu_mask = 0;
+
+	for (i = 0;
+	     i < DIV_ROUND_UP(sseu->max_eus_per_subslice, BITS_PER_BYTE); i++) {
+		eu_mask |= ((u16) sseu->eu_mask[offset + i]) <<
+			(i * BITS_PER_BYTE);
+	}
+
+	return eu_mask;
+}
+
+static inline void sseu_set_eus(struct sseu_dev_info *sseu,
+				int slice, int subslice, u16 eu_mask)
+{
+	int i, offset = sseu_eu_idx(sseu, slice, subslice);
+
+	for (i = 0;
+	     i < DIV_ROUND_UP(sseu->max_eus_per_subslice, BITS_PER_BYTE); i++) {
+		sseu->eu_mask[offset + i] =
+			(eu_mask >> (BITS_PER_BYTE * i)) & 0xff;
+	}
+}
+
 const char *intel_platform_name(enum intel_platform platform);
 
 void intel_device_info_subplatform_init(struct drm_i915_private *dev_priv);
 void intel_device_info_runtime_init(struct drm_i915_private *dev_priv);
-
-void intel_device_info_print_static(const struct intel_device_info *info,
+void intel_device_info_dump_flags(const struct intel_device_info *info,
+				  struct drm_printer *p);
+void intel_device_info_dump_runtime(const struct intel_runtime_info *info,
 				    struct drm_printer *p);
-void intel_device_info_print_runtime(const struct intel_runtime_info *info,
+void intel_device_info_dump_topology(const struct sseu_dev_info *sseu,
 				     struct drm_printer *p);
-void intel_device_info_print_topology(const struct sseu_dev_info *sseu,
-				      struct drm_printer *p);
 
 void intel_device_info_init_mmio(struct drm_i915_private *dev_priv);
 

@@ -1342,7 +1342,6 @@ MODULE_PARM_DESC(edid_fixup,
 
 static void drm_get_displayid(struct drm_connector *connector,
 			      struct edid *edid);
-static int validate_displayid(u8 *displayid, int length, int idx);
 
 static int drm_edid_block_checksum(const u8 *raw_edid)
 {
@@ -2927,44 +2926,14 @@ static u8 *drm_find_edid_extension(const struct edid *edid, int ext_id)
 	return edid_ext;
 }
 
+static u8 *drm_find_cea_extension(const struct edid *edid)
+{
+	return drm_find_edid_extension(edid, CEA_EXT);
+}
 
 static u8 *drm_find_displayid_extension(const struct edid *edid)
 {
 	return drm_find_edid_extension(edid, DISPLAYID_EXT);
-}
-
-static u8 *drm_find_cea_extension(const struct edid *edid)
-{
-	int ret;
-	int idx = 1;
-	int length = EDID_LENGTH;
-	struct displayid_block *block;
-	u8 *cea;
-	u8 *displayid;
-
-	/* Look for a top level CEA extension block */
-	cea = drm_find_edid_extension(edid, CEA_EXT);
-	if (cea)
-		return cea;
-
-	/* CEA blocks can also be found embedded in a DisplayID block */
-	displayid = drm_find_displayid_extension(edid);
-	if (!displayid)
-		return NULL;
-
-	ret = validate_displayid(displayid, length, idx);
-	if (ret)
-		return NULL;
-
-	idx += sizeof(struct displayid_hdr);
-	for_each_displayid_db(displayid, block, idx, length) {
-		if (block->tag == DATA_BLOCK_CTA) {
-			cea = (u8 *)block;
-			break;
-		}
-	}
-
-	return cea;
 }
 
 /*
@@ -3690,38 +3659,13 @@ cea_revision(const u8 *cea)
 static int
 cea_db_offsets(const u8 *cea, int *start, int *end)
 {
-	/* DisplayID CTA extension blocks and top-level CEA EDID
-	 * block header definitions differ in the following bytes:
-	 *   1) Byte 2 of the header specifies length differently,
-	 *   2) Byte 3 is only present in the CEA top level block.
-	 *
-	 * The different definitions for byte 2 follow.
-	 *
-	 * DisplayID CTA extension block defines byte 2 as:
-	 *   Number of payload bytes
-	 *
-	 * CEA EDID block defines byte 2 as:
-	 *   Byte number (decimal) within this block where the 18-byte
-	 *   DTDs begin. If no non-DTD data is present in this extension
-	 *   block, the value should be set to 04h (the byte after next).
-	 *   If set to 00h, there are no DTDs present in this block and
-	 *   no non-DTD data.
-	 */
-	if (cea[0] == DATA_BLOCK_CTA) {
-		*start = 3;
-		*end = *start + cea[2];
-	} else if (cea[0] == CEA_EXT) {
-		/* Data block offset in CEA extension block */
-		*start = 4;
-		*end = cea[2];
-		if (*end == 0)
-			*end = 127;
-		if (*end < 4 || *end > 127)
-			return -ERANGE;
-	} else {
-		return -ENOTSUPP;
-	}
-
+	/* Data block offset in CEA extension block */
+	*start = 4;
+	*end = cea[2];
+	if (*end == 0)
+		*end = 127;
+	if (*end < 4 || *end > 127)
+		return -ERANGE;
 	return 0;
 }
 
@@ -3949,8 +3893,7 @@ static uint8_t eotf_supported(const u8 *edid_ext)
 	return edid_ext[2] &
 		(BIT(HDMI_EOTF_TRADITIONAL_GAMMA_SDR) |
 		 BIT(HDMI_EOTF_TRADITIONAL_GAMMA_HDR) |
-		 BIT(HDMI_EOTF_SMPTE_ST2084) |
-		 BIT(HDMI_EOTF_BT_2100_HLG));
+		 BIT(HDMI_EOTF_SMPTE_ST2084));
 }
 
 static uint8_t hdr_metadata_type(const u8 *edid_ext)
@@ -4664,8 +4607,8 @@ u32 drm_add_display_info(struct drm_connector *connector, const struct edid *edi
 	 * tells us to assume 8 bpc color depth if the EDID doesn't have
 	 * extensions which tell otherwise.
 	 */
-	if (info->bpc == 0 && edid->revision == 3 &&
-	    edid->input & DRM_EDID_DIGITAL_DFP_1_X) {
+	if ((info->bpc == 0) && (edid->revision < 4) &&
+	    (edid->input & DRM_EDID_DIGITAL_TYPE_DVI)) {
 		info->bpc = 8;
 		DRM_DEBUG("%s: Assigning DFP sink color depth as %d bpc.\n",
 			  connector->name, info->bpc);
@@ -4824,7 +4767,11 @@ static int add_displayid_detailed_modes(struct drm_connector *connector,
 		return 0;
 
 	idx += sizeof(struct displayid_hdr);
-	for_each_displayid_db(displayid, block, idx, length) {
+	while (block = (struct displayid_block *)&displayid[idx],
+	       idx + sizeof(struct displayid_block) <= length &&
+	       idx + sizeof(struct displayid_block) + block->num_bytes <= length &&
+	       block->num_bytes > 0) {
+		idx += block->num_bytes + sizeof(struct displayid_block);
 		switch (block->tag) {
 		case DATA_BLOCK_TYPE_1_DETAILED_TIMING:
 			num_modes += add_displayid_detailed_1_modes(connector, block);
@@ -5005,7 +4952,7 @@ static inline bool is_eotf_supported(u8 output_eotf, u8 sink_eotf)
  * drm_hdmi_infoframe_set_hdr_metadata() - fill an HDMI DRM infoframe with
  *                                         HDR metadata from userspace
  * @frame: HDMI DRM infoframe
- * @conn_state: Connector state containing HDR metadata
+ * @hdr_metadata: hdr_source_metadata info from userspace
  *
  * Return: 0 on success or a negative error code on failure.
  */
@@ -5443,7 +5390,11 @@ static int drm_parse_display_id(struct drm_connector *connector,
 		return ret;
 
 	idx += sizeof(struct displayid_hdr);
-	for_each_displayid_db(displayid, block, idx, length) {
+	while (block = (struct displayid_block *)&displayid[idx],
+	       idx + sizeof(struct displayid_block) <= length &&
+	       idx + sizeof(struct displayid_block) + block->num_bytes <= length &&
+	       block->num_bytes > 0) {
+		idx += block->num_bytes + sizeof(struct displayid_block);
 		DRM_DEBUG_KMS("block id 0x%x, rev %d, len %d\n",
 			      block->tag, block->rev, block->num_bytes);
 
@@ -5455,9 +5406,6 @@ static int drm_parse_display_id(struct drm_connector *connector,
 			break;
 		case DATA_BLOCK_TYPE_1_DETAILED_TIMING:
 			/* handled in mode gathering code. */
-			break;
-		case DATA_BLOCK_CTA:
-			/* handled in the cea parser code. */
 			break;
 		default:
 			DRM_DEBUG_KMS("found DisplayID tag 0x%x, unhandled\n", block->tag);

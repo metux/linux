@@ -10,7 +10,6 @@
 
 #include <linux/console.h>
 #include <linux/dma-mapping.h>
-#include <linux/vmalloc.h>
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_fb_helper.h>

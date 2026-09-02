@@ -8,6 +8,31 @@
 #include "intel_lrc_reg.h"
 #include "intel_sseu.h"
 
+void intel_sseu_set_info(struct sseu_dev_info *sseu, u8 max_slices,
+			 u8 max_subslices, u8 max_eus_per_subslice)
+{
+	sseu->max_slices = max_slices;
+	sseu->max_subslices = max_subslices;
+	sseu->max_eus_per_subslice = max_eus_per_subslice;
+}
+
+unsigned int
+intel_sseu_subslice_total(const struct sseu_dev_info *sseu)
+{
+	unsigned int i, total = 0;
+
+	for (i = 0; i < ARRAY_SIZE(sseu->subslice_mask); i++)
+		total += hweight8(sseu->subslice_mask[i]);
+
+	return total;
+}
+
+unsigned int
+intel_sseu_subslices_per_slice(const struct sseu_dev_info *sseu, u8 slice)
+{
+	return hweight8(sseu->subslice_mask[slice]);
+}
+
 u32 intel_sseu_make_rpcs(struct drm_i915_private *i915,
 			 const struct intel_sseu *req_sseu)
 {

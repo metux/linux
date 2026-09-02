@@ -61,8 +61,11 @@
 #include <linux/cgroup_rdma.h>
 #include <linux/irqflags.h>
 #include <linux/preempt.h>
+#include <linux/dim.h>
 #include <uapi/rdma/ib_user_verbs.h>
+#include <rdma/rdma_counter.h>
 #include <rdma/restrack.h>
+#include <rdma/signature.h>
 #include <uapi/rdma/rdma_user_ioctl.h>
 #include <uapi/rdma/ib_user_ioctl_verbs.h>
 
@@ -291,7 +294,7 @@ enum ib_device_cap_flags {
 	 */
 	IB_DEVICE_CROSS_CHANNEL			= (1 << 27),
 	IB_DEVICE_MANAGED_FLOW_STEERING		= (1 << 29),
-	IB_DEVICE_SIGNATURE_HANDOVER		= (1 << 30),
+	IB_DEVICE_INTEGRITY_HANDOVER		= (1 << 30),
 	IB_DEVICE_ON_DEMAND_PAGING		= (1ULL << 31),
 	IB_DEVICE_SG_GAPS_REG			= (1ULL << 32),
 	IB_DEVICE_VIRTUAL_FUNCTION		= (1ULL << 33),
@@ -301,17 +304,6 @@ enum ib_device_cap_flags {
 	/* The device supports padding incoming writes to cacheline. */
 	IB_DEVICE_PCI_WRITE_END_PADDING		= (1ULL << 36),
 	IB_DEVICE_ALLOW_USER_UNREG		= (1ULL << 37),
-};
-
-enum ib_signature_prot_cap {
-	IB_PROT_T10DIF_TYPE_1 = 1,
-	IB_PROT_T10DIF_TYPE_2 = 1 << 1,
-	IB_PROT_T10DIF_TYPE_3 = 1 << 2,
-};
-
-enum ib_signature_guard_cap {
-	IB_GUARD_T10DIF_CRC	= 1,
-	IB_GUARD_T10DIF_CSUM	= 1 << 1,
 };
 
 enum ib_atomic_cap {
@@ -355,8 +347,8 @@ struct ib_rss_caps {
 };
 
 enum ib_tm_cap_flags {
-	/*  Support tag matching on RC transport */
-	IB_TM_CAP_RC		    = 1 << 0,
+	/*  Support tag matching with rendezvous offload for RC transport */
+	IB_TM_CAP_RNDV_RC = 1 << 0,
 };
 
 struct ib_tm_caps {
@@ -439,6 +431,7 @@ struct ib_device_attr {
 	int			max_srq_wr;
 	int			max_srq_sge;
 	unsigned int		max_fast_reg_page_list_len;
+	unsigned int		max_pi_fast_reg_page_list_len;
 	u16			max_pkeys;
 	u8			local_ca_ack_delay;
 	int			sig_prot_cap;
@@ -834,118 +827,26 @@ __attribute_const__ int ib_rate_to_mbps(enum ib_rate rate);
  * enum ib_mr_type - memory region type
  * @IB_MR_TYPE_MEM_REG:       memory region that is used for
  *                            normal registration
- * @IB_MR_TYPE_SIGNATURE:     memory region that is used for
- *                            signature operations (data-integrity
- *                            capable regions)
  * @IB_MR_TYPE_SG_GAPS:       memory region that is capable to
  *                            register any arbitrary sg lists (without
  *                            the normal mr constraints - see
  *                            ib_map_mr_sg)
+ * @IB_MR_TYPE_DM:            memory region that is used for device
+ *                            memory registration
+ * @IB_MR_TYPE_USER:          memory region that is used for the user-space
+ *                            application
+ * @IB_MR_TYPE_DMA:           memory region that is used for DMA operations
+ *                            without address translations (VA=PA)
+ * @IB_MR_TYPE_INTEGRITY:     memory region that is used for
+ *                            data integrity operations
  */
 enum ib_mr_type {
 	IB_MR_TYPE_MEM_REG,
-	IB_MR_TYPE_SIGNATURE,
 	IB_MR_TYPE_SG_GAPS,
-};
-
-/**
- * Signature types
- * IB_SIG_TYPE_NONE: Unprotected.
- * IB_SIG_TYPE_T10_DIF: Type T10-DIF
- */
-enum ib_signature_type {
-	IB_SIG_TYPE_NONE,
-	IB_SIG_TYPE_T10_DIF,
-};
-
-/**
- * Signature T10-DIF block-guard types
- * IB_T10DIF_CRC: Corresponds to T10-PI mandated CRC checksum rules.
- * IB_T10DIF_CSUM: Corresponds to IP checksum rules.
- */
-enum ib_t10_dif_bg_type {
-	IB_T10DIF_CRC,
-	IB_T10DIF_CSUM
-};
-
-/**
- * struct ib_t10_dif_domain - Parameters specific for T10-DIF
- *     domain.
- * @bg_type: T10-DIF block guard type (CRC|CSUM)
- * @pi_interval: protection information interval.
- * @bg: seed of guard computation.
- * @app_tag: application tag of guard block
- * @ref_tag: initial guard block reference tag.
- * @ref_remap: Indicate wethear the reftag increments each block
- * @app_escape: Indicate to skip block check if apptag=0xffff
- * @ref_escape: Indicate to skip block check if reftag=0xffffffff
- * @apptag_check_mask: check bitmask of application tag.
- */
-struct ib_t10_dif_domain {
-	enum ib_t10_dif_bg_type bg_type;
-	u16			pi_interval;
-	u16			bg;
-	u16			app_tag;
-	u32			ref_tag;
-	bool			ref_remap;
-	bool			app_escape;
-	bool			ref_escape;
-	u16			apptag_check_mask;
-};
-
-/**
- * struct ib_sig_domain - Parameters for signature domain
- * @sig_type: specific signauture type
- * @sig: union of all signature domain attributes that may
- *     be used to set domain layout.
- */
-struct ib_sig_domain {
-	enum ib_signature_type sig_type;
-	union {
-		struct ib_t10_dif_domain dif;
-	} sig;
-};
-
-/**
- * struct ib_sig_attrs - Parameters for signature handover operation
- * @check_mask: bitmask for signature byte check (8 bytes)
- * @mem: memory domain layout desciptor.
- * @wire: wire domain layout desciptor.
- */
-struct ib_sig_attrs {
-	u8			check_mask;
-	struct ib_sig_domain	mem;
-	struct ib_sig_domain	wire;
-};
-
-enum ib_sig_err_type {
-	IB_SIG_BAD_GUARD,
-	IB_SIG_BAD_REFTAG,
-	IB_SIG_BAD_APPTAG,
-};
-
-/**
- * Signature check masks (8 bytes in total) according to the T10-PI standard:
- *  -------- -------- ------------
- * | GUARD  | APPTAG |   REFTAG   |
- * |  2B    |  2B    |    4B      |
- *  -------- -------- ------------
- */
-enum {
-	IB_SIG_CHECK_GUARD	= 0xc0,
-	IB_SIG_CHECK_APPTAG	= 0x30,
-	IB_SIG_CHECK_REFTAG	= 0x0f,
-};
-
-/**
- * struct ib_sig_err - signature error descriptor
- */
-struct ib_sig_err {
-	enum ib_sig_err_type	err_type;
-	u32			expected;
-	u32			actual;
-	u64			sig_err_offset;
-	u32			key;
+	IB_MR_TYPE_DM,
+	IB_MR_TYPE_USER,
+	IB_MR_TYPE_DMA,
+	IB_MR_TYPE_INTEGRITY,
 };
 
 enum ib_mr_status_check {
@@ -1202,7 +1103,7 @@ enum ib_qp_create_flags {
 	IB_QP_CREATE_MANAGED_SEND               = 1 << 3,
 	IB_QP_CREATE_MANAGED_RECV               = 1 << 4,
 	IB_QP_CREATE_NETIF_QP			= 1 << 5,
-	IB_QP_CREATE_SIGNATURE_EN		= 1 << 6,
+	IB_QP_CREATE_INTEGRITY_EN		= 1 << 6,
 	/* FREE					= 1 << 7, */
 	IB_QP_CREATE_SCATTER_FCS		= 1 << 8,
 	IB_QP_CREATE_CVLAN_STRIPPING		= 1 << 9,
@@ -1381,7 +1282,7 @@ enum ib_wr_opcode {
 
 	/* These are kernel only and can not be issued by userspace */
 	IB_WR_REG_MR = 0x20,
-	IB_WR_REG_SIG_MR,
+	IB_WR_REG_MR_INTEGRITY,
 
 	/* reserve values for low level drivers' internal use.
 	 * These values will not be used at all in the ib core layer.
@@ -1489,20 +1390,6 @@ struct ib_reg_wr {
 static inline const struct ib_reg_wr *reg_wr(const struct ib_send_wr *wr)
 {
 	return container_of(wr, struct ib_reg_wr, wr);
-}
-
-struct ib_sig_handover_wr {
-	struct ib_send_wr	wr;
-	struct ib_sig_attrs    *sig_attrs;
-	struct ib_mr	       *sig_mr;
-	int			access_flags;
-	struct ib_sge	       *prot;
-};
-
-static inline const struct ib_sig_handover_wr *
-sig_handover_wr(const struct ib_send_wr *wr)
-{
-	return container_of(wr, struct ib_sig_handover_wr, wr);
 }
 
 struct ib_recv_wr {
@@ -1667,6 +1554,7 @@ struct ib_cq {
 		struct work_struct	work;
 	};
 	struct workqueue_struct *comp_wq;
+	struct dim *dim;
 	/*
 	 * Implementation details of the RDMA core, don't use in drivers:
 	 */
@@ -1851,10 +1739,14 @@ struct ib_qp {
 	struct ib_qp_security  *qp_sec;
 	u8			port;
 
+	bool			integrity_en;
 	/*
 	 * Implementation details of the RDMA core, don't use in drivers:
 	 */
 	struct rdma_restrack_entry     res;
+
+	/* The counter the qp is bind to */
+	struct rdma_counter    *counter;
 };
 
 struct ib_dm {
@@ -1873,6 +1765,7 @@ struct ib_mr {
 	u64		   iova;
 	u64		   length;
 	unsigned int	   page_size;
+	enum ib_mr_type	   type;
 	bool		   need_inval;
 	union {
 		struct ib_uobject	*uobject;	/* user */
@@ -1880,7 +1773,7 @@ struct ib_mr {
 	};
 
 	struct ib_dm      *dm;
-
+	struct ib_sig_attrs *sig_attrs; /* only for IB_MR_TYPE_INTEGRITY MRs */
 	/*
 	 * Implementation details of the RDMA core, don't use in drivers:
 	 */
@@ -2276,6 +2169,8 @@ struct ib_port_data {
 	spinlock_t netdev_lock;
 	struct net_device __rcu *netdev;
 	struct hlist_node ndev_hash_link;
+	struct rdma_port_counter port_counter;
+	struct rdma_hw_stats *hw_stats;
 };
 
 /* rdma netdev type - specifies protocol type */
@@ -2365,6 +2260,7 @@ struct ib_device_ops {
 	struct module *owner;
 	enum rdma_driver_id driver_id;
 	u32 uverbs_abi_ver;
+	unsigned int uverbs_no_driver_id_binding:1;
 
 	int (*post_send)(struct ib_qp *qp, const struct ib_send_wr *send_wr,
 			 const struct ib_send_wr **bad_send_wr);
@@ -2506,6 +2402,9 @@ struct ib_device_ops {
 	int (*dereg_mr)(struct ib_mr *mr, struct ib_udata *udata);
 	struct ib_mr *(*alloc_mr)(struct ib_pd *pd, enum ib_mr_type mr_type,
 				  u32 max_num_sg, struct ib_udata *udata);
+	struct ib_mr *(*alloc_mr_integrity)(struct ib_pd *pd,
+					    u32 max_num_data_sg,
+					    u32 max_num_meta_sg);
 	int (*advise_mr)(struct ib_pd *pd,
 			 enum ib_uverbs_advise_mr_advice advice, u32 flags,
 			 struct ib_sge *sg_list, u32 num_sge,
@@ -2554,7 +2453,7 @@ struct ib_device_ops {
 	struct ib_wq *(*create_wq)(struct ib_pd *pd,
 				   struct ib_wq_init_attr *init_attr,
 				   struct ib_udata *udata);
-	int (*destroy_wq)(struct ib_wq *wq, struct ib_udata *udata);
+	void (*destroy_wq)(struct ib_wq *wq, struct ib_udata *udata);
 	int (*modify_wq)(struct ib_wq *wq, struct ib_wq_attr *attr,
 			 u32 wq_attr_mask, struct ib_udata *udata);
 	struct ib_rwq_ind_table *(*create_rwq_ind_table)(
@@ -2576,6 +2475,11 @@ struct ib_device_ops {
 	int (*read_counters)(struct ib_counters *counters,
 			     struct ib_counters_read_attr *counters_read_attr,
 			     struct uverbs_attr_bundle *attrs);
+	int (*map_mr_sg_pi)(struct ib_mr *mr, struct scatterlist *data_sg,
+			    int data_sg_nents, unsigned int *data_sg_offset,
+			    struct scatterlist *meta_sg, int meta_sg_nents,
+			    unsigned int *meta_sg_offset);
+
 	/**
 	 * alloc_hw_stats - Allocate a struct rdma_hw_stats and fill in the
 	 *   driver initialized data.  The struct is kfree()'ed by the sysfs
@@ -2633,6 +2537,31 @@ struct ib_device_ops {
 			 u8 pdata_len);
 	int (*iw_create_listen)(struct iw_cm_id *cm_id, int backlog);
 	int (*iw_destroy_listen)(struct iw_cm_id *cm_id);
+	/**
+	 * counter_bind_qp - Bind a QP to a counter.
+	 * @counter - The counter to be bound. If counter->id is zero then
+	 *   the driver needs to allocate a new counter and set counter->id
+	 */
+	int (*counter_bind_qp)(struct rdma_counter *counter, struct ib_qp *qp);
+	/**
+	 * counter_unbind_qp - Unbind the qp from the dynamically-allocated
+	 *   counter and bind it onto the default one
+	 */
+	int (*counter_unbind_qp)(struct ib_qp *qp);
+	/**
+	 * counter_dealloc -De-allocate the hw counter
+	 */
+	int (*counter_dealloc)(struct rdma_counter *counter);
+	/**
+	 * counter_alloc_stats - Allocate a struct rdma_hw_stats and fill in
+	 * the driver initialized data.
+	 */
+	struct rdma_hw_stats *(*counter_alloc_stats)(
+		struct rdma_counter *counter);
+	/**
+	 * counter_update_stats - Query the stats value of this counter
+	 */
+	int (*counter_update_stats)(struct rdma_counter *counter);
 
 	DECLARE_RDMA_OBJ_SIZE(ib_ah);
 	DECLARE_RDMA_OBJ_SIZE(ib_cq);
@@ -2695,6 +2624,8 @@ struct ib_device {
 	u16                          is_switch:1;
 	/* Indicates kernel verbs support, should not be used in drivers */
 	u16                          kverbs_provider:1;
+	/* CQ adaptive moderation (RDMA DIM) */
+	u16                          use_cq_dim:1;
 	u8                           node_type;
 	u8                           phys_port_cnt;
 	struct ib_device_attr        attrs;
@@ -2761,7 +2692,9 @@ struct ib_client {
 			const union ib_gid *gid,
 			const struct sockaddr *addr,
 			void *client_data);
-	struct list_head list;
+
+	refcount_t uses;
+	struct completion uses_zero;
 	u32 client_id;
 
 	/* kverbs are not required by the client */
@@ -4206,6 +4139,10 @@ static inline struct ib_mr *ib_alloc_mr(struct ib_pd *pd,
 	return ib_alloc_mr_user(pd, mr_type, max_num_sg, NULL);
 }
 
+struct ib_mr *ib_alloc_mr_integrity(struct ib_pd *pd,
+				    u32 max_num_data_sg,
+				    u32 max_num_meta_sg);
+
 /**
  * ib_update_fast_reg_key - updates the key portion of the fast_reg MR
  *   R_Key and L_Key.
@@ -4390,6 +4327,10 @@ int ib_destroy_rwq_ind_table(struct ib_rwq_ind_table *wq_ind_table);
 
 int ib_map_mr_sg(struct ib_mr *mr, struct scatterlist *sg, int sg_nents,
 		 unsigned int *sg_offset, unsigned int page_size);
+int ib_map_mr_sg_pi(struct ib_mr *mr, struct scatterlist *data_sg,
+		    int data_sg_nents, unsigned int *data_sg_offset,
+		    struct scatterlist *meta_sg, int meta_sg_nents,
+		    unsigned int *meta_sg_offset, unsigned int page_size);
 
 static inline int
 ib_map_mr_sg_zbva(struct ib_mr *mr, struct scatterlist *sg, int sg_nents,

@@ -59,8 +59,7 @@ static void mock_device_release(struct drm_device *dev)
 	i915_gem_contexts_lost(i915);
 	mutex_unlock(&i915->drm.struct_mutex);
 
-	drain_delayed_work(&i915->gem.retire_work);
-	drain_delayed_work(&i915->gem.idle_work);
+	flush_work(&i915->gem.idle_work);
 	i915_gem_drain_workqueue(i915);
 
 	mutex_lock(&i915->drm.struct_mutex);
@@ -134,6 +133,7 @@ static struct dev_pm_domain pm_domain = {
 
 struct drm_i915_private *mock_gem_device(void)
 {
+	static struct lock_class_key reset_key;
 	struct drm_i915_private *i915;
 	struct pci_dev *pdev;
 	int err;
@@ -199,7 +199,7 @@ struct drm_i915_private *mock_gem_device(void)
 	mock_init_contexts(i915);
 
 	INIT_DELAYED_WORK(&i915->gem.retire_work, mock_retire_work_handler);
-	INIT_DELAYED_WORK(&i915->gem.idle_work, mock_idle_work_handler);
+	INIT_WORK(&i915->gem.idle_work, mock_idle_work_handler);
 
 	i915->gt.awake = true;
 
@@ -215,18 +215,24 @@ struct drm_i915_private *mock_gem_device(void)
 
 	INIT_LIST_HEAD(&i915->gt.active_rings);
 	INIT_LIST_HEAD(&i915->gt.closed_vma);
+	spin_lock_init(&i915->gt.closed_lock);
+	lockdep_init_map(&i915->gt.reset_lockmap, "i915.reset", &reset_key, 0);
 
 	mutex_lock(&i915->drm.struct_mutex);
 
 	mock_init_ggtt(i915, &i915->ggtt);
 
 	mkwrite_device_info(i915)->engine_mask = BIT(0);
-	i915->kernel_context = mock_context(i915, NULL);
-	if (!i915->kernel_context)
-		goto err_unlock;
 
 	i915->engine[RCS0] = mock_engine(i915, "mock", RCS0);
 	if (!i915->engine[RCS0])
+		goto err_unlock;
+
+	i915->kernel_context = mock_context(i915, NULL);
+	if (!i915->kernel_context)
+		goto err_engine;
+
+	if (mock_engine_init(i915->engine[RCS0]))
 		goto err_context;
 
 	mutex_unlock(&i915->drm.struct_mutex);
@@ -237,6 +243,8 @@ struct drm_i915_private *mock_gem_device(void)
 
 err_context:
 	i915_gem_contexts_fini(i915);
+err_engine:
+	mock_engine_free(i915->engine[RCS0]);
 err_unlock:
 	mutex_unlock(&i915->drm.struct_mutex);
 	i915_timelines_fini(i915);

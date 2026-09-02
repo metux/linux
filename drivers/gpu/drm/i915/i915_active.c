@@ -4,6 +4,10 @@
  * Copyright © 2019 Intel Corporation
  */
 
+#include <linux/debugobjects.h>
+
+#include "gt/intel_engine_pm.h"
+
 #include "i915_drv.h"
 #include "i915_active.h"
 #include "i915_globals.h"
@@ -29,6 +33,55 @@ struct active_node {
 	u64 timeline;
 };
 
+#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM) && IS_ENABLED(CONFIG_DEBUG_OBJECTS)
+
+static void *active_debug_hint(void *addr)
+{
+	struct i915_active *ref = addr;
+
+	return (void *)ref->retire ?: (void *)ref;
+}
+
+static struct debug_obj_descr active_debug_desc = {
+	.name = "i915_active",
+	.debug_hint = active_debug_hint,
+};
+
+static void debug_active_init(struct i915_active *ref)
+{
+	debug_object_init(ref, &active_debug_desc);
+}
+
+static void debug_active_activate(struct i915_active *ref)
+{
+	debug_object_activate(ref, &active_debug_desc);
+}
+
+static void debug_active_deactivate(struct i915_active *ref)
+{
+	debug_object_deactivate(ref, &active_debug_desc);
+}
+
+static void debug_active_fini(struct i915_active *ref)
+{
+	debug_object_free(ref, &active_debug_desc);
+}
+
+static void debug_active_assert(struct i915_active *ref)
+{
+	debug_object_assert_init(ref, &active_debug_desc);
+}
+
+#else
+
+static inline void debug_active_init(struct i915_active *ref) { }
+static inline void debug_active_activate(struct i915_active *ref) { }
+static inline void debug_active_deactivate(struct i915_active *ref) { }
+static inline void debug_active_fini(struct i915_active *ref) { }
+static inline void debug_active_assert(struct i915_active *ref) { }
+
+#endif
+
 static void
 __active_park(struct i915_active *ref)
 {
@@ -47,6 +100,8 @@ __active_retire(struct i915_active *ref)
 	GEM_BUG_ON(!ref->count);
 	if (--ref->count)
 		return;
+
+	debug_active_deactivate(ref);
 
 	/* return the unused nodes to our slabcache */
 	__active_park(ref);
@@ -153,6 +208,8 @@ void i915_active_init(struct drm_i915_private *i915,
 		      struct i915_active *ref,
 		      void (*retire)(struct i915_active *ref))
 {
+	debug_active_init(ref);
+
 	ref->i915 = i915;
 	ref->retire = retire;
 	ref->tree = RB_ROOT;
@@ -189,13 +246,21 @@ out:
 
 bool i915_active_acquire(struct i915_active *ref)
 {
+	debug_active_assert(ref);
 	lockdep_assert_held(BKL(ref));
-	return !ref->count++;
+
+	if (ref->count++)
+		return false;
+
+	debug_active_activate(ref);
+	return true;
 }
 
 void i915_active_release(struct i915_active *ref)
 {
+	debug_active_assert(ref);
 	lockdep_assert_held(BKL(ref));
+
 	__active_retire(ref);
 }
 
@@ -258,6 +323,7 @@ out:
 #if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM)
 void i915_active_fini(struct i915_active *ref)
 {
+	debug_active_fini(ref);
 	GEM_BUG_ON(i915_active_request_isset(&ref->last));
 	GEM_BUG_ON(!RB_EMPTY_ROOT(&ref->tree));
 	GEM_BUG_ON(ref->count);
@@ -268,8 +334,9 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 					    struct intel_engine_cs *engine)
 {
 	struct drm_i915_private *i915 = engine->i915;
+	struct llist_node *pos, *next;
 	unsigned long tmp;
-	int err = 0;
+	int err;
 
 	GEM_BUG_ON(!engine->mask);
 	for_each_engine_masked(engine, i915, engine->mask, tmp) {
@@ -279,7 +346,7 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 		node = kmem_cache_alloc(global.slab_cache, GFP_KERNEL);
 		if (unlikely(!node)) {
 			err = -ENOMEM;
-			break;
+			goto unwind;
 		}
 
 		i915_active_request_init(&node->base,
@@ -288,10 +355,24 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 		node->ref = ref;
 		ref->count++;
 
+		intel_engine_pm_get(engine);
 		llist_add((struct llist_node *)&node->base.link,
 			  &ref->barriers);
 	}
 
+	return 0;
+
+unwind:
+	llist_for_each_safe(pos, next, llist_del_all(&ref->barriers)) {
+		struct active_node *node;
+
+		node = container_of((struct list_head *)pos,
+				    typeof(*node), base.link);
+		engine = (void *)rcu_access_pointer(node->base.request);
+
+		intel_engine_pm_put(engine);
+		kmem_cache_free(global.slab_cache, node);
+	}
 	return err;
 }
 
@@ -328,6 +409,7 @@ void i915_active_acquire_barrier(struct i915_active *ref)
 
 		llist_add((struct llist_node *)&node->base.link,
 			  &engine->barrier_tasks);
+		intel_engine_pm_put(engine);
 	}
 	i915_active_release(ref);
 }

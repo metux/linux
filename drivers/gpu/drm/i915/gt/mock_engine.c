@@ -27,6 +27,7 @@
 #include "i915_drv.h"
 #include "intel_context.h"
 #include "intel_engine_pm.h"
+#include "intel_engine_pool.h"
 
 #include "mock_engine.h"
 #include "selftests/mock_request.h"
@@ -66,6 +67,7 @@ static struct intel_ring *mock_ring(struct intel_engine_cs *engine)
 	ring->base.effective_size = sz;
 	ring->base.vaddr = (void *)(ring + 1);
 	ring->base.timeline = &ring->timeline;
+	atomic_set(&ring->base.pin_count, 1);
 
 	INIT_LIST_HEAD(&ring->base.request_list);
 	intel_ring_update_space(&ring->base);
@@ -166,6 +168,9 @@ static const struct intel_context_ops mock_context_ops = {
 	.pin = mock_context_pin,
 	.unpin = mock_context_unpin,
 
+	.enter = intel_context_enter_engine,
+	.exit = intel_context_exit_engine,
+
 	.destroy = mock_context_destroy,
 };
 
@@ -226,17 +231,17 @@ static void mock_cancel_requests(struct intel_engine_cs *engine)
 	struct i915_request *request;
 	unsigned long flags;
 
-	spin_lock_irqsave(&engine->timeline.lock, flags);
+	spin_lock_irqsave(&engine->active.lock, flags);
 
 	/* Mark all submitted requests as skipped. */
-	list_for_each_entry(request, &engine->timeline.requests, sched.link) {
+	list_for_each_entry(request, &engine->active.requests, sched.link) {
 		if (!i915_request_signaled(request))
 			dma_fence_set_error(&request->fence, -EIO);
 
 		i915_request_mark_complete(request);
 	}
 
-	spin_unlock_irqrestore(&engine->timeline.lock, flags);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
 struct intel_engine_cs *mock_engine(struct drm_i915_private *i915,
@@ -270,32 +275,40 @@ struct intel_engine_cs *mock_engine(struct drm_i915_private *i915,
 	engine->base.reset.finish = mock_reset_finish;
 	engine->base.cancel_requests = mock_cancel_requests;
 
-	if (i915_timeline_init(i915, &engine->base.timeline, NULL))
-		goto err_free;
-	i915_timeline_set_subclass(&engine->base.timeline, TIMELINE_ENGINE);
-
-	intel_engine_init_breadcrumbs(&engine->base);
-	intel_engine_init_execlists(&engine->base);
-	intel_engine_init__pm(&engine->base);
-
 	/* fake hw queue */
 	spin_lock_init(&engine->hw_lock);
 	timer_setup(&engine->hw_delay, hw_delay_complete, 0);
 	INIT_LIST_HEAD(&engine->hw_queue);
 
-	engine->base.kernel_context =
-		intel_context_pin(i915->kernel_context, &engine->base);
-	if (IS_ERR(engine->base.kernel_context))
+	return &engine->base;
+}
+
+int mock_engine_init(struct intel_engine_cs *engine)
+{
+	struct drm_i915_private *i915 = engine->i915;
+	int err;
+
+	intel_engine_init_active(engine, ENGINE_MOCK);
+	intel_engine_init_breadcrumbs(engine);
+	intel_engine_init_execlists(engine);
+	intel_engine_init__pm(engine);
+	intel_engine_pool_init(&engine->pool);
+
+	engine->kernel_context =
+		i915_gem_context_get_engine(i915->kernel_context, engine->id);
+	if (IS_ERR(engine->kernel_context))
 		goto err_breadcrumbs;
 
-	return &engine->base;
+	err = intel_context_pin(engine->kernel_context);
+	intel_context_put(engine->kernel_context);
+	if (err)
+		goto err_breadcrumbs;
+
+	return 0;
 
 err_breadcrumbs:
-	intel_engine_fini_breadcrumbs(&engine->base);
-	i915_timeline_fini(&engine->base.timeline);
-err_free:
-	kfree(engine);
-	return NULL;
+	intel_engine_fini_breadcrumbs(engine);
+	return -ENOMEM;
 }
 
 void mock_engine_flush(struct intel_engine_cs *engine)
@@ -326,7 +339,6 @@ void mock_engine_free(struct intel_engine_cs *engine)
 	intel_context_unpin(engine->kernel_context);
 
 	intel_engine_fini_breadcrumbs(engine);
-	i915_timeline_fini(&engine->timeline);
 
 	kfree(engine);
 }

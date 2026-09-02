@@ -668,6 +668,10 @@ int intel_engines_setup(struct drm_i915_private *i915)
 		GEM_BUG_ON(!engine->cops);
 	}
 
+	/* Use the whole device by default */
+	engine->sseu =
+		intel_sseu_from_device_info(&RUNTIME_INFO(engine->i915)->sseu);
+
 	return 0;
 
 cleanup:

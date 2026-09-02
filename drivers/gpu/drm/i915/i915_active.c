@@ -4,8 +4,6 @@
  * Copyright © 2019 Intel Corporation
  */
 
-#include "gt/intel_engine_pm.h"
-
 #include "i915_drv.h"
 #include "i915_active.h"
 #include "i915_globals.h"
@@ -270,9 +268,8 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 					    struct intel_engine_cs *engine)
 {
 	struct drm_i915_private *i915 = engine->i915;
-	struct llist_node *pos, *next;
 	unsigned long tmp;
-	int err;
+	int err = 0;
 
 	GEM_BUG_ON(!engine->mask);
 	for_each_engine_masked(engine, i915, engine->mask, tmp) {
@@ -282,7 +279,7 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 		node = kmem_cache_alloc(global.slab_cache, GFP_KERNEL);
 		if (unlikely(!node)) {
 			err = -ENOMEM;
-			goto unwind;
+			break;
 		}
 
 		i915_active_request_init(&node->base,
@@ -291,24 +288,10 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 		node->ref = ref;
 		ref->count++;
 
-		intel_engine_pm_get(engine);
 		llist_add((struct llist_node *)&node->base.link,
 			  &ref->barriers);
 	}
 
-	return 0;
-
-unwind:
-	llist_for_each_safe(pos, next, llist_del_all(&ref->barriers)) {
-		struct active_node *node;
-
-		node = container_of((struct list_head *)pos,
-				    typeof(*node), base.link);
-		engine = (void *)rcu_access_pointer(node->base.request);
-
-		intel_engine_pm_put(engine);
-		kmem_cache_free(global.slab_cache, node);
-	}
 	return err;
 }
 
@@ -345,7 +328,6 @@ void i915_active_acquire_barrier(struct i915_active *ref)
 
 		llist_add((struct llist_node *)&node->base.link,
 			  &engine->barrier_tasks);
-		intel_engine_pm_put(engine);
 	}
 	i915_active_release(ref);
 }

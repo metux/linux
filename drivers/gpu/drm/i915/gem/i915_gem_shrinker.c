@@ -88,10 +88,18 @@ static bool can_release_pages(struct drm_i915_gem_object *obj)
 	return swap_available() || obj->mm.madv == I915_MADV_DONTNEED;
 }
 
-static bool unsafe_drop_pages(struct drm_i915_gem_object *obj)
+static bool unsafe_drop_pages(struct drm_i915_gem_object *obj,
+			      unsigned long shrink)
 {
-	if (i915_gem_object_unbind(obj) == 0)
+	unsigned long flags;
+
+	flags = 0;
+	if (shrink & I915_SHRINK_ACTIVE)
+		flags = I915_GEM_OBJECT_UNBIND_ACTIVE;
+
+	if (i915_gem_object_unbind(obj, flags) == 0)
 		__i915_gem_object_put_pages(obj, I915_MM_SHRINKER);
+
 	return !i915_gem_object_has_pages(obj);
 }
 
@@ -230,9 +238,7 @@ i915_gem_shrink(struct drm_i915_private *i915,
 				continue;
 
 			if (!(shrink & I915_SHRINK_ACTIVE) &&
-			    (i915_gem_object_is_framebuffer(obj) ||
-			     !reservation_object_test_signaled_rcu(obj->base.resv,
-								   true)))
+			    i915_gem_object_is_framebuffer(obj))
 				continue;
 
 			if (!(shrink & I915_SHRINK_BOUND) &&
@@ -242,9 +248,12 @@ i915_gem_shrink(struct drm_i915_private *i915,
 			if (!can_release_pages(obj))
 				continue;
 
+			if (!kref_get_unless_zero(&obj->base.refcount))
+				continue;
+
 			spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
 
-			if (unsafe_drop_pages(obj)) {
+			if (unsafe_drop_pages(obj, shrink)) {
 				/* May arrive from get_pages on another bo */
 				mutex_lock_nested(&obj->mm.lock,
 						  I915_MM_SHRINKER);
@@ -254,7 +263,9 @@ i915_gem_shrink(struct drm_i915_private *i915,
 				}
 				mutex_unlock(&obj->mm.lock);
 			}
+
 			scanned += obj->base.size >> PAGE_SHIFT;
+			i915_gem_object_put(obj);
 
 			spin_lock_irqsave(&i915->mm.obj_lock, flags);
 		}

@@ -63,6 +63,11 @@ struct link_init_data {
 				TODO: remove it when DC is complete. */
 };
 
+enum {
+	FREE_ACQUIRED_RESOURCE = 0,
+	KEEP_ACQUIRED_RESOURCE = 1,
+};
+
 struct dc_link *link_create(const struct link_init_data *init_params);
 void link_destroy(struct dc_link **link);
 
@@ -77,7 +82,7 @@ void core_link_enable_stream(
 		struct dc_state *state,
 		struct pipe_ctx *pipe_ctx);
 
-void core_link_disable_stream(struct pipe_ctx *pipe_ctx);
+void core_link_disable_stream(struct pipe_ctx *pipe_ctx, int option);
 
 void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 /********** DAL Core*********************/
@@ -87,9 +92,6 @@ void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 struct resource_pool;
 struct dc_state;
 struct resource_context;
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
-struct clk_bw_params;
-#endif
 
 struct resource_funcs {
 	void (*destroy)(struct resource_pool **pool);
@@ -144,11 +146,6 @@ struct resource_funcs {
 			struct dc_state *context,
 			display_e2e_pipe_params_st *pipes,
 			int pipe_cnt);
-#endif
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
-	void (*update_bw_bounding_box)(
-			struct dc *dc,
-			struct clk_bw_params *bw_params);
 #endif
 
 };

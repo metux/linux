@@ -52,9 +52,6 @@
 #if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 #include "dcn20/dcn20_resource.h"
 #endif
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
-#include "dcn21/dcn21_resource.h"
-#endif
 #include "dce120/dce120_resource.h"
 
 #define DC_LOGGER_INIT(logger)
@@ -104,10 +101,6 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 		dc_version = DCN_VERSION_1_0;
 		if (ASICREV_IS_RAVEN2(asic_id.hw_internal_rev))
 			dc_version = DCN_VERSION_1_01;
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
-		if (ASICREV_IS_RENOIR(asic_id.hw_internal_rev))
-			dc_version = DCN_VERSION_2_1;
-#endif
 		break;
 #endif
 
@@ -175,16 +168,10 @@ struct resource_pool *dc_create_resource_pool(struct dc  *dc,
 		res_pool = dcn20_create_resource_pool(init_data, dc);
 		break;
 #endif
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
-	case DCN_VERSION_2_1:
-		res_pool = dcn21_create_resource_pool(init_data, dc);
-		break;
-#endif
 
 	default:
 		break;
 	}
-
 	if (res_pool != NULL) {
 		if (dc->ctx->dc_bios->fw_info_valid) {
 			res_pool->ref_clocks.xtalin_clock_inKhz =
@@ -275,10 +262,12 @@ bool resource_construct(
 				DC_ERR("DC: failed to create audio!\n");
 				return false;
 			}
+
 			if (!aud->funcs->endpoint_valid(aud)) {
 				aud->funcs->destroy(&aud);
 				break;
 			}
+
 			pool->audios[i] = aud;
 			pool->audio_count++;
 		}
@@ -402,9 +391,6 @@ bool resource_are_streams_timing_synchronizable(
 		return false;
 
 	if (stream1->view_format != stream2->view_format)
-		return false;
-
-	if (stream1->ignore_msa_timing_param || stream2->ignore_msa_timing_param)
 		return false;
 
 	return true;
@@ -1130,12 +1116,13 @@ struct pipe_ctx *resource_get_head_pipe_for_stream(
 		struct dc_stream_state *stream)
 {
 	int i;
-
 	for (i = 0; i < MAX_PIPES; i++) {
 		if (res_ctx->pipe_ctx[i].stream == stream
 				&& !res_ctx->pipe_ctx[i].top_pipe
-				&& !res_ctx->pipe_ctx[i].prev_odm_pipe)
+				&& !res_ctx->pipe_ctx[i].prev_odm_pipe) {
 			return &res_ctx->pipe_ctx[i];
+			break;
+		}
 	}
 	return NULL;
 }
@@ -1543,9 +1530,6 @@ bool dc_is_stream_unchanged(
 	if (!are_stream_backends_same(old_stream, stream))
 		return false;
 
-	if (old_stream->ignore_msa_timing_param != stream->ignore_msa_timing_param)
-		return false;
-
 	return true;
 }
 
@@ -1637,25 +1621,24 @@ static struct audio *find_first_free_audio(
 		const struct resource_pool *pool,
 		enum engine_id id)
 {
-	int i, available_audio_count;
-
-	available_audio_count = pool->audio_count;
-
-	for (i = 0; i < available_audio_count; i++) {
+	int i;
+	for (i = 0; i < pool->audio_count; i++) {
 		if ((res_ctx->is_audio_acquired[i] == false) && (res_ctx->is_stream_enc_acquired[i] == true)) {
 			/*we have enough audio endpoint, find the matching inst*/
 			if (id != i)
 				continue;
+
 			return pool->audios[i];
 		}
 	}
 
-	/* use engine id to find free audio */
-	if ((id < available_audio_count) && (res_ctx->is_audio_acquired[id] == false)) {
+    /* use engine id to find free audio */
+	if ((id < pool->audio_count) && (res_ctx->is_audio_acquired[id] == false)) {
 		return pool->audios[id];
 	}
+
 	/*not found the matching one, first come first serve*/
-	for (i = 0; i < available_audio_count; i++) {
+	for (i = 0; i < pool->audio_count; i++) {
 		if (res_ctx->is_audio_acquired[i] == false) {
 			return pool->audios[i];
 		}
@@ -1715,45 +1698,45 @@ enum dc_status dc_remove_stream_from_ctx(
 {
 	int i;
 	struct dc_context *dc_ctx = dc->ctx;
-	struct pipe_ctx *del_pipe = resource_get_head_pipe_for_stream(&new_ctx->res_ctx, stream);
-	struct pipe_ctx *odm_pipe;
+	struct pipe_ctx *del_pipe = NULL;
+
+	/* Release primary pipe */
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (new_ctx->res_ctx.pipe_ctx[i].stream == stream &&
+				!new_ctx->res_ctx.pipe_ctx[i].top_pipe) {
+			del_pipe = &new_ctx->res_ctx.pipe_ctx[i];
+
+			ASSERT(del_pipe->stream_res.stream_enc);
+			update_stream_engine_usage(
+					&new_ctx->res_ctx,
+						dc->res_pool,
+					del_pipe->stream_res.stream_enc,
+					false);
+
+			if (del_pipe->stream_res.audio)
+				update_audio_usage(
+					&new_ctx->res_ctx,
+					dc->res_pool,
+					del_pipe->stream_res.audio,
+					false);
+
+			resource_unreference_clock_source(&new_ctx->res_ctx,
+							  dc->res_pool,
+							  del_pipe->clock_source);
+
+			if (dc->res_pool->funcs->remove_stream_from_ctx)
+				dc->res_pool->funcs->remove_stream_from_ctx(dc, new_ctx, stream);
+
+			memset(del_pipe, 0, sizeof(*del_pipe));
+
+			break;
+		}
+	}
 
 	if (!del_pipe) {
 		DC_ERROR("Pipe not found for stream %p !\n", stream);
 		return DC_ERROR_UNEXPECTED;
 	}
-
-	odm_pipe = del_pipe->next_odm_pipe;
-
-	/* Release primary pipe */
-	ASSERT(del_pipe->stream_res.stream_enc);
-	update_stream_engine_usage(
-			&new_ctx->res_ctx,
-				dc->res_pool,
-			del_pipe->stream_res.stream_enc,
-			false);
-
-	if (del_pipe->stream_res.audio)
-		update_audio_usage(
-			&new_ctx->res_ctx,
-			dc->res_pool,
-			del_pipe->stream_res.audio,
-			false);
-
-	resource_unreference_clock_source(&new_ctx->res_ctx,
-					  dc->res_pool,
-					  del_pipe->clock_source);
-
-	if (dc->res_pool->funcs->remove_stream_from_ctx)
-		dc->res_pool->funcs->remove_stream_from_ctx(dc, new_ctx, stream);
-
-	while (odm_pipe) {
-		struct pipe_ctx *next_odm_pipe = odm_pipe->next_odm_pipe;
-
-		memset(odm_pipe, 0, sizeof(*odm_pipe));
-		odm_pipe = next_odm_pipe;
-	}
-	memset(del_pipe, 0, sizeof(*del_pipe));
 
 	for (i = 0; i < new_ctx->stream_count; i++)
 		if (new_ctx->streams[i] == stream)

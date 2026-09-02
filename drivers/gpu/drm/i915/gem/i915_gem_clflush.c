@@ -8,7 +8,6 @@
 
 #include "i915_drv.h"
 #include "i915_gem_clflush.h"
-#include "intel_frontbuffer.h"
 
 static DEFINE_SPINLOCK(clflush_lock);
 

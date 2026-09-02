@@ -51,8 +51,9 @@ i915-y += i915_drv.o \
 	  intel_device_info.o \
 	  intel_pm.o \
 	  intel_runtime_pm.o \
-	  intel_wakeref.o \
-	  intel_uncore.o
+	  intel_sideband.o \
+	  intel_uncore.o \
+	  intel_wakeref.o
 
 # core library code
 i915-y += \
@@ -63,7 +64,7 @@ i915-y += \
 	i915_user_extensions.o
 
 i915-$(CONFIG_COMPAT)   += i915_ioc32.o
-i915-$(CONFIG_DEBUG_FS) += i915_debugfs.o intel_pipe_crc.o
+i915-$(CONFIG_DEBUG_FS) += i915_debugfs.o display/intel_pipe_crc.o
 i915-$(CONFIG_PERF_EVENTS) += i915_pmu.o
 
 # "Graphics Technology" (aka we talk to the gpu)
@@ -88,13 +89,17 @@ i915-y += $(gt-y)
 # GEM (Graphics Execution Management) code
 obj-y += gem/
 gem-y += \
+	gem/i915_gem_busy.o \
 	gem/i915_gem_clflush.o \
+	gem/i915_gem_client_blt.o \
 	gem/i915_gem_context.o \
 	gem/i915_gem_dmabuf.o \
 	gem/i915_gem_domain.o \
 	gem/i915_gem_execbuffer.o \
+	gem/i915_gem_fence.o \
 	gem/i915_gem_internal.o \
 	gem/i915_gem_object.o \
+	gem/i915_gem_object_blt.o \
 	gem/i915_gem_mman.o \
 	gem/i915_gem_pages.o \
 	gem/i915_gem_phys.o \
@@ -102,6 +107,7 @@ gem-y += \
 	gem/i915_gem_shmem.o \
 	gem/i915_gem_shrinker.o \
 	gem/i915_gem_stolen.o \
+	gem/i915_gem_throttle.o \
 	gem/i915_gem_tiling.o \
 	gem/i915_gem_userptr.o \
 	gem/i915_gem_wait.o \
@@ -144,33 +150,38 @@ i915-y += intel_renderstate_gen6.o \
 	  intel_renderstate_gen9.o
 
 # modesetting core code
-i915-y += intel_audio.o \
-	  intel_atomic.o \
-	  intel_atomic_plane.o \
-	  intel_bios.o \
-	  intel_bw.o \
-	  intel_cdclk.o \
-	  intel_color.o \
-	  intel_combo_phy.o \
-	  intel_connector.o \
-	  intel_display.o \
-	  intel_dpio_phy.o \
-	  intel_dpll_mgr.o \
-	  intel_fbc.o \
-	  intel_fifo_underrun.o \
-	  intel_frontbuffer.o \
-	  intel_hdcp.o \
-	  intel_hotplug.o \
-	  intel_overlay.o \
-	  intel_psr.o \
-	  intel_quirks.o \
-	  intel_sideband.o \
-	  intel_sprite.o
-i915-$(CONFIG_ACPI)		+= intel_acpi.o intel_opregion.o
-i915-$(CONFIG_DRM_FBDEV_EMULATION)	+= intel_fbdev.o
+obj-y += display/
+i915-y += \
+	display/intel_atomic.o \
+	display/intel_atomic_plane.o \
+	display/intel_audio.o \
+	display/intel_bios.o \
+	display/intel_bw.o \
+	display/intel_cdclk.o \
+	display/intel_color.o \
+	display/intel_combo_phy.o \
+	display/intel_connector.o \
+	display/intel_display.o \
+	display/intel_display_power.o \
+	display/intel_dpio_phy.o \
+	display/intel_dpll_mgr.o \
+	display/intel_fbc.o \
+	display/intel_fifo_underrun.o \
+	display/intel_frontbuffer.o \
+	display/intel_hdcp.o \
+	display/intel_hotplug.o \
+	display/intel_lpe_audio.o \
+	display/intel_overlay.o \
+	display/intel_psr.o \
+	display/intel_quirks.o \
+	display/intel_sprite.o
+i915-$(CONFIG_ACPI) += \
+	display/intel_acpi.o \
+	display/intel_opregion.o
+i915-$(CONFIG_DRM_FBDEV_EMULATION) += \
+	display/intel_fbdev.o
 
 # modesetting output/encoder code
-obj-y += display/
 i915-y += \
 	display/dvo_ch7017.o \
 	display/dvo_ch7xxx.o \
@@ -235,9 +246,6 @@ ifeq ($(CONFIG_DRM_I915_GVT),y)
 i915-y += intel_gvt.o
 include $(src)/gvt/Makefile
 endif
-
-# LPE Audio for VLV and CHT
-i915-y += intel_lpe_audio.o
 
 obj-$(CONFIG_DRM_I915) += i915.o
 obj-$(CONFIG_DRM_I915_GVT_KVMGT) += gvt/kvmgt.o

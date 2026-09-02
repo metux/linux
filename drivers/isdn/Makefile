@@ -6,3 +6,7 @@
 obj-$(CONFIG_BT_CMTP)			+= capi/
 obj-$(CONFIG_MISDN)			+= mISDN/
 obj-$(CONFIG_ISDN)			+= hardware/
+obj-$(CONFIG_ISDN_DIVERSION)		+= divert/
+obj-$(CONFIG_ISDN_DRV_LOOP)		+= isdnloop/
+obj-$(CONFIG_HYSDN)			+= hysdn/
+obj-$(CONFIG_ISDN_DRV_GIGASET)		+= gigaset/

@@ -6,6 +6,9 @@
  *  USB/RS232 I-Force joysticks and wheels.
  */
 
+/*
+ */
+
 #include <linux/serio.h>
 #include "iforce.h"
 
@@ -16,9 +19,6 @@ struct iforce_serio {
 	int idx, pkt, len, id;
 	u8 csum;
 	u8 expect_packet;
-	u8 cmd_response[IFORCE_MAX_LENGTH];
-	u8 cmd_response_len;
-	u8 data_in[IFORCE_MAX_LENGTH];
 };
 
 static void iforce_serio_xmit(struct iforce *iforce)
@@ -69,34 +69,24 @@ again:
 	spin_unlock_irqrestore(&iforce->xmit_lock, flags);
 }
 
-static int iforce_serio_get_id(struct iforce *iforce, u8 id,
-			       u8 *response_data, size_t *response_len)
+static int iforce_serio_get_id(struct iforce *iforce, u8 *packet)
 {
 	struct iforce_serio *iforce_serio = container_of(iforce,
 							 struct iforce_serio,
 							 iforce);
 
 	iforce_serio->expect_packet = HI(FF_CMD_QUERY);
-	iforce_serio->cmd_response_len = 0;
-
-	iforce_send_packet(iforce, FF_CMD_QUERY, &id);
+	iforce_send_packet(iforce, FF_CMD_QUERY, packet);
 
 	wait_event_interruptible_timeout(iforce->wait,
 					 !iforce_serio->expect_packet, HZ);
 
 	if (iforce_serio->expect_packet) {
 		iforce_serio->expect_packet = 0;
-		return -ETIMEDOUT;
+		return -EIO;
 	}
 
-	if (iforce_serio->cmd_response[0] != id)
-		return -EIO;
-
-	memcpy(response_data, iforce_serio->cmd_response,
-	       iforce_serio->cmd_response_len);
-	*response_len = iforce_serio->cmd_response_len;
-
-	return 0;
+	return -(iforce->edata[0] != packet[0]);
 }
 
 static int iforce_serio_start_io(struct iforce *iforce)
@@ -125,7 +115,7 @@ static void iforce_serio_write_wakeup(struct serio *serio)
 }
 
 static irqreturn_t iforce_serio_irq(struct serio *serio,
-				    unsigned char data, unsigned int flags)
+		unsigned char data, unsigned int flags)
 {
 	struct iforce_serio *iforce_serio = serio_get_drvdata(serio);
 	struct iforce *iforce = &iforce_serio->iforce;
@@ -155,26 +145,22 @@ static irqreturn_t iforce_serio_irq(struct serio *serio,
 	}
 
 	if (iforce_serio->idx < iforce_serio->len) {
-		iforce_serio->data_in[iforce_serio->idx++] = data;
+		iforce->data[iforce_serio->idx++] = data;
 		iforce_serio->csum += data;
 		goto out;
 	}
 
 	if (iforce_serio->idx == iforce_serio->len) {
+		u16 cmd = (iforce_serio->id << 8) | iforce_serio->idx;
+
 		/* Handle command completion */
 		if (iforce_serio->expect_packet == iforce_serio->id) {
 			iforce_serio->expect_packet = 0;
-			memcpy(iforce_serio->cmd_response,
-			       iforce_serio->data_in, IFORCE_MAX_LENGTH);
-			iforce_serio->cmd_response_len = iforce_serio->len;
-
-			/* Signal that command is done */
-			wake_up(&iforce->wait);
-		} else if (likely(iforce->type)) {
-			iforce_process_packet(iforce, iforce_serio->id,
-					      iforce_serio->data_in,
-					      iforce_serio->len);
+			iforce->ecmd = cmd;
+			memcpy(iforce->edata, iforce->data, IFORCE_MAX_LENGTH);
 		}
+
+		iforce_process_packet(iforce, cmd, iforce->data);
 
 		iforce_serio->pkt = 0;
 		iforce_serio->id  = 0;
@@ -189,13 +175,17 @@ out:
 static int iforce_serio_connect(struct serio *serio, struct serio_driver *drv)
 {
 	struct iforce_serio *iforce_serio;
+	struct iforce *iforce;
 	int err;
 
 	iforce_serio = kzalloc(sizeof(*iforce_serio), GFP_KERNEL);
 	if (!iforce_serio)
 		return -ENOMEM;
 
-	iforce_serio->iforce.xport_ops = &iforce_serio_xport_ops;
+	iforce = &iforce_serio->iforce;
+
+	iforce->xport_ops = &iforce_serio_xport_ops;
+	iforce->bus = IFORCE_232;
 
 	iforce_serio->serio = serio;
 	serio_set_drvdata(serio, iforce_serio);
@@ -204,7 +194,7 @@ static int iforce_serio_connect(struct serio *serio, struct serio_driver *drv)
 	if (err)
 		goto fail1;
 
-	err = iforce_init_device(&serio->dev, BUS_RS232, &iforce_serio->iforce);
+	err = iforce_init_device(&serio->dev, BUS_RS232, iforce);
 	if (err)
 		goto fail2;
 

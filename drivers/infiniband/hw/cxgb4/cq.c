@@ -102,6 +102,7 @@ static int create_cq(struct c4iw_rdev *rdev, struct t4_cq *cq,
 		goto err3;
 	}
 	dma_unmap_addr_set(cq, mapping, cq->dma_addr);
+	memset(cq->queue, 0, cq->memsize);
 
 	if (user && ucontext->is_32b_cqe) {
 		cq->qp_errp = &((struct t4_status_page *)
@@ -985,16 +986,17 @@ void c4iw_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 		   ucontext ? &ucontext->uctx : &chp->cq.rdev->uctx,
 		   chp->destroy_skb, chp->wr_waitp);
 	c4iw_put_wr_wait(chp->wr_waitp);
+	kfree(chp);
 }
 
-int c4iw_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
-		   struct ib_udata *udata)
+struct ib_cq *c4iw_create_cq(struct ib_device *ibdev,
+			     const struct ib_cq_init_attr *attr,
+			     struct ib_udata *udata)
 {
-	struct ib_device *ibdev = ibcq->device;
 	int entries = attr->cqe;
 	int vector = attr->comp_vector;
-	struct c4iw_dev *rhp = to_c4iw_dev(ibcq->device);
-	struct c4iw_cq *chp = to_c4iw_cq(ibcq);
+	struct c4iw_dev *rhp;
+	struct c4iw_cq *chp;
 	struct c4iw_create_cq ucmd;
 	struct c4iw_create_cq_resp uresp;
 	int ret, wr_len;
@@ -1005,15 +1007,21 @@ int c4iw_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 
 	pr_debug("ib_dev %p entries %d\n", ibdev, entries);
 	if (attr->flags)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
+
+	rhp = to_c4iw_dev(ibdev);
 
 	if (vector >= rhp->rdev.lldi.nciq)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (udata) {
 		if (udata->inlen < sizeof(ucmd))
 			ucontext->is_32b_cqe = 1;
 	}
+
+	chp = kzalloc(sizeof(*chp), GFP_KERNEL);
+	if (!chp)
+		return ERR_PTR(-ENOMEM);
 
 	chp->wr_waitp = c4iw_alloc_wr_wait(GFP_KERNEL);
 	if (!chp->wr_waitp) {
@@ -1124,11 +1132,10 @@ int c4iw_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		mm2->len = PAGE_SIZE;
 		insert_mmap(ucontext, mm2);
 	}
-
 	pr_debug("cqid 0x%0x chp %p size %u memsize %zu, dma_addr %pad\n",
 		 chp->cq.cqid, chp, chp->cq.size, chp->cq.memsize,
 		 &chp->cq.dma_addr);
-	return 0;
+	return &chp->ibcq;
 err_free_mm2:
 	kfree(mm2);
 err_free_mm:
@@ -1144,7 +1151,8 @@ err_free_skb:
 err_free_wr_wait:
 	c4iw_put_wr_wait(chp->wr_waitp);
 err_free_chp:
-	return ret;
+	kfree(chp);
+	return ERR_PTR(ret);
 }
 
 int c4iw_arm_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)

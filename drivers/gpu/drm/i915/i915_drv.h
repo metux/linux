@@ -54,6 +54,7 @@
 #include <drm/drm_cache.h>
 #include <drm/drm_util.h>
 #include <drm/drm_dsc.h>
+#include <drm/drm_atomic.h>
 #include <drm/drm_connector.h>
 #include <drm/i915_mei_hdcp_interface.h>
 
@@ -81,7 +82,6 @@
 #include "i915_gem.h"
 #include "gem/i915_gem_context_types.h"
 #include "i915_gem_fence_reg.h"
-#include "i915_gem_object.h"
 #include "i915_gem_gtt.h"
 #include "i915_gpu_error.h"
 #include "i915_request.h"
@@ -96,8 +96,8 @@
 
 #define DRIVER_NAME		"i915"
 #define DRIVER_DESC		"Intel Graphics"
-#define DRIVER_DATE		"20190417"
-#define DRIVER_TIMESTAMP	1555492067
+#define DRIVER_DATE		"20190524"
+#define DRIVER_TIMESTAMP	1558719322
 
 /* Use I915_STATE_WARN(x) and I915_STATE_WARN_ON() (rather than WARN() and
  * WARN_ON()) for hw state sanity checks to check for unexpected conditions
@@ -135,6 +135,8 @@ bool i915_error_injected(void);
 #define i915_load_error(i915, fmt, ...)					 \
 	__i915_printk(i915, i915_error_injected() ? KERN_DEBUG : KERN_ERR, \
 		      fmt, ##__VA_ARGS__)
+
+struct drm_i915_gem_object;
 
 enum hpd_pin {
 	HPD_NONE = 0,
@@ -532,8 +534,7 @@ enum intel_pch {
 	PCH_IBX,	/* Ibexpeak PCH */
 	PCH_CPT,	/* Cougarpoint/Pantherpoint PCH */
 	PCH_LPT,	/* Lynxpoint/Wildcatpoint PCH */
-	PCH_SPT,        /* Sunrisepoint PCH */
-	PCH_KBP,        /* Kaby Lake PCH */
+	PCH_SPT,        /* Sunrisepoint/Kaby Lake PCH */
 	PCH_CNP,        /* Cannon/Comet Lake PCH */
 	PCH_ICP,	/* Ice Lake PCH */
 };
@@ -835,6 +836,11 @@ struct i915_power_domains {
 
 	struct mutex lock;
 	int domain_use_count[POWER_DOMAIN_NUM];
+
+	struct delayed_work async_put_work;
+	intel_wakeref_t async_put_wakeref;
+	u64 async_put_domains[2];
+
 	struct i915_power_well *power_wells;
 };
 
@@ -869,6 +875,9 @@ struct i915_gem_mm {
 	 * All objects within this list must also be on bound_list.
 	 */
 	struct list_head userfault_list;
+
+	/* Manual runtime pm autosuspend delay for user GGTT mmaps */
+	struct intel_wakeref_auto userfault_wakeref;
 
 	/**
 	 * List of objects which are pending destruction.
@@ -1841,6 +1850,13 @@ struct drm_i915_private {
 		} type;
 	} dram_info;
 
+	struct intel_bw_info {
+		int num_planes;
+		int deratedbw[3];
+	} max_bw[6];
+
+	struct drm_private_obj bw_obj;
+
 	struct i915_runtime_pm runtime_pm;
 
 	struct {
@@ -2035,7 +2051,7 @@ struct drm_i915_private {
 		 * arrive within a small period of time, we fire
 		 * off the idle_work.
 		 */
-		struct delayed_work idle_work;
+		struct work_struct idle_work;
 	} gem;
 
 	/* For i945gm vblank irq vs. C3 workaround */
@@ -2156,111 +2172,6 @@ enum hdmi_force_audio {
 #define INTEL_FRONTBUFFER_ALL_MASK(pipe) \
 	GENMASK(INTEL_FRONTBUFFER_BITS_PER_PIPE * ((pipe) + 1) - 1, \
 		INTEL_FRONTBUFFER_BITS_PER_PIPE * (pipe))
-
-/*
- * Optimised SGL iterator for GEM objects
- */
-static __always_inline struct sgt_iter {
-	struct scatterlist *sgp;
-	union {
-		unsigned long pfn;
-		dma_addr_t dma;
-	};
-	unsigned int curr;
-	unsigned int max;
-} __sgt_iter(struct scatterlist *sgl, bool dma) {
-	struct sgt_iter s = { .sgp = sgl };
-
-	if (s.sgp) {
-		s.max = s.curr = s.sgp->offset;
-		s.max += s.sgp->length;
-		if (dma)
-			s.dma = sg_dma_address(s.sgp);
-		else
-			s.pfn = page_to_pfn(sg_page(s.sgp));
-	}
-
-	return s;
-}
-
-static inline struct scatterlist *____sg_next(struct scatterlist *sg)
-{
-	++sg;
-	if (unlikely(sg_is_chain(sg)))
-		sg = sg_chain_ptr(sg);
-	return sg;
-}
-
-/**
- * __sg_next - return the next scatterlist entry in a list
- * @sg:		The current sg entry
- *
- * Description:
- *   If the entry is the last, return NULL; otherwise, step to the next
- *   element in the array (@sg@+1). If that's a chain pointer, follow it;
- *   otherwise just return the pointer to the current element.
- **/
-static inline struct scatterlist *__sg_next(struct scatterlist *sg)
-{
-	return sg_is_last(sg) ? NULL : ____sg_next(sg);
-}
-
-/**
- * for_each_sgt_dma - iterate over the DMA addresses of the given sg_table
- * @__dmap:	DMA address (output)
- * @__iter:	'struct sgt_iter' (iterator state, internal)
- * @__sgt:	sg_table to iterate over (input)
- */
-#define for_each_sgt_dma(__dmap, __iter, __sgt)				\
-	for ((__iter) = __sgt_iter((__sgt)->sgl, true);			\
-	     ((__dmap) = (__iter).dma + (__iter).curr);			\
-	     (((__iter).curr += I915_GTT_PAGE_SIZE) >= (__iter).max) ?	\
-	     (__iter) = __sgt_iter(__sg_next((__iter).sgp), true), 0 : 0)
-
-/**
- * for_each_sgt_page - iterate over the pages of the given sg_table
- * @__pp:	page pointer (output)
- * @__iter:	'struct sgt_iter' (iterator state, internal)
- * @__sgt:	sg_table to iterate over (input)
- */
-#define for_each_sgt_page(__pp, __iter, __sgt)				\
-	for ((__iter) = __sgt_iter((__sgt)->sgl, false);		\
-	     ((__pp) = (__iter).pfn == 0 ? NULL :			\
-	      pfn_to_page((__iter).pfn + ((__iter).curr >> PAGE_SHIFT))); \
-	     (((__iter).curr += PAGE_SIZE) >= (__iter).max) ?		\
-	     (__iter) = __sgt_iter(__sg_next((__iter).sgp), false), 0 : 0)
-
-bool i915_sg_trim(struct sg_table *orig_st);
-
-static inline unsigned int i915_sg_page_sizes(struct scatterlist *sg)
-{
-	unsigned int page_sizes;
-
-	page_sizes = 0;
-	while (sg) {
-		GEM_BUG_ON(sg->offset);
-		GEM_BUG_ON(!IS_ALIGNED(sg->length, PAGE_SIZE));
-		page_sizes |= sg->length;
-		sg = __sg_next(sg);
-	}
-
-	return page_sizes;
-}
-
-static inline unsigned int i915_sg_segment_size(void)
-{
-	unsigned int size = swiotlb_max_segment();
-
-	if (size == 0)
-		return SCATTERLIST_MAX_SEGMENT;
-
-	size = rounddown(size, PAGE_SIZE);
-	/* swiotlb_max_segment_size can return 1 byte when it means one page. */
-	if (size < PAGE_SIZE)
-		size = PAGE_SIZE;
-
-	return size;
-}
 
 #define INTEL_INFO(dev_priv)	(&(dev_priv)->__info)
 #define RUNTIME_INFO(dev_priv)	(&(dev_priv)->__runtime)
@@ -2635,7 +2546,6 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define INTEL_PCH_ID(dev_priv) ((dev_priv)->pch_id)
 #define HAS_PCH_ICP(dev_priv) (INTEL_PCH_TYPE(dev_priv) == PCH_ICP)
 #define HAS_PCH_CNP(dev_priv) (INTEL_PCH_TYPE(dev_priv) == PCH_CNP)
-#define HAS_PCH_KBP(dev_priv) (INTEL_PCH_TYPE(dev_priv) == PCH_KBP)
 #define HAS_PCH_SPT(dev_priv) (INTEL_PCH_TYPE(dev_priv) == PCH_SPT)
 #define HAS_PCH_LPT(dev_priv) (INTEL_PCH_TYPE(dev_priv) == PCH_LPT)
 #define HAS_PCH_LPT_LP(dev_priv) \
@@ -2743,46 +2653,8 @@ static inline bool intel_vgpu_active(struct drm_i915_private *dev_priv)
 }
 
 /* i915_gem.c */
-int i915_gem_create_ioctl(struct drm_device *dev, void *data,
-			  struct drm_file *file_priv);
-int i915_gem_pread_ioctl(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv);
-int i915_gem_pwrite_ioctl(struct drm_device *dev, void *data,
-			  struct drm_file *file_priv);
-int i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-int i915_gem_mmap_gtt_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-int i915_gem_set_domain_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv);
-int i915_gem_sw_finish_ioctl(struct drm_device *dev, void *data,
-			     struct drm_file *file_priv);
-int i915_gem_execbuffer_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv);
-int i915_gem_execbuffer2_ioctl(struct drm_device *dev, void *data,
-			       struct drm_file *file_priv);
-int i915_gem_busy_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-int i915_gem_get_caching_ioctl(struct drm_device *dev, void *data,
-			       struct drm_file *file);
-int i915_gem_set_caching_ioctl(struct drm_device *dev, void *data,
-			       struct drm_file *file);
-int i915_gem_throttle_ioctl(struct drm_device *dev, void *data,
-			    struct drm_file *file_priv);
-int i915_gem_madvise_ioctl(struct drm_device *dev, void *data,
-			   struct drm_file *file_priv);
-int i915_gem_set_tiling_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv);
-int i915_gem_get_tiling_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv);
 int i915_gem_init_userptr(struct drm_i915_private *dev_priv);
 void i915_gem_cleanup_userptr(struct drm_i915_private *dev_priv);
-int i915_gem_userptr_ioctl(struct drm_device *dev, void *data,
-			   struct drm_file *file);
-int i915_gem_get_aperture_ioctl(struct drm_device *dev, void *data,
-				struct drm_file *file_priv);
-int i915_gem_wait_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
 void i915_gem_sanitize(struct drm_i915_private *i915);
 int i915_gem_init_early(struct drm_i915_private *dev_priv);
 void i915_gem_cleanup_early(struct drm_i915_private *dev_priv);
@@ -2835,159 +2707,8 @@ i915_gem_object_ggtt_pin(struct drm_i915_gem_object *obj,
 			 u64 flags);
 
 int i915_gem_object_unbind(struct drm_i915_gem_object *obj);
-void i915_gem_release_mmap(struct drm_i915_gem_object *obj);
 
 void i915_gem_runtime_suspend(struct drm_i915_private *dev_priv);
-
-static inline int __sg_page_count(const struct scatterlist *sg)
-{
-	return sg->length >> PAGE_SHIFT;
-}
-
-struct scatterlist *
-i915_gem_object_get_sg(struct drm_i915_gem_object *obj,
-		       unsigned int n, unsigned int *offset);
-
-struct page *
-i915_gem_object_get_page(struct drm_i915_gem_object *obj,
-			 unsigned int n);
-
-struct page *
-i915_gem_object_get_dirty_page(struct drm_i915_gem_object *obj,
-			       unsigned int n);
-
-dma_addr_t
-i915_gem_object_get_dma_address(struct drm_i915_gem_object *obj,
-				unsigned long n);
-
-void __i915_gem_object_set_pages(struct drm_i915_gem_object *obj,
-				 struct sg_table *pages,
-				 unsigned int sg_page_sizes);
-int __i915_gem_object_get_pages(struct drm_i915_gem_object *obj);
-
-static inline int __must_check
-i915_gem_object_pin_pages(struct drm_i915_gem_object *obj)
-{
-	might_lock(&obj->mm.lock);
-
-	if (atomic_inc_not_zero(&obj->mm.pages_pin_count))
-		return 0;
-
-	return __i915_gem_object_get_pages(obj);
-}
-
-static inline bool
-i915_gem_object_has_pages(struct drm_i915_gem_object *obj)
-{
-	return !IS_ERR_OR_NULL(READ_ONCE(obj->mm.pages));
-}
-
-static inline void
-__i915_gem_object_pin_pages(struct drm_i915_gem_object *obj)
-{
-	GEM_BUG_ON(!i915_gem_object_has_pages(obj));
-
-	atomic_inc(&obj->mm.pages_pin_count);
-}
-
-static inline bool
-i915_gem_object_has_pinned_pages(struct drm_i915_gem_object *obj)
-{
-	return atomic_read(&obj->mm.pages_pin_count);
-}
-
-static inline void
-__i915_gem_object_unpin_pages(struct drm_i915_gem_object *obj)
-{
-	GEM_BUG_ON(!i915_gem_object_has_pages(obj));
-	GEM_BUG_ON(!i915_gem_object_has_pinned_pages(obj));
-
-	atomic_dec(&obj->mm.pages_pin_count);
-}
-
-static inline void
-i915_gem_object_unpin_pages(struct drm_i915_gem_object *obj)
-{
-	__i915_gem_object_unpin_pages(obj);
-}
-
-enum i915_mm_subclass { /* lockdep subclass for obj->mm.lock/struct_mutex */
-	I915_MM_NORMAL = 0,
-	I915_MM_SHRINKER /* called "recursively" from direct-reclaim-esque */
-};
-
-int __i915_gem_object_put_pages(struct drm_i915_gem_object *obj,
-				enum i915_mm_subclass subclass);
-void __i915_gem_object_truncate(struct drm_i915_gem_object *obj);
-
-enum i915_map_type {
-	I915_MAP_WB = 0,
-	I915_MAP_WC,
-#define I915_MAP_OVERRIDE BIT(31)
-	I915_MAP_FORCE_WB = I915_MAP_WB | I915_MAP_OVERRIDE,
-	I915_MAP_FORCE_WC = I915_MAP_WC | I915_MAP_OVERRIDE,
-};
-
-static inline enum i915_map_type
-i915_coherent_map_type(struct drm_i915_private *i915)
-{
-	return HAS_LLC(i915) ? I915_MAP_WB : I915_MAP_WC;
-}
-
-/**
- * i915_gem_object_pin_map - return a contiguous mapping of the entire object
- * @obj: the object to map into kernel address space
- * @type: the type of mapping, used to select pgprot_t
- *
- * Calls i915_gem_object_pin_pages() to prevent reaping of the object's
- * pages and then returns a contiguous mapping of the backing storage into
- * the kernel address space. Based on the @type of mapping, the PTE will be
- * set to either WriteBack or WriteCombine (via pgprot_t).
- *
- * The caller is responsible for calling i915_gem_object_unpin_map() when the
- * mapping is no longer required.
- *
- * Returns the pointer through which to access the mapped object, or an
- * ERR_PTR() on error.
- */
-void *__must_check i915_gem_object_pin_map(struct drm_i915_gem_object *obj,
-					   enum i915_map_type type);
-
-void __i915_gem_object_flush_map(struct drm_i915_gem_object *obj,
-				 unsigned long offset,
-				 unsigned long size);
-static inline void i915_gem_object_flush_map(struct drm_i915_gem_object *obj)
-{
-	__i915_gem_object_flush_map(obj, 0, obj->base.size);
-}
-
-/**
- * i915_gem_object_unpin_map - releases an earlier mapping
- * @obj: the object to unmap
- *
- * After pinning the object and mapping its pages, once you are finished
- * with your access, call i915_gem_object_unpin_map() to release the pin
- * upon the mapping. Once the pin count reaches zero, that mapping may be
- * removed.
- */
-static inline void i915_gem_object_unpin_map(struct drm_i915_gem_object *obj)
-{
-	i915_gem_object_unpin_pages(obj);
-}
-
-int i915_gem_obj_prepare_shmem_read(struct drm_i915_gem_object *obj,
-				    unsigned int *needs_clflush);
-int i915_gem_obj_prepare_shmem_write(struct drm_i915_gem_object *obj,
-				     unsigned int *needs_clflush);
-#define CLFLUSH_BEFORE	BIT(0)
-#define CLFLUSH_AFTER	BIT(1)
-#define CLFLUSH_FLAGS	(CLFLUSH_BEFORE | CLFLUSH_AFTER)
-
-static inline void
-i915_gem_obj_finish_shmem_access(struct drm_i915_gem_object *obj)
-{
-	i915_gem_object_unpin_pages(obj);
-}
 
 static inline int __must_check
 i915_mutex_lock_interruptible(struct drm_device *dev)
@@ -3051,18 +2772,6 @@ int i915_gem_object_wait_priority(struct drm_i915_gem_object *obj,
 				  const struct i915_sched_attr *attr);
 #define I915_PRIORITY_DISPLAY I915_USER_PRIORITY(I915_PRIORITY_MAX)
 
-int __must_check
-i915_gem_object_set_to_wc_domain(struct drm_i915_gem_object *obj, bool write);
-int __must_check
-i915_gem_object_set_to_gtt_domain(struct drm_i915_gem_object *obj, bool write);
-int __must_check
-i915_gem_object_set_to_cpu_domain(struct drm_i915_gem_object *obj, bool write);
-struct i915_vma * __must_check
-i915_gem_object_pin_to_display_plane(struct drm_i915_gem_object *obj,
-				     u32 alignment,
-				     const struct i915_ggtt_view *view,
-				     unsigned int flags);
-void i915_gem_object_unpin_from_display_plane(struct i915_vma *vma);
 int i915_gem_open(struct drm_i915_private *i915, struct drm_file *file);
 void i915_gem_release(struct drm_device *dev, struct drm_file *file);
 
@@ -3202,18 +2911,6 @@ u32 i915_gem_fence_size(struct drm_i915_private *dev_priv, u32 size,
 u32 i915_gem_fence_alignment(struct drm_i915_private *dev_priv, u32 size,
 			     unsigned int tiling, unsigned int stride);
 
-/* i915_debugfs.c */
-#ifdef CONFIG_DEBUG_FS
-int i915_debugfs_register(struct drm_i915_private *dev_priv);
-int i915_debugfs_connector_add(struct drm_connector *connector);
-void intel_display_crc_init(struct drm_i915_private *dev_priv);
-#else
-static inline int i915_debugfs_register(struct drm_i915_private *dev_priv) {return 0;}
-static inline int i915_debugfs_connector_add(struct drm_connector *connector)
-{ return 0; }
-static inline void intel_display_crc_init(struct drm_i915_private *dev_priv) {}
-#endif
-
 const char *i915_cache_level_str(struct drm_i915_private *i915, int type);
 
 /* i915_cmd_parser.c */
@@ -3240,23 +2937,6 @@ extern int i915_restore_state(struct drm_i915_private *dev_priv);
 /* i915_sysfs.c */
 void i915_setup_sysfs(struct drm_i915_private *dev_priv);
 void i915_teardown_sysfs(struct drm_i915_private *dev_priv);
-
-/* intel_i2c.c */
-extern int intel_setup_gmbus(struct drm_i915_private *dev_priv);
-extern void intel_teardown_gmbus(struct drm_i915_private *dev_priv);
-extern bool intel_gmbus_is_valid_pin(struct drm_i915_private *dev_priv,
-				     unsigned int pin);
-extern int intel_gmbus_output_aksv(struct i2c_adapter *adapter);
-
-extern struct i2c_adapter *
-intel_gmbus_get_adapter(struct drm_i915_private *dev_priv, unsigned int pin);
-extern void intel_gmbus_set_speed(struct i2c_adapter *adapter, int speed);
-extern void intel_gmbus_force_bit(struct i2c_adapter *adapter, bool force_bit);
-static inline bool intel_gmbus_is_forced_bit(struct i2c_adapter *adapter)
-{
-	return container_of(adapter, struct intel_gmbus, adapter)->force_bit;
-}
-extern void intel_i2c_reset(struct drm_i915_private *dev_priv);
 
 /* intel_device_info.c */
 static inline struct intel_device_info *
@@ -3363,60 +3043,6 @@ extern void intel_display_print_error_state(struct drm_i915_error_state_buf *e,
 #define INTEL_BROADCAST_RGB_FULL 1
 #define INTEL_BROADCAST_RGB_LIMITED 2
 
-static inline i915_reg_t i915_vgacntrl_reg(struct drm_i915_private *dev_priv)
-{
-	if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
-		return VLV_VGACNTRL;
-	else if (INTEL_GEN(dev_priv) >= 5)
-		return CPU_VGACNTRL;
-	else
-		return VGACNTRL;
-}
-
-static inline unsigned long msecs_to_jiffies_timeout(const unsigned int m)
-{
-	unsigned long j = msecs_to_jiffies(m);
-
-	return min_t(unsigned long, MAX_JIFFY_OFFSET, j + 1);
-}
-
-static inline unsigned long nsecs_to_jiffies_timeout(const u64 n)
-{
-	/* nsecs_to_jiffies64() does not guard against overflow */
-	if (NSEC_PER_SEC % HZ &&
-	    div_u64(n, NSEC_PER_SEC) >= MAX_JIFFY_OFFSET / HZ)
-		return MAX_JIFFY_OFFSET;
-
-        return min_t(u64, MAX_JIFFY_OFFSET, nsecs_to_jiffies64(n) + 1);
-}
-
-/*
- * If you need to wait X milliseconds between events A and B, but event B
- * doesn't happen exactly after event A, you record the timestamp (jiffies) of
- * when event A happened, then just before event B you call this function and
- * pass the timestamp as the first argument, and X as the second argument.
- */
-static inline void
-wait_remaining_ms_from_jiffies(unsigned long timestamp_jiffies, int to_wait_ms)
-{
-	unsigned long target_jiffies, tmp_jiffies, remaining_jiffies;
-
-	/*
-	 * Don't re-read the value of "jiffies" every time since it may change
-	 * behind our back and break the math.
-	 */
-	tmp_jiffies = jiffies;
-	target_jiffies = timestamp_jiffies +
-			 msecs_to_jiffies_timeout(to_wait_ms);
-
-	if (time_after(target_jiffies, tmp_jiffies)) {
-		remaining_jiffies = target_jiffies - tmp_jiffies;
-		while (remaining_jiffies)
-			remaining_jiffies =
-			    schedule_timeout_uninterruptible(remaining_jiffies);
-	}
-}
-
 void i915_memcpy_init_early(struct drm_i915_private *dev_priv);
 bool i915_memcpy_from_wc(void *dst, const void *src, unsigned long len);
 
@@ -3452,6 +3078,23 @@ static inline int intel_hws_csb_write_index(struct drm_i915_private *i915)
 static inline u32 i915_scratch_offset(const struct drm_i915_private *i915)
 {
 	return i915_ggtt_offset(i915->gt.scratch);
+}
+
+static inline enum i915_map_type
+i915_coherent_map_type(struct drm_i915_private *i915)
+{
+	return HAS_LLC(i915) ? I915_MAP_WB : I915_MAP_WC;
+}
+
+static inline void add_taint_for_CI(unsigned int taint)
+{
+	/*
+	 * The system is "ok", just about surviving for the user, but
+	 * CI results are now unreliable as the HW is very suspect.
+	 * CI checks the taint state after every test and will reboot
+	 * the machine if the kernel is tainted.
+	 */
+	add_taint(taint, LOCKDEP_STILL_OK);
 }
 
 #endif

@@ -24,10 +24,8 @@
 
 #include <linux/prime_numbers.h>
 
-#include "gem/i915_gem_context.h"
 #include "gem/selftests/mock_context.h"
 
-#include "i915_scatterlist.h"
 #include "i915_selftest.h"
 
 #include "mock_gem_device.h"
@@ -39,7 +37,7 @@ static bool assert_vma(struct i915_vma *vma,
 {
 	bool ok = true;
 
-	if (vma->vm != rcu_access_pointer(ctx->vm)) {
+	if (vma->vm != &ctx->ppgtt->vm) {
 		pr_err("VMA created with wrong VM\n");
 		ok = false;
 	}
@@ -114,13 +112,11 @@ static int create_vmas(struct drm_i915_private *i915,
 	list_for_each_entry(obj, objects, st_link) {
 		for (pinned = 0; pinned <= 1; pinned++) {
 			list_for_each_entry(ctx, contexts, link) {
-				struct i915_address_space *vm;
+				struct i915_address_space *vm = &ctx->ppgtt->vm;
 				struct i915_vma *vma;
 				int err;
 
-				vm = i915_gem_context_get_vm_rcu(ctx);
 				vma = checked_vma_instance(obj, vm, NULL);
-				i915_vm_put(vm);
 				if (IS_ERR(vma))
 					return PTR_ERR(vma);
 
@@ -173,7 +169,7 @@ static int igt_vma_create(void *arg)
 		}
 
 		nc = 0;
-		for_each_prime_number(num_ctx, 2 * NUM_CONTEXT_TAG) {
+		for_each_prime_number(num_ctx, MAX_CONTEXT_HW_ID) {
 			for (; nc < num_ctx; nc++) {
 				ctx = mock_context(i915, "mock");
 				if (!ctx)
@@ -196,8 +192,6 @@ static int igt_vma_create(void *arg)
 			list_del_init(&ctx->link);
 			mock_context_close(ctx);
 		}
-
-		cond_resched();
 	}
 
 end:
@@ -346,8 +340,6 @@ static int igt_vma_pin1(void *arg)
 				goto out;
 			}
 		}
-
-		cond_resched();
 	}
 
 	err = 0;
@@ -604,8 +596,6 @@ static int igt_vma_rotate_remap(void *arg)
 					}
 
 					i915_vma_unpin(vma);
-
-					cond_resched();
 				}
 			}
 		}
@@ -626,7 +616,7 @@ static bool assert_partial(struct drm_i915_gem_object *obj,
 	struct sgt_iter sgt;
 	dma_addr_t dma;
 
-	for_each_sgt_daddr(dma, sgt, vma->pages) {
+	for_each_sgt_dma(dma, sgt, vma->pages) {
 		dma_addr_t src;
 
 		if (!size) {
@@ -761,8 +751,6 @@ static int igt_vma_partial(void *arg)
 
 				i915_vma_unpin(vma);
 				nvma++;
-
-				cond_resched();
 			}
 		}
 
@@ -834,10 +822,13 @@ int i915_vma_mock_selftests(void)
 	}
 	mock_init_ggtt(i915, ggtt);
 
+	mutex_lock(&i915->drm.struct_mutex);
 	err = i915_subtests(tests, ggtt);
-
 	mock_device_flush(i915);
+	mutex_unlock(&i915->drm.struct_mutex);
+
 	i915_gem_drain_freed_objects(i915);
+
 	mock_fini_ggtt(ggtt);
 	kfree(ggtt);
 out_put:
@@ -879,7 +870,9 @@ static int igt_vma_remapped_gtt(void *arg)
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
 
-	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
+	mutex_lock(&i915->drm.struct_mutex);
+
+	wakeref = intel_runtime_pm_get(i915);
 
 	for (t = types; *t; t++) {
 		for (p = planes; p->width; p++) {
@@ -892,9 +885,7 @@ static int igt_vma_remapped_gtt(void *arg)
 			unsigned int x, y;
 			int err;
 
-			i915_gem_object_lock(obj);
 			err = i915_gem_object_set_to_gtt_domain(obj, true);
-			i915_gem_object_unlock(obj);
 			if (err)
 				goto out;
 
@@ -967,13 +958,12 @@ static int igt_vma_remapped_gtt(void *arg)
 				}
 			}
 			i915_vma_unpin_iomap(vma);
-
-			cond_resched();
 		}
 	}
 
 out:
-	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
+	intel_runtime_pm_put(i915, wakeref);
+	mutex_unlock(&i915->drm.struct_mutex);
 	i915_gem_object_put(obj);
 
 	return err;

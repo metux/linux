@@ -47,10 +47,13 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/i915_drm.h>
 
+#include "gem/i915_gem_context.h"
+#include "gem/i915_gem_ioctls.h"
 #include "gt/intel_gt_pm.h"
 #include "gt/intel_reset.h"
 #include "gt/intel_workarounds.h"
 
+#include "i915_debugfs.h"
 #include "i915_drv.h"
 #include "i915_irq.h"
 #include "i915_pmu.h"
@@ -59,13 +62,16 @@
 #include "i915_vgpu.h"
 #include "intel_acpi.h"
 #include "intel_audio.h"
+#include "intel_bw.h"
 #include "intel_cdclk.h"
 #include "intel_csr.h"
 #include "intel_dp.h"
 #include "intel_drv.h"
 #include "intel_fbdev.h"
+#include "intel_gmbus.h"
 #include "intel_hotplug.h"
 #include "intel_overlay.h"
+#include "intel_pipe_crc.h"
 #include "intel_pm.h"
 #include "intel_sprite.h"
 #include "intel_uc.h"
@@ -192,7 +198,8 @@ intel_pch_type(const struct drm_i915_private *dev_priv, unsigned short id)
 		DRM_DEBUG_KMS("Found Kaby Lake PCH (KBP)\n");
 		WARN_ON(!IS_SKYLAKE(dev_priv) && !IS_KABYLAKE(dev_priv) &&
 			!IS_COFFEELAKE(dev_priv));
-		return PCH_KBP;
+		/* KBP is SPT compatible */
+		return PCH_SPT;
 	case INTEL_PCH_CNP_DEVICE_ID_TYPE:
 		DRM_DEBUG_KMS("Found Cannon Lake PCH (CNP)\n");
 		WARN_ON(!IS_CANNONLAKE(dev_priv) && !IS_COFFEELAKE(dev_priv));
@@ -439,6 +446,7 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 	case I915_PARAM_HAS_EXEC_CAPTURE:
 	case I915_PARAM_HAS_EXEC_BATCH_FIRST:
 	case I915_PARAM_HAS_EXEC_FENCE_ARRAY:
+	case I915_PARAM_HAS_EXEC_SUBMIT_FENCE:
 		/* For the time being all of these are always true;
 		 * if some supported hardware does not have one of these
 		 * features this value needs to be provided from
@@ -703,7 +711,7 @@ static int i915_load_modeset_init(struct drm_device *dev)
 	if (ret)
 		goto cleanup_csr;
 
-	intel_setup_gmbus(dev_priv);
+	intel_gmbus_setup(dev_priv);
 
 	/* Important: The output setup functions called by modeset_init need
 	 * working irqs for e.g. gmbus and dp aux transfers. */
@@ -738,7 +746,7 @@ cleanup_modeset:
 	intel_modeset_cleanup(dev);
 cleanup_irq:
 	drm_irq_uninstall(dev);
-	intel_teardown_gmbus(dev_priv);
+	intel_gmbus_teardown(dev_priv);
 cleanup_csr:
 	intel_csr_ucode_fini(dev_priv);
 	intel_power_domains_fini_hw(dev_priv);
@@ -890,6 +898,9 @@ static int i915_driver_init_early(struct drm_i915_private *dev_priv)
 	mutex_init(&dev_priv->backlight_lock);
 
 	mutex_init(&dev_priv->sb_lock);
+	pm_qos_add_request(&dev_priv->sb_qos,
+			   PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+
 	mutex_init(&dev_priv->av_mutex);
 	mutex_init(&dev_priv->wm.wm_mutex);
 	mutex_init(&dev_priv->pps_mutex);
@@ -949,6 +960,9 @@ static void i915_driver_cleanup_early(struct drm_i915_private *dev_priv)
 	i915_gem_cleanup_early(dev_priv);
 	i915_workqueues_cleanup(dev_priv);
 	i915_engines_cleanup(dev_priv);
+
+	pm_qos_remove_request(&dev_priv->sb_qos);
+	mutex_destroy(&dev_priv->sb_lock);
 }
 
 /**
@@ -1646,6 +1660,7 @@ static int i915_driver_init_hw(struct drm_i915_private *dev_priv)
 	 */
 	intel_get_dram_info(dev_priv);
 
+	intel_bw_init_hw(dev_priv);
 
 	return 0;
 
@@ -2881,7 +2896,7 @@ static int intel_runtime_suspend(struct device *kdev)
 	 */
 	i915_gem_runtime_suspend(dev_priv);
 
-	intel_uc_suspend(dev_priv);
+	intel_uc_runtime_suspend(dev_priv);
 
 	intel_runtime_pm_disable_interrupts(dev_priv);
 
@@ -3154,6 +3169,8 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_PERF_ADD_CONFIG, i915_perf_add_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_REMOVE_CONFIG, i915_perf_remove_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_QUERY, i915_query_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_VM_CREATE, i915_gem_vm_create_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_GEM_VM_DESTROY, i915_gem_vm_destroy_ioctl, DRM_RENDER_ALLOW),
 };
 
 static struct drm_driver driver = {

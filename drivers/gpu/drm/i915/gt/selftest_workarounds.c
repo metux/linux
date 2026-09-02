@@ -4,6 +4,7 @@
  * Copyright © 2018 Intel Corporation
  */
 
+#include "gem/i915_gem_pm.h"
 #include "i915_selftest.h"
 #include "intel_reset.h"
 
@@ -11,8 +12,10 @@
 #include "selftests/igt_reset.h"
 #include "selftests/igt_spinner.h"
 #include "selftests/igt_wedge_me.h"
-#include "selftests/mock_context.h"
 #include "selftests/mock_drm.h"
+
+#include "gem/selftests/igt_gem_utils.h"
+#include "gem/selftests/mock_context.h"
 
 static const struct wo_register {
 	enum intel_platform platform;

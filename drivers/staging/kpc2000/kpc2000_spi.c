@@ -36,7 +36,6 @@ static struct mtd_partition p2kr0_spi0_parts[] = {
 	{ .name = "SLOT_3",	.size = 7798784,		.offset = MTDPART_OFS_NXTBLK},
 	{ .name = "CS0_EXTRA",	.size = MTDPART_SIZ_FULL,	.offset = MTDPART_OFS_NXTBLK},
 };
-
 static struct mtd_partition p2kr0_spi1_parts[] = {
 	{ .name = "SLOT_4",	.size = 7798784,		.offset = 0,                },
 	{ .name = "SLOT_5",	.size = 7798784,		.offset = MTDPART_OFS_NXTBLK},
@@ -50,7 +49,6 @@ static struct flash_platform_data p2kr0_spi0_pdata = {
 	.nr_parts =	ARRAY_SIZE(p2kr0_spi0_parts),
 	.parts =	p2kr0_spi0_parts,
 };
-
 static struct flash_platform_data p2kr0_spi1_pdata = {
 	.name =		"SPI1",
 	.nr_parts =	ARRAY_SIZE(p2kr0_spi1_parts),
@@ -99,102 +97,132 @@ static struct spi_board_info p2kr0_board_info[] = {
 #define KP_SPI_REG_STATUS_RXFFE 0x40
 #define KP_SPI_REG_STATUS_RXFFF 0x80
 
+
+
 /******************
  * SPI Structures *
  ******************/
 struct kp_spi {
 	struct spi_master  *master;
 	u64 __iomem        *base;
+	unsigned long       phys;
 	struct device      *dev;
+	int                 fifo_depth;
+	unsigned int        pin_dir:1;
 };
+
 
 struct kp_spi_controller_state {
 	void __iomem   *base;
+	unsigned long   phys;
+	unsigned char   chip_select;
+	int             word_len;
 	s64             conf_cache;
 };
 
+
 union kp_spi_config {
-	/* use this to access individual elements */
-	struct __packed spi_config_bitfield {
-		unsigned int pha       : 1; /* spim_clk Phase      */
-		unsigned int pol       : 1; /* spim_clk Polarity   */
-		unsigned int epol      : 1; /* spim_csx Polarity   */
-		unsigned int dpe       : 1; /* Transmission Enable */
-		unsigned int wl        : 5; /* Word Length         */
-		unsigned int           : 3;
-		unsigned int trm       : 2; /* TxRx Mode           */
-		unsigned int cs        : 4; /* Chip Select         */
-		unsigned int wcnt      : 7; /* Word Count          */
-		unsigned int ffen      : 1; /* FIFO Enable         */
-		unsigned int spi_en    : 1; /* SPI Enable          */
-		unsigned int           : 5;
-	} bitfield;
-	/* use this to grab the whole register */
-	u32 reg;
+    /* use this to access individual elements */
+    struct __attribute__((packed)) spi_config_bitfield {
+        unsigned int pha       : 1; /* spim_clk Phase      */
+        unsigned int pol       : 1; /* spim_clk Polarity   */
+        unsigned int epol      : 1; /* spim_csx Polarity   */
+        unsigned int dpe       : 1; /* Transmission Enable */
+        unsigned int wl        : 5; /* Word Length         */
+        unsigned int           : 3;
+        unsigned int trm       : 2; /* TxRx Mode           */
+        unsigned int cs        : 4; /* Chip Select         */
+        unsigned int wcnt      : 7; /* Word Count          */
+        unsigned int ffen      : 1; /* FIFO Enable         */
+        unsigned int spi_en    : 1; /* SPI Enable          */
+        unsigned int           : 5;
+    } bitfield;
+    /* use this to grab the whole register */
+    u32 reg;
 };
+
+
 
 union kp_spi_status {
-	struct __packed spi_status_bitfield {
-		unsigned int rx    :  1; /* Rx Status       */
-		unsigned int tx    :  1; /* Tx Status       */
-		unsigned int eo    :  1; /* End of Transfer */
-		unsigned int       :  1;
-		unsigned int txffe :  1; /* Tx FIFO Empty   */
-		unsigned int txfff :  1; /* Tx FIFO Full    */
-		unsigned int rxffe :  1; /* Rx FIFO Empty   */
-		unsigned int rxfff :  1; /* Rx FIFO Full    */
-		unsigned int       : 24;
-	} bitfield;
-	u32 reg;
+    struct __attribute__((packed)) spi_status_bitfield {
+        unsigned int rx    :  1; /* Rx Status       */
+        unsigned int tx    :  1; /* Tx Status       */
+        unsigned int eo    :  1; /* End of Transfer */
+        unsigned int       :  1;
+        unsigned int txffe :  1; /* Tx FIFO Empty   */
+        unsigned int txfff :  1; /* Tx FIFO Full    */
+        unsigned int rxffe :  1; /* Rx FIFO Empty   */
+        unsigned int rxfff :  1; /* Rx FIFO Full    */
+        unsigned int       : 24;
+    } bitfield;
+    u32 reg;
 };
 
+
+
 union kp_spi_ffctrl {
-	struct __packed spi_ffctrl_bitfield {
-		unsigned int ffstart :  1; /* FIFO Start */
-		unsigned int         : 31;
-	} bitfield;
-	u32 reg;
+    struct __attribute__((packed)) spi_ffctrl_bitfield {
+        unsigned int ffstart :  1; /* FIFO Start */
+        unsigned int         : 31;
+    } bitfield;
+    u32 reg;
 };
+
+
 
 /***************
  * SPI Helpers *
  ***************/
+	static inline int
+kp_spi_bytes_per_word(int word_len)
+{
+	if (word_len <= 8){
+		return 1;
+	}
+	else if (word_len <= 16) {
+		return 2;
+	}
+	else { /* word_len <= 32 */
+		return 4;
+	}
+}
+
 	static inline u64
 kp_spi_read_reg(struct kp_spi_controller_state *cs, int idx)
 {
 	u64 __iomem *addr = cs->base;
+	u64 val;
 
 	addr += idx;
-	if ((idx == KP_SPI_REG_CONFIG) && (cs->conf_cache >= 0))
+	if ((idx == KP_SPI_REG_CONFIG) && (cs->conf_cache >= 0)){
 		return cs->conf_cache;
-
-	return readq(addr);
+	}
+	val = readq((void*)addr);
+	return val;
 }
 
 	static inline void
 kp_spi_write_reg(struct kp_spi_controller_state *cs, int idx, u64 val)
 {
 	u64 __iomem *addr = cs->base;
-
 	addr += idx;
-	writeq(val, addr);
+	writeq(val, (void*)addr);
 	if (idx == KP_SPI_REG_CONFIG)
 		cs->conf_cache = val;
 }
 
 	static int
-kp_spi_wait_for_reg_bit(struct kp_spi_controller_state *cs, int idx,
-			unsigned long bit)
+kp_spi_wait_for_reg_bit(struct kp_spi_controller_state *cs, int idx, unsigned long bit)
 {
 	unsigned long timeout;
-
 	timeout = jiffies + msecs_to_jiffies(1000);
 	while (!(kp_spi_read_reg(cs, idx) & bit)) {
 		if (time_after(jiffies, timeout)) {
-			if (!(kp_spi_read_reg(cs, idx) & bit))
+			if (!(kp_spi_read_reg(cs, idx) & bit)) {
 				return -ETIMEDOUT;
-			else
+			} else {
 				return 0;
+			}
 		}
 		cpu_relax();
 	}
@@ -209,7 +237,6 @@ kp_spi_txrx_pio(struct spi_device *spidev, struct spi_transfer *transfer)
 	unsigned int c = count;
 
 	int i;
-	int res;
 	u8 *rx       = transfer->rx_buf;
 	const u8 *tx = transfer->tx_buf;
 	int processed = 0;
@@ -218,23 +245,23 @@ kp_spi_txrx_pio(struct spi_device *spidev, struct spi_transfer *transfer)
 		for (i = 0 ; i < c ; i++) {
 			char val = *tx++;
 
-			res = kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS,
-						      KP_SPI_REG_STATUS_TXS);
-			if (res < 0)
+			if (kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS, KP_SPI_REG_STATUS_TXS) < 0) {
 				goto out;
+			}
 
 			kp_spi_write_reg(cs, KP_SPI_REG_TXDATA, val);
 			processed++;
 		}
-	} else if (rx) {
+	}
+	else if(rx) {
 		for (i = 0 ; i < c ; i++) {
-			char test = 0;
+			char test=0;
 
 			kp_spi_write_reg(cs, KP_SPI_REG_TXDATA, 0x00);
-			res = kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS,
-						      KP_SPI_REG_STATUS_RXS);
-			if (res < 0)
+
+			if (kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS, KP_SPI_REG_STATUS_RXS) < 0) {
 				goto out;
+			}
 
 			test = kp_spi_read_reg(cs, KP_SPI_REG_RXDATA);
 			*rx++ = test;
@@ -242,10 +269,8 @@ kp_spi_txrx_pio(struct spi_device *spidev, struct spi_transfer *transfer)
 		}
 	}
 
-	if (kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS,
-				    KP_SPI_REG_STATUS_EOT) < 0) {
-		//TODO: Figure out how to abort transaction??
-		//Ths has never happened in practice though...
+	if (kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS, KP_SPI_REG_STATUS_EOT) < 0) {
+		//TODO: Figure out how to abort transaction??  This has never happened in practice though...
 	}
 
 out:
@@ -266,9 +291,13 @@ kp_spi_setup(struct spi_device *spidev)
 	cs = spidev->controller_state;
 	if (!cs) {
 		cs = kzalloc(sizeof(*cs), GFP_KERNEL);
-		if (!cs)
+		if(!cs) {
 			return -ENOMEM;
+		}
 		cs->base = kpspi->base;
+		cs->phys = kpspi->phys;
+		cs->chip_select = spidev->chip_select;
+		cs->word_len = spidev->bits_per_word;
 		cs->conf_cache = -1;
 		spidev->controller_state = cs;
 	}
@@ -301,31 +330,30 @@ kp_spi_transfer_one_message(struct spi_master *master, struct spi_message *m)
 	cs = spidev->controller_state;
 
 	/* reject invalid messages and transfers */
-	if (list_empty(&m->transfers))
+	if (list_empty(&m->transfers)) {
 		return -EINVAL;
+	}
 
 	/* validate input */
 	list_for_each_entry(transfer, &m->transfers, transfer_list) {
 		const void *tx_buf = transfer->tx_buf;
 		void       *rx_buf = transfer->rx_buf;
-		unsigned int len = transfer->len;
+		unsigned    len = transfer->len;
 
-		if (transfer->speed_hz > KP_SPI_CLK ||
-		    (len && !(rx_buf || tx_buf))) {
+		if (transfer->speed_hz > KP_SPI_CLK || (len && !(rx_buf || tx_buf))) {
 			dev_dbg(kpspi->dev, "  transfer: %d Hz, %d %s%s, %d bpw\n",
-				transfer->speed_hz,
-				len,
-				tx_buf ? "tx" : "",
-				rx_buf ? "rx" : "",
-				transfer->bits_per_word);
+					transfer->speed_hz,
+					len,
+					tx_buf ? "tx" : "",
+					rx_buf ? "rx" : "",
+					transfer->bits_per_word);
 			dev_dbg(kpspi->dev, "  transfer -EINVAL\n");
 			return -EINVAL;
 		}
-		if (transfer->speed_hz &&
-		    transfer->speed_hz < (KP_SPI_CLK >> 15)) {
+		if (transfer->speed_hz && (transfer->speed_hz < (KP_SPI_CLK >> 15))) {
 			dev_dbg(kpspi->dev, "speed_hz %d below minimum %d Hz\n",
-				transfer->speed_hz,
-				KP_SPI_CLK >> 15);
+					transfer->speed_hz,
+					KP_SPI_CLK >> 15);
 			dev_dbg(kpspi->dev, "  speed_hz -EINVAL\n");
 			return -EINVAL;
 		}
@@ -337,16 +365,14 @@ kp_spi_transfer_one_message(struct spi_master *master, struct spi_message *m)
 	kp_spi_write_reg(cs, KP_SPI_REG_CONFIG, sc.reg);
 
 	/* work */
-	if (kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS,
-				    KP_SPI_REG_STATUS_EOT) < 0) {
+	if (kp_spi_wait_for_reg_bit(cs, KP_SPI_REG_STATUS, KP_SPI_REG_STATUS_EOT) < 0) {
 		dev_info(kpspi->dev, "EOT timed out\n");
 		goto out;
 	}
 
 	/* do the transfers for this message */
 	list_for_each_entry(transfer, &m->transfers, transfer_list) {
-		if (!transfer->tx_buf && !transfer->rx_buf &&
-		    transfer->len) {
+		if (transfer->tx_buf == NULL && transfer->rx_buf == NULL && transfer->len) {
 			status = -EINVAL;
 			goto error;
 		}
@@ -354,21 +380,25 @@ kp_spi_transfer_one_message(struct spi_master *master, struct spi_message *m)
 		/* transfer */
 		if (transfer->len) {
 			unsigned int word_len = spidev->bits_per_word;
-			unsigned int count;
+			unsigned count;
 
 			/* set up the transfer... */
 			sc.reg = kp_spi_read_reg(cs, KP_SPI_REG_CONFIG);
 
 			/* ...direction */
-			if (transfer->tx_buf)
+			if (transfer->tx_buf) {
 				sc.bitfield.trm = KP_SPI_REG_CONFIG_TRM_TX;
-			else if (transfer->rx_buf)
+			}
+			else if (transfer->rx_buf) {
 				sc.bitfield.trm = KP_SPI_REG_CONFIG_TRM_RX;
+			}
 
 			/* ...word length */
-			if (transfer->bits_per_word)
+			if (transfer->bits_per_word) {
 				word_len = transfer->bits_per_word;
-			sc.bitfield.wl = word_len - 1;
+			}
+			cs->word_len = word_len;
+			sc.bitfield.wl = word_len-1;
 
 			/* ...chip select */
 			sc.bitfield.cs = spidev->chip_select;
@@ -386,8 +416,9 @@ kp_spi_transfer_one_message(struct spi_master *master, struct spi_message *m)
 			}
 		}
 
-		if (transfer->delay_usecs)
+		if (transfer->delay_usecs) {
 			udelay(transfer->delay_usecs);
+		}
 	}
 
 	/* de-assert chip select to end the sequence */
@@ -409,9 +440,12 @@ error:
 kp_spi_cleanup(struct spi_device *spidev)
 {
 	struct kp_spi_controller_state *cs = spidev->controller_state;
-
-	kfree(cs);
+	if (cs) {
+		kfree(cs);
+	}
 }
+
+
 
 /******************
  * Probe / Remove *
@@ -427,15 +461,14 @@ kp_spi_probe(struct platform_device *pldev)
 	int i;
 
 	drvdata = pldev->dev.platform_data;
-	if (!drvdata) {
-		dev_err(&pldev->dev, "%s: platform_data is NULL\n", __func__);
+	if (!drvdata){
+		dev_err(&pldev->dev, "kp_spi_probe: platform_data is NULL!\n");
 		return -ENODEV;
 	}
 
 	master = spi_alloc_master(&pldev->dev, sizeof(struct kp_spi));
-	if (!master) {
-		dev_err(&pldev->dev, "%s: master allocation failed\n",
-			__func__);
+	if (master == NULL) {
+		dev_err(&pldev->dev, "kp_spi_probe: master allocation failed\n");
 		return -ENOMEM;
 	}
 
@@ -453,19 +486,20 @@ kp_spi_probe(struct platform_device *pldev)
 	kpspi->dev = &pldev->dev;
 
 	master->num_chipselect = 4;
-	if (pldev->id != -1)
+	if (pldev->id != -1) {
 		master->bus_num = pldev->id;
+	}
+	kpspi->pin_dir = 0;
 
 	r = platform_get_resource(pldev, IORESOURCE_MEM, 0);
-	if (!r) {
-		dev_err(&pldev->dev, "%s: Unable to get platform resources\n",
-			__func__);
+	if (r == NULL) {
+		dev_err(&pldev->dev, "kp_spi_probe: Unable to get platform resources\n");
 		status = -ENODEV;
 		goto free_master;
 	}
 
-	kpspi->base = devm_ioremap(&pldev->dev, r->start,
-					   resource_size(r));
+	kpspi->phys = (unsigned long)ioremap_nocache(r->start, resource_size(r));
+	kpspi->base = (u64 __iomem *)kpspi->phys;
 
 	status = spi_register_master(master);
 	if (status < 0) {
@@ -476,16 +510,17 @@ kp_spi_probe(struct platform_device *pldev)
 	/* register the slave boards */
 #define NEW_SPI_DEVICE_FROM_BOARD_INFO_TABLE(table) \
 	for (i = 0 ; i < ARRAY_SIZE(table) ; i++) { \
-		spi_new_device(master, &table[i]); \
+		spi_new_device(master, &(table[i])); \
 	}
 
-	switch ((drvdata->card_id & 0xFFFF0000) >> 16) {
-	case PCI_DEVICE_ID_DAKTRONICS_KADOKA_P2KR0:
-		NEW_SPI_DEVICE_FROM_BOARD_INFO_TABLE(p2kr0_board_info);
-		break;
-	default:
-		dev_err(&pldev->dev, "Unknown hardware, cant know what partition table to use!\n");
-		goto free_master;
+	switch ((drvdata->card_id & 0xFFFF0000) >> 16){
+		case PCI_DEVICE_ID_DAKTRONICS_KADOKA_P2KR0:
+			NEW_SPI_DEVICE_FROM_BOARD_INFO_TABLE(p2kr0_board_info);
+			break;
+		default:
+			dev_err(&pldev->dev, "Unknown hardware, cant know what partition table to use!\n");
+			goto free_master;
+			break;
 	}
 
 	return status;
@@ -498,11 +533,11 @@ free_master:
 	static int
 kp_spi_remove(struct platform_device *pldev)
 {
-	struct spi_master *master = platform_get_drvdata(pldev);
-
+	struct spi_master * master = platform_get_drvdata(pldev);
 	spi_unregister_master(master);
 	return 0;
 }
+
 
 static struct platform_driver kp_spi_driver = {
 	.driver = {

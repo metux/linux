@@ -22,13 +22,10 @@
  *
  */
 
-#include "display/intel_frontbuffer.h"
-
 #include "i915_drv.h"
-#include "i915_gem_clflush.h"
-#include "i915_gem_context.h"
 #include "i915_gem_object.h"
 #include "i915_globals.h"
+#include "intel_frontbuffer.h"
 
 static struct i915_global_object {
 	struct i915_global base;
@@ -43,6 +40,25 @@ struct drm_i915_gem_object *i915_gem_object_alloc(void)
 void i915_gem_object_free(struct drm_i915_gem_object *obj)
 {
 	return kmem_cache_free(global.slab_objects, obj);
+}
+
+/* some bookkeeping */
+static void i915_gem_info_add_obj(struct drm_i915_private *i915,
+				  u64 size)
+{
+	spin_lock(&i915->mm.object_stat_lock);
+	i915->mm.object_count++;
+	i915->mm.object_memory += size;
+	spin_unlock(&i915->mm.object_stat_lock);
+}
+
+static void i915_gem_info_remove_obj(struct drm_i915_private *i915,
+				     u64 size)
+{
+	spin_lock(&i915->mm.object_stat_lock);
+	i915->mm.object_count--;
+	i915->mm.object_memory -= size;
+	spin_unlock(&i915->mm.object_stat_lock);
 }
 
 static void
@@ -70,6 +86,9 @@ void i915_gem_object_init(struct drm_i915_gem_object *obj,
 
 	obj->ops = ops;
 
+	reservation_object_init(&obj->__builtin_resv);
+	obj->resv = &obj->__builtin_resv;
+
 	obj->frontbuffer_ggtt_origin = ORIGIN_GTT;
 	i915_active_request_init(&obj->frontbuffer_write,
 				 NULL, frontbuffer_retire);
@@ -77,6 +96,8 @@ void i915_gem_object_init(struct drm_i915_gem_object *obj,
 	obj->mm.madv = I915_MADV_WILLNEED;
 	INIT_RADIX_TREE(&obj->mm.get_page.radix, GFP_KERNEL | __GFP_NOWARN);
 	mutex_init(&obj->mm.get_page.lock);
+
+	i915_gem_info_add_obj(to_i915(obj->base.dev), obj->base.size);
 }
 
 /**
@@ -103,47 +124,63 @@ void i915_gem_object_set_cache_coherency(struct drm_i915_gem_object *obj,
 
 void i915_gem_close_object(struct drm_gem_object *gem, struct drm_file *file)
 {
+	struct drm_i915_private *i915 = to_i915(gem->dev);
 	struct drm_i915_gem_object *obj = to_intel_bo(gem);
 	struct drm_i915_file_private *fpriv = file->driver_priv;
 	struct i915_lut_handle *lut, *ln;
-	LIST_HEAD(close);
 
-	i915_gem_object_lock(obj);
+	mutex_lock(&i915->drm.struct_mutex);
+
 	list_for_each_entry_safe(lut, ln, &obj->lut_list, obj_link) {
-		struct i915_gem_context *ctx = lut->ctx;
-
-		if (ctx->file_priv != fpriv)
-			continue;
-
-		i915_gem_context_get(ctx);
-		list_move(&lut->obj_link, &close);
-	}
-	i915_gem_object_unlock(obj);
-
-	list_for_each_entry_safe(lut, ln, &close, obj_link) {
 		struct i915_gem_context *ctx = lut->ctx;
 		struct i915_vma *vma;
 
-		/*
-		 * We allow the process to have multiple handles to the same
+		GEM_BUG_ON(ctx->file_priv == ERR_PTR(-EBADF));
+		if (ctx->file_priv != fpriv)
+			continue;
+
+		vma = radix_tree_delete(&ctx->handles_vma, lut->handle);
+		GEM_BUG_ON(vma->obj != obj);
+
+		/* We allow the process to have multiple handles to the same
 		 * vma, in the same fd namespace, by virtue of flink/open.
 		 */
+		GEM_BUG_ON(!vma->open_count);
+		if (!--vma->open_count && !i915_vma_is_ggtt(vma))
+			i915_vma_close(vma);
 
-		mutex_lock(&ctx->mutex);
-		vma = radix_tree_delete(&ctx->handles_vma, lut->handle);
-		if (vma) {
-			GEM_BUG_ON(vma->obj != obj);
-			GEM_BUG_ON(!atomic_read(&vma->open_count));
-			if (atomic_dec_and_test(&vma->open_count) &&
-			    !i915_vma_is_ggtt(vma))
-				i915_vma_close(vma);
-		}
-		mutex_unlock(&ctx->mutex);
+		list_del(&lut->obj_link);
+		list_del(&lut->ctx_link);
 
-		i915_gem_context_put(lut->ctx);
 		i915_lut_handle_free(lut);
-		i915_gem_object_put(obj);
+		__i915_gem_object_release_unless_active(obj);
 	}
+
+	mutex_unlock(&i915->drm.struct_mutex);
+}
+
+static bool discard_backing_storage(struct drm_i915_gem_object *obj)
+{
+	/* If we are the last user of the backing storage (be it shmemfs
+	 * pages or stolen etc), we know that the pages are going to be
+	 * immediately released. In this case, we can then skip copying
+	 * back the contents from the GPU.
+	 */
+
+	if (obj->mm.madv != I915_MADV_WILLNEED)
+		return false;
+
+	if (!obj->base.filp)
+		return true;
+
+	/* At first glance, this looks racy, but then again so would be
+	 * userspace racing mmap against close. However, the first external
+	 * reference to the filp can only be obtained through the
+	 * i915_gem_mmap_ioctl() which safeguards us against the user
+	 * acquiring such a reference whilst we are in the middle of
+	 * freeing the object.
+	 */
+	return file_count(obj->base.filp) == 1;
 }
 
 static void __i915_gem_free_objects(struct drm_i915_private *i915,
@@ -152,7 +189,7 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 	struct drm_i915_gem_object *obj, *on;
 	intel_wakeref_t wakeref;
 
-	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
+	wakeref = intel_runtime_pm_get(i915);
 	llist_for_each_entry_safe(obj, on, freed, freed) {
 		struct i915_vma *vma, *vn;
 
@@ -169,25 +206,21 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 		GEM_BUG_ON(!list_empty(&obj->vma.list));
 		GEM_BUG_ON(!RB_EMPTY_ROOT(&obj->vma.tree));
 
-		/*
-		 * This serializes freeing with the shrinker. Since the free
+		/* This serializes freeing with the shrinker. Since the free
 		 * is delayed, first by RCU then by the workqueue, we want the
 		 * shrinker to be able to free pages of unreferenced objects,
 		 * or else we may oom whilst there are plenty of deferred
 		 * freed objects.
 		 */
-		if (i915_gem_object_has_pages(obj) &&
-		    i915_gem_object_is_shrinkable(obj)) {
-			unsigned long flags;
-
-			spin_lock_irqsave(&i915->mm.obj_lock, flags);
+		if (i915_gem_object_has_pages(obj)) {
+			spin_lock(&i915->mm.obj_lock);
 			list_del_init(&obj->mm.link);
-			spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
+			spin_unlock(&i915->mm.obj_lock);
 		}
 
 		mutex_unlock(&i915->drm.struct_mutex);
 
-		GEM_BUG_ON(atomic_read(&obj->bind_count));
+		GEM_BUG_ON(obj->bind_count);
 		GEM_BUG_ON(obj->userfault_count);
 		GEM_BUG_ON(atomic_read(&obj->frontbuffer_bits));
 		GEM_BUG_ON(!list_empty(&obj->lut_list));
@@ -195,14 +228,17 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 		if (obj->ops->release)
 			obj->ops->release(obj);
 
-		atomic_set(&obj->mm.pages_pin_count, 0);
+		if (WARN_ON(i915_gem_object_has_pinned_pages(obj)))
+			atomic_set(&obj->mm.pages_pin_count, 0);
 		__i915_gem_object_put_pages(obj, I915_MM_NORMAL);
 		GEM_BUG_ON(i915_gem_object_has_pages(obj));
 
 		if (obj->base.import_attach)
 			drm_prime_gem_destroy(&obj->base, NULL);
 
+		reservation_object_fini(&obj->__builtin_resv);
 		drm_gem_object_release(&obj->base);
+		i915_gem_info_remove_obj(i915, obj->base.size);
 
 		bitmap_free(obj->bit_17);
 		i915_gem_object_free(obj);
@@ -210,9 +246,10 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 		GEM_BUG_ON(!atomic_read(&i915->mm.free_count));
 		atomic_dec(&i915->mm.free_count);
 
-		cond_resched();
+		if (on)
+			cond_resched();
 	}
-	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
+	intel_runtime_pm_put(i915, wakeref);
 }
 
 void i915_gem_flush_free_objects(struct drm_i915_private *i915)
@@ -292,6 +329,12 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 {
 	struct drm_i915_gem_object *obj = to_intel_bo(gem_obj);
 
+	if (obj->mm.quirked)
+		__i915_gem_object_unpin_pages(obj);
+
+	if (discard_backing_storage(obj))
+		obj->mm.madv = I915_MADV_DONTNEED;
+
 	/*
 	 * Before we free the object, make sure any pure RCU-only
 	 * read-side critical sections are complete, e.g.
@@ -302,61 +345,15 @@ void i915_gem_free_object(struct drm_gem_object *gem_obj)
 	call_rcu(&obj->rcu, __i915_gem_free_object_rcu);
 }
 
-static inline enum fb_op_origin
-fb_write_origin(struct drm_i915_gem_object *obj, unsigned int domain)
+void __i915_gem_object_release_unless_active(struct drm_i915_gem_object *obj)
 {
-	return (domain == I915_GEM_DOMAIN_GTT ?
-		obj->frontbuffer_ggtt_origin : ORIGIN_CPU);
-}
+	lockdep_assert_held(&obj->base.dev->struct_mutex);
 
-static bool gpu_write_needs_clflush(struct drm_i915_gem_object *obj)
-{
-	return !(obj->cache_level == I915_CACHE_NONE ||
-		 obj->cache_level == I915_CACHE_WT);
-}
-
-void
-i915_gem_object_flush_write_domain(struct drm_i915_gem_object *obj,
-				   unsigned int flush_domains)
-{
-	struct drm_i915_private *dev_priv = to_i915(obj->base.dev);
-	struct i915_vma *vma;
-
-	assert_object_held(obj);
-
-	if (!(obj->write_domain & flush_domains))
-		return;
-
-	switch (obj->write_domain) {
-	case I915_GEM_DOMAIN_GTT:
-		i915_gem_flush_ggtt_writes(dev_priv);
-
-		intel_fb_obj_flush(obj,
-				   fb_write_origin(obj, I915_GEM_DOMAIN_GTT));
-
-		for_each_ggtt_vma(vma, obj) {
-			if (vma->iomap)
-				continue;
-
-			i915_vma_unset_ggtt_write(vma);
-		}
-		break;
-
-	case I915_GEM_DOMAIN_WC:
-		wmb();
-		break;
-
-	case I915_GEM_DOMAIN_CPU:
-		i915_gem_clflush_object(obj, I915_CLFLUSH_SYNC);
-		break;
-
-	case I915_GEM_DOMAIN_RENDER:
-		if (gpu_write_needs_clflush(obj))
-			obj->cache_dirty = true;
-		break;
-	}
-
-	obj->write_domain = 0;
+	if (!i915_gem_object_has_active_reference(obj) &&
+	    i915_gem_object_is_active(obj))
+		i915_gem_object_set_active_reference(obj);
+	else
+		i915_gem_object_put(obj);
 }
 
 void i915_gem_init__objects(struct drm_i915_private *i915)
@@ -389,10 +386,3 @@ int __init i915_global_objects_init(void)
 	i915_global_register(&global.base);
 	return 0;
 }
-
-#if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
-#include "selftests/huge_gem_object.c"
-#include "selftests/huge_pages.c"
-#include "selftests/i915_gem_object.c"
-#include "selftests/i915_gem_coherency.c"
-#endif

@@ -286,15 +286,18 @@ static void drm_sched_job_timedout(struct work_struct *work)
 	job = list_first_entry_or_null(&sched->ring_mirror_list,
 				       struct drm_sched_job, node);
 
-	if (job)
+	if (job) {
 		job->sched->ops->timedout_job(job);
 
-	/*
-	 * Guilty job did complete and hence needs to be manually removed
-	 * See drm_sched_stop doc.
-	 */
-	if (list_empty(&job->node))
-		job->sched->ops->free_job(job);
+		/*
+		 * Guilty job did complete and hence needs to be manually removed
+		 * See drm_sched_stop doc.
+		 */
+		if (sched->free_guilty) {
+			job->sched->ops->free_job(job);
+			sched->free_guilty = false;
+		}
+	}
 
 	spin_lock_irqsave(&sched->job_list_lock, flags);
 	drm_sched_start_timeout(sched);
@@ -350,6 +353,7 @@ EXPORT_SYMBOL(drm_sched_increase_karma);
  * drm_sched_stop - stop the scheduler
  *
  * @sched: scheduler instance
+ * @bad: job which caused the time out
  *
  * Stop the scheduler and also removes and frees all completed jobs.
  * Note: bad job will not be freed as it might be used later and so it's
@@ -374,8 +378,6 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 		if (s_job->s_fence->parent &&
 		    dma_fence_remove_callback(s_job->s_fence->parent,
 					      &s_job->cb)) {
-			dma_fence_put(s_job->s_fence->parent);
-			s_job->s_fence->parent = NULL;
 			atomic_dec(&sched->hw_rq_count);
 		} else {
 			/*
@@ -396,12 +398,23 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 
 			/*
 			 * We must keep bad job alive for later use during
-			 * recovery by some of the drivers
+			 * recovery by some of the drivers but leave a hint
+			 * that the guilty job must be released.
 			 */
 			if (bad != s_job)
 				sched->ops->free_job(s_job);
+			else
+				sched->free_guilty = true;
 		}
 	}
+
+	/*
+	 * Stop pending timer in flight as we rearm it in  drm_sched_start. This
+	 * avoids the pending timeout work in progress to fire right away after
+	 * this TDR finished and before the newly restarted jobs had a
+	 * chance to complete.
+	 */
+	cancel_delayed_work(&sched->work_tdr);
 }
 
 EXPORT_SYMBOL(drm_sched_stop);
@@ -410,6 +423,7 @@ EXPORT_SYMBOL(drm_sched_stop);
  * drm_sched_job_recovery - recover jobs after a reset
  *
  * @sched: scheduler instance
+ * @full_recovery: proceed with complete sched restart
  *
  */
 void drm_sched_start(struct drm_gpu_scheduler *sched, bool full_recovery)
@@ -464,6 +478,7 @@ void drm_sched_resubmit_jobs(struct drm_gpu_scheduler *sched)
 	struct drm_sched_job *s_job, *tmp;
 	uint64_t guilty_context;
 	bool found_guilty = false;
+	struct dma_fence *fence;
 
 	list_for_each_entry_safe(s_job, tmp, &sched->ring_mirror_list, node) {
 		struct drm_sched_fence *s_fence = s_job->s_fence;
@@ -476,7 +491,17 @@ void drm_sched_resubmit_jobs(struct drm_gpu_scheduler *sched)
 		if (found_guilty && s_job->s_fence->scheduled.context == guilty_context)
 			dma_fence_set_error(&s_fence->finished, -ECANCELED);
 
-		s_job->s_fence->parent = sched->ops->run_job(s_job);
+		dma_fence_put(s_job->s_fence->parent);
+		fence = sched->ops->run_job(s_job);
+
+		if (IS_ERR_OR_NULL(fence)) {
+			s_job->s_fence->parent = NULL;
+			dma_fence_set_error(&s_fence->finished, PTR_ERR(fence));
+		} else {
+			s_job->s_fence->parent = fence;
+		}
+
+
 	}
 }
 EXPORT_SYMBOL(drm_sched_resubmit_jobs);
@@ -617,7 +642,8 @@ static void drm_sched_cleanup_jobs(struct drm_gpu_scheduler *sched)
 	unsigned long flags;
 
 	/* Don't destroy jobs while the timeout worker is running */
-	if (!cancel_delayed_work(&sched->work_tdr))
+	if (sched->timeout != MAX_SCHEDULE_TIMEOUT &&
+	    !cancel_delayed_work(&sched->work_tdr))
 		return;
 
 
@@ -703,7 +729,7 @@ static int drm_sched_main(void *param)
 		fence = sched->ops->run_job(sched_job);
 		drm_sched_fence_scheduled(s_fence);
 
-		if (fence) {
+		if (!IS_ERR_OR_NULL(fence)) {
 			s_fence->parent = dma_fence_get(fence);
 			r = dma_fence_add_callback(fence, &sched_job->cb,
 						   drm_sched_process_job);
@@ -713,8 +739,11 @@ static int drm_sched_main(void *param)
 				DRM_ERROR("fence add callback failed (%d)\n",
 					  r);
 			dma_fence_put(fence);
-		} else
+		} else {
+
+			dma_fence_set_error(&s_fence->finished, PTR_ERR(fence));
 			drm_sched_process_job(NULL, &sched_job->cb);
+		}
 
 		wake_up(&sched->job_scheduled);
 	}

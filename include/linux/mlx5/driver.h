@@ -145,8 +145,6 @@ enum {
 	MLX5_REG_MCC		 = 0x9062,
 	MLX5_REG_MCDA		 = 0x9063,
 	MLX5_REG_MCAM		 = 0x907f,
-	MLX5_REG_MIRC		 = 0x9162,
-	MLX5_REG_RESOURCE_DUMP   = 0xC000,
 };
 
 enum mlx5_qpts_trust_state {
@@ -463,11 +461,6 @@ struct mlx5_vf_context {
 	int	enabled;
 	u64	port_guid;
 	u64	node_guid;
-	/* Valid bits are used to validate administrative guid only.
-	 * Enabled after ndo_set_vf_guid
-	 */
-	u8	port_guid_valid:1;
-	u8	node_guid_valid:1;
 	enum port_state_policy	policy;
 };
 
@@ -691,7 +684,7 @@ struct mlx5_core_dev {
 		u32 hca_cur[MLX5_CAP_NUM][MLX5_UN_SZ_DW(hca_cap_union)];
 		u32 hca_max[MLX5_CAP_NUM][MLX5_UN_SZ_DW(hca_cap_union)];
 		u32 pcam[MLX5_ST_SZ_DW(pcam_reg)];
-		u32 mcam[MLX5_MCAM_REGS_NUM][MLX5_ST_SZ_DW(mcam_reg)];
+		u32 mcam[MLX5_ST_SZ_DW(mcam_reg)];
 		u32 fpga[MLX5_ST_SZ_DW(fpga_cap)];
 		u32 qcam[MLX5_ST_SZ_DW(qcam_reg)];
 		u8  embedded_cpu;
@@ -935,6 +928,8 @@ void mlx5_start_health_poll(struct mlx5_core_dev *dev);
 void mlx5_stop_health_poll(struct mlx5_core_dev *dev, bool disable_health);
 void mlx5_drain_health_wq(struct mlx5_core_dev *dev);
 void mlx5_trigger_health_work(struct mlx5_core_dev *dev);
+int mlx5_buf_alloc_node(struct mlx5_core_dev *dev, int size,
+			struct mlx5_frag_buf *buf, int node);
 int mlx5_buf_alloc(struct mlx5_core_dev *dev,
 		   int size, struct mlx5_frag_buf *buf);
 void mlx5_buf_free(struct mlx5_core_dev *dev, struct mlx5_frag_buf *buf);
@@ -1120,11 +1115,6 @@ enum {
 static inline bool mlx5_core_is_pf(const struct mlx5_core_dev *dev)
 {
 	return dev->coredev_type == MLX5_COREDEV_PF;
-}
-
-static inline bool mlx5_core_is_vf(const struct mlx5_core_dev *dev)
-{
-	return dev->coredev_type == MLX5_COREDEV_VF;
 }
 
 static inline bool mlx5_core_is_vf(const struct mlx5_core_dev *dev)

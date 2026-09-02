@@ -10,10 +10,10 @@
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
-#include <linux/rbtree.h>
 #include <linux/types.h>
 
 #include "i915_active_types.h"
+#include "i915_utils.h"
 #include "intel_engine_types.h"
 #include "intel_sseu.h"
 
@@ -26,6 +26,9 @@ struct intel_context_ops {
 	int (*pin)(struct intel_context *ce);
 	void (*unpin)(struct intel_context *ce);
 
+	void (*enter)(struct intel_context *ce);
+	void (*exit)(struct intel_context *ce);
+
 	void (*reset)(struct intel_context *ce);
 	void (*destroy)(struct kref *kref);
 };
@@ -35,9 +38,12 @@ struct intel_context {
 
 	struct i915_gem_context *gem_context;
 	struct intel_engine_cs *engine;
-	struct intel_engine_cs *active;
+	struct intel_engine_cs *inflight;
+#define intel_context_inflight(ce) ptr_mask_bits((ce)->inflight, 2)
+#define intel_context_inflight_count(ce)  ptr_unmask_bits((ce)->inflight, 2)
+#define intel_context_inflight_inc(ce) ptr_count_inc(&(ce)->inflight)
+#define intel_context_inflight_dec(ce) ptr_count_dec(&(ce)->inflight)
 
-	struct list_head active_link;
 	struct list_head signal_link;
 	struct list_head signals;
 
@@ -47,10 +53,10 @@ struct intel_context {
 	u32 *lrc_reg_state;
 	u64 lrc_desc;
 
+	unsigned int active_count; /* notionally protected by timeline->mutex */
+
 	atomic_t pin_count;
 	struct mutex pin_mutex; /* guards pinning and associated on-gpuing */
-
-	intel_engine_mask_t saturated; /* submitting semaphores too late? */
 
 	/**
 	 * active: Active tracker for the rq activity (inc. external) on this
@@ -59,7 +65,6 @@ struct intel_context {
 	struct i915_active active;
 
 	const struct intel_context_ops *ops;
-	struct rb_node node;
 
 	/** sseu: Control eu/slice partitioning */
 	struct intel_sseu sseu;

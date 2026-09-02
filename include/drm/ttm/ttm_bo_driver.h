@@ -747,10 +747,10 @@ static inline int ttm_bo_reserve_slowpath(struct ttm_buffer_object *bo,
 	WARN_ON(!kref_read(&bo->kref));
 
 	if (interruptible)
-		ret = ww_mutex_lock_slow_interruptible(&bo->resv->lock,
-						       ticket);
+		ret = reservation_object_lock_slow_interruptible(bo->resv,
+								 ticket);
 	else
-		ww_mutex_lock_slow(&bo->resv->lock, ticket);
+		reservation_object_lock_slow(bo->resv, ticket);
 
 	if (likely(ret == 0))
 		ttm_bo_del_sub_from_lru(bo);
@@ -769,14 +769,12 @@ static inline int ttm_bo_reserve_slowpath(struct ttm_buffer_object *bo,
  */
 static inline void ttm_bo_unreserve(struct ttm_buffer_object *bo)
 {
-	if (!(bo->mem.placement & TTM_PL_FLAG_NO_EVICT)) {
-		spin_lock(&bo->bdev->glob->lru_lock);
-		if (list_empty(&bo->lru))
-			ttm_bo_add_to_lru(bo);
-		else
-			ttm_bo_move_to_lru_tail(bo, NULL);
-		spin_unlock(&bo->bdev->glob->lru_lock);
-	}
+	spin_lock(&bo->bdev->glob->lru_lock);
+	if (list_empty(&bo->lru))
+		ttm_bo_add_to_lru(bo);
+	else
+		ttm_bo_move_to_lru_tail(bo, NULL);
+	spin_unlock(&bo->bdev->glob->lru_lock);
 	reservation_object_unlock(bo->resv);
 }
 

@@ -1,11 +1,9 @@
-==========================
 BFQ (Budget Fair Queueing)
 ==========================
 
 BFQ is a proportional-share I/O scheduler, with some extra
 low-latency capabilities. In addition to cgroups support (blkio or io
 controllers), BFQ's main features are:
-
 - BFQ guarantees a high system and application responsiveness, and a
   low latency for time-sensitive applications, such as audio or video
   players;
@@ -40,13 +38,13 @@ stack). To give an idea of the limits with BFQ, on slow or average
 CPUs, here are, first, the limits of BFQ for three different CPUs, on,
 respectively, an average laptop, an old desktop, and a cheap embedded
 system, in case full hierarchical support is enabled (i.e.,
-CONFIG_BFQ_GROUP_IOSCHED is set), but CONFIG_BFQ_CGROUP_DEBUG is not
+CONFIG_BFQ_GROUP_IOSCHED is set), but CONFIG_DEBUG_BLK_CGROUP is not
 set (Section 4-2):
 - Intel i7-4850HQ: 400 KIOPS
 - AMD A8-3850: 250 KIOPS
 - ARM CortexTM-A53 Octa-core: 80 KIOPS
 
-If CONFIG_BFQ_CGROUP_DEBUG is set (and of course full hierarchical
+If CONFIG_DEBUG_BLK_CGROUP is set (and of course full hierarchical
 support is enabled), then the sustainable throughput with BFQ
 decreases, because all blkio.bfq* statistics are created and updated
 (Section 4-2). For BFQ, this leads to the following maximum
@@ -57,18 +55,18 @@ sustainable throughputs, on the same systems as above:
 
 BFQ works for multi-queue devices too.
 
-.. The table of contents follow. Impatients can just jump to Section 3.
+The table of contents follow. Impatients can just jump to Section 3.
 
-.. CONTENTS
+CONTENTS
 
-   1. When may BFQ be useful?
-    1-1 Personal systems
-    1-2 Server systems
-   2. How does BFQ work?
-   3. What are BFQ's tunables and how to properly configure BFQ?
-   4. BFQ group scheduling
-    4-1 Service guarantees provided
-    4-2 Interface
+1. When may BFQ be useful?
+ 1-1 Personal systems
+ 1-2 Server systems
+2. How does BFQ work?
+3. What are BFQ's tunables and how to properly configure BFQ?
+4. BFQ group scheduling
+ 4-1 Service guarantees provided
+ 4-2 Interface
 
 1. When may BFQ be useful?
 ==========================
@@ -79,20 +77,17 @@ BFQ provides the following benefits on personal and server systems.
 --------------------
 
 Low latency for interactive applications
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Regardless of the actual background workload, BFQ guarantees that, for
 interactive tasks, the storage device is virtually as responsive as if
 it was idle. For example, even if one or more of the following
 background workloads are being executed:
-
 - one or more large files are being read, written or copied,
 - a tree of source files is being compiled,
 - one or more virtual machines are performing I/O,
 - a software update is in progress,
 - indexing daemons are scanning filesystems and updating their
   databases,
-
 starting an application or loading a file from within an application
 takes about the same time as if the storage device was idle. As a
 comparison, with CFQ, NOOP or DEADLINE, and in the same conditions,
@@ -100,14 +95,13 @@ applications experience high latencies, or even become unresponsive
 until the background workload terminates (also on SSDs).
 
 Low latency for soft real-time applications
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 Also soft real-time applications, such as audio and video
 players/streamers, enjoy a low latency and a low drop rate, regardless
 of the background I/O workload. As a consequence, these applications
 do not suffer from almost any glitch due to the background workload.
 
 Higher speed for code-development tasks
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If some additional workload happens to be executed in parallel, then
 BFQ executes the I/O-related components of typical code-development
@@ -115,7 +109,6 @@ tasks (compilation, checkout, merge, ...) much more quickly than CFQ,
 NOOP or DEADLINE.
 
 High throughput
-^^^^^^^^^^^^^^^
 
 On hard disks, BFQ achieves up to 30% higher throughput than CFQ, and
 up to 150% higher throughput than DEADLINE and NOOP, with all the
@@ -124,7 +117,6 @@ and with all the workloads on flash-based devices, BFQ achieves,
 instead, about the same throughput as the other schedulers.
 
 Strong fairness, bandwidth and delay guarantees
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 BFQ distributes the device throughput, and not just the device time,
 among I/O-bound applications in proportion their weights, with any
@@ -141,15 +133,15 @@ Most benefits for server systems follow from the same service
 properties as above. In particular, regardless of whether additional,
 possibly heavy workloads are being served, BFQ guarantees:
 
-* audio and video-streaming with zero or very low jitter and drop
+. audio and video-streaming with zero or very low jitter and drop
   rate;
 
-* fast retrieval of WEB pages and embedded objects;
+. fast retrieval of WEB pages and embedded objects;
 
-* real-time recording of data in live-dumping applications (e.g.,
+. real-time recording of data in live-dumping applications (e.g.,
   packet logging);
 
-* responsiveness in local and remote access to a server.
+. responsiveness in local and remote access to a server.
 
 
 2. How does BFQ work?
@@ -159,7 +151,7 @@ BFQ is a proportional-share I/O scheduler, whose general structure,
 plus a lot of code, are borrowed from CFQ.
 
 - Each process doing I/O on a device is associated with a weight and a
-  `(bfq_)queue`.
+  (bfq_)queue.
 
 - BFQ grants exclusive access to the device, for a while, to one queue
   (process) at a time, and implements this service model by
@@ -545,20 +537,19 @@ or io.bfq.weight.
 
 As for cgroups-v1 (blkio controller), the exact set of stat files
 created, and kept up-to-date by bfq, depends on whether
-CONFIG_BFQ_CGROUP_DEBUG is set. If it is set, then bfq creates all
+CONFIG_DEBUG_BLK_CGROUP is set. If it is set, then bfq creates all
 the stat files documented in
-Documentation/admin-guide/cgroup-v1/blkio-controller.rst. If, instead,
-CONFIG_BFQ_CGROUP_DEBUG is not set, then bfq creates only the files::
+Documentation/cgroup-v1/blkio-controller.rst. If, instead,
+CONFIG_DEBUG_BLK_CGROUP is not set, then bfq creates only the files
+blkio.bfq.io_service_bytes
+blkio.bfq.io_service_bytes_recursive
+blkio.bfq.io_serviced
+blkio.bfq.io_serviced_recursive
 
-  blkio.bfq.io_service_bytes
-  blkio.bfq.io_service_bytes_recursive
-  blkio.bfq.io_serviced
-  blkio.bfq.io_serviced_recursive
-
-The value of CONFIG_BFQ_CGROUP_DEBUG greatly influences the maximum
+The value of CONFIG_DEBUG_BLK_CGROUP greatly influences the maximum
 throughput sustainable with bfq, because updating the blkio.bfq.*
 stats is rather costly, especially for some of the stats enabled by
-CONFIG_BFQ_CGROUP_DEBUG.
+CONFIG_DEBUG_BLK_CGROUP.
 
 Parameters to set
 -----------------
@@ -576,22 +567,17 @@ weight of the queues associated with interactive and soft real-time
 applications. Unset this tunable if you need/want to control weights.
 
 
-[1]
-    P. Valente, A. Avanzini, "Evolution of the BFQ Storage I/O
+[1] P. Valente, A. Avanzini, "Evolution of the BFQ Storage I/O
     Scheduler", Proceedings of the First Workshop on Mobile System
     Technologies (MST-2015), May 2015.
-
     http://algogroup.unimore.it/people/paolo/disk_sched/mst-2015.pdf
 
-[2]
-    P. Valente and M. Andreolini, "Improving Application
+[2] P. Valente and M. Andreolini, "Improving Application
     Responsiveness with the BFQ Disk I/O Scheduler", Proceedings of
     the 5th Annual International Systems and Storage Conference
     (SYSTOR '12), June 2012.
-
     Slightly extended version:
+    http://algogroup.unimore.it/people/paolo/disk_sched/bfq-v1-suite-
+							results.pdf
 
-    http://algogroup.unimore.it/people/paolo/disk_sched/bfq-v1-suite-results.pdf
-
-[3]
-   https://github.com/Algodev-github/S
+[3] https://github.com/Algodev-github/S

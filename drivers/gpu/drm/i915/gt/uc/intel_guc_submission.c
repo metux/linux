@@ -363,11 +363,7 @@ static void guc_stage_desc_pool_destroy(struct intel_guc *guc)
 static void guc_stage_desc_init(struct intel_guc_client *client)
 {
 	struct intel_guc *guc = client->guc;
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
-	struct intel_engine_cs *engine;
-	struct i915_gem_context *ctx = client->owner;
 	struct guc_stage_desc *desc;
-	unsigned int tmp;
 	u32 gfx_addr;
 
 	desc = __get_stage_desc(client);
@@ -380,52 +376,6 @@ static void guc_stage_desc_init(struct intel_guc_client *client)
 	desc->stage_id = client->stage_id;
 	desc->priority = client->priority;
 	desc->db_id = client->doorbell_id;
-
-	for_each_engine_masked(engine, dev_priv, client->engines, tmp) {
-		struct intel_context *ce = intel_context_lookup(ctx, engine);
-		u32 guc_engine_id = engine->guc_id;
-		struct guc_execlist_context *lrc = &desc->lrc[guc_engine_id];
-
-		/* TODO: We have a design issue to be solved here. Only when we
-		 * receive the first batch, we know which engine is used by the
-		 * user. But here GuC expects the lrc and ring to be pinned. It
-		 * is not an issue for default context, which is the only one
-		 * for now who owns a GuC client. But for future owner of GuC
-		 * client, need to make sure lrc is pinned prior to enter here.
-		 */
-		if (!ce || !ce->state)
-			break;	/* XXX: continue? */
-
-		/*
-		 * XXX: When this is a GUC_STAGE_DESC_ATTR_KERNEL client (proxy
-		 * submission or, in other words, not using a direct submission
-		 * model) the KMD's LRCA is not used for any work submission.
-		 * Instead, the GuC uses the LRCA of the user mode context (see
-		 * guc_add_request below).
-		 */
-		lrc->context_desc = lower_32_bits(ce->lrc_desc);
-
-		/* The state page is after PPHWSP */
-		lrc->ring_lrca = intel_guc_ggtt_offset(guc, ce->state) +
-				 LRC_STATE_PN * PAGE_SIZE;
-
-		/* XXX: In direct submission, the GuC wants the HW context id
-		 * here. In proxy submission, it wants the stage id
-		 */
-		lrc->context_id = (client->stage_id << GUC_ELC_CTXID_OFFSET) |
-				(guc_engine_id << GUC_ELC_ENGINE_OFFSET);
-
-		lrc->ring_begin = intel_guc_ggtt_offset(guc, ce->ring->vma);
-		lrc->ring_end = lrc->ring_begin + ce->ring->size - 1;
-		lrc->ring_next_free_location = lrc->ring_begin;
-		lrc->ring_current_tail_pointer_value = 0;
-
-		desc->engines_used |= (1 << guc_engine_id);
-	}
-
-	DRM_DEBUG_DRIVER("Host engines 0x%x => GuC engines used 0x%x\n",
-			 client->engines, desc->engines_used);
-	WARN_ON(desc->engines_used == 0);
 
 	/*
 	 * The doorbell, process descriptor, and workqueue are all parts
@@ -548,10 +498,10 @@ static void guc_add_request(struct intel_guc *guc, struct i915_request *rq)
  */
 static void flush_ggtt_writes(struct i915_vma *vma)
 {
-	struct drm_i915_private *dev_priv = vma->vm->i915;
+	struct drm_i915_private *i915 = vma->vm->i915;
 
 	if (i915_vma_is_map_and_fenceable(vma))
-		POSTING_READ_FW(GUC_STATUS);
+		intel_uncore_posting_read_fw(&i915->uncore, GUC_STATUS);
 }
 
 static void guc_submit(struct intel_engine_cs *engine,
@@ -610,7 +560,7 @@ static void __guc_dequeue(struct intel_engine_cs *engine)
 	bool submit = false;
 	struct rb_node *rb;
 
-	lockdep_assert_held(&engine->timeline.lock);
+	lockdep_assert_held(&engine->active.lock);
 
 	if (last) {
 		if (*++first)
@@ -662,7 +612,7 @@ static void guc_submission_tasklet(unsigned long data)
 	struct i915_request **port, *rq;
 	unsigned long flags;
 
-	spin_lock_irqsave(&engine->timeline.lock, flags);
+	spin_lock_irqsave(&engine->active.lock, flags);
 
 	for (port = execlists->inflight; (rq = *port); port++) {
 		if (!i915_request_completed(rq))
@@ -678,7 +628,7 @@ static void guc_submission_tasklet(unsigned long data)
 
 	__guc_dequeue(engine);
 
-	spin_unlock_irqrestore(&engine->timeline.lock, flags);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
 static void guc_reset_prepare(struct intel_engine_cs *engine)
@@ -705,7 +655,7 @@ static void guc_reset(struct intel_engine_cs *engine, bool stalled)
 	struct i915_request *rq;
 	unsigned long flags;
 
-	spin_lock_irqsave(&engine->timeline.lock, flags);
+	spin_lock_irqsave(&engine->active.lock, flags);
 
 	execlists_cancel_port_requests(execlists);
 
@@ -721,7 +671,7 @@ static void guc_reset(struct intel_engine_cs *engine, bool stalled)
 	intel_lr_context_reset(engine, rq->hw_context, rq->head, stalled);
 
 out_unlock:
-	spin_unlock_irqrestore(&engine->timeline.lock, flags);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
 static void guc_cancel_requests(struct intel_engine_cs *engine)
@@ -747,13 +697,13 @@ static void guc_cancel_requests(struct intel_engine_cs *engine)
 	 * submission's irq state, we also wish to remind ourselves that
 	 * it is irq state.)
 	 */
-	spin_lock_irqsave(&engine->timeline.lock, flags);
+	spin_lock_irqsave(&engine->active.lock, flags);
 
 	/* Cancel the requests on the HW and clear the ELSP tracker. */
 	execlists_cancel_port_requests(execlists);
 
 	/* Mark all executing requests as skipped. */
-	list_for_each_entry(rq, &engine->timeline.requests, link) {
+	list_for_each_entry(rq, &engine->active.requests, sched.link) {
 		if (!i915_request_signaled(rq))
 			dma_fence_set_error(&rq->fence, -EIO);
 
@@ -781,7 +731,7 @@ static void guc_cancel_requests(struct intel_engine_cs *engine)
 	execlists->queue_priority_hint = INT_MIN;
 	execlists->queue = RB_ROOT_CACHED;
 
-	spin_unlock_irqrestore(&engine->timeline.lock, flags);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
 static void guc_reset_finish(struct intel_engine_cs *engine)
@@ -834,8 +784,7 @@ static bool guc_verify_doorbells(struct intel_guc *guc)
 
 /**
  * guc_client_alloc() - Allocate an intel_guc_client
- * @dev_priv:	driver private data structure
- * @engines:	The set of engines to enable for this client
+ * @guc:	the intel_guc structure
  * @priority:	four levels priority _CRITICAL, _HIGH, _NORMAL and _LOW
  *		The kernel client to replace ExecList submission is created with
  *		NORMAL priority. Priority of a client for scheduler can be HIGH,
@@ -846,13 +795,9 @@ static bool guc_verify_doorbells(struct intel_guc *guc)
  * Return:	An intel_guc_client object if success, else NULL.
  */
 static struct intel_guc_client *
-guc_client_alloc(struct drm_i915_private *dev_priv,
-		 u32 engines,
-		 u32 priority,
-		 struct i915_gem_context *ctx)
+guc_client_alloc(struct intel_guc *guc, u32 priority)
 {
 	struct intel_guc_client *client;
-	struct intel_guc *guc = &dev_priv->guc;
 	struct i915_vma *vma;
 	void *vaddr;
 	int ret;
@@ -862,8 +807,6 @@ guc_client_alloc(struct drm_i915_private *dev_priv,
 		return ERR_PTR(-ENOMEM);
 
 	client->guc = guc;
-	client->owner = ctx;
-	client->engines = engines;
 	client->priority = priority;
 	client->doorbell_id = GUC_DOORBELL_INVALID;
 	spin_lock_init(&client->wq_lock);
@@ -908,8 +851,8 @@ guc_client_alloc(struct drm_i915_private *dev_priv,
 	else
 		client->proc_desc_offset = (GUC_DB_SIZE / 2);
 
-	DRM_DEBUG_DRIVER("new priority %u client %p for engine(s) 0x%x: stage_id %u\n",
-			 priority, client, client->engines, client->stage_id);
+	DRM_DEBUG_DRIVER("new priority %u client %p: stage_id %u\n",
+			 priority, client, client->stage_id);
 	DRM_DEBUG_DRIVER("doorbell id %u, cacheline offset 0x%lx\n",
 			 client->doorbell_id, client->doorbell_offset);
 
@@ -949,15 +892,11 @@ static inline bool ctx_save_restore_disabled(struct intel_context *ce)
 
 static int guc_clients_create(struct intel_guc *guc)
 {
-	struct drm_i915_private *dev_priv = guc_to_i915(guc);
 	struct intel_guc_client *client;
 
 	GEM_BUG_ON(guc->execbuf_client);
 
-	client = guc_client_alloc(dev_priv,
-				  INTEL_INFO(dev_priv)->engine_mask,
-				  GUC_CLIENT_PRIORITY_KMD_NORMAL,
-				  dev_priv->kernel_context);
+	client = guc_client_alloc(guc, GUC_CLIENT_PRIORITY_KMD_NORMAL);
 	if (IS_ERR(client)) {
 		DRM_ERROR("Failed to create GuC client for submission!\n");
 		return PTR_ERR(client);
@@ -1002,7 +941,7 @@ static void __guc_client_disable(struct intel_guc_client *client)
 	 * the case, instead of trying (in vain) to communicate with it, let's
 	 * just cleanup the doorbell HW and our internal state.
 	 */
-	if (intel_guc_is_alive(client->guc))
+	if (intel_guc_is_loaded(client->guc))
 		destroy_doorbell(client);
 	else
 		__fini_doorbell(client);
@@ -1075,7 +1014,7 @@ static void guc_interrupts_capture(struct drm_i915_private *dev_priv)
 	 */
 	irqs = _MASKED_BIT_ENABLE(GFX_INTERRUPT_STEERING);
 	for_each_engine(engine, dev_priv, id)
-		I915_WRITE(RING_MODE_GEN7(engine), irqs);
+		ENGINE_WRITE(engine, RING_MODE_GEN7, irqs);
 
 	/* route USER_INTERRUPT to Host, all others are sent to GuC. */
 	irqs = GT_RENDER_USER_INTERRUPT << GEN8_RCS_IRQ_SHIFT |
@@ -1122,7 +1061,7 @@ static void guc_interrupts_release(struct drm_i915_private *dev_priv)
 	irqs = _MASKED_FIELD(GFX_FORWARD_VBLANK_MASK, GFX_FORWARD_VBLANK_NEVER);
 	irqs |= _MASKED_BIT_DISABLE(GFX_INTERRUPT_STEERING);
 	for_each_engine(engine, dev_priv, id)
-		I915_WRITE(RING_MODE_GEN7(engine), irqs);
+		ENGINE_WRITE(engine, RING_MODE_GEN7, irqs);
 
 	/* route all GT interrupts to the host */
 	I915_WRITE(GUC_BCS_RCS_IER, 0);
@@ -1196,10 +1135,6 @@ int intel_guc_submission_enable(struct intel_guc *guc)
 		     I915_NUM_ENGINES > GUC_WQ_SIZE);
 
 	GEM_BUG_ON(!guc->execbuf_client);
-
-	err = intel_guc_sample_forcewake(guc);
-	if (err)
-		return err;
 
 	err = guc_clients_enable(guc);
 	if (err)

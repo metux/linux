@@ -2028,7 +2028,6 @@ static int i915_guc_stage_pool(struct seq_file *m, void *data)
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 	const struct intel_guc *guc = &dev_priv->guc;
 	struct guc_stage_desc *desc = guc->stage_desc_pool_vaddr;
-	struct intel_guc_client *client = guc->execbuf_client;
 	intel_engine_mask_t tmp;
 	int index;
 
@@ -2058,7 +2057,7 @@ static int i915_guc_stage_pool(struct seq_file *m, void *data)
 			   desc->wq_addr, desc->wq_size);
 		seq_putc(m, '\n');
 
-		for_each_engine_masked(engine, dev_priv, client->engines, tmp) {
+		for_each_engine(engine, dev_priv, tmp) {
 			u32 guc_engine_id = engine->guc_id;
 			struct guc_execlist_context *lrc =
 						&desc->lrc[guc_engine_id];

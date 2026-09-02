@@ -27,8 +27,7 @@
 
 struct hangcheck {
 	u64 acthd;
-	u32 ring;
-	u32 head;
+	u32 seqno;
 	enum intel_engine_hangcheck_action action;
 	unsigned long action_timestamp;
 	int deadlock;
@@ -134,30 +133,25 @@ static void hangcheck_load_sample(struct intel_engine_cs *engine,
 				  struct hangcheck *hc)
 {
 	hc->acthd = intel_engine_get_active_head(engine);
-	hc->ring = ENGINE_READ(engine, RING_START);
-	hc->head = ENGINE_READ(engine, RING_HEAD);
+	hc->seqno = intel_engine_get_hangcheck_seqno(engine);
 }
 
 static void hangcheck_store_sample(struct intel_engine_cs *engine,
 				   const struct hangcheck *hc)
 {
 	engine->hangcheck.acthd = hc->acthd;
-	engine->hangcheck.last_ring = hc->ring;
-	engine->hangcheck.last_head = hc->head;
+	engine->hangcheck.last_seqno = hc->seqno;
 }
 
 static enum intel_engine_hangcheck_action
 hangcheck_get_action(struct intel_engine_cs *engine,
 		     const struct hangcheck *hc)
 {
+	if (engine->hangcheck.last_seqno != hc->seqno)
+		return ENGINE_ACTIVE_SEQNO;
+
 	if (intel_engine_is_idle(engine))
 		return ENGINE_IDLE;
-
-	if (engine->hangcheck.last_ring != hc->ring)
-		return ENGINE_ACTIVE_SEQNO;
-
-	if (engine->hangcheck.last_head != hc->head)
-		return ENGINE_ACTIVE_SEQNO;
 
 	return engine_stuck(engine, hc->acthd);
 }
@@ -223,8 +217,8 @@ static void hangcheck_accumulate_sample(struct intel_engine_cs *engine,
 }
 
 static void hangcheck_declare_hang(struct drm_i915_private *i915,
-				   intel_engine_mask_t hung,
-				   intel_engine_mask_t stuck)
+				   unsigned int hung,
+				   unsigned int stuck)
 {
 	struct intel_engine_cs *engine;
 	intel_engine_mask_t tmp;
@@ -259,9 +253,9 @@ static void i915_hangcheck_elapsed(struct work_struct *work)
 	struct drm_i915_private *dev_priv =
 		container_of(work, typeof(*dev_priv),
 			     gpu_error.hangcheck_work.work);
-	intel_engine_mask_t hung = 0, stuck = 0, wedged = 0;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
+	unsigned int hung = 0, stuck = 0, wedged = 0;
 	intel_wakeref_t wakeref;
 
 	if (!i915_modparams.enable_hangcheck)
@@ -273,7 +267,7 @@ static void i915_hangcheck_elapsed(struct work_struct *work)
 	if (i915_terminally_wedged(dev_priv))
 		return;
 
-	wakeref = intel_runtime_pm_get_if_in_use(&dev_priv->runtime_pm);
+	wakeref = intel_runtime_pm_get_if_in_use(dev_priv);
 	if (!wakeref)
 		return;
 
@@ -324,7 +318,7 @@ static void i915_hangcheck_elapsed(struct work_struct *work)
 	if (hung)
 		hangcheck_declare_hang(dev_priv, hung, stuck);
 
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
+	intel_runtime_pm_put(dev_priv, wakeref);
 
 	/* Reset timer in case GPU hangs without another request being added */
 	i915_queue_hangcheck(dev_priv);

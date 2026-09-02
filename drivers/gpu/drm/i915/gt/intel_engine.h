@@ -53,7 +53,6 @@ struct drm_printer;
 #define ENGINE_READ(...)	__ENGINE_READ_OP(read, __VA_ARGS__)
 #define ENGINE_READ_FW(...)	__ENGINE_READ_OP(read_fw, __VA_ARGS__)
 #define ENGINE_POSTING_READ(...) __ENGINE_READ_OP(posting_read, __VA_ARGS__)
-#define ENGINE_POSTING_READ16(...) __ENGINE_READ_OP(posting_read16, __VA_ARGS__)
 
 #define ENGINE_READ64(engine__, lower_reg__, upper_reg__) \
 	__ENGINE_REG_OP(read64_2x32, (engine__), \
@@ -69,24 +68,6 @@ struct drm_printer;
 #define ENGINE_WRITE16(...)	__ENGINE_WRITE_OP(write16, __VA_ARGS__)
 #define ENGINE_WRITE(...)	__ENGINE_WRITE_OP(write, __VA_ARGS__)
 #define ENGINE_WRITE_FW(...)	__ENGINE_WRITE_OP(write_fw, __VA_ARGS__)
-
-#define GEN6_RING_FAULT_REG_READ(engine__) \
-	intel_uncore_read((engine__)->uncore, RING_FAULT_REG(engine__))
-
-#define GEN6_RING_FAULT_REG_POSTING_READ(engine__) \
-	intel_uncore_posting_read((engine__)->uncore, RING_FAULT_REG(engine__))
-
-#define GEN6_RING_FAULT_REG_RMW(engine__, clear__, set__) \
-({ \
-	u32 __val; \
-\
-	__val = intel_uncore_read((engine__)->uncore, \
-				  RING_FAULT_REG(engine__)); \
-	__val &= ~(clear__); \
-	__val |= (set__); \
-	intel_uncore_write((engine__)->uncore, RING_FAULT_REG(engine__), \
-			   __val); \
-})
 
 /* seqno size is actually only a uint32, but since we plan to use MI_FLUSH_DW to
  * do the writes, and that must have qw aligned offsets, simply pretend it's 8b.
@@ -612,6 +593,24 @@ intel_engine_has_preemption(const struct intel_engine_cs *engine)
 
 void intel_engines_set_scheduler_caps(struct drm_i915_private *i915);
 
+static inline bool __execlists_need_preempt(int prio, int last)
+{
+	/*
+	 * Allow preemption of low -> normal -> high, but we do
+	 * not allow low priority tasks to preempt other low priority
+	 * tasks under the impression that latency for low priority
+	 * tasks does not matter (as much as background throughput),
+	 * so kiss.
+	 *
+	 * More naturally we would write
+	 *	prio >= max(0, last);
+	 * except that we wish to prevent triggering preemption at the same
+	 * priority level: the task that is running should remain running
+	 * to preserve FIFO ordering of dependencies.
+	 */
+	return prio > max(I915_PRIORITY_NORMAL - 1, last);
+}
+
 static inline void
 execlists_set_active(struct intel_engine_execlists *execlists,
 		     unsigned int bit)
@@ -721,6 +720,8 @@ intel_write_status_page(struct intel_engine_cs *engine, int reg, u32 value)
  */
 #define I915_GEM_HWS_PREEMPT		0x32
 #define I915_GEM_HWS_PREEMPT_ADDR	(I915_GEM_HWS_PREEMPT * sizeof(u32))
+#define I915_GEM_HWS_HANGCHECK		0x34
+#define I915_GEM_HWS_HANGCHECK_ADDR	(I915_GEM_HWS_HANGCHECK * sizeof(u32))
 #define I915_GEM_HWS_SEQNO		0x40
 #define I915_GEM_HWS_SEQNO_ADDR		(I915_GEM_HWS_SEQNO * sizeof(u32))
 #define I915_GEM_HWS_SCRATCH		0x80
@@ -848,16 +849,14 @@ __intel_ring_space(unsigned int head, unsigned int tail, unsigned int size)
 	return (head - tail - CACHELINE_BYTES) & (size - 1);
 }
 
-int intel_engines_init_mmio(struct drm_i915_private *i915);
-int intel_engines_setup(struct drm_i915_private *i915);
-int intel_engines_init(struct drm_i915_private *i915);
-void intel_engines_cleanup(struct drm_i915_private *i915);
-
+int intel_engine_setup_common(struct intel_engine_cs *engine);
 int intel_engine_init_common(struct intel_engine_cs *engine);
 void intel_engine_cleanup_common(struct intel_engine_cs *engine);
 
-int intel_ring_submission_setup(struct intel_engine_cs *engine);
-int intel_ring_submission_init(struct intel_engine_cs *engine);
+int intel_init_render_ring_buffer(struct intel_engine_cs *engine);
+int intel_init_bsd_ring_buffer(struct intel_engine_cs *engine);
+int intel_init_blt_ring_buffer(struct intel_engine_cs *engine);
+int intel_init_vebox_ring_buffer(struct intel_engine_cs *engine);
 
 int intel_engine_stop_cs(struct intel_engine_cs *engine);
 void intel_engine_cancel_stop_cs(struct intel_engine_cs *engine);
@@ -954,6 +953,8 @@ static inline void intel_engine_reset(struct intel_engine_cs *engine,
 bool intel_engine_is_idle(struct intel_engine_cs *engine);
 bool intel_engines_are_idle(struct drm_i915_private *dev_priv);
 
+void intel_engine_lost_context(struct intel_engine_cs *engine);
+
 void intel_engines_reset_default_submission(struct drm_i915_private *i915);
 unsigned int intel_engines_has_context_isolation(struct drm_i915_private *i915);
 
@@ -1030,8 +1031,6 @@ ktime_t intel_engine_get_busy_time(struct intel_engine_cs *engine);
 struct i915_request *
 intel_engine_find_active_request(struct intel_engine_cs *engine);
 
-u32 intel_engine_context_size(struct drm_i915_private *i915, u8 class);
-
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
 
 static inline bool inject_preempt_hang(struct intel_engine_execlists *execlists)
@@ -1052,10 +1051,17 @@ static inline bool inject_preempt_hang(struct intel_engine_execlists *execlists)
 
 #endif
 
-void intel_engine_init_active(struct intel_engine_cs *engine,
-			      unsigned int subclass);
-#define ENGINE_PHYSICAL	0
-#define ENGINE_MOCK	1
-#define ENGINE_VIRTUAL	2
+static inline u32
+intel_engine_next_hangcheck_seqno(struct intel_engine_cs *engine)
+{
+	return engine->hangcheck.next_seqno =
+		next_pseudo_random32(engine->hangcheck.next_seqno);
+}
+
+static inline u32
+intel_engine_get_hangcheck_seqno(struct intel_engine_cs *engine)
+{
+	return intel_read_status_page(engine, I915_GEM_HWS_HANGCHECK);
+}
 
 #endif /* _INTEL_RINGBUFFER_H_ */

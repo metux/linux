@@ -99,8 +99,8 @@
 
 #define DRIVER_NAME		"i915"
 #define DRIVER_DESC		"Intel Graphics"
-#define DRIVER_DATE		"20190708"
-#define DRIVER_TIMESTAMP	1562616546
+#define DRIVER_DATE		"20190730"
+#define DRIVER_TIMESTAMP	1564512624
 
 /* Use I915_STATE_WARN(x) and I915_STATE_WARN_ON() (rather than WARN() and
  * WARN_ON()) for hw state sanity checks to check for unexpected conditions
@@ -122,18 +122,20 @@
 
 #if IS_ENABLED(CONFIG_DRM_I915_DEBUG)
 
-bool __i915_inject_probe_failure(const char *func, int line);
-#define i915_inject_probe_failure() \
-	__i915_inject_probe_failure(__func__, __LINE__)
-
+int __i915_inject_load_error(struct drm_i915_private *i915, int err,
+			     const char *func, int line);
+#define i915_inject_load_error(_i915, _err) \
+	__i915_inject_load_error((_i915), (_err), __func__, __LINE__)
 bool i915_error_injected(void);
 
 #else
 
-#define i915_inject_probe_failure() false
+#define i915_inject_load_error(_i915, _err) 0
 #define i915_error_injected() false
 
 #endif
+
+#define i915_inject_probe_failure(i915) i915_inject_load_error((i915), -ENODEV)
 
 #define i915_probe_error(i915, fmt, ...)				   \
 	__i915_printk(i915, i915_error_injected() ? KERN_DEBUG : KERN_ERR, \
@@ -771,7 +773,6 @@ struct i915_gem_mm {
 	 */
 	struct llist_head free_list;
 	struct work_struct free_work;
-	spinlock_t free_lock;
 	/**
 	 * Count of objects pending destructions. Used to skip needlessly
 	 * waiting on an RCU barrier if no objects are waiting to be freed.
@@ -787,9 +788,6 @@ struct i915_gem_mm {
 	 * tmpfs instance used for shmem backed objects
 	 */
 	struct vfsmount *gemfs;
-
-	/** PPGTT used for aliasing the PPGTT with the GTT */
-	struct i915_ppgtt *aliasing_ppgtt;
 
 	struct notifier_block oom_notifier;
 	struct notifier_block vmap_notifier;
@@ -1904,7 +1902,12 @@ static inline struct drm_i915_private *to_i915(const struct drm_device *dev)
 
 static inline struct drm_i915_private *kdev_to_i915(struct device *kdev)
 {
-	return to_i915(dev_get_drvdata(kdev));
+	return dev_get_drvdata(kdev);
+}
+
+static inline struct drm_i915_private *pdev_to_i915(struct pci_dev *pdev)
+{
+	return pci_get_drvdata(pdev);
 }
 
 static inline struct drm_i915_private *wopcm_to_i915(struct intel_wopcm *wopcm)
@@ -2292,12 +2295,13 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 
 #define HAS_GT_UC(dev_priv)	(INTEL_INFO(dev_priv)->has_gt_uc)
 
-/* Having GuC/HuC is not the same as using GuC/HuC */
-#define USES_GUC(dev_priv)		intel_uc_is_using_guc(&(dev_priv)->gt.uc)
-#define USES_GUC_SUBMISSION(dev_priv)	intel_uc_is_using_guc_submission(&(dev_priv)->gt.uc)
-#define USES_HUC(dev_priv)		intel_uc_is_using_huc(&(dev_priv)->gt.uc)
+/* Having GuC is not the same as using GuC */
+#define USES_GUC(dev_priv)		intel_uc_supports_guc(&(dev_priv)->gt.uc)
+#define USES_GUC_SUBMISSION(dev_priv)	intel_uc_supports_guc_submission(&(dev_priv)->gt.uc)
 
 #define HAS_POOLED_EU(dev_priv)	(INTEL_INFO(dev_priv)->has_pooled_eu)
+
+#define HAS_GLOBAL_MOCS_REGISTERS(dev_priv)	(INTEL_INFO(dev_priv)->has_global_mocs)
 
 #define INTEL_PCH_DEVICE_ID_MASK		0xff80
 #define INTEL_PCH_IBX_DEVICE_ID_TYPE		0x3b00
@@ -2392,7 +2396,7 @@ long i915_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 extern const struct dev_pm_ops i915_pm_ops;
 
 int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-void i915_driver_remove(struct drm_device *dev);
+void i915_driver_remove(struct drm_i915_private *i915);
 
 void intel_engine_init_hangcheck(struct intel_engine_cs *engine);
 int vlv_force_gfx_clock(struct drm_i915_private *dev_priv, bool on);
@@ -2499,6 +2503,8 @@ static inline u32 i915_reset_engine_count(struct i915_gpu_error *error,
 void i915_gem_init_mmio(struct drm_i915_private *i915);
 int __must_check i915_gem_init(struct drm_i915_private *dev_priv);
 int __must_check i915_gem_init_hw(struct drm_i915_private *dev_priv);
+void i915_gem_driver_register(struct drm_i915_private *i915);
+void i915_gem_driver_unregister(struct drm_i915_private *i915);
 void i915_gem_driver_remove(struct drm_i915_private *dev_priv);
 void i915_gem_driver_release(struct drm_i915_private *dev_priv);
 int i915_gem_wait_for_idle(struct drm_i915_private *dev_priv,
@@ -2598,8 +2604,8 @@ unsigned long i915_gem_shrink(struct drm_i915_private *i915,
 #define I915_SHRINK_WRITEBACK	BIT(4)
 
 unsigned long i915_gem_shrink_all(struct drm_i915_private *i915);
-void i915_gem_shrinker_register(struct drm_i915_private *i915);
-void i915_gem_shrinker_unregister(struct drm_i915_private *i915);
+void i915_gem_driver_register__shrinker(struct drm_i915_private *i915);
+void i915_gem_driver_unregister__shrinker(struct drm_i915_private *i915);
 void i915_gem_shrinker_taints_mutex(struct drm_i915_private *i915,
 				    struct mutex *mutex);
 
@@ -2651,23 +2657,8 @@ mkwrite_device_info(struct drm_i915_private *dev_priv)
 	return (struct intel_device_info *)INTEL_INFO(dev_priv);
 }
 
-/* modesetting */
-void intel_modeset_init_hw(struct drm_device *dev);
-int intel_modeset_init(struct drm_device *dev);
-void intel_modeset_driver_remove(struct drm_device *dev);
-int intel_modeset_vga_set_state(struct drm_i915_private *dev_priv, bool state);
-void intel_display_resume(struct drm_device *dev);
-void i915_redisable_vga(struct drm_i915_private *dev_priv);
-void i915_redisable_vga_power_on(struct drm_i915_private *dev_priv);
-void intel_init_pch_refclk(struct drm_i915_private *dev_priv);
-
 int i915_reg_read_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
-
-struct intel_display_error_state *
-intel_display_capture_error_state(struct drm_i915_private *dev_priv);
-void intel_display_print_error_state(struct drm_i915_error_state_buf *e,
-				     struct intel_display_error_state *error);
 
 #define __I915_REG_OP(op__, dev_priv__, ...) \
 	intel_uncore_##op__(&(dev_priv__)->uncore, __VA_ARGS__)

@@ -227,10 +227,10 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 	}
 
 	/* Make small buffers to store a hardware cursor (double buffered icon updates) */
-	mdev->cursor.pixels_1 = drm_gem_vram_create(dev, &dev->vram_mm->bdev,
+	mdev->cursor.pixels_1 = drm_gem_vram_create(dev, &mdev->ttm.bdev,
 						    roundup(48*64, PAGE_SIZE),
 						    0, 0);
-	mdev->cursor.pixels_2 = drm_gem_vram_create(dev, &dev->vram_mm->bdev,
+	mdev->cursor.pixels_2 = drm_gem_vram_create(dev, &mdev->ttm.bdev,
 						    roundup(48*64, PAGE_SIZE),
 						    0, 0);
 	if (IS_ERR(mdev->cursor.pixels_2) || IS_ERR(mdev->cursor.pixels_1)) {
@@ -238,8 +238,10 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 		mdev->cursor.pixels_2 = NULL;
 		dev_warn(&dev->pdev->dev,
 			"Could not allocate space for cursors. Not doing hardware cursors.\n");
+	} else {
+		mdev->cursor.pixels_current = mdev->cursor.pixels_1;
+		mdev->cursor.pixels_prev = mdev->cursor.pixels_2;
 	}
-	mdev->cursor.pixels_current = NULL;
 
 	return 0;
 
@@ -269,6 +271,7 @@ int mgag200_gem_create(struct drm_device *dev,
 		   u32 size, bool iskernel,
 		   struct drm_gem_object **obj)
 {
+	struct mga_device *mdev = dev->dev_private;
 	struct drm_gem_vram_object *gbo;
 	int ret;
 
@@ -278,7 +281,7 @@ int mgag200_gem_create(struct drm_device *dev,
 	if (size == 0)
 		return -EINVAL;
 
-	gbo = drm_gem_vram_create(dev, &dev->vram_mm->bdev, size, 0, false);
+	gbo = drm_gem_vram_create(dev, &mdev->ttm.bdev, size, 0, false);
 	if (IS_ERR(gbo)) {
 		ret = PTR_ERR(gbo);
 		if (ret != -ERESTARTSYS)
@@ -287,4 +290,14 @@ int mgag200_gem_create(struct drm_device *dev,
 	}
 	*obj = &gbo->gem;
 	return 0;
+}
+
+int mgag200_dumb_create(struct drm_file *file,
+		    struct drm_device *dev,
+		    struct drm_mode_create_dumb *args)
+{
+	struct mga_device *mdev = dev->dev_private;
+
+	return drm_gem_vram_fill_create_dumb(file, dev, &mdev->ttm.bdev, 0,
+					    false, args);
 }

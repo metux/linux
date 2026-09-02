@@ -56,7 +56,13 @@ static void mga_pci_remove(struct pci_dev *pdev)
 
 static const struct file_operations mgag200_driver_fops = {
 	.owner = THIS_MODULE,
-	DRM_VRAM_MM_FILE_OPERATIONS
+	.open = drm_open,
+	.release = drm_release,
+	.unlocked_ioctl = drm_ioctl,
+	.mmap = mgag200_mmap,
+	.poll = drm_poll,
+	.compat_ioctl = drm_compat_ioctl,
+	.read = drm_read,
 };
 
 static struct drm_driver driver = {
@@ -70,7 +76,11 @@ static struct drm_driver driver = {
 	.major = DRIVER_MAJOR,
 	.minor = DRIVER_MINOR,
 	.patchlevel = DRIVER_PATCHLEVEL,
-	DRM_GEM_VRAM_DRIVER
+
+	.gem_free_object_unlocked =
+		drm_gem_vram_driver_gem_free_object_unlocked,
+	.dumb_create = mgag200_dumb_create,
+	.dumb_map_offset = drm_gem_vram_driver_dumb_mmap_offset,
 };
 
 static struct pci_driver mgag200_pci_driver = {

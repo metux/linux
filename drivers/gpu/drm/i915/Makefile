@@ -50,6 +50,7 @@ i915-y += i915_drv.o \
 	  intel_device_info.o \
 	  intel_pm.o \
 	  intel_runtime_pm.o \
+	  intel_wakeref.o \
 	  intel_uncore.o
 
 # core library code
@@ -84,7 +85,12 @@ gt-$(CONFIG_DRM_I915_SELFTEST) += \
 i915-y += $(gt-y)
 
 # GEM (Graphics Execution Management) code
+obj-y += gem/
+gem-y += \
+	gem/i915_gem_object.o \
+	gem/i915_gem_shmem.o
 i915-y += \
+	  $(gem-y) \
 	  i915_active.o \
 	  i915_cmd_parser.o \
 	  i915_gem_batch_pool.o \
@@ -97,7 +103,7 @@ i915-y += \
 	  i915_gem_gtt.o \
 	  i915_gem_internal.o \
 	  i915_gem.o \
-	  i915_gem_object.o \
+	  i915_gem_pm.o \
 	  i915_gem_render_state.o \
 	  i915_gem_shrinker.o \
 	  i915_gem_stolen.o \
@@ -136,6 +142,7 @@ i915-y += intel_audio.o \
 	  intel_atomic.o \
 	  intel_atomic_plane.o \
 	  intel_bios.o \
+	  intel_bw.o \
 	  intel_cdclk.o \
 	  intel_color.o \
 	  intel_combo_phy.o \
@@ -174,8 +181,8 @@ i915-y += dvo_ch7017.o \
 	  intel_dsi_dcs_backlight.o \
 	  intel_dsi_vbt.o \
 	  intel_dvo.o \
+	  intel_gmbus.o \
 	  intel_hdmi.o \
-	  intel_i2c.o \
 	  intel_lspcon.o \
 	  intel_lvds.o \
 	  intel_panel.o \
@@ -191,6 +198,7 @@ i915-$(CONFIG_DRM_I915_SELFTEST) += \
 	selftests/i915_random.o \
 	selftests/i915_selftest.o \
 	selftests/igt_flush_test.o \
+	selftests/igt_gem_utils.o \
 	selftests/igt_live_test.o \
 	selftests/igt_reset.o \
 	selftests/igt_spinner.o

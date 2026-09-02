@@ -1,18 +1,18 @@
-==========================
-Real-Time group scheduling
-==========================
+				Real-Time group scheduling
+				--------------------------
 
-.. CONTENTS
+CONTENTS
+========
 
-   0. WARNING
-   1. Overview
-     1.1 The problem
-     1.2 The solution
-   2. The interface
-     2.1 System-wide settings
-     2.2 Default behaviour
-     2.3 Basis for grouping tasks
-   3. Future plans
+0. WARNING
+1. Overview
+  1.1 The problem
+  1.2 The solution
+2. The interface
+  2.1 System-wide settings
+  2.2 Default behaviour
+  2.3 Basis for grouping tasks
+3. Future plans
 
 
 0. WARNING
@@ -133,7 +133,7 @@ This uses the cgroup virtual file system and "<cgroup>/cpu.rt_runtime_us"
 to control the CPU time reserved for each control group.
 
 For more information on working with control groups, you should read
-Documentation/admin-guide/cgroup-v1/cgroups.rst as well.
+Documentation/cgroup-v1/cgroups.rst as well.
 
 Group settings are checked against the following limits in order to keep the
 configuration schedulable:
@@ -159,11 +159,9 @@ Consider two sibling groups A and B; both have 50% bandwidth, but A's
 period is twice the length of B's.
 
 * group A: period=100000us, runtime=50000us
-
 	- this runs for 0.05s once every 0.1s
 
 * group B: period= 50000us, runtime=25000us
-
 	- this runs for 0.025s twice every 0.1s (or once every 0.05 sec).
 
 This means that currently a while (1) loop in A will run for the full period of

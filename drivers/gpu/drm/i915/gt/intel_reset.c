@@ -1044,7 +1044,7 @@ taint:
 	 * rather than continue on into oblivion. For everyone else,
 	 * the system should still plod along, but they have been warned!
 	 */
-	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
+	add_taint_for_CI(TAINT_WARN);
 error:
 	__i915_gem_set_wedged(i915);
 	goto finish;
@@ -1160,7 +1160,8 @@ static void clear_register(struct intel_uncore *uncore, i915_reg_t reg)
 	intel_uncore_rmw(uncore, reg, 0, 0);
 }
 
-void i915_clear_error_registers(struct drm_i915_private *i915)
+void i915_clear_error_registers(struct drm_i915_private *i915,
+				intel_engine_mask_t engine_mask)
 {
 	struct intel_uncore *uncore = &i915->uncore;
 	u32 eir;
@@ -1193,11 +1194,9 @@ void i915_clear_error_registers(struct drm_i915_private *i915)
 		struct intel_engine_cs *engine;
 		enum intel_engine_id id;
 
-		for_each_engine(engine, i915, id) {
-			rmw_clear(uncore,
-				  RING_FAULT_REG(engine), RING_FAULT_VALID);
-			intel_uncore_posting_read(uncore,
-						  RING_FAULT_REG(engine));
+		for_each_engine_masked(engine, i915, engine_mask, id) {
+			GEN6_RING_FAULT_REG_RMW(engine, RING_FAULT_VALID, 0);
+			GEN6_RING_FAULT_REG_POSTING_READ(engine);
 		}
 		POSTING_READ(RING_FAULT_REG(dev_priv->engine[RCS0]));
 	}
@@ -1251,7 +1250,7 @@ void i915_handle_error(struct drm_i915_private *i915,
 
 	if (flags & I915_ERROR_CAPTURE) {
 		i915_capture_error_state(i915, engine_mask, msg);
-		i915_clear_error_registers(i915);
+		i915_clear_error_registers(i915, engine_mask);
 	}
 
 	/*
@@ -1397,3 +1396,7 @@ void __i915_fini_wedge(struct i915_wedge_me *w)
 	destroy_delayed_work_on_stack(&w->work);
 	w->i915 = NULL;
 }
+
+#if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)
+#include "selftest_reset.c"
+#endif

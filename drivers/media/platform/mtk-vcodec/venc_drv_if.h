@@ -1,10 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/*
- * Copyright (c) 2016 MediaTek Inc.
- * Author: Daniel Hsiao <daniel.hsiao@mediatek.com>
- *		Jungchang Tsao <jungchang.tsao@mediatek.com>
- *		Tiffany Lin <tiffany.lin@mediatek.com>
- */
 
 #ifndef _VENC_DRV_IF_H_
 #define _VENC_DRV_IF_H_
@@ -109,9 +103,6 @@ struct venc_done_result {
 	unsigned int bs_size;
 	bool is_key_frm;
 };
-
-extern const struct venc_common_if venc_h264_if;
-extern const struct venc_common_if venc_vp8_if;
 
 /*
  * venc_if_init - Create the driver handle

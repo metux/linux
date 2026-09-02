@@ -218,6 +218,11 @@ intel_pch_type(const struct drm_i915_private *dev_priv, unsigned short id)
 		DRM_DEBUG_KMS("Found Ice Lake PCH\n");
 		WARN_ON(!IS_ICELAKE(dev_priv));
 		return PCH_ICP;
+	case INTEL_PCH_MCC_DEVICE_ID_TYPE:
+	case INTEL_PCH_MCC2_DEVICE_ID_TYPE:
+		DRM_DEBUG_KMS("Found Mule Creek Canyon PCH\n");
+		WARN_ON(!IS_ELKHARTLAKE(dev_priv));
+		return PCH_MCC;
 	default:
 		return PCH_NONE;
 	}
@@ -245,7 +250,9 @@ intel_virt_detect_pch(const struct drm_i915_private *dev_priv)
 	 * make an educated guess as to which PCH is really there.
 	 */
 
-	if (IS_ICELAKE(dev_priv))
+	if (IS_ELKHARTLAKE(dev_priv))
+		id = INTEL_PCH_MCC_DEVICE_ID_TYPE;
+	else if (IS_ICELAKE(dev_priv))
 		id = INTEL_PCH_ICP_DEVICE_ID_TYPE;
 	else if (IS_CANNONLAKE(dev_priv) || IS_COFFEELAKE(dev_priv))
 		id = INTEL_PCH_CNP_DEVICE_ID_TYPE;
@@ -910,7 +917,7 @@ static int i915_driver_init_early(struct drm_i915_private *dev_priv)
 	mutex_init(&dev_priv->hdcp_comp_mutex);
 
 	i915_memcpy_init_early(dev_priv);
-	intel_runtime_pm_init_early(dev_priv);
+	intel_runtime_pm_init_early(&dev_priv->runtime_pm);
 
 	ret = i915_workqueues_init(dev_priv);
 	if (ret < 0)
@@ -1592,6 +1599,12 @@ static int i915_driver_init_hw(struct drm_i915_private *dev_priv)
 
 	pci_set_master(pdev);
 
+	/*
+	 * We don't have a max segment size, so set it to the max so sg's
+	 * debugging layer doesn't complain
+	 */
+	dma_set_max_seg_size(&pdev->dev, UINT_MAX);
+
 	/* overlay on gen2 is broken and can't address above 1G */
 	if (IS_GEN(dev_priv, 2)) {
 		ret = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(30));
@@ -1753,7 +1766,7 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
 		drm_kms_helper_poll_init(dev);
 
 	intel_power_domains_enable(dev_priv);
-	intel_runtime_pm_enable(dev_priv);
+	intel_runtime_pm_enable(&dev_priv->runtime_pm);
 }
 
 /**
@@ -1762,7 +1775,7 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
  */
 static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 {
-	intel_runtime_pm_disable(dev_priv);
+	intel_runtime_pm_disable(&dev_priv->runtime_pm);
 	intel_power_domains_disable(dev_priv);
 
 	intel_fbdev_unregister(dev_priv);
@@ -1982,8 +1995,9 @@ void i915_driver_unload(struct drm_device *dev)
 static void i915_driver_release(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
 
-	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
+	disable_rpm_wakeref_asserts(rpm);
 
 	i915_gem_fini(dev_priv);
 
@@ -1994,8 +2008,8 @@ static void i915_driver_release(struct drm_device *dev)
 
 	i915_driver_cleanup_mmio(dev_priv);
 
-	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
-	intel_runtime_pm_cleanup(dev_priv);
+	enable_rpm_wakeref_asserts(rpm);
+	intel_runtime_pm_cleanup(rpm);
 
 	i915_driver_cleanup_early(dev_priv);
 	i915_driver_destroy(dev_priv);
@@ -2144,9 +2158,10 @@ static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct pci_dev *pdev = dev_priv->drm.pdev;
+	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
 	int ret;
 
-	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
+	disable_rpm_wakeref_asserts(rpm);
 
 	i915_gem_suspend_late(dev_priv);
 
@@ -2187,9 +2202,9 @@ static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 		pci_set_power_state(pdev, PCI_D3hot);
 
 out:
-	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
+	enable_rpm_wakeref_asserts(rpm);
 	if (!dev_priv->uncore.user_forcewake.count)
-		intel_runtime_pm_cleanup(dev_priv);
+		intel_runtime_pm_cleanup(rpm);
 
 	return ret;
 }
@@ -2953,7 +2968,7 @@ static int intel_runtime_suspend(struct device *kdev)
 	}
 
 	enable_rpm_wakeref_asserts(rpm);
-	intel_runtime_pm_cleanup(dev_priv);
+	intel_runtime_pm_cleanup(rpm);
 
 	if (intel_uncore_arm_unclaimed_mmio_detection(&dev_priv->uncore))
 		DRM_ERROR("Unclaimed access detected prior to suspending\n");

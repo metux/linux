@@ -185,7 +185,7 @@ int i915_live_selftests(struct pci_dev *pdev)
 	if (!i915_selftest.live)
 		return 0;
 
-	err = run_selftests(live, pdev_to_i915(pdev));
+	err = run_selftests(live, to_i915(pci_get_drvdata(pdev)));
 	if (err) {
 		i915_selftest.live = err;
 		return err;
@@ -256,7 +256,7 @@ int __i915_live_setup(void *data)
 {
 	struct drm_i915_private *i915 = data;
 
-	return intel_gt_terminally_wedged(&i915->gt);
+	return i915_terminally_wedged(i915);
 }
 
 int __i915_live_teardown(int err, void *data)
@@ -269,27 +269,6 @@ int __i915_live_teardown(int err, void *data)
 	mutex_unlock(&i915->drm.struct_mutex);
 
 	i915_gem_drain_freed_objects(i915);
-
-	return err;
-}
-
-int __intel_gt_live_setup(void *data)
-{
-	struct intel_gt *gt = data;
-
-	return intel_gt_terminally_wedged(gt);
-}
-
-int __intel_gt_live_teardown(int err, void *data)
-{
-	struct intel_gt *gt = data;
-
-	mutex_lock(&gt->i915->drm.struct_mutex);
-	if (igt_flush_test(gt->i915, I915_WAIT_LOCKED))
-		err = -EIO;
-	mutex_unlock(&gt->i915->drm.struct_mutex);
-
-	i915_gem_drain_freed_objects(gt->i915);
 
 	return err;
 }

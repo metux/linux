@@ -252,7 +252,7 @@ void vm_vcpu_add_default(struct kvm_vm *vm, uint32_t vcpuid, void *guest_code)
 	stack_vaddr = vm_vaddr_alloc(vm, stack_size,
 				     DEFAULT_GUEST_STACK_VADDR_MIN, 0, 0);
 
-	vm_vcpu_add(vm, vcpuid);
+	vm_vcpu_add(vm, vcpuid, 0, 0);
 
 	/* Setup guest registers */
 	vcpu_regs_get(vm, vcpuid, &regs);
@@ -260,13 +260,21 @@ void vm_vcpu_add_default(struct kvm_vm *vm, uint32_t vcpuid, void *guest_code)
 	vcpu_regs_set(vm, vcpuid, &regs);
 
 	vcpu_sregs_get(vm, vcpuid, &sregs);
-	sregs.crs[0] |= 0x00040000;		/* Enable floating point regs */
 	sregs.crs[1] = vm->pgd | 0xf;		/* Primary region table */
 	vcpu_sregs_set(vm, vcpuid, &sregs);
 
 	run = vcpu_state(vm, vcpuid);
 	run->psw_mask = 0x0400000180000000ULL;  /* DAT enabled + 64 bit mode */
 	run->psw_addr = (uintptr_t)guest_code;
+}
+
+void vcpu_setup(struct kvm_vm *vm, int vcpuid, int pgd_memslot, int gdt_memslot)
+{
+	struct kvm_sregs sregs;
+
+	vcpu_sregs_get(vm, vcpuid, &sregs);
+	sregs.crs[0] |= 0x00040000;		/* Enable floating point regs */
+	vcpu_sregs_set(vm, vcpuid, &sregs);
 }
 
 void vcpu_dump(FILE *stream, struct kvm_vm *vm, uint32_t vcpuid, uint8_t indent)

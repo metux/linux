@@ -5,11 +5,8 @@ use strict;
 # Copyright (c) 2017-2019 Mauro Carvalho Chehab <mchehab@kernel.org>
 #
 
-my $prefix = "./";
-$prefix = "$ENV{'srctree'}/" if ($ENV{'srctree'});
-
-my $conf = $prefix . "Documentation/conf.py";
-my $requirement_file = $prefix . "Documentation/sphinx/requirements.txt";
+my $conf = "Documentation/conf.py";
+my $requirement_file = "Documentation/sphinx/requirements.txt";
 my $virtenv_prefix = "sphinx_";
 
 #
@@ -679,15 +676,20 @@ sub check_needs()
 	}
 	if ($need_sphinx || $rec_sphinx_upgrade) {
 		my $min_activate = "$ENV{'PWD'}/${virtenv_prefix}${min_version}/bin/activate";
+	if ($need_sphinx || $rec_sphinx_upgrade) {
+		my $min_activate = "$ENV{'PWD'}/${virtenv_prefix}${min_version}/bin/activate";
 		my @activates = glob "$ENV{'PWD'}/${virtenv_prefix}*/bin/activate";
 
 		@activates = sort {$b cmp $a} @activates;
 
 		if ($need_sphinx && scalar @activates > 0 && $activates[0] ge $min_activate) {
-			printf "\nNeed to activate a compatible Sphinx version on virtualenv with:\n";
-			printf "\t. $activates[0]\n";
+			printf "
+Need to activate a compatible Sphinx version on virtualenv with:
+";
+			printf "	. $activates[0]
+";
 			exit (1);
-		} else {
+		} else {		} else {
 			my $rec_activate = "$virtenv_dir/bin/activate";
 			my $virtualenv = findprog("virtualenv-3");
 			$virtualenv = findprog("virtualenv-3.5") if (!$virtualenv);

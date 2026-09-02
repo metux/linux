@@ -3796,7 +3796,7 @@ encrypted VMs.
 
 Currently, this ioctl is used for issuing Secure Encrypted Virtualization
 (SEV) commands on AMD Processors. The SEV commands are defined in
-Documentation/virt/kvm/amd-memory-encryption.rst.
+Documentation/virtual/kvm/amd-memory-encryption.rst.
 
 4.111 KVM_MEMORY_ENCRYPT_REG_REGION
 
@@ -4111,22 +4111,17 @@ Parameters: struct kvm_pmu_event_filter (in)
 Returns: 0 on success, -1 on error
 
 struct kvm_pmu_event_filter {
-	__u32 action;
-	__u32 nevents;
-	__u32 fixed_counter_bitmap;
-	__u32 flags;
-	__u32 pad[4];
-	__u64 events[0];
+       __u32 action;
+       __u32 nevents;
+       __u64 events[0];
 };
 
 This ioctl restricts the set of PMU events that the guest can program.
 The argument holds a list of events which will be allowed or denied.
 The eventsel+umask of each event the guest attempts to program is compared
 against the events field to determine whether the guest should have access.
-The events field only controls general purpose counters; fixed purpose
-counters are controlled by the fixed_counter_bitmap.
-
-No flags are defined yet, the field must be zero.
+This only affects general purpose counters; fixed purpose counters can
+be disabled by changing the perfmon CPUID leaf.
 
 Valid values for 'action':
 #define KVM_PMU_EVENT_ALLOW 0

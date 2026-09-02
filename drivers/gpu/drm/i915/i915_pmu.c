@@ -8,9 +8,6 @@
 #include <linux/pm_runtime.h>
 
 #include "gt/intel_engine.h"
-#include "gt/intel_engine_pm.h"
-#include "gt/intel_engine_user.h"
-#include "gt/intel_gt_pm.h"
 
 #include "i915_drv.h"
 #include "i915_pmu.h"
@@ -165,29 +162,31 @@ add_sample(struct i915_pmu_sample *sample, u32 val)
 }
 
 static void
-engines_sample(struct intel_gt *gt, unsigned int period_ns)
+engines_sample(struct drm_i915_private *dev_priv, unsigned int period_ns)
 {
-	struct drm_i915_private *i915 = gt->i915;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
+	intel_wakeref_t wakeref;
+	unsigned long flags;
 
-	if ((i915->pmu.enable & ENGINE_SAMPLE_MASK) == 0)
+	if ((dev_priv->pmu.enable & ENGINE_SAMPLE_MASK) == 0)
 		return;
 
-	for_each_engine(engine, i915, id) {
+	wakeref = 0;
+	if (READ_ONCE(dev_priv->gt.awake))
+		wakeref = intel_runtime_pm_get_if_in_use(&dev_priv->runtime_pm);
+	if (!wakeref)
+		return;
+
+	spin_lock_irqsave(&dev_priv->uncore.lock, flags);
+	for_each_engine(engine, dev_priv, id) {
 		struct intel_engine_pmu *pmu = &engine->pmu;
-		unsigned long flags;
 		bool busy;
 		u32 val;
 
-		if (!intel_engine_pm_get_if_awake(engine))
-			continue;
-
-		spin_lock_irqsave(&engine->uncore->lock, flags);
-
-		val = ENGINE_READ_FW(engine, RING_CTL);
+		val = I915_READ_FW(RING_CTL(engine->mmio_base));
 		if (val == 0) /* powerwell off => engine idle */
-			goto skip;
+			continue;
 
 		if (val & RING_WAIT)
 			add_sample(&pmu->sample[I915_SAMPLE_WAIT], period_ns);
@@ -203,16 +202,15 @@ engines_sample(struct intel_gt *gt, unsigned int period_ns)
 		 */
 		busy = val & (RING_WAIT_SEMAPHORE | RING_WAIT);
 		if (!busy) {
-			val = ENGINE_READ_FW(engine, RING_MI_MODE);
+			val = I915_READ_FW(RING_MI_MODE(engine->mmio_base));
 			busy = !(val & MODE_IDLE);
 		}
 		if (busy)
 			add_sample(&pmu->sample[I915_SAMPLE_BUSY], period_ns);
-
-skip:
-		spin_unlock_irqrestore(&engine->uncore->lock, flags);
-		intel_engine_pm_put(engine);
 	}
+	spin_unlock_irqrestore(&dev_priv->uncore.lock, flags);
+
+	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
 }
 
 static void
@@ -222,30 +220,34 @@ add_sample_mult(struct i915_pmu_sample *sample, u32 val, u32 mul)
 }
 
 static void
-frequency_sample(struct intel_gt *gt, unsigned int period_ns)
+frequency_sample(struct drm_i915_private *dev_priv, unsigned int period_ns)
 {
-	struct drm_i915_private *i915 = gt->i915;
-	struct intel_uncore *uncore = gt->uncore;
-	struct i915_pmu *pmu = &i915->pmu;
-
-	if (pmu->enable & config_enabled_mask(I915_PMU_ACTUAL_FREQUENCY)) {
+	if (dev_priv->pmu.enable &
+	    config_enabled_mask(I915_PMU_ACTUAL_FREQUENCY)) {
 		u32 val;
 
-		val = i915->gt_pm.rps.cur_freq;
-		if (intel_gt_pm_get_if_awake(gt)) {
-			val = intel_uncore_read_notrace(uncore, GEN6_RPSTAT1);
-			val = intel_get_cagf(i915, val);
-			intel_gt_pm_put(gt);
+		val = dev_priv->gt_pm.rps.cur_freq;
+		if (dev_priv->gt.awake) {
+			intel_wakeref_t wakeref;
+
+			with_intel_runtime_pm_if_in_use(&dev_priv->runtime_pm,
+							wakeref) {
+				val = intel_uncore_read_notrace(&dev_priv->uncore,
+								GEN6_RPSTAT1);
+				val = intel_get_cagf(dev_priv, val);
+			}
 		}
 
-		add_sample_mult(&pmu->sample[__I915_SAMPLE_FREQ_ACT],
-				intel_gpu_freq(i915, val),
+		add_sample_mult(&dev_priv->pmu.sample[__I915_SAMPLE_FREQ_ACT],
+				intel_gpu_freq(dev_priv, val),
 				period_ns / 1000);
 	}
 
-	if (pmu->enable & config_enabled_mask(I915_PMU_REQUESTED_FREQUENCY)) {
-		add_sample_mult(&pmu->sample[__I915_SAMPLE_FREQ_REQ],
-				intel_gpu_freq(i915, i915->gt_pm.rps.cur_freq),
+	if (dev_priv->pmu.enable &
+	    config_enabled_mask(I915_PMU_REQUESTED_FREQUENCY)) {
+		add_sample_mult(&dev_priv->pmu.sample[__I915_SAMPLE_FREQ_REQ],
+				intel_gpu_freq(dev_priv,
+					       dev_priv->gt_pm.rps.cur_freq),
 				period_ns / 1000);
 	}
 }
@@ -255,7 +257,6 @@ static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
 	struct drm_i915_private *i915 =
 		container_of(hrtimer, struct drm_i915_private, pmu.timer);
 	struct i915_pmu *pmu = &i915->pmu;
-	struct intel_gt *gt = &i915->gt;
 	unsigned int period_ns;
 	ktime_t now;
 
@@ -272,8 +273,8 @@ static enum hrtimer_restart i915_sample(struct hrtimer *hrtimer)
 	 * grabbing the forcewake. However the potential error from timer call-
 	 * back delay greatly dominates this so we keep it simple.
 	 */
-	engines_sample(gt, period_ns);
-	frequency_sample(gt, period_ns);
+	engines_sample(i915, period_ns);
+	frequency_sample(i915, period_ns);
 
 	hrtimer_forward(hrtimer, now, ns_to_ktime(PERIOD));
 
@@ -426,9 +427,8 @@ static int i915_pmu_event_init(struct perf_event *event)
 	return 0;
 }
 
-static u64 __get_rc6(struct intel_gt *gt)
+static u64 __get_rc6(struct drm_i915_private *i915)
 {
-	struct drm_i915_private *i915 = gt->i915;
 	u64 val;
 
 	val = intel_rc6_residency_ns(i915,
@@ -445,10 +445,9 @@ static u64 __get_rc6(struct intel_gt *gt)
 	return val;
 }
 
-static u64 get_rc6(struct intel_gt *gt)
+static u64 get_rc6(struct drm_i915_private *i915)
 {
 #if IS_ENABLED(CONFIG_PM)
-	struct drm_i915_private *i915 = gt->i915;
 	struct intel_runtime_pm *rpm = &i915->runtime_pm;
 	struct i915_pmu *pmu = &i915->pmu;
 	intel_wakeref_t wakeref;
@@ -457,7 +456,7 @@ static u64 get_rc6(struct intel_gt *gt)
 
 	wakeref = intel_runtime_pm_get_if_in_use(rpm);
 	if (wakeref) {
-		val = __get_rc6(gt);
+		val = __get_rc6(i915);
 		intel_runtime_pm_put(rpm, wakeref);
 
 		/*
@@ -520,7 +519,7 @@ static u64 get_rc6(struct intel_gt *gt)
 
 	return val;
 #else
-	return __get_rc6(gt);
+	return __get_rc6(i915);
 #endif
 }
 
@@ -563,7 +562,7 @@ static u64 __i915_pmu_event_read(struct perf_event *event)
 			val = count_interrupts(i915);
 			break;
 		case I915_PMU_RC6_RESIDENCY:
-			val = get_rc6(&i915->gt);
+			val = get_rc6(i915);
 			break;
 		}
 	}
@@ -843,8 +842,8 @@ create_event_attributes(struct i915_pmu *pmu)
 		const char *name;
 		const char *unit;
 	} events[] = {
-		__event(I915_PMU_ACTUAL_FREQUENCY, "actual-frequency", "M"),
-		__event(I915_PMU_REQUESTED_FREQUENCY, "requested-frequency", "M"),
+		__event(I915_PMU_ACTUAL_FREQUENCY, "actual-frequency", "MHz"),
+		__event(I915_PMU_REQUESTED_FREQUENCY, "requested-frequency", "MHz"),
 		__event(I915_PMU_INTERRUPTS, "interrupts", NULL),
 		__event(I915_PMU_RC6_RESIDENCY, "rc6-residency", "ns"),
 	};
@@ -861,6 +860,7 @@ create_event_attributes(struct i915_pmu *pmu)
 	struct i915_ext_attribute *i915_attr = NULL, *i915_iter;
 	struct attribute **attr = NULL, **attr_iter;
 	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
 	unsigned int i;
 
 	/* Count how many counters we will be exposing. */
@@ -869,7 +869,7 @@ create_event_attributes(struct i915_pmu *pmu)
 			count++;
 	}
 
-	for_each_uabi_engine(engine, i915) {
+	for_each_engine(engine, i915, id) {
 		for (i = 0; i < ARRAY_SIZE(engine_events); i++) {
 			if (!engine_event_status(engine,
 						 engine_events[i].sample))
@@ -920,7 +920,7 @@ create_event_attributes(struct i915_pmu *pmu)
 	}
 
 	/* Initialize supported engine counters. */
-	for_each_uabi_engine(engine, i915) {
+	for_each_engine(engine, i915, id) {
 		for (i = 0; i < ARRAY_SIZE(engine_events); i++) {
 			char *str;
 
@@ -937,7 +937,7 @@ create_event_attributes(struct i915_pmu *pmu)
 			i915_iter =
 				add_i915_attr(i915_iter, str,
 					      __I915_PMU_ENGINE(engine->uabi_class,
-								engine->uabi_instance,
+								engine->instance,
 								engine_events[i].sample));
 
 			str = kasprintf(GFP_KERNEL, "%s-%s.unit",
@@ -1053,7 +1053,7 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	int ret;
 
 	if (INTEL_GEN(i915) <= 2) {
-		dev_info(i915->drm.dev, "PMU not supported for this GPU.");
+		DRM_INFO("PMU not supported for this GPU.");
 		return;
 	}
 

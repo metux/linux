@@ -1,3 +1,4 @@
+
 .. The Linux Kernel documentation master file, created by
    sphinx-quickstart on Fri Feb 12 13:51:46 2016.
    You can adapt this file completely to your liking, but it should at least
@@ -55,6 +56,7 @@ the kernel interface as seen by application developers.
    :maxdepth: 2
 
    userspace-api/index
+   ioctl/index
 
 
 Introduction to kernel development
@@ -90,6 +92,7 @@ needed).
 
    driver-api/index
    core-api/index
+   leds/index
    media/index
    networking/index
    input/index
@@ -123,7 +126,16 @@ implementation.
 
    x86/index
    sh/index
+   arm/index
+   arm64/index
+   ia64/index
+   m68k/index
+   riscv/index
+   s390/index
+   sh/index
+   sparc/index
    x86/index
+   xtensa/index
 
 Filesystem Documentation
 ------------------------

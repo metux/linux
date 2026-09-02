@@ -68,4 +68,8 @@ static inline bool intel_gt_has_init_error(const struct intel_gt *gt)
 	return test_bit(I915_WEDGED_ON_INIT, &gt->reset.flags);
 }
 
+void intel_gt_check_and_clear_faults(struct intel_gt *gt);
+void intel_gt_clear_error_registers(struct intel_gt *gt,
+				    intel_engine_mask_t engine_mask);
+
 #endif /* __INTEL_GT_H__ */

@@ -441,13 +441,7 @@ static int mlx5_internal_err_ret_value(struct mlx5_core_dev *dev, u16 op,
 	case MLX5_CMD_OP_CREATE_GENERAL_OBJECT:
 	case MLX5_CMD_OP_MODIFY_GENERAL_OBJECT:
 	case MLX5_CMD_OP_QUERY_GENERAL_OBJECT:
-	case MLX5_CMD_OP_CREATE_UCTX:
-	case MLX5_CMD_OP_DESTROY_UCTX:
-	case MLX5_CMD_OP_CREATE_UMEM:
-	case MLX5_CMD_OP_DESTROY_UMEM:
 	case MLX5_CMD_OP_ALLOC_MEMIC:
-	case MLX5_CMD_OP_MODIFY_XRQ:
-	case MLX5_CMD_OP_RELEASE_XRQ_ERROR:
 		*status = MLX5_DRIVER_STATUS_ABORTED;
 		*synd = MLX5_DRIVER_SYND;
 		return -EIO;
@@ -635,12 +629,6 @@ const char *mlx5_command_str(int command)
 	MLX5_COMMAND_STR_CASE(ALLOC_MEMIC);
 	MLX5_COMMAND_STR_CASE(DEALLOC_MEMIC);
 	MLX5_COMMAND_STR_CASE(QUERY_ESW_FUNCTIONS);
-	MLX5_COMMAND_STR_CASE(CREATE_UCTX);
-	MLX5_COMMAND_STR_CASE(DESTROY_UCTX);
-	MLX5_COMMAND_STR_CASE(CREATE_UMEM);
-	MLX5_COMMAND_STR_CASE(DESTROY_UMEM);
-	MLX5_COMMAND_STR_CASE(RELEASE_XRQ_ERROR);
-	MLX5_COMMAND_STR_CASE(MODIFY_XRQ);
 	default: return "unknown command opcode";
 	}
 }
@@ -1372,19 +1360,49 @@ static void clean_debug_files(struct mlx5_core_dev *dev)
 	debugfs_remove_recursive(dbg->dbg_root);
 }
 
-static void create_debugfs_files(struct mlx5_core_dev *dev)
+static int create_debugfs_files(struct mlx5_core_dev *dev)
 {
 	struct mlx5_cmd_debug *dbg = &dev->cmd.dbg;
+	int err = -ENOMEM;
+
+	if (!mlx5_debugfs_root)
+		return 0;
 
 	dbg->dbg_root = debugfs_create_dir("cmd", dev->priv.dbg_root);
+	if (!dbg->dbg_root)
+		return err;
 
-	debugfs_create_file("in", 0400, dbg->dbg_root, dev, &dfops);
-	debugfs_create_file("out", 0200, dbg->dbg_root, dev, &dfops);
-	debugfs_create_file("out_len", 0600, dbg->dbg_root, dev, &olfops);
-	debugfs_create_u8("status", 0600, dbg->dbg_root, &dbg->status);
-	debugfs_create_file("run", 0200, dbg->dbg_root, dev, &fops);
+	dbg->dbg_in = debugfs_create_file("in", 0400, dbg->dbg_root,
+					  dev, &dfops);
+	if (!dbg->dbg_in)
+		goto err_dbg;
+
+	dbg->dbg_out = debugfs_create_file("out", 0200, dbg->dbg_root,
+					   dev, &dfops);
+	if (!dbg->dbg_out)
+		goto err_dbg;
+
+	dbg->dbg_outlen = debugfs_create_file("out_len", 0600, dbg->dbg_root,
+					      dev, &olfops);
+	if (!dbg->dbg_outlen)
+		goto err_dbg;
+
+	dbg->dbg_status = debugfs_create_u8("status", 0600, dbg->dbg_root,
+					    &dbg->status);
+	if (!dbg->dbg_status)
+		goto err_dbg;
+
+	dbg->dbg_run = debugfs_create_file("run", 0200, dbg->dbg_root, dev, &fops);
+	if (!dbg->dbg_run)
+		goto err_dbg;
 
 	mlx5_cmdif_debugfs_init(dev);
+
+	return 0;
+
+err_dbg:
+	clean_debug_files(dev);
+	return err;
 }
 
 static void mlx5_cmd_change_mod(struct mlx5_core_dev *dev, int mode)
@@ -1586,27 +1604,7 @@ void mlx5_cmd_flush(struct mlx5_core_dev *dev)
 
 static int status_to_err(u8 status)
 {
-	switch (status) {
-	case MLX5_CMD_DELIVERY_STAT_OK:
-	case MLX5_DRIVER_STATUS_ABORTED:
-		return 0;
-	case MLX5_CMD_DELIVERY_STAT_SIGNAT_ERR:
-	case MLX5_CMD_DELIVERY_STAT_TOK_ERR:
-		return -EBADR;
-	case MLX5_CMD_DELIVERY_STAT_BAD_BLK_NUM_ERR:
-	case MLX5_CMD_DELIVERY_STAT_OUT_PTR_ALIGN_ERR:
-	case MLX5_CMD_DELIVERY_STAT_IN_PTR_ALIGN_ERR:
-		return -EFAULT; /* Bad address */
-	case MLX5_CMD_DELIVERY_STAT_IN_LENGTH_ERR:
-	case MLX5_CMD_DELIVERY_STAT_OUT_LENGTH_ERR:
-	case MLX5_CMD_DELIVERY_STAT_CMD_DESCR_ERR:
-	case MLX5_CMD_DELIVERY_STAT_RES_FLD_NOT_CLR_ERR:
-		return -ENOMSG;
-	case MLX5_CMD_DELIVERY_STAT_FW_ERR:
-		return -EIO;
-	default:
-		return -EINVAL;
-	}
+	return status ? -1 : 0; /* TBD more meaningful codes */
 }
 
 static struct mlx5_cmd_msg *alloc_msg(struct mlx5_core_dev *dev, int in_size,
@@ -1981,9 +1979,16 @@ int mlx5_cmd_init(struct mlx5_core_dev *dev)
 		goto err_cache;
 	}
 
-	create_debugfs_files(dev);
+	err = create_debugfs_files(dev);
+	if (err) {
+		err = -ENOMEM;
+		goto err_wq;
+	}
 
 	return 0;
+
+err_wq:
+	destroy_workqueue(cmd->wq);
 
 err_cache:
 	destroy_msg_cache(dev);

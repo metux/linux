@@ -22,17 +22,11 @@ extern u32 get_umwait_control_msr(void);
 
 #define X2APIC_MSR(r) (APIC_BASE_MSR + ((r) >> 4))
 
-#ifdef CONFIG_X86_64
-#define NR_SHARED_MSRS	7
-#else
-#define NR_SHARED_MSRS	4
-#endif
-
-#define NR_LOADSTORE_MSRS 8
+#define NR_AUTOLOAD_MSRS 8
 
 struct vmx_msrs {
 	unsigned int		nr;
-	struct vmx_msr_entry	val[NR_LOADSTORE_MSRS];
+	struct vmx_msr_entry	val[NR_AUTOLOAD_MSRS];
 };
 
 struct shared_msr_entry {
@@ -93,6 +87,11 @@ struct pt_desc {
 	struct pt_ctx guest;
 };
 
+struct vmx_controls_shadow {
+	u32 vm_entry;
+	u32 vm_exit;
+};
+
 /*
  * The nested_vmx structure is part of vcpu_vmx, and holds information we need
  * for correct emulation of VMX (i.e., nested VMX) on this vcpu.
@@ -150,9 +149,6 @@ struct nested_vmx {
 	/* L2 must run next, and mustn't decide to exit to L1. */
 	bool nested_run_pending;
 
-	/* Pending MTF VM-exit into L1.  */
-	bool mtf_pending;
-
 	struct loaded_vmcs vmcs02;
 
 	/*
@@ -175,9 +171,6 @@ struct nested_vmx {
 	/* to migrate it to L2 if VM_ENTRY_LOAD_DEBUG_CONTROLS is off */
 	u64 vmcs01_debugctl;
 	u64 vmcs01_guest_bndcfgs;
-
-	/* to migrate it to L1 if L2 writes to L1's CR8 directly */
-	int l1_tpr_threshold;
 
 	u16 vpid02;
 	u16 last_vpid;
@@ -215,7 +208,9 @@ struct vcpu_vmx {
 	u32                   idt_vectoring_info;
 	ulong                 rflags;
 
-	struct shared_msr_entry guest_msrs[NR_SHARED_MSRS];
+	struct vmx_controls_shadow	controls_shadow;
+
+	struct shared_msr_entry *guest_msrs;
 	int                   nmsrs;
 	int                   save_nmsrs;
 	bool                  guest_msrs_ready;
@@ -241,10 +236,6 @@ struct vcpu_vmx {
 		struct vmx_msrs guest;
 		struct vmx_msrs host;
 	} msr_autoload;
-
-	struct msr_autostore {
-		struct vmx_msrs guest;
-	} msr_autostore;
 
 	struct {
 		int vm86_active;
@@ -292,7 +283,7 @@ struct vcpu_vmx {
 
 	/*
 	 * Only bits masked by msr_ia32_feature_control_valid_bits can be set in
-	 * msr_ia32_feature_control. FEAT_CTL_LOCKED is always included
+	 * msr_ia32_feature_control. FEATURE_CONTROL_LOCKED is always included
 	 * in msr_ia32_feature_control_valid_bits.
 	 */
 	u64 msr_ia32_feature_control;
@@ -350,7 +341,6 @@ void vmx_set_virtual_apic_mode(struct kvm_vcpu *vcpu);
 struct shared_msr_entry *find_msr_entry(struct vcpu_vmx *vmx, u32 msr);
 void pt_update_intercept_for_msr(struct vcpu_vmx *vmx);
 void vmx_update_host_rsp(struct vcpu_vmx *vmx, unsigned long host_rsp);
-int vmx_find_msr_index(struct vmx_msrs *m, u32 msr);
 
 #define POSTED_INTR_ON  0
 #define POSTED_INTR_SN  1
@@ -425,16 +415,23 @@ static inline u8 vmx_get_rvi(void)
 }
 
 #define BUILD_CONTROLS_SHADOW(lname, uname)				    \
+static inline void lname##_controls_reset_shadow(struct vcpu_vmx *vmx)	    \
+{									    \
+	vmx->controls_shadow.lname = vmcs_read32(uname);		    \
+}									    \
+static inline void lname##_controls_init(struct vcpu_vmx *vmx, u32 val)	    \
+{									    \
+	vmcs_write32(uname, val);					    \
+	vmx->controls_shadow.lname = val;				    \
+}									    \
 static inline void lname##_controls_set(struct vcpu_vmx *vmx, u32 val)	    \
 {									    \
-	if (vmx->loaded_vmcs->controls_shadow.lname != val) {		    \
-		vmcs_write32(uname, val);				    \
-		vmx->loaded_vmcs->controls_shadow.lname = val;		    \
-	}								    \
+	if (vmx->controls_shadow.lname != val)				    \
+		lname##_controls_init(vmx, val);			    \
 }									    \
 static inline u32 lname##_controls_get(struct vcpu_vmx *vmx)		    \
 {									    \
-	return vmx->loaded_vmcs->controls_shadow.lname;			    \
+	return vmx->controls_shadow.lname;				    \
 }									    \
 static inline void lname##_controls_setbit(struct vcpu_vmx *vmx, u32 val)   \
 {									    \
@@ -446,9 +443,6 @@ static inline void lname##_controls_clearbit(struct vcpu_vmx *vmx, u32 val) \
 }
 BUILD_CONTROLS_SHADOW(vm_entry, VM_ENTRY_CONTROLS)
 BUILD_CONTROLS_SHADOW(vm_exit, VM_EXIT_CONTROLS)
-BUILD_CONTROLS_SHADOW(pin, PIN_BASED_VM_EXEC_CONTROL)
-BUILD_CONTROLS_SHADOW(exec, CPU_BASED_VM_EXEC_CONTROL)
-BUILD_CONTROLS_SHADOW(secondary_exec, SECONDARY_VM_EXEC_CONTROL)
 
 static inline void vmx_segment_cache_clear(struct vcpu_vmx *vmx)
 {

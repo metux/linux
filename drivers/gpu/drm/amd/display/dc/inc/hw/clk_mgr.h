@@ -26,17 +26,25 @@
 #ifndef __DAL_CLK_MGR_H__
 #define __DAL_CLK_MGR_H__
 
-#include "dm_services_types.h"
 #include "dc.h"
 
-struct clk_mgr {
-	struct dc_context *ctx;
-	struct clk_mgr_funcs *funcs;
+#define DCN_MINIMUM_DISPCLK_Khz 100000
+#define DCN_MINIMUM_DPPCLK_Khz 100000
 
-	struct dc_clocks clks;
+/* Public interfaces */
+
+struct clk_states {
+	uint32_t dprefclk_khz;
 };
 
 struct clk_mgr_funcs {
+	/*
+	 * This function should set new clocks based on the input "safe_to_lower".
+	 * If safe_to_lower == false, then only clocks which are to be increased
+	 * should changed.
+	 * If safe_to_lower == true, then only clocks which are to be decreased
+	 * should be changed.
+	 */
 	void (*update_clocks)(struct clk_mgr *clk_mgr,
 			struct dc_state *context,
 			bool safe_to_lower);
@@ -45,11 +53,25 @@ struct clk_mgr_funcs {
 
 	void (*init_clocks)(struct clk_mgr *clk_mgr);
 
-	/* Returns actual clk that's set */
-	int (*set_dispclk)(struct clk_mgr *clk_mgr, int requested_dispclk_khz);
-	int (*set_dprefclk)(struct clk_mgr *clk_mgr);
+	void (*enable_pme_wa) (struct clk_mgr *clk_mgr);
+	void (*get_clock)(struct clk_mgr *clk_mgr,
+			struct dc_state *context,
+			enum dc_clock_type clock_type,
+			struct dc_clock_config *clock_cfg);
 };
 
+struct clk_mgr {
+	struct dc_context *ctx;
+	struct clk_mgr_funcs *funcs;
+	struct dc_clocks clks;
+	int dprefclk_khz; // Used by program pixel clock in clock source funcs, need to figureout where this goes
+};
 
+/* forward declarations */
+struct dccg;
+
+struct clk_mgr *dc_clk_mgr_create(struct dc_context *ctx, struct pp_smu_funcs *pp_smu, struct dccg *dccg);
+
+void dc_destroy_clk_mgr(struct clk_mgr *clk_mgr);
 
 #endif /* __DAL_CLK_MGR_H__ */

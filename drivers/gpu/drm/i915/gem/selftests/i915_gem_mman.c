@@ -6,6 +6,7 @@
 
 #include <linux/prime_numbers.h>
 
+#include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 #include "huge_gem_object.h"
 #include "i915_selftest.h"
@@ -98,6 +99,14 @@ static int check_partial_mapping(struct drm_i915_gem_object *obj,
 	GEM_BUG_ON(i915_gem_object_get_tiling(obj) != tile->tiling);
 	GEM_BUG_ON(i915_gem_object_get_stride(obj) != tile->stride);
 
+	i915_gem_object_lock(obj);
+	err = i915_gem_object_set_to_gtt_domain(obj, true);
+	i915_gem_object_unlock(obj);
+	if (err) {
+		pr_err("Failed to flush to GTT write domain; err=%d\n", err);
+		return err;
+	}
+
 	for_each_prime_number_from(page, 1, npages) {
 		struct i915_ggtt_view view =
 			compute_partial_view(obj, page, MIN_CHUNK_PAGES);
@@ -109,13 +118,6 @@ static int check_partial_mapping(struct drm_i915_gem_object *obj,
 
 		GEM_BUG_ON(view.partial.size > nreal);
 		cond_resched();
-
-		err = i915_gem_object_set_to_gtt_domain(obj, true);
-		if (err) {
-			pr_err("Failed to flush to GTT write domain; err=%d\n",
-			       err);
-			return err;
-		}
 
 		vma = i915_gem_object_ggtt_pin(obj, &view, 0, 0, PIN_MAPPABLE);
 		if (IS_ERR(vma)) {
@@ -142,7 +144,7 @@ static int check_partial_mapping(struct drm_i915_gem_object *obj,
 		if (offset >= obj->base.size)
 			continue;
 
-		i915_gem_object_flush_write_domain(obj, ~I915_GEM_DOMAIN_CPU);
+		intel_gt_flush_ggtt_writes(&to_i915(obj->base.dev)->gt);
 
 		p = i915_gem_object_get_page(obj, offset >> PAGE_SHIFT);
 		cpu = kmap(p) + offset_in_page(offset);
@@ -204,7 +206,7 @@ static int igt_partial_tiling(void *arg)
 	}
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (1) {
 		IGT_TIMEOUT(end);
@@ -315,7 +317,7 @@ next_tiling: ;
 	}
 
 out_unlock:
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	i915_gem_object_unpin_pages(obj);
 out:
@@ -344,12 +346,14 @@ static int make_obj_busy(struct drm_i915_gem_object *obj)
 		return PTR_ERR(rq);
 	}
 
+	i915_vma_lock(vma);
 	err = i915_vma_move_to_active(vma, rq, EXEC_OBJECT_WRITE);
+	i915_vma_unlock(vma);
 
 	i915_request_add(rq);
 
-	__i915_gem_object_release_unless_active(obj);
 	i915_vma_unpin(vma);
+	i915_gem_object_put(obj); /* leave it only alive via its active ref */
 
 	return err;
 }

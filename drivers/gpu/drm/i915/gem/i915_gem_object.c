@@ -23,7 +23,7 @@
  */
 
 #include "display/intel_frontbuffer.h"
-
+#include "gt/intel_gt.h"
 #include "i915_drv.h"
 #include "i915_gem_clflush.h"
 #include "i915_gem_context.h"
@@ -376,7 +376,6 @@ void
 i915_gem_object_flush_write_domain(struct drm_i915_gem_object *obj,
 				   unsigned int flush_domains)
 {
-	struct drm_i915_private *dev_priv = to_i915(obj->base.dev);
 	struct i915_vma *vma;
 
 	if (!(obj->write_domain & flush_domains))
@@ -384,7 +383,8 @@ i915_gem_object_flush_write_domain(struct drm_i915_gem_object *obj,
 
 	switch (obj->write_domain) {
 	case I915_GEM_DOMAIN_GTT:
-		i915_gem_flush_ggtt_writes(dev_priv);
+		for_each_ggtt_vma(vma, obj)
+			intel_gt_flush_ggtt_writes(vma->vm->gt);
 
 		intel_fb_obj_flush(obj,
 				   fb_write_origin(obj, I915_GEM_DOMAIN_GTT));
@@ -395,6 +395,7 @@ i915_gem_object_flush_write_domain(struct drm_i915_gem_object *obj,
 
 			i915_vma_unset_ggtt_write(vma);
 		}
+
 		break;
 
 	case I915_GEM_DOMAIN_WC:

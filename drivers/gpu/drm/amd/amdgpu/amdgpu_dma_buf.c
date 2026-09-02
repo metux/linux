@@ -137,23 +137,23 @@ int amdgpu_gem_prime_mmap(struct drm_gem_object *obj,
 }
 
 static int
-__dma_resv_make_exclusive(struct dma_resv *obj)
+__reservation_object_make_exclusive(struct reservation_object *obj)
 {
 	struct dma_fence **fences;
 	unsigned int count;
 	int r;
 
-	if (!dma_resv_get_list(obj)) /* no shared fences to convert */
+	if (!reservation_object_get_list(obj)) /* no shared fences to convert */
 		return 0;
 
-	r = dma_resv_get_fences_rcu(obj, NULL, &count, &fences);
+	r = reservation_object_get_fences_rcu(obj, NULL, &count, &fences);
 	if (r)
 		return r;
 
 	if (count == 0) {
 		/* Now that was unexpected. */
 	} else if (count == 1) {
-		dma_resv_add_excl_fence(obj, fences[0]);
+		reservation_object_add_excl_fence(obj, fences[0]);
 		dma_fence_put(fences[0]);
 		kfree(fences);
 	} else {
@@ -165,7 +165,7 @@ __dma_resv_make_exclusive(struct dma_resv *obj)
 		if (!array)
 			goto err_fences_put;
 
-		dma_resv_add_excl_fence(obj, &array->base);
+		reservation_object_add_excl_fence(obj, &array->base);
 		dma_fence_put(&array->base);
 	}
 
@@ -216,7 +216,7 @@ static int amdgpu_dma_buf_map_attach(struct dma_buf *dma_buf,
 		 * fences on the reservation object into a single exclusive
 		 * fence.
 		 */
-		r = __dma_resv_make_exclusive(bo->tbo.base.resv);
+		r = __reservation_object_make_exclusive(bo->tbo.resv);
 		if (r)
 			goto error_unreserve;
 	}
@@ -285,7 +285,7 @@ static int amdgpu_dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(dma_buf->priv);
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
 	struct ttm_operation_ctx ctx = { true, false };
-	u32 domain = amdgpu_display_supported_domains(adev, bo->flags);
+	u32 domain = amdgpu_display_supported_domains(adev);
 	int ret;
 	bool reads = (direction == DMA_BIDIRECTIONAL ||
 		      direction == DMA_FROM_DEVICE);
@@ -367,7 +367,7 @@ amdgpu_gem_prime_import_sg_table(struct drm_device *dev,
 				 struct dma_buf_attachment *attach,
 				 struct sg_table *sg)
 {
-	struct dma_resv *resv = attach->dmabuf->resv;
+	struct reservation_object *resv = attach->dmabuf->resv;
 	struct amdgpu_device *adev = dev->dev_private;
 	struct amdgpu_bo *bo;
 	struct amdgpu_bo_param bp;
@@ -380,7 +380,7 @@ amdgpu_gem_prime_import_sg_table(struct drm_device *dev,
 	bp.flags = 0;
 	bp.type = ttm_bo_type_sg;
 	bp.resv = resv;
-	dma_resv_lock(resv, NULL);
+	reservation_object_lock(resv, NULL);
 	ret = amdgpu_bo_create(adev, &bp, &bo);
 	if (ret)
 		goto error;
@@ -392,11 +392,11 @@ amdgpu_gem_prime_import_sg_table(struct drm_device *dev,
 	if (attach->dmabuf->ops != &amdgpu_dmabuf_ops)
 		bo->prime_shared_count = 1;
 
-	dma_resv_unlock(resv);
-	return &bo->tbo.base;
+	reservation_object_unlock(resv);
+	return &bo->gem_base;
 
 error:
-	dma_resv_unlock(resv);
+	reservation_object_unlock(resv);
 	return ERR_PTR(ret);
 }
 

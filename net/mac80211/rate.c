@@ -354,10 +354,8 @@ static void __rate_control_send_low(struct ieee80211_hw *hw,
 		break;
 	}
 	WARN_ONCE(i == sband->n_bitrates,
-		  "no supported rates for sta %pM (0x%x, band %d) in rate_mask 0x%x with flags 0x%x\n",
-		  sta ? sta->addr : NULL,
+		  "no supported rates (0x%x) in rate_mask 0x%x with flags 0x%x\n",
 		  sta ? sta->supp_rates[sband->band] : -1,
-		  sband->band,
 		  rate_mask, rate_flags);
 
 	info->control.rates[0].count =
@@ -891,10 +889,10 @@ void rate_control_get_rate(struct ieee80211_sub_if_data *sdata,
 		info->control.rates[i].count = 0;
 	}
 
-	if (rate_control_send_low(sta ? &sta->sta : NULL, txrc))
+	if (ieee80211_hw_check(&sdata->local->hw, HAS_RATE_CONTROL))
 		return;
 
-	if (ieee80211_hw_check(&sdata->local->hw, HAS_RATE_CONTROL))
+	if (rate_control_send_low(sta ? &sta->sta : NULL, txrc))
 		return;
 
 	if (sta && test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {

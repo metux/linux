@@ -279,6 +279,23 @@ static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 	set_pte(ptep, pte);
 }
 
+#define __HAVE_ARCH_PTE_SAME
+static inline int pte_same(pte_t pte_a, pte_t pte_b)
+{
+	pteval_t lhs, rhs;
+
+	lhs = pte_val(pte_a);
+	rhs = pte_val(pte_b);
+
+	if (pte_present(pte_a))
+		lhs &= ~PTE_RDONLY;
+
+	if (pte_present(pte_b))
+		rhs &= ~PTE_RDONLY;
+
+	return (lhs == rhs);
+}
+
 /*
  * Huge pte definitions.
  */
@@ -416,14 +433,6 @@ static inline pmd_t pmd_mkdevmap(pmd_t pmd)
 	__pgprot_modify(prot, PTE_ATTRINDX_MASK, PTE_ATTRINDX(MT_NORMAL_NC) | PTE_PXN | PTE_UXN)
 #define pgprot_device(prot) \
 	__pgprot_modify(prot, PTE_ATTRINDX_MASK, PTE_ATTRINDX(MT_DEVICE_nGnRE) | PTE_PXN | PTE_UXN)
-/*
- * DMA allocations for non-coherent devices use what the Arm architecture calls
- * "Normal non-cacheable" memory, which permits speculation, unaligned accesses
- * and merging of writes.  This is different from "Device-nGnR[nE]" memory which
- * is intended for MMIO and thus forbids speculation, preserves access size,
- * requires strict alignment and can also force write responses to come from the
- * endpoint.
- */
 #define pgprot_dmacoherent(prot) \
 	__pgprot_modify(prot, PTE_ATTRINDX_MASK, \
 			PTE_ATTRINDX(MT_NORMAL_NC) | PTE_PXN | PTE_UXN)
@@ -842,6 +851,8 @@ extern int kern_addr_valid(unsigned long addr);
 
 #include <asm-generic/pgtable.h>
 
+static inline void pgtable_cache_init(void) { }
+
 /*
  * On AArch64, the cache coherency is handled via the set_pte_at() function.
  */
@@ -856,6 +867,9 @@ static inline void update_mmu_cache(struct vm_area_struct *vma,
 }
 
 #define update_mmu_cache_pmd(vma, address, pmd) do { } while (0)
+
+#define kc_vaddr_to_offset(v)	((v) & ~PAGE_END)
+#define kc_offset_to_vaddr(o)	((o) | PAGE_END)
 
 #ifdef CONFIG_ARM64_PA_BITS_52
 #define phys_to_ttbr(addr)	(((addr) | ((addr) >> 46)) & TTBR_BADDR_MASK_52)

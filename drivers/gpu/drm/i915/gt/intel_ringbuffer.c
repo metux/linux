@@ -34,9 +34,10 @@
 #include "gem/i915_gem_context.h"
 
 #include "i915_drv.h"
-#include "i915_gem_render_state.h"
 #include "i915_trace.h"
 #include "intel_context.h"
+#include "intel_gt.h"
+#include "intel_renderstate.h"
 #include "intel_reset.h"
 #include "intel_workarounds.h"
 
@@ -75,7 +76,8 @@ gen2_render_ring_flush(struct i915_request *rq, u32 mode)
 	*cs++ = cmd;
 	while (num_store_dw--) {
 		*cs++ = MI_STORE_DWORD_IMM | MI_MEM_VIRTUAL;
-		*cs++ = i915_scratch_offset(rq->i915);
+		*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+						INTEL_GT_SCRATCH_FIELD_DEFAULT);
 		*cs++ = 0;
 	}
 	*cs++ = MI_FLUSH | MI_NO_WRITE_FLUSH;
@@ -148,7 +150,9 @@ gen4_render_ring_flush(struct i915_request *rq, u32 mode)
 	 */
 	if (mode & EMIT_INVALIDATE) {
 		*cs++ = GFX_OP_PIPE_CONTROL(4) | PIPE_CONTROL_QW_WRITE;
-		*cs++ = i915_scratch_offset(rq->i915) | PIPE_CONTROL_GLOBAL_GTT;
+		*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+						INTEL_GT_SCRATCH_FIELD_DEFAULT) |
+			PIPE_CONTROL_GLOBAL_GTT;
 		*cs++ = 0;
 		*cs++ = 0;
 
@@ -156,7 +160,9 @@ gen4_render_ring_flush(struct i915_request *rq, u32 mode)
 			*cs++ = MI_FLUSH;
 
 		*cs++ = GFX_OP_PIPE_CONTROL(4) | PIPE_CONTROL_QW_WRITE;
-		*cs++ = i915_scratch_offset(rq->i915) | PIPE_CONTROL_GLOBAL_GTT;
+		*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+						INTEL_GT_SCRATCH_FIELD_DEFAULT) |
+			PIPE_CONTROL_GLOBAL_GTT;
 		*cs++ = 0;
 		*cs++ = 0;
 	}
@@ -208,7 +214,9 @@ gen4_render_ring_flush(struct i915_request *rq, u32 mode)
 static int
 gen6_emit_post_sync_nonzero_flush(struct i915_request *rq)
 {
-	u32 scratch_addr = i915_scratch_offset(rq->i915) + 2 * CACHELINE_BYTES;
+	u32 scratch_addr =
+		intel_gt_scratch_offset(rq->engine->gt,
+					INTEL_GT_SCRATCH_FIELD_RENDER_FLUSH);
 	u32 *cs;
 
 	cs = intel_ring_begin(rq, 6);
@@ -241,7 +249,9 @@ gen6_emit_post_sync_nonzero_flush(struct i915_request *rq)
 static int
 gen6_render_ring_flush(struct i915_request *rq, u32 mode)
 {
-	u32 scratch_addr = i915_scratch_offset(rq->i915) + 2 * CACHELINE_BYTES;
+	u32 scratch_addr =
+		intel_gt_scratch_offset(rq->engine->gt,
+					INTEL_GT_SCRATCH_FIELD_RENDER_FLUSH);
 	u32 *cs, flags = 0;
 	int ret;
 
@@ -299,7 +309,9 @@ static u32 *gen6_rcs_emit_breadcrumb(struct i915_request *rq, u32 *cs)
 
 	*cs++ = GFX_OP_PIPE_CONTROL(4);
 	*cs++ = PIPE_CONTROL_QW_WRITE;
-	*cs++ = i915_scratch_offset(rq->i915) | PIPE_CONTROL_GLOBAL_GTT;
+	*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+					INTEL_GT_SCRATCH_FIELD_DEFAULT) |
+		PIPE_CONTROL_GLOBAL_GTT;
 	*cs++ = 0;
 
 	/* Finally we can flush and with it emit the breadcrumb */
@@ -342,7 +354,9 @@ gen7_render_ring_cs_stall_wa(struct i915_request *rq)
 static int
 gen7_render_ring_flush(struct i915_request *rq, u32 mode)
 {
-	u32 scratch_addr = i915_scratch_offset(rq->i915) + 2 * CACHELINE_BYTES;
+	u32 scratch_addr =
+		intel_gt_scratch_offset(rq->engine->gt,
+					INTEL_GT_SCRATCH_FIELD_RENDER_FLUSH);
 	u32 *cs, flags = 0;
 
 	/*
@@ -781,7 +795,7 @@ static void reset_ring(struct intel_engine_cs *engine, bool stalled)
 		 * If the request was innocent, we try to replay the request
 		 * with the restored context.
 		 */
-		i915_reset_request(rq, stalled);
+		__i915_request_reset(rq, stalled);
 
 		GEM_BUG_ON(rq->ring != engine->buffer);
 		head = rq->head;
@@ -805,7 +819,7 @@ static int intel_rcs_ctx_init(struct i915_request *rq)
 	if (ret != 0)
 		return ret;
 
-	ret = i915_gem_render_state_emit(rq);
+	ret = intel_renderstate_emit(rq);
 	if (ret)
 		return ret;
 
@@ -1033,14 +1047,14 @@ hsw_vebox_irq_enable(struct intel_engine_cs *engine)
 	/* Flush/delay to ensure the RING_IMR is active before the GT IMR */
 	ENGINE_POSTING_READ(engine, RING_IMR);
 
-	gen6_unmask_pm_irq(engine->i915, engine->irq_enable_mask);
+	gen6_unmask_pm_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static void
 hsw_vebox_irq_disable(struct intel_engine_cs *engine)
 {
 	ENGINE_WRITE(engine, RING_IMR, ~0);
-	gen6_mask_pm_irq(engine->i915, engine->irq_enable_mask);
+	gen6_mask_pm_irq(engine->gt, engine->irq_enable_mask);
 }
 
 static int
@@ -1071,9 +1085,11 @@ i830_emit_bb_start(struct i915_request *rq,
 		   u64 offset, u32 len,
 		   unsigned int dispatch_flags)
 {
-	u32 *cs, cs_offset = i915_scratch_offset(rq->i915);
+	u32 *cs, cs_offset =
+		intel_gt_scratch_offset(rq->engine->gt,
+					INTEL_GT_SCRATCH_FIELD_DEFAULT);
 
-	GEM_BUG_ON(rq->i915->gt.scratch->size < I830_WA_SIZE);
+	GEM_BUG_ON(rq->engine->gt->scratch->size < I830_WA_SIZE);
 
 	cs = intel_ring_begin(rq, 6);
 	if (IS_ERR(cs))
@@ -1189,6 +1205,7 @@ int intel_ring_pin(struct intel_ring *ring)
 	GEM_BUG_ON(ring->vaddr);
 	ring->vaddr = addr;
 
+	GEM_TRACE("ring:%llx pin\n", ring->timeline->fence_context);
 	return 0;
 
 err_ring:
@@ -1214,6 +1231,8 @@ void intel_ring_unpin(struct intel_ring *ring)
 {
 	if (!atomic_dec_and_test(&ring->pin_count))
 		return;
+
+	GEM_TRACE("ring:%llx unpin\n", ring->timeline->fence_context);
 
 	/* Discard any unused bytes beyond that submitted to hw. */
 	intel_ring_reset(ring, ring->tail);
@@ -1493,7 +1512,7 @@ static int load_pd_dir(struct i915_request *rq, const struct i915_ppgtt *ppgtt)
 
 	*cs++ = MI_LOAD_REGISTER_IMM(1);
 	*cs++ = i915_mmio_reg_offset(RING_PP_DIR_BASE(engine->mmio_base));
-	*cs++ = ppgtt->pd->base.ggtt_offset << 10;
+	*cs++ = px_base(ppgtt->pd)->ggtt_offset << 10;
 
 	intel_ring_advance(rq, cs);
 
@@ -1512,7 +1531,8 @@ static int flush_pd_dir(struct i915_request *rq)
 	/* Stall until the page table load is complete */
 	*cs++ = MI_STORE_REGISTER_MEM | MI_SRM_LRM_GLOBAL_GTT;
 	*cs++ = i915_mmio_reg_offset(RING_PP_DIR_BASE(engine->mmio_base));
-	*cs++ = i915_scratch_offset(rq->i915);
+	*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+					INTEL_GT_SCRATCH_FIELD_DEFAULT);
 	*cs++ = MI_NOOP;
 
 	intel_ring_advance(rq, cs);
@@ -1628,7 +1648,8 @@ static inline int mi_set_context(struct i915_request *rq, u32 flags)
 			/* Insert a delay before the next switch! */
 			*cs++ = MI_STORE_REGISTER_MEM | MI_SRM_LRM_GLOBAL_GTT;
 			*cs++ = i915_mmio_reg_offset(last_reg);
-			*cs++ = i915_scratch_offset(rq->i915);
+			*cs++ = intel_gt_scratch_offset(rq->engine->gt,
+							INTEL_GT_SCRATCH_FIELD_DEFAULT);
 			*cs++ = MI_NOOP;
 		}
 		*cs++ = MI_ARB_ON_OFF | MI_ARB_ENABLE;

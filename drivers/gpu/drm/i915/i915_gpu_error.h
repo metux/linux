@@ -15,9 +15,9 @@
 #include <drm/drm_mm.h>
 
 #include "gt/intel_engine.h"
-#include "gt/uc/intel_uc_fw.h"
 
 #include "intel_device_info.h"
+#include "intel_uc_fw.h"
 
 #include "i915_gem.h"
 #include "i915_gem_gtt.h"
@@ -81,11 +81,11 @@ struct i915_gpu_state {
 	struct intel_display_error_state *display;
 
 	struct drm_i915_error_engine {
-		const struct intel_engine_cs *engine;
-
+		int engine_id;
 		/* Software tracked state */
 		bool idle;
 		unsigned long hangcheck_timestamp;
+		struct i915_address_space *vm;
 		int num_requests;
 		u32 reset_count;
 
@@ -159,9 +159,23 @@ struct i915_gpu_state {
 				u32 pp_dir_base;
 			};
 		} vm_info;
+	} engine[I915_NUM_ENGINES];
 
-		struct drm_i915_error_engine *next;
-	} *engine;
+	struct drm_i915_error_buffer {
+		u32 size;
+		u32 name;
+		u64 gtt_offset;
+		u32 read_domains;
+		u32 write_domain;
+		s32 fence_reg:I915_MAX_NUM_FENCE_BITS;
+		u32 tiling:2;
+		u32 dirty:1;
+		u32 purgeable:1;
+		u32 userptr:1;
+		u32 cache_level:3;
+	} *active_bo[I915_NUM_ENGINES], *pinned_bo;
+	u32 active_bo_count[I915_NUM_ENGINES], pinned_bo_count;
+	struct i915_address_space *active_vm[I915_NUM_ENGINES];
 
 	struct scatterlist *sgl, *fit;
 };

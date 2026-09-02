@@ -7,6 +7,7 @@
 #include <linux/prime_numbers.h>
 
 #include "gem/i915_gem_pm.h"
+#include "gt/intel_gt.h"
 #include "gt/intel_reset.h"
 #include "i915_selftest.h"
 
@@ -83,7 +84,7 @@ static int live_nop_switch(void *arg)
 		}
 		if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 			pr_err("Failed to populated %d contexts\n", nctx);
-			i915_gem_set_wedged(i915);
+			intel_gt_set_wedged(&i915->gt);
 			err = -EIO;
 			goto out_unlock;
 		}
@@ -127,7 +128,7 @@ static int live_nop_switch(void *arg)
 			if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 				pr_err("Switching between %ld contexts timed out\n",
 				       prime);
-				i915_gem_set_wedged(i915);
+				intel_gt_set_wedged(&i915->gt);
 				break;
 			}
 
@@ -427,6 +428,9 @@ create_test_object(struct i915_gem_context *ctx,
 	u64 size;
 	int err;
 
+	/* Keep in GEM's good graces */
+	i915_retire_requests(ctx->i915);
+
 	size = min(vm->total / 2, 1024ull * DW_PER_PAGE * PAGE_SIZE);
 	size = round_down(size, DW_PER_PAGE * PAGE_SIZE);
 
@@ -563,6 +567,8 @@ out_unlock:
 		mock_file_free(i915, file);
 		if (err)
 			return err;
+
+		i915_gem_drain_freed_objects(i915);
 	}
 
 	return 0;
@@ -673,6 +679,10 @@ static int igt_shared_ctx_exec(void *arg)
 
 			dw += rem;
 		}
+
+		mutex_unlock(&i915->drm.struct_mutex);
+		i915_gem_drain_freed_objects(i915);
+		mutex_lock(&i915->drm.struct_mutex);
 	}
 out_test:
 	if (igt_live_test_end(&t))
@@ -951,7 +961,7 @@ __sseu_finish(struct drm_i915_private *i915,
 	int ret = 0;
 
 	if (flags & TEST_RESET) {
-		ret = i915_reset_engine(ce->engine, "sseu");
+		ret = intel_engine_reset(ce->engine, "sseu");
 		if (ret)
 			goto out;
 	}
@@ -1020,7 +1030,6 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 	       unsigned int flags)
 {
 	struct intel_engine_cs *engine = i915->engine[RCS0];
-	struct intel_sseu default_sseu = engine->sseu;
 	struct drm_i915_gem_object *obj;
 	struct i915_gem_context *ctx;
 	struct intel_context *ce;
@@ -1028,26 +1037,26 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 	struct drm_file *file;
 	int ret;
 
-	if (INTEL_GEN(i915) < 9)
+	if (INTEL_GEN(i915) < 9 || !engine)
 		return 0;
 
 	if (!RUNTIME_INFO(i915)->sseu.has_slice_pg)
 		return 0;
 
-	if (hweight32(default_sseu.slice_mask) < 2)
+	if (hweight32(engine->sseu.slice_mask) < 2)
 		return 0;
 
 	/*
 	 * Gen11 VME friendly power-gated configuration with half enabled
 	 * sub-slices.
 	 */
-	pg_sseu = default_sseu;
+	pg_sseu = engine->sseu;
 	pg_sseu.slice_mask = 1;
 	pg_sseu.subslice_mask =
-		~(~0 << (hweight32(default_sseu.subslice_mask) / 2));
+		~(~0 << (hweight32(engine->sseu.subslice_mask) / 2));
 
 	pr_info("SSEU subtest '%s', flags=%x, def_slices=%u, pg_slices=%u\n",
-		name, flags, hweight32(default_sseu.slice_mask),
+		name, flags, hweight32(engine->sseu.slice_mask),
 		hweight32(pg_sseu.slice_mask));
 
 	file = mock_file(i915);
@@ -1055,7 +1064,7 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 		return PTR_ERR(file);
 
 	if (flags & TEST_RESET)
-		igt_global_reset_lock(i915);
+		igt_global_reset_lock(&i915->gt);
 
 	mutex_lock(&i915->drm.struct_mutex);
 
@@ -1083,7 +1092,7 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 		goto out_context;
 
 	/* First set the default mask. */
-	ret = __sseu_test(i915, name, flags, ce, obj, default_sseu);
+	ret = __sseu_test(i915, name, flags, ce, obj, engine->sseu);
 	if (ret)
 		goto out_fail;
 
@@ -1093,7 +1102,7 @@ __igt_ctx_sseu(struct drm_i915_private *i915,
 		goto out_fail;
 
 	/* Back to defaults. */
-	ret = __sseu_test(i915, name, flags, ce, obj, default_sseu);
+	ret = __sseu_test(i915, name, flags, ce, obj, engine->sseu);
 	if (ret)
 		goto out_fail;
 
@@ -1116,7 +1125,7 @@ out_unlock:
 	mutex_unlock(&i915->drm.struct_mutex);
 
 	if (flags & TEST_RESET)
-		igt_global_reset_unlock(i915);
+		igt_global_reset_unlock(&i915->gt);
 
 	mock_file_free(i915, file);
 
@@ -1535,7 +1544,7 @@ static int igt_vm_isolation(void *arg)
 
 			div64_u64_rem(i915_prandom_u64_state(&prng),
 				      vm_total, &offset);
-			offset &= -sizeof(u32);
+			offset = round_down(offset, alignof_dword);
 			offset += I915_GTT_PAGE_SIZE;
 
 			err = write_to_scratch(ctx_a, engine,
@@ -1718,7 +1727,7 @@ int i915_gem_context_mock_selftests(void)
 	return err;
 }
 
-int i915_gem_context_live_selftests(struct drm_i915_private *dev_priv)
+int i915_gem_context_live_selftests(struct drm_i915_private *i915)
 {
 	static const struct i915_subtest tests[] = {
 		SUBTEST(live_nop_switch),
@@ -1729,8 +1738,8 @@ int i915_gem_context_live_selftests(struct drm_i915_private *dev_priv)
 		SUBTEST(igt_vm_isolation),
 	};
 
-	if (i915_terminally_wedged(dev_priv))
+	if (intel_gt_is_wedged(&i915->gt))
 		return 0;
 
-	return i915_live_subtests(tests, dev_priv);
+	return i915_live_subtests(tests, i915);
 }

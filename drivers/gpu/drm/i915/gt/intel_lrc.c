@@ -136,6 +136,7 @@
 #include "i915_drv.h"
 #include "i915_gem_render_state.h"
 #include "i915_vgpu.h"
+#include "intel_engine_pm.h"
 #include "intel_lrc_reg.h"
 #include "intel_mocs.h"
 #include "intel_reset.h"
@@ -1405,6 +1406,9 @@ static const struct intel_context_ops execlists_context_ops = {
 	.pin = execlists_context_pin,
 	.unpin = execlists_context_unpin,
 
+	.enter = intel_context_enter_engine,
+	.exit = intel_context_exit_engine,
+
 	.reset = execlists_context_reset,
 	.destroy = execlists_context_destroy,
 };
@@ -1784,8 +1788,8 @@ static int intel_init_workaround_bb(struct intel_engine_cs *engine)
 	unsigned int i;
 	int ret;
 
-	if (GEM_DEBUG_WARN_ON(engine->id != RCS0))
-		return -EINVAL;
+	if (engine->class != RENDER_CLASS)
+		return 0;
 
 	switch (INTEL_GEN(engine->i915)) {
 	case 11:
@@ -2418,38 +2422,9 @@ static int gen8_init_rcs_context(struct i915_request *rq)
 	return i915_gem_render_state_emit(rq);
 }
 
-/**
- * intel_logical_ring_cleanup() - deallocate the Engine Command Streamer
- * @engine: Engine Command Streamer.
- */
-void intel_logical_ring_cleanup(struct intel_engine_cs *engine)
+static void execlists_park(struct intel_engine_cs *engine)
 {
-	struct drm_i915_private *dev_priv;
-
-	/*
-	 * Tasklet cannot be active at this point due intel_mark_active/idle
-	 * so this is just for documentation.
-	 */
-	if (WARN_ON(test_bit(TASKLET_STATE_SCHED,
-			     &engine->execlists.tasklet.state)))
-		tasklet_kill(&engine->execlists.tasklet);
-
-	dev_priv = engine->i915;
-
-	if (engine->buffer) {
-		WARN_ON((ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE) == 0);
-	}
-
-	if (engine->cleanup)
-		engine->cleanup(engine);
-
-	intel_engine_cleanup_common(engine);
-
-	lrc_destroy_wa_ctx(engine);
-
-	engine->i915 = NULL;
-	dev_priv->engine[engine->id] = NULL;
-	kfree(engine);
+	intel_engine_park(engine);
 }
 
 void intel_execlists_set_default_submission(struct intel_engine_cs *engine)
@@ -2463,7 +2438,7 @@ void intel_execlists_set_default_submission(struct intel_engine_cs *engine)
 	engine->reset.reset = execlists_reset;
 	engine->reset.finish = execlists_reset_finish;
 
-	engine->park = NULL;
+	engine->park = execlists_park;
 	engine->unpark = NULL;
 
 	engine->flags |= I915_ENGINE_SUPPORTS_STATS;
@@ -2474,10 +2449,19 @@ void intel_execlists_set_default_submission(struct intel_engine_cs *engine)
 		engine->flags |= I915_ENGINE_HAS_PREEMPTION;
 }
 
+static void execlists_destroy(struct intel_engine_cs *engine)
+{
+	intel_engine_cleanup_common(engine);
+	lrc_destroy_wa_ctx(engine);
+	kfree(engine);
+}
+
 static void
 logical_ring_default_vfuncs(struct intel_engine_cs *engine)
 {
 	/* Default vfuncs which can be overriden by each engine. */
+
+	engine->destroy = execlists_destroy;
 	engine->resume = execlists_resume;
 
 	engine->reset.prepare = execlists_reset_prepare;
@@ -2531,15 +2515,8 @@ logical_ring_default_irqs(struct intel_engine_cs *engine)
 	engine->irq_keep_mask = GT_CONTEXT_SWITCH_INTERRUPT << shift;
 }
 
-static int
-logical_ring_setup(struct intel_engine_cs *engine)
+int intel_execlists_submission_setup(struct intel_engine_cs *engine)
 {
-	int err;
-
-	err = intel_engine_setup_common(engine);
-	if (err)
-		return err;
-
 	/* Intentionally left blank. */
 	engine->buffer = NULL;
 
@@ -2549,10 +2526,16 @@ logical_ring_setup(struct intel_engine_cs *engine)
 	logical_ring_default_vfuncs(engine);
 	logical_ring_default_irqs(engine);
 
+	if (engine->class == RENDER_CLASS) {
+		engine->init_context = gen8_init_rcs_context;
+		engine->emit_flush = gen8_emit_flush_render;
+		engine->emit_fini_breadcrumb = gen8_emit_fini_breadcrumb_rcs;
+	}
+
 	return 0;
 }
 
-static int logical_ring_init(struct intel_engine_cs *engine)
+int intel_execlists_submission_init(struct intel_engine_cs *engine)
 {
 	struct drm_i915_private *i915 = engine->i915;
 	struct intel_engine_execlists * const execlists = &engine->execlists;
@@ -2564,6 +2547,15 @@ static int logical_ring_init(struct intel_engine_cs *engine)
 		return ret;
 
 	intel_engine_init_workarounds(engine);
+	intel_engine_init_whitelist(engine);
+
+	if (intel_init_workaround_bb(engine))
+		/*
+		 * We continue even if we fail to initialize WA batch
+		 * because we only expect rare glitches but nothing
+		 * critical to prevent us from using GPU
+		 */
+		DRM_ERROR("WA batch buffer initialization failed\n");
 
 	if (HAS_LOGICAL_RING_ELSQ(i915)) {
 		execlists->submit_reg = i915->uncore.regs +
@@ -2594,50 +2586,6 @@ static int logical_ring_init(struct intel_engine_cs *engine)
 	reset_csb_pointers(execlists);
 
 	return 0;
-}
-
-int logical_render_ring_init(struct intel_engine_cs *engine)
-{
-	int ret;
-
-	ret = logical_ring_setup(engine);
-	if (ret)
-		return ret;
-
-	/* Override some for render ring. */
-	engine->init_context = gen8_init_rcs_context;
-	engine->emit_flush = gen8_emit_flush_render;
-	engine->emit_fini_breadcrumb = gen8_emit_fini_breadcrumb_rcs;
-
-	ret = logical_ring_init(engine);
-	if (ret)
-		return ret;
-
-	ret = intel_init_workaround_bb(engine);
-	if (ret) {
-		/*
-		 * We continue even if we fail to initialize WA batch
-		 * because we only expect rare glitches but nothing
-		 * critical to prevent us from using GPU
-		 */
-		DRM_ERROR("WA batch buffer initialization failed: %d\n",
-			  ret);
-	}
-
-	intel_engine_init_whitelist(engine);
-
-	return 0;
-}
-
-int logical_xcs_ring_init(struct intel_engine_cs *engine)
-{
-	int err;
-
-	err = logical_ring_setup(engine);
-	if (err)
-		return err;
-
-	return logical_ring_init(engine);
 }
 
 static u32 intel_lr_indirect_ctx_offset(struct intel_engine_cs *engine)

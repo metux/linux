@@ -70,6 +70,7 @@
 #include "intel_bios.h"
 #include "intel_device_info.h"
 #include "intel_display.h"
+#include "intel_display_power.h"
 #include "intel_dpll_mgr.h"
 #include "intel_frontbuffer.h"
 #include "intel_opregion.h"
@@ -213,12 +214,6 @@ struct drm_i915_file_private {
 	struct {
 		spinlock_t lock;
 		struct list_head request_list;
-/* 20ms is a fairly arbitrary limit (greater than the average frame time)
- * chosen to prevent the CPU getting more than a frame ahead of the GPU
- * (when using lax throttling for the frontbuffer). We also use it to
- * offer free GPU waitboosts for severely congested workloads.
- */
-#define DRM_I915_THROTTLE_JIFFIES msecs_to_jiffies(20)
 	} mm;
 
 	struct idr context_idr;
@@ -300,7 +295,7 @@ struct drm_i915_display_funcs {
 				    struct intel_crtc_state *cstate);
 	int (*compute_global_watermarks)(struct intel_atomic_state *state);
 	void (*update_wm)(struct intel_crtc *crtc);
-	int (*modeset_calc_cdclk)(struct drm_atomic_state *state);
+	int (*modeset_calc_cdclk)(struct intel_atomic_state *state);
 	/* Returns the active state of the crtc, and if the crtc is active,
 	 * fills out the pipe-config with the hw state. */
 	bool (*get_pipe_config)(struct intel_crtc *,
@@ -345,6 +340,7 @@ struct drm_i915_display_funcs {
 	 * involved with the same commit.
 	 */
 	void (*load_luts)(const struct intel_crtc_state *crtc_state);
+	void (*read_luts)(struct intel_crtc_state *crtc_state);
 };
 
 struct intel_csr {
@@ -734,116 +730,6 @@ struct intel_ilk_power_mgmt {
 	int r_t;
 };
 
-struct drm_i915_private;
-struct i915_power_well;
-
-struct i915_power_well_ops {
-	/*
-	 * Synchronize the well's hw state to match the current sw state, for
-	 * example enable/disable it based on the current refcount. Called
-	 * during driver init and resume time, possibly after first calling
-	 * the enable/disable handlers.
-	 */
-	void (*sync_hw)(struct drm_i915_private *dev_priv,
-			struct i915_power_well *power_well);
-	/*
-	 * Enable the well and resources that depend on it (for example
-	 * interrupts located on the well). Called after the 0->1 refcount
-	 * transition.
-	 */
-	void (*enable)(struct drm_i915_private *dev_priv,
-		       struct i915_power_well *power_well);
-	/*
-	 * Disable the well and resources that depend on it. Called after
-	 * the 1->0 refcount transition.
-	 */
-	void (*disable)(struct drm_i915_private *dev_priv,
-			struct i915_power_well *power_well);
-	/* Returns the hw enabled state. */
-	bool (*is_enabled)(struct drm_i915_private *dev_priv,
-			   struct i915_power_well *power_well);
-};
-
-struct i915_power_well_regs {
-	i915_reg_t bios;
-	i915_reg_t driver;
-	i915_reg_t kvmr;
-	i915_reg_t debug;
-};
-
-/* Power well structure for haswell */
-struct i915_power_well_desc {
-	const char *name;
-	bool always_on;
-	u64 domains;
-	/* unique identifier for this power well */
-	enum i915_power_well_id id;
-	/*
-	 * Arbitraty data associated with this power well. Platform and power
-	 * well specific.
-	 */
-	union {
-		struct {
-			/*
-			 * request/status flag index in the PUNIT power well
-			 * control/status registers.
-			 */
-			u8 idx;
-		} vlv;
-		struct {
-			enum dpio_phy phy;
-		} bxt;
-		struct {
-			const struct i915_power_well_regs *regs;
-			/*
-			 * request/status flag index in the power well
-			 * constrol/status registers.
-			 */
-			u8 idx;
-			/* Mask of pipes whose IRQ logic is backed by the pw */
-			u8 irq_pipe_mask;
-			/* The pw is backing the VGA functionality */
-			bool has_vga:1;
-			bool has_fuses:1;
-			/*
-			 * The pw is for an ICL+ TypeC PHY port in
-			 * Thunderbolt mode.
-			 */
-			bool is_tc_tbt:1;
-		} hsw;
-	};
-	const struct i915_power_well_ops *ops;
-};
-
-struct i915_power_well {
-	const struct i915_power_well_desc *desc;
-	/* power well enable/disable usage count */
-	int count;
-	/* cached hw enabled state */
-	bool hw_enabled;
-};
-
-struct i915_power_domains {
-	/*
-	 * Power wells needed for initialization at driver init and suspend
-	 * time are on. They are kept on until after the first modeset.
-	 */
-	bool initializing;
-	bool display_core_suspended;
-	int power_well_count;
-
-	intel_wakeref_t wakeref;
-
-	struct mutex lock;
-	int domain_use_count[POWER_DOMAIN_NUM];
-
-	struct delayed_work async_put_work;
-	intel_wakeref_t async_put_wakeref;
-	u64 async_put_domains[2];
-
-	struct i915_power_well *power_wells;
-};
-
 #define MAX_L3_SLICES 2
 struct intel_l3_parity {
 	u32 *remap_info[MAX_L3_SLICES];
@@ -861,23 +747,15 @@ struct i915_gem_mm {
 	/* Protects bound_list/unbound_list and #drm_i915_gem_object.mm.link */
 	spinlock_t obj_lock;
 
-	/** List of all objects in gtt_space. Used to restore gtt
-	 * mappings on resume */
-	struct list_head bound_list;
 	/**
-	 * List of objects which are not bound to the GTT (thus
-	 * are idle and not used by the GPU). These objects may or may
-	 * not actually have any pages attached.
+	 * List of objects which are purgeable.
 	 */
-	struct list_head unbound_list;
+	struct list_head purge_list;
 
-	/** List of all objects in gtt_space, currently mmaped by userspace.
-	 * All objects within this list must also be on bound_list.
+	/**
+	 * List of objects which have allocated pages and are shrinkable.
 	 */
-	struct list_head userfault_list;
-
-	/* Manual runtime pm autosuspend delay for user GGTT mmaps */
-	struct intel_wakeref_auto userfault_wakeref;
+	struct list_head shrink_list;
 
 	/**
 	 * List of objects which are pending destruction.
@@ -908,9 +786,6 @@ struct i915_gem_mm {
 	struct notifier_block vmap_notifier;
 	struct shrinker shrinker;
 
-	/** LRU list of objects with fence regs on them. */
-	struct list_head fence_list;
-
 	/**
 	 * Workqueue to fault in userptr pages, flushed by the execbuf
 	 * when required but otherwise left to userspace to try again
@@ -928,10 +803,9 @@ struct i915_gem_mm {
 	/** Bit 6 swizzling required for Y tiling */
 	u32 bit_6_swizzle_y;
 
-	/* accounting, useful for userland debugging */
-	spinlock_t object_stat_lock;
-	u64 object_memory;
-	u32 object_count;
+	/* shrinker accounting, also useful for userland debugging */
+	u64 shrink_memory;
+	u32 shrink_count;
 };
 
 #define I915_IDLE_ENGINES_TIMEOUT (200) /* in ms */
@@ -945,6 +819,9 @@ struct i915_gem_mm {
 #define I915_ENGINE_WEDGED_TIMEOUT  (60 * HZ)  /* Reset but no recovery? */
 
 struct ddi_vbt_port_info {
+	/* Non-NULL if port present. */
+	const struct child_device_config *child;
+
 	int max_tmds_clock;
 
 	/*
@@ -955,7 +832,6 @@ struct ddi_vbt_port_info {
 #define HDMI_LEVEL_SHIFT_UNKNOWN	0xff
 	u8 hdmi_level_shift;
 
-	u8 present:1;
 	u8 supports_dvi:1;
 	u8 supports_hdmi:1;
 	u8 supports_dp:1;
@@ -1155,54 +1031,6 @@ struct skl_wm_params {
 	uint_fixed_16_16_t y_tile_minimum;
 	u32 linetime_us;
 	u32 dbuf_block_size;
-};
-
-/*
- * This struct helps tracking the state needed for runtime PM, which puts the
- * device in PCI D3 state. Notice that when this happens, nothing on the
- * graphics device works, even register access, so we don't get interrupts nor
- * anything else.
- *
- * Every piece of our code that needs to actually touch the hardware needs to
- * either call intel_runtime_pm_get or call intel_display_power_get with the
- * appropriate power domain.
- *
- * Our driver uses the autosuspend delay feature, which means we'll only really
- * suspend if we stay with zero refcount for a certain amount of time. The
- * default value is currently very conservative (see intel_runtime_pm_enable), but
- * it can be changed with the standard runtime PM files from sysfs.
- *
- * The irqs_disabled variable becomes true exactly after we disable the IRQs and
- * goes back to false exactly before we reenable the IRQs. We use this variable
- * to check if someone is trying to enable/disable IRQs while they're supposed
- * to be disabled. This shouldn't happen and we'll print some error messages in
- * case it happens.
- *
- * For more, read the Documentation/power/runtime_pm.txt.
- */
-struct i915_runtime_pm {
-	atomic_t wakeref_count;
-	bool suspended;
-	bool irqs_enabled;
-
-#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_RUNTIME_PM)
-	/*
-	 * To aide detection of wakeref leaks and general misuse, we
-	 * track all wakeref holders. With manual markup (i.e. returning
-	 * a cookie to each rpm_get caller which they then supply to their
-	 * paired rpm_put) we can remove corresponding pairs of and keep
-	 * the array trimmed to active wakerefs.
-	 */
-	struct intel_runtime_pm_debug {
-		spinlock_t lock;
-
-		depot_stack_handle_t last_acquire;
-		depot_stack_handle_t last_release;
-
-		depot_stack_handle_t *owners;
-		unsigned long count;
-	} debug;
-#endif
 };
 
 enum intel_pipe_crc_source {
@@ -1602,9 +1430,6 @@ struct drm_i915_private {
 	/* protects panel power sequencer state */
 	struct mutex pps_mutex;
 
-	struct drm_i915_fence_reg fence_regs[I915_MAX_NUM_FENCES]; /* assume 965 */
-	int num_fence_regs; /* 8 on pre-965, 16 otherwise */
-
 	unsigned int fsb_freq, mem_freq, is_ddr3;
 	unsigned int skl_preferred_vco_freq;
 	unsigned int max_cdclk_freq;
@@ -1857,7 +1682,7 @@ struct drm_i915_private {
 
 	struct drm_private_obj bw_obj;
 
-	struct i915_runtime_pm runtime_pm;
+	struct intel_runtime_pm runtime_pm;
 
 	struct {
 		bool initialized;
@@ -2012,9 +1837,11 @@ struct drm_i915_private {
 		} timelines;
 
 		struct list_head active_rings;
-		struct list_head closed_vma;
 
 		struct intel_wakeref wakeref;
+
+		struct list_head closed_vma;
+		spinlock_t closed_lock; /* guards the list of closed_vma */
 
 		/**
 		 * Is the GPU currently considered idle, or busy executing
@@ -2326,9 +2153,6 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 	IS_SUBPLATFORM(dev_priv, INTEL_KABYLAKE, INTEL_SUBPLATFORM_ULT)
 #define IS_KBL_ULX(dev_priv) \
 	IS_SUBPLATFORM(dev_priv, INTEL_KABYLAKE, INTEL_SUBPLATFORM_ULX)
-#define IS_AML_ULX(dev_priv) \
-	(IS_SUBPLATFORM(dev_priv, INTEL_KABYLAKE, INTEL_SUBPLATFORM_AML) || \
-	 IS_SUBPLATFORM(dev_priv, INTEL_COFFEELAKE, INTEL_SUBPLATFORM_AML))
 #define IS_SKL_GT2(dev_priv)	(IS_SKYLAKE(dev_priv) && \
 				 INTEL_INFO(dev_priv)->gt == 2)
 #define IS_SKL_GT3(dev_priv)	(IS_SKYLAKE(dev_priv) && \
@@ -2341,6 +2165,8 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 				 INTEL_INFO(dev_priv)->gt == 3)
 #define IS_CFL_ULT(dev_priv) \
 	IS_SUBPLATFORM(dev_priv, INTEL_COFFEELAKE, INTEL_SUBPLATFORM_ULT)
+#define IS_CFL_ULX(dev_priv) \
+	IS_SUBPLATFORM(dev_priv, INTEL_COFFEELAKE, INTEL_SUBPLATFORM_ULX)
 #define IS_CFL_GT2(dev_priv)	(IS_COFFEELAKE(dev_priv) && \
 				 INTEL_INFO(dev_priv)->gt == 2)
 #define IS_CFL_GT3(dev_priv)	(IS_COFFEELAKE(dev_priv) && \
@@ -2506,7 +2332,6 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
  * properties, so we have separate macros to test them.
  */
 #define HAS_GUC(dev_priv)	(INTEL_INFO(dev_priv)->has_guc)
-#define HAS_GUC_CT(dev_priv)	(INTEL_INFO(dev_priv)->has_guc_ct)
 #define HAS_GUC_UCODE(dev_priv)	(HAS_GUC(dev_priv))
 #define HAS_GUC_SCHED(dev_priv)	(HAS_GUC(dev_priv))
 
@@ -2615,10 +2440,6 @@ extern void i915_driver_unload(struct drm_device *dev);
 
 extern void intel_engine_init_hangcheck(struct intel_engine_cs *engine);
 extern void intel_hangcheck_init(struct drm_i915_private *dev_priv);
-extern unsigned long i915_chipset_val(struct drm_i915_private *dev_priv);
-extern unsigned long i915_mch_val(struct drm_i915_private *dev_priv);
-extern unsigned long i915_gfx_val(struct drm_i915_private *dev_priv);
-extern void i915_update_gfx_val(struct drm_i915_private *dev_priv);
 int vlv_force_gfx_clock(struct drm_i915_private *dev_priv, bool on);
 
 u32 intel_calculate_mcr_s_ss_select(struct drm_i915_private *dev_priv);
@@ -2656,7 +2477,6 @@ void i915_gem_cleanup_userptr(struct drm_i915_private *dev_priv);
 void i915_gem_sanitize(struct drm_i915_private *i915);
 int i915_gem_init_early(struct drm_i915_private *dev_priv);
 void i915_gem_cleanup_early(struct drm_i915_private *dev_priv);
-void i915_gem_load_init_fences(struct drm_i915_private *dev_priv);
 int i915_gem_freeze(struct drm_i915_private *dev_priv);
 int i915_gem_freeze_late(struct drm_i915_private *dev_priv);
 
@@ -2755,6 +2575,7 @@ void i915_gem_init_mmio(struct drm_i915_private *i915);
 int __must_check i915_gem_init(struct drm_i915_private *dev_priv);
 int __must_check i915_gem_init_hw(struct drm_i915_private *dev_priv);
 void i915_gem_init_swizzling(struct drm_i915_private *dev_priv);
+void i915_gem_fini_hw(struct drm_i915_private *dev_priv);
 void i915_gem_fini(struct drm_i915_private *dev_priv);
 int i915_gem_wait_for_idle(struct drm_i915_private *dev_priv,
 			   unsigned int flags, long timeout);
@@ -2774,19 +2595,6 @@ struct drm_gem_object *i915_gem_prime_import(struct drm_device *dev,
 
 struct dma_buf *i915_gem_prime_export(struct drm_device *dev,
 				struct drm_gem_object *gem_obj, int flags);
-
-/* i915_gem_fence_reg.c */
-struct drm_i915_fence_reg *
-i915_reserve_fence(struct drm_i915_private *dev_priv);
-void i915_unreserve_fence(struct drm_i915_fence_reg *fence);
-
-void i915_gem_restore_fences(struct drm_i915_private *dev_priv);
-
-void i915_gem_detect_bit_6_swizzle(struct drm_i915_private *dev_priv);
-void i915_gem_object_do_bit_17_swizzle(struct drm_i915_gem_object *obj,
-				       struct sg_table *pages);
-void i915_gem_object_save_bit_17_swizzle(struct drm_i915_gem_object *obj,
-					 struct sg_table *pages);
 
 static inline struct i915_gem_context *
 __i915_gem_context_lookup_rcu(struct drm_i915_file_private *file_priv, u32 id)
@@ -2870,12 +2678,12 @@ unsigned long i915_gem_shrink(struct drm_i915_private *i915,
 			      unsigned long target,
 			      unsigned long *nr_scanned,
 			      unsigned flags);
-#define I915_SHRINK_PURGEABLE	BIT(0)
-#define I915_SHRINK_UNBOUND	BIT(1)
-#define I915_SHRINK_BOUND	BIT(2)
-#define I915_SHRINK_ACTIVE	BIT(3)
-#define I915_SHRINK_VMAPS	BIT(4)
-#define I915_SHRINK_WRITEBACK	BIT(5)
+#define I915_SHRINK_UNBOUND	BIT(0)
+#define I915_SHRINK_BOUND	BIT(1)
+#define I915_SHRINK_ACTIVE	BIT(2)
+#define I915_SHRINK_VMAPS	BIT(3)
+#define I915_SHRINK_WRITEBACK	BIT(4)
+
 unsigned long i915_gem_shrink_all(struct drm_i915_private *i915);
 void i915_gem_shrinker_register(struct drm_i915_private *i915);
 void i915_gem_shrinker_unregister(struct drm_i915_private *i915);
@@ -2939,13 +2747,7 @@ extern int intel_modeset_vga_set_state(struct drm_i915_private *dev_priv,
 extern void intel_display_resume(struct drm_device *dev);
 extern void i915_redisable_vga(struct drm_i915_private *dev_priv);
 extern void i915_redisable_vga_power_on(struct drm_i915_private *dev_priv);
-extern bool ironlake_set_drps(struct drm_i915_private *dev_priv, u8 val);
 extern void intel_init_pch_refclk(struct drm_i915_private *dev_priv);
-extern int intel_set_rps(struct drm_i915_private *dev_priv, u8 val);
-extern void intel_rps_mark_interactive(struct drm_i915_private *i915,
-				       bool interactive);
-extern bool intel_set_memory_cxsr(struct drm_i915_private *dev_priv,
-				  bool enable);
 
 int i915_reg_read_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
@@ -2958,39 +2760,10 @@ extern void intel_display_print_error_state(struct drm_i915_error_state_buf *e,
 #define __I915_REG_OP(op__, dev_priv__, ...) \
 	intel_uncore_##op__(&(dev_priv__)->uncore, __VA_ARGS__)
 
-#define I915_READ8(reg__)	  __I915_REG_OP(read8, dev_priv, (reg__))
-#define I915_WRITE8(reg__, val__) __I915_REG_OP(write8, dev_priv, (reg__), (val__))
-
-#define I915_READ16(reg__)	   __I915_REG_OP(read16, dev_priv, (reg__))
-#define I915_WRITE16(reg__, val__) __I915_REG_OP(write16, dev_priv, (reg__), (val__))
-#define I915_READ16_NOTRACE(reg__)	   __I915_REG_OP(read16_notrace, dev_priv, (reg__))
-#define I915_WRITE16_NOTRACE(reg__, val__) __I915_REG_OP(write16_notrace, dev_priv, (reg__), (val__))
-
 #define I915_READ(reg__)	 __I915_REG_OP(read, dev_priv, (reg__))
 #define I915_WRITE(reg__, val__) __I915_REG_OP(write, dev_priv, (reg__), (val__))
-#define I915_READ_NOTRACE(reg__)	 __I915_REG_OP(read_notrace, dev_priv, (reg__))
-#define I915_WRITE_NOTRACE(reg__, val__) __I915_REG_OP(write_notrace, dev_priv, (reg__), (val__))
-
-/* Be very careful with read/write 64-bit values. On 32-bit machines, they
- * will be implemented using 2 32-bit writes in an arbitrary order with
- * an arbitrary delay between them. This can cause the hardware to
- * act upon the intermediate value, possibly leading to corruption and
- * machine death. For this reason we do not support I915_WRITE64, or
- * dev_priv->uncore.funcs.mmio_writeq.
- *
- * When reading a 64-bit value as two 32-bit values, the delay may cause
- * the two reads to mismatch, e.g. a timestamp overflowing. Also note that
- * occasionally a 64-bit register does not actualy support a full readq
- * and must be read using two 32-bit reads.
- *
- * You have been warned.
- */
-#define I915_READ64(reg__)	__I915_REG_OP(read64, dev_priv, (reg__))
-#define I915_READ64_2x32(lower_reg__, upper_reg__) \
-	__I915_REG_OP(read64_2x32, dev_priv, (lower_reg__), (upper_reg__))
 
 #define POSTING_READ(reg__)	__I915_REG_OP(posting_read, dev_priv, (reg__))
-#define POSTING_READ16(reg__)	__I915_REG_OP(posting_read16, dev_priv, (reg__))
 
 /* These are untraced mmio-accessors that are only valid to be used inside
  * critical sections, such as inside IRQ handlers, where forcewake is explicitly
@@ -3020,8 +2793,6 @@ extern void intel_display_print_error_state(struct drm_i915_error_state_buf *e,
  */
 #define I915_READ_FW(reg__) __I915_REG_OP(read_fw, dev_priv, (reg__))
 #define I915_WRITE_FW(reg__, val__) __I915_REG_OP(write_fw, dev_priv, (reg__), (val__))
-#define I915_WRITE64_FW(reg__, val__) __I915_REG_OP(write64_fw, dev_priv, (reg__), (val__))
-#define POSTING_READ_FW(reg__) __I915_REG_OP(posting_read_fw, dev_priv, (reg__))
 
 /* "Broadcast RGB" property */
 #define INTEL_BROADCAST_RGB_AUTO 0

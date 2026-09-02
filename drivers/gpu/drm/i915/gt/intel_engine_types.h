@@ -12,6 +12,8 @@
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/llist.h>
+#include <linux/rbtree.h>
+#include <linux/timer.h>
 #include <linux/types.h>
 
 #include "i915_gem.h"
@@ -30,10 +32,12 @@
 #define I915_CMD_HASH_ORDER 9
 
 struct dma_fence;
+struct drm_i915_gem_object;
 struct drm_i915_reg_table;
 struct i915_gem_context;
 struct i915_request;
 struct i915_sched_attr;
+struct intel_gt;
 struct intel_uncore;
 
 typedef u8 intel_engine_mask_t;
@@ -54,8 +58,8 @@ struct intel_instdone {
 
 struct intel_engine_hangcheck {
 	u64 acthd;
-	u32 last_seqno;
-	u32 next_seqno;
+	u32 last_ring;
+	u32 last_head;
 	unsigned long action_timestamp;
 	struct intel_instdone instdone;
 };
@@ -68,6 +72,18 @@ struct intel_ring {
 	struct intel_timeline *timeline;
 	struct list_head request_list;
 	struct list_head active_link;
+
+	/*
+	 * As we have two types of rings, one global to the engine used
+	 * by ringbuffer submission and those that are exclusive to a
+	 * context used by execlists, we have to play safe and allow
+	 * atomic updates to the pin_count. However, the actual pinning
+	 * of the context is either done during initialisation for
+	 * ringbuffer submission or serialised as part of the context
+	 * pinning for execlists, and so we do not need a mutex ourselves
+	 * to serialise intel_ring_pin/intel_ring_unpin.
+	 */
+	atomic_t pin_count;
 
 	u32 head;
 	u32 tail;
@@ -135,6 +151,11 @@ struct intel_engine_execlists {
 	 * @tasklet: softirq tasklet for bottom handler
 	 */
 	struct tasklet_struct tasklet;
+
+	/**
+	 * @timer: kick the current context if its timeslice expires
+	 */
+	struct timer_list timer;
 
 	/**
 	 * @default_priolist: priority list for I915_PRIORITY_NORMAL
@@ -205,6 +226,7 @@ struct intel_engine_execlists {
 	 * @queue: queue of requests, in priority lists
 	 */
 	struct rb_root_cached queue;
+	struct rb_root_cached virtual;
 
 	/**
 	 * @csb_write: control register for Context Switch buffer
@@ -237,6 +259,7 @@ struct intel_engine_execlists {
 
 struct intel_engine_cs {
 	struct drm_i915_private *i915;
+	struct intel_gt *gt;
 	struct intel_uncore *uncore;
 	char name[INTEL_ENGINE_CS_MAX_NAME];
 
@@ -245,21 +268,33 @@ struct intel_engine_cs {
 	unsigned int guc_id;
 	intel_engine_mask_t mask;
 
-	u8 uabi_class;
-
 	u8 class;
 	u8 instance;
+
+	u8 uabi_class;
+	u8 uabi_instance;
+
 	u32 context_size;
 	u32 mmio_base;
+
+	u32 uabi_capabilities;
+
+	struct rb_node uabi_node;
 
 	struct intel_sseu sseu;
 
 	struct intel_ring *buffer;
 
-	struct i915_timeline timeline;
+	struct {
+		spinlock_t lock;
+		struct list_head requests;
+	} active;
+
 	struct llist_head barrier_tasks;
 
 	struct intel_context *kernel_context; /* pinned */
+
+	intel_engine_mask_t saturated; /* submitting semaphores too late? */
 
 	unsigned long serial;
 
@@ -353,7 +388,6 @@ struct intel_engine_cs {
 	const struct intel_context_ops *cops;
 
 	int		(*request_alloc)(struct i915_request *rq);
-	int		(*init_context)(struct i915_request *rq);
 
 	int		(*emit_flush)(struct i915_request *request, u32 mode);
 #define EMIT_INVALIDATE	BIT(0)
@@ -378,6 +412,13 @@ struct intel_engine_cs {
 	void		(*submit_request)(struct i915_request *rq);
 
 	/*
+	 * Called on signaling of a SUBMIT_FENCE, passing along the signaling
+	 * request down to the bonded pairs.
+	 */
+	void            (*bond_execute)(struct i915_request *rq,
+					struct dma_fence *signal);
+
+	/*
 	 * Call when the priority on a request has changed and it and its
 	 * dependencies may need rescheduling. Note the request itself may
 	 * not be ready to run!
@@ -393,7 +434,7 @@ struct intel_engine_cs {
 	 */
 	void		(*cancel_requests)(struct intel_engine_cs *engine);
 
-	void		(*cleanup)(struct intel_engine_cs *engine);
+	void		(*destroy)(struct intel_engine_cs *engine);
 
 	struct intel_engine_execlists execlists;
 
@@ -407,6 +448,7 @@ struct intel_engine_cs {
 #define I915_ENGINE_HAS_PREEMPTION   BIT(2)
 #define I915_ENGINE_HAS_SEMAPHORES   BIT(3)
 #define I915_ENGINE_NEEDS_BREADCRUMB_TASKLET BIT(4)
+#define I915_ENGINE_IS_VIRTUAL       BIT(5)
 	unsigned int flags;
 
 	/*
@@ -494,6 +536,12 @@ static inline bool
 intel_engine_needs_breadcrumb_tasklet(const struct intel_engine_cs *engine)
 {
 	return engine->flags & I915_ENGINE_NEEDS_BREADCRUMB_TASKLET;
+}
+
+static inline bool
+intel_engine_is_virtual(const struct intel_engine_cs *engine)
+{
+	return engine->flags & I915_ENGINE_IS_VIRTUAL;
 }
 
 #define instdone_slice_mask(dev_priv__) \

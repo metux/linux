@@ -200,20 +200,20 @@
 #include "gt/intel_lrc_reg.h"
 
 #include "i915_drv.h"
-#include "i915_oa_hsw.h"
-#include "i915_oa_bdw.h"
-#include "i915_oa_chv.h"
-#include "i915_oa_sklgt2.h"
-#include "i915_oa_sklgt3.h"
-#include "i915_oa_sklgt4.h"
-#include "i915_oa_bxt.h"
-#include "i915_oa_kblgt2.h"
-#include "i915_oa_kblgt3.h"
-#include "i915_oa_glk.h"
-#include "i915_oa_cflgt2.h"
-#include "i915_oa_cflgt3.h"
-#include "i915_oa_cnl.h"
-#include "i915_oa_icl.h"
+#include "oa/i915_oa_hsw.h"
+#include "oa/i915_oa_bdw.h"
+#include "oa/i915_oa_chv.h"
+#include "oa/i915_oa_sklgt2.h"
+#include "oa/i915_oa_sklgt3.h"
+#include "oa/i915_oa_sklgt4.h"
+#include "oa/i915_oa_bxt.h"
+#include "oa/i915_oa_kblgt2.h"
+#include "oa/i915_oa_kblgt3.h"
+#include "oa/i915_oa_glk.h"
+#include "oa/i915_oa_cflgt2.h"
+#include "oa/i915_oa_cflgt3.h"
+#include "oa/i915_oa_cnl.h"
+#include "oa/i915_oa_icl.h"
 
 /* HW requires this to be a power of two, between 128k and 16M, though driver
  * is currently generally designed assuming the largest 16M size is used such
@@ -1667,7 +1667,7 @@ gen8_update_reg_state_unlocked(struct intel_context *ce,
 			       u32 *reg_state,
 			       const struct i915_oa_config *oa_config)
 {
-	struct drm_i915_private *i915 = ce->gem_context->i915;
+	struct drm_i915_private *i915 = ce->engine->i915;
 	u32 ctx_oactxctrl = i915->perf.oa.ctx_oactxctrl_offset;
 	u32 ctx_flexeu0 = i915->perf.oa.ctx_flexeu0_offset;
 	/* The MMIO offsets for Flex EU registers aren't contiguous */
@@ -1794,6 +1794,38 @@ static int gen8_modify_self(struct intel_context *ce,
 	return err;
 }
 
+static int gen8_configure_context(struct i915_gem_context *ctx,
+				  struct flex *flex, unsigned int count)
+{
+	struct i915_gem_engines_iter it;
+	struct intel_context *ce;
+	int err = 0;
+
+	for_each_gem_engine(ce, i915_gem_context_lock_engines(ctx), it) {
+		GEM_BUG_ON(ce == ce->engine->kernel_context);
+
+		if (ce->engine->class != RENDER_CLASS)
+			continue;
+
+		err = intel_context_lock_pinned(ce);
+		if (err)
+			break;
+
+		flex->value = intel_sseu_make_rpcs(ctx->i915, &ce->sseu);
+
+		/* Otherwise OA settings will be set upon first use */
+		if (intel_context_is_pinned(ce))
+			err = gen8_modify_context(ce, flex, count);
+
+		intel_context_unlock_pinned(ce);
+		if (err)
+			break;
+	}
+	i915_gem_context_unlock_engines(ctx);
+
+	return err;
+}
+
 /*
  * Manages updating the per-context aspects of the OA stream
  * configuration across all contexts.
@@ -1847,8 +1879,6 @@ static int gen8_configure_all_contexts(struct drm_i915_private *i915,
 #undef ctx_flexeuN
 	struct intel_engine_cs *engine;
 	struct i915_gem_context *ctx;
-	enum intel_engine_id id;
-	int err;
 	int i;
 
 	for (i = 2; i < ARRAY_SIZE(regs); i++)
@@ -1873,35 +1903,12 @@ static int gen8_configure_all_contexts(struct drm_i915_private *i915,
 	 * trapped behind the barrier.
 	 */
 	list_for_each_entry(ctx, &i915->contexts.list, link) {
-		struct i915_gem_engines_iter it;
-		struct intel_context *ce;
+		int err;
 
 		if (ctx == i915->kernel_context)
 			continue;
 
-		for_each_gem_engine(ce,
-				    i915_gem_context_lock_engines(ctx),
-				    it) {
-			GEM_BUG_ON(ce == ce->engine->kernel_context);
-
-			if (ce->engine->class != RENDER_CLASS)
-				continue;
-
-			err = intel_context_lock_pinned(ce);
-			if (err)
-				break;
-
-			regs[0].value = intel_sseu_make_rpcs(i915, &ce->sseu);
-
-			/* Otherwise OA settings will be set upon first use */
-			if (intel_context_is_pinned(ce))
-				err = gen8_modify_context(ce, regs, ARRAY_SIZE(regs));
-
-			intel_context_unlock_pinned(ce);
-			if (err)
-				break;
-		}
-		i915_gem_context_unlock_engines(ctx);
+		err = gen8_configure_context(ctx, regs, ARRAY_SIZE(regs));
 		if (err)
 			return err;
 	}
@@ -1911,8 +1918,9 @@ static int gen8_configure_all_contexts(struct drm_i915_private *i915,
 	 * If we don't modify the kernel_context, we do not get events while
 	 * idle.
 	 */
-	for_each_engine(engine, i915, id) {
+	for_each_uabi_engine(engine, i915) {
 		struct intel_context *ce = engine->kernel_context;
+		int err;
 
 		if (engine->class != RENDER_CLASS)
 			continue;

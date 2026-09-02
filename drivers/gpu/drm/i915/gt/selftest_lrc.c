@@ -1764,6 +1764,7 @@ static int live_virtual_engine(void *arg)
 	struct drm_i915_private *i915 = arg;
 	struct intel_engine_cs *siblings[MAX_ENGINE_INSTANCE + 1];
 	struct intel_engine_cs *engine;
+	struct intel_gt *gt = &i915->gt;
 	enum intel_engine_id id;
 	unsigned int class, inst;
 	int err = -ENODEV;
@@ -1787,10 +1788,10 @@ static int live_virtual_engine(void *arg)
 
 		nsibling = 0;
 		for (inst = 0; inst <= MAX_ENGINE_INSTANCE; inst++) {
-			if (!i915->engine_class[class][inst])
+			if (!gt->engine_class[class][inst])
 				continue;
 
-			siblings[nsibling++] = i915->engine_class[class][inst];
+			siblings[nsibling++] = gt->engine_class[class][inst];
 		}
 		if (nsibling < 2)
 			continue;
@@ -1911,6 +1912,7 @@ static int live_virtual_mask(void *arg)
 {
 	struct drm_i915_private *i915 = arg;
 	struct intel_engine_cs *siblings[MAX_ENGINE_INSTANCE + 1];
+	struct intel_gt *gt = &i915->gt;
 	unsigned int class, inst;
 	int err = 0;
 
@@ -1924,10 +1926,10 @@ static int live_virtual_mask(void *arg)
 
 		nsibling = 0;
 		for (inst = 0; inst <= MAX_ENGINE_INSTANCE; inst++) {
-			if (!i915->engine_class[class][inst])
+			if (!gt->engine_class[class][inst])
 				break;
 
-			siblings[nsibling++] = i915->engine_class[class][inst];
+			siblings[nsibling++] = gt->engine_class[class][inst];
 		}
 		if (nsibling < 2)
 			continue;
@@ -2088,6 +2090,7 @@ static int live_virtual_bond(void *arg)
 	};
 	struct drm_i915_private *i915 = arg;
 	struct intel_engine_cs *siblings[MAX_ENGINE_INSTANCE + 1];
+	struct intel_gt *gt = &i915->gt;
 	unsigned int class, inst;
 	int err = 0;
 
@@ -2102,11 +2105,11 @@ static int live_virtual_bond(void *arg)
 
 		nsibling = 0;
 		for (inst = 0; inst <= MAX_ENGINE_INSTANCE; inst++) {
-			if (!i915->engine_class[class][inst])
+			if (!gt->engine_class[class][inst])
 				break;
 
 			GEM_BUG_ON(nsibling == ARRAY_SIZE(siblings));
-			siblings[nsibling++] = i915->engine_class[class][inst];
+			siblings[nsibling++] = gt->engine_class[class][inst];
 		}
 		if (nsibling < 2)
 			continue;

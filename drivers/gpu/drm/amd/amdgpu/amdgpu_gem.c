@@ -26,13 +26,9 @@
  *          Jerome Glisse
  */
 #include <linux/ktime.h>
-#include <linux/module.h>
 #include <linux/pagemap.h>
-#include <linux/pci.h>
-
+#include <drm/drmP.h>
 #include <drm/amdgpu_drm.h>
-#include <drm/drm_debugfs.h>
-
 #include "amdgpu.h"
 #include "amdgpu_display.h"
 #include "amdgpu_xgmi.h"
@@ -175,7 +171,7 @@ void amdgpu_gem_object_close(struct drm_gem_object *obj,
 
 	amdgpu_vm_get_pd_bo(vm, &list, &vm_pd);
 
-	r = ttm_eu_reserve_buffers(&ticket, &list, false, &duplicates);
+	r = ttm_eu_reserve_buffers(&ticket, &list, false, &duplicates, true);
 	if (r) {
 		dev_err(adev->dev, "leaking bo va because "
 			"we fail to reserve bo (%d)\n", r);
@@ -329,30 +325,33 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
 	}
 
 	if (args->flags & AMDGPU_GEM_USERPTR_VALIDATE) {
-		r = amdgpu_ttm_tt_get_user_pages(bo, bo->tbo.ttm->pages);
+		r = amdgpu_ttm_tt_get_user_pages(bo->tbo.ttm,
+						 bo->tbo.ttm->pages);
 		if (r)
 			goto release_object;
 
 		r = amdgpu_bo_reserve(bo, true);
 		if (r)
-			goto user_pages_done;
+			goto free_pages;
 
 		amdgpu_bo_placement_from_domain(bo, AMDGPU_GEM_DOMAIN_GTT);
 		r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);
 		amdgpu_bo_unreserve(bo);
 		if (r)
-			goto user_pages_done;
+			goto free_pages;
 	}
 
 	r = drm_gem_handle_create(filp, gobj, &handle);
+	/* drop reference from allocate - handle holds it now */
+	drm_gem_object_put_unlocked(gobj);
 	if (r)
-		goto user_pages_done;
+		return r;
 
 	args->handle = handle;
+	return 0;
 
-user_pages_done:
-	if (args->flags & AMDGPU_GEM_USERPTR_VALIDATE)
-		amdgpu_ttm_tt_get_user_pages_done(bo->tbo.ttm);
+free_pages:
+	release_pages(bo->tbo.ttm->pages, bo->tbo.ttm->num_pages);
 
 release_object:
 	drm_gem_object_put_unlocked(gobj);
@@ -527,39 +526,11 @@ static void amdgpu_gem_va_update_vm(struct amdgpu_device *adev,
 			goto error;
 	}
 
-	r = amdgpu_vm_update_pdes(adev, vm, false);
+	r = amdgpu_vm_update_directories(adev, vm);
 
 error:
 	if (r && r != -ERESTARTSYS)
 		DRM_ERROR("Couldn't update BO_VA (%d)\n", r);
-}
-
-/**
- * amdgpu_gem_va_map_flags - map GEM UAPI flags into hardware flags
- *
- * @adev: amdgpu_device pointer
- * @flags: GEM UAPI flags
- *
- * Returns the GEM UAPI flags mapped into hardware for the ASIC.
- */
-uint64_t amdgpu_gem_va_map_flags(struct amdgpu_device *adev, uint32_t flags)
-{
-	uint64_t pte_flag = 0;
-
-	if (flags & AMDGPU_VM_PAGE_EXECUTABLE)
-		pte_flag |= AMDGPU_PTE_EXECUTABLE;
-	if (flags & AMDGPU_VM_PAGE_READABLE)
-		pte_flag |= AMDGPU_PTE_READABLE;
-	if (flags & AMDGPU_VM_PAGE_WRITEABLE)
-		pte_flag |= AMDGPU_PTE_WRITEABLE;
-	if (flags & AMDGPU_VM_PAGE_PRT)
-		pte_flag |= AMDGPU_PTE_PRT;
-
-	if (adev->gmc.gmc_funcs->map_mtype)
-		pte_flag |= amdgpu_gmc_map_mtype(adev,
-						 flags & AMDGPU_VM_MTYPE_MASK);
-
-	return pte_flag;
 }
 
 int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
@@ -641,7 +612,7 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 
 	amdgpu_vm_get_pd_bo(&fpriv->vm, &list, &vm_pd);
 
-	r = ttm_eu_reserve_buffers(&ticket, &list, true, &duplicates);
+	r = ttm_eu_reserve_buffers(&ticket, &list, true, &duplicates, true);
 	if (r)
 		goto error_unref;
 
@@ -659,7 +630,7 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 
 	switch (args->operation) {
 	case AMDGPU_VA_OP_MAP:
-		va_flags = amdgpu_gem_va_map_flags(adev, args->flags);
+		va_flags = amdgpu_gmc_get_pte_flags(adev, args->flags);
 		r = amdgpu_vm_bo_map(adev, bo_va, args->va_address,
 				     args->offset_in_bo, args->map_size,
 				     va_flags);
@@ -674,7 +645,7 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 						args->map_size);
 		break;
 	case AMDGPU_VA_OP_REPLACE:
-		va_flags = amdgpu_gem_va_map_flags(adev, args->flags);
+		va_flags = amdgpu_gmc_get_pte_flags(adev, args->flags);
 		r = amdgpu_vm_bo_replace_map(adev, bo_va, args->va_address,
 					     args->offset_in_bo, args->map_size,
 					     va_flags);

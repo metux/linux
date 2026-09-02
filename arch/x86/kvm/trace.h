@@ -1498,21 +1498,18 @@ TRACE_EVENT(kvm_pv_tlb_flush,
  * Tracepoint for failed nested VMX VM-Enter.
  */
 TRACE_EVENT(kvm_nested_vmenter_failed,
-	TP_PROTO(const char *msg, u32 err),
-	TP_ARGS(msg, err),
+	TP_PROTO(const char *msg),
+	TP_ARGS(msg),
 
 	TP_STRUCT__entry(
 		__field(const char *, msg)
-		__field(u32, err)
 	),
 
 	TP_fast_assign(
 		__entry->msg = msg;
-		__entry->err = err;
 	),
 
-	TP_printk("%s%s", __entry->msg, !__entry->err ? "" :
-		__print_symbolic(__entry->err, VMX_VMENTER_INSTRUCTION_ERRORS))
+	TP_printk("%s", __entry->msg)
 );
 
 #endif /* _TRACE_KVM_H */

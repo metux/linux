@@ -21,11 +21,10 @@
  *
  */
 
-#include <linux/delay.h>
 #include <linux/firmware.h>
-#include <linux/module.h>
-#include <linux/pci.h>
+#include <linux/delay.h>
 
+#include <drm/drmP.h>
 #include "amdgpu.h"
 #include "amdgpu_ucode.h"
 #include "amdgpu_trace.h"
@@ -1095,7 +1094,7 @@ static int sdma_v4_0_load_microcode(struct amdgpu_device *adev)
 static int sdma_v4_0_start(struct amdgpu_device *adev)
 {
 	struct amdgpu_ring *ring;
-	int i, r = 0;
+	int i, r;
 
 	if (amdgpu_sriov_vf(adev)) {
 		sdma_v4_0_ctx_switch_enable(adev, false);
@@ -1569,7 +1568,9 @@ static int sdma_v4_0_late_init(void *handle)
 	if (r)
 		goto interrupt;
 
-	amdgpu_ras_debugfs_create(adev, &fs_info);
+	r = amdgpu_ras_debugfs_create(adev, &fs_info);
+	if (r)
+		goto debugfs;
 
 	r = amdgpu_ras_sysfs_create(adev, &fs_info);
 	if (r)
@@ -1590,6 +1591,7 @@ irq:
 	amdgpu_ras_sysfs_remove(adev, *ras_if);
 sysfs:
 	amdgpu_ras_debugfs_remove(adev, *ras_if);
+debugfs:
 	amdgpu_ras_interrupt_remove_handler(adev, &ih_info);
 interrupt:
 	amdgpu_ras_feature_enable(adev, *ras_if, 0);

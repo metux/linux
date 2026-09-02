@@ -24,7 +24,6 @@
  */
 
 #include <linux/delay.h>
-#include <linux/slab.h>
 
 #include "reg_helper.h"
 

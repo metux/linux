@@ -39,9 +39,7 @@
 #include <linux/pagevec.h>
 
 #include "gt/intel_reset.h"
-#include "i915_gem_fence_reg.h"
 #include "i915_request.h"
-#include "i915_scatterlist.h"
 #include "i915_selftest.h"
 #include "i915_timeline.h"
 
@@ -62,7 +60,7 @@
 #define I915_MAX_NUM_FENCE_BITS 6
 
 struct drm_i915_file_private;
-struct drm_i915_gem_object;
+struct drm_i915_fence_reg;
 struct i915_vma;
 
 typedef u32 gen6_pte_t;
@@ -163,21 +161,13 @@ typedef u64 gen8_ppgtt_pml4e_t;
 #define GEN8_PDE_IPS_64K BIT(11)
 #define GEN8_PDE_PS_2M   BIT(7)
 
-#define for_each_sgt_dma(__dmap, __iter, __sgt) \
-	__for_each_sgt_dma(__dmap, __iter, __sgt, I915_GTT_PAGE_SIZE)
-
-struct intel_remapped_plane_info {
-	/* in gtt pages */
-	unsigned int width, height, stride, offset;
-} __packed;
-
-struct intel_remapped_info {
-	struct intel_remapped_plane_info plane[2];
-	unsigned int unused_mbz;
-} __packed;
+struct sg_table;
 
 struct intel_rotation_info {
-	struct intel_remapped_plane_info plane[2];
+	struct intel_rotation_plane_info {
+		/* tiles */
+		unsigned int width, height, stride, offset;
+	} plane[2];
 } __packed;
 
 struct intel_partial_info {
@@ -189,20 +179,12 @@ enum i915_ggtt_view_type {
 	I915_GGTT_VIEW_NORMAL = 0,
 	I915_GGTT_VIEW_ROTATED = sizeof(struct intel_rotation_info),
 	I915_GGTT_VIEW_PARTIAL = sizeof(struct intel_partial_info),
-	I915_GGTT_VIEW_REMAPPED = sizeof(struct intel_remapped_info),
 };
 
 static inline void assert_i915_gem_gtt_types(void)
 {
 	BUILD_BUG_ON(sizeof(struct intel_rotation_info) != 8*sizeof(unsigned int));
 	BUILD_BUG_ON(sizeof(struct intel_partial_info) != sizeof(u64) + sizeof(unsigned int));
-	BUILD_BUG_ON(sizeof(struct intel_remapped_info) != 9*sizeof(unsigned int));
-
-	/* Check that rotation/remapped shares offsets for simplicity */
-	BUILD_BUG_ON(offsetof(struct intel_remapped_info, plane[0]) !=
-		     offsetof(struct intel_rotation_info, plane[0]));
-	BUILD_BUG_ON(offsetofend(struct intel_remapped_info, plane[1]) !=
-		     offsetofend(struct intel_rotation_info, plane[1]));
 
 	/* As we encode the size of each branch inside the union into its type,
 	 * we have to be careful that each branch has a unique size.
@@ -211,7 +193,6 @@ static inline void assert_i915_gem_gtt_types(void)
 	case I915_GGTT_VIEW_NORMAL:
 	case I915_GGTT_VIEW_PARTIAL:
 	case I915_GGTT_VIEW_ROTATED:
-	case I915_GGTT_VIEW_REMAPPED:
 		/* gcc complains if these are identical cases */
 		break;
 	}
@@ -223,7 +204,6 @@ struct i915_ggtt_view {
 		/* Members need to contain no holes/padding */
 		struct intel_partial_info partial;
 		struct intel_rotation_info rotated;
-		struct intel_remapped_info remapped;
 	};
 };
 
@@ -248,14 +228,25 @@ struct i915_page_dma {
 
 struct i915_page_table {
 	struct i915_page_dma base;
-	atomic_t used;
+	unsigned int used_ptes;
 };
 
 struct i915_page_directory {
 	struct i915_page_dma base;
-	atomic_t used;
-	spinlock_t lock;
-	void *entry[512];
+
+	struct i915_page_table *page_table[I915_PDES]; /* PDEs */
+	unsigned int used_pdes;
+};
+
+struct i915_page_directory_pointer {
+	struct i915_page_dma base;
+	struct i915_page_directory **page_directory;
+	unsigned int used_pdpes;
+};
+
+struct i915_pml4 {
+	struct i915_page_dma base;
+	struct i915_page_directory_pointer *pdps[GEN8_PML4ES_PER_PML4];
 };
 
 struct i915_vma_ops {
@@ -279,8 +270,6 @@ struct pagestash {
 };
 
 struct i915_address_space {
-	struct kref ref;
-
 	struct drm_mm mm;
 	struct drm_i915_private *i915;
 	struct device *dma;
@@ -307,7 +296,7 @@ struct i915_address_space {
 	struct i915_page_dma scratch_page;
 	struct i915_page_table *scratch_pt;
 	struct i915_page_directory *scratch_pd;
-	struct i915_page_directory *scratch_pdp; /* GEN8+ & 48b PPGTT */
+	struct i915_page_directory_pointer *scratch_pdp; /* GEN8+ & 48b PPGTT */
 
 	/**
 	 * List of vma currently bound.
@@ -394,26 +383,16 @@ struct i915_ggtt {
 
 	u32 pin_bias;
 
-	unsigned int num_fences;
-	struct i915_fence_reg fence_regs[I915_MAX_NUM_FENCES];
-	struct list_head fence_list;
-
-	/** List of all objects in gtt_space, currently mmaped by userspace.
-	 * All objects within this list must also be on bound_list.
-	 */
-	struct list_head userfault_list;
-
-	/* Manual runtime pm autosuspend delay for user GGTT mmaps */
-	struct intel_wakeref_auto userfault_wakeref;
-
 	struct drm_mm_node error_capture;
 	struct drm_mm_node uc_fw;
 };
 
-struct i915_ppgtt {
+struct i915_hw_ppgtt {
 	struct i915_address_space vm;
+	struct kref ref;
 
 	intel_engine_mask_t pd_dirty_engines;
+	unsigned long pd_dirty_engines;
 	union {
 		struct i915_pml4 pml4;		/* GEN8+ & 48b PPGTT */
 		struct i915_page_directory_pointer pdp;	/* GEN8+ */
@@ -423,23 +402,21 @@ struct i915_ppgtt {
 	u32 user_handle;
 };
 
-struct gen6_ppgtt {
-	struct i915_ppgtt base;
+struct gen6_hw_ppgtt {
+	struct i915_hw_ppgtt base;
 
 	struct i915_vma *vma;
 	gen6_pte_t __iomem *pd_addr;
 
 	unsigned int pin_count;
 	bool scan_for_unused_pt;
-
-	struct gen6_ppgtt_cleanup_work *work;
 };
 
-#define __to_gen6_ppgtt(base) container_of(base, struct gen6_ppgtt, base)
+#define __to_gen6_ppgtt(base) container_of(base, struct gen6_hw_ppgtt, base)
 
-static inline struct gen6_ppgtt *to_gen6_ppgtt(struct i915_ppgtt *base)
+static inline struct gen6_hw_ppgtt *to_gen6_ppgtt(struct i915_hw_ppgtt *base)
 {
-	BUILD_BUG_ON(offsetof(struct gen6_ppgtt, base));
+	BUILD_BUG_ON(offsetof(struct gen6_hw_ppgtt, base));
 	return __to_gen6_ppgtt(base);
 }
 
@@ -454,7 +431,7 @@ static inline struct gen6_ppgtt *to_gen6_ppgtt(struct i915_ppgtt *base)
 #define gen6_for_each_pde(pt, pd, start, length, iter)			\
 	for (iter = gen6_pde_index(start);				\
 	     length > 0 && iter < I915_PDES &&				\
-		     (pt = i915_pt_entry(pd, iter), true);		\
+		(pt = (pd)->page_table[iter], true);			\
 	     ({ u32 temp = ALIGN(start+1, 1 << GEN6_PDE_SHIFT);		\
 		    temp = min(temp - start, length);			\
 		    start += temp, length -= temp; }), ++iter)
@@ -462,7 +439,7 @@ static inline struct gen6_ppgtt *to_gen6_ppgtt(struct i915_ppgtt *base)
 #define gen6_for_all_pdes(pt, pd, iter)					\
 	for (iter = 0;							\
 	     iter < I915_PDES &&					\
-		     (pt = i915_pt_entry(pd, iter), true);		\
+		(pt = (pd)->page_table[iter], true);			\
 	     ++iter)
 
 static inline u32 i915_pte_index(u64 address, unsigned int pde_shift)
@@ -521,27 +498,6 @@ i915_pdpes_per_pdp(const struct i915_address_space *vm)
 	return GEN8_3LVL_PDPES;
 }
 
-static inline struct i915_page_table *
-i915_pt_entry(const struct i915_page_directory * const pd,
-	      const unsigned short n)
-{
-	return pd->entry[n];
-}
-
-static inline struct i915_page_directory *
-i915_pd_entry(const struct i915_page_directory * const pdp,
-	      const unsigned short n)
-{
-	return pdp->entry[n];
-}
-
-static inline struct i915_page_directory *
-i915_pdp_entry(const struct i915_page_directory * const pml4,
-	       const unsigned short n)
-{
-	return pml4->entry[n];
-}
-
 /* Equivalent to the gen6 version, For each pde iterates over every pde
  * between from start until start + length. On gen8+ it simply iterates
  * over every page directory entry in a page directory.
@@ -549,7 +505,7 @@ i915_pdp_entry(const struct i915_page_directory * const pml4,
 #define gen8_for_each_pde(pt, pd, start, length, iter)			\
 	for (iter = gen8_pde_index(start);				\
 	     length > 0 && iter < I915_PDES &&				\
-		     (pt = i915_pt_entry(pd, iter), true);		\
+		(pt = (pd)->page_table[iter], true);			\
 	     ({ u64 temp = ALIGN(start+1, 1 << GEN8_PDE_SHIFT);		\
 		    temp = min(temp - start, length);			\
 		    start += temp, length -= temp; }), ++iter)
@@ -557,7 +513,7 @@ i915_pdp_entry(const struct i915_page_directory * const pml4,
 #define gen8_for_each_pdpe(pd, pdp, start, length, iter)		\
 	for (iter = gen8_pdpe_index(start);				\
 	     length > 0 && iter < i915_pdpes_per_pdp(vm) &&		\
-		     (pd = i915_pd_entry(pdp, iter), true);		\
+		(pd = (pdp)->page_directory[iter], true);		\
 	     ({ u64 temp = ALIGN(start+1, 1 << GEN8_PDPE_SHIFT);	\
 		    temp = min(temp - start, length);			\
 		    start += temp, length -= temp; }), ++iter)
@@ -565,7 +521,7 @@ i915_pdp_entry(const struct i915_page_directory * const pml4,
 #define gen8_for_each_pml4e(pdp, pml4, start, length, iter)		\
 	for (iter = gen8_pml4e_index(start);				\
 	     length > 0 && iter < GEN8_PML4ES_PER_PML4 &&		\
-		     (pdp = i915_pdp_entry(pml4, iter), true);		\
+		(pdp = (pml4)->pdps[iter], true);			\
 	     ({ u64 temp = ALIGN(start+1, 1ULL << GEN8_PML4E_SHIFT);	\
 		    temp = min(temp - start, length);			\
 		    start += temp, length -= temp; }), ++iter)
@@ -596,28 +552,16 @@ static inline u64 gen8_pte_count(u64 address, u64 length)
 }
 
 static inline dma_addr_t
-i915_page_dir_dma_addr(const struct i915_ppgtt *ppgtt, const unsigned int n)
+i915_page_dir_dma_addr(const struct i915_hw_ppgtt *ppgtt, const unsigned n)
 {
-	struct i915_page_directory *pd;
-
-	pd = i915_pdp_entry(ppgtt->pd, n);
-	return px_dma(pd);
+	return px_dma(ppgtt->pdp.page_directory[n]);
 }
 
 static inline struct i915_ggtt *
 i915_vm_to_ggtt(struct i915_address_space *vm)
 {
-	BUILD_BUG_ON(offsetof(struct i915_ggtt, vm));
 	GEM_BUG_ON(!i915_is_ggtt(vm));
 	return container_of(vm, struct i915_ggtt, vm);
-}
-
-static inline struct i915_ppgtt *
-i915_vm_to_ppgtt(struct i915_address_space *vm)
-{
-	BUILD_BUG_ON(offsetof(struct i915_ppgtt, vm));
-	GEM_BUG_ON(i915_is_ggtt(vm));
-	return container_of(vm, struct i915_ppgtt, vm);
 }
 
 #define INTEL_MAX_PPAT_ENTRIES 8
@@ -651,6 +595,9 @@ const struct intel_ppat_entry *
 intel_ppat_get(struct drm_i915_private *i915, u8 value);
 void intel_ppat_put(const struct intel_ppat_entry *entry);
 
+int i915_gem_init_aliasing_ppgtt(struct drm_i915_private *i915);
+void i915_gem_fini_aliasing_ppgtt(struct drm_i915_private *i915);
+
 int i915_ggtt_probe_hw(struct drm_i915_private *dev_priv);
 int i915_ggtt_init_hw(struct drm_i915_private *dev_priv);
 int i915_ggtt_enable_hw(struct drm_i915_private *dev_priv);
@@ -661,26 +608,26 @@ void i915_ggtt_cleanup_hw(struct drm_i915_private *dev_priv);
 
 int i915_ppgtt_init_hw(struct drm_i915_private *dev_priv);
 
-struct i915_ppgtt *i915_ppgtt_create(struct drm_i915_private *dev_priv);
+struct i915_hw_ppgtt *i915_ppgtt_create(struct drm_i915_private *dev_priv);
+void i915_ppgtt_release(struct kref *kref);
 
-static inline struct i915_address_space *
-i915_vm_get(struct i915_address_space *vm)
+static inline struct i915_hw_ppgtt *i915_ppgtt_get(struct i915_hw_ppgtt *ppgtt)
 {
-	kref_get(&vm->ref);
-	return vm;
+	kref_get(&ppgtt->ref);
+	return ppgtt;
 }
 
-void i915_vm_release(struct kref *kref);
-
-static inline void i915_vm_put(struct i915_address_space *vm)
+static inline void i915_ppgtt_put(struct i915_hw_ppgtt *ppgtt)
 {
-	kref_put(&vm->ref, i915_vm_release);
+	if (ppgtt)
+		kref_put(&ppgtt->ref, i915_ppgtt_release);
 }
 
-int gen6_ppgtt_pin(struct i915_ppgtt *base);
-void gen6_ppgtt_unpin(struct i915_ppgtt *base);
-void gen6_ppgtt_unpin_all(struct i915_ppgtt *base);
+int gen6_ppgtt_pin(struct i915_hw_ppgtt *base);
+void gen6_ppgtt_unpin(struct i915_hw_ppgtt *base);
+void gen6_ppgtt_unpin_all(struct i915_hw_ppgtt *base);
 
+void i915_check_and_clear_faults(struct drm_i915_private *dev_priv);
 void i915_gem_suspend_gtt_mappings(struct drm_i915_private *dev_priv);
 void i915_gem_restore_gtt_mappings(struct drm_i915_private *dev_priv);
 

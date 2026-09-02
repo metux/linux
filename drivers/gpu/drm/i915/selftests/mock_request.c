@@ -22,7 +22,6 @@
  *
  */
 
-#include "gem/selftests/igt_gem_utils.h"
 #include "gt/mock_engine.h"
 
 #include "mock_request.h"
@@ -35,7 +34,7 @@ mock_request(struct intel_engine_cs *engine,
 	struct i915_request *request;
 
 	/* NB the i915->requests slab cache is enlarged to fit mock_request */
-	request = igt_request_alloc(context, engine);
+	request = i915_request_alloc(engine, context);
 	if (IS_ERR(request))
 		return NULL;
 

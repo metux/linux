@@ -24,13 +24,9 @@
 
 #include <drm/drm_print.h>
 
-#include "gem/i915_gem_context.h"
-
 #include "i915_drv.h"
 
 #include "intel_engine.h"
-#include "intel_engine_pm.h"
-#include "intel_context.h"
 #include "intel_lrc.h"
 #include "intel_reset.h"
 
@@ -53,24 +49,35 @@
 
 struct engine_class_info {
 	const char *name;
+	int (*init_legacy)(struct intel_engine_cs *engine);
+	int (*init_execlists)(struct intel_engine_cs *engine);
+
 	u8 uabi_class;
 };
 
 static const struct engine_class_info intel_engine_classes[] = {
 	[RENDER_CLASS] = {
 		.name = "rcs",
+		.init_execlists = logical_render_ring_init,
+		.init_legacy = intel_init_render_ring_buffer,
 		.uabi_class = I915_ENGINE_CLASS_RENDER,
 	},
 	[COPY_ENGINE_CLASS] = {
 		.name = "bcs",
+		.init_execlists = logical_xcs_ring_init,
+		.init_legacy = intel_init_blt_ring_buffer,
 		.uabi_class = I915_ENGINE_CLASS_COPY,
 	},
 	[VIDEO_DECODE_CLASS] = {
 		.name = "vcs",
+		.init_execlists = logical_xcs_ring_init,
+		.init_legacy = intel_init_bsd_ring_buffer,
 		.uabi_class = I915_ENGINE_CLASS_VIDEO,
 	},
 	[VIDEO_ENHANCEMENT_CLASS] = {
 		.name = "vecs",
+		.init_execlists = logical_xcs_ring_init,
+		.init_legacy = intel_init_vebox_ring_buffer,
 		.uabi_class = I915_ENGINE_CLASS_VIDEO_ENHANCE,
 	},
 };
@@ -159,7 +166,7 @@ static const struct engine_info intel_engines[] = {
 };
 
 /**
- * intel_engine_context_size() - return the size of the context for an engine
+ * ___intel_engine_context_size() - return the size of the context for an engine
  * @dev_priv: i915 device private
  * @class: engine class
  *
@@ -172,7 +179,8 @@ static const struct engine_info intel_engines[] = {
  * in LRC mode, but does not include the "shared data page" used with
  * GuC submission. The caller should account for this if using the GuC.
  */
-u32 intel_engine_context_size(struct drm_i915_private *dev_priv, u8 class)
+static u32
+__intel_engine_context_size(struct drm_i915_private *dev_priv, u8 class)
 {
 	u32 cxt_size;
 
@@ -205,22 +213,6 @@ u32 intel_engine_context_size(struct drm_i915_private *dev_priv, u8 class)
 					PAGE_SIZE);
 		case 5:
 		case 4:
-			/*
-			 * There is a discrepancy here between the size reported
-			 * by the register and the size of the context layout
-			 * in the docs. Both are described as authorative!
-			 *
-			 * The discrepancy is on the order of a few cachelines,
-			 * but the total is under one page (4k), which is our
-			 * minimum allocation anyway so it should all come
-			 * out in the wash.
-			 */
-			cxt_size = I915_READ(CXT_SIZE) + 1;
-			DRM_DEBUG_DRIVER("gen%d CXT_SIZE = %d bytes [0x%08x]\n",
-					 INTEL_GEN(dev_priv),
-					 cxt_size * 64,
-					 cxt_size - 1);
-			return round_up(cxt_size * 64, PAGE_SIZE);
 		case 3:
 		case 2:
 		/* For the special day when i810 gets merged. */
@@ -321,16 +313,10 @@ intel_engine_setup(struct drm_i915_private *dev_priv,
 	engine->class = info->class;
 	engine->instance = info->instance;
 
-	/*
-	 * To be overridden by the backend on setup. However to facilitate
-	 * cleanup on error during setup, we always provide the destroy vfunc.
-	 */
-	engine->destroy = (typeof(engine->destroy))kfree;
-
 	engine->uabi_class = intel_engine_classes[info->class].uabi_class;
 
-	engine->context_size = intel_engine_context_size(dev_priv,
-							 engine->class);
+	engine->context_size = __intel_engine_context_size(dev_priv,
+							   engine->class);
 	if (WARN_ON(engine->context_size > BIT(20)))
 		engine->context_size = 0;
 	if (engine->context_size)
@@ -351,70 +337,18 @@ intel_engine_setup(struct drm_i915_private *dev_priv,
 	return 0;
 }
 
-static void __setup_engine_capabilities(struct intel_engine_cs *engine)
-{
-	struct drm_i915_private *i915 = engine->i915;
-
-	if (engine->class == VIDEO_DECODE_CLASS) {
-		/*
-		 * HEVC support is present on first engine instance
-		 * before Gen11 and on all instances afterwards.
-		 */
-		if (INTEL_GEN(i915) >= 11 ||
-		    (INTEL_GEN(i915) >= 9 && engine->instance == 0))
-			engine->uabi_capabilities |=
-				I915_VIDEO_CLASS_CAPABILITY_HEVC;
-
-		/*
-		 * SFC block is present only on even logical engine
-		 * instances.
-		 */
-		if ((INTEL_GEN(i915) >= 11 &&
-		     RUNTIME_INFO(i915)->vdbox_sfc_access & engine->mask) ||
-		    (INTEL_GEN(i915) >= 9 && engine->instance == 0))
-			engine->uabi_capabilities |=
-				I915_VIDEO_AND_ENHANCE_CLASS_CAPABILITY_SFC;
-	} else if (engine->class == VIDEO_ENHANCEMENT_CLASS) {
-		if (INTEL_GEN(i915) >= 9)
-			engine->uabi_capabilities |=
-				I915_VIDEO_AND_ENHANCE_CLASS_CAPABILITY_SFC;
-	}
-}
-
-static void intel_setup_engine_capabilities(struct drm_i915_private *i915)
-{
-	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
-
-	for_each_engine(engine, i915, id)
-		__setup_engine_capabilities(engine);
-}
-
-/**
- * intel_engines_cleanup() - free the resources allocated for Command Streamers
- * @i915: the i915 devic
- */
-void intel_engines_cleanup(struct drm_i915_private *i915)
-{
-	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
-
-	for_each_engine(engine, i915, id) {
-		engine->destroy(engine);
-		i915->engine[id] = NULL;
-	}
-}
-
 /**
  * intel_engines_init_mmio() - allocate and prepare the Engine Command Streamers
- * @i915: the i915 device
+ * @dev_priv: i915 device private
  *
  * Return: non-zero if the initialization failed.
  */
-int intel_engines_init_mmio(struct drm_i915_private *i915)
+int intel_engines_init_mmio(struct drm_i915_private *dev_priv)
 {
-	struct intel_device_info *device_info = mkwrite_device_info(i915);
-	const unsigned int engine_mask = INTEL_INFO(i915)->engine_mask;
+	struct intel_device_info *device_info = mkwrite_device_info(dev_priv);
+	const unsigned int engine_mask = INTEL_INFO(dev_priv)->engine_mask;
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
 	unsigned int mask = 0;
 	unsigned int i;
 	int err;
@@ -427,10 +361,10 @@ int intel_engines_init_mmio(struct drm_i915_private *i915)
 		return -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(intel_engines); i++) {
-		if (!HAS_ENGINE(i915, i))
+		if (!HAS_ENGINE(dev_priv, i))
 			continue;
 
-		err = intel_engine_setup(i915, i);
+		err = intel_engine_setup(dev_priv, i);
 		if (err)
 			goto cleanup;
 
@@ -446,52 +380,69 @@ int intel_engines_init_mmio(struct drm_i915_private *i915)
 		device_info->engine_mask = mask;
 
 	/* We always presume we have at least RCS available for later probing */
-	if (WARN_ON(!HAS_ENGINE(i915, RCS0))) {
+	if (WARN_ON(!HAS_ENGINE(dev_priv, RCS0))) {
 		err = -ENODEV;
 		goto cleanup;
 	}
 
-	RUNTIME_INFO(i915)->num_engines = hweight32(mask);
+	RUNTIME_INFO(dev_priv)->num_engines = hweight32(mask);
 
-	i915_check_and_clear_faults(i915);
-
-	intel_setup_engine_capabilities(i915);
+	i915_check_and_clear_faults(dev_priv);
 
 	return 0;
 
 cleanup:
-	intel_engines_cleanup(i915);
+	for_each_engine(engine, dev_priv, id)
+		kfree(engine);
 	return err;
 }
 
 /**
  * intel_engines_init() - init the Engine Command Streamers
- * @i915: i915 device private
+ * @dev_priv: i915 device private
  *
  * Return: non-zero if the initialization failed.
  */
-int intel_engines_init(struct drm_i915_private *i915)
+int intel_engines_init(struct drm_i915_private *dev_priv)
 {
-	int (*init)(struct intel_engine_cs *engine);
 	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
+	enum intel_engine_id id, err_id;
 	int err;
 
-	if (HAS_EXECLISTS(i915))
-		init = intel_execlists_submission_init;
-	else
-		init = intel_ring_submission_init;
+	for_each_engine(engine, dev_priv, id) {
+		const struct engine_class_info *class_info =
+			&intel_engine_classes[engine->class];
+		int (*init)(struct intel_engine_cs *engine);
 
-	for_each_engine(engine, i915, id) {
+		if (HAS_EXECLISTS(dev_priv))
+			init = class_info->init_execlists;
+		else
+			init = class_info->init_legacy;
+
+		err = -EINVAL;
+		err_id = id;
+
+		if (GEM_DEBUG_WARN_ON(!init))
+			goto cleanup;
+
 		err = init(engine);
 		if (err)
 			goto cleanup;
+
+		GEM_BUG_ON(!engine->submit_request);
 	}
 
 	return 0;
 
 cleanup:
-	intel_engines_cleanup(i915);
+	for_each_engine(engine, dev_priv, id) {
+		if (id >= err_id) {
+			kfree(engine);
+			dev_priv->engine[id] = NULL;
+		} else {
+			dev_priv->gt.cleanup_engine(engine);
+		}
+	}
 	return err;
 }
 
@@ -500,7 +451,7 @@ static void intel_engine_init_batch_pool(struct intel_engine_cs *engine)
 	i915_gem_batch_pool_init(&engine->batch_pool, engine);
 }
 
-void intel_engine_init_execlists(struct intel_engine_cs *engine)
+static void intel_engine_init_execlist(struct intel_engine_cs *engine)
 {
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 
@@ -527,7 +478,7 @@ static void cleanup_status_page(struct intel_engine_cs *engine)
 		i915_vma_unpin(vma);
 
 	i915_gem_object_unpin_map(vma->obj);
-	i915_gem_object_put(vma->obj);
+	__i915_gem_object_release_unless_active(vma->obj);
 }
 
 static int pin_ggtt_status_page(struct intel_engine_cs *engine,
@@ -607,66 +558,36 @@ err:
 	return ret;
 }
 
-static int intel_engine_setup_common(struct intel_engine_cs *engine)
+/**
+ * intel_engines_setup_common - setup engine state not requiring hw access
+ * @engine: Engine to setup.
+ *
+ * Initializes @engine@ structure members shared between legacy and execlists
+ * submission modes which do not require hardware access.
+ *
+ * Typically done early in the submission mode specific engine setup stage.
+ */
+int intel_engine_setup_common(struct intel_engine_cs *engine)
 {
 	int err;
-
-	init_llist_head(&engine->barrier_tasks);
 
 	err = init_status_page(engine);
 	if (err)
 		return err;
 
-	intel_engine_init_active(engine, ENGINE_PHYSICAL);
+	err = i915_timeline_init(engine->i915,
+				 &engine->timeline,
+				 engine->status_page.vma);
+	if (err)
+		goto err_hwsp;
+
+	i915_timeline_set_subclass(&engine->timeline, TIMELINE_ENGINE);
+
 	intel_engine_init_breadcrumbs(engine);
-	intel_engine_init_execlists(engine);
+	intel_engine_init_execlist(engine);
 	intel_engine_init_hangcheck(engine);
 	intel_engine_init_batch_pool(engine);
 	intel_engine_init_cmd_parser(engine);
-	intel_engine_init__pm(engine);
-
-	/* Use the whole device by default */
-	engine->sseu =
-		intel_sseu_from_device_info(&RUNTIME_INFO(engine->i915)->sseu);
-
-	return 0;
-}
-
-/**
- * intel_engines_setup- setup engine state not requiring hw access
- * @i915: Device to setup.
- *
- * Initializes engine structure members shared between legacy and execlists
- * submission modes which do not require hardware access.
- *
- * Typically done early in the submission mode specific engine setup stage.
- */
-int intel_engines_setup(struct drm_i915_private *i915)
-{
-	int (*setup)(struct intel_engine_cs *engine);
-	struct intel_engine_cs *engine;
-	enum intel_engine_id id;
-	int err;
-
-	if (HAS_EXECLISTS(i915))
-		setup = intel_execlists_submission_setup;
-	else
-		setup = intel_ring_submission_setup;
-
-	for_each_engine(engine, i915, id) {
-		err = intel_engine_setup_common(engine);
-		if (err)
-			goto cleanup;
-
-		err = setup(engine);
-		if (err)
-			goto cleanup;
-
-		/* We expect the backend to take control over its state */
-		GEM_BUG_ON(engine->destroy == (typeof(engine->destroy))kfree);
-
-		GEM_BUG_ON(!engine->cops);
-	}
 
 	/* Use the whole device by default */
 	engine->sseu =
@@ -674,8 +595,8 @@ int intel_engines_setup(struct drm_i915_private *i915)
 
 	return 0;
 
-cleanup:
-	intel_engines_cleanup(i915);
+err_hwsp:
+	cleanup_status_page(engine);
 	return err;
 }
 
@@ -759,7 +680,6 @@ static int measure_breadcrumb_dw(struct intel_engine_cs *engine)
 		goto out_timeline;
 
 	dw = engine->emit_fini_breadcrumb(&frame->rq, frame->cs) - frame->cs;
-	GEM_BUG_ON(dw & 1); /* RING_TAIL must be qword aligned */
 
 	i915_timeline_unpin(&frame->timeline);
 
@@ -775,40 +695,13 @@ static int pin_context(struct i915_gem_context *ctx,
 		       struct intel_context **out)
 {
 	struct intel_context *ce;
-	int err;
 
-	ce = i915_gem_context_get_engine(ctx, engine->id);
+	ce = intel_context_pin(ctx, engine);
 	if (IS_ERR(ce))
 		return PTR_ERR(ce);
 
-	err = intel_context_pin(ce);
-	intel_context_put(ce);
-	if (err)
-		return err;
-
 	*out = ce;
 	return 0;
-}
-
-void
-intel_engine_init_active(struct intel_engine_cs *engine, unsigned int subclass)
-{
-	INIT_LIST_HEAD(&engine->active.requests);
-
-	spin_lock_init(&engine->active.lock);
-	lockdep_set_subclass(&engine->active.lock, subclass);
-
-	/*
-	 * Due to an interesting quirk in lockdep's internal debug tracking,
-	 * after setting a subclass we must ensure the lock is used. Otherwise,
-	 * nr_unused_locks is incremented once too often.
-	 */
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
-	local_irq_disable();
-	lock_map_acquire(&engine->active.lock.dep_map);
-	lock_map_release(&engine->active.lock.dep_map);
-	local_irq_enable();
-#endif
 }
 
 /**
@@ -865,6 +758,30 @@ err_unpin:
 	return ret;
 }
 
+void intel_gt_resume(struct drm_i915_private *i915)
+{
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+
+	/*
+	 * After resume, we may need to poke into the pinned kernel
+	 * contexts to paper over any damage caused by the sudden suspend.
+	 * Only the kernel contexts should remain pinned over suspend,
+	 * allowing us to fixup the user contexts on their first pin.
+	 */
+	for_each_engine(engine, i915, id) {
+		struct intel_context *ce;
+
+		ce = engine->kernel_context;
+		if (ce)
+			ce->ops->reset(ce);
+
+		ce = engine->preempt_context;
+		if (ce)
+			ce->ops->reset(ce);
+	}
+}
+
 /**
  * intel_engines_cleanup_common - cleans up the engine state created by
  *                                the common initiailizers.
@@ -874,8 +791,6 @@ err_unpin:
  */
 void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 {
-	GEM_BUG_ON(!list_empty(&engine->active.requests));
-
 	cleanup_status_page(engine);
 
 	intel_engine_fini_breadcrumbs(engine);
@@ -888,7 +803,8 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 	if (engine->preempt_context)
 		intel_context_unpin(engine->preempt_context);
 	intel_context_unpin(engine->kernel_context);
-	GEM_BUG_ON(!llist_empty(&engine->barrier_tasks));
+
+	i915_timeline_fini(&engine->timeline);
 
 	intel_wa_list_free(&engine->ctx_wa_list);
 	intel_wa_list_free(&engine->wa_list);
@@ -973,14 +889,9 @@ const char *i915_cache_level_str(struct drm_i915_private *i915, int type)
 u32 intel_calculate_mcr_s_ss_select(struct drm_i915_private *dev_priv)
 {
 	const struct sseu_dev_info *sseu = &RUNTIME_INFO(dev_priv)->sseu;
-	unsigned int slice = fls(sseu->slice_mask) - 1;
-	unsigned int subslice;
 	u32 mcr_s_ss_select;
-
-	GEM_BUG_ON(slice >= ARRAY_SIZE(sseu->subslice_mask));
-	subslice = fls(sseu->subslice_mask[slice]);
-	GEM_BUG_ON(!subslice);
-	subslice--;
+	u32 slice = fls(sseu->slice_mask);
+	u32 subslice = fls(sseu->subslice_mask[slice]);
 
 	if (IS_GEN(dev_priv, 10))
 		mcr_s_ss_select = GEN8_MCR_SLICE(slice) |
@@ -994,12 +905,11 @@ u32 intel_calculate_mcr_s_ss_select(struct drm_i915_private *dev_priv)
 	return mcr_s_ss_select;
 }
 
-static u32
-read_subslice_reg(struct intel_engine_cs *engine, int slice, int subslice,
-		  i915_reg_t reg)
+static inline u32
+read_subslice_reg(struct drm_i915_private *dev_priv, int slice,
+		  int subslice, i915_reg_t reg)
 {
-	struct drm_i915_private *i915 = engine->i915;
-	struct intel_uncore *uncore = engine->uncore;
+	struct intel_uncore *uncore = &dev_priv->uncore;
 	u32 mcr_slice_subslice_mask;
 	u32 mcr_slice_subslice_select;
 	u32 default_mcr_s_ss_select;
@@ -1007,7 +917,7 @@ read_subslice_reg(struct intel_engine_cs *engine, int slice, int subslice,
 	u32 ret;
 	enum forcewake_domains fw_domains;
 
-	if (INTEL_GEN(i915) >= 11) {
+	if (INTEL_GEN(dev_priv) >= 11) {
 		mcr_slice_subslice_mask = GEN11_MCR_SLICE_MASK |
 					  GEN11_MCR_SUBSLICE_MASK;
 		mcr_slice_subslice_select = GEN11_MCR_SLICE(slice) |
@@ -1019,7 +929,7 @@ read_subslice_reg(struct intel_engine_cs *engine, int slice, int subslice,
 					    GEN8_MCR_SUBSLICE(subslice);
 	}
 
-	default_mcr_s_ss_select = intel_calculate_mcr_s_ss_select(i915);
+	default_mcr_s_ss_select = intel_calculate_mcr_s_ss_select(dev_priv);
 
 	fw_domains = intel_uncore_forcewake_for_reg(uncore, reg,
 						    FW_REG_READ);
@@ -1056,7 +966,7 @@ read_subslice_reg(struct intel_engine_cs *engine, int slice, int subslice,
 void intel_engine_get_instdone(struct intel_engine_cs *engine,
 			       struct intel_instdone *instdone)
 {
-	struct drm_i915_private *i915 = engine->i915;
+	struct drm_i915_private *dev_priv = engine->i915;
 	struct intel_uncore *uncore = engine->uncore;
 	u32 mmio_base = engine->mmio_base;
 	int slice;
@@ -1064,7 +974,7 @@ void intel_engine_get_instdone(struct intel_engine_cs *engine,
 
 	memset(instdone, 0, sizeof(*instdone));
 
-	switch (INTEL_GEN(i915)) {
+	switch (INTEL_GEN(dev_priv)) {
 	default:
 		instdone->instdone =
 			intel_uncore_read(uncore, RING_INSTDONE(mmio_base));
@@ -1074,12 +984,12 @@ void intel_engine_get_instdone(struct intel_engine_cs *engine,
 
 		instdone->slice_common =
 			intel_uncore_read(uncore, GEN7_SC_INSTDONE);
-		for_each_instdone_slice_subslice(i915, slice, subslice) {
+		for_each_instdone_slice_subslice(dev_priv, slice, subslice) {
 			instdone->sampler[slice][subslice] =
-				read_subslice_reg(engine, slice, subslice,
+				read_subslice_reg(dev_priv, slice, subslice,
 						  GEN7_SAMPLER_INSTDONE);
 			instdone->row[slice][subslice] =
-				read_subslice_reg(engine, slice, subslice,
+				read_subslice_reg(dev_priv, slice, subslice,
 						  GEN7_ROW_INSTDONE);
 		}
 		break;
@@ -1127,7 +1037,7 @@ static bool ring_is_idle(struct intel_engine_cs *engine)
 		return true;
 
 	/* If the whole device is asleep, the engine must be idle */
-	wakeref = intel_runtime_pm_get_if_in_use(&dev_priv->runtime_pm);
+	wakeref = intel_runtime_pm_get_if_in_use(dev_priv);
 	if (!wakeref)
 		return true;
 
@@ -1141,7 +1051,7 @@ static bool ring_is_idle(struct intel_engine_cs *engine)
 	    !(ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE))
 		idle = false;
 
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
+	intel_runtime_pm_put(dev_priv, wakeref);
 
 	return idle;
 }
@@ -1159,14 +1069,9 @@ bool intel_engine_is_idle(struct intel_engine_cs *engine)
 	if (i915_reset_failed(engine->i915))
 		return true;
 
-	if (!intel_wakeref_active(&engine->wakeref))
-		return true;
-
 	/* Waiting to drain ELSP? */
 	if (READ_ONCE(engine->execlists.active)) {
 		struct tasklet_struct *t = &engine->execlists.tasklet;
-
-		synchronize_hardirq(engine->i915->drm.irq);
 
 		local_bh_disable();
 		if (tasklet_trylock(t)) {
@@ -1223,6 +1128,137 @@ void intel_engines_reset_default_submission(struct drm_i915_private *i915)
 
 	for_each_engine(engine, i915, id)
 		engine->set_default_submission(engine);
+}
+
+static bool reset_engines(struct drm_i915_private *i915)
+{
+	if (INTEL_INFO(i915)->gpu_reset_clobbers_display)
+		return false;
+
+	return intel_gpu_reset(i915, ALL_ENGINES) == 0;
+}
+
+/**
+ * intel_engines_sanitize: called after the GPU has lost power
+ * @i915: the i915 device
+ * @force: ignore a failed reset and sanitize engine state anyway
+ *
+ * Anytime we reset the GPU, either with an explicit GPU reset or through a
+ * PCI power cycle, the GPU loses state and we must reset our state tracking
+ * to match. Note that calling intel_engines_sanitize() if the GPU has not
+ * been reset results in much confusion!
+ */
+void intel_engines_sanitize(struct drm_i915_private *i915, bool force)
+{
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+
+	GEM_TRACE("\n");
+
+	if (!reset_engines(i915) && !force)
+		return;
+
+	for_each_engine(engine, i915, id)
+		intel_engine_reset(engine, false);
+}
+
+/**
+ * intel_engines_park: called when the GT is transitioning from busy->idle
+ * @i915: the i915 device
+ *
+ * The GT is now idle and about to go to sleep (maybe never to wake again?).
+ * Time for us to tidy and put away our toys (release resources back to the
+ * system).
+ */
+void intel_engines_park(struct drm_i915_private *i915)
+{
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+
+	for_each_engine(engine, i915, id) {
+		/* Flush the residual irq tasklets first. */
+		intel_engine_disarm_breadcrumbs(engine);
+		tasklet_kill(&engine->execlists.tasklet);
+
+		/*
+		 * We are committed now to parking the engines, make sure there
+		 * will be no more interrupts arriving later and the engines
+		 * are truly idle.
+		 */
+		if (wait_for(intel_engine_is_idle(engine), 10)) {
+			struct drm_printer p = drm_debug_printer(__func__);
+
+			dev_err(i915->drm.dev,
+				"%s is not idle before parking\n",
+				engine->name);
+			intel_engine_dump(engine, &p, NULL);
+		}
+
+		/* Must be reset upon idling, or we may miss the busy wakeup. */
+		GEM_BUG_ON(engine->execlists.queue_priority_hint != INT_MIN);
+
+		if (engine->park)
+			engine->park(engine);
+
+		if (engine->pinned_default_state) {
+			i915_gem_object_unpin_map(engine->default_state);
+			engine->pinned_default_state = NULL;
+		}
+
+		i915_gem_batch_pool_fini(&engine->batch_pool);
+		engine->execlists.no_priolist = false;
+	}
+
+	i915->gt.active_engines = 0;
+}
+
+/**
+ * intel_engines_unpark: called when the GT is transitioning from idle->busy
+ * @i915: the i915 device
+ *
+ * The GT was idle and now about to fire up with some new user requests.
+ */
+void intel_engines_unpark(struct drm_i915_private *i915)
+{
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+
+	for_each_engine(engine, i915, id) {
+		void *map;
+
+		/* Pin the default state for fast resets from atomic context. */
+		map = NULL;
+		if (engine->default_state)
+			map = i915_gem_object_pin_map(engine->default_state,
+						      I915_MAP_WB);
+		if (!IS_ERR_OR_NULL(map))
+			engine->pinned_default_state = map;
+
+		if (engine->unpark)
+			engine->unpark(engine);
+
+		intel_engine_init_hangcheck(engine);
+	}
+}
+
+/**
+ * intel_engine_lost_context: called when the GPU is reset into unknown state
+ * @engine: the engine
+ *
+ * We have either reset the GPU or otherwise about to lose state tracking of
+ * the current GPU logical state (e.g. suspend). On next use, it is therefore
+ * imperative that we make no presumptions about the current state and load
+ * from scratch.
+ */
+void intel_engine_lost_context(struct intel_engine_cs *engine)
+{
+	struct intel_context *ce;
+
+	lockdep_assert_held(&engine->i915->drm.struct_mutex);
+
+	ce = fetch_and_zero(&engine->last_retired_context);
+	if (ce)
+		intel_context_unpin(ce);
 }
 
 bool intel_engine_can_store_dword(struct intel_engine_cs *engine)
@@ -1283,11 +1319,8 @@ static void print_request(struct drm_printer *m,
 		   i915_request_completed(rq) ? "!" :
 		   i915_request_started(rq) ? "*" :
 		   "",
-		   test_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
-			    &rq->fence.flags) ? "+" :
 		   test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
-			    &rq->fence.flags) ? "-" :
-		   "",
+			    &rq->fence.flags) ?  "+" : "",
 		   buf,
 		   jiffies_to_msecs(jiffies - rq->emitted_jiffies),
 		   name);
@@ -1322,13 +1355,12 @@ static void hexdump(struct drm_printer *m, const void *buf, size_t len)
 	}
 }
 
-static void intel_engine_print_registers(struct intel_engine_cs *engine,
+static void intel_engine_print_registers(const struct intel_engine_cs *engine,
 					 struct drm_printer *m)
 {
 	struct drm_i915_private *dev_priv = engine->i915;
 	const struct intel_engine_execlists * const execlists =
 		&engine->execlists;
-	unsigned long flags;
 	u64 addr;
 
 	if (engine->id == RCS0 && IS_GEN_RANGE(dev_priv, 4, 7))
@@ -1410,16 +1442,15 @@ static void intel_engine_print_registers(struct intel_engine_cs *engine,
 				   idx, hws[idx * 2], hws[idx * 2 + 1]);
 		}
 
-		spin_lock_irqsave(&engine->active.lock, flags);
+		rcu_read_lock();
 		for (idx = 0; idx < execlists_num_ports(execlists); idx++) {
 			struct i915_request *rq;
 			unsigned int count;
-			char hdr[80];
 
 			rq = port_unpack(&execlists->port[idx], &count);
-			if (!rq) {
-				drm_printf(m, "\t\tELSP[%d] idle\n", idx);
-			} else if (!i915_request_signaled(rq)) {
+			if (rq) {
+				char hdr[80];
+
 				snprintf(hdr, sizeof(hdr),
 					 "\t\tELSP[%d] count=%d, ring:{start:%08x, hwsp:%08x, seqno:%08x}, rq: ",
 					 idx, count,
@@ -1428,11 +1459,11 @@ static void intel_engine_print_registers(struct intel_engine_cs *engine,
 					 hwsp_seqno(rq));
 				print_request(m, rq, hdr);
 			} else {
-				print_request(m, rq, "\t\tELSP[%d] rq: ");
+				drm_printf(m, "\t\tELSP[%d] idle\n", idx);
 			}
 		}
 		drm_printf(m, "\t\tHW active? 0x%x\n", execlists->active);
-		spin_unlock_irqrestore(&engine->active.lock, flags);
+		rcu_read_unlock();
 	} else if (INTEL_GEN(dev_priv) > 6) {
 		drm_printf(m, "\tPP_DIR_BASE: 0x%08x\n",
 			   ENGINE_READ(engine, RING_PP_DIR_BASE));
@@ -1483,7 +1514,6 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 	struct i915_gpu_error * const error = &engine->i915->gpu_error;
 	struct i915_request *rq;
 	intel_wakeref_t wakeref;
-	unsigned long flags;
 
 	if (header) {
 		va_list ap;
@@ -1496,16 +1526,28 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 	if (i915_reset_failed(engine->i915))
 		drm_printf(m, "*** WEDGED ***\n");
 
-	drm_printf(m, "\tAwake? %d\n", atomic_read(&engine->wakeref.count));
-	drm_printf(m, "\tHangcheck: %d ms ago\n",
+	drm_printf(m, "\tHangcheck %x:%x [%d ms]\n",
+		   engine->hangcheck.last_seqno,
+		   engine->hangcheck.next_seqno,
 		   jiffies_to_msecs(jiffies - engine->hangcheck.action_timestamp));
 	drm_printf(m, "\tReset count: %d (global %d)\n",
 		   i915_reset_engine_count(error, engine),
 		   i915_reset_count(error));
 
+	rcu_read_lock();
+
 	drm_printf(m, "\tRequests:\n");
 
-	spin_lock_irqsave(&engine->active.lock, flags);
+	rq = list_first_entry(&engine->timeline.requests,
+			      struct i915_request, link);
+	if (&rq->link != &engine->timeline.requests)
+		print_request(m, rq, "\t\tfirst  ");
+
+	rq = list_last_entry(&engine->timeline.requests,
+			     struct i915_request, link);
+	if (&rq->link != &engine->timeline.requests)
+		print_request(m, rq, "\t\tlast   ");
+
 	rq = intel_engine_find_active_request(engine);
 	if (rq) {
 		print_request(m, rq, "\t\tactive ");
@@ -1525,12 +1567,13 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 
 		print_request_ring(m, rq);
 	}
-	spin_unlock_irqrestore(&engine->active.lock, flags);
 
-	wakeref = intel_runtime_pm_get_if_in_use(&engine->i915->runtime_pm);
+	rcu_read_unlock();
+
+	wakeref = intel_runtime_pm_get_if_in_use(engine->i915);
 	if (wakeref) {
 		intel_engine_print_registers(engine, m);
-		intel_runtime_pm_put(&engine->i915->runtime_pm, wakeref);
+		intel_runtime_pm_put(engine->i915, wakeref);
 	} else {
 		drm_printf(m, "\tDevice is asleep; skipping register dump\n");
 	}
@@ -1585,7 +1628,7 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 	if (!intel_engine_supports_stats(engine))
 		return -ENODEV;
 
-	spin_lock_irqsave(&engine->active.lock, flags);
+	spin_lock_irqsave(&engine->timeline.lock, flags);
 	write_seqlock(&engine->stats.lock);
 
 	if (unlikely(engine->stats.enabled == ~0)) {
@@ -1611,7 +1654,7 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 
 unlock:
 	write_sequnlock(&engine->stats.lock);
-	spin_unlock_irqrestore(&engine->active.lock, flags);
+	spin_unlock_irqrestore(&engine->timeline.lock, flags);
 
 	return err;
 }
@@ -1683,6 +1726,7 @@ struct i915_request *
 intel_engine_find_active_request(struct intel_engine_cs *engine)
 {
 	struct i915_request *request, *active = NULL;
+	unsigned long flags;
 
 	/*
 	 * We are called by the error capture, reset and to dump engine
@@ -1695,21 +1739,22 @@ intel_engine_find_active_request(struct intel_engine_cs *engine)
 	 * At all other times, we must assume the GPU is still running, but
 	 * we only care about the snapshot of this moment.
 	 */
-	lockdep_assert_held(&engine->active.lock);
-	list_for_each_entry(request, &engine->active.requests, sched.link) {
+	spin_lock_irqsave(&engine->timeline.lock, flags);
+	list_for_each_entry(request, &engine->timeline.requests, link) {
 		if (i915_request_completed(request))
 			continue;
 
 		if (!i915_request_started(request))
-			continue;
+			break;
 
 		/* More than one preemptible request may match! */
 		if (!match_ring(request))
-			continue;
+			break;
 
 		active = request;
 		break;
 	}
+	spin_unlock_irqrestore(&engine->timeline.lock, flags);
 
 	return active;
 }

@@ -10,9 +10,8 @@
 
 #include <linux/delay.h>
 
+#include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_fourcc.h>
-#include <drm/drm_pci.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 
@@ -856,29 +855,56 @@ static void mga_set_start_address(struct drm_crtc *crtc, unsigned offset)
 	WREG_ECRT(0x0, ((u8)(addr >> 16) & 0xf) | crtcext0);
 }
 
+
+/* ast is different - we will force move buffers out of VRAM */
 static int mga_crtc_do_set_base(struct drm_crtc *crtc,
 				struct drm_framebuffer *fb,
 				int x, int y, int atomic)
 {
+	struct mga_device *mdev = crtc->dev->dev_private;
+	struct drm_gem_object *obj;
+	struct mga_framebuffer *mga_fb;
 	struct drm_gem_vram_object *gbo;
 	int ret;
 	s64 gpu_addr;
 
+	/* push the previous fb to system ram */
 	if (!atomic && fb) {
-		gbo = drm_gem_vram_of_gem(fb->obj[0]);
-		drm_gem_vram_unpin(gbo);
+		mga_fb = to_mga_framebuffer(fb);
+		obj = mga_fb->obj;
+		gbo = drm_gem_vram_of_gem(obj);
+		ret = drm_gem_vram_reserve(gbo, false);
+		if (ret)
+			return ret;
+		drm_gem_vram_push_to_system(gbo);
+		drm_gem_vram_unreserve(gbo);
 	}
 
-	gbo = drm_gem_vram_of_gem(crtc->primary->fb->obj[0]);
+	mga_fb = to_mga_framebuffer(crtc->primary->fb);
+	obj = mga_fb->obj;
+	gbo = drm_gem_vram_of_gem(obj);
+
+	ret = drm_gem_vram_reserve(gbo, false);
+	if (ret)
+		return ret;
 
 	ret = drm_gem_vram_pin(gbo, DRM_GEM_VRAM_PL_FLAG_VRAM);
 	if (ret)
-		return ret;
+		goto err_drm_gem_vram_unreserve;
 	gpu_addr = drm_gem_vram_offset(gbo);
 	if (gpu_addr < 0) {
 		ret = (int)gpu_addr;
 		goto err_drm_gem_vram_unpin;
 	}
+
+	if (&mdev->mfbdev->mfb == mga_fb) {
+		/* if pushing console in kmap it */
+		ret = ttm_bo_kmap(&gbo->bo, 0, gbo->bo.num_pages, &gbo->kmap);
+		if (ret)
+			DRM_ERROR("failed to kmap fbcon\n");
+
+	}
+	drm_gem_vram_unreserve(gbo);
 
 	mga_set_start_address(crtc, (u32)gpu_addr);
 
@@ -886,6 +912,8 @@ static int mga_crtc_do_set_base(struct drm_crtc *crtc,
 
 err_drm_gem_vram_unpin:
 	drm_gem_vram_unpin(gbo);
+err_drm_gem_vram_unreserve:
+	drm_gem_vram_unreserve(gbo);
 	return ret;
 }
 
@@ -1400,13 +1428,19 @@ static void mga_crtc_destroy(struct drm_crtc *crtc)
 
 static void mga_crtc_disable(struct drm_crtc *crtc)
 {
+	int ret;
 	DRM_DEBUG_KMS("\n");
 	mga_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
 	if (crtc->primary->fb) {
-		struct drm_framebuffer *fb = crtc->primary->fb;
-		struct drm_gem_vram_object *gbo =
-			drm_gem_vram_of_gem(fb->obj[0]);
-		drm_gem_vram_unpin(gbo);
+		struct mga_framebuffer *mga_fb = to_mga_framebuffer(crtc->primary->fb);
+		struct drm_gem_object *obj = mga_fb->obj;
+		struct drm_gem_vram_object *gbo = drm_gem_vram_of_gem(obj);
+
+		ret = drm_gem_vram_reserve(gbo, false);
+		if (ret)
+			return;
+		drm_gem_vram_push_to_system(gbo);
+		drm_gem_vram_unreserve(gbo);
 	}
 	crtc->primary->fb = NULL;
 }
@@ -1678,18 +1712,17 @@ static struct drm_connector *mga_vga_init(struct drm_device *dev)
 		return NULL;
 
 	connector = &mga_connector->base;
-	mga_connector->i2c = mgag200_i2c_create(dev);
-	if (!mga_connector->i2c)
-		DRM_ERROR("failed to add ddc bus\n");
 
-	drm_connector_init_with_ddc(dev, connector,
-				    &mga_vga_connector_funcs,
-				    DRM_MODE_CONNECTOR_VGA,
-				    &mga_connector->i2c->adapter);
+	drm_connector_init(dev, connector,
+			   &mga_vga_connector_funcs, DRM_MODE_CONNECTOR_VGA);
 
 	drm_connector_helper_add(connector, &mga_vga_connector_helper_funcs);
 
 	drm_connector_register(connector);
+
+	mga_connector->i2c = mgag200_i2c_create(dev);
+	if (!mga_connector->i2c)
+		DRM_ERROR("failed to add ddc bus\n");
 
 	return connector;
 }
@@ -1699,6 +1732,7 @@ int mgag200_modeset_init(struct mga_device *mdev)
 {
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
+	int ret;
 
 	mdev->mode_info.mode_config_initialized = true;
 
@@ -1722,6 +1756,12 @@ int mgag200_modeset_init(struct mga_device *mdev)
 	}
 
 	drm_connector_attach_encoder(connector, encoder);
+
+	ret = mgag200_fbdev_init(mdev);
+	if (ret) {
+		DRM_ERROR("mga_fbdev_init failed\n");
+		return ret;
+	}
 
 	return 0;
 }

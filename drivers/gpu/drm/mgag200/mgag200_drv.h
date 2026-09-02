@@ -10,16 +10,21 @@
 #ifndef __MGAG200_DRV_H__
 #define __MGAG200_DRV_H__
 
-#include <linux/i2c-algo-bit.h>
-#include <linux/i2c.h>
-
 #include <video/vga.h>
 
 #include <drm/drm_encoder.h>
 #include <drm/drm_fb_helper.h>
+#include <drm/ttm/ttm_bo_api.h>
+#include <drm/ttm/ttm_bo_driver.h>
+#include <drm/ttm/ttm_placement.h>
+#include <drm/ttm/ttm_memory.h>
+#include <drm/ttm/ttm_module.h>
+
 #include <drm/drm_gem.h>
 #include <drm/drm_gem_vram_helper.h>
-#include <drm/drm_vram_mm_helper.h>
+
+#include <linux/i2c.h>
+#include <linux/i2c-algo-bit.h>
 
 #include "mgag200_reg.h"
 
@@ -98,6 +103,22 @@
 #define to_mga_crtc(x) container_of(x, struct mga_crtc, base)
 #define to_mga_encoder(x) container_of(x, struct mga_encoder, base)
 #define to_mga_connector(x) container_of(x, struct mga_connector, base)
+#define to_mga_framebuffer(x) container_of(x, struct mga_framebuffer, base)
+
+struct mga_framebuffer {
+	struct drm_framebuffer base;
+	struct drm_gem_object *obj;
+};
+
+struct mga_fbdev {
+	struct drm_fb_helper helper; /* must be first */
+	struct mga_framebuffer mfb;
+	void *sysram;
+	int size;
+	struct ttm_bo_kmap_obj mapping;
+	int x1, y1, x2, y2; /* dirty rect */
+	spinlock_t dirty_lock;
+};
 
 struct mga_crtc {
 	struct drm_crtc base;
@@ -138,8 +159,11 @@ struct mga_cursor {
 	*/
 	struct drm_gem_vram_object *pixels_1;
 	struct drm_gem_vram_object *pixels_2;
+	u64 pixels_1_gpu_addr, pixels_2_gpu_addr;
 	/* The currently displayed icon, this points to one of pixels_1, or pixels_2 */
 	struct drm_gem_vram_object *pixels_current;
+	/* The previously displayed icon */
+	struct drm_gem_vram_object *pixels_prev;
 };
 
 struct mga_mc {
@@ -172,6 +196,7 @@ struct mga_device {
 	struct mga_mc			mc;
 	struct mga_mode_info		mode_info;
 
+	struct mga_fbdev *mfbdev;
 	struct mga_cursor cursor;
 
 	bool				suspended;
@@ -184,6 +209,10 @@ struct mga_device {
 
 	int fb_mtrr;
 
+	struct {
+		struct ttm_bo_device bdev;
+	} ttm;
+
 	/* SE model number stored in reg 0x1e24 */
 	u32 unique_rev_id;
 };
@@ -192,9 +221,25 @@ struct mga_device {
 int mgag200_modeset_init(struct mga_device *mdev);
 void mgag200_modeset_fini(struct mga_device *mdev);
 
+				/* mgag200_fb.c */
+int mgag200_fbdev_init(struct mga_device *mdev);
+void mgag200_fbdev_fini(struct mga_device *mdev);
+
 				/* mgag200_main.c */
+int mgag200_framebuffer_init(struct drm_device *dev,
+			     struct mga_framebuffer *mfb,
+			     const struct drm_mode_fb_cmd2 *mode_cmd,
+			     struct drm_gem_object *obj);
+
+
 int mgag200_driver_load(struct drm_device *dev, unsigned long flags);
 void mgag200_driver_unload(struct drm_device *dev);
+int mgag200_gem_create(struct drm_device *dev,
+		   u32 size, bool iskernel,
+		       struct drm_gem_object **obj);
+int mgag200_dumb_create(struct drm_file *file,
+			struct drm_device *dev,
+			struct drm_mode_create_dumb *args);
 
 				/* mgag200_i2c.c */
 struct mga_i2c_chan *mgag200_i2c_create(struct drm_device *dev);

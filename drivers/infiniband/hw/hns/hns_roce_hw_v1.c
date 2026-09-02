@@ -717,7 +717,7 @@ static int hns_roce_v1_rsv_lp_qp(struct hns_roce_dev *hr_dev)
 	union ib_gid dgid;
 	u64 subnet_prefix;
 	int attr_mask = 0;
-	int ret;
+	int ret = -ENOMEM;
 	int i, j;
 	u8 queue_en[HNS_ROCE_V1_RESV_QP] = { 0 };
 	u8 phy_port;
@@ -730,16 +730,10 @@ static int hns_roce_v1_rsv_lp_qp(struct hns_roce_dev *hr_dev)
 	/* Reserved cq for loop qp */
 	cq_init_attr.cqe		= HNS_ROCE_MIN_WQE_NUM * 2;
 	cq_init_attr.comp_vector	= 0;
-
-	ibdev = &hr_dev->ib_dev;
-	cq = rdma_zalloc_drv_obj(ibdev, ib_cq);
-	if (!cq)
-		return -ENOMEM;
-
-	ret = hns_roce_ib_create_cq(cq, &cq_init_attr, NULL);
-	if (ret) {
+	cq = hns_roce_ib_create_cq(&hr_dev->ib_dev, &cq_init_attr, NULL);
+	if (IS_ERR(cq)) {
 		dev_err(dev, "Create cq for reserved loop qp failed!");
-		goto alloc_cq_failed;
+		return -ENOMEM;
 	}
 	free_mr->mr_free_cq = to_hr_cq(cq);
 	free_mr->mr_free_cq->ib_cq.device		= &hr_dev->ib_dev;
@@ -749,11 +743,10 @@ static int hns_roce_v1_rsv_lp_qp(struct hns_roce_dev *hr_dev)
 	free_mr->mr_free_cq->ib_cq.cq_context		= NULL;
 	atomic_set(&free_mr->mr_free_cq->ib_cq.usecnt, 0);
 
+	ibdev = &hr_dev->ib_dev;
 	pd = rdma_zalloc_drv_obj(ibdev, ib_pd);
-	if (!pd) {
-		ret = -ENOMEM;
+	if (!pd)
 		goto alloc_mem_failed;
-	}
 
 	pd->device  = ibdev;
 	ret = hns_roce_alloc_pd(pd, NULL);
@@ -873,8 +866,7 @@ alloc_pd_failed:
 
 alloc_mem_failed:
 	hns_roce_ib_destroy_cq(cq, NULL);
-alloc_cq_failed:
-	kfree(cq);
+
 	return ret;
 }
 
@@ -902,7 +894,6 @@ static void hns_roce_v1_release_lp_qp(struct hns_roce_dev *hr_dev)
 	}
 
 	hns_roce_ib_destroy_cq(&free_mr->mr_free_cq->ib_cq, NULL);
-	kfree(&free_mr->mr_free_cq->ib_cq);
 	hns_roce_dealloc_pd(&free_mr->mr_free_pd->ibpd, NULL);
 	kfree(&free_mr->mr_free_pd->ibpd);
 }
@@ -1166,7 +1157,8 @@ free_mr:
 	hns_roce_bitmap_free(&hr_dev->mr_table.mtpt_bitmap,
 			     key_to_hw_index(mr->key), 0);
 
-	ib_umem_release(mr->umem);
+	if (mr->umem)
+		ib_umem_release(mr->umem);
 
 	kfree(mr);
 
@@ -1561,7 +1553,6 @@ static int hns_roce_v1_profile(struct hns_roce_dev *hr_dev)
 	caps->reserved_mrws	= 1;
 	caps->reserved_uars	= 0;
 	caps->reserved_cqs	= 0;
-	caps->reserved_qps	= 12; /* 2 SQP per port, six ports total 12 */
 	caps->chunk_sz		= HNS_ROCE_V1_TABLE_CHUNK_SIZE;
 
 	for (i = 0; i < caps->num_ports; i++)
@@ -2471,7 +2462,7 @@ static int hns_roce_v1_clear_hem(struct hns_roce_dev *hr_dev,
 	end = HW_SYNC_TIMEOUT_MSECS;
 	while (1) {
 		if (readl(bt_cmd) >> BT_CMD_SYNC_SHIFT) {
-			if (!end) {
+			if (end < 0) {
 				dev_err(dev, "Write bt_cmd err,hw_sync is not zero.\n");
 				spin_unlock_irqrestore(&hr_dev->bt_cmd_lock,
 					flags);
@@ -3644,8 +3635,9 @@ int hns_roce_v1_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 
 	hns_roce_mtt_cleanup(hr_dev, &hr_qp->mtt);
 
-	ib_umem_release(hr_qp->umem);
-	if (!udata) {
+	if (udata)
+		ib_umem_release(hr_qp->umem);
+	else {
 		kfree(hr_qp->sq.wrid);
 		kfree(hr_qp->rq.wrid);
 
@@ -3696,12 +3688,15 @@ static void hns_roce_v1_destroy_cq(struct ib_cq *ibcq, struct ib_udata *udata)
 
 	hns_roce_mtt_cleanup(hr_dev, &hr_cq->hr_buf.hr_mtt);
 
-	ib_umem_release(hr_cq->umem);
-	if (!udata) {
+	if (ibcq->uobject)
+		ib_umem_release(hr_cq->umem);
+	else {
 		/* Free the buff of stored cq */
 		cq_buf_size = (ibcq->cqe + 1) * hr_dev->caps.cq_entry_sz;
 		hns_roce_buf_free(hr_dev, cq_buf_size, &hr_cq->hr_buf.hr_buf);
 	}
+
+	kfree(hr_cq);
 }
 
 static void set_eq_cons_index_v1(struct hns_roce_eq *eq, int req_not)
@@ -3905,8 +3900,7 @@ static int hns_roce_v1_aeq_int(struct hns_roce_dev *hr_dev,
 		 */
 		dma_rmb();
 
-		dev_dbg(dev, "aeqe = %pK, aeqe->asyn.event_type = 0x%lx\n",
-			aeqe,
+		dev_dbg(dev, "aeqe = %p, aeqe->asyn.event_type = 0x%lx\n", aeqe,
 			roce_get_field(aeqe->asyn,
 				       HNS_ROCE_AEQE_U32_4_EVENT_TYPE_M,
 				       HNS_ROCE_AEQE_U32_4_EVENT_TYPE_S));
@@ -4269,6 +4263,7 @@ static int hns_roce_v1_create_eq(struct hns_roce_dev *hr_dev,
 		}
 
 		eq->buf_list[i].map = tmp_dma_addr;
+		memset(eq->buf_list[i].buf, 0, HNS_ROCE_BA_SIZE);
 	}
 	eq->cons_index = 0;
 	roce_set_field(tmp, ROCEE_CAEP_AEQC_AEQE_SHIFT_CAEP_AEQC_STATE_M,

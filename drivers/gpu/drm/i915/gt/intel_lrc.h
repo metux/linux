@@ -74,8 +74,9 @@ enum {
 
 /* Logical Rings */
 void intel_logical_ring_cleanup(struct intel_engine_cs *engine);
-int logical_render_ring_init(struct intel_engine_cs *engine);
-int logical_xcs_ring_init(struct intel_engine_cs *engine);
+
+int intel_execlists_submission_setup(struct intel_engine_cs *engine);
+int intel_execlists_submission_init(struct intel_engine_cs *engine);
 
 /* Logical Ring Contexts */
 
@@ -116,5 +117,22 @@ void intel_execlists_show_requests(struct intel_engine_cs *engine,
 							struct i915_request *rq,
 							const char *prefix),
 				   unsigned int max);
+
+struct intel_context *
+intel_execlists_create_virtual(struct i915_gem_context *ctx,
+			       struct intel_engine_cs **siblings,
+			       unsigned int count);
+
+struct intel_context *
+intel_execlists_clone_virtual(struct i915_gem_context *ctx,
+			      struct intel_engine_cs *src);
+
+int intel_virtual_engine_attach_bond(struct intel_engine_cs *engine,
+				     const struct intel_engine_cs *master,
+				     const struct intel_engine_cs *sibling);
+
+struct intel_engine_cs *
+intel_virtual_engine_get_sibling(struct intel_engine_cs *engine,
+				 unsigned int sibling);
 
 #endif /* _INTEL_LRC_H_ */

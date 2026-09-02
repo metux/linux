@@ -24,7 +24,6 @@
  */
 
 #include <linux/delay.h>
-#include <linux/slab.h>
 
 #include "reg_helper.h"
 
@@ -233,9 +232,7 @@ static void setup_panel_mode(
 {
 	uint32_t value;
 
-	if (!REG(DP_DPHY_INTERNAL_CTRL))
-		return;
-
+	ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
 	value = REG_READ(DP_DPHY_INTERNAL_CTRL);
 
 	switch (panel_mode) {

@@ -19,7 +19,7 @@ static struct i915_global_context {
 	struct kmem_cache *slab_ce;
 } global;
 
-struct intel_context *intel_context_alloc(void)
+static struct intel_context *intel_context_alloc(void)
 {
 	return kmem_cache_zalloc(global.slab_ce, GFP_KERNEL);
 }
@@ -30,155 +30,36 @@ void intel_context_free(struct intel_context *ce)
 }
 
 struct intel_context *
-intel_context_lookup(struct i915_gem_context *ctx,
+intel_context_create(struct i915_gem_context *ctx,
 		     struct intel_engine_cs *engine)
 {
-	struct intel_context *ce = NULL;
-	struct rb_node *p;
-
-	spin_lock(&ctx->hw_contexts_lock);
-	p = ctx->hw_contexts.rb_node;
-	while (p) {
-		struct intel_context *this =
-			rb_entry(p, struct intel_context, node);
-
-		if (this->engine == engine) {
-			GEM_BUG_ON(this->gem_context != ctx);
-			ce = this;
-			break;
-		}
-
-		if (this->engine < engine)
-			p = p->rb_right;
-		else
-			p = p->rb_left;
-	}
-	spin_unlock(&ctx->hw_contexts_lock);
-
-	return ce;
-}
-
-struct intel_context *
-__intel_context_insert(struct i915_gem_context *ctx,
-		       struct intel_engine_cs *engine,
-		       struct intel_context *ce)
-{
-	struct rb_node **p, *parent;
-	int err = 0;
-
-	spin_lock(&ctx->hw_contexts_lock);
-
-	parent = NULL;
-	p = &ctx->hw_contexts.rb_node;
-	while (*p) {
-		struct intel_context *this;
-
-		parent = *p;
-		this = rb_entry(parent, struct intel_context, node);
-
-		if (this->engine == engine) {
-			err = -EEXIST;
-			ce = this;
-			break;
-		}
-
-		if (this->engine < engine)
-			p = &parent->rb_right;
-		else
-			p = &parent->rb_left;
-	}
-	if (!err) {
-		rb_link_node(&ce->node, parent, p);
-		rb_insert_color(&ce->node, &ctx->hw_contexts);
-	}
-
-	spin_unlock(&ctx->hw_contexts_lock);
-
-	return ce;
-}
-
-void __intel_context_remove(struct intel_context *ce)
-{
-	struct i915_gem_context *ctx = ce->gem_context;
-
-	spin_lock(&ctx->hw_contexts_lock);
-	rb_erase(&ce->node, &ctx->hw_contexts);
-	spin_unlock(&ctx->hw_contexts_lock);
-}
-
-static struct intel_context *
-intel_context_instance(struct i915_gem_context *ctx,
-		       struct intel_engine_cs *engine)
-{
-	struct intel_context *ce, *pos;
-
-	ce = intel_context_lookup(ctx, engine);
-	if (likely(ce))
-		return ce;
+	struct intel_context *ce;
 
 	ce = intel_context_alloc();
 	if (!ce)
 		return ERR_PTR(-ENOMEM);
 
 	intel_context_init(ce, ctx, engine);
-
-	pos = __intel_context_insert(ctx, engine, ce);
-	if (unlikely(pos != ce)) /* Beaten! Use their HW context instead */
-		intel_context_free(ce);
-
-	GEM_BUG_ON(intel_context_lookup(ctx, engine) != pos);
-	return pos;
-}
-
-struct intel_context *
-intel_context_pin_lock(struct i915_gem_context *ctx,
-		       struct intel_engine_cs *engine)
-	__acquires(ce->pin_mutex)
-{
-	struct intel_context *ce;
-
-	ce = intel_context_instance(ctx, engine);
-	if (IS_ERR(ce))
-		return ce;
-
-	if (mutex_lock_interruptible(&ce->pin_mutex))
-		return ERR_PTR(-EINTR);
-
 	return ce;
 }
 
-struct intel_context *
-intel_context_pin(struct i915_gem_context *ctx,
-		  struct intel_engine_cs *engine)
+int __intel_context_do_pin(struct intel_context *ce)
 {
-	struct intel_context *ce;
 	int err;
 
-	ce = intel_context_instance(ctx, engine);
-	if (IS_ERR(ce))
-		return ce;
-
-	if (likely(atomic_inc_not_zero(&ce->pin_count)))
-		return ce;
-
 	if (mutex_lock_interruptible(&ce->pin_mutex))
-		return ERR_PTR(-EINTR);
+		return -EINTR;
 
 	if (likely(!atomic_read(&ce->pin_count))) {
 		intel_wakeref_t wakeref;
 
 		err = 0;
-		with_intel_runtime_pm(ce->engine->i915, wakeref)
+		with_intel_runtime_pm(&ce->engine->i915->runtime_pm, wakeref)
 			err = ce->ops->pin(ce);
 		if (err)
 			goto err;
 
-		i915_gem_context_get(ctx);
-		GEM_BUG_ON(ce->gem_context != ctx);
-
-		mutex_lock(&ctx->mutex);
-		list_add(&ce->active_link, &ctx->active_engines);
-		mutex_unlock(&ctx->mutex);
+		i915_gem_context_get(ce->gem_context); /* for ctx->ppgtt */
 
 		smp_mb__before_atomic(); /* flush pin before it is visible */
 	}
@@ -187,11 +68,11 @@ intel_context_pin(struct i915_gem_context *ctx,
 	GEM_BUG_ON(!intel_context_is_pinned(ce)); /* no overflow! */
 
 	mutex_unlock(&ce->pin_mutex);
-	return ce;
+	return 0;
 
 err:
 	mutex_unlock(&ce->pin_mutex);
-	return ERR_PTR(err);
+	return err;
 }
 
 void intel_context_unpin(struct intel_context *ce)
@@ -206,10 +87,6 @@ void intel_context_unpin(struct intel_context *ce)
 	if (likely(atomic_dec_and_test(&ce->pin_count))) {
 		ce->ops->unpin(ce);
 
-		mutex_lock(&ce->gem_context->mutex);
-		list_del(&ce->active_link);
-		mutex_unlock(&ce->gem_context->mutex);
-
 		i915_gem_context_put(ce->gem_context);
 		intel_context_active_release(ce);
 	}
@@ -218,11 +95,15 @@ void intel_context_unpin(struct intel_context *ce)
 	intel_context_put(ce);
 }
 
-static int __context_pin_state(struct i915_vma *vma, unsigned long flags)
+static int __context_pin_state(struct i915_vma *vma)
 {
+	u64 flags;
 	int err;
 
-	err = i915_vma_pin(vma, 0, 0, flags | PIN_GLOBAL);
+	flags = i915_ggtt_pin_bias(vma) | PIN_OFFSET_BIAS;
+	flags |= PIN_HIGH | PIN_GLOBAL;
+
+	err = i915_vma_pin(vma, 0, 0, flags);
 	if (err)
 		return err;
 
@@ -242,14 +123,52 @@ static void __context_unpin_state(struct i915_vma *vma)
 	__i915_vma_unpin(vma);
 }
 
-static void intel_context_retire(struct i915_active *active)
+static void __intel_context_retire(struct i915_active *active)
 {
 	struct intel_context *ce = container_of(active, typeof(*ce), active);
 
 	if (ce->state)
 		__context_unpin_state(ce->state);
 
+	intel_ring_unpin(ce->ring);
 	intel_context_put(ce);
+}
+
+static int __intel_context_active(struct i915_active *active)
+{
+	struct intel_context *ce = container_of(active, typeof(*ce), active);
+	int err;
+
+	intel_context_get(ce);
+
+	err = intel_ring_pin(ce->ring);
+	if (err)
+		goto err_put;
+
+	if (!ce->state)
+		return 0;
+
+	err = __context_pin_state(ce->state);
+	if (err)
+		goto err_ring;
+
+	/* Preallocate tracking nodes */
+	if (!i915_gem_context_is_kernel(ce->gem_context)) {
+		err = i915_active_acquire_preallocate_barrier(&ce->active,
+							      ce->engine);
+		if (err)
+			goto err_state;
+	}
+
+	return 0;
+
+err_state:
+	__context_unpin_state(ce->state);
+err_ring:
+	intel_ring_unpin(ce->ring);
+err_put:
+	intel_context_put(ce);
+	return err;
 }
 
 void
@@ -257,59 +176,22 @@ intel_context_init(struct intel_context *ce,
 		   struct i915_gem_context *ctx,
 		   struct intel_engine_cs *engine)
 {
+	GEM_BUG_ON(!engine->cops);
+
 	kref_init(&ce->ref);
 
 	ce->gem_context = ctx;
 	ce->engine = engine;
 	ce->ops = engine->cops;
 	ce->sseu = engine->sseu;
-	ce->saturated = 0;
 
 	INIT_LIST_HEAD(&ce->signal_link);
 	INIT_LIST_HEAD(&ce->signals);
 
 	mutex_init(&ce->pin_mutex);
 
-	i915_active_init(ctx->i915, &ce->active, intel_context_retire);
-}
-
-int intel_context_active_acquire(struct intel_context *ce, unsigned long flags)
-{
-	int err;
-
-	if (!i915_active_acquire(&ce->active))
-		return 0;
-
-	intel_context_get(ce);
-
-	if (!ce->state)
-		return 0;
-
-	err = __context_pin_state(ce->state, flags);
-	if (err) {
-		i915_active_cancel(&ce->active);
-		intel_context_put(ce);
-		return err;
-	}
-
-	/* Preallocate tracking nodes */
-	if (!i915_gem_context_is_kernel(ce->gem_context)) {
-		err = i915_active_acquire_preallocate_barrier(&ce->active,
-							      ce->engine);
-		if (err) {
-			i915_active_release(&ce->active);
-			return err;
-		}
-	}
-
-	return 0;
-}
-
-void intel_context_active_release(struct intel_context *ce)
-{
-	/* Nodes preallocated in intel_context_active() */
-	i915_active_acquire_barrier(&ce->active);
-	i915_active_release(&ce->active);
+	i915_active_init(ctx->i915, &ce->active,
+			 __intel_context_active, __intel_context_retire);
 }
 
 static void i915_global_context_shrink(void)
@@ -344,6 +226,20 @@ void intel_context_enter_engine(struct intel_context *ce)
 
 void intel_context_exit_engine(struct intel_context *ce)
 {
-	ce->saturated = 0;
 	intel_engine_pm_put(ce->engine);
+}
+
+struct i915_request *intel_context_create_request(struct intel_context *ce)
+{
+	struct i915_request *rq;
+	int err;
+
+	err = intel_context_pin(ce);
+	if (unlikely(err))
+		return ERR_PTR(err);
+
+	rq = i915_request_create(ce);
+	intel_context_unpin(ce);
+
+	return rq;
 }

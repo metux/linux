@@ -16,7 +16,6 @@ etc.
    README
    kernel-parameters
    devices
-   sysctl/index
 
 This section describes CPU vulnerabilities and their mitigations.
 
@@ -39,7 +38,6 @@ problems and bugs in particular.
    ramoops
    dynamic-debug-howto
    init
-   kdump/index
    perf/index
 
 This is the beginning of a section with information of interest to
@@ -57,63 +55,32 @@ configure specific aspects of kernel behavior to your liking.
 .. toctree::
    :maxdepth: 1
 
-   acpi/index
-   aoe/index
-   auxdisplay/index
-   bcache
-   binderfs
-   binfmt-misc
-   blockdev/index
-   bootconfig
-   braille-console
-   btmrvl
-   cgroup-v1/index
-   cgroup-v2
-   cifs/index
-   clearing-warn-once
-   cpu-load
-   cputopology
-   dell_rbu
-   device-mapper/index
-   efi-stub
-   ext4
-   nfs/index
-   gpio/index
-   highuid
-   hw_random
    initrd
-   iostats
-   java
-   jfs
-   kernel-per-CPU-kthreads
-   laptops/index
-   lcd-panel-cgram
-   ldm
-   lockup-watchdogs
-   LSM/index
-   md
-   mm/index
-   module-signing
-   mono
-   namespaces/index
-   numastat
-   parport
-   perf-security
-   pm/index
-   pnp
-   rapidio
-   ras
-   rtc
+   cgroup-v2
    serial-console
-   svga
+   braille-console
+   parport
+   md
+   module-signing
+   rapidio
    sysrq
-   thunderbolt
-   ufs
    unicode
    vga-softcursor
-   video-output
-   wimax/index
-   xfs
+   binfmt-misc
+   mono
+   java
+   ras
+   bcache
+   ext4
+   binderfs
+   pm/index
+   thunderbolt
+   LSM/index
+   mm/index
+   namespaces/index
+   perf-security
+   acpi/index
+   device-mapper/index
 
 .. only::  subproject and html
 

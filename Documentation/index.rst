@@ -92,6 +92,10 @@ needed).
 
    driver-api/index
    core-api/index
+   accounting/index
+   block/index
+   hid/index
+   iio/index
    leds/index
    media/index
    networking/index
@@ -106,6 +110,9 @@ needed).
    bpf/index
    PCI/index
    misc-devices/index
+   mic/index
+   phy/samsung-usb2
+   scheduler/index
 
 Architecture-agnostic documentation
 -----------------------------------

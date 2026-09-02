@@ -26,7 +26,6 @@ available subsections can be seen below.
    device_link
    component
    message-based
-   infiniband
    sound
    frame-buffer
    regulator
@@ -40,7 +39,6 @@ available subsections can be seen below.
    ipmb
    i3c/index
    interconnect
-   devfreq
    hsi
    edac
    scsi
@@ -71,9 +69,11 @@ available subsections can be seen below.
    fpga/index
    acpi/index
    backlight/lp855x-driver.rst
+   bt8xxgpio
    connector
    console
    dcdbas
+   dell_rbu
    edid
    eisa
    ipmb
@@ -81,18 +81,16 @@ available subsections can be seen below.
    isapnp
    generic-counter
    lightnvm-pblk
-   memory-devices/index
    men-chameleon-bus
    ntb
    nvmem
    parport-lowlevel
    pps
    ptp
-   phy/index
    pti_intel_mid
    pwm
    rfkill
-   serial/index
+   sgi-ioc4
    sm501
    smsc_ece1099
    switchtec

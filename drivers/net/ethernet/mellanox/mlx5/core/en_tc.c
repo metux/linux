@@ -56,11 +56,12 @@
 #include "en/tc_tun.h"
 #include "lib/devcom.h"
 #include "lib/geneve.h"
+#include "diag/en_tc_tracepoint.h"
 
 struct mlx5_nic_flow_attr {
 	u32 action;
 	u32 flow_tag;
-	u32 mod_hdr_id;
+	struct mlx5_modify_hdr *modify_hdr;
 	u32 hairpin_tirn;
 	u8 match_level;
 	struct mlx5_flow_table	*hairpin_ft;
@@ -126,8 +127,11 @@ struct mlx5e_tc_flow {
 	struct list_head	hairpin; /* flows sharing the same hairpin */
 	struct list_head	peer;    /* flows with peer flow */
 	struct list_head	unready; /* flows not ready to be offloaded (e.g due to missing route) */
+	int			tmp_efi_index;
+	struct list_head	tmp_list; /* temporary flow list used by neigh update */
 	refcount_t		refcnt;
 	struct rcu_head		rcu_head;
+	struct completion	init_done;
 	union {
 		struct mlx5_esw_flow_attr esw_attr[0];
 		struct mlx5_nic_flow_attr nic_attr[0];
@@ -197,7 +201,7 @@ struct mlx5e_mod_hdr_entry {
 
 	struct mod_hdr_key key;
 
-	u32 mod_hdr_id;
+	struct mlx5_modify_hdr *modify_hdr;
 
 	refcount_t refcnt;
 	struct completion res_ready;
@@ -330,7 +334,7 @@ static void mlx5e_mod_hdr_put(struct mlx5e_priv *priv,
 
 	WARN_ON(!list_empty(&mh->flows));
 	if (mh->compl_result > 0)
-		mlx5_modify_header_dealloc(priv->mdev, mh->mod_hdr_id);
+		mlx5_modify_header_dealloc(priv->mdev, mh->modify_hdr);
 
 	kfree(mh);
 }
@@ -391,11 +395,11 @@ static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 	hash_add(tbl->hlist, &mh->mod_hdr_hlist, hash_key);
 	mutex_unlock(&tbl->lock);
 
-	err = mlx5_modify_header_alloc(priv->mdev, namespace,
-				       mh->key.num_actions,
-				       mh->key.actions,
-				       &mh->mod_hdr_id);
-	if (err) {
+	mh->modify_hdr = mlx5_modify_header_alloc(priv->mdev, namespace,
+						  mh->key.num_actions,
+						  mh->key.actions);
+	if (IS_ERR(mh->modify_hdr)) {
+		err = PTR_ERR(mh->modify_hdr);
 		mh->compl_result = err;
 		goto alloc_header_err;
 	}
@@ -408,9 +412,9 @@ attach_flow:
 	list_add(&flow->mod_hdr, &mh->flows);
 	spin_unlock(&mh->flows_lock);
 	if (mlx5e_is_eswitch_flow(flow))
-		flow->esw_attr->mod_hdr_id = mh->mod_hdr_id;
+		flow->esw_attr->modify_hdr = mh->modify_hdr;
 	else
-		flow->nic_attr->mod_hdr_id = mh->mod_hdr_id;
+		flow->nic_attr->modify_hdr = mh->modify_hdr;
 
 	return 0;
 
@@ -902,7 +906,6 @@ mlx5e_tc_add_nic_flow(struct mlx5e_priv *priv,
 	struct mlx5_flow_destination dest[2] = {};
 	struct mlx5_flow_act flow_act = {
 		.action = attr->action,
-		.reformat_id = 0,
 		.flags    = FLOW_ACT_NO_APPEND,
 	};
 	struct mlx5_fc *counter = NULL;
@@ -943,7 +946,7 @@ mlx5e_tc_add_nic_flow(struct mlx5e_priv *priv,
 
 	if (attr->action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR) {
 		err = mlx5e_attach_mod_hdr(priv, flow, parse_attr);
-		flow_act.modify_id = attr->mod_hdr_id;
+		flow_act.modify_hdr = attr->modify_hdr;
 		kfree(parse_attr->mod_hdr_actions);
 		if (err)
 			return err;
@@ -1290,42 +1293,39 @@ static void mlx5e_tc_del_fdb_flow(struct mlx5e_priv *priv,
 }
 
 void mlx5e_tc_encap_flows_add(struct mlx5e_priv *priv,
-			      struct mlx5e_encap_entry *e)
+			      struct mlx5e_encap_entry *e,
+			      struct list_head *flow_list)
 {
 	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
 	struct mlx5_esw_flow_attr slow_attr, *esw_attr;
-	struct encap_flow_item *efi, *tmp;
 	struct mlx5_flow_handle *rule;
 	struct mlx5_flow_spec *spec;
 	struct mlx5e_tc_flow *flow;
 	int err;
 
-	err = mlx5_packet_reformat_alloc(priv->mdev,
-					 e->reformat_type,
-					 e->encap_size, e->encap_header,
-					 MLX5_FLOW_NAMESPACE_FDB,
-					 &e->encap_id);
-	if (err) {
-		mlx5_core_warn(priv->mdev, "Failed to offload cached encapsulation header, %d\n",
-			       err);
+	e->pkt_reformat = mlx5_packet_reformat_alloc(priv->mdev,
+						     e->reformat_type,
+						     e->encap_size, e->encap_header,
+						     MLX5_FLOW_NAMESPACE_FDB);
+	if (IS_ERR(e->pkt_reformat)) {
+		mlx5_core_warn(priv->mdev, "Failed to offload cached encapsulation header, %lu\n",
+			       PTR_ERR(e->pkt_reformat));
 		return;
 	}
 	e->flags |= MLX5_ENCAP_ENTRY_VALID;
 	mlx5e_rep_queue_neigh_stats_work(priv);
 
-	list_for_each_entry_safe(efi, tmp, &e->flows, list) {
+	list_for_each_entry(flow, flow_list, tmp_list) {
 		bool all_flow_encaps_valid = true;
 		int i;
 
-		flow = container_of(efi, struct mlx5e_tc_flow, encaps[efi->index]);
-		if (IS_ERR(mlx5e_flow_get(flow)))
+		if (!mlx5e_is_offloaded_flow(flow))
 			continue;
-
 		esw_attr = flow->esw_attr;
 		spec = &esw_attr->parse_attr->spec;
 
-		esw_attr->dests[efi->index].encap_id = e->encap_id;
-		esw_attr->dests[efi->index].flags |= MLX5_ESW_DEST_ENCAP_VALID;
+		esw_attr->dests[flow->tmp_efi_index].pkt_reformat = e->pkt_reformat;
+		esw_attr->dests[flow->tmp_efi_index].flags |= MLX5_ESW_DEST_ENCAP_VALID;
 		/* Flow can be associated with multiple encap entries.
 		 * Before offloading the flow verify that all of them have
 		 * a valid neighbour.
@@ -1340,68 +1340,60 @@ void mlx5e_tc_encap_flows_add(struct mlx5e_priv *priv,
 		}
 		/* Do not offload flows with unresolved neighbors */
 		if (!all_flow_encaps_valid)
-			goto loop_cont;
+			continue;
 		/* update from slow path rule to encap rule */
 		rule = mlx5e_tc_offload_fdb_rules(esw, flow, spec, esw_attr);
 		if (IS_ERR(rule)) {
 			err = PTR_ERR(rule);
 			mlx5_core_warn(priv->mdev, "Failed to update cached encapsulation flow, %d\n",
 				       err);
-			goto loop_cont;
+			continue;
 		}
 
 		mlx5e_tc_unoffload_from_slow_path(esw, flow, &slow_attr);
 		flow->rule[0] = rule;
 		/* was unset when slow path rule removed */
 		flow_flag_set(flow, OFFLOADED);
-
-loop_cont:
-		mlx5e_flow_put(priv, flow);
 	}
 }
 
 void mlx5e_tc_encap_flows_del(struct mlx5e_priv *priv,
-			      struct mlx5e_encap_entry *e)
+			      struct mlx5e_encap_entry *e,
+			      struct list_head *flow_list)
 {
 	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
 	struct mlx5_esw_flow_attr slow_attr;
-	struct encap_flow_item *efi, *tmp;
 	struct mlx5_flow_handle *rule;
 	struct mlx5_flow_spec *spec;
 	struct mlx5e_tc_flow *flow;
 	int err;
 
-	list_for_each_entry_safe(efi, tmp, &e->flows, list) {
-		flow = container_of(efi, struct mlx5e_tc_flow, encaps[efi->index]);
-		if (IS_ERR(mlx5e_flow_get(flow)))
+	list_for_each_entry(flow, flow_list, tmp_list) {
+		if (!mlx5e_is_offloaded_flow(flow))
 			continue;
-
 		spec = &flow->esw_attr->parse_attr->spec;
 
 		/* update from encap rule to slow path rule */
 		rule = mlx5e_tc_offload_to_slow_path(esw, flow, spec, &slow_attr);
 		/* mark the flow's encap dest as non-valid */
-		flow->esw_attr->dests[efi->index].flags &= ~MLX5_ESW_DEST_ENCAP_VALID;
+		flow->esw_attr->dests[flow->tmp_efi_index].flags &= ~MLX5_ESW_DEST_ENCAP_VALID;
 
 		if (IS_ERR(rule)) {
 			err = PTR_ERR(rule);
 			mlx5_core_warn(priv->mdev, "Failed to update slow path (encap) flow, %d\n",
 				       err);
-			goto loop_cont;
+			continue;
 		}
 
 		mlx5e_tc_unoffload_fdb_rules(esw, flow, flow->esw_attr);
 		flow->rule[0] = rule;
 		/* was unset when fast path rule removed */
 		flow_flag_set(flow, OFFLOADED);
-
-loop_cont:
-		mlx5e_flow_put(priv, flow);
 	}
 
 	/* we know that the encap is valid */
 	e->flags &= ~MLX5_ENCAP_ENTRY_VALID;
-	mlx5_packet_reformat_dealloc(priv->mdev, e->encap_id);
+	mlx5_packet_reformat_dealloc(priv->mdev, e->pkt_reformat);
 }
 
 static struct mlx5_fc *mlx5e_tc_get_counter(struct mlx5e_tc_flow *flow)
@@ -1410,6 +1402,34 @@ static struct mlx5_fc *mlx5e_tc_get_counter(struct mlx5e_tc_flow *flow)
 		return flow->esw_attr->counter;
 	else
 		return flow->nic_attr->counter;
+}
+
+/* Takes reference to all flows attached to encap and adds the flows to
+ * flow_list using 'tmp_list' list_head in mlx5e_tc_flow.
+ */
+void mlx5e_take_all_encap_flows(struct mlx5e_encap_entry *e, struct list_head *flow_list)
+{
+	struct encap_flow_item *efi;
+	struct mlx5e_tc_flow *flow;
+
+	list_for_each_entry(efi, &e->flows, list) {
+		flow = container_of(efi, struct mlx5e_tc_flow, encaps[efi->index]);
+		if (IS_ERR(mlx5e_flow_get(flow)))
+			continue;
+		wait_for_completion(&flow->init_done);
+
+		flow->tmp_efi_index = efi->index;
+		list_add(&flow->tmp_list, flow_list);
+	}
+}
+
+/* Iterate over tmp_list of flows attached to flow_list head. */
+void mlx5e_put_encap_flow_list(struct mlx5e_priv *priv, struct list_head *flow_list)
+{
+	struct mlx5e_tc_flow *flow, *tmp;
+
+	list_for_each_entry_safe(flow, tmp, flow_list, tmp_list)
+		mlx5e_flow_put(priv, flow);
 }
 
 static struct mlx5e_encap_entry *
@@ -1481,33 +1501,40 @@ void mlx5e_tc_update_neigh_used_value(struct mlx5e_neigh_hash_entry *nhe)
 	 * next one.
 	 */
 	while ((e = mlx5e_get_next_valid_encap(nhe, e)) != NULL) {
+		struct mlx5e_priv *priv = netdev_priv(e->out_dev);
 		struct encap_flow_item *efi, *tmp;
+		struct mlx5_eswitch *esw;
+		LIST_HEAD(flow_list);
 
+		esw = priv->mdev->priv.eswitch;
+		mutex_lock(&esw->offloads.encap_tbl_lock);
 		list_for_each_entry_safe(efi, tmp, &e->flows, list) {
 			flow = container_of(efi, struct mlx5e_tc_flow,
 					    encaps[efi->index]);
 			if (IS_ERR(mlx5e_flow_get(flow)))
 				continue;
+			list_add(&flow->tmp_list, &flow_list);
 
 			if (mlx5e_is_offloaded_flow(flow)) {
 				counter = mlx5e_tc_get_counter(flow);
 				lastuse = mlx5_fc_query_lastuse(counter);
 				if (time_after((unsigned long)lastuse, nhe->reported_lastuse)) {
-					mlx5e_flow_put(netdev_priv(e->out_dev), flow);
 					neigh_used = true;
 					break;
 				}
 			}
-
-			mlx5e_flow_put(netdev_priv(e->out_dev), flow);
 		}
+		mutex_unlock(&esw->offloads.encap_tbl_lock);
 
+		mlx5e_put_encap_flow_list(priv, &flow_list);
 		if (neigh_used) {
 			/* release current encap before breaking the loop */
-			mlx5e_encap_put(netdev_priv(e->out_dev), e);
+			mlx5e_encap_put(priv, e);
 			break;
 		}
 	}
+
+	trace_mlx5e_tc_update_neigh_used_value(nhe, neigh_used);
 
 	if (neigh_used) {
 		nhe->reported_lastuse = jiffies;
@@ -1532,7 +1559,7 @@ static void mlx5e_encap_dealloc(struct mlx5e_priv *priv, struct mlx5e_encap_entr
 		mlx5e_rep_encap_entry_detach(netdev_priv(e->out_dev), e);
 
 		if (e->flags & MLX5_ENCAP_ENTRY_VALID)
-			mlx5_packet_reformat_dealloc(priv->mdev, e->encap_id);
+			mlx5_packet_reformat_dealloc(priv->mdev, e->pkt_reformat);
 	}
 
 	kfree(e->encap_header);
@@ -1867,7 +1894,10 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			*match_level = MLX5_MATCH_L2;
 		}
 	} else if (*match_level != MLX5_MATCH_NONE) {
-		MLX5_SET(fte_match_set_lyr_2_4, headers_c, svlan_tag, 1);
+		/* cvlan_tag enabled in match criteria and
+		 * disabled in match value means both S & C tags
+		 * don't exist (untagged of both)
+		 */
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c, cvlan_tag, 1);
 		*match_level = MLX5_MATCH_L2;
 	}
@@ -3016,7 +3046,7 @@ attach_flow:
 	flow->encaps[out_index].index = out_index;
 	*encap_dev = e->out_dev;
 	if (e->flags & MLX5_ENCAP_ENTRY_VALID) {
-		attr->dests[out_index].encap_id = e->encap_id;
+		attr->dests[out_index].pkt_reformat = e->pkt_reformat;
 		attr->dests[out_index].flags |= MLX5_ESW_DEST_ENCAP_VALID;
 		*encap_valid = true;
 	} else {
@@ -3472,6 +3502,7 @@ mlx5e_alloc_flow(struct mlx5e_priv *priv, int attr_size,
 	INIT_LIST_HEAD(&flow->mod_hdr);
 	INIT_LIST_HEAD(&flow->hairpin);
 	refcount_set(&flow->refcnt, 1);
+	init_completion(&flow->init_done);
 
 	*__flow = flow;
 	*__parse_attr = parse_attr;
@@ -3544,6 +3575,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 		goto err_free;
 
 	err = mlx5e_tc_add_fdb_flow(priv, flow, extack);
+	complete_all(&flow->init_done);
 	if (err) {
 		if (!(err == -ENETUNREACH && mlx5_lag_is_multipath(in_mdev)))
 			goto err_free;
@@ -3741,6 +3773,7 @@ int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 		goto out;
 	}
 
+	trace_mlx5e_configure_flower(f);
 	err = mlx5e_tc_add_flow(priv, f, flags, dev, &flow);
 	if (err)
 		goto out;
@@ -3790,6 +3823,7 @@ int mlx5e_delete_flower(struct net_device *dev, struct mlx5e_priv *priv,
 	rhashtable_remove_fast(tc_ht, &flow->node, tc_ht_params);
 	rcu_read_unlock();
 
+	trace_mlx5e_delete_flower(f);
 	mlx5e_flow_put(priv, flow);
 
 	return 0;
@@ -3859,6 +3893,7 @@ no_peer_counter:
 	mlx5_devcom_release_peer_data(devcom, MLX5_DEVCOM_ESW_OFFLOADS);
 out:
 	flow_stats_update(&f->stats, bytes, packets, lastuse);
+	trace_mlx5e_stats_flower(f);
 errout:
 	mlx5e_flow_put(priv, flow);
 	return err;

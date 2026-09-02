@@ -22,15 +22,12 @@
  *
  */
 
-#include "i915_drv.h"
-#include "intel_engine.h"
-#include "intel_gt.h"
 #include "intel_reset.h"
+#include "i915_drv.h"
 
 struct hangcheck {
 	u64 acthd;
-	u32 ring;
-	u32 head;
+	u32 seqno;
 	enum intel_engine_hangcheck_action action;
 	unsigned long action_timestamp;
 	int deadlock;
@@ -58,6 +55,9 @@ static bool subunits_stuck(struct intel_engine_cs *engine)
 	bool stuck;
 	int slice;
 	int subslice;
+
+	if (engine->id != RCS0)
+		return true;
 
 	intel_engine_get_instdone(engine, &instdone);
 
@@ -102,6 +102,7 @@ head_stuck(struct intel_engine_cs *engine, u64 acthd)
 static enum intel_engine_hangcheck_action
 engine_stuck(struct intel_engine_cs *engine, u64 acthd)
 {
+	struct drm_i915_private *dev_priv = engine->i915;
 	enum intel_engine_hangcheck_action ha;
 	u32 tmp;
 
@@ -109,7 +110,7 @@ engine_stuck(struct intel_engine_cs *engine, u64 acthd)
 	if (ha != ENGINE_DEAD)
 		return ha;
 
-	if (IS_GEN(engine->i915, 2))
+	if (IS_GEN(dev_priv, 2))
 		return ENGINE_DEAD;
 
 	/* Is the chip hanging on a WAIT_FOR_EVENT?
@@ -119,8 +120,8 @@ engine_stuck(struct intel_engine_cs *engine, u64 acthd)
 	 */
 	tmp = ENGINE_READ(engine, RING_CTL);
 	if (tmp & RING_WAIT) {
-		intel_gt_handle_error(engine->gt, engine->mask, 0,
-				      "stuck wait on %s", engine->name);
+		i915_handle_error(dev_priv, engine->mask, 0,
+				  "stuck wait on %s", engine->name);
 		ENGINE_WRITE(engine, RING_CTL, tmp);
 		return ENGINE_WAIT_KICK;
 	}
@@ -132,30 +133,25 @@ static void hangcheck_load_sample(struct intel_engine_cs *engine,
 				  struct hangcheck *hc)
 {
 	hc->acthd = intel_engine_get_active_head(engine);
-	hc->ring = ENGINE_READ(engine, RING_START);
-	hc->head = ENGINE_READ(engine, RING_HEAD);
+	hc->seqno = intel_engine_get_hangcheck_seqno(engine);
 }
 
 static void hangcheck_store_sample(struct intel_engine_cs *engine,
 				   const struct hangcheck *hc)
 {
 	engine->hangcheck.acthd = hc->acthd;
-	engine->hangcheck.last_ring = hc->ring;
-	engine->hangcheck.last_head = hc->head;
+	engine->hangcheck.last_seqno = hc->seqno;
 }
 
 static enum intel_engine_hangcheck_action
 hangcheck_get_action(struct intel_engine_cs *engine,
 		     const struct hangcheck *hc)
 {
+	if (engine->hangcheck.last_seqno != hc->seqno)
+		return ENGINE_ACTIVE_SEQNO;
+
 	if (intel_engine_is_idle(engine))
 		return ENGINE_IDLE;
-
-	if (engine->hangcheck.last_ring != hc->ring)
-		return ENGINE_ACTIVE_SEQNO;
-
-	if (engine->hangcheck.last_head != hc->head)
-		return ENGINE_ACTIVE_SEQNO;
 
 	return engine_stuck(engine, hc->acthd);
 }
@@ -220,9 +216,9 @@ static void hangcheck_accumulate_sample(struct intel_engine_cs *engine,
 				 I915_ENGINE_WEDGED_TIMEOUT);
 }
 
-static void hangcheck_declare_hang(struct intel_gt *gt,
-				   intel_engine_mask_t hung,
-				   intel_engine_mask_t stuck)
+static void hangcheck_declare_hang(struct drm_i915_private *i915,
+				   unsigned int hung,
+				   unsigned int stuck)
 {
 	struct intel_engine_cs *engine;
 	intel_engine_mask_t tmp;
@@ -236,12 +232,12 @@ static void hangcheck_declare_hang(struct intel_gt *gt,
 		hung &= ~stuck;
 	len = scnprintf(msg, sizeof(msg),
 			"%s on ", stuck == hung ? "no progress" : "hang");
-	for_each_engine_masked(engine, gt->i915, hung, tmp)
+	for_each_engine_masked(engine, i915, hung, tmp)
 		len += scnprintf(msg + len, sizeof(msg) - len,
 				 "%s, ", engine->name);
 	msg[len-2] = '\0';
 
-	return intel_gt_handle_error(gt, hung, I915_ERROR_CAPTURE, "%s", msg);
+	return i915_handle_error(i915, hung, I915_ERROR_CAPTURE, "%s", msg);
 }
 
 /*
@@ -252,25 +248,26 @@ static void hangcheck_declare_hang(struct intel_gt *gt,
  * we kick the ring. If we see no progress on three subsequent calls
  * we assume chip is wedged and try to fix it by resetting the chip.
  */
-static void hangcheck_elapsed(struct work_struct *work)
+static void i915_hangcheck_elapsed(struct work_struct *work)
 {
-	struct intel_gt *gt =
-		container_of(work, typeof(*gt), hangcheck.work.work);
-	intel_engine_mask_t hung = 0, stuck = 0, wedged = 0;
+	struct drm_i915_private *dev_priv =
+		container_of(work, typeof(*dev_priv),
+			     gpu_error.hangcheck_work.work);
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
+	unsigned int hung = 0, stuck = 0, wedged = 0;
 	intel_wakeref_t wakeref;
 
 	if (!i915_modparams.enable_hangcheck)
 		return;
 
-	if (!READ_ONCE(gt->awake))
+	if (!READ_ONCE(dev_priv->gt.awake))
 		return;
 
-	if (intel_gt_is_wedged(gt))
+	if (i915_terminally_wedged(dev_priv))
 		return;
 
-	wakeref = intel_runtime_pm_get_if_in_use(&gt->i915->runtime_pm);
+	wakeref = intel_runtime_pm_get_if_in_use(dev_priv);
 	if (!wakeref)
 		return;
 
@@ -278,9 +275,9 @@ static void hangcheck_elapsed(struct work_struct *work)
 	 * periodically arm the mmio checker to see if we are triggering
 	 * any invalid access.
 	 */
-	intel_uncore_arm_unclaimed_mmio_detection(gt->uncore);
+	intel_uncore_arm_unclaimed_mmio_detection(&dev_priv->uncore);
 
-	for_each_engine(engine, gt->i915, id) {
+	for_each_engine(engine, dev_priv, id) {
 		struct hangcheck hc;
 
 		intel_engine_signal_breadcrumbs(engine);
@@ -302,7 +299,7 @@ static void hangcheck_elapsed(struct work_struct *work)
 	if (GEM_SHOW_DEBUG() && (hung | stuck)) {
 		struct drm_printer p = drm_debug_printer("hangcheck");
 
-		for_each_engine(engine, gt->i915, id) {
+		for_each_engine(engine, dev_priv, id) {
 			if (intel_engine_is_idle(engine))
 				continue;
 
@@ -311,37 +308,20 @@ static void hangcheck_elapsed(struct work_struct *work)
 	}
 
 	if (wedged) {
-		dev_err(gt->i915->drm.dev,
+		dev_err(dev_priv->drm.dev,
 			"GPU recovery timed out,"
 			" cancelling all in-flight rendering.\n");
 		GEM_TRACE_DUMP();
-		intel_gt_set_wedged(gt);
+		i915_gem_set_wedged(dev_priv);
 	}
 
 	if (hung)
-		hangcheck_declare_hang(gt, hung, stuck);
+		hangcheck_declare_hang(dev_priv, hung, stuck);
 
-	intel_runtime_pm_put(&gt->i915->runtime_pm, wakeref);
+	intel_runtime_pm_put(dev_priv, wakeref);
 
 	/* Reset timer in case GPU hangs without another request being added */
-	intel_gt_queue_hangcheck(gt);
-}
-
-void intel_gt_queue_hangcheck(struct intel_gt *gt)
-{
-	unsigned long delay;
-
-	if (unlikely(!i915_modparams.enable_hangcheck))
-		return;
-
-	/*
-	 * Don't continually defer the hangcheck so that it is always run at
-	 * least once after work has been scheduled on any ring. Otherwise,
-	 * we will ignore a hung ring if a second ring is kept busy.
-	 */
-
-	delay = round_jiffies_up_relative(DRM_I915_HANGCHECK_JIFFIES);
-	queue_delayed_work(system_long_wq, &gt->hangcheck.work, delay);
+	i915_queue_hangcheck(dev_priv);
 }
 
 void intel_engine_init_hangcheck(struct intel_engine_cs *engine)
@@ -350,9 +330,10 @@ void intel_engine_init_hangcheck(struct intel_engine_cs *engine)
 	engine->hangcheck.action_timestamp = jiffies;
 }
 
-void intel_gt_init_hangcheck(struct intel_gt *gt)
+void intel_hangcheck_init(struct drm_i915_private *i915)
 {
-	INIT_DELAYED_WORK(&gt->hangcheck.work, hangcheck_elapsed);
+	INIT_DELAYED_WORK(&i915->gpu_error.hangcheck_work,
+			  i915_hangcheck_elapsed);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

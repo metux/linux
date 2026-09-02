@@ -130,7 +130,6 @@ needed).
    vm/index
    bpf/index
    usb/index
-   PCI/index
    misc-devices/index
    mic/index
    scheduler/index

@@ -37,17 +37,17 @@ static void guc_free_load_err_log(struct intel_guc *guc);
  */
 static int __intel_uc_reset_hw(struct intel_uc *uc)
 {
-	struct drm_i915_private *dev_priv = uc_to_gt(uc)->i915;
+	struct intel_gt *gt = uc_to_gt(uc);
 	int ret;
 	u32 guc_status;
 
-	ret = intel_reset_guc(&dev_priv->gt);
+	ret = intel_reset_guc(gt);
 	if (ret) {
 		DRM_ERROR("Failed to reset GuC, ret = %d\n", ret);
 		return ret;
 	}
 
-	guc_status = I915_READ(GUC_STATUS);
+	guc_status = intel_uncore_read(gt->uncore, GUC_STATUS);
 	WARN(!(guc_status & GS_MIA_IN_RESET),
 	     "GuC status: 0x%x, MIA core expected to be in reset\n",
 	     guc_status);
@@ -61,7 +61,7 @@ static int __get_platform_enable_guc(struct intel_uc *uc)
 	struct intel_uc_fw *huc_fw = &uc->huc.fw;
 	int enable_guc = 0;
 
-	if (!HAS_GUC(uc_to_gt(uc)->i915))
+	if (!HAS_GT_UC(uc_to_gt(uc)->i915))
 		return 0;
 
 	/* We don't want to enable GuC/HuC on pre-Gen11 by default */
@@ -228,7 +228,7 @@ static void guc_free_load_err_log(struct intel_guc *guc)
  */
 static void guc_clear_mmio_msg(struct intel_guc *guc)
 {
-	intel_uncore_write(&guc_to_i915(guc)->uncore, SOFT_SCRATCH(15), 0);
+	intel_uncore_write(guc_to_gt(guc)->uncore, SOFT_SCRATCH(15), 0);
 }
 
 static void guc_get_mmio_msg(struct intel_guc *guc)
@@ -237,7 +237,7 @@ static void guc_get_mmio_msg(struct intel_guc *guc)
 
 	spin_lock_irq(&guc->irq_lock);
 
-	val = intel_uncore_read(&guc_to_i915(guc)->uncore, SOFT_SCRATCH(15));
+	val = intel_uncore_read(guc_to_gt(guc)->uncore, SOFT_SCRATCH(15));
 	guc->mmio_msg |= val & guc->msg_enabled_mask;
 
 	/*
@@ -252,7 +252,7 @@ static void guc_get_mmio_msg(struct intel_guc *guc)
 
 static void guc_handle_mmio_msg(struct intel_guc *guc)
 {
-	struct drm_i915_private *i915 = guc_to_i915(guc);
+	struct drm_i915_private *i915 = guc_to_gt(guc)->i915;
 
 	/* we need communication to be enabled to reply to GuC */
 	GEM_BUG_ON(guc->handler == intel_guc_to_host_event_handler_nop);
@@ -284,7 +284,7 @@ static void guc_disable_interrupts(struct intel_guc *guc)
 
 static int guc_enable_communication(struct intel_guc *guc)
 {
-	struct drm_i915_private *i915 = guc_to_i915(guc);
+	struct drm_i915_private *i915 = guc_to_gt(guc)->i915;
 	int ret;
 
 	ret = intel_guc_ct_enable(&guc->ct);
@@ -492,7 +492,7 @@ int intel_uc_init_hw(struct intel_uc *uc)
 		}
 
 		intel_guc_ads_reset(guc);
-		intel_guc_init_params(guc);
+		intel_guc_write_params(guc);
 		ret = intel_guc_fw_upload(guc);
 		if (ret == 0)
 			break;

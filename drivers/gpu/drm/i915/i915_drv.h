@@ -163,7 +163,7 @@ enum hpd_pin {
 #define HPD_STORM_DEFAULT_THRESHOLD 50
 
 struct i915_hotplug {
-	struct work_struct hotplug_work;
+	struct delayed_work hotplug_work;
 
 	struct {
 		unsigned long last_jiffies;
@@ -175,6 +175,7 @@ struct i915_hotplug {
 		} state;
 	} stats[HPD_NUM_PINS];
 	u32 event_bits;
+	u32 retry_bits;
 	struct delayed_work reenable_work;
 
 	u32 long_port_mask;
@@ -1353,9 +1354,6 @@ struct drm_i915_private {
 
 	struct intel_wopcm wopcm;
 
-	struct intel_huc huc;
-	struct intel_guc guc;
-
 	struct intel_csr csr;
 
 	struct intel_gmbus gmbus[GMBUS_NUM_PINS];
@@ -1407,7 +1405,6 @@ struct drm_i915_private {
 	};
 	u32 gt_irq_mask;
 	u32 pm_rps_events;
-	u32 pm_guc_events;
 	u32 pipestat_irq_mask[I915_MAX_PIPES];
 
 	struct i915_hotplug hotplug;
@@ -1910,16 +1907,6 @@ static inline struct drm_i915_private *wopcm_to_i915(struct intel_wopcm *wopcm)
 	return container_of(wopcm, struct drm_i915_private, wopcm);
 }
 
-static inline struct drm_i915_private *guc_to_i915(struct intel_guc *guc)
-{
-	return container_of(guc, struct drm_i915_private, guc);
-}
-
-static inline struct drm_i915_private *huc_to_i915(struct intel_huc *huc)
-{
-	return container_of(huc, struct drm_i915_private, huc);
-}
-
 /* Simple iterator over all initialised engines */
 #define for_each_engine(engine__, dev_priv__, id__) \
 	for ((id__) = 0; \
@@ -2290,20 +2277,9 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 
 #define HAS_IPC(dev_priv)		 (INTEL_INFO(dev_priv)->display.has_ipc)
 
-/*
- * For now, anything with a GuC requires uCode loading, and then supports
- * command submission once loaded. But these are logically independent
- * properties, so we have separate macros to test them.
- */
-#define HAS_GUC(dev_priv)	(INTEL_INFO(dev_priv)->has_guc)
-#define HAS_GUC_UCODE(dev_priv)	(HAS_GUC(dev_priv))
-#define HAS_GUC_SCHED(dev_priv)	(HAS_GUC(dev_priv))
+#define HAS_GT_UC(dev_priv)	(INTEL_INFO(dev_priv)->has_gt_uc)
 
-/* For now, anything with a GuC has also HuC */
-#define HAS_HUC(dev_priv)	(HAS_GUC(dev_priv))
-#define HAS_HUC_UCODE(dev_priv)	(HAS_GUC(dev_priv))
-
-/* Having a GuC is not the same as using a GuC */
+/* Having GuC/HuC is not the same as using GuC/HuC */
 #define USES_GUC(dev_priv)		intel_uc_is_using_guc(&(dev_priv)->gt.uc)
 #define USES_GUC_SUBMISSION(dev_priv)	intel_uc_is_using_guc_submission(&(dev_priv)->gt.uc)
 #define USES_HUC(dev_priv)		intel_uc_is_using_huc(&(dev_priv)->gt.uc)
@@ -2407,8 +2383,6 @@ void i915_driver_remove(struct drm_device *dev);
 
 void intel_engine_init_hangcheck(struct intel_engine_cs *engine);
 int vlv_force_gfx_clock(struct drm_i915_private *dev_priv, bool on);
-
-u32 intel_calculate_mcr_s_ss_select(struct drm_i915_private *dev_priv);
 
 static inline bool intel_gvt_active(struct drm_i915_private *dev_priv)
 {

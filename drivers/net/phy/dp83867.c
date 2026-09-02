@@ -77,7 +77,8 @@
 
 /* PHY CTRL bits */
 #define DP83867_PHYCR_FIFO_DEPTH_SHIFT		14
-#define DP83867_PHYCR_FIFO_DEPTH_MASK		(3 << 14)
+#define DP83867_PHYCR_FIFO_DEPTH_MAX		0x03
+#define DP83867_PHYCR_FIFO_DEPTH_MASK		GENMASK(15, 14)
 #define DP83867_PHYCR_RESERVED_MASK		BIT(11)
 
 /* RGMIIDCTL bits */
@@ -87,8 +88,7 @@
 #define DP83867_RGMII_RX_CLK_DELAY_SHIFT	0
 
 /* IO_MUX_CFG bits */
-#define DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL	0x1f
-
+#define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MASK	0x1f
 #define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX	0x0
 #define DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN	0x1f
 #define DP83867_IO_MUX_CFG_CLK_O_DISABLE	BIT(6)
@@ -105,9 +105,9 @@ enum {
 };
 
 struct dp83867_private {
-	int rx_id_delay;
-	int tx_id_delay;
-	int fifo_depth;
+	u32 rx_id_delay;
+	u32 tx_id_delay;
+	u32 fifo_depth;
 	int io_impedance;
 	int port_mirroring;
 	bool rxctrl_strap_quirk;
@@ -175,8 +175,6 @@ static int dp83867_of_init(struct phy_device *phydev)
 	if (!of_node)
 		return -ENODEV;
 
-	dp83867->io_impedance = -EINVAL;
-
 	/* Optional configuration */
 	ret = of_property_read_u32(of_node, "ti,clk-output-sel",
 				   &dp83867->clk_output_sel);
@@ -198,6 +196,8 @@ static int dp83867_of_init(struct phy_device *phydev)
 		dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MAX;
 	else if (of_property_read_bool(of_node, "ti,min-output-impedance"))
 		dp83867->io_impedance = DP83867_IO_MUX_CFG_IO_IMPEDANCE_MIN;
+	else
+		dp83867->io_impedance = -1; /* leave at default */
 
 	dp83867->rxctrl_strap_quirk = of_property_read_bool(of_node,
 					"ti,dp83867-rxctrl-strap-quirk");
@@ -262,8 +262,20 @@ static int dp83867_of_init(struct phy_device *phydev)
 	if (of_property_read_bool(of_node, "enet-phy-lane-no-swap"))
 		dp83867->port_mirroring = DP83867_PORT_MIRROING_DIS;
 
-	return of_property_read_u32(of_node, "ti,fifo-depth",
+	ret = of_property_read_u32(of_node, "ti,fifo-depth",
 				   &dp83867->fifo_depth);
+	if (ret) {
+		phydev_err(phydev,
+			   "ti,fifo-depth property is required\n");
+		return ret;
+	}
+	if (dp83867->fifo_depth > DP83867_PHYCR_FIFO_DEPTH_MAX) {
+		phydev_err(phydev,
+			   "ti,fifo-depth value %u out of range\n",
+			   dp83867->fifo_depth);
+		return -EINVAL;
+	}
+	return 0;
 }
 #else
 static int dp83867_of_init(struct phy_device *phydev)
@@ -272,25 +284,25 @@ static int dp83867_of_init(struct phy_device *phydev)
 }
 #endif /* CONFIG_OF_MDIO */
 
-static int dp83867_config_init(struct phy_device *phydev)
+static int dp83867_probe(struct phy_device *phydev)
 {
 	struct dp83867_private *dp83867;
+
+	dp83867 = devm_kzalloc(&phydev->mdio.dev, sizeof(*dp83867),
+			       GFP_KERNEL);
+	if (!dp83867)
+		return -ENOMEM;
+
+	phydev->priv = dp83867;
+
+	return dp83867_of_init(phydev);
+}
+
+static int dp83867_config_init(struct phy_device *phydev)
+{
+	struct dp83867_private *dp83867 = phydev->priv;
 	int ret, val, bs;
 	u16 delay;
-
-	if (!phydev->priv) {
-		dp83867 = devm_kzalloc(&phydev->mdio.dev, sizeof(*dp83867),
-				       GFP_KERNEL);
-		if (!dp83867)
-			return -ENOMEM;
-
-		phydev->priv = dp83867;
-		ret = dp83867_of_init(phydev);
-		if (ret)
-			return ret;
-	} else {
-		dp83867 = (struct dp83867_private *)phydev->priv;
-	}
 
 	/* RX_DV/RX_CTRL strapped in mode 1 or mode 2 workaround */
 	if (dp83867->rxctrl_strap_quirk)
@@ -348,13 +360,13 @@ static int dp83867_config_init(struct phy_device *phydev)
 
 		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_RGMIIDCTL,
 			      delay);
-
-		if (dp83867->io_impedance >= 0)
-			phy_modify_mmd(phydev, DP83867_DEVADDR, DP83867_IO_MUX_CFG,
-				       DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL,
-				       dp83867->io_impedance &
-				       DP83867_IO_MUX_CFG_IO_IMPEDANCE_CTRL);
 	}
+
+	/* If specified, set io impedance */
+	if (dp83867->io_impedance >= 0)
+		phy_modify_mmd(phydev, DP83867_DEVADDR, DP83867_IO_MUX_CFG,
+			       DP83867_IO_MUX_CFG_IO_IMPEDANCE_MASK,
+			       dp83867->io_impedance);
 
 	if (phydev->interface == PHY_INTERFACE_MODE_SGMII) {
 		/* For support SPEED_10 in SGMII mode
@@ -443,6 +455,7 @@ static struct phy_driver dp83867_driver[] = {
 		.name		= "TI DP83867",
 		/* PHY_GBIT_FEATURES */
 
+		.probe          = dp83867_probe,
 		.config_init	= dp83867_config_init,
 		.soft_reset	= dp83867_phy_reset,
 

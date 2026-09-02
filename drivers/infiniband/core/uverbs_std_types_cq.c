@@ -137,7 +137,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 
 	return 0;
 err_cq:
-	ib_destroy_cq_user(cq, uverbs_get_cleared_udata(attrs));
+	ib_destroy_cq(cq);
 	cq = NULL;
 err_free:
 	kfree(cq);

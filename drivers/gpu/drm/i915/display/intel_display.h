@@ -472,7 +472,7 @@ enum phy_fia {
 void intel_link_compute_m_n(u16 bpp, int nlanes,
 			    int pixel_clock, int link_clock,
 			    struct intel_link_m_n *m_n,
-			    bool constant_n, bool fec_enable);
+			    bool constant_n);
 bool is_ccs_modifier(u64 modifier);
 int intel_main_to_aux_plane(const struct drm_framebuffer *fb, int main_plane);
 void lpt_disable_clkout_dp(struct drm_i915_private *dev_priv);
@@ -631,23 +631,5 @@ void assert_pipe(struct drm_i915_private *dev_priv,
 		 enum transcoder cpu_transcoder, bool state);
 #define assert_pipe_enabled(d, t) assert_pipe(d, t, true)
 #define assert_pipe_disabled(d, t) assert_pipe(d, t, false)
-
-/* Use I915_STATE_WARN(x) and I915_STATE_WARN_ON() (rather than WARN() and
- * WARN_ON()) for hw state sanity checks to check for unexpected conditions
- * which may not necessarily be a user visible problem.  This will either
- * WARN() or DRM_ERROR() depending on the verbose_checks moduleparam, to
- * enable distros and users to tailor their preferred amount of i915 abrt
- * spam.
- */
-#define I915_STATE_WARN(condition, format...) ({			\
-	int __ret_warn_on = !!(condition);				\
-	if (unlikely(__ret_warn_on))					\
-		if (!WARN(i915_modparams.verbose_state_checks, format))	\
-			DRM_ERROR(format);				\
-	unlikely(__ret_warn_on);					\
-})
-
-#define I915_STATE_WARN_ON(x)						\
-	I915_STATE_WARN((x), "%s", "WARN_ON(" __stringify(x) ")")
 
 #endif

@@ -10,21 +10,16 @@
 #ifndef __MGAG200_DRV_H__
 #define __MGAG200_DRV_H__
 
+#include <linux/i2c-algo-bit.h>
+#include <linux/i2c.h>
+
 #include <video/vga.h>
 
 #include <drm/drm_encoder.h>
 #include <drm/drm_fb_helper.h>
-#include <drm/ttm/ttm_bo_api.h>
-#include <drm/ttm/ttm_bo_driver.h>
-#include <drm/ttm/ttm_placement.h>
-#include <drm/ttm/ttm_memory.h>
-#include <drm/ttm/ttm_module.h>
-
 #include <drm/drm_gem.h>
 #include <drm/drm_gem_vram_helper.h>
-
-#include <linux/i2c.h>
-#include <linux/i2c-algo-bit.h>
+#include <drm/drm_vram_mm_helper.h>
 
 #include "mgag200_reg.h"
 
@@ -108,7 +103,6 @@ struct mga_fbdev {
 	struct drm_fb_helper helper; /* must be first */
 	void *sysram;
 	int size;
-	struct ttm_bo_kmap_obj mapping;
 	int x1, y1, x2, y2; /* dirty rect */
 	spinlock_t dirty_lock;
 };
@@ -152,11 +146,8 @@ struct mga_cursor {
 	*/
 	struct drm_gem_vram_object *pixels_1;
 	struct drm_gem_vram_object *pixels_2;
-	u64 pixels_1_gpu_addr, pixels_2_gpu_addr;
 	/* The currently displayed icon, this points to one of pixels_1, or pixels_2 */
 	struct drm_gem_vram_object *pixels_current;
-	/* The previously displayed icon */
-	struct drm_gem_vram_object *pixels_prev;
 };
 
 struct mga_mc {
@@ -201,10 +192,6 @@ struct mga_device {
 	int bpp_shifts[4];
 
 	int fb_mtrr;
-
-	struct {
-		struct ttm_bo_device bdev;
-	} ttm;
 
 	/* SE model number stored in reg 0x1e24 */
 	u32 unique_rev_id;

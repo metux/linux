@@ -9,7 +9,6 @@
 #include <linux/types.h>    /* size_t */
 #include <linux/cdev.h>
 #include <linux/uaccess.h>  /* copy_*_user */
-#include <linux/aio.h>      /* aio stuff */
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
 #include "kpc_dma_driver.h"
@@ -21,20 +20,19 @@ unsigned int  count_pages(unsigned long iov_base, size_t iov_len)
 {
 	unsigned long first = (iov_base             & PAGE_MASK) >> PAGE_SHIFT;
 	unsigned long last  = ((iov_base+iov_len-1) & PAGE_MASK) >> PAGE_SHIFT;
+
 	return last - first + 1;
 }
 
 static inline
 unsigned int  count_parts_for_sge(struct scatterlist *sg)
 {
-	unsigned int sg_length = sg_dma_len(sg);
-	sg_length += (0x80000-1);
-	return (sg_length / 0x80000);
+	return DIV_ROUND_UP(sg_dma_len(sg), 0x80000);
 }
 
 /**********  Transfer Helpers  **********/
-static
-int  kpc_dma_transfer(struct dev_private_data *priv, struct kiocb *kcb, unsigned long iov_base, size_t iov_len)
+static int kpc_dma_transfer(struct dev_private_data *priv,
+			    unsigned long iov_base, size_t iov_len)
 {
 	unsigned int i = 0;
 	long rv = 0;
@@ -53,8 +51,6 @@ int  kpc_dma_transfer(struct dev_private_data *priv, struct kiocb *kcb, unsigned
 
 	ldev = priv->ldev;
 
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_transfer(priv = [%p], kcb = [%p], iov_base = [%p], iov_len = %ld) ldev = [%p]\n", priv, kcb, (void *)iov_base, iov_len, ldev);
-
 	acd = kzalloc(sizeof(*acd), GFP_KERNEL);
 	if (!acd) {
 		dev_err(&priv->ldev->pldev->dev, "Couldn't kmalloc space for for the aio data\n");
@@ -66,7 +62,6 @@ int  kpc_dma_transfer(struct dev_private_data *priv, struct kiocb *kcb, unsigned
 	acd->ldev = priv->ldev;
 	acd->cpl = &done;
 	acd->flags = 0;
-	acd->kcb = kcb;
 	acd->len = iov_len;
 	acd->page_count = count_pages(iov_base, iov_len);
 
@@ -174,21 +169,18 @@ int  kpc_dma_transfer(struct dev_private_data *priv, struct kiocb *kcb, unsigned
 
 	unlock_engine(ldev);
 
-	// If this is a synchronous kiocb, we need to put the calling process to sleep until the transfer is complete
-	if (kcb == NULL || is_sync_kiocb(kcb)) {
-		rv = wait_for_completion_interruptible(&done);
-		// If the user aborted (rv == -ERESTARTSYS), we're no longer responsible for cleaning up the acd
-		if (rv == -ERESTARTSYS) {
-			acd->cpl = NULL;
-		}
-		if (rv == 0) {
-			rv = acd->len;
-			kfree(acd);
-		}
-		return rv;
+	rv = wait_for_completion_interruptible(&done);
+	/*
+	 * If the user aborted (rv == -ERESTARTSYS), we're no longer responsible
+	 * for cleaning up the acd
+	 */
+	if (rv == -ERESTARTSYS)
+		acd->cpl = NULL;
+	if (rv == 0) {
+		rv = acd->len;
+		kfree(acd);
 	}
-
-	return -EIOCBQUEUED;
+	return rv;
 
  err_descr_too_many:
 	unlock_engine(ldev);
@@ -196,14 +188,12 @@ int  kpc_dma_transfer(struct dev_private_data *priv, struct kiocb *kcb, unsigned
 	sg_free_table(&acd->sgt);
  err_dma_map_sg:
  err_alloc_sg_table:
-	for (i = 0 ; i < acd->page_count ; i++) {
-		put_page(acd->user_pages[i]);
-	}
+	put_user_pages(acd->user_pages, acd->page_count);
  err_get_user_pages:
 	kfree(acd->user_pages);
  err_alloc_userpages:
 	kfree(acd);
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_transfer returning with error %ld\n", rv);
+	dev_dbg(&priv->ldev->pldev->dev, "%s returning with error %ld\n", __func__, rv);
 	return rv;
 }
 
@@ -217,18 +207,13 @@ void  transfer_complete_cb(struct aio_cb_data *acd, size_t xfr_count, u32 flags)
 	BUG_ON(acd->ldev == NULL);
 	BUG_ON(acd->ldev->pldev == NULL);
 
-	dev_dbg(&acd->ldev->pldev->dev, "transfer_complete_cb(acd = [%p])\n", acd);
-
-	for (i = 0 ; i < acd->page_count ; i++) {
-		if (!PageReserved(acd->user_pages[i])) {
-			set_page_dirty(acd->user_pages[i]);
-		}
-	}
-
 	dma_unmap_sg(&acd->ldev->pldev->dev, acd->sgt.sgl, acd->sgt.nents, acd->ldev->dir);
 
-	for (i = 0 ; i < acd->page_count ; i++) {
-		put_page(acd->user_pages[i]);
+	for (i = 0; i < acd->page_count; i++) {
+		if (!PageReserved(acd->user_pages[i]))
+			put_user_pages_dirty(&acd->user_pages[i], 1);
+		else
+			put_user_page(acd->user_pages[i]);
 	}
 
 	sg_free_table(&acd->sgt);
@@ -237,17 +222,13 @@ void  transfer_complete_cb(struct aio_cb_data *acd, size_t xfr_count, u32 flags)
 
 	acd->flags = flags;
 
-	if (acd->kcb == NULL || is_sync_kiocb(acd->kcb)) {
-		if (acd->cpl) {
-			complete(acd->cpl);
-		} else {
-			// There's no completion, so we're responsible for cleaning up the acd
-			kfree(acd);
-		}
+	if (acd->cpl) {
+		complete(acd->cpl);
 	} else {
-#ifdef CONFIG_KPC_DMA_AIO
-		aio_complete(acd->kcb, acd->len, acd->flags);
-#endif
+		/*
+		 * There's no completion, so we're responsible for cleaning up
+		 * the acd
+		 */
 		kfree(acd);
 	}
 }
@@ -258,7 +239,8 @@ int  kpc_dma_open(struct inode *inode, struct file *filp)
 {
 	struct dev_private_data *priv;
 	struct kpc_dma_device *ldev = kpc_dma_lookup_device(iminor(inode));
-	if (ldev == NULL)
+
+	if (!ldev)
 		return -ENODEV;
 
 	if (!atomic_dec_and_test(&ldev->open_count)) {
@@ -273,7 +255,6 @@ int  kpc_dma_open(struct inode *inode, struct file *filp)
 	priv->ldev = ldev;
 	filp->private_data = priv;
 
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_open(inode = [%p], filp = [%p]) priv = [%p] ldev = [%p]\n", inode, filp, priv, priv->ldev);
 	return 0;
 }
 
@@ -283,7 +264,6 @@ int  kpc_dma_close(struct inode *inode, struct file *filp)
 	struct kpc_dma_descriptor *cur;
 	struct dev_private_data *priv = (struct dev_private_data *)filp->private_data;
 	struct kpc_dma_device *eng = priv->ldev;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_close(inode = [%p], filp = [%p]) priv = [%p], ldev = [%p]\n", inode, filp, priv, priv->ldev);
 
 	lock_engine(eng);
 
@@ -312,105 +292,53 @@ int  kpc_dma_close(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-#ifdef CONFIG_KPC_DMA_AIO
-static
-int  kpc_dma_aio_cancel(struct kiocb *kcb)
-{
-	struct dev_private_data *priv = (struct dev_private_data *)kcb->ki_filp->private_data;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_aio_cancel(kcb = [%p]) priv = [%p], ldev = [%p]\n", kcb, priv, priv->ldev);
-	return 0;
-}
-
-static
-ssize_t   kpc_dma_aio_read(struct kiocb *kcb, const struct iovec *iov, unsigned long iov_count, loff_t pos)
-{
-	struct dev_private_data *priv = (struct dev_private_data *)kcb->ki_filp->private_data;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_aio_read(kcb = [%p], iov = [%p], iov_count = %ld, pos = %lld) priv = [%p], ldev = [%p]\n", kcb, iov, iov_count, pos, priv, priv->ldev);
-
-	if (priv->ldev->dir != DMA_FROM_DEVICE)
-		return -EMEDIUMTYPE;
-
-	if (iov_count != 1) {
-		dev_err(&priv->ldev->pldev->dev, "kpc_dma_aio_read() called with iov_count > 1!\n");
-		return -EFAULT;
-	}
-
-	if (!is_sync_kiocb(kcb))
-		kiocb_set_cancel_fn(kcb, kpc_dma_aio_cancel);
-	return kpc_dma_transfer(priv, kcb, (unsigned long)iov->iov_base, iov->iov_len);
-}
-
-static
-ssize_t  kpc_dma_aio_write(struct kiocb *kcb, const struct iovec *iov, unsigned long iov_count, loff_t pos)
-{
-	struct dev_private_data *priv = (struct dev_private_data *)kcb->ki_filp->private_data;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_aio_write(kcb = [%p], iov = [%p], iov_count = %ld, pos = %lld) priv = [%p], ldev = [%p]\n", kcb, iov, iov_count, pos, priv, priv->ldev);
-
-	if (priv->ldev->dir != DMA_TO_DEVICE)
-		return -EMEDIUMTYPE;
-
-	if (iov_count != 1) {
-		dev_err(&priv->ldev->pldev->dev, "kpc_dma_aio_write() called with iov_count > 1!\n");
-		return -EFAULT;
-	}
-
-	if (!is_sync_kiocb(kcb))
-		kiocb_set_cancel_fn(kcb, kpc_dma_aio_cancel);
-	return kpc_dma_transfer(priv, kcb, (unsigned long)iov->iov_base, iov->iov_len);
-}
-#endif
-
 static
 ssize_t  kpc_dma_read(struct file *filp,       char __user *user_buf, size_t count, loff_t *ppos)
 {
 	struct dev_private_data *priv = (struct dev_private_data *)filp->private_data;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_read(filp = [%p], user_buf = [%p], count = %zu, ppos = [%p]) priv = [%p], ldev = [%p]\n", filp, user_buf, count, ppos, priv, priv->ldev);
 
 	if (priv->ldev->dir != DMA_FROM_DEVICE)
 		return -EMEDIUMTYPE;
 
-	return kpc_dma_transfer(priv, (struct kiocb *)NULL, (unsigned long)user_buf, count);
+	return kpc_dma_transfer(priv, (unsigned long)user_buf, count);
 }
 
 static
 ssize_t  kpc_dma_write(struct file *filp, const char __user *user_buf, size_t count, loff_t *ppos)
 {
 	struct dev_private_data *priv = (struct dev_private_data *)filp->private_data;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_write(filp = [%p], user_buf = [%p], count = %zu, ppos = [%p]) priv = [%p], ldev = [%p]\n", filp, user_buf, count, ppos, priv, priv->ldev);
 
 	if (priv->ldev->dir != DMA_TO_DEVICE)
 		return -EMEDIUMTYPE;
 
-	return kpc_dma_transfer(priv, (struct kiocb *)NULL, (unsigned long)user_buf, count);
+	return kpc_dma_transfer(priv, (unsigned long)user_buf, count);
 }
 
 static
 long  kpc_dma_ioctl(struct file *filp, unsigned int ioctl_num, unsigned long ioctl_param)
 {
 	struct dev_private_data *priv = (struct dev_private_data *)filp->private_data;
-	dev_dbg(&priv->ldev->pldev->dev, "kpc_dma_ioctl(filp = [%p], ioctl_num = 0x%x, ioctl_param = 0x%lx) priv = [%p], ldev = [%p]\n", filp, ioctl_num, ioctl_param, priv, priv->ldev);
 
 	switch (ioctl_num) {
-		case KND_IOCTL_SET_CARD_ADDR:           priv->card_addr  = ioctl_param; return priv->card_addr;
-		case KND_IOCTL_SET_USER_CTL:            priv->user_ctl   = ioctl_param; return priv->user_ctl;
-		case KND_IOCTL_SET_USER_CTL_LAST:       priv->user_ctl_last = ioctl_param; return priv->user_ctl_last;
-		case KND_IOCTL_GET_USER_STS:            return priv->user_sts;
+	case KND_IOCTL_SET_CARD_ADDR:
+		priv->card_addr  = ioctl_param; return priv->card_addr;
+	case KND_IOCTL_SET_USER_CTL:
+		priv->user_ctl   = ioctl_param; return priv->user_ctl;
+	case KND_IOCTL_SET_USER_CTL_LAST:
+		priv->user_ctl_last = ioctl_param; return priv->user_ctl_last;
+	case KND_IOCTL_GET_USER_STS:
+		return priv->user_sts;
 	}
 
 	return -ENOTTY;
 }
 
-
-struct file_operations  kpc_dma_fops = {
+const struct file_operations  kpc_dma_fops = {
 	.owner      = THIS_MODULE,
 	.open           = kpc_dma_open,
 	.release        = kpc_dma_close,
 	.read           = kpc_dma_read,
 	.write          = kpc_dma_write,
-#ifdef CONFIG_KPC_DMA_AIO
-	.aio_read       = kpc_dma_aio_read,
-	.aio_write      = kpc_dma_aio_write,
-#endif
 	.unlocked_ioctl = kpc_dma_ioctl,
 };
 

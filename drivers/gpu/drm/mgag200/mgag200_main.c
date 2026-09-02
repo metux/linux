@@ -162,7 +162,7 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 	if (IS_G200_SE(mdev) && mdev->mc.vram_size < (2048*1024))
 		dev->mode_config.preferred_depth = 16;
 	else
-		dev->mode_config.preferred_depth = 24;
+		dev->mode_config.preferred_depth = 32;
 	dev->mode_config.prefer_shadow = 1;
 
 	r = mgag200_modeset_init(mdev);
@@ -172,10 +172,10 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 	}
 
 	/* Make small buffers to store a hardware cursor (double buffered icon updates) */
-	mdev->cursor.pixels_1 = drm_gem_vram_create(dev, &mdev->ttm.bdev,
+	mdev->cursor.pixels_1 = drm_gem_vram_create(dev, &dev->vram_mm->bdev,
 						    roundup(48*64, PAGE_SIZE),
 						    0, 0);
-	mdev->cursor.pixels_2 = drm_gem_vram_create(dev, &mdev->ttm.bdev,
+	mdev->cursor.pixels_2 = drm_gem_vram_create(dev, &dev->vram_mm->bdev,
 						    roundup(48*64, PAGE_SIZE),
 						    0, 0);
 	if (IS_ERR(mdev->cursor.pixels_2) || IS_ERR(mdev->cursor.pixels_1)) {
@@ -183,10 +183,12 @@ int mgag200_driver_load(struct drm_device *dev, unsigned long flags)
 		mdev->cursor.pixels_2 = NULL;
 		dev_warn(&dev->pdev->dev,
 			"Could not allocate space for cursors. Not doing hardware cursors.\n");
-	} else {
-		mdev->cursor.pixels_current = mdev->cursor.pixels_1;
-		mdev->cursor.pixels_prev = mdev->cursor.pixels_2;
 	}
+	mdev->cursor.pixels_current = NULL;
+
+	r = drm_fbdev_generic_setup(mdev->dev, 0);
+	if (r)
+		goto err_modeset;
 
 	return 0;
 
@@ -206,43 +208,7 @@ void mgag200_driver_unload(struct drm_device *dev)
 	if (mdev == NULL)
 		return;
 	mgag200_modeset_fini(mdev);
-	mgag200_fbdev_fini(mdev);
 	drm_mode_config_cleanup(dev);
 	mgag200_mm_fini(mdev);
 	dev->dev_private = NULL;
-}
-
-int mgag200_gem_create(struct drm_device *dev,
-		   u32 size, bool iskernel,
-		   struct drm_gem_object **obj)
-{
-	struct mga_device *mdev = dev->dev_private;
-	struct drm_gem_vram_object *gbo;
-	int ret;
-
-	*obj = NULL;
-
-	size = roundup(size, PAGE_SIZE);
-	if (size == 0)
-		return -EINVAL;
-
-	gbo = drm_gem_vram_create(dev, &mdev->ttm.bdev, size, 0, false);
-	if (IS_ERR(gbo)) {
-		ret = PTR_ERR(gbo);
-		if (ret != -ERESTARTSYS)
-			DRM_ERROR("failed to allocate GEM object\n");
-		return ret;
-	}
-	*obj = &gbo->gem;
-	return 0;
-}
-
-int mgag200_dumb_create(struct drm_file *file,
-		    struct drm_device *dev,
-		    struct drm_mode_create_dumb *args)
-{
-	struct mga_device *mdev = dev->dev_private;
-
-	return drm_gem_vram_fill_create_dumb(file, dev, &mdev->ttm.bdev, 0,
-					    false, args);
 }

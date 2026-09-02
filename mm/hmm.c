@@ -26,6 +26,9 @@
 #include <linux/mmu_notifier.h>
 #include <linux/memory_hotplug.h>
 
+#define PA_SECTION_SIZE (1UL << PA_SECTION_SHIFT)
+
+#if IS_ENABLED(CONFIG_HMM_MIRROR)
 static const struct mmu_notifier_ops hmm_mmu_notifier_ops;
 
 /**
@@ -44,7 +47,7 @@ static struct hmm *hmm_get_or_create(struct mm_struct *mm)
 {
 	struct hmm *hmm;
 
-	lockdep_assert_held_write(&mm->mmap_sem);
+	lockdep_assert_held_exclusive(&mm->mmap_sem);
 
 	/* Abuse the page_table_lock to also protect mm->hmm. */
 	spin_lock(&mm->page_table_lock);
@@ -245,7 +248,7 @@ static const struct mmu_notifier_ops hmm_mmu_notifier_ops = {
  */
 int hmm_mirror_register(struct hmm_mirror *mirror, struct mm_struct *mm)
 {
-	lockdep_assert_held_write(&mm->mmap_sem);
+	lockdep_assert_held_exclusive(&mm->mmap_sem);
 
 	/* Sanity check */
 	if (!mm || !mirror || !mirror->ops)
@@ -946,7 +949,7 @@ EXPORT_SYMBOL(hmm_range_unregister);
  * @range: range
  * Return: -EINVAL if invalid argument, -ENOMEM out of memory, -EPERM invalid
  *          permission (for instance asking for write and range is read only),
- *          -EBUSY if you need to retry, -EFAULT invalid (ie either no valid
+ *          -EAGAIN if you need to retry, -EFAULT invalid (ie either no valid
  *          vma or it is illegal to access that range), number of valid pages
  *          in range->pfns[] (from range start address).
  *
@@ -967,7 +970,7 @@ long hmm_range_snapshot(struct hmm_range *range)
 	do {
 		/* If range is no longer valid force retry. */
 		if (!range->valid)
-			return -EBUSY;
+			return -EAGAIN;
 
 		vma = find_vma(hmm->mm, start);
 		if (vma == NULL || (vma->vm_flags & device_vma))
@@ -1062,8 +1065,10 @@ long hmm_range_fault(struct hmm_range *range, bool block)
 
 	do {
 		/* If range is no longer valid force retry. */
-		if (!range->valid)
-			return -EBUSY;
+		if (!range->valid) {
+			up_read(&hmm->mm->mmap_sem);
+			return -EAGAIN;
+		}
 
 		vma = find_vma(hmm->mm, start);
 		if (vma == NULL || (vma->vm_flags & device_vma))
@@ -1282,3 +1287,154 @@ long hmm_range_dma_unmap(struct hmm_range *range,
 	return cpages;
 }
 EXPORT_SYMBOL(hmm_range_dma_unmap);
+#endif /* IS_ENABLED(CONFIG_HMM_MIRROR) */
+
+
+#if IS_ENABLED(CONFIG_DEVICE_PRIVATE)
+struct page *hmm_vma_alloc_locked_page(struct vm_area_struct *vma,
+				       unsigned long addr)
+{
+	struct page *page;
+
+	page = alloc_page_vma(GFP_HIGHUSER, vma, addr);
+	if (!page)
+		return NULL;
+	lock_page(page);
+	return page;
+}
+EXPORT_SYMBOL(hmm_vma_alloc_locked_page);
+
+
+static void hmm_devmem_ref_release(struct percpu_ref *ref)
+{
+	struct hmm_devmem *devmem;
+
+	devmem = container_of(ref, struct hmm_devmem, ref);
+	complete(&devmem->completion);
+}
+
+static void hmm_devmem_ref_exit(struct percpu_ref *ref)
+{
+	struct hmm_devmem *devmem;
+
+	devmem = container_of(ref, struct hmm_devmem, ref);
+	wait_for_completion(&devmem->completion);
+	percpu_ref_exit(ref);
+}
+
+static void hmm_devmem_ref_kill(struct percpu_ref *ref)
+{
+	percpu_ref_kill(ref);
+}
+
+static vm_fault_t hmm_devmem_fault(struct vm_area_struct *vma,
+			    unsigned long addr,
+			    const struct page *page,
+			    unsigned int flags,
+			    pmd_t *pmdp)
+{
+	struct hmm_devmem *devmem = page->pgmap->data;
+
+	return devmem->ops->fault(devmem, vma, addr, page, flags, pmdp);
+}
+
+static void hmm_devmem_free(struct page *page, void *data)
+{
+	struct hmm_devmem *devmem = data;
+
+	page->mapping = NULL;
+
+	devmem->ops->free(devmem, page);
+}
+
+/*
+ * hmm_devmem_add() - hotplug ZONE_DEVICE memory for device memory
+ *
+ * @ops: memory event device driver callback (see struct hmm_devmem_ops)
+ * @device: device struct to bind the resource too
+ * @size: size in bytes of the device memory to add
+ * Return: pointer to new hmm_devmem struct ERR_PTR otherwise
+ *
+ * This function first finds an empty range of physical address big enough to
+ * contain the new resource, and then hotplugs it as ZONE_DEVICE memory, which
+ * in turn allocates struct pages. It does not do anything beyond that; all
+ * events affecting the memory will go through the various callbacks provided
+ * by hmm_devmem_ops struct.
+ *
+ * Device driver should call this function during device initialization and
+ * is then responsible of memory management. HMM only provides helpers.
+ */
+struct hmm_devmem *hmm_devmem_add(const struct hmm_devmem_ops *ops,
+				  struct device *device,
+				  unsigned long size)
+{
+	struct hmm_devmem *devmem;
+	resource_size_t addr;
+	void *result;
+	int ret;
+
+	dev_pagemap_get_ops();
+
+	devmem = devm_kzalloc(device, sizeof(*devmem), GFP_KERNEL);
+	if (!devmem)
+		return ERR_PTR(-ENOMEM);
+
+	init_completion(&devmem->completion);
+	devmem->pfn_first = -1UL;
+	devmem->pfn_last = -1UL;
+	devmem->resource = NULL;
+	devmem->device = device;
+	devmem->ops = ops;
+
+	ret = percpu_ref_init(&devmem->ref, &hmm_devmem_ref_release,
+			      0, GFP_KERNEL);
+	if (ret)
+		return ERR_PTR(ret);
+
+	size = ALIGN(size, PA_SECTION_SIZE);
+	addr = min((unsigned long)iomem_resource.end,
+		   (1UL << MAX_PHYSMEM_BITS) - 1);
+	addr = addr - size + 1UL;
+
+	/*
+	 * FIXME add a new helper to quickly walk resource tree and find free
+	 * range
+	 *
+	 * FIXME what about ioport_resource resource ?
+	 */
+	for (; addr > size && addr >= iomem_resource.start; addr -= size) {
+		ret = region_intersects(addr, size, 0, IORES_DESC_NONE);
+		if (ret != REGION_DISJOINT)
+			continue;
+
+		devmem->resource = devm_request_mem_region(device, addr, size,
+							   dev_name(device));
+		if (!devmem->resource)
+			return ERR_PTR(-ENOMEM);
+		break;
+	}
+	if (!devmem->resource)
+		return ERR_PTR(-ERANGE);
+
+	devmem->resource->desc = IORES_DESC_DEVICE_PRIVATE_MEMORY;
+	devmem->pfn_first = devmem->resource->start >> PAGE_SHIFT;
+	devmem->pfn_last = devmem->pfn_first +
+			   (resource_size(devmem->resource) >> PAGE_SHIFT);
+	devmem->page_fault = hmm_devmem_fault;
+
+	devmem->pagemap.type = MEMORY_DEVICE_PRIVATE;
+	devmem->pagemap.res = *devmem->resource;
+	devmem->pagemap.page_free = hmm_devmem_free;
+	devmem->pagemap.altmap_valid = false;
+	devmem->pagemap.ref = &devmem->ref;
+	devmem->pagemap.data = devmem;
+	devmem->pagemap.kill = hmm_devmem_ref_kill;
+	devmem->pagemap.cleanup = hmm_devmem_ref_exit;
+
+	result = devm_memremap_pages(devmem->device, &devmem->pagemap);
+	if (IS_ERR(result))
+		return result;
+	return devmem;
+}
+EXPORT_SYMBOL_GPL(hmm_devmem_add);
+#endif /* CONFIG_DEVICE_PRIVATE  */

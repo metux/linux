@@ -29,6 +29,16 @@
  *    Thomas Hellstrom <thomas-at-tungstengraphics-dot-com>
  *    Dave Airlie
  */
+
+#include <linux/debugfs.h>
+#include <linux/iommu.h>
+#include <linux/pagemap.h>
+#include <linux/sched/task.h>
+#include <linux/seq_file.h>
+#include <linux/slab.h>
+#include <linux/swap.h>
+#include <linux/swiotlb.h>
+
 #include <drm/ttm/ttm_bo_api.h>
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_placement.h>
@@ -732,13 +742,9 @@ int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages)
 {
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
 	struct mm_struct *mm = gtt->usertask->mm;
-	unsigned long start = gtt->userptr;
-	unsigned long end = start + ttm->num_pages * PAGE_SIZE;
-	struct vm_area_struct *vma = NULL, *vmas[MAX_NR_VMAS];
-	struct hmm_range *ranges;
-	unsigned long nr_pages, i;
-	uint64_t *pfns, f;
-	int r = 0;
+	unsigned int flags = 0;
+	unsigned pinned = 0;
+	int r;
 
 	if (!mm) /* Happens during process shutdown */
 		return -ESRCH;
@@ -794,17 +800,6 @@ int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages)
 	} while (pinned < ttm->num_pages);
 
 	up_read(&mm->mmap_sem);
-
-	for (i = 0; i < ttm->num_pages; i++) {
-		pages[i] = hmm_pfn_to_page(&ranges[0], pfns[i]);
-		if (!pages[i]) {
-			pr_err("Page fault failed for pfn[%lu] = 0x%llx\n",
-			       i, pfns[i]);
-			goto out_invalid_pfn;
-		}
-	}
-	gtt->ranges = ranges;
-
 	return 0;
 
 release_pages:
@@ -829,9 +824,9 @@ out_invalid_pfn:
  */
 void amdgpu_ttm_tt_set_user_pages(struct ttm_tt *ttm, struct page **pages)
 {
-	unsigned long i;
+	struct amdgpu_ttm_tt *gtt = (void *)ttm;
+	unsigned i;
 
-	gtt->last_set_pages = atomic_read(&gtt->mmu_invalidations);
 	for (i = 0; i < ttm->num_pages; ++i) {
 		if (ttm->pages[i])
 			put_page(ttm->pages[i]);
@@ -1774,25 +1769,43 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 
 	/* Initialize various on-chip memory pools */
 	r = ttm_bo_init_mm(&adev->mman.bdev, AMDGPU_PL_GDS,
-			   adev->gds.gds_size);
+			   adev->gds.mem.total_size);
 	if (r) {
 		DRM_ERROR("Failed initializing GDS heap.\n");
 		return r;
 	}
 
+	r = amdgpu_bo_create_kernel(adev, adev->gds.mem.gfx_partition_size,
+				    4, AMDGPU_GEM_DOMAIN_GDS,
+				    &adev->gds.gds_gfx_bo, NULL, NULL);
+	if (r)
+		return r;
+
 	r = ttm_bo_init_mm(&adev->mman.bdev, AMDGPU_PL_GWS,
-			   adev->gds.gws_size);
+			   adev->gds.gws.total_size);
 	if (r) {
 		DRM_ERROR("Failed initializing gws heap.\n");
 		return r;
 	}
 
+	r = amdgpu_bo_create_kernel(adev, adev->gds.gws.gfx_partition_size,
+				    1, AMDGPU_GEM_DOMAIN_GWS,
+				    &adev->gds.gws_gfx_bo, NULL, NULL);
+	if (r)
+		return r;
+
 	r = ttm_bo_init_mm(&adev->mman.bdev, AMDGPU_PL_OA,
-			   adev->gds.oa_size);
+			   adev->gds.oa.total_size);
 	if (r) {
 		DRM_ERROR("Failed initializing oa heap.\n");
 		return r;
 	}
+
+	r = amdgpu_bo_create_kernel(adev, adev->gds.oa.gfx_partition_size,
+				    1, AMDGPU_GEM_DOMAIN_OA,
+				    &adev->gds.oa_gfx_bo, NULL, NULL);
+	if (r)
+		return r;
 
 	/* Register debugfs entries for amdgpu_ttm */
 	r = amdgpu_ttm_debugfs_init(adev);

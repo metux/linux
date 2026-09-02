@@ -79,18 +79,15 @@ available subsections can be seen below.
    isapnp
    generic-counter
    lightnvm-pblk
-   memory-devices/index
    men-chameleon-bus
    ntb
    nvmem
    parport-lowlevel
    pps
    ptp
-   phy/index
    pti_intel_mid
    pwm
    rfkill
-   serial/index
    sgi-ioc4
    sm501
    smsc_ece1099

@@ -730,14 +730,13 @@ static void reset_prepare(struct intel_engine_cs *engine)
 
 static void reset_ring(struct intel_engine_cs *engine, bool stalled)
 {
-	struct i915_timeline *tl = &engine->timeline;
 	struct i915_request *pos, *rq;
 	unsigned long flags;
 	u32 head;
 
 	rq = NULL;
-	spin_lock_irqsave(&tl->lock, flags);
-	list_for_each_entry(pos, &tl->requests, link) {
+	spin_lock_irqsave(&engine->active.lock, flags);
+	list_for_each_entry(pos, &engine->active.requests, sched.link) {
 		if (!i915_request_completed(pos)) {
 			rq = pos;
 			break;
@@ -791,7 +790,7 @@ static void reset_ring(struct intel_engine_cs *engine, bool stalled)
 	}
 	engine->buffer->head = intel_ring_wrap(engine->buffer, head);
 
-	spin_unlock_irqrestore(&tl->lock, flags);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
 static void reset_finish(struct intel_engine_cs *engine)
@@ -877,10 +876,10 @@ static void cancel_requests(struct intel_engine_cs *engine)
 	struct i915_request *request;
 	unsigned long flags;
 
-	spin_lock_irqsave(&engine->timeline.lock, flags);
+	spin_lock_irqsave(&engine->active.lock, flags);
 
 	/* Mark all submitted requests as skipped. */
-	list_for_each_entry(request, &engine->timeline.requests, link) {
+	list_for_each_entry(request, &engine->active.requests, sched.link) {
 		if (!i915_request_signaled(request))
 			dma_fence_set_error(&request->fence, -EIO);
 
@@ -889,7 +888,7 @@ static void cancel_requests(struct intel_engine_cs *engine)
 
 	/* Remaining _unready_ requests will be nop'ed when submitted */
 
-	spin_unlock_irqrestore(&engine->timeline.lock, flags);
+	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
 static void i9xx_submit_request(struct i915_request *request)
@@ -976,20 +975,20 @@ i9xx_irq_disable(struct intel_engine_cs *engine)
 static void
 i8xx_irq_enable(struct intel_engine_cs *engine)
 {
-	struct drm_i915_private *dev_priv = engine->i915;
+	struct drm_i915_private *i915 = engine->i915;
 
-	dev_priv->irq_mask &= ~engine->irq_enable_mask;
-	I915_WRITE16(GEN2_IMR, dev_priv->irq_mask);
-	POSTING_READ16(RING_IMR(engine->mmio_base));
+	i915->irq_mask &= ~engine->irq_enable_mask;
+	intel_uncore_write16(&i915->uncore, GEN2_IMR, i915->irq_mask);
+	ENGINE_POSTING_READ16(engine, RING_IMR);
 }
 
 static void
 i8xx_irq_disable(struct intel_engine_cs *engine)
 {
-	struct drm_i915_private *dev_priv = engine->i915;
+	struct drm_i915_private *i915 = engine->i915;
 
-	dev_priv->irq_mask |= engine->irq_enable_mask;
-	I915_WRITE16(GEN2_IMR, dev_priv->irq_mask);
+	i915->irq_mask |= engine->irq_enable_mask;
+	intel_uncore_write16(&i915->uncore, GEN2_IMR, i915->irq_mask);
 }
 
 static int
@@ -1150,16 +1149,16 @@ i915_emit_bb_start(struct i915_request *rq,
 int intel_ring_pin(struct intel_ring *ring)
 {
 	struct i915_vma *vma = ring->vma;
-	enum i915_map_type map = i915_coherent_map_type(vma->vm->i915);
 	unsigned int flags;
 	void *addr;
 	int ret;
 
-	GEM_BUG_ON(ring->vaddr);
+	if (atomic_fetch_inc(&ring->pin_count))
+		return 0;
 
 	ret = i915_timeline_pin(ring->timeline);
 	if (ret)
-		return ret;
+		goto err_unpin;
 
 	flags = PIN_GLOBAL;
 
@@ -1173,26 +1172,31 @@ int intel_ring_pin(struct intel_ring *ring)
 
 	ret = i915_vma_pin(vma, 0, 0, flags);
 	if (unlikely(ret))
-		goto unpin_timeline;
+		goto err_timeline;
 
 	if (i915_vma_is_map_and_fenceable(vma))
 		addr = (void __force *)i915_vma_pin_iomap(vma);
 	else
-		addr = i915_gem_object_pin_map(vma->obj, map);
+		addr = i915_gem_object_pin_map(vma->obj,
+					       i915_coherent_map_type(vma->vm->i915));
 	if (IS_ERR(addr)) {
 		ret = PTR_ERR(addr);
-		goto unpin_ring;
+		goto err_ring;
 	}
 
 	vma->obj->pin_global++;
 
+	GEM_BUG_ON(ring->vaddr);
 	ring->vaddr = addr;
+
 	return 0;
 
-unpin_ring:
+err_ring:
 	i915_vma_unpin(vma);
-unpin_timeline:
+err_timeline:
 	i915_timeline_unpin(ring->timeline);
+err_unpin:
+	atomic_dec(&ring->pin_count);
 	return ret;
 }
 
@@ -1208,16 +1212,20 @@ void intel_ring_reset(struct intel_ring *ring, u32 tail)
 
 void intel_ring_unpin(struct intel_ring *ring)
 {
-	GEM_BUG_ON(!ring->vma);
-	GEM_BUG_ON(!ring->vaddr);
+	if (!atomic_dec_and_test(&ring->pin_count))
+		return;
 
 	/* Discard any unused bytes beyond that submitted to hw. */
 	intel_ring_reset(ring, ring->tail);
 
+	GEM_BUG_ON(!ring->vma);
+	i915_vma_unset_ggtt_write(ring->vma);
 	if (i915_vma_is_map_and_fenceable(ring->vma))
 		i915_vma_unpin_iomap(ring->vma);
 	else
 		i915_gem_object_unpin_map(ring->vma->obj);
+
+	GEM_BUG_ON(!ring->vaddr);
 	ring->vaddr = NULL;
 
 	ring->vma->obj->pin_global--;
@@ -1267,8 +1275,6 @@ intel_engine_create_ring(struct intel_engine_cs *engine,
 
 	GEM_BUG_ON(!is_power_of_2(size));
 	GEM_BUG_ON(RING_CTL_SIZE(size) & ~RING_NR_PAGES);
-	GEM_BUG_ON(timeline == &engine->timeline);
-	lockdep_assert_held(&engine->i915->drm.struct_mutex);
 
 	ring = kzalloc(sizeof(*ring), GFP_KERNEL);
 	if (!ring)
@@ -1818,7 +1824,7 @@ static noinline int wait_for_space(struct intel_ring *ring, unsigned int bytes)
 		return -ENOSPC;
 
 	timeout = i915_request_wait(target,
-				    I915_WAIT_INTERRUPTIBLE | I915_WAIT_LOCKED,
+				    I915_WAIT_INTERRUPTIBLE,
 				    MAX_SCHEDULE_TIMEOUT);
 	if (timeout < 0)
 		return timeout;
@@ -2084,10 +2090,11 @@ static void ring_destroy(struct intel_engine_cs *engine)
 	WARN_ON(INTEL_GEN(dev_priv) > 2 &&
 		(ENGINE_READ(engine, RING_MI_MODE) & MODE_IDLE) == 0);
 
+	intel_engine_cleanup_common(engine);
+
 	intel_ring_unpin(engine->buffer);
 	intel_ring_put(engine->buffer);
 
-	intel_engine_cleanup_common(engine);
 	kfree(engine);
 }
 

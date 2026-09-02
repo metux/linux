@@ -6,7 +6,6 @@
 
 #include "i915_drv.h"
 #include "i915_gem_object.h"
-#include "i915_scatterlist.h"
 
 void __i915_gem_object_set_pages(struct drm_i915_gem_object *obj,
 				 struct sg_table *pages,
@@ -56,23 +55,9 @@ void __i915_gem_object_set_pages(struct drm_i915_gem_object *obj,
 	}
 	GEM_BUG_ON(!HAS_PAGE_SIZES(i915, obj->mm.page_sizes.sg));
 
-	if (i915_gem_object_is_shrinkable(obj)) {
-		struct list_head *list;
-		unsigned long flags;
-
-		spin_lock_irqsave(&i915->mm.obj_lock, flags);
-
-		i915->mm.shrink_count++;
-		i915->mm.shrink_memory += obj->base.size;
-
-		if (obj->mm.madv != I915_MADV_WILLNEED)
-			list = &i915->mm.purge_list;
-		else
-			list = &i915->mm.shrink_list;
-		list_add_tail(&obj->mm.link, list);
-
-		spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
-	}
+	spin_lock(&i915->mm.obj_lock);
+	list_add(&obj->mm.link, &i915->mm.unbound_list);
+	spin_unlock(&i915->mm.obj_lock);
 }
 
 int ____i915_gem_object_get_pages(struct drm_i915_gem_object *obj)
@@ -160,17 +145,9 @@ __i915_gem_object_unset_pages(struct drm_i915_gem_object *obj)
 	if (IS_ERR_OR_NULL(pages))
 		return pages;
 
-	if (i915_gem_object_is_shrinkable(obj)) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&i915->mm.obj_lock, flags);
-
-		list_del(&obj->mm.link);
-		i915->mm.shrink_count--;
-		i915->mm.shrink_memory -= obj->base.size;
-
-		spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
-	}
+	spin_lock(&i915->mm.obj_lock);
+	list_del(&obj->mm.link);
+	spin_unlock(&i915->mm.obj_lock);
 
 	if (obj->mm.mapping) {
 		void *ptr;
@@ -199,7 +176,7 @@ int __i915_gem_object_put_pages(struct drm_i915_gem_object *obj,
 	if (i915_gem_object_has_pinned_pages(obj))
 		return -EBUSY;
 
-	GEM_BUG_ON(atomic_read(&obj->bind_count));
+	GEM_BUG_ON(obj->bind_count);
 
 	/* May be called by shrinker from within get_pages() (on another bo) */
 	mutex_lock_nested(&obj->mm.lock, subclass);
@@ -268,7 +245,7 @@ static void *i915_gem_object_map(const struct drm_i915_gem_object *obj,
 	switch (type) {
 	default:
 		MISSING_CASE(type);
-		/* fallthrough - to use PAGE_KERNEL anyway */
+		/* fallthrough to use PAGE_KERNEL anyway */
 	case I915_MAP_WB:
 		pgprot = PAGE_KERNEL;
 		break;

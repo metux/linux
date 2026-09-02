@@ -36,7 +36,6 @@
 #include <asm/mach/map.h>
 #include <asm/system_info.h>
 #include <asm/dma-contiguous.h>
-#include <xen/swiotlb-xen.h>
 
 #include "dma.h"
 #include "mm.h"
@@ -340,6 +339,18 @@ static void *__alloc_remap_buffer(struct device *dev, size_t size, gfp_t gfp,
 				 pgprot_t prot, struct page **ret_page,
 				 const void *caller, bool want_vaddr);
 
+static void *
+__dma_alloc_remap(struct page *page, size_t size, gfp_t gfp, pgprot_t prot,
+	const void *caller)
+{
+	return dma_common_contiguous_remap(page, size, prot, caller);
+}
+
+static void __dma_free_remap(void *cpu_addr, size_t size)
+{
+	dma_common_free_remap(cpu_addr, size);
+}
+
 #define DEFAULT_DMA_COHERENT_POOL_SIZE	SZ_256K
 static struct gen_pool *atomic_pool __ro_after_init;
 
@@ -495,7 +506,7 @@ static void *__alloc_remap_buffer(struct device *dev, size_t size, gfp_t gfp,
 	if (!want_vaddr)
 		goto out;
 
-	ptr = dma_common_contiguous_remap(page, size, prot, caller);
+	ptr = __dma_alloc_remap(page, size, gfp, prot, caller);
 	if (!ptr) {
 		__dma_free_buffer(page, size);
 		return NULL;
@@ -562,7 +573,7 @@ static void *__alloc_from_contiguous(struct device *dev, size_t size,
 		goto out;
 
 	if (PageHighMem(page)) {
-		ptr = dma_common_contiguous_remap(page, size, prot, caller);
+		ptr = __dma_alloc_remap(page, size, GFP_KERNEL, prot, caller);
 		if (!ptr) {
 			dma_release_from_contiguous(dev, page, count);
 			return NULL;
@@ -582,7 +593,7 @@ static void __free_from_contiguous(struct device *dev, struct page *page,
 {
 	if (want_vaddr) {
 		if (PageHighMem(page))
-			dma_common_free_remap(cpu_addr, size);
+			__dma_free_remap(cpu_addr, size);
 		else
 			__dma_remap(page, size, PAGE_KERNEL);
 	}
@@ -674,7 +685,7 @@ static void *remap_allocator_alloc(struct arm_dma_alloc_args *args,
 static void remap_allocator_free(struct arm_dma_free_args *args)
 {
 	if (args->want_vaddr)
-		dma_common_free_remap(args->cpu_addr, args->size);
+		__dma_free_remap(args->cpu_addr, args->size);
 
 	__dma_free_buffer(args->page, args->size);
 }
@@ -1106,6 +1117,10 @@ static const struct dma_map_ops *arm_get_dma_map_ops(bool coherent)
 	 * 32-bit DMA.
 	 * Use the generic dma-direct / swiotlb ops code in that case, as that
 	 * handles bounce buffering for us.
+	 *
+	 * Note: this checks CONFIG_ARM_LPAE instead of CONFIG_SWIOTLB as the
+	 * latter is also selected by the Xen code, but that code for now relies
+	 * on non-NULL dev_dma_ops.  To be cleaned up later.
 	 */
 	if (IS_ENABLED(CONFIG_ARM_LPAE))
 		return NULL;
@@ -1343,6 +1358,16 @@ static int __iommu_free_buffer(struct device *dev, struct page **pages,
 }
 
 /*
+ * Create a CPU mapping for a specified pages
+ */
+static void *
+__iommu_alloc_remap(struct page **pages, size_t size, gfp_t gfp, pgprot_t prot,
+		    const void *caller)
+{
+	return dma_common_pages_remap(pages, size, prot, caller);
+}
+
+/*
  * Create a mapping in device IO address space for specified pages
  */
 static dma_addr_t
@@ -1414,13 +1439,18 @@ static struct page **__atomic_get_pages(void *addr)
 
 static struct page **__iommu_get_pages(void *cpu_addr, unsigned long attrs)
 {
+	struct vm_struct *area;
+
 	if (__in_atomic_pool(cpu_addr, PAGE_SIZE))
 		return __atomic_get_pages(cpu_addr);
 
 	if (attrs & DMA_ATTR_NO_KERNEL_MAPPING)
 		return cpu_addr;
 
-	return dma_common_find_pages(cpu_addr);
+	area = find_vm_area(cpu_addr);
+	if (area && (area->flags & VM_DMA_COHERENT))
+		return area->pages;
+	return NULL;
 }
 
 static void *__iommu_alloc_simple(struct device *dev, size_t size, gfp_t gfp,
@@ -1493,7 +1523,7 @@ static void *__arm_iommu_alloc_attrs(struct device *dev, size_t size,
 	if (attrs & DMA_ATTR_NO_KERNEL_MAPPING)
 		return pages;
 
-	addr = dma_common_pages_remap(pages, size, prot,
+	addr = __iommu_alloc_remap(pages, size, gfp, prot,
 				   __builtin_return_address(0));
 	if (!addr)
 		goto err_mapping;
@@ -2319,8 +2349,10 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 	set_dma_ops(dev, dma_ops);
 
 #ifdef CONFIG_XEN
-	if (xen_initial_domain())
-		dev->dma_ops = &xen_swiotlb_dma_ops;
+	if (xen_initial_domain()) {
+		dev->archdata.dev_dma_ops = dev->dma_ops;
+		dev->dma_ops = xen_dma_ops;
+	}
 #endif
 	dev->archdata.dma_ops_setup = true;
 }

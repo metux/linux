@@ -10,7 +10,6 @@
 
 #include "i915_drv.h"
 #include "i915_gem_object.h"
-#include "i915_scatterlist.h"
 
 static struct drm_i915_gem_object *dma_buf_to_obj(struct dma_buf *buf)
 {
@@ -151,6 +150,7 @@ static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *
 static int i915_gem_begin_cpu_access(struct dma_buf *dma_buf, enum dma_data_direction direction)
 {
 	struct drm_i915_gem_object *obj = dma_buf_to_obj(dma_buf);
+	struct drm_device *dev = obj->base.dev;
 	bool write = (direction == DMA_BIDIRECTIONAL || direction == DMA_TO_DEVICE);
 	int err;
 
@@ -158,12 +158,12 @@ static int i915_gem_begin_cpu_access(struct dma_buf *dma_buf, enum dma_data_dire
 	if (err)
 		return err;
 
-	err = i915_gem_object_lock_interruptible(obj);
+	err = i915_mutex_lock_interruptible(dev);
 	if (err)
 		goto out;
 
 	err = i915_gem_object_set_to_cpu_domain(obj, write);
-	i915_gem_object_unlock(obj);
+	mutex_unlock(&dev->struct_mutex);
 
 out:
 	i915_gem_object_unpin_pages(obj);
@@ -173,18 +173,19 @@ out:
 static int i915_gem_end_cpu_access(struct dma_buf *dma_buf, enum dma_data_direction direction)
 {
 	struct drm_i915_gem_object *obj = dma_buf_to_obj(dma_buf);
+	struct drm_device *dev = obj->base.dev;
 	int err;
 
 	err = i915_gem_object_pin_pages(obj);
 	if (err)
 		return err;
 
-	err = i915_gem_object_lock_interruptible(obj);
+	err = i915_mutex_lock_interruptible(dev);
 	if (err)
 		goto out;
 
 	err = i915_gem_object_set_to_gtt_domain(obj, false);
-	i915_gem_object_unlock(obj);
+	mutex_unlock(&dev->struct_mutex);
 
 out:
 	i915_gem_object_unpin_pages(obj);
@@ -214,7 +215,7 @@ struct dma_buf *i915_gem_prime_export(struct drm_device *dev,
 	exp_info.size = gem_obj->size;
 	exp_info.flags = flags;
 	exp_info.priv = gem_obj;
-	exp_info.resv = obj->base.resv;
+	exp_info.resv = obj->resv;
 
 	if (obj->ops->dmabuf_export) {
 		int ret = obj->ops->dmabuf_export(obj);
@@ -290,7 +291,7 @@ struct drm_gem_object *i915_gem_prime_import(struct drm_device *dev,
 	drm_gem_private_object_init(dev, &obj->base, dma_buf->size);
 	i915_gem_object_init(obj, &i915_gem_object_dmabuf_ops);
 	obj->base.import_attach = attach;
-	obj->base.resv = dma_buf->resv;
+	obj->resv = dma_buf->resv;
 
 	/* We use GTT as shorthand for a coherent domain, one that is
 	 * neither in the GPU cache nor in the CPU cache, where all

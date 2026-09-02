@@ -14,7 +14,6 @@
 
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"
-#include "i915_scatterlist.h"
 #include "i915_trace.h"
 #include "intel_drv.h"
 
@@ -768,14 +767,14 @@ i915_gem_userptr_ioctl(struct drm_device *dev,
 		return -EFAULT;
 
 	if (args->flags & I915_USERPTR_READ_ONLY) {
-		struct i915_address_space *vm;
+		struct i915_hw_ppgtt *ppgtt;
 
 		/*
 		 * On almost all of the older hw, we cannot tell the GPU that
 		 * a page is readonly.
 		 */
-		vm = dev_priv->kernel_context->vm;
-		if (!vm || !vm->has_read_only)
+		ppgtt = dev_priv->kernel_context->ppgtt;
+		if (!ppgtt || !ppgtt->vm.has_read_only)
 			return -ENODEV;
 	}
 

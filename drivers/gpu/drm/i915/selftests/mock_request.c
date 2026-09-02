@@ -22,6 +22,7 @@
  *
  */
 
+#include "gem/selftests/igt_gem_utils.h"
 #include "gt/mock_engine.h"
 
 #include "mock_request.h"

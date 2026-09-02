@@ -46,7 +46,6 @@
 #include "gem/i915_gem_ioctls.h"
 #include "gem/i915_gem_pm.h"
 #include "gem/i915_gemfs.h"
-#include "gt/intel_engine_pm.h"
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_pm.h"
 #include "gt/intel_mocs.h"
@@ -1637,13 +1636,13 @@ i915_gem_wait_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	return ret;
 }
 
-static int wait_for_engines(struct drm_i915_private *i915)
+static int wait_for_engines(struct intel_gt *gt)
 {
-	if (wait_for(intel_engines_are_idle(i915), I915_IDLE_ENGINES_TIMEOUT)) {
-		dev_err(i915->drm.dev,
+	if (wait_for(intel_engines_are_idle(gt), I915_IDLE_ENGINES_TIMEOUT)) {
+		dev_err(gt->i915->drm.dev,
 			"Failed to idle engines, declaring wedged!\n");
 		GEM_TRACE_DUMP();
-		i915_gem_set_wedged(i915);
+		intel_gt_set_wedged(gt);
 		return -EIO;
 	}
 
@@ -1654,7 +1653,7 @@ static long
 wait_for_timelines(struct drm_i915_private *i915,
 		   unsigned int flags, long timeout)
 {
-	struct i915_gt_timelines *gt = &i915->gt.timelines;
+	struct intel_gt_timelines *gt = &i915->gt.timelines;
 	struct intel_timeline *tl;
 
 	mutex_lock(&gt->mutex);
@@ -1714,7 +1713,7 @@ int i915_gem_wait_for_idle(struct drm_i915_private *i915,
 
 		lockdep_assert_held(&i915->drm.struct_mutex);
 
-		err = wait_for_engines(i915);
+		err = wait_for_engines(&i915->gt);
 		if (err)
 			return err;
 
@@ -1892,8 +1891,8 @@ void i915_gem_sanitize(struct drm_i915_private *i915)
 	 * back to defaults, recovering from whatever wedged state we left it
 	 * in and so worth trying to use the device once more.
 	 */
-	if (i915_terminally_wedged(i915))
-		i915_gem_unset_wedged(i915);
+	if (intel_gt_is_wedged(&i915->gt))
+		intel_gt_unset_wedged(&i915->gt);
 
 	/*
 	 * If we inherit context state from the BIOS or earlier occupants
@@ -1909,53 +1908,66 @@ void i915_gem_sanitize(struct drm_i915_private *i915)
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
-static void init_unused_ring(struct drm_i915_private *dev_priv, u32 base)
+static void init_unused_ring(struct intel_gt *gt, u32 base)
 {
-	I915_WRITE(RING_CTL(base), 0);
-	I915_WRITE(RING_HEAD(base), 0);
-	I915_WRITE(RING_TAIL(base), 0);
-	I915_WRITE(RING_START(base), 0);
+	struct intel_uncore *uncore = gt->uncore;
+
+	intel_uncore_write(uncore, RING_CTL(base), 0);
+	intel_uncore_write(uncore, RING_HEAD(base), 0);
+	intel_uncore_write(uncore, RING_TAIL(base), 0);
+	intel_uncore_write(uncore, RING_START(base), 0);
 }
 
-static void init_unused_rings(struct drm_i915_private *dev_priv)
+static void init_unused_rings(struct intel_gt *gt)
 {
-	if (IS_I830(dev_priv)) {
-		init_unused_ring(dev_priv, PRB1_BASE);
-		init_unused_ring(dev_priv, SRB0_BASE);
-		init_unused_ring(dev_priv, SRB1_BASE);
-		init_unused_ring(dev_priv, SRB2_BASE);
-		init_unused_ring(dev_priv, SRB3_BASE);
-	} else if (IS_GEN(dev_priv, 2)) {
-		init_unused_ring(dev_priv, SRB0_BASE);
-		init_unused_ring(dev_priv, SRB1_BASE);
-	} else if (IS_GEN(dev_priv, 3)) {
-		init_unused_ring(dev_priv, PRB1_BASE);
-		init_unused_ring(dev_priv, PRB2_BASE);
+	struct drm_i915_private *i915 = gt->i915;
+
+	if (IS_I830(i915)) {
+		init_unused_ring(gt, PRB1_BASE);
+		init_unused_ring(gt, SRB0_BASE);
+		init_unused_ring(gt, SRB1_BASE);
+		init_unused_ring(gt, SRB2_BASE);
+		init_unused_ring(gt, SRB3_BASE);
+	} else if (IS_GEN(i915, 2)) {
+		init_unused_ring(gt, SRB0_BASE);
+		init_unused_ring(gt, SRB1_BASE);
+	} else if (IS_GEN(i915, 3)) {
+		init_unused_ring(gt, PRB1_BASE);
+		init_unused_ring(gt, PRB2_BASE);
 	}
 }
 
-int i915_gem_init_hw(struct drm_i915_private *dev_priv)
+int i915_gem_init_hw(struct drm_i915_private *i915)
 {
+	struct intel_uncore *uncore = &i915->uncore;
+	struct intel_gt *gt = &i915->gt;
 	int ret;
 
-	dev_priv->gt.last_init_time = ktime_get();
+	BUG_ON(!i915->kernel_context);
+	ret = intel_gt_terminally_wedged(gt);
+	if (ret)
+		return ret;
+
+	gt->last_init_time = ktime_get();
 
 	/* Double layer security blanket, see i915_gem_init() */
-	intel_uncore_forcewake_get(&dev_priv->uncore, FORCEWAKE_ALL);
+	intel_uncore_forcewake_get(uncore, FORCEWAKE_ALL);
 
-	if (HAS_EDRAM(dev_priv) && INTEL_GEN(dev_priv) < 9)
-		I915_WRITE(HSW_IDICR, I915_READ(HSW_IDICR) | IDIHASHMSK(0xf));
+	if (HAS_EDRAM(i915) && INTEL_GEN(i915) < 9)
+		intel_uncore_rmw(uncore, HSW_IDICR, 0, IDIHASHMSK(0xf));
 
-	if (IS_HASWELL(dev_priv))
-		I915_WRITE(MI_PREDICATE_RESULT_2, IS_HSW_GT3(dev_priv) ?
-			   LOWER_SLICE_ENABLED : LOWER_SLICE_DISABLED);
+	if (IS_HASWELL(i915))
+		intel_uncore_write(uncore,
+				   MI_PREDICATE_RESULT_2,
+				   IS_HSW_GT3(i915) ?
+				   LOWER_SLICE_ENABLED : LOWER_SLICE_DISABLED);
 
 	/* Apply the GT workarounds... */
-	intel_gt_apply_workarounds(dev_priv);
+	intel_gt_apply_workarounds(gt);
 	/* ...and determine whether they are sticking. */
-	intel_gt_verify_workarounds(dev_priv, "init");
+	intel_gt_verify_workarounds(gt, "init");
 
-	intel_gt_init_swizzling(&dev_priv->gt);
+	intel_gt_init_swizzling(gt);
 
 	/*
 	 * At least 830 can leave some of the unused rings
@@ -1963,49 +1975,33 @@ int i915_gem_init_hw(struct drm_i915_private *dev_priv)
 	 * will prevent c3 entry. Makes sure all unused rings
 	 * are totally idle.
 	 */
-	init_unused_rings(dev_priv);
+	init_unused_rings(gt);
 
-	BUG_ON(!dev_priv->kernel_context);
-	ret = i915_terminally_wedged(dev_priv);
-	if (ret)
-		goto out;
-
-	ret = i915_ppgtt_init_hw(dev_priv);
+	ret = i915_ppgtt_init_hw(gt);
 	if (ret) {
 		DRM_ERROR("Enabling PPGTT failed (%d)\n", ret);
 		goto out;
 	}
 
-	ret = intel_wopcm_init_hw(&dev_priv->wopcm);
+	ret = intel_wopcm_init_hw(&i915->wopcm, gt);
 	if (ret) {
 		DRM_ERROR("Enabling WOPCM failed (%d)\n", ret);
 		goto out;
 	}
 
 	/* We can't enable contexts until all firmware is loaded */
-	ret = intel_uc_init_hw(dev_priv);
+	ret = intel_uc_init_hw(i915);
 	if (ret) {
 		DRM_ERROR("Enabling uc failed (%d)\n", ret);
 		goto out;
 	}
 
-	intel_mocs_init_l3cc_table(dev_priv);
+	intel_mocs_init_l3cc_table(gt);
 
-	/* Only when the HW is re-initialised, can we replay the requests */
-	ret = intel_engines_resume(dev_priv);
-	if (ret)
-		goto cleanup_uc;
+	intel_engines_set_scheduler_caps(i915);
 
-	intel_uncore_forcewake_put(&dev_priv->uncore, FORCEWAKE_ALL);
-
-	intel_engines_set_scheduler_caps(dev_priv);
-	return 0;
-
-cleanup_uc:
-	intel_uc_fini_hw(dev_priv);
 out:
-	intel_uncore_forcewake_put(&dev_priv->uncore, FORCEWAKE_ALL);
-
+	intel_uncore_forcewake_put(uncore, FORCEWAKE_ALL);
 	return ret;
 }
 
@@ -2130,46 +2126,19 @@ err_active:
 	 * and ready to be torn-down. The quickest way we can accomplish
 	 * this is by declaring ourselves wedged.
 	 */
-	i915_gem_set_wedged(i915);
+	intel_gt_set_wedged(&i915->gt);
 	goto out_ctx;
 }
 
 static int
 i915_gem_init_scratch(struct drm_i915_private *i915, unsigned int size)
 {
-	struct drm_i915_gem_object *obj;
-	struct i915_vma *vma;
-	int ret;
-
-	obj = i915_gem_object_create_stolen(i915, size);
-	if (!obj)
-		obj = i915_gem_object_create_internal(i915, size);
-	if (IS_ERR(obj)) {
-		DRM_ERROR("Failed to allocate scratch page\n");
-		return PTR_ERR(obj);
-	}
-
-	vma = i915_vma_instance(obj, &i915->ggtt.vm, NULL);
-	if (IS_ERR(vma)) {
-		ret = PTR_ERR(vma);
-		goto err_unref;
-	}
-
-	ret = i915_vma_pin(vma, 0, 0, PIN_GLOBAL | PIN_HIGH);
-	if (ret)
-		goto err_unref;
-
-	i915->gt.scratch = vma;
-	return 0;
-
-err_unref:
-	i915_gem_object_put(obj);
-	return ret;
+	return intel_gt_init_scratch(&i915->gt, size);
 }
 
 static void i915_gem_fini_scratch(struct drm_i915_private *i915)
 {
-	i915_vma_unpin_and_release(&i915->gt.scratch, 0);
+	intel_gt_fini_scratch(&i915->gt);
 }
 
 static int intel_engines_verify_workarounds(struct drm_i915_private *i915)
@@ -2223,7 +2192,7 @@ int i915_gem_init(struct drm_i915_private *dev_priv)
 	mutex_lock(&dev_priv->drm.struct_mutex);
 	intel_uncore_forcewake_get(&dev_priv->uncore, FORCEWAKE_ALL);
 
-	ret = i915_gem_init_ggtt(dev_priv);
+	ret = i915_init_ggtt(dev_priv);
 	if (ret) {
 		GEM_BUG_ON(ret == -EIO);
 		goto err_unlock;
@@ -2264,6 +2233,11 @@ int i915_gem_init(struct drm_i915_private *dev_priv)
 	if (ret)
 		goto err_uc_init;
 
+	/* Only when the HW is re-initialised, can we replay the requests */
+	ret = intel_gt_resume(&dev_priv->gt);
+	if (ret)
+		goto err_init_hw;
+
 	/*
 	 * Despite its name intel_init_clock_gating applies both display
 	 * clock gating workarounds; GT mmio workarounds and the occasional
@@ -2277,20 +2251,20 @@ int i915_gem_init(struct drm_i915_private *dev_priv)
 
 	ret = intel_engines_verify_workarounds(dev_priv);
 	if (ret)
-		goto err_init_hw;
+		goto err_gt;
 
 	ret = __intel_engines_record_defaults(dev_priv);
 	if (ret)
-		goto err_init_hw;
+		goto err_gt;
 
-	if (i915_inject_load_failure()) {
+	if (i915_inject_probe_failure()) {
 		ret = -ENODEV;
-		goto err_init_hw;
+		goto err_gt;
 	}
 
-	if (i915_inject_load_failure()) {
+	if (i915_inject_probe_failure()) {
 		ret = -EIO;
-		goto err_init_hw;
+		goto err_gt;
 	}
 
 	intel_uncore_forcewake_put(&dev_priv->uncore, FORCEWAKE_ALL);
@@ -2304,16 +2278,17 @@ int i915_gem_init(struct drm_i915_private *dev_priv)
 	 * HW as irrevisibly wedged, but keep enough state around that the
 	 * driver doesn't explode during runtime.
 	 */
-err_init_hw:
+err_gt:
 	mutex_unlock(&dev_priv->drm.struct_mutex);
 
-	i915_gem_set_wedged(dev_priv);
+	intel_gt_set_wedged(&dev_priv->gt);
 	i915_gem_suspend(dev_priv);
 	i915_gem_suspend_late(dev_priv);
 
 	i915_gem_drain_workqueue(dev_priv);
 
 	mutex_lock(&dev_priv->drm.struct_mutex);
+err_init_hw:
 	intel_uc_fini_hw(dev_priv);
 err_uc_init:
 	intel_uc_fini(dev_priv);
@@ -2348,10 +2323,10 @@ err_uc_misc:
 		 * wedged. But we only want to do this where the GPU is angry,
 		 * for all other failure, such as an allocation failure, bail.
 		 */
-		if (!i915_reset_failed(dev_priv)) {
-			i915_load_error(dev_priv,
-					"Failed to initialize GPU, declaring it wedged!\n");
-			i915_gem_set_wedged(dev_priv);
+		if (!intel_gt_is_wedged(&dev_priv->gt)) {
+			i915_probe_error(dev_priv,
+					 "Failed to initialize GPU, declaring it wedged!\n");
+			intel_gt_set_wedged(&dev_priv->gt);
 		}
 
 		/* Minimal basic recovery for KMS */
@@ -2367,7 +2342,7 @@ err_uc_misc:
 	return ret;
 }
 
-void i915_gem_fini_hw(struct drm_i915_private *dev_priv)
+void i915_gem_driver_remove(struct drm_i915_private *dev_priv)
 {
 	GEM_BUG_ON(dev_priv->gt.awake);
 
@@ -2446,11 +2421,6 @@ int i915_gem_init_early(struct drm_i915_private *dev_priv)
 	i915_gem_init__mm(dev_priv);
 	i915_gem_init__pm(dev_priv);
 
-	init_waitqueue_head(&dev_priv->gpu_error.wait_queue);
-	init_waitqueue_head(&dev_priv->gpu_error.reset_queue);
-	mutex_init(&dev_priv->gpu_error.wedge_mutex);
-	init_srcu_struct(&dev_priv->gpu_error.reset_backoff_srcu);
-
 	atomic_set(&dev_priv->mm.bsd_engine_dispatch_index, 0);
 
 	spin_lock_init(&dev_priv->fb_tracking.lock);
@@ -2476,7 +2446,7 @@ void i915_gem_cleanup_early(struct drm_i915_private *dev_priv)
 	GEM_BUG_ON(atomic_read(&dev_priv->mm.free_count));
 	WARN_ON(dev_priv->mm.shrink_count);
 
-	cleanup_srcu_struct(&dev_priv->gpu_error.reset_backoff_srcu);
+	intel_gt_cleanup_early(&dev_priv->gt);
 
 	kmem_cache_destroy(dev_priv->luts);
 	kmem_cache_destroy(dev_priv->vmas);

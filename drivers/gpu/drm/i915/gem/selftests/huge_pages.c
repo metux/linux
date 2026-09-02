@@ -1422,6 +1422,9 @@ static int igt_ppgtt_pin_update(void *arg)
 	struct drm_i915_gem_object *obj;
 	struct i915_vma *vma;
 	unsigned int flags = PIN_USER | PIN_OFFSET_FIXED;
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
+	unsigned int n;
 	int first, last;
 	int err;
 
@@ -1519,11 +1522,20 @@ static int igt_ppgtt_pin_update(void *arg)
 	 * land in the now stale 2M page.
 	 */
 
-	err = gpu_write(vma, ctx, dev_priv->engine[RCS0], 0, 0xdeadbeaf);
-	if (err)
-		goto out_unpin;
+	n = 0;
+	for_each_engine(engine, dev_priv, id) {
+		if (!intel_engine_can_store_dword(engine))
+			continue;
 
-	err = cpu_check(obj, 0, 0xdeadbeaf);
+		err = gpu_write(vma, ctx, engine, n++, 0xdeadbeaf);
+		if (err)
+			goto out_unpin;
+	}
+	while (n--) {
+		err = cpu_check(obj, n, 0xdeadbeaf);
+		if (err)
+			goto out_unpin;
+	}
 
 out_unpin:
 	i915_vma_unpin(vma);
@@ -1599,8 +1611,11 @@ static int igt_shrink_thp(void *arg)
 	struct drm_i915_private *i915 = ctx->i915;
 	struct i915_address_space *vm = ctx->vm ?: &i915->ggtt.vm;
 	struct drm_i915_gem_object *obj;
+	struct intel_engine_cs *engine;
+	enum intel_engine_id id;
 	struct i915_vma *vma;
 	unsigned int flags = PIN_USER;
+	unsigned int n;
 	int err;
 
 	/*
@@ -1636,9 +1651,15 @@ static int igt_shrink_thp(void *arg)
 	if (err)
 		goto out_unpin;
 
-	err = gpu_write(vma, ctx, i915->engine[RCS0], 0, 0xdeadbeaf);
-	if (err)
-		goto out_unpin;
+	n = 0;
+	for_each_engine(engine, i915, id) {
+		if (!intel_engine_can_store_dword(engine))
+			continue;
+
+		err = gpu_write(vma, ctx, engine, n++, 0xdeadbeaf);
+		if (err)
+			goto out_unpin;
+	}
 
 	i915_vma_unpin(vma);
 
@@ -1663,7 +1684,12 @@ static int igt_shrink_thp(void *arg)
 	if (err)
 		goto out_close;
 
-	err = cpu_check(obj, 0, 0xdeadbeaf);
+	while (n--) {
+		err = cpu_check(obj, n, 0xdeadbeaf);
+		if (err)
+			goto out_unpin;
+	}
+
 
 out_unpin:
 	i915_vma_unpin(vma);
@@ -1727,7 +1753,7 @@ out_unlock:
 	return err;
 }
 
-int i915_gem_huge_page_live_selftests(struct drm_i915_private *dev_priv)
+int i915_gem_huge_page_live_selftests(struct drm_i915_private *i915)
 {
 	static const struct i915_subtest tests[] = {
 		SUBTEST(igt_shrink_thp),
@@ -1742,22 +1768,22 @@ int i915_gem_huge_page_live_selftests(struct drm_i915_private *dev_priv)
 	intel_wakeref_t wakeref;
 	int err;
 
-	if (!HAS_PPGTT(dev_priv)) {
+	if (!HAS_PPGTT(i915)) {
 		pr_info("PPGTT not supported, skipping live-selftests\n");
 		return 0;
 	}
 
-	if (i915_terminally_wedged(dev_priv))
+	if (intel_gt_is_wedged(&i915->gt))
 		return 0;
 
-	file = mock_file(dev_priv);
+	file = mock_file(i915);
 	if (IS_ERR(file))
 		return PTR_ERR(file);
 
-	mutex_lock(&dev_priv->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
+	mutex_lock(&i915->drm.struct_mutex);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
-	ctx = live_context(dev_priv, file);
+	ctx = live_context(i915, file);
 	if (IS_ERR(ctx)) {
 		err = PTR_ERR(ctx);
 		goto out_unlock;
@@ -1769,10 +1795,10 @@ int i915_gem_huge_page_live_selftests(struct drm_i915_private *dev_priv)
 	err = i915_subtests(tests, ctx);
 
 out_unlock:
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
-	mutex_unlock(&dev_priv->drm.struct_mutex);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
+	mutex_unlock(&i915->drm.struct_mutex);
 
-	mock_file_free(dev_priv, file);
+	mock_file_free(i915, file);
 
 	return err;
 }

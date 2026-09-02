@@ -426,7 +426,7 @@ int intel_engines_init_mmio(struct drm_i915_private *i915)
 	WARN_ON(engine_mask &
 		GENMASK(BITS_PER_TYPE(mask) - 1, I915_NUM_ENGINES));
 
-	if (i915_inject_load_failure())
+	if (i915_inject_probe_failure())
 		return -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(intel_engines); i++) {
@@ -447,12 +447,6 @@ int intel_engines_init_mmio(struct drm_i915_private *i915)
 	 */
 	if (WARN_ON(mask != engine_mask))
 		device_info->engine_mask = mask;
-
-	/* We always presume we have at least RCS available for later probing */
-	if (WARN_ON(!HAS_ENGINE(i915, RCS0))) {
-		err = -ENODEV;
-		goto cleanup;
-	}
 
 	RUNTIME_INFO(i915)->num_engines = hweight32(mask);
 
@@ -636,6 +630,10 @@ static int intel_engine_setup_common(struct intel_engine_cs *engine)
 	engine->sseu =
 		intel_sseu_from_device_info(&RUNTIME_INFO(engine->i915)->sseu);
 
+	intel_engine_init_workarounds(engine);
+	intel_engine_init_whitelist(engine);
+	intel_engine_init_ctx_wa(engine);
+
 	return 0;
 }
 
@@ -688,9 +686,10 @@ void intel_engines_set_scheduler_caps(struct drm_i915_private *i915)
 		u8 engine;
 		u8 sched;
 	} map[] = {
-#define MAP(x, y) { ilog2(I915_ENGINE_HAS_##x), ilog2(I915_SCHEDULER_CAP_##y) }
-		MAP(PREEMPTION, PREEMPTION),
-		MAP(SEMAPHORES, SEMAPHORES),
+#define MAP(x, y) { ilog2(I915_ENGINE_##x), ilog2(I915_SCHEDULER_CAP_##y) }
+		MAP(HAS_PREEMPTION, PREEMPTION),
+		MAP(HAS_SEMAPHORES, SEMAPHORES),
+		MAP(SUPPORTS_STATS, ENGINE_BUSY_STATS),
 #undef MAP
 	};
 	struct intel_engine_cs *engine;
@@ -734,7 +733,7 @@ static int measure_breadcrumb_dw(struct intel_engine_cs *engine)
 	struct measure_breadcrumb *frame;
 	int dw = -ENOMEM;
 
-	GEM_BUG_ON(!engine->i915->gt.scratch);
+	GEM_BUG_ON(!engine->gt->scratch);
 
 	frame = kzalloc(sizeof(*frame), GFP_KERNEL);
 	if (!frame)
@@ -1146,17 +1145,17 @@ static bool ring_is_idle(struct intel_engine_cs *engine)
 bool intel_engine_is_idle(struct intel_engine_cs *engine)
 {
 	/* More white lies, if wedged, hw state is inconsistent */
-	if (i915_reset_failed(engine->i915))
+	if (intel_gt_is_wedged(engine->gt))
 		return true;
 
-	if (!intel_wakeref_active(&engine->wakeref))
+	if (!intel_engine_pm_is_awake(engine))
 		return true;
 
 	/* Waiting to drain ELSP? */
 	if (execlists_active(&engine->execlists)) {
 		struct tasklet_struct *t = &engine->execlists.tasklet;
 
-		synchronize_hardirq(engine->i915->drm.irq);
+		synchronize_hardirq(engine->i915->drm.pdev->irq);
 
 		local_bh_disable();
 		if (tasklet_trylock(t)) {
@@ -1182,7 +1181,7 @@ bool intel_engine_is_idle(struct intel_engine_cs *engine)
 	return ring_is_idle(engine);
 }
 
-bool intel_engines_are_idle(struct drm_i915_private *i915)
+bool intel_engines_are_idle(struct intel_gt *gt)
 {
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
@@ -1191,14 +1190,14 @@ bool intel_engines_are_idle(struct drm_i915_private *i915)
 	 * If the driver is wedged, HW state may be very inconsistent and
 	 * report that it is still busy, even though we have stopped using it.
 	 */
-	if (i915_reset_failed(i915))
+	if (intel_gt_is_wedged(gt))
 		return true;
 
 	/* Already parked (and passed an idleness test); must still be idle */
-	if (!READ_ONCE(i915->gt.awake))
+	if (!READ_ONCE(gt->awake))
 		return true;
 
-	for_each_engine(engine, i915, id) {
+	for_each_engine(engine, gt->i915, id) {
 		if (!intel_engine_is_idle(engine))
 			return false;
 	}
@@ -1206,12 +1205,12 @@ bool intel_engines_are_idle(struct drm_i915_private *i915)
 	return true;
 }
 
-void intel_engines_reset_default_submission(struct drm_i915_private *i915)
+void intel_engines_reset_default_submission(struct intel_gt *gt)
 {
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 
-	for_each_engine(engine, i915, id)
+	for_each_engine(engine, gt->i915, id)
 		engine->set_default_submission(engine);
 }
 
@@ -1490,7 +1489,7 @@ void intel_engine_dump(struct intel_engine_cs *engine,
 		va_end(ap);
 	}
 
-	if (i915_reset_failed(engine->i915))
+	if (intel_gt_is_wedged(engine->gt))
 		drm_printf(m, "*** WEDGED ***\n");
 
 	drm_printf(m, "\tAwake? %d\n", atomic_read(&engine->wakeref.count));

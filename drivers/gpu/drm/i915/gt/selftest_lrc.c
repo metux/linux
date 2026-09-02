@@ -33,7 +33,7 @@ static int live_sanitycheck(void *arg)
 		return 0;
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (igt_spinner_init(&spin, i915))
 		goto err_unlock;
@@ -73,8 +73,7 @@ err_ctx:
 err_spin:
 	igt_spinner_fini(&spin);
 err_unlock:
-	igt_flush_test(i915, I915_WAIT_LOCKED);
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 }
@@ -290,8 +289,6 @@ err_map:
 err_obj:
 	i915_gem_object_put(obj);
 err_unlock:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
-		err = -EIO;
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 
@@ -316,7 +313,7 @@ static int live_busywait_preempt(void *arg)
 	 */
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	ctx_hi = kernel_context(i915);
 	if (!ctx_hi)
@@ -411,7 +408,7 @@ static int live_busywait_preempt(void *arg)
 		}
 
 		/* Low priority request should be busywaiting now */
-		if (i915_request_wait(lo, I915_WAIT_LOCKED, 1) != -ETIME) {
+		if (i915_request_wait(lo, 0, 1) != -ETIME) {
 			pr_err("%s: Busywaiting request did not!\n",
 			       engine->name);
 			err = -EIO;
@@ -439,7 +436,7 @@ static int live_busywait_preempt(void *arg)
 		intel_ring_advance(hi, cs);
 		i915_request_add(hi);
 
-		if (i915_request_wait(lo, I915_WAIT_LOCKED, HZ / 5) < 0) {
+		if (i915_request_wait(lo, 0, HZ / 5) < 0) {
 			struct drm_printer p = drm_info_printer(i915->drm.dev);
 
 			pr_err("%s: Failed to preempt semaphore busywait!\n",
@@ -472,9 +469,7 @@ err_ctx_lo:
 err_ctx_hi:
 	kernel_context_close(ctx_hi);
 err_unlock:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
-		err = -EIO;
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 }
@@ -496,7 +491,7 @@ static int live_preempt(void *arg)
 		pr_err("Logical preemption supported, but not exposed\n");
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (igt_spinner_init(&spin_hi, i915))
 		goto err_unlock;
@@ -580,8 +575,7 @@ err_spin_lo:
 err_spin_hi:
 	igt_spinner_fini(&spin_hi);
 err_unlock:
-	igt_flush_test(i915, I915_WAIT_LOCKED);
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 }
@@ -601,7 +595,7 @@ static int live_late_preempt(void *arg)
 		return 0;
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (igt_spinner_init(&spin_hi, i915))
 		goto err_unlock;
@@ -687,8 +681,7 @@ err_spin_lo:
 err_spin_hi:
 	igt_spinner_fini(&spin_hi);
 err_unlock:
-	igt_flush_test(i915, I915_WAIT_LOCKED);
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 
@@ -754,7 +747,7 @@ static int live_suppress_self_preempt(void *arg)
 		return 0; /* presume black blox */
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (preempt_client_init(i915, &a))
 		goto err_unlock;
@@ -826,9 +819,7 @@ err_client_b:
 err_client_a:
 	preempt_client_fini(&a);
 err_unlock:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
-		err = -EIO;
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 
@@ -905,7 +896,7 @@ static int live_suppress_wait_preempt(void *arg)
 		return 0;
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (preempt_client_init(i915, &client[0])) /* ELSP[0] */
 		goto err_unlock;
@@ -961,7 +952,6 @@ static int live_suppress_wait_preempt(void *arg)
 			GEM_BUG_ON(!i915_request_started(rq[0]));
 
 			if (i915_request_wait(rq[depth],
-					      I915_WAIT_LOCKED |
 					      I915_WAIT_PRIORITY,
 					      1) != -ETIME) {
 				pr_err("%s: Waiter depth:%d completed!\n",
@@ -996,9 +986,7 @@ err_client_1:
 err_client_0:
 	preempt_client_fini(&client[0]);
 err_unlock:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
-		err = -EIO;
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 
@@ -1029,7 +1017,7 @@ static int live_chain_preempt(void *arg)
 		return 0;
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (preempt_client_init(i915, &hi))
 		goto err_unlock;
@@ -1063,7 +1051,7 @@ static int live_chain_preempt(void *arg)
 			 __func__, engine->name, ring_size);
 
 		igt_spinner_end(&lo.spin);
-		if (i915_request_wait(rq, I915_WAIT_LOCKED, HZ / 2) < 0) {
+		if (i915_request_wait(rq, 0, HZ / 2) < 0) {
 			pr_err("Timed out waiting to flush %s\n", engine->name);
 			goto err_wedged;
 		}
@@ -1104,7 +1092,7 @@ static int live_chain_preempt(void *arg)
 			engine->schedule(rq, &attr);
 
 			igt_spinner_end(&hi.spin);
-			if (i915_request_wait(rq, I915_WAIT_LOCKED, HZ / 5) < 0) {
+			if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 				struct drm_printer p =
 					drm_info_printer(i915->drm.dev);
 
@@ -1120,7 +1108,7 @@ static int live_chain_preempt(void *arg)
 			if (IS_ERR(rq))
 				goto err_wedged;
 			i915_request_add(rq);
-			if (i915_request_wait(rq, I915_WAIT_LOCKED, HZ / 5) < 0) {
+			if (i915_request_wait(rq, 0, HZ / 5) < 0) {
 				struct drm_printer p =
 					drm_info_printer(i915->drm.dev);
 
@@ -1144,9 +1132,7 @@ err_client_lo:
 err_client_hi:
 	preempt_client_fini(&hi);
 err_unlock:
-	if (igt_flush_test(i915, I915_WAIT_LOCKED))
-		err = -EIO;
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 
@@ -1175,7 +1161,7 @@ static int live_preempt_hang(void *arg)
 		return 0;
 
 	mutex_lock(&i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	if (igt_spinner_init(&spin_hi, i915))
 		goto err_unlock;
@@ -1271,8 +1257,7 @@ err_spin_lo:
 err_spin_hi:
 	igt_spinner_fini(&spin_hi);
 err_unlock:
-	igt_flush_test(i915, I915_WAIT_LOCKED);
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	mutex_unlock(&i915->drm.struct_mutex);
 	return err;
 }
@@ -1330,11 +1315,13 @@ static int smoke_submit(struct preempt_smoke *smoke,
 	}
 
 	if (vma) {
+		i915_vma_lock(vma);
 		err = rq->engine->emit_bb_start(rq,
 						vma->node.start,
 						PAGE_SIZE, 0);
 		if (!err)
 			err = i915_vma_move_to_active(vma, rq, 0);
+		i915_vma_unlock(vma);
 	}
 
 	i915_request_add(rq);
@@ -1476,7 +1463,7 @@ static int live_preempt_smoke(void *arg)
 		return -ENOMEM;
 
 	mutex_lock(&smoke.i915->drm.struct_mutex);
-	wakeref = intel_runtime_pm_get(smoke.i915);
+	wakeref = intel_runtime_pm_get(&smoke.i915->runtime_pm);
 
 	smoke.batch = i915_gem_object_create_internal(smoke.i915, PAGE_SIZE);
 	if (IS_ERR(smoke.batch)) {
@@ -1529,7 +1516,7 @@ err_ctx:
 err_batch:
 	i915_gem_object_put(smoke.batch);
 err_unlock:
-	intel_runtime_pm_put(smoke.i915, wakeref);
+	intel_runtime_pm_put(&smoke.i915->runtime_pm, wakeref);
 	mutex_unlock(&smoke.i915->drm.struct_mutex);
 	kfree(smoke.contexts);
 
@@ -1616,9 +1603,7 @@ static int nop_virtual_engine(struct drm_i915_private *i915,
 		}
 
 		for (nc = 0; nc < nctx; nc++) {
-			if (i915_request_wait(request[nc],
-					      I915_WAIT_LOCKED,
-					      HZ / 10) < 0) {
+			if (i915_request_wait(request[nc], 0, HZ / 10) < 0) {
 				pr_err("%s(%s): wait for %llx:%lld timed out\n",
 				       __func__, ve[0]->engine->name,
 				       request[nc]->fence.context,
@@ -1751,8 +1736,8 @@ static int mask_virtual_engine(struct drm_i915_private *i915,
 
 	for (n = 0; n < nsibling; n++) {
 		request[n] = i915_request_create(ve);
-		if (IS_ERR(request)) {
-			err = PTR_ERR(request);
+		if (IS_ERR(request[n])) {
+			err = PTR_ERR(request[n]);
 			nsibling = n;
 			goto out;
 		}
@@ -1765,7 +1750,7 @@ static int mask_virtual_engine(struct drm_i915_private *i915,
 	}
 
 	for (n = 0; n < nsibling; n++) {
-		if (i915_request_wait(request[n], I915_WAIT_LOCKED, HZ / 10) < 0) {
+		if (i915_request_wait(request[n], 0, HZ / 10) < 0) {
 			pr_err("%s(%s): wait for %llx:%lld timed out\n",
 			       __func__, ve->engine->name,
 			       request[n]->fence.context,
@@ -1940,9 +1925,7 @@ static int bond_virtual_engine(struct drm_i915_private *i915,
 		}
 		onstack_fence_fini(&fence);
 
-		if (i915_request_wait(rq[0],
-				      I915_WAIT_LOCKED,
-				      HZ / 10) < 0) {
+		if (i915_request_wait(rq[0], 0, HZ / 10) < 0) {
 			pr_err("Master request did not execute (on %s)!\n",
 			       rq[0]->engine->name);
 			err = -EIO;
@@ -1950,8 +1933,7 @@ static int bond_virtual_engine(struct drm_i915_private *i915,
 		}
 
 		for (n = 0; n < nsibling; n++) {
-			if (i915_request_wait(rq[n + 1],
-					      I915_WAIT_LOCKED,
+			if (i915_request_wait(rq[n + 1], 0,
 					      MAX_SCHEDULE_TIMEOUT) < 0) {
 				err = -EIO;
 				goto out;
@@ -2058,5 +2040,5 @@ int intel_execlists_live_selftests(struct drm_i915_private *i915)
 	if (i915_terminally_wedged(i915))
 		return 0;
 
-	return i915_subtests(tests, i915);
+	return i915_live_subtests(tests, i915);
 }

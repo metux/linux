@@ -1865,11 +1865,11 @@ static int i915_huc_load_status_info(struct seq_file *m, void *data)
 	intel_wakeref_t wakeref;
 	struct drm_printer p;
 
-	if (!HAS_HUC(dev_priv))
+	if (!HAS_GT_UC(dev_priv))
 		return -ENODEV;
 
 	p = drm_seq_file_printer(m);
-	intel_uc_fw_dump(&dev_priv->huc.fw, &p);
+	intel_uc_fw_dump(&dev_priv->gt.uc.huc.fw, &p);
 
 	with_intel_runtime_pm(&dev_priv->runtime_pm, wakeref)
 		seq_printf(m, "\nHuC status 0x%08x:\n", I915_READ(HUC_STATUS2));
@@ -1883,11 +1883,11 @@ static int i915_guc_load_status_info(struct seq_file *m, void *data)
 	intel_wakeref_t wakeref;
 	struct drm_printer p;
 
-	if (!HAS_GUC(dev_priv))
+	if (!HAS_GT_UC(dev_priv))
 		return -ENODEV;
 
 	p = drm_seq_file_printer(m);
-	intel_uc_fw_dump(&dev_priv->guc.fw, &p);
+	intel_uc_fw_dump(&dev_priv->gt.uc.guc.fw, &p);
 
 	with_intel_runtime_pm(&dev_priv->runtime_pm, wakeref) {
 		u32 tmp = I915_READ(GUC_STATUS);
@@ -1930,7 +1930,7 @@ stringify_guc_log_type(enum guc_log_buffer_type type)
 static void i915_guc_log_info(struct seq_file *m,
 			      struct drm_i915_private *dev_priv)
 {
-	struct intel_guc_log *log = &dev_priv->guc.log;
+	struct intel_guc_log *log = &dev_priv->gt.uc.guc.log;
 	enum guc_log_buffer_type type;
 
 	if (!intel_guc_log_relay_enabled(log)) {
@@ -1976,7 +1976,7 @@ static void i915_guc_client_info(struct seq_file *m,
 static int i915_guc_info(struct seq_file *m, void *data)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
-	const struct intel_guc *guc = &dev_priv->guc;
+	const struct intel_guc *guc = &dev_priv->gt.uc.guc;
 
 	if (!USES_GUC(dev_priv))
 		return -ENODEV;
@@ -2003,7 +2003,7 @@ static int i915_guc_info(struct seq_file *m, void *data)
 static int i915_guc_stage_pool(struct seq_file *m, void *data)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
-	const struct intel_guc *guc = &dev_priv->guc;
+	const struct intel_guc *guc = &dev_priv->gt.uc.guc;
 	struct guc_stage_desc *desc = guc->stage_desc_pool_vaddr;
 	intel_engine_mask_t tmp;
 	int index;
@@ -2062,13 +2062,13 @@ static int i915_guc_log_dump(struct seq_file *m, void *data)
 	u32 *log;
 	int i = 0;
 
-	if (!HAS_GUC(dev_priv))
+	if (!HAS_GT_UC(dev_priv))
 		return -ENODEV;
 
 	if (dump_load_err)
-		obj = dev_priv->guc.load_err_log;
-	else if (dev_priv->guc.log.vma)
-		obj = dev_priv->guc.log.vma->obj;
+		obj = dev_priv->gt.uc.guc.load_err_log;
+	else if (dev_priv->gt.uc.guc.log.vma)
+		obj = dev_priv->gt.uc.guc.log.vma->obj;
 
 	if (!obj)
 		return 0;
@@ -2099,7 +2099,7 @@ static int i915_guc_log_level_get(void *data, u64 *val)
 	if (!USES_GUC(dev_priv))
 		return -ENODEV;
 
-	*val = intel_guc_log_get_level(&dev_priv->guc.log);
+	*val = intel_guc_log_get_level(&dev_priv->gt.uc.guc.log);
 
 	return 0;
 }
@@ -2111,7 +2111,7 @@ static int i915_guc_log_level_set(void *data, u64 val)
 	if (!USES_GUC(dev_priv))
 		return -ENODEV;
 
-	return intel_guc_log_set_level(&dev_priv->guc.log, val);
+	return intel_guc_log_set_level(&dev_priv->gt.uc.guc.log, val);
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(i915_guc_log_level_fops,
@@ -2125,9 +2125,9 @@ static int i915_guc_log_relay_open(struct inode *inode, struct file *file)
 	if (!USES_GUC(dev_priv))
 		return -ENODEV;
 
-	file->private_data = &dev_priv->guc.log;
+	file->private_data = &dev_priv->gt.uc.guc.log;
 
-	return intel_guc_log_relay_open(&dev_priv->guc.log);
+	return intel_guc_log_relay_open(&dev_priv->gt.uc.guc.log);
 }
 
 static ssize_t
@@ -2147,7 +2147,7 @@ static int i915_guc_log_relay_release(struct inode *inode, struct file *file)
 {
 	struct drm_i915_private *dev_priv = inode->i_private;
 
-	intel_guc_log_relay_close(&dev_priv->guc.log);
+	intel_guc_log_relay_close(&dev_priv->gt.uc.guc.log);
 
 	return 0;
 }
@@ -2569,6 +2569,25 @@ static void intel_panel_info(struct seq_file *m, struct intel_panel *panel)
 	intel_seq_print_mode(m, 2, mode);
 }
 
+static void intel_hdcp_info(struct seq_file *m,
+			    struct intel_connector *intel_connector)
+{
+	bool hdcp_cap, hdcp2_cap;
+
+	hdcp_cap = intel_hdcp_capable(intel_connector);
+	hdcp2_cap = intel_hdcp2_capable(intel_connector);
+
+	if (hdcp_cap)
+		seq_puts(m, "HDCP1.4 ");
+	if (hdcp2_cap)
+		seq_puts(m, "HDCP2.2 ");
+
+	if (!hdcp_cap && !hdcp2_cap)
+		seq_puts(m, "None");
+
+	seq_puts(m, "\n");
+}
+
 static void intel_dp_info(struct seq_file *m,
 			  struct intel_connector *intel_connector)
 {
@@ -2582,6 +2601,10 @@ static void intel_dp_info(struct seq_file *m,
 
 	drm_dp_downstream_debug(m, intel_dp->dpcd, intel_dp->downstream_ports,
 				&intel_dp->aux);
+	if (intel_connector->hdcp.shim) {
+		seq_puts(m, "\tHDCP version: ");
+		intel_hdcp_info(m, intel_connector);
+	}
 }
 
 static void intel_dp_mst_info(struct seq_file *m,
@@ -2605,6 +2628,10 @@ static void intel_hdmi_info(struct seq_file *m,
 	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(&intel_encoder->base);
 
 	seq_printf(m, "\taudio support: %s\n", yesno(intel_hdmi->has_audio));
+	if (intel_connector->hdcp.shim) {
+		seq_puts(m, "\tHDCP version: ");
+		intel_hdcp_info(m, intel_connector);
+	}
 }
 
 static void intel_lvds_info(struct seq_file *m,
@@ -4071,7 +4098,7 @@ static int i915_hpd_storm_ctl_show(struct seq_file *m, void *data)
 	 */
 	intel_synchronize_irq(dev_priv);
 	flush_work(&dev_priv->hotplug.dig_port_work);
-	flush_work(&dev_priv->hotplug.hotplug_work);
+	flush_delayed_work(&dev_priv->hotplug.hotplug_work);
 
 	seq_printf(m, "Threshold: %d\n", hotplug->hpd_storm_threshold);
 	seq_printf(m, "Detected: %s\n",
@@ -4528,7 +4555,6 @@ static int i915_hdcp_sink_capability_show(struct seq_file *m, void *data)
 {
 	struct drm_connector *connector = m->private;
 	struct intel_connector *intel_connector = to_intel_connector(connector);
-	bool hdcp_cap, hdcp2_cap;
 
 	if (connector->status != connector_status_connected)
 		return -ENODEV;
@@ -4539,17 +4565,7 @@ static int i915_hdcp_sink_capability_show(struct seq_file *m, void *data)
 
 	seq_printf(m, "%s:%d HDCP version: ", connector->name,
 		   connector->base.id);
-	hdcp_cap = intel_hdcp_capable(intel_connector);
-	hdcp2_cap = intel_hdcp2_capable(intel_connector);
-
-	if (hdcp_cap)
-		seq_puts(m, "HDCP1.4 ");
-	if (hdcp2_cap)
-		seq_puts(m, "HDCP2.2 ");
-
-	if (!hdcp_cap && !hdcp2_cap)
-		seq_puts(m, "None");
-	seq_puts(m, "\n");
+	intel_hdcp_info(m, intel_connector);
 
 	return 0;
 }

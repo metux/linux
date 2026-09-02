@@ -134,11 +134,11 @@ static int igt_guc_clients(void *args)
 	struct intel_guc *guc;
 	int err = 0;
 
-	GEM_BUG_ON(!HAS_GUC(dev_priv));
+	GEM_BUG_ON(!HAS_GT_UC(dev_priv));
 	mutex_lock(&dev_priv->drm.struct_mutex);
 	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
 
-	guc = &dev_priv->guc;
+	guc = &dev_priv->gt.uc.guc;
 	if (!guc) {
 		pr_err("No guc object!\n");
 		err = -EINVAL;
@@ -226,11 +226,11 @@ static int igt_guc_doorbells(void *arg)
 	int i, err = 0;
 	u16 db_id;
 
-	GEM_BUG_ON(!HAS_GUC(dev_priv));
+	GEM_BUG_ON(!HAS_GT_UC(dev_priv));
 	mutex_lock(&dev_priv->drm.struct_mutex);
 	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
 
-	guc = &dev_priv->guc;
+	guc = &dev_priv->gt.uc.guc;
 	if (!guc) {
 		pr_err("No guc object!\n");
 		err = -EINVAL;

@@ -18,18 +18,16 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "pidfd.h"
 #include "../kselftest.h"
-
-#ifndef __NR_pidfd_send_signal
-#define __NR_pidfd_send_signal -1
-#endif
 
 #define str(s) _str(s)
 #define _str(s) #s
 #define CHILD_THREAD_MIN_WAIT 3 /* seconds */
 
 #define MAX_EVENTS 5
+#ifndef __NR_pidfd_send_signal
+#define __NR_pidfd_send_signal 424
+#endif
 
 #ifndef CLONE_PIDFD
 #define CLONE_PIDFD 0x00001000
@@ -93,6 +91,28 @@ static int test_pidfd_send_signal_simple_success(void)
 	return 0;
 }
 
+static int wait_for_pid(pid_t pid)
+{
+	int status, ret;
+
+again:
+	ret = waitpid(pid, &status, 0);
+	if (ret == -1) {
+		if (errno == EINTR)
+			goto again;
+
+		return -1;
+	}
+
+	if (ret != pid)
+		goto again;
+
+	if (!WIFEXITED(status))
+		return -1;
+
+	return WEXITSTATUS(status);
+}
+
 static int test_pidfd_send_signal_exited_fail(void)
 {
 	int pidfd, ret, saved_errno;
@@ -138,12 +158,30 @@ static int test_pidfd_send_signal_exited_fail(void)
 }
 
 /*
+ * The kernel reserves 300 pids via RESERVED_PIDS in kernel/pid.c
+ * That means, when it wraps around any pid < 300 will be skipped.
+ * So we need to use a pid > 300 in order to test recycling.
+ */
+#define PID_RECYCLE 1000
+
+/*
  * Maximum number of cycles we allow. This is equivalent to PID_MAX_DEFAULT.
  * If users set a higher limit or we have cycled PIDFD_MAX_DEFAULT number of
  * times then we skip the test to not go into an infinite loop or block for a
  * long time.
  */
 #define PIDFD_MAX_DEFAULT 0x8000
+
+/*
+ * Define a few custom error codes for the child process to clearly indicate
+ * what is happening. This way we can tell the difference between a system
+ * error, a test error, etc.
+ */
+#define PIDFD_PASS 0
+#define PIDFD_FAIL 1
+#define PIDFD_ERROR 2
+#define PIDFD_SKIP 3
+#define PIDFD_XFAIL 4
 
 static int test_pidfd_send_signal_recycled_pid_fail(void)
 {
@@ -339,9 +377,13 @@ static int test_pidfd_send_signal_syscall_support(void)
 
 	ret = sys_pidfd_send_signal(pidfd, 0, NULL, 0);
 	if (ret < 0) {
+		/*
+		 * pidfd_send_signal() will currently return ENOSYS when
+		 * CONFIG_PROC_FS is not set.
+		 */
 		if (errno == ENOSYS)
 			ksft_exit_skip(
-				"%s test: pidfd_send_signal() syscall not supported\n",
+				"%s test: pidfd_send_signal() syscall not supported (Ensure that CONFIG_PROC_FS=y is set)\n",
 				test_name);
 
 		ksft_exit_fail_msg("%s test: Failed to send signal\n",

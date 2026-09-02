@@ -2025,6 +2025,12 @@ struct drm_i915_private {
 		 */
 		intel_wakeref_t awake;
 
+		ktime_t last_init_time;
+
+		struct i915_vma *scratch;
+	} gt;
+
+	struct {
 		/**
 		 * We leave the user IRQ off as much as possible,
 		 * but this means that requests will finish and never
@@ -2042,11 +2048,7 @@ struct drm_i915_private {
 		 * off the idle_work.
 		 */
 		struct delayed_work idle_work;
-
-		ktime_t last_init_time;
-
-		struct i915_vma *scratch;
-	} gt;
+	} gem;
 
 	/* For i945gm vblank irq vs. C3 workaround */
 	struct {

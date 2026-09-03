@@ -78,6 +78,7 @@ static void mock_device_release(struct drm_device *dev)
 	drm_mode_config_cleanup(&i915->drm);
 
 out:
+	i915_params_free(&i915->params);
 	put_device(&i915->drm.pdev->dev);
 	i915->drm.pdev = NULL;
 }
@@ -148,8 +149,6 @@ struct drm_i915_private *mock_gem_device(void)
 
 	pci_set_drvdata(pdev, i915);
 
-	intel_runtime_pm_init_early(i915);
-
 	dev_pm_domain_set(&pdev->dev, &pm_domain);
 	pm_runtime_enable(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
@@ -166,6 +165,10 @@ struct drm_i915_private *mock_gem_device(void)
 	}
 	i915->drm.pdev = pdev;
 	drmm_add_final_kfree(&i915->drm, i915);
+
+	i915_params_copy(&i915->params, &i915_modparams);
+
+	intel_runtime_pm_init_early(&i915->runtime_pm);
 
 	/* Using the global GTT may ask questions about KMS users, so prepare */
 	drm_mode_config_init(&i915->drm);

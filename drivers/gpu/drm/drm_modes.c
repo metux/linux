@@ -158,6 +158,9 @@ struct drm_display_mode *drm_cvt_mode(struct drm_device *dev, int hdisplay,
 	int interlace;
 	u64 tmp;
 
+	if (!hdisplay || !vdisplay)
+		return NULL;
+
 	/* allocate the drm_display_mode structure. If failure, we will
 	 * return directly
 	 */
@@ -391,6 +394,9 @@ drm_gtf_mode_complex(struct drm_device *dev, int hdisplay, int vdisplay,
 	unsigned int hblank, total_pixels, pixel_freq;
 	int hsync, hfront_porch, vodd_front_porch_lines;
 	unsigned int tmp1, tmp2;
+
+	if (!hdisplay || !vdisplay)
+		return NULL;
 
 	drm_mode = drm_mode_create(dev);
 	if (!drm_mode)
@@ -1448,7 +1454,8 @@ static int drm_mode_parse_cmdline_refresh(const char *str, char **end_ptr,
 }
 
 static int drm_mode_parse_cmdline_extra(const char *str, int length,
-					struct drm_connector *connector,
+					bool freestanding,
+					const struct drm_connector *connector,
 					struct drm_cmdline_mode *mode)
 {
 	int i;
@@ -1456,9 +1463,15 @@ static int drm_mode_parse_cmdline_extra(const char *str, int length,
 	for (i = 0; i < length; i++) {
 		switch (str[i]) {
 		case 'i':
+			if (freestanding)
+				return -EINVAL;
+
 			mode->interlace = true;
 			break;
 		case 'm':
+			if (freestanding)
+				return -EINVAL;
+
 			mode->margins = true;
 			break;
 		case 'D':
@@ -1493,7 +1506,7 @@ static int drm_mode_parse_cmdline_extra(const char *str, int length,
 
 static int drm_mode_parse_cmdline_res_mode(const char *str, unsigned int length,
 					   bool extras,
-					   struct drm_connector *connector,
+					   const struct drm_connector *connector,
 					   struct drm_cmdline_mode *mode)
 {
 	const char *str_start = str;
@@ -1536,6 +1549,7 @@ static int drm_mode_parse_cmdline_res_mode(const char *str, unsigned int length,
 			if (extras) {
 				int ret = drm_mode_parse_cmdline_extra(end_ptr + i,
 								       1,
+								       false,
 								       connector,
 								       mode);
 				if (ret)
@@ -1577,15 +1591,15 @@ static int drm_mode_parse_cmdline_int(const char *delim, unsigned int *int_ret)
 	return 0;
 }
 
-static int drm_mode_parse_cmdline_options(char *str, size_t len,
-					  struct drm_connector *connector,
+static int drm_mode_parse_cmdline_options(const char *str, size_t len,
+					  const struct drm_connector *connector,
 					  struct drm_cmdline_mode *mode)
 {
 	unsigned int deg, margin, rotation = 0;
-	char *sep = str;
+	const char *sep = str;
 
 	while ((sep = strchr(sep, ','))) {
-		char *delim, *option;
+		const char *delim, *option;
 
 		option = sep + 1;
 		delim = strchr(option, '=');
@@ -1655,6 +1669,22 @@ static int drm_mode_parse_cmdline_options(char *str, size_t len,
 	return 0;
 }
 
+static const char * const drm_named_modes_whitelist[] = {
+	"NTSC",
+	"PAL",
+};
+
+static bool drm_named_mode_is_in_whitelist(const char *mode, unsigned int size)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(drm_named_modes_whitelist); i++)
+		if (!strncmp(mode, drm_named_modes_whitelist[i], size))
+			return true;
+
+	return false;
+}
+
 /**
  * drm_mode_parse_command_line_for_connector - parse command line modeline for connector
  * @mode_option: optional per connector mode option
@@ -1681,15 +1711,15 @@ static int drm_mode_parse_cmdline_options(char *str, size_t len,
  * True if a valid modeline has been parsed, false otherwise.
  */
 bool drm_mode_parse_command_line_for_connector(const char *mode_option,
-					       struct drm_connector *connector,
+					       const struct drm_connector *connector,
 					       struct drm_cmdline_mode *mode)
 {
 	const char *name;
 	bool named_mode = false, parse_extras = false;
 	unsigned int bpp_off = 0, refresh_off = 0, options_off = 0;
 	unsigned int mode_end = 0;
-	char *bpp_ptr = NULL, *refresh_ptr = NULL, *extra_ptr = NULL;
-	char *options_ptr = NULL;
+	const char *bpp_ptr = NULL, *refresh_ptr = NULL, *extra_ptr = NULL;
+	const char *options_ptr = NULL;
 	char *bpp_end_ptr = NULL, *refresh_end_ptr = NULL;
 	int ret;
 
@@ -1711,16 +1741,30 @@ bool drm_mode_parse_command_line_for_connector(const char *mode_option,
 	 * bunch of things:
 	 *   - We need to make sure that the first character (which
 	 *     would be our resolution in X) is a digit.
-	 *   - However, if the X resolution is missing, then we end up
-	 *     with something like x<yres>, with our first character
-	 *     being an alpha-numerical character, which would be
-	 *     considered a named mode.
+	 *   - If not, then it's either a named mode or a force on/off.
+	 *     To distinguish between the two, we need to run the
+	 *     extra parsing function, and if not, then we consider it
+	 *     a named mode.
 	 *
 	 * If this isn't enough, we should add more heuristics here,
 	 * and matching unit-tests.
 	 */
-	if (!isdigit(name[0]) && name[0] != 'x')
+	if (!isdigit(name[0]) && name[0] != 'x') {
+		unsigned int namelen = strlen(name);
+
+		/*
+		 * Only the force on/off options can be in that case,
+		 * and they all take a single character.
+		 */
+		if (namelen == 1) {
+			ret = drm_mode_parse_cmdline_extra(name, namelen, true,
+							   connector, mode);
+			if (!ret)
+				return true;
+		}
+
 		named_mode = true;
+	}
 
 	/* Try to locate the bpp and refresh specifiers, if any */
 	bpp_ptr = strchr(name, '-');
@@ -1756,7 +1800,13 @@ bool drm_mode_parse_command_line_for_connector(const char *mode_option,
 	}
 
 	if (named_mode) {
-		strncpy(mode->name, name, mode_end);
+		if (mode_end + 1 > DRM_DISPLAY_MODE_LEN)
+			return false;
+
+		if (!drm_named_mode_is_in_whitelist(name, mode_end))
+			return false;
+
+		strscpy(mode->name, name, mode_end + 1);
 	} else {
 		ret = drm_mode_parse_cmdline_res_mode(name, mode_end,
 						      parse_extras,
@@ -1795,7 +1845,7 @@ bool drm_mode_parse_command_line_for_connector(const char *mode_option,
 	    extra_ptr != options_ptr) {
 		int len = strlen(name) - (extra_ptr - name);
 
-		ret = drm_mode_parse_cmdline_extra(extra_ptr, len,
+		ret = drm_mode_parse_cmdline_extra(extra_ptr, len, false,
 						   connector, mode);
 		if (ret)
 			return false;

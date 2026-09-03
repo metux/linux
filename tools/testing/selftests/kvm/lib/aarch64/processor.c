@@ -227,7 +227,7 @@ struct kvm_vm *vm_create_default(uint32_t vcpuid, uint64_t extra_mem_pages,
 	uint64_t extra_pg_pages = (extra_mem_pages / ptrs_per_4k_pte) * 2;
 	struct kvm_vm *vm;
 
-	vm = vm_create(VM_MODE_P40V48_4K, DEFAULT_GUEST_PHY_PAGES + extra_pg_pages, O_RDWR);
+	vm = vm_create(VM_MODE_DEFAULT, DEFAULT_GUEST_PHY_PAGES + extra_pg_pages, O_RDWR);
 
 	kvm_vm_elf_load(vm, program_invocation_name, 0, 0);
 	vm_vcpu_add_default(vm, vcpuid, guest_code);
@@ -235,14 +235,21 @@ struct kvm_vm *vm_create_default(uint32_t vcpuid, uint64_t extra_mem_pages,
 	return vm;
 }
 
-static void vcpu_setup(struct kvm_vm *vm, int vcpuid)
+void aarch64_vcpu_setup(struct kvm_vm *vm, int vcpuid, struct kvm_vcpu_init *init)
 {
-	struct kvm_vcpu_init init;
+	struct kvm_vcpu_init default_init = { .target = -1, };
 	uint64_t sctlr_el1, tcr_el1;
 
-	memset(&init, 0, sizeof(init));
-	init.target = KVM_ARM_TARGET_GENERIC_V8;
-	vcpu_ioctl(vm, vcpuid, KVM_ARM_VCPU_INIT, &init);
+	if (!init)
+		init = &default_init;
+
+	if (init->target == -1) {
+		struct kvm_vcpu_init preferred;
+		vm_ioctl(vm, KVM_ARM_PREFERRED_TARGET, &preferred);
+		init->target = preferred.target;
+	}
+
+	vcpu_ioctl(vm, vcpuid, KVM_ARM_VCPU_INIT, init);
 
 	/*
 	 * Enable FP/ASIMD to avoid trapping when accessing Q0-Q15
@@ -306,7 +313,8 @@ void vcpu_dump(FILE *stream, struct kvm_vm *vm, uint32_t vcpuid, uint8_t indent)
 		indent, "", pstate, pc);
 }
 
-void vm_vcpu_add_default(struct kvm_vm *vm, uint32_t vcpuid, void *guest_code)
+void aarch64_vcpu_add_default(struct kvm_vm *vm, uint32_t vcpuid,
+			      struct kvm_vcpu_init *init, void *guest_code)
 {
 	size_t stack_size = vm->page_size == 4096 ?
 					DEFAULT_STACK_PGS * vm->page_size :
@@ -315,9 +323,48 @@ void vm_vcpu_add_default(struct kvm_vm *vm, uint32_t vcpuid, void *guest_code)
 					DEFAULT_ARM64_GUEST_STACK_VADDR_MIN, 0, 0);
 
 	vm_vcpu_add(vm, vcpuid);
-	vcpu_setup(vm, vcpuid);
+	aarch64_vcpu_setup(vm, vcpuid, init);
 
 	set_reg(vm, vcpuid, ARM64_CORE_REG(sp_el1), stack_vaddr + stack_size);
 	set_reg(vm, vcpuid, ARM64_CORE_REG(regs.pc), (uint64_t)guest_code);
 }
 
+void vm_vcpu_add_default(struct kvm_vm *vm, uint32_t vcpuid, void *guest_code)
+{
+	aarch64_vcpu_add_default(vm, vcpuid, NULL, guest_code);
+}
+
+
+/* VM VCPU Args Set
+ *
+ * Input Args:
+ *   vm - Virtual Machine
+ *   vcpuid - VCPU ID
+ *   num - number of arguments
+ *   ... - arguments, each of type uint64_t
+ *
+ * Output Args: None
+ *
+ * Return: None
+ *
+ * Sets the first num function input arguments to the values
+ * given as variable args.  Each of the variable args is expected to
+ * be of type uint64_t. The registers set by this function are r0-r7.
+ */
+void vcpu_args_set(struct kvm_vm *vm, uint32_t vcpuid, unsigned int num, ...)
+{
+	va_list ap;
+	int i;
+
+	TEST_ASSERT(num >= 1 && num <= 8, "Unsupported number of args,\n"
+		    "  num: %u\n", num);
+
+	va_start(ap, num);
+
+	for (i = 0; i < num; i++) {
+		set_reg(vm, vcpuid, ARM64_CORE_REG(regs.regs[i]),
+			va_arg(ap, uint64_t));
+	}
+
+	va_end(ap);
+}

@@ -7,6 +7,8 @@
 #include <linux/slab.h>
 #include <rdma/ib_verbs.h>
 
+#include <trace/events/rdma_core.h>
+
 /* # of WCs to poll for with a single call to ib_poll_cq */
 #define IB_POLL_BATCH			16
 #define IB_POLL_BATCH_DIRECT		8
@@ -18,18 +20,77 @@
 #define IB_POLL_FLAGS \
 	(IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)
 
+static const struct dim_cq_moder
+rdma_dim_prof[RDMA_DIM_PARAMS_NUM_PROFILES] = {
+	{1,   0, 1,  0},
+	{1,   0, 4,  0},
+	{2,   0, 4,  0},
+	{2,   0, 8,  0},
+	{4,   0, 8,  0},
+	{16,  0, 8,  0},
+	{16,  0, 16, 0},
+	{32,  0, 16, 0},
+	{32,  0, 32, 0},
+};
+
+static void ib_cq_rdma_dim_work(struct work_struct *w)
+{
+	struct dim *dim = container_of(w, struct dim, work);
+	struct ib_cq *cq = dim->priv;
+
+	u16 usec = rdma_dim_prof[dim->profile_ix].usec;
+	u16 comps = rdma_dim_prof[dim->profile_ix].comps;
+
+	dim->state = DIM_START_MEASURE;
+
+	trace_cq_modify(cq, comps, usec);
+	cq->device->ops.modify_cq(cq, comps, usec);
+}
+
+static void rdma_dim_init(struct ib_cq *cq)
+{
+	struct dim *dim;
+
+	if (!cq->device->ops.modify_cq || !cq->device->use_cq_dim ||
+	    cq->poll_ctx == IB_POLL_DIRECT)
+		return;
+
+	dim = kzalloc(sizeof(struct dim), GFP_KERNEL);
+	if (!dim)
+		return;
+
+	dim->state = DIM_START_MEASURE;
+	dim->tune_state = DIM_GOING_RIGHT;
+	dim->profile_ix = RDMA_DIM_START_PROFILE;
+	dim->priv = cq;
+	cq->dim = dim;
+
+	INIT_WORK(&dim->work, ib_cq_rdma_dim_work);
+}
+
+static int __poll_cq(struct ib_cq *cq, int num_entries, struct ib_wc *wc)
+{
+	int rc;
+
+	rc = ib_poll_cq(cq, num_entries, wc);
+	trace_cq_poll(cq, num_entries, rc);
+	return rc;
+}
+
 static int __ib_process_cq(struct ib_cq *cq, int budget, struct ib_wc *wcs,
 			   int batch)
 {
 	int i, n, completed = 0;
+
+	trace_cq_process(cq);
 
 	/*
 	 * budget might be (-1) if the caller does not
 	 * want to bound this call, thus we need unsigned
 	 * minimum here.
 	 */
-	while ((n = ib_poll_cq(cq, min_t(u32, batch,
-					 budget - completed), wcs)) > 0) {
+	while ((n = __poll_cq(cq, min_t(u32, batch,
+					budget - completed), wcs)) > 0) {
 		for (i = 0; i < n; i++) {
 			struct ib_wc *wc = &wcs[i];
 
@@ -78,20 +139,27 @@ static void ib_cq_completion_direct(struct ib_cq *cq, void *private)
 static int ib_poll_handler(struct irq_poll *iop, int budget)
 {
 	struct ib_cq *cq = container_of(iop, struct ib_cq, iop);
+	struct dim *dim = cq->dim;
 	int completed;
 
 	completed = __ib_process_cq(cq, budget, cq->wc, IB_POLL_BATCH);
 	if (completed < budget) {
 		irq_poll_complete(&cq->iop);
-		if (ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0)
+		if (ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0) {
+			trace_cq_reschedule(cq);
 			irq_poll_sched(&cq->iop);
+		}
 	}
+
+	if (dim)
+		rdma_dim(dim, completed);
 
 	return completed;
 }
 
 static void ib_cq_completion_softirq(struct ib_cq *cq, void *private)
 {
+	trace_cq_schedule(cq);
 	irq_poll_sched(&cq->iop);
 }
 
@@ -105,10 +173,13 @@ static void ib_cq_poll_work(struct work_struct *work)
 	if (completed >= IB_POLL_BUDGET_WORKQUEUE ||
 	    ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0)
 		queue_work(cq->comp_wq, &cq->work);
+	else if (cq->dim)
+		rdma_dim(cq->dim, completed);
 }
 
 static void ib_cq_completion_workqueue(struct ib_cq *cq, void *private)
 {
+	trace_cq_schedule(cq);
 	queue_work(cq->comp_wq, &cq->work);
 }
 
@@ -161,6 +232,8 @@ struct ib_cq *__ib_alloc_cq_user(struct ib_device *dev, void *private,
 
 	rdma_restrack_kadd(&cq->res);
 
+	rdma_dim_init(cq);
+
 	switch (cq->poll_ctx) {
 	case IB_POLL_DIRECT:
 		cq->comp_handler = ib_cq_completion_direct;
@@ -184,6 +257,7 @@ struct ib_cq *__ib_alloc_cq_user(struct ib_device *dev, void *private,
 		goto out_destroy_cq;
 	}
 
+	trace_cq_alloc(cq, nr_cqe, comp_vector, poll_ctx);
 	return cq;
 
 out_destroy_cq:
@@ -193,6 +267,7 @@ out_free_wc:
 	kfree(cq->wc);
 out_free_cq:
 	kfree(cq);
+	trace_cq_alloc_error(nr_cqe, comp_vector, poll_ctx, ret);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(__ib_alloc_cq_user);
@@ -249,8 +324,12 @@ void ib_free_cq_user(struct ib_cq *cq, struct ib_udata *udata)
 		WARN_ON_ONCE(1);
 	}
 
+	trace_cq_free(cq);
 	rdma_restrack_del(&cq->res);
 	cq->device->ops.destroy_cq(cq, udata);
+	if (cq->dim)
+		cancel_work_sync(&cq->dim->work);
+	kfree(cq->dim);
 	kfree(cq->wc);
 	kfree(cq);
 }

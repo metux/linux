@@ -29,6 +29,7 @@
 #include "mtk_drm_gem.h"
 #include "mtk_drm_mmp.h"
 #include "mtk_dump.h"
+#include "platform/mtk_drm_6789.h"
 
 #define MTK_SMI_CLK_CTRL
 #ifdef MTK_SMI_CLK_CTRL
@@ -71,31 +72,7 @@
 #define DITHER_ADD_LSHIFT_G(x) (((x)&0x7) << 4)
 #define DITHER_ADD_RSHIFT_G(x) (((x)&0x7) << 0)
 
-#define MMSYS_MISC                                0xF0
-#define MMSYS_SODI_REQ_MASK                       0xF4
-
-#define SODI_HRT_FIFO_SEL                         REG_FLD_MSB_LSB(3, 0)
-	#define SODI_HRT_FIFO_SEL_DISP0_PD_MODE       REG_FLD_MSB_LSB(0, 0)
-	#define SODI_HRT_FIFO_SEL_DISP0_CG_MODE       REG_FLD_MSB_LSB(1, 1)
-	#define SODI_HRT_FIFO_SEL_DISP1_PD_MODE       REG_FLD_MSB_LSB(2, 2)
-	#define SODI_HRT_FIFO_SEL_DISP1_CG_MODE       REG_FLD_MSB_LSB(3, 3)
-
-#define SODI_REQ_SEL_APSRC				          REG_FLD_MSB_LSB(0, 0)
-#define SODI_REQ_SEL_DDREN				          REG_FLD_MSB_LSB(1, 1)
-
-#define SODI_REQ_SEL_ALL                          REG_FLD_MSB_LSB(11, 8)
-	#define SODI_REQ_SEL_RDMA0_PD_MODE            REG_FLD_MSB_LSB(8, 8)
-	#define SODI_REQ_SEL_RDMA0_CG_MODE            REG_FLD_MSB_LSB(9, 9)
-	#define SODI_REQ_SEL_RDMA1_PD_MODE            REG_FLD_MSB_LSB(10, 10)
-	#define SODI_REQ_SEL_RDMA1_CG_MODE            REG_FLD_MSB_LSB(11, 11)
-
 #define MT6873_SODI_REQ_SEL_ALL                   REG_FLD_MSB_LSB(9, 8)
-
-#define SODI_REQ_VAL_ALL                          REG_FLD_MSB_LSB(15, 12)
-	#define SODI_REQ_VAL_RDMA0_PD_MODE            REG_FLD_MSB_LSB(12, 12)
-	#define SODI_REQ_VAL_RDMA0_CG_MODE            REG_FLD_MSB_LSB(13, 13)
-	#define SODI_REQ_VAL_RDMA1_PD_MODE            REG_FLD_MSB_LSB(14, 14)
-	#define SODI_REQ_VAL_RDMA1_CG_MODE            REG_FLD_MSB_LSB(15, 15)
 
 #define MT6873_SODI_REQ_VAL_ALL                   REG_FLD_MSB_LSB(13, 12)
 
@@ -107,16 +84,6 @@
 	#define MT6879_DVFS_HALT_MASK_SEL_WDMA0       REG_FLD_MSB_LSB(20, 20)
 	#define MT6879_DVFS_HALT_MASK_SEL_WDMA1       REG_FLD_MSB_LSB(21, 21)
 
-#define MMSYS_EMI_REQ_CTL                         0xF8
-#define HRT_URGENT_CTL_SEL_ALL                    REG_FLD_MSB_LSB(7, 0)
-	#define HRT_URGENT_CTL_SEL_RDMA0              REG_FLD_MSB_LSB(0, 0)
-	#define HRT_URGENT_CTL_SEL_WDMA0              REG_FLD_MSB_LSB(1, 1)
-	#define HRT_URGENT_CTL_SEL_RDMA1              REG_FLD_MSB_LSB(2, 2)
-	#define HRT_URGENT_CTL_SEL_WDMA1              REG_FLD_MSB_LSB(3, 3)
-	#define HRT_URGENT_CTL_SEL_RDMA4              REG_FLD_MSB_LSB(4, 4)
-	#define HRT_URGENT_CTL_SEL_RDMA5              REG_FLD_MSB_LSB(5, 5)
-	#define HRT_URGENT_CTL_SEL_MDP_RDMA4          REG_FLD_MSB_LSB(6, 6)
-
 #define MT6879_HRT_URGENT_CTL_SEL_ALL             REG_FLD_MSB_LSB(7, 0)
 	#define MT6879_HRT_URGENT_CTL_SEL_RDMA0       REG_FLD_MSB_LSB(0, 0)
 	#define MT6879_HRT_URGENT_CTL_SEL_RDMA1       REG_FLD_MSB_LSB(1, 1)
@@ -125,11 +92,10 @@
 	#define MT6879_HRT_URGENT_CTL_SEL_DSI0        REG_FLD_MSB_LSB(5, 5)
 	#define MT6879_HRT_URGENT_CTL_SEL_MDP_RDMA0   REG_FLD_MSB_LSB(6, 6)
 
-#define HRT_URGENT_CTL_VAL_ALL                    REG_FLD_MSB_LSB(16, 9)
-	#define HRT_URGENT_CTL_VAL_RDMA0              REG_FLD_MSB_LSB(9, 9)
-	#define HRT_URGENT_CTL_VAL_WDMA0              REG_FLD_MSB_LSB(10, 10)
-	#define HRT_URGENT_CTL_VAL_RDMA4              REG_FLD_MSB_LSB(13, 13)
-	#define HRT_URGENT_CTL_VAL_MDP_RDMA4          REG_FLD_MSB_LSB(15, 15)
+#define MT6855_HRT_URGENT_CTL_SEL_ALL             REG_FLD_MSB_LSB(7, 0)
+	#define MT6855_HRT_URGENT_CTL_SEL_RDMA0       REG_FLD_MSB_LSB(0, 0)
+	#define MT6855_HRT_URGENT_CTL_SEL_WDMA0       REG_FLD_MSB_LSB(2, 2)
+	#define MT6855_HRT_URGENT_CTL_SEL_DSI0        REG_FLD_MSB_LSB(5, 5)
 
 #define MT6879_HRT_URGENT_CTL_VAL_ALL             REG_FLD_MSB_LSB(15, 8)
 	#define MT6879_HRT_URGENT_CTL_VAL_RDMA0       REG_FLD_MSB_LSB(8, 8)
@@ -139,27 +105,22 @@
 	#define MT6879_HRT_URGENT_CTL_VAL_DSI0        REG_FLD_MSB_LSB(13, 13)
 	#define MT6879_HRT_URGENT_CTL_VAL_MDP_RDMA4   REG_FLD_MSB_LSB(15, 15)
 
-#define DVFS_HALT_MASK_SEL_ALL                    REG_FLD_MSB_LSB(23, 18)
-	#define DVFS_HALT_MASK_SEL_RDMA0              REG_FLD_MSB_LSB(18, 18)
-	#define DVFS_HALT_MASK_SEL_RDMA1              REG_FLD_MSB_LSB(19, 19)
-	#define DVFS_HALT_MASK_SEL_RDMA4              REG_FLD_MSB_LSB(20, 20)
-	#define DVFS_HALT_MASK_SEL_RDMA5              REG_FLD_MSB_LSB(21, 21)
-	#define DVFS_HALT_MASK_SEL_WDMA0              REG_FLD_MSB_LSB(22, 22)
-	#define DVFS_HALT_MASK_SEL_WDMA1              REG_FLD_MSB_LSB(23, 23)
+#define MT6855_HRT_URGENT_CTL_VAL_ALL             REG_FLD_MSB_LSB(15, 8)
+	#define MT6855_HRT_URGENT_CTL_VAL_RDMA0       REG_FLD_MSB_LSB(8, 8)
+	#define MT6855_HRT_URGENT_CTL_VAL_WDMA0       REG_FLD_MSB_LSB(10, 10)
+	#define MT6855_HRT_URGENT_CTL_VAL_DSI0        REG_FLD_MSB_LSB(13, 13)
 
 #define MT6833_INFRA_DISP_DDR_CTL  0x2C
 #define MT6833_INFRA_FLD_DDR_MASK  REG_FLD_MSB_LSB(7, 4)
 
-#define SMI_LARB_NON_SEC_CON 0x0380
-#define MMSYS_DUMMY0 0x0400
-
-#define DISP_REG_CONFIG_MMSYS_MISC                0x0F0
 #define MT6895_FLD_OVL0_RDMA_ULTRA_SEL            REG_FLD_MSB_LSB(5, 2)
 #define MT6895_FLD_OVL0_2L_RDMA_ULTRA_SEL         REG_FLD_MSB_LSB(9, 6)
 #define MT6895_FLD_OVL1_2L_RDMA_ULTRA_SEL         REG_FLD_MSB_LSB(13, 10)
 #define MT6879_FLD_OVL0_RDMA_ULTRA_SEL            REG_FLD_MSB_LSB(5, 2)
 #define MT6879_FLD_OVL0_2L_RDMA_ULTRA_SEL         REG_FLD_MSB_LSB(9, 6)
 #define MT6879_FLD_OVL0_2L_NWCG_RDMA_ULTRA_SEL    REG_FLD_MSB_LSB(17, 14)
+
+#define SMI_LARB_NON_SEC_CON 0x0380
 
 #define MTK_DDP_COMP_USER "DISP"
 
@@ -1314,6 +1275,69 @@ void mt6879_mtk_sodi_config(struct drm_device *drm, enum mtk_ddp_comp_id id,
 			0, MT6879_FLD_OVL0_2L_RDMA_ULTRA_SEL);
 		cmdq_pkt_write(handle, NULL, priv->config_regs_pa +
 			DISP_REG_CONFIG_MMSYS_MISC, ultra_ovl_val, ultra_ovl_mask);
+	}
+}
+
+void mt6855_mtk_sodi_config(struct drm_device *drm, enum mtk_ddp_comp_id id,
+			    struct cmdq_pkt *handle, void *data)
+{
+	struct mtk_drm_private *priv = drm->dev_private;
+	unsigned int sodi_req_val = 0, sodi_req_mask = 0;
+	unsigned int emi_req_val = 0, emi_req_mask = 0;
+	bool en = *((bool *)data);
+
+	if (id == DDP_COMPONENT_ID_MAX) { /* config when top clk on */
+		if (!en)
+			return;
+
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask,
+					0, SODI_REQ_SEL_ALL);
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask,
+					0, SODI_REQ_VAL_ALL);
+
+		/* apply sodi hrt with rdma fifo*/
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask,
+					1, SODI_HRT_FIFO_SEL_DISP0_PD_MODE);
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask,
+					1, SODI_HRT_FIFO_SEL_DISP0_CG_MODE);
+
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask,
+					1, SODI_REQ_SEL_RDMA0_PD_MODE);
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask,
+					1, SODI_REQ_VAL_RDMA0_PD_MODE);
+
+		SET_VAL_MASK(emi_req_val, emi_req_mask,
+					0xFF, MT6855_HRT_URGENT_CTL_SEL_ALL);
+		SET_VAL_MASK(emi_req_val, emi_req_mask,
+					0, MT6855_HRT_URGENT_CTL_VAL_ALL);
+	} else if (id == DDP_COMPONENT_RDMA0) {
+		SET_VAL_MASK(sodi_req_val, sodi_req_mask, (!en),
+					SODI_REQ_SEL_RDMA0_CG_MODE);
+		SET_VAL_MASK(emi_req_val, emi_req_mask, (!en),
+					MT6855_HRT_URGENT_CTL_SEL_RDMA0);
+	} else if (id == DDP_COMPONENT_WDMA0) {
+		SET_VAL_MASK(emi_req_val, emi_req_mask, (!en),
+					MT6855_HRT_URGENT_CTL_SEL_WDMA0);
+	} else
+		return;
+
+	if (handle == NULL) {
+		unsigned int v;
+
+		v = (readl(priv->config_regs + MMSYS_SODI_REQ_MASK)
+			& (~sodi_req_mask));
+		v += (sodi_req_val & sodi_req_mask);
+		writel_relaxed(v, priv->config_regs + MMSYS_SODI_REQ_MASK);
+
+		v = (readl(priv->config_regs +  MMSYS_EMI_REQ_CTL)
+			& (~emi_req_mask));
+		v += (emi_req_val & emi_req_mask);
+		writel_relaxed(v, priv->config_regs +  MMSYS_EMI_REQ_CTL);
+	} else {
+		cmdq_pkt_write(handle, NULL, priv->config_regs_pa +
+			MMSYS_SODI_REQ_MASK, sodi_req_val, sodi_req_mask);
+		cmdq_pkt_write(handle, NULL, priv->config_regs_pa +
+			MMSYS_EMI_REQ_CTL, emi_req_val, emi_req_mask);
 	}
 }
 

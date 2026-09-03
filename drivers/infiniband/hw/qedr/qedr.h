@@ -238,6 +238,11 @@ struct qedr_ucontext {
 	u8 edpm_mode;
 };
 
+union db_prod32 {
+	struct rdma_pwm_val16_data data;
+	u32 raw;
+};
+
 union db_prod64 {
 	struct rdma_pwm_val32_data data;
 	u64 raw;
@@ -268,6 +273,8 @@ struct qedr_userq {
 	void __iomem *db_addr;
 	struct qedr_user_db_rec *db_rec_data;
 	struct rdma_user_mmap_entry *db_mmap_entry;
+	void __iomem *db_rec_db2_addr;
+	union db_prod32 db_rec_db2_data;
 };
 
 struct qedr_cq {
@@ -303,9 +310,9 @@ struct qedr_pd {
 	struct qedr_ucontext *uctx;
 };
 
-union db_prod32 {
-	struct rdma_pwm_val16_data data;
-	u32 raw;
+struct qedr_xrcd {
+	struct ib_xrcd ibxrcd;
+	u16 xrcd_id;
 };
 
 struct qedr_qp_hwq_info {
@@ -359,6 +366,7 @@ struct qedr_srq {
 	struct ib_umem *prod_umem;
 	u16 srq_id;
 	u32 srq_limit;
+	bool is_xrc;
 	/* lock to protect srq recv post */
 	spinlock_t lock;
 };
@@ -571,6 +579,11 @@ static inline struct qedr_pd *get_qedr_pd(struct ib_pd *ibpd)
 	return container_of(ibpd, struct qedr_pd, ibpd);
 }
 
+static inline struct qedr_xrcd *get_qedr_xrcd(struct ib_xrcd *ibxrcd)
+{
+	return container_of(ibxrcd, struct qedr_xrcd, ibxrcd);
+}
+
 static inline struct qedr_cq *get_qedr_cq(struct ib_cq *ibcq)
 {
 	return container_of(ibcq, struct qedr_cq, ibcq);
@@ -594,6 +607,28 @@ static inline struct qedr_mr *get_qedr_mr(struct ib_mr *ibmr)
 static inline struct qedr_srq *get_qedr_srq(struct ib_srq *ibsrq)
 {
 	return container_of(ibsrq, struct qedr_srq, ibsrq);
+}
+
+static inline bool qedr_qp_has_srq(struct qedr_qp *qp)
+{
+	return qp->srq;
+}
+
+static inline bool qedr_qp_has_sq(struct qedr_qp *qp)
+{
+	if (qp->qp_type == IB_QPT_GSI || qp->qp_type == IB_QPT_XRC_TGT)
+		return 0;
+
+	return 1;
+}
+
+static inline bool qedr_qp_has_rq(struct qedr_qp *qp)
+{
+	if (qp->qp_type == IB_QPT_GSI || qp->qp_type == IB_QPT_XRC_INI ||
+	    qp->qp_type == IB_QPT_XRC_TGT || qedr_qp_has_srq(qp))
+		return 0;
+
+	return 1;
 }
 
 static inline struct qedr_user_mmap_entry *

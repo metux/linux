@@ -324,9 +324,9 @@ int ionic_dev_cmd_wait(struct ionic *ionic, unsigned long max_seconds)
 	unsigned long max_wait;
 	unsigned long duration;
 	int opcode;
+	int hb = 0;
 	int done;
 	int err;
-	int hb;
 
 	/* Wait for dev cmd to complete, retrying if we get EAGAIN,
 	 * but don't wait any longer than max_seconds.

@@ -984,7 +984,7 @@ static void mtk_iommu_tlb_flush_range_sync(unsigned long iova, size_t size,
 
 		/* tlb sync */
 		ret = readl_poll_timeout_atomic(data->base + REG_MMU_CPE_DONE,
-						tmp, tmp != 0, 10, 100000);
+						tmp, tmp != 0, 10, 1000);
 		if (ret) {
 			pr_warn("Partial TLB flush timed out, (%d, %d), iova:0x%llx,0x%zx\n",
 				data->plat_data->iommu_type, data->plat_data->iommu_id,
@@ -1720,7 +1720,7 @@ static void mtk_iommu_detach_device(struct iommu_domain *domain,
 }
 
 static int mtk_iommu_map(struct iommu_domain *domain, unsigned long iova,
-			 phys_addr_t paddr, size_t size, int prot)
+			 phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
 {
 	struct mtk_iommu_domain *dom = to_mtk_domain(domain);
 	int ret;
@@ -2003,13 +2003,7 @@ static const struct iommu_ops mtk_iommu_ops = {
 static int mtk_iommu_hw_init(const struct mtk_iommu_data *data)
 {
 	u32 regval;
-	int i, ret;
-
-	ret = clk_prepare_enable(data->bclk);
-	if (ret) {
-		dev_err(data->dev, "Failed to enable iommu bclk(%d)\n", ret);
-		return ret;
-	}
+	int i;
 
 	if (data->plat_data->m4u_plat == M4U_MT8173) {
 		regval = F_MMU_PREFETCH_RT_REPLACE_MOD |
@@ -2095,7 +2089,6 @@ static int mtk_iommu_hw_init(const struct mtk_iommu_data *data)
 		if (devm_request_irq(dev, irq, mtk_iommu_isr, 0, dev_name(dev), (void *)data)) {
 			if (i == IOMMU_BK0)
 				writel_relaxed(0, data->base + REG_MMU_PT_BASE_ADDR);
-			clk_disable_unprepare(data->bclk);
 			dev_err(dev, "Failed @ IRQ-%d Request\n", irq);
 			return -ENODEV;
 		}
@@ -3021,10 +3014,6 @@ static int mtk_iommu_hw_resume(struct device *dev)
 			mtk_iommu_tlb_flush_all(data);
 		return 0;
 	}
-
-	/* Avoid first resume to affect the default value of registers below. */
-	if (!m4u_dom)
-		return 0;
 
 	ret = clk_prepare_enable(data->bclk);
 	if (ret) {

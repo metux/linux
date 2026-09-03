@@ -68,14 +68,22 @@ i915_gem_object_lookup_rcu(struct drm_file *file, u32 handle)
 }
 
 static inline struct drm_i915_gem_object *
+i915_gem_object_get_rcu(struct drm_i915_gem_object *obj)
+{
+	if (obj && !kref_get_unless_zero(&obj->base.refcount))
+		obj = NULL;
+
+	return obj;
+}
+
+static inline struct drm_i915_gem_object *
 i915_gem_object_lookup(struct drm_file *file, u32 handle)
 {
 	struct drm_i915_gem_object *obj;
 
 	rcu_read_lock();
 	obj = i915_gem_object_lookup_rcu(file, handle);
-	if (obj && !kref_get_unless_zero(&obj->base.refcount))
-		obj = NULL;
+	obj = i915_gem_object_get_rcu(obj);
 	rcu_read_unlock();
 
 	return obj;
@@ -162,6 +170,24 @@ static inline bool
 i915_gem_object_is_readonly(const struct drm_i915_gem_object *obj)
 {
 	return obj->flags & I915_BO_READONLY;
+}
+
+static inline bool
+i915_gem_object_is_contiguous(const struct drm_i915_gem_object *obj)
+{
+	return obj->flags & I915_BO_ALLOC_CONTIGUOUS;
+}
+
+static inline bool
+i915_gem_object_is_volatile(const struct drm_i915_gem_object *obj)
+{
+	return obj->flags & I915_BO_ALLOC_VOLATILE;
+}
+
+static inline void
+i915_gem_object_set_volatile(struct drm_i915_gem_object *obj)
+{
+	obj->flags |= I915_BO_ALLOC_VOLATILE;
 }
 
 static inline bool
@@ -276,10 +302,27 @@ void __i915_gem_object_set_pages(struct drm_i915_gem_object *obj,
 int ____i915_gem_object_get_pages(struct drm_i915_gem_object *obj);
 int __i915_gem_object_get_pages(struct drm_i915_gem_object *obj);
 
+enum i915_mm_subclass { /* lockdep subclass for obj->mm.lock/struct_mutex */
+	I915_MM_NORMAL = 0,
+	/*
+	 * Only used by struct_mutex, when called "recursively" from
+	 * direct-reclaim-esque. Safe because there is only every one
+	 * struct_mutex in the entire system.
+	 */
+	I915_MM_SHRINKER = 1,
+	/*
+	 * Used for obj->mm.lock when allocating pages. Safe because the object
+	 * isn't yet on any LRU, and therefore the shrinker can't deadlock on
+	 * it. As soon as the object has pages, obj->mm.lock nests within
+	 * fs_reclaim.
+	 */
+	I915_MM_GET_PAGES = 1,
+};
+
 static inline int __must_check
 i915_gem_object_pin_pages(struct drm_i915_gem_object *obj)
 {
-	might_lock(&obj->mm.lock);
+	might_lock_nested(&obj->mm.lock, I915_MM_GET_PAGES);
 
 	if (atomic_inc_not_zero(&obj->mm.pages_pin_count))
 		return 0;
@@ -322,13 +365,7 @@ i915_gem_object_unpin_pages(struct drm_i915_gem_object *obj)
 	__i915_gem_object_unpin_pages(obj);
 }
 
-enum i915_mm_subclass { /* lockdep subclass for obj->mm.lock/struct_mutex */
-	I915_MM_NORMAL = 0,
-	I915_MM_SHRINKER /* called "recursively" from direct-reclaim-esque */
-};
-
-int __i915_gem_object_put_pages(struct drm_i915_gem_object *obj,
-				enum i915_mm_subclass subclass);
+int __i915_gem_object_put_pages(struct drm_i915_gem_object *obj);
 void i915_gem_object_truncate(struct drm_i915_gem_object *obj);
 void i915_gem_object_writeback(struct drm_i915_gem_object *obj);
 

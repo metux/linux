@@ -196,12 +196,11 @@ int amdgpu_driver_load_kms(struct amdgpu_device *adev, unsigned long flags)
 		dev_dbg(&dev->pdev->dev, "Error during ACPI methods call\n");
 
 	if (adev->runpm) {
-	dev_pm_set_driver_flags(dev->dev, DPM_FLAG_NO_DIRECT_COMPLETE);
-	/* only need to skip on ATPX */
-	if (amdgpu_device_supports_boco(dev) &&
-	    !amdgpu_is_atpx_hybrid())
-		dev_pm_set_driver_flags(dev->dev, DPM_FLAG_NEVER_SKIP);
-	pm_runtime_use_autosuspend(dev->dev);
+		/* only need to skip on ATPX */
+		if (amdgpu_device_supports_boco(dev) &&
+		    !amdgpu_is_atpx_hybrid())
+			dev_pm_set_driver_flags(dev->dev, DPM_FLAG_NO_DIRECT_COMPLETE);
+		pm_runtime_use_autosuspend(dev->dev);
 		pm_runtime_set_autosuspend_delay(dev->dev, 5000);
 		pm_runtime_allow(dev->dev);
 		pm_runtime_mark_last_busy(dev->dev);

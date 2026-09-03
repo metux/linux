@@ -23,6 +23,9 @@
  *
  */
 
+#include <linux/slab.h>
+
+#include "reg_helper.h"
 #include "core_types.h"
 #include "clk_mgr_internal.h"
 #include "rv1_clk_mgr.h"
@@ -200,6 +203,9 @@ static void rv1_update_clocks(struct clk_mgr *clk_mgr_base,
 	bool enter_display_off = false;
 
 	ASSERT(clk_mgr->pp_smu);
+
+	if (dc->work_arounds.skip_clock_update)
+		return;
 
 	pp_smu = &clk_mgr->pp_smu->rv_funcs;
 

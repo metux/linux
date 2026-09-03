@@ -26,8 +26,6 @@
 #ifndef DC_HW_TYPES_H
 #define DC_HW_TYPES_H
 
-#ifndef AMD_EDID_UTILITY
-
 #include "os_types.h"
 #include "fixed31_32.h"
 #include "signal_types.h"
@@ -606,6 +604,11 @@ enum dc_quantization_range {
 	QUANTIZATION_RANGE_LIMITED
 };
 
+enum dc_dynamic_expansion {
+	DYN_EXPANSION_AUTO,
+	DYN_EXPANSION_DISABLE
+};
+
 /* XFM */
 
 /* used in  struct dc_plane_state */
@@ -616,8 +619,6 @@ struct scaling_taps {
 	uint32_t h_taps_c;
 	bool integer_scaling;
 };
-
-#endif /* AMD_EDID_UTILITY */
 
 enum dc_timing_standard {
 	DC_TIMING_STANDARD_UNDEFINED,
@@ -782,8 +783,6 @@ struct dc_crtc_timing {
 	struct dc_dsc_config dsc_cfg;
 };
 
-#ifndef AMD_EDID_UTILITY
-
 enum trigger_delay {
 	TRIGGER_DELAY_NEXT_PIXEL = 0,
 	TRIGGER_DELAY_NEXT_LINE,
@@ -915,8 +914,6 @@ struct tg_color {
 	uint16_t color_g_y;
 	uint16_t color_b_cb;
 };
-
-#endif /* AMD_EDID_UTILITY */
 
 #endif /* DC_HW_TYPES_H */
 

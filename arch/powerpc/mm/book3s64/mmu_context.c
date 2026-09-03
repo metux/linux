@@ -1,13 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  MMU context allocation for 64-bit kernels.
  *
  *  Copyright (C) 2004 Anton Blanchard, IBM Corp. <anton@samba.org>
- *
- *  This program is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU General Public License
- *  as published by the Free Software Foundation; either version
- *  2 of the License, or (at your option) any later version.
- *
  */
 
 #include <linux/sched.h>
@@ -26,6 +21,8 @@
 
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
+
+#include "internal.h"
 
 static DEFINE_IDA(mmu_context_ida);
 
@@ -53,8 +50,6 @@ int hash__alloc_context_id(void)
 	return alloc_context_id(MIN_USER_CONTEXT, max);
 }
 EXPORT_SYMBOL_GPL(hash__alloc_context_id);
-
-void slb_setup_new_exec(void);
 
 static int realloc_context_ids(mm_context_t *ctx)
 {

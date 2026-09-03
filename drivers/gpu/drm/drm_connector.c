@@ -93,6 +93,7 @@ static struct drm_conn_prop_enum_list drm_connector_enum_list[] = {
 	{ DRM_MODE_CONNECTOR_DSI, "DSI" },
 	{ DRM_MODE_CONNECTOR_DPI, "DPI" },
 	{ DRM_MODE_CONNECTOR_WRITEBACK, "Writeback" },
+	{ DRM_MODE_CONNECTOR_SPI, "SPI" },
 };
 
 void drm_connector_ida_init(void)
@@ -319,6 +320,41 @@ out_put:
 	return ret;
 }
 EXPORT_SYMBOL(drm_connector_init);
+
+/**
+ * drm_connector_init_with_ddc - Init a preallocated connector
+ * @dev: DRM device
+ * @connector: the connector to init
+ * @funcs: callbacks for this connector
+ * @connector_type: user visible type of the connector
+ * @ddc: pointer to the associated ddc adapter
+ *
+ * Initialises a preallocated connector. Connectors should be
+ * subclassed as part of driver connector objects.
+ *
+ * Ensures that the ddc field of the connector is correctly set.
+ *
+ * Returns:
+ * Zero on success, error code on failure.
+ */
+int drm_connector_init_with_ddc(struct drm_device *dev,
+				struct drm_connector *connector,
+				const struct drm_connector_funcs *funcs,
+				int connector_type,
+				struct i2c_adapter *ddc)
+{
+	int ret;
+
+	ret = drm_connector_init(dev, connector, funcs, connector_type);
+	if (ret)
+		return ret;
+
+	/* provide ddc symlink in sysfs */
+	connector->ddc = ddc;
+
+	return ret;
+}
+EXPORT_SYMBOL(drm_connector_init_with_ddc);
 
 /**
  * drm_connector_attach_edid_property - attach edid property.
@@ -1041,10 +1077,21 @@ static const struct drm_prop_enum_list dp_colorspaces[] = {
  *	- If the state is DESIRED, kernel should attempt to re-authenticate the
  *	  link whenever possible. This includes across disable/enable, dpms,
  *	  hotplug, downstream device changes, link status failures, etc..
- *	- Userspace is responsible for polling the property to determine when
- *	  the value transitions from ENABLED to DESIRED. This signifies the link
- *	  is no longer protected and userspace should take appropriate action
- *	  (whatever that might be).
+ *	- Kernel sends uevent with the connector id and property id through
+ *	  @drm_hdcp_update_content_protection, upon below kernel triggered
+ *	  scenarios:
+ *
+ *		- DESIRED -> ENABLED (authentication success)
+ *		- ENABLED -> DESIRED (termination of authentication)
+ *	- Please note no uevents for userspace triggered property state changes,
+ *	  which can't fail such as
+ *
+ *		- DESIRED/ENABLED -> UNDESIRED
+ *		- UNDESIRED -> DESIRED
+ *	- Userspace is responsible for polling the property or listen to uevents
+ *	  to determine when the value transitions from ENABLED to DESIRED.
+ *	  This signifies the link is no longer protected and userspace should
+ *	  take appropriate action (whatever that might be).
  *
  * HDCP Content Type:
  *	This Enum property is used by the userspace to declare the content type

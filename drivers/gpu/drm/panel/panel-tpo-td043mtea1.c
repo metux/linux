@@ -345,12 +345,12 @@ static const struct drm_display_mode td043mtea1_mode = {
 	.height_mm = 56,
 };
 
-static int td043mtea1_get_modes(struct drm_panel *panel)
+static int td043mtea1_get_modes(struct drm_panel *panel,
+				struct drm_connector *connector)
 {
-	struct drm_connector *connector = panel->connector;
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(panel->drm, &td043mtea1_mode);
+	mode = drm_mode_duplicate(connector->dev, &td043mtea1_mode);
 	if (!mode)
 		return -ENOMEM;
 
@@ -457,7 +457,8 @@ static int td043mtea1_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	drm_panel_init(&lcd->panel, &lcd->spi->dev, &td043mtea1_funcs);
+	drm_panel_init(&lcd->panel, &lcd->spi->dev, &td043mtea1_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
 
 	drm_panel_add(&lcd->panel);
 

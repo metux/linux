@@ -304,7 +304,6 @@ extern struct ttm_bo_global {
  * @driver: Pointer to a struct ttm_bo_driver struct setup by the driver.
  * @man: An array of resource_managers.
  * @vma_manager: Address space manager (pointer)
- * @_vma_manager: Address space manager (enbedded)
  * lru_lock: Spinlock that protects the buffer+device lru lists and
  * ddestroy lists.
  * @dev_mapping: A pointer to the struct address_space representing the
@@ -330,7 +329,6 @@ struct ttm_bo_device {
 	 * Protected by internal locks.
 	 */
 	struct drm_vma_offset_manager *vma_manager;
-	struct drm_vma_offset_manager _vma_manager;
 
 	/*
 	 * Protected by the global:lru lock.
@@ -400,17 +398,6 @@ struct ttm_lru_bulk_move {
  */
 
 /**
- * ttm_resource_is_pci
- *
- * @bdev: Pointer to a struct ttm_bo_device.
- * @mem: A valid struct ttm_resource.
- *
- * Returns true if the memory described by @mem is PCI memory,
- * false otherwise.
- */
-bool ttm_resource_is_pci(struct ttm_bo_device *bdev, struct ttm_resource *mem);
-
-/**
  * ttm_bo_mem_space
  *
  * @bo: Pointer to a struct ttm_buffer_object. the data of which
@@ -443,7 +430,7 @@ int ttm_bo_device_release(struct ttm_bo_device *bdev);
  * @glob: A pointer to an initialized struct ttm_bo_global.
  * @driver: A pointer to a struct ttm_bo_driver set up by the caller.
  * @mapping: The address space to use for this bo.
- * @vma_manager: A pointer to a vma manager or NULL.
+ * @vma_manager: A pointer to a vma manager.
  * @file_page_offset: Offset into the device address space that is available
  * for buffer data. This ensures compatibility with other users of the
  * address space.

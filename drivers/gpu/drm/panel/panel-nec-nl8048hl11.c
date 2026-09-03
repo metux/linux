@@ -122,12 +122,12 @@ static const struct drm_display_mode nl8048_mode = {
 	.height_mm = 53,
 };
 
-static int nl8048_get_modes(struct drm_panel *panel)
+static int nl8048_get_modes(struct drm_panel *panel,
+			    struct drm_connector *connector)
 {
-	struct drm_connector *connector = panel->connector;
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(panel->drm, &nl8048_mode);
+	mode = drm_mode_duplicate(connector->dev, &nl8048_mode);
 	if (!mode)
 		return -ENOMEM;
 
@@ -204,7 +204,8 @@ static int nl8048_probe(struct spi_device *spi)
 	if (ret < 0)
 		return ret;
 
-	drm_panel_init(&lcd->panel, &lcd->spi->dev, &nl8048_funcs);
+	drm_panel_init(&lcd->panel, &lcd->spi->dev, &nl8048_funcs,
+		       DRM_MODE_CONNECTOR_DPI);
 
 	drm_panel_add(&lcd->panel);
 

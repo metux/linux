@@ -48,7 +48,7 @@ static bool unsafe_drop_pages(struct drm_i915_gem_object *obj,
 		flags = I915_GEM_OBJECT_UNBIND_TEST;
 
 	if (i915_gem_object_unbind(obj, flags) == 0)
-		__i915_gem_object_put_pages(obj, I915_MM_SHRINKER);
+		__i915_gem_object_put_pages(obj);
 
 	return !i915_gem_object_has_pages(obj);
 }
@@ -201,8 +201,7 @@ i915_gem_shrink(struct drm_i915_private *i915,
 
 			if (unsafe_drop_pages(obj, shrink)) {
 				/* May arrive from get_pages on another bo */
-				mutex_lock_nested(&obj->mm.lock,
-						  I915_MM_SHRINKER);
+				mutex_lock(&obj->mm.lock);
 				if (!i915_gem_object_has_pages(obj)) {
 					try_to_writeback(obj, shrink);
 					count += obj->base.size >> PAGE_SHIFT;
@@ -249,8 +248,7 @@ unsigned long i915_gem_shrink_all(struct drm_i915_private *i915)
 	with_intel_runtime_pm(&i915->runtime_pm, wakeref) {
 		freed = i915_gem_shrink(i915, -1UL, NULL,
 					I915_SHRINK_BOUND |
-					I915_SHRINK_UNBOUND |
-					I915_SHRINK_ACTIVE);
+					I915_SHRINK_UNBOUND);
 	}
 
 	return freed;
@@ -329,7 +327,6 @@ i915_gem_shrinker_oom(struct notifier_block *nb, unsigned long event, void *ptr)
 	freed_pages = 0;
 	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
 		freed_pages += i915_gem_shrink(i915, -1UL, NULL,
-					       I915_SHRINK_ACTIVE |
 					       I915_SHRINK_BOUND |
 					       I915_SHRINK_UNBOUND |
 					       I915_SHRINK_WRITEBACK);
@@ -433,46 +430,52 @@ void i915_gem_shrinker_taints_mutex(struct drm_i915_private *i915,
 
 void i915_gem_object_make_unshrinkable(struct drm_i915_gem_object *obj)
 {
+	struct drm_i915_private *i915 = obj_to_i915(obj);
+	unsigned long flags;
+
 	/*
 	 * We can only be called while the pages are pinned or when
 	 * the pages are released. If pinned, we should only be called
 	 * from a single caller under controlled conditions; and on release
 	 * only one caller may release us. Neither the two may cross.
 	 */
-	if (!list_empty(&obj->mm.link)) { /* pinned by caller */
-		struct drm_i915_private *i915 = obj_to_i915(obj);
-		unsigned long flags;
+	if (atomic_add_unless(&obj->mm.shrink_pin, 1, 0))
+		return;
 
-		spin_lock_irqsave(&i915->mm.obj_lock, flags);
-		GEM_BUG_ON(list_empty(&obj->mm.link));
-
+	spin_lock_irqsave(&i915->mm.obj_lock, flags);
+	if (!atomic_fetch_inc(&obj->mm.shrink_pin) &&
+	    !list_empty(&obj->mm.link)) {
 		list_del_init(&obj->mm.link);
 		i915->mm.shrink_count--;
 		i915->mm.shrink_memory -= obj->base.size;
-
-		spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
 	}
+	spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
 }
 
 static void __i915_gem_object_make_shrinkable(struct drm_i915_gem_object *obj,
 					      struct list_head *head)
 {
+	struct drm_i915_private *i915 = obj_to_i915(obj);
+	unsigned long flags;
+
 	GEM_BUG_ON(!i915_gem_object_has_pages(obj));
-	GEM_BUG_ON(!list_empty(&obj->mm.link));
+	if (!i915_gem_object_is_shrinkable(obj))
+		return;
 
-	if (i915_gem_object_is_shrinkable(obj)) {
-		struct drm_i915_private *i915 = obj_to_i915(obj);
-		unsigned long flags;
+	if (atomic_add_unless(&obj->mm.shrink_pin, -1, 1))
+		return;
 
-		spin_lock_irqsave(&i915->mm.obj_lock, flags);
-		GEM_BUG_ON(!kref_read(&obj->base.refcount));
+	spin_lock_irqsave(&i915->mm.obj_lock, flags);
+	GEM_BUG_ON(!kref_read(&obj->base.refcount));
+	if (atomic_dec_and_test(&obj->mm.shrink_pin)) {
+		GEM_BUG_ON(!list_empty(&obj->mm.link));
 
 		list_add_tail(&obj->mm.link, head);
 		i915->mm.shrink_count++;
 		i915->mm.shrink_memory += obj->base.size;
 
-		spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
 	}
+	spin_unlock_irqrestore(&i915->mm.obj_lock, flags);
 }
 
 void i915_gem_object_make_shrinkable(struct drm_i915_gem_object *obj)

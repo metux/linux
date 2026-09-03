@@ -941,7 +941,7 @@ static ssize_t port_fops_splice_write(struct pipe_inode_info *pipe,
 
 	occupancy = pipe_occupancy(pipe->head, pipe->tail);
 	buf = alloc_buf(port->portdev->vdev, 0, occupancy);
-			
+
 	if (!buf) {
 		ret = -ENOMEM;
 		goto error_out;

@@ -6376,7 +6376,6 @@ static int tcpm_psy_set_prop(struct power_supply *psy,
 		break;
 	}
 	power_supply_changed(port->psy);
-
 	return ret;
 }
 

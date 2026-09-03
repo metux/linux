@@ -12,6 +12,28 @@
 #include "i915_selftest.h"
 #include "selftest_engine_heartbeat.h"
 
+static int timeline_sync(struct intel_timeline *tl)
+{
+	struct dma_fence *fence;
+	long timeout;
+
+	fence = i915_active_fence_get(&tl->last_request);
+	if (!fence)
+		return 0;
+
+	timeout = dma_fence_wait_timeout(fence, true, HZ / 2);
+	dma_fence_put(fence);
+	if (timeout < 0)
+		return timeout;
+
+	return 0;
+}
+
+static int engine_sync_barrier(struct intel_engine_cs *engine)
+{
+	return timeline_sync(engine->kernel_context->timeline);
+}
+
 struct pulse {
 	struct i915_active active;
 	struct kref kref;
@@ -55,11 +77,18 @@ static struct pulse *pulse_create(void)
 	return p;
 }
 
+static void pulse_unlock_wait(struct pulse *p)
+{
+	i915_active_unlock_wait(&p->active);
+}
+
 static int __live_idle_pulse(struct intel_engine_cs *engine,
 			     int (*fn)(struct intel_engine_cs *cs))
 {
 	struct pulse *p;
 	int err;
+
+	GEM_BUG_ON(!intel_engine_pm_is_awake(engine));
 
 	p = pulse_create();
 	if (!p)
@@ -79,19 +108,35 @@ static int __live_idle_pulse(struct intel_engine_cs *engine,
 	i915_active_release(&p->active);
 
 	GEM_BUG_ON(i915_active_is_idle(&p->active));
+	GEM_BUG_ON(llist_empty(&engine->barrier_tasks));
 
 	err = fn(engine);
 	if (err)
 		goto out;
 
-	if (intel_gt_retire_requests_timeout(engine->gt, HZ / 5)) {
+	GEM_BUG_ON(!llist_empty(&engine->barrier_tasks));
+
+	if (engine_sync_barrier(engine)) {
+		struct drm_printer m = drm_err_printer("pulse");
+
+		pr_err("%s: no heartbeat pulse?\n", engine->name);
+		intel_engine_dump(engine, &m, "%s", engine->name);
+
 		err = -ETIME;
 		goto out;
 	}
 
+	GEM_BUG_ON(READ_ONCE(engine->serial) != engine->wakeref_serial);
+
+	pulse_unlock_wait(p); /* synchronize with the retirement callback */
+
 	if (!i915_active_is_idle(&p->active)) {
+		struct drm_printer m = drm_err_printer("pulse");
+
 		pr_err("%s: heartbeat pulse did not flush idle tasks\n",
 		       engine->name);
+		i915_active_print(&p->active, &m);
+
 		err = -EINVAL;
 		goto out;
 	}
@@ -159,8 +204,7 @@ static int __live_heartbeat_fast(struct intel_engine_cs *engine)
 	int err;
 	int i;
 
-	ce = intel_context_create(engine->kernel_context->gem_context,
-				  engine);
+	ce = intel_context_create(engine);
 	if (IS_ERR(ce))
 		return PTR_ERR(ce);
 
@@ -230,7 +274,7 @@ static int live_heartbeat_fast(void *arg)
 	struct intel_gt *gt = arg;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
-	int err;
+	int err = 0;
 
 	/* Check that the heartbeat ticks at the desired rate. */
 	if (!CONFIG_DRM_I915_HEARTBEAT_INTERVAL)
@@ -292,7 +336,7 @@ static int live_heartbeat_off(void *arg)
 	struct intel_gt *gt = arg;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
-	int err;
+	int err = 0;
 
 	/* Check that we can turn off heartbeat and not interrupt VIP */
 	if (!CONFIG_DRM_I915_HEARTBEAT_INTERVAL)
@@ -327,7 +371,7 @@ int intel_heartbeat_live_selftests(struct drm_i915_private *i915)
 	saved_hangcheck = i915->params.enable_hangcheck;
 	i915->params.enable_hangcheck = INT_MAX;
 
-	err =  intel_gt_live_subtests(tests, &i915->gt);
+	err = intel_gt_live_subtests(tests, &i915->gt);
 
 	i915->params.enable_hangcheck = saved_hangcheck;
 	return err;

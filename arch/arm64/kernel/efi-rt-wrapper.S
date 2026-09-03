@@ -56,4 +56,4 @@ SYM_FUNC_START(__efi_rt_asm_wrapper)
 #endif
 
 	b	efi_handle_corrupted_x18	// tail call
-ENDPROC(__efi_rt_asm_wrapper)
+SYM_FUNC_END(__efi_rt_asm_wrapper)

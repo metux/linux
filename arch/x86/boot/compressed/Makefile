@@ -72,7 +72,7 @@ LDFLAGS_vmlinux += -z noexecstack
 LDFLAGS_vmlinux += $(call ld-option,--no-warn-rwx-segments)
 LDFLAGS_vmlinux += -T
 
-hostprogs-y	:= mkpiggy
+hostprogs	:= mkpiggy
 HOST_EXTRACFLAGS += -I$(srctree)/tools/include
 
 sed-voffset := -e 's/^\([0-9a-fA-F]*\) [ABCDGRSTVW] \(_text\|__bss_start\|_end\)$$/\#define VO_\2 _AC(0x\1,UL)/p'

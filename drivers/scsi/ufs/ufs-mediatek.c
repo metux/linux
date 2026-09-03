@@ -672,34 +672,6 @@ static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
 	}
 }
 
-static void ufs_mtk_init_va09_pwr_ctrl(struct ufs_hba *hba)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-
-	host->reg_va09 = regulator_get(hba->dev, "va09");
-	if (!host->reg_va09)
-		dev_info(hba->dev, "failed to get va09");
-	else
-		host->caps |= UFS_MTK_CAP_VA09_PWR_CTRL;
-}
-
-static void ufs_mtk_init_host_caps(struct ufs_hba *hba)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	struct device_node *np = hba->dev->of_node;
-
-	if (of_property_read_bool(np, "mediatek,ufs-boost-crypt"))
-		ufs_mtk_init_boost_crypt(hba);
-
-	if (of_property_read_bool(np, "mediatek,ufs-support-va09"))
-		ufs_mtk_init_va09_pwr_ctrl(hba);
-
-	if (of_property_read_bool(np, "mediatek,ufs-disable-ah8"))
-		host->caps |= UFS_MTK_CAP_DISABLE_AH8;
-
-	dev_info(hba->dev, "caps: 0x%x", host->caps);
-}
-
 /**
  * ufs_mtk_setup_clocks - enables/disable clocks
  * @hba: host controller instance
@@ -759,24 +731,6 @@ static int ufs_mtk_setup_clocks(struct ufs_hba *hba, bool on,
 	}
 
 	return ret;
-}
-
-static void ufs_mtk_get_controller_version(struct ufs_hba *hba)
-{
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	int ret, ver = 0;
-
-	if (host->hw_ver.major)
-		return;
-
-	/* Set default (minimum) version anyway */
-	host->hw_ver.major = 2;
-
-	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_LOCALVERINFO), &ver);
-	if (!ret) {
-		if (ver >= UFS_UNIPRO_VER_1_8)
-			host->hw_ver.major = 3;
-	}
 }
 
 static bool ufs_mtk_is_data_cmd(struct scsi_cmnd *cmd)
@@ -2302,24 +2256,6 @@ static void ufs_mtk_fixup_dev_quirks(struct ufs_hba *hba)
 		ufsf_set_init_state(ufs_mtk_get_ufsf(hba));
 	}
 #endif
-}
-
-static void ufs_mtk_setup_xfer_req(struct ufs_hba *hba, int tag,
-				   bool is_scsi)
-{
-	struct ufshcd_lrb *lrbp;
-	struct scsi_cmnd *cmd;
-
-	if (is_scsi) {
-		lrbp = &hba->lrb[tag];
-		cmd = lrbp->cmd;
-
-		if (!ufs_mtk_is_data_cmd(cmd))
-			return;
-
-		ufs_mtk_biolog_send_command(tag, cmd);
-		ufs_mtk_biolog_check(1);
-	}
 }
 
 static void ufs_mtk_event_notify(struct ufs_hba *hba,

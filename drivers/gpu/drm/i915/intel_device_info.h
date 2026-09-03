@@ -110,11 +110,13 @@ enum intel_ppgtt_type {
 	func(is_mobile); \
 	func(is_lp); \
 	func(require_force_probe); \
+	func(is_dgfx); \
 	/* Keep has_* in alphabetical order */ \
 	func(has_64bit_reloc); \
 	func(gpu_reset_clobbers_display); \
 	func(has_reset_engine); \
 	func(has_fpga_dbg); \
+	func(has_global_mocs); \
 	func(has_gt_uc); \
 	func(has_l3_dpf); \
 	func(has_llc); \
@@ -138,46 +140,20 @@ enum intel_ppgtt_type {
 	func(has_csr); \
 	func(has_ddi); \
 	func(has_dp_mst); \
+	func(has_dsb); \
+	func(has_dsc); \
 	func(has_fbc); \
 	func(has_gmch); \
 	func(has_hdcp); \
 	func(has_hotplug); \
 	func(has_hti); \
 	func(has_ipc); \
+	func(has_modular_fia); \
 	func(has_overlay); \
 	func(has_psr); \
 	func(has_psr_hw_tracking); \
 	func(overlay_needs_physical); \
 	func(supports_tv);
-
-#define GEN_MAX_SLICES		(6) /* CNL upper bound */
-#define GEN_MAX_SUBSLICES	(8) /* ICL upper bound */
-
-struct sseu_dev_info {
-	u8 slice_mask;
-	u8 subslice_mask[GEN_MAX_SLICES];
-	u16 eu_total;
-	u8 eu_per_subslice;
-	u8 min_eu_in_pool;
-	/* For each slice, which subslice(s) has(have) 7 EUs (bitfield)? */
-	u8 subslice_7eu[3];
-	u8 has_slice_pg:1;
-	u8 has_subslice_pg:1;
-	u8 has_eu_pg:1;
-
-	/* Topology fields */
-	u8 max_slices;
-	u8 max_subslices;
-	u8 max_eus_per_subslice;
-
-	/* We don't have more than 8 eus per subslice at the moment and as we
-	 * store eus enabled using bits, no need to multiply by eus per
-	 * subslice.
-	 */
-	u8 eu_mask[GEN_MAX_SLICES * GEN_MAX_SUBSLICES];
-};
-
-typedef u8 intel_engine_mask_t;
 
 struct intel_device_info {
 	u16 gen_mask;
@@ -261,11 +237,10 @@ const char *intel_platform_name(enum intel_platform platform);
 
 void intel_device_info_subplatform_init(struct drm_i915_private *dev_priv);
 void intel_device_info_runtime_init(struct drm_i915_private *dev_priv);
-void intel_device_info_dump_flags(const struct intel_device_info *info,
-				  struct drm_printer *p);
-void intel_device_info_dump_runtime(const struct intel_runtime_info *info,
+
+void intel_device_info_print_static(const struct intel_device_info *info,
 				    struct drm_printer *p);
-void intel_device_info_dump_topology(const struct sseu_dev_info *sseu,
+void intel_device_info_print_runtime(const struct intel_runtime_info *info,
 				     struct drm_printer *p);
 
 void intel_driver_caps_print(const struct intel_driver_caps *caps,

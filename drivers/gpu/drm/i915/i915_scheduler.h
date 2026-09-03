@@ -25,23 +25,6 @@
 					 &(plist)->requests[idx], \
 					 sched.link)
 
-struct i915_priolist {
-	struct list_head requests[I915_PRIORITY_COUNT];
-	struct rb_node node;
-	unsigned long used;
-	int priority;
-};
-
-#define priolist_for_each_request(it, plist, idx) \
-	for (idx = 0; idx < ARRAY_SIZE((plist)->requests); idx++) \
-		list_for_each_entry(it, &(plist)->requests[idx], sched.link)
-
-#define priolist_for_each_request_consume(it, n, plist, idx) \
-	for (; (idx = ffs((plist)->used)); (plist)->used &= ~BIT(idx - 1)) \
-		list_for_each_entry_safe(it, n, \
-					 &(plist)->requests[idx - 1], \
-					 sched.link)
-
 void i915_sched_node_init(struct i915_sched_node *node);
 void i915_sched_node_reinit(struct i915_sched_node *node);
 
@@ -69,27 +52,6 @@ static inline void i915_priolist_free(struct i915_priolist *p)
 {
 	if (p->priority != I915_PRIORITY_NORMAL)
 		__i915_priolist_free(p);
-}
-
-int i915_global_scheduler_init(void);
-void i915_global_scheduler_shrink(void);
-void i915_global_scheduler_exit(void);
-static inline bool i915_scheduler_need_preempt(int prio, int active)
-{
-	/*
-	 * Allow preemption of low -> normal -> high, but we do
-	 * not allow low priority tasks to preempt other low priority
-	 * tasks under the impression that latency for low priority
-	 * tasks does not matter (as much as background throughput),
-	 * so kiss.
-	 *
-	 * More naturally we would write
-	 *	prio >= max(0, last);
-	 * except that we wish to prevent triggering preemption at the same
-	 * priority level: the task that is running should remain running
-	 * to preserve FIFO ordering of dependencies.
-	 */
-	return prio > max(I915_PRIORITY_NORMAL - 1, active);
 }
 
 #endif /* _I915_SCHEDULER_H_ */

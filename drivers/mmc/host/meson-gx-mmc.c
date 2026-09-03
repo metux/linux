@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Amlogic SD/eMMC driver for the GX/S905 family SoCs
  *

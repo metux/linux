@@ -50,6 +50,7 @@ static struct flash_platform_data p2kr0_spi0_pdata = {
 	.nr_parts =	ARRAY_SIZE(p2kr0_spi0_parts),
 	.parts =	p2kr0_spi0_parts,
 };
+
 static struct flash_platform_data p2kr0_spi1_pdata = {
 	.name =		"SPI1",
 	.nr_parts =	ARRAY_SIZE(p2kr0_spi1_parts),
@@ -113,46 +114,46 @@ struct kp_spi_controller_state {
 };
 
 union kp_spi_config {
-    /* use this to access individual elements */
-    struct __attribute__((packed)) spi_config_bitfield {
-        unsigned int pha       : 1; /* spim_clk Phase      */
-        unsigned int pol       : 1; /* spim_clk Polarity   */
-        unsigned int epol      : 1; /* spim_csx Polarity   */
-        unsigned int dpe       : 1; /* Transmission Enable */
-        unsigned int wl        : 5; /* Word Length         */
-        unsigned int           : 3;
-        unsigned int trm       : 2; /* TxRx Mode           */
-        unsigned int cs        : 4; /* Chip Select         */
-        unsigned int wcnt      : 7; /* Word Count          */
-        unsigned int ffen      : 1; /* FIFO Enable         */
-        unsigned int spi_en    : 1; /* SPI Enable          */
-        unsigned int           : 5;
-    } bitfield;
-    /* use this to grab the whole register */
-    u32 reg;
+	/* use this to access individual elements */
+	struct __packed spi_config_bitfield {
+		unsigned int pha       : 1; /* spim_clk Phase      */
+		unsigned int pol       : 1; /* spim_clk Polarity   */
+		unsigned int epol      : 1; /* spim_csx Polarity   */
+		unsigned int dpe       : 1; /* Transmission Enable */
+		unsigned int wl        : 5; /* Word Length         */
+		unsigned int           : 3;
+		unsigned int trm       : 2; /* TxRx Mode           */
+		unsigned int cs        : 4; /* Chip Select         */
+		unsigned int wcnt      : 7; /* Word Count          */
+		unsigned int ffen      : 1; /* FIFO Enable         */
+		unsigned int spi_en    : 1; /* SPI Enable          */
+		unsigned int           : 5;
+	} bitfield;
+	/* use this to grab the whole register */
+	u32 reg;
 };
 
 union kp_spi_status {
-    struct __attribute__((packed)) spi_status_bitfield {
-        unsigned int rx    :  1; /* Rx Status       */
-        unsigned int tx    :  1; /* Tx Status       */
-        unsigned int eo    :  1; /* End of Transfer */
-        unsigned int       :  1;
-        unsigned int txffe :  1; /* Tx FIFO Empty   */
-        unsigned int txfff :  1; /* Tx FIFO Full    */
-        unsigned int rxffe :  1; /* Rx FIFO Empty   */
-        unsigned int rxfff :  1; /* Rx FIFO Full    */
-        unsigned int       : 24;
-    } bitfield;
-    u32 reg;
+	struct __packed spi_status_bitfield {
+		unsigned int rx    :  1; /* Rx Status       */
+		unsigned int tx    :  1; /* Tx Status       */
+		unsigned int eo    :  1; /* End of Transfer */
+		unsigned int       :  1;
+		unsigned int txffe :  1; /* Tx FIFO Empty   */
+		unsigned int txfff :  1; /* Tx FIFO Full    */
+		unsigned int rxffe :  1; /* Rx FIFO Empty   */
+		unsigned int rxfff :  1; /* Rx FIFO Full    */
+		unsigned int       : 24;
+	} bitfield;
+	u32 reg;
 };
 
 union kp_spi_ffctrl {
-    struct __attribute__((packed)) spi_ffctrl_bitfield {
-        unsigned int ffstart :  1; /* FIFO Start */
-        unsigned int         : 31;
-    } bitfield;
-    u32 reg;
+	struct __packed spi_ffctrl_bitfield {
+		unsigned int ffstart :  1; /* FIFO Start */
+		unsigned int         : 31;
+	} bitfield;
+	u32 reg;
 };
 
 /***************
@@ -162,14 +163,12 @@ union kp_spi_ffctrl {
 kp_spi_read_reg(struct kp_spi_controller_state *cs, int idx)
 {
 	u64 __iomem *addr = cs->base;
-	u64 val;
 
 	addr += idx;
 	if ((idx == KP_SPI_REG_CONFIG) && (cs->conf_cache >= 0))
 		return cs->conf_cache;
 
-	val = readq(addr);
-	return val;
+	return readq(addr);
 }
 
 	static inline void
@@ -227,8 +226,7 @@ kp_spi_txrx_pio(struct spi_device *spidev, struct spi_transfer *transfer)
 			kp_spi_write_reg(cs, KP_SPI_REG_TXDATA, val);
 			processed++;
 		}
-	}
-	else if (rx) {
+	} else if (rx) {
 		for (i = 0 ; i < c ; i++) {
 			char test = 0;
 
@@ -315,19 +313,19 @@ kp_spi_transfer_one_message(struct spi_master *master, struct spi_message *m)
 		if (transfer->speed_hz > KP_SPI_CLK ||
 		    (len && !(rx_buf || tx_buf))) {
 			dev_dbg(kpspi->dev, "  transfer: %d Hz, %d %s%s, %d bpw\n",
-					transfer->speed_hz,
-					len,
-					tx_buf ? "tx" : "",
-					rx_buf ? "rx" : "",
-					transfer->bits_per_word);
+				transfer->speed_hz,
+				len,
+				tx_buf ? "tx" : "",
+				rx_buf ? "rx" : "",
+				transfer->bits_per_word);
 			dev_dbg(kpspi->dev, "  transfer -EINVAL\n");
 			return -EINVAL;
 		}
 		if (transfer->speed_hz &&
 		    transfer->speed_hz < (KP_SPI_CLK >> 15)) {
 			dev_dbg(kpspi->dev, "speed_hz %d below minimum %d Hz\n",
-					transfer->speed_hz,
-					KP_SPI_CLK >> 15);
+				transfer->speed_hz,
+				KP_SPI_CLK >> 15);
 			dev_dbg(kpspi->dev, "  speed_hz -EINVAL\n");
 			return -EINVAL;
 		}
@@ -478,7 +476,7 @@ kp_spi_probe(struct platform_device *pldev)
 	/* register the slave boards */
 #define NEW_SPI_DEVICE_FROM_BOARD_INFO_TABLE(table) \
 	for (i = 0 ; i < ARRAY_SIZE(table) ; i++) { \
-		spi_new_device(master, &(table[i])); \
+		spi_new_device(master, &table[i]); \
 	}
 
 	switch ((drvdata->card_id & 0xFFFF0000) >> 16) {

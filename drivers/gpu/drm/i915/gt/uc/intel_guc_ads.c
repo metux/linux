@@ -93,23 +93,10 @@ static void __guc_ads_init(struct intel_guc *guc)
 		 */
 		blob->ads.golden_context_lrca[engine_class] = 0;
 		blob->ads.eng_state_size[engine_class] =
-			intel_engine_context_size(dev_priv, engine_class) -
+			intel_engine_context_size(guc_to_gt(guc),
+						  engine_class) -
 			skipped_size;
 	}
-
-	/*
-	 * The GuC requires a "Golden Context" when it reinitialises
-	 * engines after a reset. Here we use the Render ring default
-	 * context, which must already exist and be pinned in the GGTT,
-	 * so its address won't change after we've told the GuC where
-	 * to find it. Note that we have to skip our header (1 page),
-	 * because our GuC shared data is there.
-	 */
-	kernel_ctx_vma = dev_priv->engine[RCS0]->kernel_context->state;
-	kernel_ctx_vma = to_intel_context(dev_priv->kernel_context,
-					  dev_priv->engine[RCS0])->state;
-	blob->ads.golden_context_lrca =
-		intel_guc_ggtt_offset(guc, kernel_ctx_vma) + skipped_offset;
 
 	/* System info */
 	blob->system_info.slice_enabled = hweight8(gt->info.sseu.slice_mask);

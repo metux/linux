@@ -684,83 +684,37 @@ static void intel_write_infoframe(struct intel_encoder *encoder,
 	dig_port->write_infoframe(encoder, crtc_state, type, buffer, len);
 }
 
-static bool
-intel_hdmi_compute_avi_infoframe(struct intel_encoder *encoder,
-				 struct intel_crtc_state *crtc_state,
-				 struct drm_connector_state *conn_state)
+void intel_read_infoframe(struct intel_encoder *encoder,
+			  const struct intel_crtc_state *crtc_state,
+			  enum hdmi_infoframe_type type,
+			  union hdmi_infoframe *frame)
 {
-	struct hdmi_avi_infoframe *frame = &crtc_state->infoframes.avi.avi;
-	const struct drm_display_mode *adjusted_mode =
-		&crtc_state->hw.adjusted_mode;
-	struct drm_connector *connector = conn_state->connector;
-	struct intel_digital_port *intel_dig_port = enc_to_dig_port(encoder);
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	u8 buffer[VIDEO_DIP_DATA_SIZE];
 	int ret;
 
-	if (!crtc_state->has_infoframe)
-		return true;
+	if ((crtc_state->infoframes.enable &
+	     intel_hdmi_infoframe_enable(type)) == 0)
+		return;
 
-	crtc_state->infoframes.enable |=
-		intel_hdmi_infoframe_enable(HDMI_INFOFRAME_TYPE_AVI);
 	dig_port->read_infoframe(encoder, crtc_state,
 				       type, buffer, sizeof(buffer));
 
-	ret = drm_hdmi_avi_infoframe_from_display_mode(frame, connector,
-						       adjusted_mode);
-	if (ret)
-		return false;
+	/* Fill the 'hole' (see big comment above) at position 3 */
+	memmove(&buffer[1], &buffer[0], 3);
 
-	if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420)
-		frame->colorspace = HDMI_COLORSPACE_YUV420;
-	else if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR444)
-		frame->colorspace = HDMI_COLORSPACE_YUV444;
-	else
-		frame->colorspace = HDMI_COLORSPACE_RGB;
-
-	drm_hdmi_avi_infoframe_colorspace(frame, conn_state);
-
-	/* nonsense combination */
-	WARN_ON(crtc_state->limited_color_range &&
-		crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB);
-
-	if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_RGB) {
-		drm_hdmi_avi_infoframe_quant_range(frame, connector,
-						   adjusted_mode,
-						   crtc_state->limited_color_range ?
-						   HDMI_QUANTIZATION_RANGE_LIMITED :
-						   HDMI_QUANTIZATION_RANGE_FULL);
-	} else {
-		frame->quantization_range = HDMI_QUANTIZATION_RANGE_DEFAULT;
-		frame->ycc_quantization_range = HDMI_YCC_QUANTIZATION_RANGE_LIMITED;
+	/* see comment above for the reason for this offset */
+	ret = hdmi_infoframe_unpack(frame, buffer + 1, sizeof(buffer) - 1);
+	if (ret) {
+		drm_dbg_kms(encoder->base.dev,
+			    "Failed to unpack infoframe type 0x%02x\n", type);
+		return;
 	}
 
-	drm_hdmi_avi_infoframe_content_type(frame, conn_state);
-
-	/* nonsense combination */
-	WARN_ON(crtc_state->limited_color_range &&
-		crtc_state->output_format != INTEL_OUTPUT_FORMAT_RGB);
-
-	if (crtc_state->output_format == INTEL_OUTPUT_FORMAT_RGB) {
-		drm_hdmi_avi_infoframe_quant_range(frame, connector,
-						   adjusted_mode,
-						   crtc_state->limited_color_range ?
-						   HDMI_QUANTIZATION_RANGE_LIMITED :
-						   HDMI_QUANTIZATION_RANGE_FULL);
-	} else {
-		frame->quantization_range = HDMI_QUANTIZATION_RANGE_DEFAULT;
-		frame->ycc_quantization_range = HDMI_YCC_QUANTIZATION_RANGE_LIMITED;
-	}
-
-	drm_hdmi_avi_infoframe_content_type(frame, conn_state);
-
-	/* TODO: handle pixel repetition for YCBCR420 outputs */
-
-	ret = hdmi_avi_infoframe_check(frame);
-	if (WARN_ON(ret))
-		return false;
-
-	return true;
+	if (frame->any.type != type)
+		drm_dbg_kms(encoder->base.dev,
+			    "Found the wrong infoframe type 0x%x (expected 0x%02x)\n",
+			    frame->any.type, type);
 }
 
 static bool

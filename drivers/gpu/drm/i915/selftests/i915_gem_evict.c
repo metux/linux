@@ -174,8 +174,8 @@ static int igt_overcommit(void *arg)
 	quirk_add(obj, &objects);
 
 	vma = i915_gem_object_ggtt_pin(obj, NULL, 0, 0, 0);
-	if (!IS_ERR(vma) || PTR_ERR(vma) != -ENOSPC) {
-		pr_err("Failed to evict+insert, i915_gem_object_ggtt_pin returned err=%d\n", (int)PTR_ERR(vma));
+	if (vma != ERR_PTR(-ENOSPC)) {
+		pr_err("Failed to evict+insert, i915_gem_object_ggtt_pin returned err=%d\n", (int)PTR_ERR_OR_ZERO(vma));
 		err = -EINVAL;
 		goto cleanup;
 	}
@@ -251,12 +251,14 @@ static int igt_evict_for_cache_color(void *arg)
 	LIST_HEAD(objects);
 	int err;
 
-	/* Currently the use of color_adjust is limited to cache domains within
-	 * the ggtt, and so the presence of mm.color_adjust is assumed to be
-	 * i915_gtt_color_adjust throughout our driver, so using a mock color
-	 * adjust will work just fine for our purposes.
+	/*
+	 * Currently the use of color_adjust for the GGTT is limited to cache
+	 * coloring and guard pages, and so the presence of mm.color_adjust for
+	 * the GGTT is assumed to be i915_ggtt_color_adjust, hence using a mock
+	 * color adjust will work just fine for our purposes.
 	 */
 	ggtt->vm.mm.color_adjust = mock_color_adjust;
+	GEM_BUG_ON(!i915_vm_has_cache_coloring(&ggtt->vm));
 
 	obj = i915_gem_object_create_internal(gt->i915, I915_GTT_PAGE_SIZE);
 	if (IS_ERR(obj)) {
@@ -440,7 +442,7 @@ static int igt_evict_contexts(void *arg)
 	/* Overfill the GGTT with context objects and so try to evict one. */
 	for_each_engine(engine, gt, id) {
 		struct i915_sw_fence fence;
-		struct drm_file *file;
+		struct file *file;
 
 		file = mock_file(i915);
 		if (IS_ERR(file)) {
@@ -489,7 +491,7 @@ static int igt_evict_contexts(void *arg)
 		pr_info("Submitted %lu contexts/requests on %s\n",
 			count, engine->name);
 
-		mock_file_put(file);
+		fput(file);
 		if (err)
 			break;
 	}

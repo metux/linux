@@ -153,7 +153,7 @@ struct i915_gem_context {
 	 * @active_count: How many times this context was active during a GPU
 	 * hang, but did not cause it.
 	 */
-	atomic_t active_count.
+	atomic_t active_count;
 
 	/**
 	 * @hang_timestamp: The last time(s) this context caused a GPU hang

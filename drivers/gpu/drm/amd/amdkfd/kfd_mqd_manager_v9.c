@@ -75,6 +75,12 @@ static void update_cu_mask(struct mqd_manager *mm, void *mqd,
 		m->compute_static_thread_mgmt_se7);
 }
 
+static void set_priority(struct v9_mqd *m, struct queue_properties *q)
+{
+	m->cp_hqd_pipe_priority = pipe_priority_map[q->priority];
+	m->cp_hqd_queue_priority = q->priority;
+}
+
 static struct kfd_mem_obj *allocate_mqd(struct kfd_dev *kfd,
 		struct queue_properties *q)
 {
@@ -98,7 +104,7 @@ static struct kfd_mem_obj *allocate_mqd(struct kfd_dev *kfd,
 	 * amdgpu memory functions to do so.
 	 */
 	if (kfd->cwsr_enabled && (q->type == KFD_QUEUE_TYPE_COMPUTE)) {
-		mqd_mem_obj = kzalloc(sizeof(struct kfd_mem_obj), GFP_NOIO);
+		mqd_mem_obj = kzalloc(sizeof(struct kfd_mem_obj), GFP_KERNEL);
 		if (!mqd_mem_obj)
 			return NULL;
 		retval = amdgpu_amdkfd_alloc_gtt_mem(kfd->kgd,
@@ -157,9 +163,6 @@ static void init_mqd(struct mqd_manager *mm, void **mqd,
 			1 << CP_HQD_QUANTUM__QUANTUM_SCALE__SHIFT |
 			1 << CP_HQD_QUANTUM__QUANTUM_DURATION__SHIFT;
 
-	m->cp_hqd_pipe_priority = 1;
-	m->cp_hqd_queue_priority = 15;
-
 	if (q->format == KFD_QUEUE_FORMAT_AQL) {
 		m->cp_hqd_aql_control =
 			1 << CP_HQD_AQL_CONTROL__CONTROL0__SHIFT;
@@ -199,6 +202,14 @@ static int load_mqd(struct mqd_manager *mm, void *mqd,
 	return mm->dev->kfd2kgd->hqd_load(mm->dev->kgd, mqd, pipe_id, queue_id,
 					  (uint32_t __user *)p->write_ptr,
 					  wptr_shift, 0, mms);
+}
+
+static int hiq_load_mqd_kiq(struct mqd_manager *mm, void *mqd,
+			    uint32_t pipe_id, uint32_t queue_id,
+			    struct queue_properties *p, struct mm_struct *mms)
+{
+	return mm->dev->kfd2kgd->hiq_mqd_load(mm->dev->kgd, mqd, pipe_id,
+					      queue_id, p->doorbell_off);
 }
 
 static void update_mqd(struct mqd_manager *mm, void *mqd,
@@ -260,6 +271,7 @@ static void update_mqd(struct mqd_manager *mm, void *mqd,
 		m->cp_hqd_ctx_save_control = 0;
 
 	update_cu_mask(mm, mqd, q);
+	set_priority(m, q);
 
 	q->is_active = QUEUE_IS_ACTIVE(*q);
 }
@@ -311,7 +323,8 @@ static int get_wave_state(struct mqd_manager *mm, void *mqd,
 
 	*ctl_stack_used_size = m->cp_hqd_cntl_stack_size -
 		m->cp_hqd_cntl_stack_offset;
-	*save_area_used_size = m->cp_hqd_wg_state_offset;
+	*save_area_used_size = m->cp_hqd_wg_state_offset -
+		m->cp_hqd_cntl_stack_size;
 
 	if (copy_to_user(ctl_stack, mqd_ctl_stack, m->cp_hqd_cntl_stack_size))
 		return -EFAULT;
@@ -331,18 +344,6 @@ static void init_mqd_hiq(struct mqd_manager *mm, void **mqd,
 
 	m->cp_hqd_pq_control |= 1 << CP_HQD_PQ_CONTROL__PRIV_STATE__SHIFT |
 			1 << CP_HQD_PQ_CONTROL__KMD_QUEUE__SHIFT;
-}
-
-static void update_mqd_hiq(struct mqd_manager *mm, void *mqd,
-			struct queue_properties *q)
-{
-	struct v9_mqd *m;
-
-	update_mqd(mm, mqd, q);
-
-	/* TODO: what's the point? update_mqd already does this. */
-	m = get_mqd(mqd);
-	m->cp_hqd_vmid = q->vmid;
 }
 
 static void init_mqd_sdma(struct mqd_manager *mm, void **mqd,
@@ -452,7 +453,6 @@ struct mqd_manager *mqd_manager_init_v9(enum KFD_MQD_TYPE type,
 
 	switch (type) {
 	case KFD_MQD_TYPE_CP:
-	case KFD_MQD_TYPE_COMPUTE:
 		mqd->allocate_mqd = allocate_mqd;
 		mqd->init_mqd = init_mqd;
 		mqd->free_mqd = free_mqd;
@@ -470,8 +470,8 @@ struct mqd_manager *mqd_manager_init_v9(enum KFD_MQD_TYPE type,
 		mqd->allocate_mqd = allocate_hiq_mqd;
 		mqd->init_mqd = init_mqd_hiq;
 		mqd->free_mqd = free_mqd_hiq_sdma;
-		mqd->load_mqd = load_mqd;
-		mqd->update_mqd = update_mqd_hiq;
+		mqd->load_mqd = hiq_load_mqd_kiq;
+		mqd->update_mqd = update_mqd;
 		mqd->destroy_mqd = destroy_mqd;
 		mqd->is_occupied = is_occupied;
 		mqd->mqd_size = sizeof(struct v9_mqd);
@@ -480,11 +480,11 @@ struct mqd_manager *mqd_manager_init_v9(enum KFD_MQD_TYPE type,
 #endif
 		break;
 	case KFD_MQD_TYPE_DIQ:
-		mqd->allocate_mqd = allocate_hiq_mqd;
+		mqd->allocate_mqd = allocate_mqd;
 		mqd->init_mqd = init_mqd_hiq;
 		mqd->free_mqd = free_mqd;
 		mqd->load_mqd = load_mqd;
-		mqd->update_mqd = update_mqd_hiq;
+		mqd->update_mqd = update_mqd;
 		mqd->destroy_mqd = destroy_mqd;
 		mqd->is_occupied = is_occupied;
 		mqd->mqd_size = sizeof(struct v9_mqd);

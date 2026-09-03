@@ -54,11 +54,9 @@ typedef struct {
  */
 #define ASID(mm)	(atomic64_read(&(mm)->context.id) & 0xffff)
 
-extern bool arm64_use_ng_mappings;
-
 static inline bool arm64_kernel_unmapped_at_el0(void)
 {
-	return arm64_use_ng_mappings;
+	return cpus_have_const_cap(ARM64_UNMAP_KERNEL_AT_EL0);
 }
 
 extern void arm64_memblock_init(void);

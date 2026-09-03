@@ -140,19 +140,20 @@ static int komeda_platform_remove(struct platform_device *pdev)
 
 static const struct of_device_id komeda_of_match[] = {
 	{ .compatible = "arm,mali-d71", .data = d71_identify, },
+	{ .compatible = "arm,mali-d32", .data = d71_identify, },
 	{},
 };
 
 MODULE_DEVICE_TABLE(of, komeda_of_match);
 
-static int komeda_rt_pm_suspend(struct device *dev)
+static int __maybe_unused komeda_rt_pm_suspend(struct device *dev)
 {
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 
 	return komeda_dev_suspend(mdrv->mdev);
 }
 
-static int komeda_rt_pm_resume(struct device *dev)
+static int __maybe_unused komeda_rt_pm_resume(struct device *dev)
 {
 	struct komeda_drv *mdrv = dev_get_drvdata(dev);
 

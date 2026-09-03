@@ -1043,7 +1043,6 @@ static int xs_tcp_send_request(struct rpc_rqst *req)
 	 * called sendmsg(). */
 	req->rq_xtime = ktime_get();
 	while (1) {
-		sent = 0;
 		status = xprt_sock_sendmsg(transport->sock, &msg, xdr,
 					   transport->xmit.offset, rm, &sent);
 

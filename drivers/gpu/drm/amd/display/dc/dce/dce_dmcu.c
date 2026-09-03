@@ -324,7 +324,7 @@ static void dce_get_psr_wait_loop(
 	return;
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 static void dcn10_get_dmcu_version(struct dmcu *dmcu)
 {
 	struct dce_dmcu *dmcu_dce = TO_DCE_DMCU(dmcu);
@@ -456,7 +456,6 @@ static bool dcn10_dmcu_init(struct dmcu *dmcu)
 	return status;
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 static bool dcn21_dmcu_init(struct dmcu *dmcu)
 {
 	struct dce_dmcu *dmcu_dce = TO_DCE_DMCU(dmcu);
@@ -468,7 +467,6 @@ static bool dcn21_dmcu_init(struct dmcu *dmcu)
 
 	return dcn10_dmcu_init(dmcu);
 }
-#endif
 
 static bool dcn10_dmcu_load_iram(struct dmcu *dmcu,
 		unsigned int start_offset,
@@ -555,9 +553,6 @@ static void dcn10_dmcu_set_psr_enable(struct dmcu *dmcu, bool enable, bool wait)
 	if (dmcu->dmcu_state != DMCU_RUNNING)
 		return;
 
-	dcn10_get_dmcu_psr_state(dmcu, &psr_state);
-	if (psr_state == 0 && !enable)
-		return;
 	/* waitDMCUReadyForCmd */
 	REG_WAIT(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 0,
 				dmcu_wait_reg_ready_interval,
@@ -812,7 +807,7 @@ static bool dcn20_unlock_phy(struct dmcu *dmcu)
 	return true;
 }
 
-#endif //(CONFIG_DRM_AMD_DC_DCN1_0)
+#endif //(CONFIG_DRM_AMD_DC_DCN)
 
 static const struct dmcu_funcs dce_funcs = {
 	.dmcu_init = dce_dmcu_init,
@@ -825,7 +820,7 @@ static const struct dmcu_funcs dce_funcs = {
 	.is_dmcu_initialized = dce_is_dmcu_initialized
 };
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 static const struct dmcu_funcs dcn10_funcs = {
 	.dmcu_init = dcn10_dmcu_init,
 	.load_iram = dcn10_dmcu_load_iram,
@@ -850,7 +845,6 @@ static const struct dmcu_funcs dcn20_funcs = {
 	.unlock_phy = dcn20_unlock_phy
 };
 
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 static const struct dmcu_funcs dcn21_funcs = {
 	.dmcu_init = dcn21_dmcu_init,
 	.load_iram = dcn10_dmcu_load_iram,
@@ -863,7 +857,6 @@ static const struct dmcu_funcs dcn21_funcs = {
 	.lock_phy = dcn20_lock_phy,
 	.unlock_phy = dcn20_unlock_phy
 };
-#endif
 #endif
 
 static void dce_dmcu_construct(
@@ -884,7 +877,7 @@ static void dce_dmcu_construct(
 	dmcu_dce->dmcu_mask = dmcu_mask;
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 static void dcn21_dmcu_construct(
 		struct dce_dmcu *dmcu_dce,
 		struct dc_context *ctx,
@@ -898,7 +891,7 @@ static void dcn21_dmcu_construct(
 
 	if (!IS_FPGA_MAXIMUS_DC(ctx->dce_environment)) {
 		psp_version = dm_read_reg(ctx, mmMP0_SMN_C2PMSG_58);
-		dmcu_dce->base.auto_load_dmcu = (psp_version > 0x00110029);
+		dmcu_dce->base.auto_load_dmcu = ((psp_version & 0x00FF00FF) > 0x00110029);
 		dmcu_dce->base.psp_version = psp_version;
 	}
 }
@@ -925,7 +918,7 @@ struct dmcu *dce_dmcu_create(
 	return &dmcu_dce->base;
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 struct dmcu *dcn10_dmcu_create(
 	struct dc_context *ctx,
 	const struct dce_dmcu_registers *regs,
@@ -968,7 +961,6 @@ struct dmcu *dcn20_dmcu_create(
 	return &dmcu_dce->base;
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 struct dmcu *dcn21_dmcu_create(
 	struct dc_context *ctx,
 	const struct dce_dmcu_registers *regs,
@@ -990,14 +982,10 @@ struct dmcu *dcn21_dmcu_create(
 	return &dmcu_dce->base;
 }
 #endif
-#endif
 
 void dce_dmcu_destroy(struct dmcu **dmcu)
 {
 	struct dce_dmcu *dmcu_dce = TO_DCE_DMCU(*dmcu);
-
-	if (dmcu_dce->base.dmcu_state == DMCU_RUNNING)
-		dmcu_dce->base.funcs->set_psr_enable(*dmcu, false, true);
 
 	kfree(dmcu_dce);
 	*dmcu = NULL;

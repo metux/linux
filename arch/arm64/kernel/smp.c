@@ -87,7 +87,6 @@ static int nr_ipi __read_mostly = NR_IPI;
 static struct irq_desc *ipi_desc[NR_IPI] __read_mostly;
 
 static void ipi_setup(int cpu);
-static void ipi_teardown(int cpu);
 
 #ifdef CONFIG_HOTPLUG_CPU
 static void ipi_teardown(int cpu);
@@ -1009,64 +1008,6 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 		/* The recheduling IPI is special... */
 		if (i == IPI_RESCHEDULE)
 			__irq_modify_status(ipi_base + i, 0, IRQ_RAW, ~0);
-	}
-
-	ipi_irq_base = ipi_base;
-
-	/* Setup the boot CPU immediately */
-	ipi_setup(smp_processor_id());
-}
-
-static irqreturn_t ipi_handler(int irq, void *data)
-{
-	do_handle_IPI(irq - ipi_irq_base);
-	return IRQ_HANDLED;
-}
-
-static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
-{
-	trace_ipi_raise(target, ipi_types[ipinr]);
-	__ipi_send_mask(ipi_desc[ipinr], target);
-}
-
-static void ipi_setup(int cpu)
-{
-	int i;
-
-	if (WARN_ON_ONCE(!ipi_irq_base))
-		return;
-
-	for (i = 0; i < nr_ipi; i++)
-		enable_percpu_irq(ipi_irq_base + i, 0);
-}
-
-static void ipi_teardown(int cpu)
-{
-	int i;
-
-	if (WARN_ON_ONCE(!ipi_irq_base))
-		return;
-
-	for (i = 0; i < nr_ipi; i++)
-		disable_percpu_irq(ipi_irq_base + i);
-}
-
-void __init set_smp_ipi_range(int ipi_base, int n)
-{
-	int i;
-
-	WARN_ON(n < NR_IPI);
-	nr_ipi = min(n, NR_IPI);
-
-	for (i = 0; i < nr_ipi; i++) {
-		int err;
-
-		err = request_percpu_irq(ipi_base + i, ipi_handler,
-					 "IPI", &cpu_number);
-		WARN_ON(err);
-
-		ipi_desc[i] = irq_to_desc(ipi_base + i);
-		irq_set_status_flags(ipi_base + i, IRQ_HIDDEN);
 	}
 
 	ipi_irq_base = ipi_base;

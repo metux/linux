@@ -25,43 +25,30 @@
 #include <asm/sections.h>
 
 #include <asm/sn/arch.h>
-#include <asm/sn/hub.h>
+#include <asm/sn/agent.h>
 #include <asm/sn/klconfig.h>
-#include <asm/sn/sn_private.h>
 
+#include "ip27-common.h"
 
 #define SLOT_PFNSHIFT		(SLOT_SHIFT - PAGE_SHIFT)
 #define PFN_NASIDSHFT		(NASID_SHFT - PAGE_SHIFT)
 
-struct node_data *__node_data[MAX_COMPACT_NODES];
+struct node_data *__node_data[MAX_NUMNODES];
 
 EXPORT_SYMBOL(__node_data);
 
-static int fine_mode;
-
-static int is_fine_dirmode(void)
+static u64 gen_region_mask(void)
 {
-	return ((LOCAL_HUB_L(NI_STATUS_REV_ID) & NSRI_REGIONSIZE_MASK) >> NSRI_REGIONSIZE_SHFT) & REGIONSIZE_FINE;
-}
-
-static u64 get_region(nasid_t nasid)
-{
-	if (fine_mode)
-		return nasid >> NASID_TO_FINEREG_SHFT;
-	else
-		return nasid >> NASID_TO_COARSEREG_SHFT;
-}
-
-static u64 region_mask;
-
-static void gen_region_mask(u64 *region_mask)
-{
+	int region_shift;
+	u64 region_mask;
 	nasid_t nasid;
 
-	(*region_mask) = 0;
-	for_each_online_node(nasid) {
-		(*region_mask) |= 1ULL << get_region(nasid);
-	}
+	region_shift = get_region_shift();
+	region_mask = 0;
+	for_each_online_node(nasid)
+		region_mask |= BIT_ULL(nasid >> region_shift);
+
+	return region_mask;
 }
 
 #define rou_rflag	rou_flags
@@ -104,7 +91,7 @@ static void router_recurse(klrou_t *router_a, klrou_t *router_b, int depth)
 	router_a->rou_rflag = 0;
 }
 
-unsigned char __node_distances[MAX_COMPACT_NODES][MAX_COMPACT_NODES];
+unsigned char __node_distances[MAX_NUMNODES][MAX_NUMNODES];
 EXPORT_SYMBOL(__node_distances);
 
 static int __init compute_node_distance(nasid_t nasid_a, nasid_t nasid_b)
@@ -148,33 +135,33 @@ static int __init compute_node_distance(nasid_t nasid_a, nasid_t nasid_b)
 		} while ((brd = find_lboard_class(KLCF_NEXT(brd), KLTYPE_ROUTER)));
 	}
 
+	if (nasid_a == nasid_b)
+		return LOCAL_DISTANCE;
+
+	if (router_a == router_b)
+		return LOCAL_DISTANCE + 1;
+
 	if (router_a == NULL) {
 		pr_info("node_distance: router_a NULL\n");
-		return -1;
+		return 255;
 	}
 	if (router_b == NULL) {
 		pr_info("node_distance: router_b NULL\n");
-		return -1;
+		return 255;
 	}
-
-	if (nasid_a == nasid_b)
-		return 0;
-
-	if (router_a == router_b)
-		return 1;
 
 	router_distance = 100;
 	router_recurse(router_a, router_b, 2);
 
-	return router_distance;
+	return LOCAL_DISTANCE + router_distance;
 }
 
 static void __init init_topology_matrix(void)
 {
 	nasid_t row, col;
 
-	for (row = 0; row < MAX_COMPACT_NODES; row++)
-		for (col = 0; col < MAX_COMPACT_NODES; col++)
+	for (row = 0; row < MAX_NUMNODES; row++)
+		for (col = 0; col < MAX_NUMNODES; col++)
 			__node_distances[row][col] = -1;
 
 	for_each_online_node(row) {
@@ -281,10 +268,10 @@ static unsigned long __init slot_psize_compute(nasid_t nasid, int slot)
 
 static void __init mlreset(void)
 {
+	u64 region_mask;
 	nasid_t nasid;
 
 	master_nasid = get_nasid();
-	fine_mode = is_fine_dirmode();
 
 	/*
 	 * Probe for all CPUs - this creates the cpumask and sets up the
@@ -297,7 +284,7 @@ static void __init mlreset(void)
 	init_topology_matrix();
 	dump_topology();
 
-	gen_region_mask(&region_mask);
+	region_mask = gen_region_mask();
 
 	setup_replication_mask();
 
@@ -381,12 +368,8 @@ static void __init node_mem_init(nasid_t node)
 	slot_freepfn += PFN_UP(sizeof(struct pglist_data) +
 			       sizeof(struct hub_data));
 
-	free_bootmem_with_active_regions(node, end_pfn);
-
 	memblock_reserve(slot_firstpfn << PAGE_SHIFT,
 			 ((slot_freepfn - slot_firstpfn) << PAGE_SHIFT));
-
-	sparse_memory_present_with_active_regions(node);
 }
 
 /*
@@ -412,7 +395,7 @@ void __init prom_meminit(void)
 	szmem();
 	max_low_pfn = PHYS_PFN(memblock_end_of_DRAM());
 
-	for (node = 0; node < MAX_COMPACT_NODES; node++) {
+	for (node = 0; node < MAX_NUMNODES; node++) {
 		if (node_online(node)) {
 			node_mem_init(node);
 			continue;

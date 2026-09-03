@@ -40,10 +40,10 @@
 #include "jpeg_v1_0.h"
 #include "vcn_v1_0.h"
 
-#define mmUVD_RBC_XX_IB_REG_CHECK				0x05ab
-#define mmUVD_RBC_XX_IB_REG_CHECK_BASE_IDX	1
-#define mmUVD_REG_XX_MASK							0x05ac
-#define mmUVD_REG_XX_MASK_BASE_IDX				1
+#define mmUVD_RBC_XX_IB_REG_CHECK_1_0		0x05ab
+#define mmUVD_RBC_XX_IB_REG_CHECK_1_0_BASE_IDX	1
+#define mmUVD_REG_XX_MASK_1_0			0x05ac
+#define mmUVD_REG_XX_MASK_1_0_BASE_IDX		1
 
 static int vcn_v1_0_stop(struct amdgpu_device *adev);
 static void vcn_v1_0_set_dec_ring_funcs(struct amdgpu_device *adev);
@@ -845,9 +845,9 @@ static int vcn_v1_0_start_spg_mode(struct amdgpu_device *adev)
 
 	vcn_v1_0_mc_resume_spg_mode(adev);
 
-	WREG32_SOC15(UVD, 0, mmUVD_REG_XX_MASK, 0x10);
-	WREG32_SOC15(UVD, 0, mmUVD_RBC_XX_IB_REG_CHECK,
-		RREG32_SOC15(UVD, 0, mmUVD_RBC_XX_IB_REG_CHECK) | 0x3);
+	WREG32_SOC15(UVD, 0, mmUVD_REG_XX_MASK_1_0, 0x10);
+	WREG32_SOC15(UVD, 0, mmUVD_RBC_XX_IB_REG_CHECK_1_0,
+		RREG32_SOC15(UVD, 0, mmUVD_RBC_XX_IB_REG_CHECK_1_0) | 0x3);
 
 	/* enable VCPU clock */
 	WREG32_SOC15(UVD, 0, mmUVD_VCPU_CNTL, UVD_VCPU_CNTL__CLK_EN_MASK);
@@ -1216,9 +1216,10 @@ static int vcn_v1_0_pause_dpg_mode(struct amdgpu_device *adev,
 	struct amdgpu_ring *ring;
 
 	/* pause/unpause if state is changed */
-	if (adev->vcn.pause_state.fw_based != new_state->fw_based) {
+	if (adev->vcn.inst[inst_idx].pause_state.fw_based != new_state->fw_based) {
 		DRM_DEBUG("dpg pause state changed %d:%d -> %d:%d",
-			adev->vcn.pause_state.fw_based, adev->vcn.pause_state.jpeg,
+			adev->vcn.inst[inst_idx].pause_state.fw_based,
+			adev->vcn.inst[inst_idx].pause_state.jpeg,
 			new_state->fw_based, new_state->jpeg);
 
 		reg_data = RREG32_SOC15(UVD, 0, mmUVD_DPG_PAUSE) &
@@ -1267,13 +1268,14 @@ static int vcn_v1_0_pause_dpg_mode(struct amdgpu_device *adev,
 			reg_data &= ~UVD_DPG_PAUSE__NJ_PAUSE_DPG_REQ_MASK;
 			WREG32_SOC15(UVD, 0, mmUVD_DPG_PAUSE, reg_data);
 		}
-		adev->vcn.pause_state.fw_based = new_state->fw_based;
+		adev->vcn.inst[inst_idx].pause_state.fw_based = new_state->fw_based;
 	}
 
 	/* pause/unpause if state is changed */
-	if (adev->vcn.pause_state.jpeg != new_state->jpeg) {
+	if (adev->vcn.inst[inst_idx].pause_state.jpeg != new_state->jpeg) {
 		DRM_DEBUG("dpg pause state changed %d:%d -> %d:%d",
-			adev->vcn.pause_state.fw_based, adev->vcn.pause_state.jpeg,
+			adev->vcn.inst[inst_idx].pause_state.fw_based,
+			adev->vcn.inst[inst_idx].pause_state.jpeg,
 			new_state->fw_based, new_state->jpeg);
 
 		reg_data = RREG32_SOC15(UVD, 0, mmUVD_DPG_PAUSE) &
@@ -1327,7 +1329,7 @@ static int vcn_v1_0_pause_dpg_mode(struct amdgpu_device *adev,
 			reg_data &= ~UVD_DPG_PAUSE__JPEG_PAUSE_DPG_REQ_MASK;
 			WREG32_SOC15(UVD, 0, mmUVD_DPG_PAUSE, reg_data);
 		}
-		adev->vcn.pause_state.jpeg = new_state->jpeg;
+		adev->vcn.inst[inst_idx].pause_state.jpeg = new_state->jpeg;
 	}
 
 	return 0;
@@ -1355,11 +1357,11 @@ static int vcn_v1_0_set_clockgating_state(void *handle,
 					  enum amd_clockgating_state state)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	bool enable = (state == AMD_CG_STATE_GATE) ? true : false;
+	bool enable = (state == AMD_CG_STATE_GATE);
 
 	if (enable) {
 		/* wait for STATUS to clear */
-		if (vcn_v1_0_is_idle(handle))
+		if (!vcn_v1_0_is_idle(handle))
 			return -EBUSY;
 		vcn_v1_0_enable_clock_gating(adev);
 	} else {

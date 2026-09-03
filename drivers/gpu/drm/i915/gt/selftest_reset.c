@@ -306,7 +306,7 @@ static int igt_atomic_engine_reset(void *arg)
 
 	/* Check that the resets are usable from atomic context */
 
-	if (!intel_has_reset_engine(gt->i915))
+	if (!intel_has_reset_engine(gt))
 		return 0;
 
 	if (intel_uc_uses_guc_submission(&gt->uc))
@@ -319,8 +319,8 @@ static int igt_atomic_engine_reset(void *arg)
 	if (!igt_force_reset(gt))
 		goto out_unlock;
 
-	for_each_engine(engine, gt->i915, id) {
-		tasklet_disable_nosync(&engine->execlists.tasklet);
+	for_each_engine(engine, gt, id) {
+		tasklet_disable(&engine->execlists.tasklet);
 		intel_engine_pm_get(engine);
 
 		for (p = igt_atomic_phases; p->name; p++) {
@@ -366,7 +366,7 @@ int intel_reset_live_selftests(struct drm_i915_private *i915)
 	};
 	struct intel_gt *gt = &i915->gt;
 
-	if (!intel_has_gpu_reset(gt->i915))
+	if (!intel_has_gpu_reset(gt))
 		return 0;
 
 	if (intel_gt_is_wedged(gt))

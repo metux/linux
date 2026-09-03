@@ -18,6 +18,7 @@
 #include <linux/sched.h>
 #include <linux/serdev.h>
 #include <linux/slab.h>
+#include <linux/platform_data/x86/apple.h>
 
 static bool is_registered;
 static DEFINE_IDA(ctrl_ida);
@@ -653,6 +654,15 @@ static int acpi_serdev_check_resources(struct serdev_controller *ctrl,
 	if (ret)
 		return ret;
 
+	/*
+	 * Apple machines provide an empty resource template, so on those
+	 * machines just look for immediate children with a "baud" property
+	 * (from the _DSM method) instead.
+	 */
+	if (!lookup.controller_handle && x86_apple_machine &&
+	    !acpi_dev_get_property(adev, "baud", ACPI_TYPE_BUFFER, NULL))
+		acpi_get_parent(adev->handle, &lookup.controller_handle);
+
 	/* Make sure controller and ResourceSource handle match */
 	if (ACPI_HANDLE(ctrl->dev.parent) != lookup.controller_handle)
 		return -ENODEV;
@@ -687,6 +697,12 @@ static acpi_status acpi_serdev_register_device(struct serdev_controller *ctrl,
 	return AE_OK;
 }
 
+static const struct acpi_device_id serdev_acpi_devices_blacklist[] = {
+	{ "INT3511", 0 },
+	{ "INT3512", 0 },
+	{ },
+};
+
 static acpi_status acpi_serdev_add_device(acpi_handle handle, u32 level,
 					  void *data, void **return_value)
 {
@@ -697,6 +713,10 @@ static acpi_status acpi_serdev_add_device(acpi_handle handle, u32 level,
 		return AE_OK;
 
 	if (acpi_device_enumerated(adev))
+		return AE_OK;
+
+	/* Skip if black listed */
+	if (!acpi_match_device_ids(adev, serdev_acpi_devices_blacklist))
 		return AE_OK;
 
 	if (acpi_serdev_check_resources(ctrl, adev))
@@ -786,9 +806,10 @@ int serdev_controller_add_platform(struct serdev_controller *ctrl, bool platform
 	if (platform)
 		ret_platform = platform_serdev_register_devices(ctrl);
 	if (ret_of && ret_acpi && ret_platform) {
-		dev_dbg(&ctrl->dev, "no devices registered: of:%pe acpi:%pe "
-				    "platform:%d\n",
-				    ret_of, ret_acpi, ret_platform);
+		dev_dbg(&ctrl->dev,
+			"no devices registered: of:%pe acpi:%pe platform:%pe\n",
+			ERR_PTR(ret_of), ERR_PTR(ret_acpi),
+			ERR_PTR(ret_platform));
 		ret = -ENODEV;
 		goto err_rpm_disable;
 	}

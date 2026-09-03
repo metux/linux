@@ -39,14 +39,6 @@ void handle_IPI(int ipinr, struct pt_regs *regs);
  */
 extern void smp_init_cpus(void);
 
-<<<<<<< HEAD
-/*
- * Register IPI interrupts with the arch SMP code
- */
-extern void set_smp_ipi_range(int ipi_base, int nr_ipi);
-
-=======
->>>>>>> 8aa837cb7a032 (ARM: Kill __smp_cross_call and co)
 /*
  * Register IPI interrupts with the arch SMP code
  */

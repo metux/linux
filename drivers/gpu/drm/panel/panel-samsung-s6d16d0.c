@@ -131,12 +131,12 @@ static int s6d16d0_disable(struct drm_panel *panel)
 	return 0;
 }
 
-static int s6d16d0_get_modes(struct drm_panel *panel)
+static int s6d16d0_get_modes(struct drm_panel *panel,
+			     struct drm_connector *connector)
 {
-	struct drm_connector *connector = panel->connector;
 	struct drm_display_mode *mode;
 
-	mode = drm_mode_duplicate(panel->drm, &samsung_s6d16d0_mode);
+	mode = drm_mode_duplicate(connector->dev, &samsung_s6d16d0_mode);
 	if (!mode) {
 		dev_err(panel->dev, "bad mode or failed to add mode\n");
 		return -EINVAL;
@@ -200,7 +200,8 @@ static int s6d16d0_probe(struct mipi_dsi_device *dsi)
 		return ret;
 	}
 
-	drm_panel_init(&s6->panel, dev, &s6d16d0_drm_funcs);
+	drm_panel_init(&s6->panel, dev, &s6d16d0_drm_funcs,
+		       DRM_MODE_CONNECTOR_DSI);
 
 	drm_panel_add(&s6->panel);
 

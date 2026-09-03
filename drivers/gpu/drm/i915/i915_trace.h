@@ -403,7 +403,7 @@ TRACE_EVENT(intel_fbc_nuke,
 
 /* pipe updates */
 
-TRACE_EVENT(i915_pipe_update_start,
+TRACE_EVENT(intel_pipe_update_start,
 	    TP_PROTO(struct intel_crtc *crtc),
 	    TP_ARGS(crtc),
 
@@ -428,7 +428,7 @@ TRACE_EVENT(i915_pipe_update_start,
 		       __entry->scanline, __entry->min, __entry->max)
 );
 
-TRACE_EVENT(i915_pipe_update_vblank_evaded,
+TRACE_EVENT(intel_pipe_update_vblank_evaded,
 	    TP_PROTO(struct intel_crtc *crtc),
 	    TP_ARGS(crtc),
 
@@ -453,7 +453,7 @@ TRACE_EVENT(i915_pipe_update_vblank_evaded,
 		       __entry->scanline, __entry->min, __entry->max)
 );
 
-TRACE_EVENT(i915_pipe_update_end,
+TRACE_EVENT(intel_pipe_update_end,
 	    TP_PROTO(struct intel_crtc *crtc, u32 frame, int scanline_end),
 	    TP_ARGS(crtc, frame, scanline_end),
 

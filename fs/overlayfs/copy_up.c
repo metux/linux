@@ -24,7 +24,7 @@
 
 static int ovl_ccup_set(const char *buf, const struct kernel_param *param)
 {
-	pr_warn("overlayfs: \"check_copy_up\" module option is obsolete\n");
+	pr_warn("\"check_copy_up\" module option is obsolete\n");
 	return 0;
 }
 
@@ -138,6 +138,9 @@ static int ovl_copy_up_data(struct ovl_fs *ofs, struct path *old,
 	loff_t old_pos = 0;
 	loff_t new_pos = 0;
 	loff_t cloned;
+	loff_t data_pos = -1;
+	loff_t hole_len;
+	bool skip_hole = false;
 	int error = 0;
 
 	if (len == 0)
@@ -159,7 +162,11 @@ static int ovl_copy_up_data(struct ovl_fs *ofs, struct path *old,
 		goto out;
 	/* Couldn't clone, so now we try to copy the data */
 
-	/* FIXME: copy up sparse files efficiently */
+	/* Check if lower fs supports seek operation */
+	if (old_file->f_mode & FMODE_LSEEK &&
+	    old_file->f_op->llseek)
+		skip_hole = true;
+
 	while (len) {
 		size_t this_len = OVL_COPY_UP_CHUNK_SIZE;
 		long bytes;
@@ -170,6 +177,36 @@ static int ovl_copy_up_data(struct ovl_fs *ofs, struct path *old,
 		if (signal_pending_state(TASK_KILLABLE, current)) {
 			error = -EINTR;
 			break;
+		}
+
+		/*
+		 * Fill zero for hole will cost unnecessary disk space
+		 * and meanwhile slow down the copy-up speed, so we do
+		 * an optimization for hole during copy-up, it relies
+		 * on SEEK_DATA implementation in lower fs so if lower
+		 * fs does not support it, copy-up will behave as before.
+		 *
+		 * Detail logic of hole detection as below:
+		 * When we detect next data position is larger than current
+		 * position we will skip that hole, otherwise we copy
+		 * data in the size of OVL_COPY_UP_CHUNK_SIZE. Actually,
+		 * it may not recognize all kind of holes and sometimes
+		 * only skips partial of hole area. However, it will be
+		 * enough for most of the use cases.
+		 */
+
+		if (skip_hole && data_pos < old_pos) {
+			data_pos = vfs_llseek(old_file, old_pos, SEEK_DATA);
+			if (data_pos > old_pos) {
+				hole_len = data_pos - old_pos;
+				len -= hole_len;
+				old_pos = new_pos = data_pos;
+				continue;
+			} else if (data_pos == -ENXIO) {
+				break;
+			} else if (data_pos < 0) {
+				skip_hole = false;
+			}
 		}
 
 		bytes = do_splice_direct(old_file, &old_pos,
@@ -242,13 +279,17 @@ int ovl_set_attr(struct dentry *upperdentry, struct kstat *stat)
 struct ovl_fh *ovl_encode_real_fh(struct dentry *real, bool is_upper)
 {
 	struct ovl_fh *fh;
-	int fh_type, fh_len, dwords;
-	void *buf;
+	int fh_type, dwords;
 	int buflen = MAX_HANDLE_SZ;
 	uuid_t *uuid = &real->d_sb->s_uuid;
+	int err;
 
-	buf = kmalloc(buflen, GFP_KERNEL);
-	if (!buf)
+	/* Make sure the real fid stays 32bit aligned */
+	BUILD_BUG_ON(OVL_FH_FID_OFFSET % 4);
+	BUILD_BUG_ON(MAX_HANDLE_SZ + OVL_FH_FID_OFFSET > 255);
+
+	fh = kzalloc(buflen + OVL_FH_FID_OFFSET, GFP_KERNEL);
+	if (!fh)
 		return ERR_PTR(-ENOMEM);
 
 	/*
@@ -257,24 +298,14 @@ struct ovl_fh *ovl_encode_real_fh(struct dentry *real, bool is_upper)
 	 * the price or reconnecting the dentry.
 	 */
 	dwords = buflen >> 2;
-	fh_type = exportfs_encode_fh(real, buf, &dwords, 0);
+	fh_type = exportfs_encode_fh(real, (void *)fh->fb.fid, &dwords, 0);
 	buflen = (dwords << 2);
 
-	fh = ERR_PTR(-EIO);
+	err = -EIO;
 	if (WARN_ON(fh_type < 0) ||
 	    WARN_ON(buflen > MAX_HANDLE_SZ) ||
 	    WARN_ON(fh_type == FILEID_INVALID))
-		goto out;
-
-	/* Make sure the real fid stays 32bit aligned */
-	BUILD_BUG_ON(OVL_FH_FID_OFFSET % 4);
-	BUILD_BUG_ON(MAX_HANDLE_SZ + OVL_FH_FID_OFFSET > 255);
-	fh_len = OVL_FH_FID_OFFSET + buflen;
-	fh = kzalloc(fh_len, GFP_KERNEL);
-	if (!fh) {
-		fh = ERR_PTR(-ENOMEM);
-		goto out;
-	}
+		goto out_err;
 
 	fh->fb.version = OVL_FH_VERSION;
 	fh->fb.magic = OVL_FH_MAGIC;
@@ -288,13 +319,14 @@ struct ovl_fh *ovl_encode_real_fh(struct dentry *real, bool is_upper)
 	 */
 	if (is_upper)
 		fh->fb.flags |= OVL_FH_FLAG_PATH_UPPER;
-	fh->fb.len = fh_len - OVL_FH_WIRE_OFFSET;
+	fh->fb.len = sizeof(fh->fb) + buflen;
 	fh->fb.uuid = *uuid;
-	memcpy(fh->fb.fid, buf, buflen);
 
-out:
-	kfree(buf);
 	return fh;
+
+out_err:
+	kfree(fh);
+	return ERR_PTR(err);
 }
 
 int ovl_set_origin(struct dentry *dentry, struct dentry *lower,
@@ -504,7 +536,7 @@ static int ovl_copy_up_inode(struct ovl_copy_up_ctx *c, struct dentry *temp)
 	}
 
 	inode_lock(temp->d_inode);
-	if (c->metacopy)
+	if (S_ISREG(c->stat.mode))
 		err = ovl_set_size(temp, &c->stat);
 	if (!err)
 		err = ovl_set_attr(temp, &c->stat);

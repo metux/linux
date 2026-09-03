@@ -203,7 +203,6 @@ struct mlx5e_rep_sq {
 	struct list_head	 list;
 };
 
-void *mlx5e_alloc_nic_rep_priv(struct mlx5_core_dev *mdev);
 void mlx5e_rep_register_vport_reps(struct mlx5_core_dev *mdev);
 void mlx5e_rep_unregister_vport_reps(struct mlx5_core_dev *mdev);
 int mlx5e_rep_bond_init(struct mlx5e_rep_priv *rpriv);

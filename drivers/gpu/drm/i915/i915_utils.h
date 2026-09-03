@@ -71,7 +71,7 @@ bool i915_error_injected(void);
 
 #else
 
-#define i915_inject_probe_error(_i915, _err) 0
+#define i915_inject_probe_error(i915, e) ({ BUILD_BUG_ON_INVALID(i915); 0; })
 #define i915_error_injected() false
 
 #endif
@@ -247,6 +247,11 @@ static inline u64 ptr_to_u64(const void *ptr)
 	mask &= ~BIT(__idx);						\
 	__idx;								\
 })
+
+static inline bool is_power_of_2_u64(u64 n)
+{
+	return (n != 0 && ((n & (n - 1)) == 0));
+}
 
 static inline void __list_del_many(struct list_head *head,
 				   struct list_head *first)
@@ -437,5 +442,18 @@ static inline bool timer_expired(const struct timer_list *t)
 {
 	return READ_ONCE(t->expires) && !timer_pending(t);
 }
+
+/*
+ * This is a lookalike for IS_ENABLED() that takes a kconfig value,
+ * e.g. CONFIG_DRM_I915_SPIN_REQUEST, and evaluates whether it is non-zero
+ * i.e. whether the configuration is active. Wrapping up the config inside
+ * a boolean context prevents clang and smatch from complaining about potential
+ * issues in confusing logical-&& with bitwise-& for constants.
+ *
+ * Sadly IS_ENABLED() itself does not work with kconfig values.
+ *
+ * Returns 0 if @config is 0, 1 if set to any value.
+ */
+#define IS_ACTIVE(config) ((config) != 0)
 
 #endif /* !__I915_UTILS_H */

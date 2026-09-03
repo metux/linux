@@ -17,7 +17,6 @@ static inline struct clk_hw *of_clk_get_hw(struct device_node *np,
 {
 	return ERR_PTR(-ENOENT);
 }
-struct clk_hw *of_clk_get_hw_from_clkspec(struct of_phandle_args *clkspec);
 #endif
 
 struct clk_hw *clk_find_hw(const char *dev_id, const char *con_id);

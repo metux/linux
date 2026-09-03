@@ -8,6 +8,7 @@
 #include <linux/iommu.h>
 #include <linux/of_device.h>
 #include <linux/of_graph.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/dma-mapping.h>
@@ -158,6 +159,12 @@ static int komeda_parse_dt(struct device *dev, struct komeda_dev *mdev)
 		return mdev->irq;
 	}
 
+	/* Get the optional framebuffer memory resource */
+	ret = of_reserved_mem_device_init(dev);
+	if (ret && ret != -ENODEV)
+		return ret;
+	ret = 0;
+
 	for_each_available_child_of_node(np, child) {
 		if (of_node_name_eq(child, "pipeline")) {
 			of_property_read_u32(child, "reg", &pipe_id);
@@ -305,6 +312,8 @@ void komeda_dev_destroy(struct komeda_dev *mdev)
 	}
 
 	mdev->n_pipelines = 0;
+
+	of_reserved_mem_device_release(dev);
 
 	if (funcs && funcs->cleanup)
 		funcs->cleanup(mdev);

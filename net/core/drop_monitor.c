@@ -1080,8 +1080,10 @@ static void net_dm_hw_monitor_stop(struct netlink_ext_ack *extack)
 	const struct net_dm_alert_ops *ops;
 	int cpu;
 
-	if (!monitor_hw)
+	if (!monitor_hw) {
 		NL_SET_ERR_MSG_MOD(extack, "Hardware monitoring already disabled");
+		return;
+	}
 
 	ops = net_dm_alert_ops_arr[net_dm_alert_mode];
 

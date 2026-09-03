@@ -35,102 +35,6 @@ static inline bool node_signaled(const struct i915_sched_node *node)
 	return i915_request_completed(node_to_request(node));
 }
 
-void i915_sched_node_init(struct i915_sched_node *node)
-{
-	INIT_LIST_HEAD(&node->signalers_list);
-	INIT_LIST_HEAD(&node->waiters_list);
-	INIT_LIST_HEAD(&node->link);
-	node->attr.priority = I915_PRIORITY_INVALID;
-}
-
-static struct i915_dependency *
-i915_dependency_alloc(void)
-{
-	return kmem_cache_alloc(global.slab_dependencies, GFP_KERNEL);
-}
-
-static void
-i915_dependency_free(struct i915_dependency *dep)
-{
-	kmem_cache_free(global.slab_dependencies, dep);
-}
-
-bool __i915_sched_node_add_dependency(struct i915_sched_node *node,
-				      struct i915_sched_node *signal,
-				      struct i915_dependency *dep,
-				      unsigned long flags)
-{
-	bool ret = false;
-
-	spin_lock(&schedule_lock);
-
-	if (!node_signaled(signal)) {
-		INIT_LIST_HEAD(&dep->dfs_link);
-		list_add(&dep->wait_link, &signal->waiters_list);
-		list_add(&dep->signal_link, &node->signalers_list);
-		dep->signaler = signal;
-		dep->flags = flags;
-
-		ret = true;
-	}
-
-	spin_unlock(&schedule_lock);
-
-	return ret;
-}
-
-int i915_sched_node_add_dependency(struct i915_sched_node *node,
-				   struct i915_sched_node *signal)
-{
-	struct i915_dependency *dep;
-
-	dep = i915_dependency_alloc();
-	if (!dep)
-		return -ENOMEM;
-
-	if (!__i915_sched_node_add_dependency(node, signal, dep,
-					      I915_DEPENDENCY_ALLOC))
-		i915_dependency_free(dep);
-
-	return 0;
-}
-
-void i915_sched_node_fini(struct i915_sched_node *node)
-{
-	struct i915_dependency *dep, *tmp;
-
-	GEM_BUG_ON(!list_empty(&node->link));
-
-	spin_lock(&schedule_lock);
-
-	/*
-	 * Everyone we depended upon (the fences we wait to be signaled)
-	 * should retire before us and remove themselves from our list.
-	 * However, retirement is run independently on each timeline and
-	 * so we may be called out-of-order.
-	 */
-	list_for_each_entry_safe(dep, tmp, &node->signalers_list, signal_link) {
-		GEM_BUG_ON(!node_signaled(dep->signaler));
-		GEM_BUG_ON(!list_empty(&dep->dfs_link));
-
-		list_del(&dep->wait_link);
-		if (dep->flags & I915_DEPENDENCY_ALLOC)
-			i915_dependency_free(dep);
-	}
-
-	/* Remove ourselves from everyone who depends upon us */
-	list_for_each_entry_safe(dep, tmp, &node->waiters_list, wait_link) {
-		GEM_BUG_ON(dep->signaler != node);
-		GEM_BUG_ON(!list_empty(&dep->dfs_link));
-
-		list_del(&dep->signal_link);
-		if (dep->flags & I915_DEPENDENCY_ALLOC)
-			i915_dependency_free(dep);
-	}
-
-	spin_unlock(&schedule_lock);
-}
-
 static inline struct i915_priolist *to_priolist(struct rb_node *rb)
 {
 	return rb_entry(rb, struct i915_priolist, node);
@@ -426,20 +330,18 @@ static void __i915_schedule(struct i915_sched_node *node,
 
 		WRITE_ONCE(node->attr.priority, prio);
 
-		if (list_empty(&node->link)) {
-			/*
-			 * If the request is not in the priolist queue because
-			 * it is not yet runnable, then it doesn't contribute
-			 * to our preemption decisions. On the other hand,
-			 * if the request is on the HW, it too is not in the
-			 * queue; but in that case we may still need to reorder
-			 * the inflight requests.
-			 */
+		/*
+		 * Once the request is ready, it will be placed into the
+		 * priority lists and then onto the HW runlist. Before the
+		 * request is ready, it does not contribute to our preemption
+		 * decisions and we can safely ignore it, as it will, and
+		 * any preemption required, be dealt with upon submission.
+		 * See engine->submit_request()
+		 */
+		if (list_empty(&node->link))
 			continue;
-		}
 
-		if (!intel_engine_is_virtual(engine) &&
-		    !i915_request_is_active(node_to_request(node))) {
+		if (i915_request_in_priority_queue(node_to_request(node))) {
 			if (!cache.priolist)
 				cache.priolist =
 					i915_sched_lookup_priolist(engine,
@@ -477,8 +379,7 @@ void i915_schedule_bump_priority(struct i915_request *rq, unsigned int bump)
 	unsigned long flags;
 
 	GEM_BUG_ON(bump & ~I915_PRIORITY_MASK);
-
-	if (READ_ONCE(rq->sched.attr.priority) == I915_PRIORITY_INVALID)
+	if (READ_ONCE(rq->sched.attr.priority) & bump)
 		return;
 
 	spin_lock_irqsave(&schedule_lock, flags);
@@ -530,6 +431,7 @@ bool __i915_sched_node_add_dependency(struct i915_sched_node *node,
 	if (!node_signaled(signal)) {
 		INIT_LIST_HEAD(&dep->dfs_link);
 		dep->signaler = signal;
+		dep->waiter = node;
 		dep->flags = flags;
 
 		/* All set, now publish. Beware the lockless walkers. */
@@ -638,40 +540,4 @@ int __init i915_global_scheduler_init(void)
 err_priorities:
 	kmem_cache_destroy(global.slab_priorities);
 	return -ENOMEM;
-}
-
-void __i915_priolist_free(struct i915_priolist *p)
-{
-	kmem_cache_free(global.slab_priorities, p);
-}
-
-int __init i915_global_scheduler_init(void)
-{
-	global.slab_dependencies = KMEM_CACHE(i915_dependency,
-					      SLAB_HWCACHE_ALIGN);
-	if (!global.slab_dependencies)
-		return -ENOMEM;
-
-	global.slab_priorities = KMEM_CACHE(i915_priolist,
-					    SLAB_HWCACHE_ALIGN);
-	if (!global.slab_priorities)
-		goto err_priorities;
-
-	return 0;
-
-err_priorities:
-	kmem_cache_destroy(global.slab_priorities);
-	return -ENOMEM;
-}
-
-void i915_global_scheduler_shrink(void)
-{
-	kmem_cache_shrink(global.slab_dependencies);
-	kmem_cache_shrink(global.slab_priorities);
-}
-
-void i915_global_scheduler_exit(void)
-{
-	kmem_cache_destroy(global.slab_dependencies);
-	kmem_cache_destroy(global.slab_priorities);
 }

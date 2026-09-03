@@ -18,15 +18,6 @@
 #include "i915_drv.h"
 #include "i915_trace.h"
 
-enum {
-	GUC_PREEMPT_NONE = 0,
-	GUC_PREEMPT_INPROGRESS,
-	GUC_PREEMPT_FINISHED,
-};
-#define GUC_PREEMPT_BREADCRUMB_DWORDS	0x8
-#define GUC_PREEMPT_BREADCRUMB_BYTES	\
-	(sizeof(u32) * GUC_PREEMPT_BREADCRUMB_DWORDS)
-
 /**
  * DOC: GuC-based command submission
  *
@@ -36,24 +27,13 @@ enum {
  * code) matches the old submission model and will be updated as part of the
  * upgrade to the new flow.
  *
- * GuC client:
- * A intel_guc_client refers to a submission path through GuC. Currently, there
- * is only one client, which is charged with all submissions to the GuC. This
- * struct is the owner of a process descriptor and a workqueue (both of them
- * inside a single gem object that contains all required pages for these
- * elements).
- *
  * GuC stage descriptor:
  * During initialization, the driver allocates a static pool of 1024 such
- * descriptors, and shares them with the GuC.
- * Currently, there exists a 1:1 mapping between a intel_guc_client and a
- * guc_stage_desc (via the client's stage_id), so effectively only one
- * gets used. This stage descriptor lets the GuC know about the workqueue and
+ * descriptors, and shares them with the GuC. Currently, we only use one
+ * descriptor. This stage descriptor lets the GuC know about the workqueue and
  * process descriptor. Theoretically, it also lets the GuC know about our HW
  * contexts (context ID, etc...), but we actually employ a kind of submission
- * where the GuC uses the LRCA sent via the work item instead (the single
- * guc_stage_desc associated to execbuf client contains information about the
- * default kernel context only, but this is essentially unused). This is called
+ * where the GuC uses the LRCA sent via the work item instead. This is called
  * a "proxy" submission.
  *
  * The Scratch registers:
@@ -63,7 +43,6 @@ enum {
  * Firmware writes a success/fail code back to the action register after
  * processes the request. The kernel driver polls waiting for this update and
  * then proceeds.
- * See intel_guc_send()
  *
  * Work Items:
  * There are several types of work items that the host may place into a
@@ -80,33 +59,45 @@ static inline struct i915_priolist *to_priolist(struct rb_node *rb)
 	return rb_entry(rb, struct i915_priolist, node);
 }
 
-static inline bool is_high_priority(struct intel_guc_client *client)
+static struct guc_stage_desc *__get_stage_desc(struct intel_guc *guc, u32 id)
 {
-	return (client->priority == GUC_CLIENT_PRIORITY_KMD_HIGH ||
-		client->priority == GUC_CLIENT_PRIORITY_HIGH);
+	struct guc_stage_desc *base = guc->stage_desc_pool_vaddr;
+
+	return &base[id];
 }
 
-static struct guc_stage_desc *__get_stage_desc(struct intel_guc_client *client)
+static int guc_workqueue_create(struct intel_guc *guc)
 {
-	struct guc_stage_desc *base = client->guc->stage_desc_pool_vaddr;
-
-	return &base[client->stage_id];
+	return intel_guc_allocate_and_map_vma(guc, GUC_WQ_SIZE, &guc->workqueue,
+					      &guc->workqueue_vaddr);
 }
 
-static inline struct guc_process_desc *
-__get_process_desc(struct intel_guc_client *client)
+static void guc_workqueue_destroy(struct intel_guc *guc)
 {
-	return client->vaddr;
+	i915_vma_unpin_and_release(&guc->workqueue, I915_VMA_RELEASE_MAP);
 }
 
 /*
  * Initialise the process descriptor shared with the GuC firmware.
  */
-static void guc_proc_desc_init(struct intel_guc_client *client)
+static int guc_proc_desc_create(struct intel_guc *guc)
+{
+	const u32 size = PAGE_ALIGN(sizeof(struct guc_process_desc));
+
+	return intel_guc_allocate_and_map_vma(guc, size, &guc->proc_desc,
+					      &guc->proc_desc_vaddr);
+}
+
+static void guc_proc_desc_destroy(struct intel_guc *guc)
+{
+	i915_vma_unpin_and_release(&guc->proc_desc, I915_VMA_RELEASE_MAP);
+}
+
+static void guc_proc_desc_init(struct intel_guc *guc)
 {
 	struct guc_process_desc *desc;
 
-	desc = memset(__get_process_desc(client), 0, sizeof(*desc));
+	desc = memset(guc->proc_desc_vaddr, 0, sizeof(*desc));
 
 	/*
 	 * XXX: pDoorbell and WQVBaseAddress are pointers in process address
@@ -117,39 +108,27 @@ static void guc_proc_desc_init(struct intel_guc_client *client)
 	desc->wq_base_addr = 0;
 	desc->db_base_addr = 0;
 
-	desc->stage_id = client->stage_id;
 	desc->wq_size_bytes = GUC_WQ_SIZE;
 	desc->wq_status = WQ_STATUS_ACTIVE;
-	desc->priority = client->priority;
+	desc->priority = GUC_CLIENT_PRIORITY_KMD_NORMAL;
 }
 
-static void guc_proc_desc_fini(struct intel_guc_client *client)
+static void guc_proc_desc_fini(struct intel_guc *guc)
 {
-	struct guc_process_desc *desc;
-
-	desc = __get_process_desc(client);
-	memset(desc, 0, sizeof(*desc));
+	memset(guc->proc_desc_vaddr, 0, sizeof(struct guc_process_desc));
 }
 
 static int guc_stage_desc_pool_create(struct intel_guc *guc)
 {
 	u32 size = PAGE_ALIGN(sizeof(struct guc_stage_desc) *
 			      GUC_MAX_STAGE_DESCRIPTORS);
-	int ret;
 
-	ret = intel_guc_allocate_and_map_vma(guc, size, &guc->stage_desc_pool,
-					     &guc->stage_desc_pool_vaddr);
-	if (ret)
-		return ret;
-
-	ida_init(&guc->stage_ids);
-
-	return 0;
+	return intel_guc_allocate_and_map_vma(guc, size, &guc->stage_desc_pool,
+					      &guc->stage_desc_pool_vaddr);
 }
 
 static void guc_stage_desc_pool_destroy(struct intel_guc *guc)
 {
-	ida_destroy(&guc->stage_ids);
 	i915_vma_unpin_and_release(&guc->stage_desc_pool, I915_VMA_RELEASE_MAP);
 }
 
@@ -157,58 +136,49 @@ static void guc_stage_desc_pool_destroy(struct intel_guc *guc)
  * Initialise/clear the stage descriptor shared with the GuC firmware.
  *
  * This descriptor tells the GuC where (in GGTT space) to find the important
- * data structures relating to this client (process descriptor, write queue,
+ * data structures related to work submission (process descriptor, write queue,
  * etc).
  */
-static void guc_stage_desc_init(struct intel_guc_client *client)
+static void guc_stage_desc_init(struct intel_guc *guc)
 {
-	struct intel_guc *guc = client->guc;
 	struct guc_stage_desc *desc;
-	u32 gfx_addr;
 
-	desc = __get_stage_desc(client);
+	/* we only use 1 stage desc, so hardcode it to 0 */
+	desc = __get_stage_desc(guc, 0);
 	memset(desc, 0, sizeof(*desc));
 
 	desc->attribute = GUC_STAGE_DESC_ATTR_ACTIVE |
 			  GUC_STAGE_DESC_ATTR_KERNEL;
-	if (is_high_priority(client))
-		desc->attribute |= GUC_STAGE_DESC_ATTR_PREEMPT;
-	desc->stage_id = client->stage_id;
-	desc->priority = client->priority;
 
-	/*
-	 * The process descriptor and workqueue are all parts of the client
-	 * object, which the GuC will reference via the GGTT
-	 */
-	gfx_addr = intel_guc_ggtt_offset(guc, client->vma);
-	desc->process_desc = gfx_addr;
-	desc->wq_addr = gfx_addr + GUC_PD_SIZE;
+	desc->stage_id = 0;
+	desc->priority = GUC_CLIENT_PRIORITY_KMD_NORMAL;
+
+	desc->process_desc = intel_guc_ggtt_offset(guc, guc->proc_desc);
+	desc->wq_addr = intel_guc_ggtt_offset(guc, guc->workqueue);
 	desc->wq_size = GUC_WQ_SIZE;
-
-	desc->desc_private = ptr_to_u64(client);
 }
 
-static void guc_stage_desc_fini(struct intel_guc_client *client)
+static void guc_stage_desc_fini(struct intel_guc *guc)
 {
 	struct guc_stage_desc *desc;
 
-	desc = __get_stage_desc(client);
+	desc = __get_stage_desc(guc, 0);
 	memset(desc, 0, sizeof(*desc));
 }
 
 /* Construct a Work Item and append it to the GuC's Work Queue */
-static void guc_wq_item_append(struct intel_guc_client *client,
+static void guc_wq_item_append(struct intel_guc *guc,
 			       u32 target_engine, u32 context_desc,
 			       u32 ring_tail, u32 fence_id)
 {
 	/* wqi_len is in DWords, and does not include the one-word header */
 	const size_t wqi_size = sizeof(struct guc_wq_item);
 	const u32 wqi_len = wqi_size / sizeof(u32) - 1;
-	struct guc_process_desc *desc = __get_process_desc(client);
+	struct guc_process_desc *desc = guc->proc_desc_vaddr;
 	struct guc_wq_item *wqi;
 	u32 wq_off;
 
-	lockdep_assert_held(&client->wq_lock);
+	lockdep_assert_held(&guc->wq_lock);
 
 	/* For now workqueue item is 4 DWs; workqueue buffer is 2 pages. So we
 	 * should not have the case where structure wqi is across page, neither
@@ -228,8 +198,7 @@ static void guc_wq_item_append(struct intel_guc_client *client,
 			      GUC_WQ_SIZE) < wqi_size);
 	GEM_BUG_ON(wq_off & (wqi_size - 1));
 
-	/* WQ starts from the page after process_desc */
-	wqi = client->vaddr + wq_off + GUC_PD_SIZE;
+	wqi = guc->workqueue_vaddr + wq_off;
 
 	/* Now fill in the 4-word work queue item */
 	wqi->header = WQ_TYPE_INORDER |
@@ -247,12 +216,11 @@ static void guc_wq_item_append(struct intel_guc_client *client,
 
 static void guc_add_request(struct intel_guc *guc, struct i915_request *rq)
 {
-	struct intel_guc_client *client = guc->execbuf_client;
 	struct intel_engine_cs *engine = rq->engine;
 	u32 ctx_desc = rq->context->lrc.ccid;
 	u32 ring_tail = intel_ring_set_tail(rq->ring, rq->tail) / sizeof(u64);
 
-	guc_wq_item_append(client, engine->guc_id, ctx_desc,
+	guc_wq_item_append(guc, engine->guc_id, ctx_desc,
 			   ring_tail, rq->fence.seqno);
 }
 
@@ -265,10 +233,9 @@ static void guc_add_request(struct intel_guc *guc, struct i915_request *rq)
  */
 static void flush_ggtt_writes(struct i915_vma *vma)
 {
-	struct drm_i915_private *i915 = vma->vm->i915;
-
 	if (i915_vma_is_map_and_fenceable(vma))
-		intel_uncore_posting_read_fw(&i915->uncore, GUC_STATUS);
+		intel_uncore_posting_read_fw(vma->vm->gt->uncore,
+					     GUC_STATUS);
 }
 
 static void guc_submit(struct intel_engine_cs *engine,
@@ -276,9 +243,8 @@ static void guc_submit(struct intel_engine_cs *engine,
 		       struct i915_request **end)
 {
 	struct intel_guc *guc = &engine->gt->uc.guc;
-	struct intel_guc_client *client = guc->execbuf_client;
 
-	spin_lock(&client->wq_lock);
+	spin_lock(&guc->wq_lock);
 
 	do {
 		struct i915_request *rq = *out++;
@@ -287,7 +253,7 @@ static void guc_submit(struct intel_engine_cs *engine,
 		guc_add_request(guc, rq);
 	} while (out != end);
 
-	spin_unlock(&client->wq_lock);
+	spin_unlock(&guc->wq_lock);
 }
 
 static inline int rq_prio(const struct i915_request *rq)
@@ -306,7 +272,7 @@ static struct i915_request *schedule_in(struct i915_request *rq, int idx)
 	 * required if we generalise the inflight tracking.
 	 */
 
-	intel_gt_pm_get(rq->engine->gt);
+	__intel_gt_pm_get(rq->engine->gt);
 	return i915_request_get(rq);
 }
 
@@ -408,7 +374,7 @@ static void guc_reset_prepare(struct intel_engine_cs *engine)
 {
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 
-	GEM_TRACE("%s\n", engine->name);
+	ENGINE_TRACE(engine, "\n");
 
 	/*
 	 * Prevent request submission to the hardware until we have
@@ -435,7 +401,7 @@ cancel_port_requests(struct intel_engine_execlists * const execlists)
 		memset(execlists->inflight, 0, sizeof(execlists->inflight));
 }
 
-static void guc_reset(struct intel_engine_cs *engine, bool stalled)
+static void guc_reset_rewind(struct intel_engine_cs *engine, bool stalled)
 {
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 	struct i915_request *rq;
@@ -460,14 +426,14 @@ out_unlock:
 	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
 
-static void guc_cancel_requests(struct intel_engine_cs *engine)
+static void guc_reset_cancel(struct intel_engine_cs *engine)
 {
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 	struct i915_request *rq, *rn;
 	struct rb_node *rb;
 	unsigned long flags;
 
-	GEM_TRACE("%s\n", engine->name);
+	ENGINE_TRACE(engine, "\n");
 
 	/*
 	 * Before we call engine->cancel_requests(), we should have exclusive
@@ -526,8 +492,8 @@ static void guc_reset_finish(struct intel_engine_cs *engine)
 		/* And kick in case we missed a new request submission. */
 		tasklet_hi_schedule(&execlists->tasklet);
 
-	GEM_TRACE("%s: depth->%d\n", engine->name,
-		  atomic_read(&execlists->tasklet.count));
+	ENGINE_TRACE(engine, "depth->%d\n",
+		     atomic_read(&execlists->tasklet.count));
 }
 
 /*
@@ -535,139 +501,6 @@ static void guc_reset_finish(struct intel_engine_cs *engine)
  * therefore not part of the somewhat time-critical batch-submission
  * path of guc_submit() above.
  */
-
-/**
- * guc_client_alloc() - Allocate an intel_guc_client
- * @guc:	the intel_guc structure
- * @priority:	four levels priority _CRITICAL, _HIGH, _NORMAL and _LOW
- *		The kernel client to replace ExecList submission is created with
- *		NORMAL priority. Priority of a client for scheduler can be HIGH,
- *		while a preemption context can use CRITICAL.
- *
- * Return:	An intel_guc_client object if success, else NULL.
- */
-static struct intel_guc_client *
-guc_client_alloc(struct intel_guc *guc, u32 priority)
-{
-	struct intel_guc_client *client;
-	struct i915_vma *vma;
-	void *vaddr;
-	int ret;
-
-	client = kzalloc(sizeof(*client), GFP_KERNEL);
-	if (!client)
-		return ERR_PTR(-ENOMEM);
-
-	client->guc = guc;
-	client->priority = priority;
-	spin_lock_init(&client->wq_lock);
-
-	ret = ida_simple_get(&guc->stage_ids, 0, GUC_MAX_STAGE_DESCRIPTORS,
-			     GFP_KERNEL);
-	if (ret < 0)
-		goto err_client;
-
-	client->stage_id = ret;
-
-	/* The first page is proc_desc. Two following pages are wq. */
-	vma = intel_guc_allocate_vma(guc, GUC_PD_SIZE + GUC_WQ_SIZE);
-	if (IS_ERR(vma)) {
-		ret = PTR_ERR(vma);
-		goto err_id;
-	}
-
-	/* We'll keep just the first (doorbell/proc) page permanently kmap'd. */
-	client->vma = vma;
-
-	vaddr = i915_gem_object_pin_map(vma->obj, I915_MAP_WB);
-	if (IS_ERR(vaddr)) {
-		ret = PTR_ERR(vaddr);
-		goto err_vma;
-	}
-	client->vaddr = vaddr;
-
-	DRM_DEBUG_DRIVER("new priority %u client %p: stage_id %u\n",
-			 priority, client, client->stage_id);
-
-	return client;
-
-err_vma:
-	i915_vma_unpin_and_release(&client->vma, 0);
-err_id:
-	ida_simple_remove(&guc->stage_ids, client->stage_id);
-err_client:
-	kfree(client);
-	return ERR_PTR(ret);
-}
-
-static void guc_client_free(struct intel_guc_client *client)
-{
-	i915_vma_unpin_and_release(&client->vma, I915_VMA_RELEASE_MAP);
-	ida_simple_remove(&client->guc->stage_ids, client->stage_id);
-	kfree(client);
-}
-
-static inline bool ctx_save_restore_disabled(struct intel_context *ce)
-{
-	u32 sr = ce->lrc_reg_state[CTX_CONTEXT_CONTROL + 1];
-
-#define SR_DISABLED \
-	_MASKED_BIT_ENABLE(CTX_CTRL_ENGINE_CTX_RESTORE_INHIBIT | \
-			   CTX_CTRL_ENGINE_CTX_SAVE_INHIBIT)
-
-	return (sr & SR_DISABLED) == SR_DISABLED;
-
-#undef SR_DISABLED
-}
-
-static int guc_clients_create(struct intel_guc *guc)
-{
-	struct intel_guc_client *client;
-
-	GEM_BUG_ON(guc->execbuf_client);
-
-	client = guc_client_alloc(guc, GUC_CLIENT_PRIORITY_KMD_NORMAL);
-	if (IS_ERR(client)) {
-		DRM_ERROR("Failed to create GuC client for submission!\n");
-		return PTR_ERR(client);
-	}
-	guc->execbuf_client = client;
-
-	return 0;
-}
-
-static void guc_clients_destroy(struct intel_guc *guc)
-{
-	struct intel_guc_client *client;
-
-	client = fetch_and_zero(&guc->execbuf_client);
-	if (client)
-		guc_client_free(client);
-}
-
-static void __guc_client_enable(struct intel_guc_client *client)
-{
-	guc_proc_desc_init(client);
-	guc_stage_desc_init(client);
-}
-
-static void __guc_client_disable(struct intel_guc_client *client)
-{
-	/* Note: By the time we're here, GuC may have already been reset */
-	guc_stage_desc_fini(client);
-	guc_proc_desc_fini(client);
-}
-
-static void guc_clients_enable(struct intel_guc *guc)
-{
-	__guc_client_enable(guc->execbuf_client);
-}
-
-static void guc_clients_disable(struct intel_guc *guc)
-{
-	if (guc->execbuf_client)
-		__guc_client_disable(guc->execbuf_client);
-}
 
 /*
  * Set up the memory resources to be shared with the GuC (via the GGTT)
@@ -689,12 +522,20 @@ int intel_guc_submission_init(struct intel_guc *guc)
 	 */
 	GEM_BUG_ON(!guc->stage_desc_pool);
 
-	ret = guc_clients_create(guc);
+	ret = guc_workqueue_create(guc);
 	if (ret)
 		goto err_pool;
 
+	ret = guc_proc_desc_create(guc);
+	if (ret)
+		goto err_workqueue;
+
+	spin_lock_init(&guc->wq_lock);
+
 	return 0;
 
+err_workqueue:
+	guc_workqueue_destroy(guc);
 err_pool:
 	guc_stage_desc_pool_destroy(guc);
 	return ret;
@@ -702,10 +543,11 @@ err_pool:
 
 void intel_guc_submission_fini(struct intel_guc *guc)
 {
-	guc_clients_destroy(guc);
-
-	if (guc->stage_desc_pool)
+	if (guc->stage_desc_pool) {
+		guc_proc_desc_destroy(guc);
+		guc_workqueue_destroy(guc);
 		guc_stage_desc_pool_destroy(guc);
+	}
 }
 
 static void guc_interrupts_capture(struct intel_gt *gt)
@@ -755,10 +597,9 @@ static void guc_set_default_submission(struct intel_engine_cs *engine)
 	engine->park = engine->unpark = NULL;
 
 	engine->reset.prepare = guc_reset_prepare;
-	engine->reset.reset = guc_reset;
+	engine->reset.rewind = guc_reset_rewind;
+	engine->reset.cancel = guc_reset_cancel;
 	engine->reset.finish = guc_reset_finish;
-
-	engine->cancel_requests = guc_cancel_requests;
 
 	engine->flags &= ~I915_ENGINE_SUPPORTS_STATS;
 	engine->flags |= I915_ENGINE_NEEDS_BREADCRUMB_TASKLET;
@@ -791,9 +632,8 @@ void intel_guc_submission_enable(struct intel_guc *guc)
 		     sizeof(struct guc_wq_item) *
 		     I915_NUM_ENGINES > GUC_WQ_SIZE);
 
-	GEM_BUG_ON(!guc->execbuf_client);
-
-	guc_clients_enable(guc);
+	guc_proc_desc_init(guc);
+	guc_stage_desc_init(guc);
 
 	/* Take over from manual control of ELSP (execlists) */
 	guc_interrupts_capture(gt);
@@ -810,8 +650,12 @@ void intel_guc_submission_disable(struct intel_guc *guc)
 
 	GEM_BUG_ON(gt->awake); /* GT should be parked first */
 
+	/* Note: By the time we're here, GuC may have already been reset */
+
 	guc_interrupts_release(gt);
-	guc_clients_disable(guc);
+
+	guc_stage_desc_fini(guc);
+	guc_proc_desc_fini(guc);
 }
 
 static bool __guc_submission_selected(struct intel_guc *guc)
@@ -827,4 +671,9 @@ static bool __guc_submission_selected(struct intel_guc *guc)
 void intel_guc_submission_init_early(struct intel_guc *guc)
 {
 	guc->submission_selected = __guc_submission_selected(guc);
+}
+
+bool intel_engine_in_guc_submission_mode(const struct intel_engine_cs *engine)
+{
+	return engine->set_default_submission == guc_set_default_submission;
 }

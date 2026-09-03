@@ -205,8 +205,6 @@ static __always_inline u64 __arch_counter_get_cntvct(void)
 	return cnt;
 }
 
-#undef arch_counter_enforce_ordering
-
 static inline int arch_timer_arch_init(void)
 {
 	return 0;

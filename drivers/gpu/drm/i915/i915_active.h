@@ -219,9 +219,6 @@ i915_active_is_idle(const struct i915_active *ref)
 
 void i915_active_fini(struct i915_active *ref);
 
-int i915_global_active_init(void);
-void i915_global_active_shrink(void);
-void i915_global_active_exit(void);
 int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 					    struct intel_engine_cs *engine);
 void i915_active_acquire_barrier(struct i915_active *ref);

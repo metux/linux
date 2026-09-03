@@ -39,8 +39,8 @@
 #include <linux/debugfs.h>
 #include <linux/bpf.h>
 #include <linux/psi.h>
-#include <linux/blk-crypto.h>
 #include <linux/sched/sysctl.h>
+#include <linux/blk-crypto.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>
@@ -818,8 +818,13 @@ static noinline_for_stack bool submit_bio_checks(struct bio *bio)
 {
 	struct request_queue *q = bio->bi_disk->queue;
 	blk_status_t status = BLK_STS_IOERR;
+	struct blk_plug *plug;
 
 	might_sleep();
+
+	plug = blk_mq_plug(q, bio);
+	if (plug && plug->nowait)
+		bio->bi_opf |= REQ_NOWAIT;
 
 	/*
 	 * For a REQ_NOWAIT based request, return -EOPNOTSUPP
@@ -1821,12 +1826,6 @@ int __init blk_dev_init(void)
 			sizeof(struct request_queue), 0, SLAB_PANIC, NULL);
 
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
-
-	if (bio_crypt_ctx_init() < 0)
-		panic("Failed to allocate mem for bio crypt ctxs\n");
-
-	if (blk_crypto_init() < 0)
-		panic("Failed to init blk-crypto\n");
 
 	return 0;
 }

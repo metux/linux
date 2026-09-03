@@ -1756,9 +1756,6 @@ static int csi_unsubscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 	return v4l2_event_unsubscribe(fh, sub);
 }
 
-/*
- * retrieve our pads parsed from the OF graph by the media device
- */
 static int csi_registered(struct v4l2_subdev *sd)
 {
 	struct csi_priv *priv = v4l2_get_subdevdata(sd);
@@ -1775,9 +1772,6 @@ static int csi_registered(struct v4l2_subdev *sd)
 	priv->csi = csi;
 
 	for (i = 0; i < CSI_NUM_PADS; i++) {
-		priv->pad[i].flags = (i == CSI_SINK_PAD) ?
-			MEDIA_PAD_FL_SINK : MEDIA_PAD_FL_SOURCE;
-
 		code = 0;
 		if (i != CSI_SINK_PAD)
 			imx_media_enum_ipu_formats(&code, 0, PIXFMT_SEL_YUV);
@@ -1808,10 +1802,6 @@ static int csi_registered(struct v4l2_subdev *sd)
 		ret = PTR_ERR(priv->fim);
 		goto put_csi;
 	}
-
-	ret = media_entity_pads_init(&sd->entity, CSI_NUM_PADS, priv->pad);
-	if (ret)
-		goto free_fim;
 
 	priv->vdev = imx_media_capture_device_init(priv->sd.dev,
 						   &priv->sd,
@@ -1980,7 +1970,7 @@ static int imx_csi_probe(struct platform_device *pdev)
 	struct ipu_client_platformdata *pdata;
 	struct pinctrl *pinctrl;
 	struct csi_priv *priv;
-	int ret;
+	int i, ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -2019,6 +2009,15 @@ static int imx_csi_probe(struct platform_device *pdev)
 		IMX_MEDIA_GRP_ID_IPU_CSI1 : IMX_MEDIA_GRP_ID_IPU_CSI0;
 	imx_media_grp_id_to_sd_name(priv->sd.name, sizeof(priv->sd.name),
 				    priv->sd.grp_id, ipu_get_num(priv->ipu));
+
+	for (i = 0; i < CSI_NUM_PADS; i++)
+		priv->pad[i].flags = (i == CSI_SINK_PAD) ?
+			MEDIA_PAD_FL_SINK : MEDIA_PAD_FL_SOURCE;
+
+	ret = media_entity_pads_init(&priv->sd.entity, CSI_NUM_PADS,
+				     priv->pad);
+	if (ret)
+		return ret;
 
 	mutex_init(&priv->lock);
 

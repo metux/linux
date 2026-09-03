@@ -730,7 +730,7 @@ static int _set_opp_custom(const struct opp_table *opp_table,
 
 	data->old_opp.rate = old_freq;
 	size = sizeof(*old_supply) * opp_table->regulator_count;
-	if (IS_ERR(old_supply))
+	if (!old_supply)
 		memset(data->old_opp.supplies, 0, size);
 	else
 		memcpy(data->old_opp.supplies, old_supply, size);
@@ -756,7 +756,7 @@ static int _set_required_opps(struct device *dev,
 
 	/* Single genpd case */
 	if (!genpd_virt_devs) {
-		pstate = opp->required_opps[0]->pstate;
+		pstate = likely(opp) ? opp->required_opps[0]->pstate : 0;
 		ret = dev_pm_genpd_set_performance_state(dev, pstate);
 		if (ret) {
 			dev_err(dev, "Failed to set performance state of %s: %d (%d)\n",
@@ -774,7 +774,7 @@ static int _set_required_opps(struct device *dev,
 	mutex_lock(&opp_table->genpd_virt_dev_lock);
 
 	for (i = 0; i < opp_table->required_opp_count; i++) {
-		pstate = opp->required_opps[i]->pstate;
+		pstate = likely(opp) ? opp->required_opps[i]->pstate : 0;
 
 		if (!genpd_virt_devs[i])
 			continue;
@@ -796,27 +796,37 @@ static int _set_required_opps(struct device *dev,
  * @dev:	 device for which we do this operation
  * @target_freq: frequency to achieve
  *
- * This configures the power-supplies and clock source to the levels specified
- * by the OPP corresponding to the target_freq.
+ * This configures the power-supplies to the levels specified by the OPP
+ * corresponding to the target_freq, and programs the clock to a value <=
+ * target_freq, as rounded by clk_round_rate(). Device wanting to run at fmax
+ * provided by the opp, should have already rounded to the target OPP's
+ * frequency.
  */
 int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 {
 	struct opp_table *opp_table;
-	unsigned long freq, old_freq;
+	unsigned long freq, old_freq, temp_freq;
 	struct dev_pm_opp *old_opp, *opp;
 	struct clk *clk;
 	int ret;
-
-	if (unlikely(!target_freq)) {
-		dev_err(dev, "%s: Invalid target frequency %lu\n", __func__,
-			target_freq);
-		return -EINVAL;
-	}
 
 	opp_table = _find_opp_table(dev);
 	if (IS_ERR(opp_table)) {
 		dev_err(dev, "%s: device opp doesn't exist\n", __func__);
 		return PTR_ERR(opp_table);
+	}
+
+	if (unlikely(!target_freq)) {
+		if (opp_table->required_opp_tables) {
+			ret = _set_required_opps(dev, opp_table, NULL);
+		} else if (!_get_opp_count(opp_table)) {
+			return 0;
+		} else {
+			dev_err(dev, "target frequency can't be 0\n");
+			ret = -EINVAL;
+		}
+
+		goto put_opp_table;
 	}
 
 	clk = opp_table->clk;
@@ -841,13 +851,27 @@ int dev_pm_opp_set_rate(struct device *dev, unsigned long target_freq)
 		goto put_opp_table;
 	}
 
-	old_opp = _find_freq_ceil(opp_table, &old_freq);
+	/*
+	 * For IO devices which require an OPP on some platforms/SoCs
+	 * while just needing to scale the clock on some others
+	 * we look for empty OPP tables with just a clock handle and
+	 * scale only the clk. This makes dev_pm_opp_set_rate()
+	 * equivalent to a clk_set_rate()
+	 */
+	if (!_get_opp_count(opp_table)) {
+		ret = _generic_set_opp_clk_only(dev, clk, freq);
+		goto put_opp_table;
+	}
+
+	temp_freq = old_freq;
+	old_opp = _find_freq_ceil(opp_table, &temp_freq);
 	if (IS_ERR(old_opp)) {
 		dev_err(dev, "%s: failed to find current OPP for freq %lu (%ld)\n",
 			__func__, old_freq, PTR_ERR(old_opp));
 	}
 
-	opp = _find_freq_ceil(opp_table, &freq);
+	temp_freq = freq;
+	opp = _find_freq_ceil(opp_table, &temp_freq);
 	if (IS_ERR(opp)) {
 		ret = PTR_ERR(opp);
 		dev_err(dev, "%s: failed to find OPP for freq %lu (%d)\n",
@@ -1791,6 +1815,9 @@ static void _opp_detach_genpd(struct opp_table *opp_table)
 		dev_pm_domain_detach(opp_table->genpd_virt_devs[index], false);
 		opp_table->genpd_virt_devs[index] = NULL;
 	}
+
+	kfree(opp_table->genpd_virt_devs);
+	opp_table->genpd_virt_devs = NULL;
 }
 
 /**
@@ -1839,6 +1866,12 @@ struct opp_table *dev_pm_opp_attach_genpd(struct device *dev,
 
 	mutex_lock(&opp_table->genpd_virt_dev_lock);
 
+	opp_table->genpd_virt_devs = kcalloc(opp_table->required_opp_count,
+					     sizeof(*opp_table->genpd_virt_devs),
+					     GFP_KERNEL);
+	if (!opp_table->genpd_virt_devs)
+		goto unlock;
+
 	while (*name) {
 		if (index >= opp_table->required_opp_count) {
 			dev_err(dev, "Index can't be greater than required-opp-count - 1, %s (%d : %d)\n",
@@ -1872,6 +1905,7 @@ struct opp_table *dev_pm_opp_attach_genpd(struct device *dev,
 
 err:
 	_opp_detach_genpd(opp_table);
+unlock:
 	mutex_unlock(&opp_table->genpd_virt_dev_lock);
 
 put_table:

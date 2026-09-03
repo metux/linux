@@ -33,6 +33,10 @@
 #define AMDGPU_MAX_VCN_INSTANCES	2
 #define AMDGPU_MAX_VCN_ENC_RINGS  AMDGPU_VCN_MAX_ENC_RINGS * AMDGPU_MAX_VCN_INSTANCES
 
+#define AMDGPU_VCN_HARVEST_VCN0 (1 << 0)
+#define AMDGPU_VCN_HARVEST_VCN1 (1 << 1)
+
+#define VCN_DEC_KMD_CMD 		0x80000000
 #define VCN_DEC_CMD_FENCE		0x00000000
 #define VCN_DEC_CMD_TRAP		0x00000001
 #define VCN_DEC_CMD_WRITE_REG		0x00000004
@@ -219,6 +223,7 @@ struct amdgpu_vcn {
 	struct mutex		vcn1_jpeg1_workaround;
 	atomic_t		 total_submission_cnt;
 
+	unsigned	harvest_config;
 	int (*pause_dpg_mode)(struct amdgpu_device *adev,
 		int inst_idx, struct dpg_pause_state *new_state);
 };

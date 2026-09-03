@@ -110,6 +110,13 @@
 						  * Microarchitectural Data
 						  * Sampling (MDS) vulnerabilities.
 						  */
+#define ARCH_CAP_PSCHANGE_MC_NO		BIT(6)	 /*
+						  * The processor is not susceptible to a
+						  * machine check error due to modifying the
+						  * code page size along with either the
+						  * physical address or cache type
+						  * without TLB invalidation.
+						  */
 #define ARCH_CAP_TSX_CTRL_MSR		BIT(7)	/* MSR for TSX control is available. */
 #define ARCH_CAP_TAA_NO			BIT(8)	/*
 						 * Not susceptible to
@@ -475,6 +482,10 @@
 
 /* Alternative perfctr range with full access. */
 #define MSR_IA32_PMC0			0x000004c1
+
+/* Auto-reload via MSR instead of DS area */
+#define MSR_RELOAD_PMC0			0x000014c1
+#define MSR_RELOAD_FIXED_CTR0		0x00001309
 
 /*
  * AMD64 MSRs. Not complete. See the architecture manual for a more

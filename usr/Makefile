@@ -48,7 +48,7 @@ ifeq ($(cpio-data),)
 
 cpio-data := $(obj)/initramfs_data.cpio
 
-hostprogs-y := gen_init_cpio
+hostprogs := gen_init_cpio
 
 # .initramfs_data.cpio.d is used to identify all files included
 # in initramfs and to detect if any files are added/removed.

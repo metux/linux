@@ -237,7 +237,7 @@ static __poll_t dma_buf_poll(struct file *file, poll_table *poll)
 	struct dma_resv_list *fobj;
 	struct dma_fence *fence_excl;
 	__poll_t events;
-	unsigned shared_count;
+	unsigned shared_count, seq;
 
 	dmabuf = file->private_data;
 	if (!dmabuf || !dmabuf->resv)
@@ -251,8 +251,21 @@ static __poll_t dma_buf_poll(struct file *file, poll_table *poll)
 	if (!events)
 		return 0;
 
+retry:
+	seq = read_seqcount_begin(&resv->seq);
 	rcu_read_lock();
-	dma_resv_fences(resv, &fence_excl, &fobj, &shared_count);
+
+	fobj = rcu_dereference(resv->fence);
+	if (fobj)
+		shared_count = fobj->shared_count;
+	else
+		shared_count = 0;
+	fence_excl = rcu_dereference(resv->fence_excl);
+	if (read_seqcount_retry(&resv->seq, seq)) {
+		rcu_read_unlock();
+		goto retry;
+	}
+
 	if (fence_excl && (!(events & EPOLLOUT) || shared_count == 0)) {
 		struct dma_buf_poll_cb_t *dcb = &dmabuf->cb_excl;
 		__poll_t pevents = EPOLLIN;
@@ -1163,6 +1176,30 @@ int dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 }
 EXPORT_SYMBOL_GPL(dma_buf_begin_cpu_access);
 
+int dma_buf_begin_cpu_access_partial(struct dma_buf *dmabuf,
+				     enum dma_data_direction direction,
+				     unsigned int offset, unsigned int len)
+{
+	int ret = 0;
+
+	if (WARN_ON(!dmabuf))
+		return -EINVAL;
+
+	if (dmabuf->ops->begin_cpu_access_partial)
+		ret = dmabuf->ops->begin_cpu_access_partial(dmabuf, direction,
+							    offset, len);
+
+	/* Ensure that all fences are waited upon - but we first allow
+	 * the native handler the chance to do so more efficiently if it
+	 * chooses. A double invocation here will be reasonably cheap no-op.
+	 */
+	if (ret == 0)
+		ret = __dma_buf_begin_cpu_access(dmabuf, direction);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dma_buf_begin_cpu_access_partial);
+
 /**
  * dma_buf_end_cpu_access - Must be called after accessing a dma_buf from the
  * cpu in the kernel context. Calls end_cpu_access to allow exporter-specific
@@ -1189,6 +1226,21 @@ int dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 }
 EXPORT_SYMBOL_GPL(dma_buf_end_cpu_access);
 
+int dma_buf_end_cpu_access_partial(struct dma_buf *dmabuf,
+				   enum dma_data_direction direction,
+				   unsigned int offset, unsigned int len)
+{
+	int ret = 0;
+
+	WARN_ON(!dmabuf);
+
+	if (dmabuf->ops->end_cpu_access_partial)
+		ret = dmabuf->ops->end_cpu_access_partial(dmabuf, direction,
+							  offset, len);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dma_buf_end_cpu_access_partial);
 
 /**
  * dma_buf_mmap - Setup up a userspace mmap with the given vma
@@ -1317,6 +1369,32 @@ void dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 }
 EXPORT_SYMBOL_GPL(dma_buf_vunmap);
 
+int dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags)
+{
+	int ret = 0;
+
+	if (WARN_ON(!dmabuf) || !flags)
+		return -EINVAL;
+
+	if (dmabuf->ops->get_flags)
+		ret = dmabuf->ops->get_flags(dmabuf, flags);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dma_buf_get_flags);
+
+int dma_buf_get_uuid(struct dma_buf *dmabuf, uuid_t *uuid)
+{
+	if (WARN_ON(!dmabuf) || !uuid)
+		return -EINVAL;
+
+	if (!dmabuf->ops->get_uuid)
+		return -ENODEV;
+
+	return dmabuf->ops->get_uuid(dmabuf, uuid);
+}
+EXPORT_SYMBOL_GPL(dma_buf_get_uuid);
+
 #ifdef CONFIG_DEBUG_FS
 static int dma_buf_debug_show(struct seq_file *s, void *unused)
 {
@@ -1326,6 +1404,7 @@ static int dma_buf_debug_show(struct seq_file *s, void *unused)
 	struct dma_resv *robj;
 	struct dma_resv_list *fobj;
 	struct dma_fence *fence;
+	unsigned seq;
 	int count = 0, attach_count, shared_count, i;
 	size_t size = 0;
 
@@ -1355,9 +1434,16 @@ static int dma_buf_debug_show(struct seq_file *s, void *unused)
 		spin_unlock(&buf_obj->name_lock);
 
 		robj = buf_obj->resv;
-		rcu_read_lock();
-		dma_resv_fences(robj, &fence, &fobj, &shared_count);
-		rcu_read_unlock();
+		while (true) {
+			seq = read_seqcount_begin(&robj->seq);
+			rcu_read_lock();
+			fobj = rcu_dereference(robj->fence);
+			shared_count = fobj ? fobj->shared_count : 0;
+			fence = rcu_dereference(robj->fence_excl);
+			if (!read_seqcount_retry(&robj->seq, seq))
+				break;
+			rcu_read_unlock();
+		}
 
 		if (fence)
 			seq_printf(s, "\tExclusive fence: %s %s %ssignalled\n",

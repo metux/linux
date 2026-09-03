@@ -83,6 +83,7 @@ available subsections can be seen below.
    io_ordering
    generic-counter
    lightnvm-pblk
+   memory-devices/index
    men-chameleon-bus
    ntb
    nvmem
@@ -94,6 +95,7 @@ available subsections can be seen below.
    pwm
    pldmfw/index
    rfkill
+   serial/index
    sm501
    switchtec
    sync_file

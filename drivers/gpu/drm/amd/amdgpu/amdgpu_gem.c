@@ -310,6 +310,8 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
 	uint32_t handle;
 	int r;
 
+	args->addr = untagged_addr(args->addr);
+
 	if (offset_in_page(args->addr | args->size))
 		return -EINVAL;
 
@@ -350,26 +352,24 @@ int amdgpu_gem_userptr_ioctl(struct drm_device *dev, void *data,
 
 		r = amdgpu_bo_reserve(bo, true);
 		if (r)
-			goto free_pages;
+			goto user_pages_done;
 
 		amdgpu_bo_placement_from_domain(bo, AMDGPU_GEM_DOMAIN_GTT);
 		r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);
 		amdgpu_bo_unreserve(bo);
 		if (r)
-			goto free_pages;
+			goto user_pages_done;
 	}
 
 	r = drm_gem_handle_create(filp, gobj, &handle);
-	/* drop reference from allocate - handle holds it now */
-	drm_gem_object_put_unlocked(gobj);
 	if (r)
-		return r;
+		goto user_pages_done;
 
 	args->handle = handle;
-	return 0;
 
-free_pages:
-	release_pages(bo->tbo.ttm->pages, bo->tbo.ttm->num_pages);
+user_pages_done:
+	if (args->flags & AMDGPU_GEM_USERPTR_VALIDATE)
+		amdgpu_ttm_tt_get_user_pages_done(bo->tbo.ttm);
 
 release_object:
 	drm_gem_object_put(gobj);
@@ -804,7 +804,8 @@ int amdgpu_mode_dumb_create(struct drm_file *file_priv,
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct drm_gem_object *gobj;
 	uint32_t handle;
-	u64 flags = AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
+	u64 flags = AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
+		    AMDGPU_GEM_CREATE_CPU_GTT_USWC;
 	u32 domain;
 	int r;
 
@@ -821,7 +822,7 @@ int amdgpu_mode_dumb_create(struct drm_file *file_priv,
 	args->size = (u64)args->pitch * args->height;
 	args->size = ALIGN(args->size, PAGE_SIZE);
 	domain = amdgpu_bo_get_preferred_pin_domain(adev,
-				amdgpu_display_supported_domains(adev));
+				amdgpu_display_supported_domains(adev, flags));
 	r = amdgpu_gem_object_create(adev, args->size, 0, domain, flags,
 				     ttm_bo_type_device, NULL, &gobj);
 	if (r)

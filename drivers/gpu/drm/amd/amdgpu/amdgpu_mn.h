@@ -24,10 +24,6 @@
 #ifndef __AMDGPU_MN_H__
 #define __AMDGPU_MN_H__
 
-/*
- * MMU Notifier
- */
-struct amdgpu_mn;
 #include <linux/types.h>
 #include <linux/hmm.h>
 #include <linux/rwsem.h>
@@ -40,6 +36,8 @@ void amdgpu_mn_unregister(struct amdgpu_bo *bo);
 #else
 static inline int amdgpu_mn_register(struct amdgpu_bo *bo, unsigned long addr)
 {
+	DRM_WARN_ONCE("HMM_MIRROR kernel config option is not enabled, "
+		      "add CONFIG_ZONE_DEVICE=y in config file to fix this\n");
 	return -ENODEV;
 }
 static inline void amdgpu_mn_unregister(struct amdgpu_bo *bo) {}

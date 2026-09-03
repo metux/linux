@@ -815,10 +815,6 @@ struct i915_selftest_stash {
 struct drm_i915_private {
 	struct drm_device drm;
 
-	struct kmem_cache *objects;
-	struct kmem_cache *vmas;
-	struct kmem_cache *luts;
-
 	/* FIXME: Device release actions should all be moved to drmm_ */
 	bool do_release;
 
@@ -1627,12 +1623,10 @@ tgl_revids_get(struct drm_i915_private *dev_priv)
 	((gt)->info.engine_mask &						\
 	 GENMASK(first__ + count__ - 1, first__)) >> first__;		\
 })
-#define VDBOX_MASK(dev_priv) \
-	ENGINE_INSTANCES_MASK(dev_priv, VCS0, I915_MAX_VCS)
-#define VEBOX_MASK(dev_priv) \
-	ENGINE_INSTANCES_MASK(dev_priv, VECS0, I915_MAX_VECS)
-#define ALL_ENGINES	(~0u)
-#define HAS_ENGINE(dev_priv, id) (INTEL_INFO(dev_priv)->engine_mask & BIT(id))
+#define VDBOX_MASK(gt) \
+	ENGINE_INSTANCES_MASK(gt, VCS0, I915_MAX_VCS)
+#define VEBOX_MASK(gt) \
+	ENGINE_INSTANCES_MASK(gt, VECS0, I915_MAX_VECS)
 
 /*
  * The Gen7 cmdparser copies the scanned buffer to the ggtt for execution

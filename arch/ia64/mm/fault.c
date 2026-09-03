@@ -109,7 +109,7 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
 retry:
-	down_read(&mm->mmap_sem);
+	mmap_read_lock(mm);
 
 	vma = find_vma_prev(mm, address, &prev_vma);
 	if (!vma && !prev_vma )
@@ -181,7 +181,7 @@ retry:
 		}
 	}
 
-	up_read(&mm->mmap_sem);
+	mmap_read_unlock(mm);
 	return;
 
   check_expansion:
@@ -212,7 +212,7 @@ retry:
 	goto good_area;
 
   bad_area:
-	up_read(&mm->mmap_sem);
+	mmap_read_unlock(mm);
 #ifdef CONFIG_VIRTUAL_MEM_MAP
   bad_area_no_up:
 #endif
@@ -278,7 +278,7 @@ retry:
 	return;
 
   out_of_memory:
-	up_read(&mm->mmap_sem);
+	mmap_read_unlock(mm);
 	if (!user_mode(regs))
 		goto no_context;
 	pagefault_out_of_memory();

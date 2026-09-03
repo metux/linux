@@ -383,8 +383,6 @@ cpucap_multi_entry_cap_matches(const struct arm64_cpu_capabilities *entry,
 	return false;
 }
 
-extern cpumask_t aarch32_el0_mask;
-
 static __always_inline bool is_vhe_hyp_code(void)
 {
 	/* Only defined for code run in VHE hyp context */

@@ -38,6 +38,7 @@ Currently, these files are in /proc/sys/vm:
 - dirty_writeback_centisecs
 - drop_caches
 - extfrag_threshold
+- extra_free_kbytes
 - highmem_is_dirtyable
 - hugetlb_shm_group
 - laptop_mode
@@ -110,7 +111,7 @@ block_dump
 ==========
 
 block_dump enables block I/O debugging when set to a nonzero value. More
-information on block I/O debugging is in Documentation/laptops/laptop-mode.rst.
+information on block I/O debugging is in Documentation/admin-guide/laptops/laptop-mode.rst.
 
 
 compact_memory
@@ -308,6 +309,21 @@ only use the low memory and they can fill it up with dirty data without
 any throttling.
 
 
+extra_free_kbytes
+
+This parameter tells the VM to keep extra free memory between the threshold
+where background reclaim (kswapd) kicks in, and the threshold where direct
+reclaim (by allocating processes) kicks in.
+
+This is useful for workloads that require low latency memory allocations
+and have a bounded burstiness in memory allocations, for example a
+realtime application that receives and transmits network traffic
+(causing in-kernel memory allocations) with a maximum total message burst
+size of 200MB may need 200MB of extra free memory to avoid direct reclaim
+related latencies.
+
+==============================================================
+
 hugetlb_shm_group
 =================
 
@@ -319,7 +335,7 @@ laptop_mode
 ===========
 
 laptop_mode is a knob that controls "laptop mode". All the things that are
-controlled by this knob are discussed in Documentation/laptops/laptop-mode.rst.
+controlled by this knob are discussed in Documentation/admin-guide/laptops/laptop-mode.rst.
 
 
 legacy_va_layout

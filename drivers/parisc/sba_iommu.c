@@ -678,14 +678,6 @@ static int sba_dma_supported( struct device *dev, u64 mask)
 		return(0);
 	}
 
-	/* Documentation/DMA-API-HOWTO.txt tells drivers to try 64-bit
-	 * first, then fall back to 32-bit if that fails.
-	 * We are just "encouraging" 32-bit DMA masks here since we can
-	 * never allow IOMMU bypass unless we add special support for ZX1.
-	 */
-	if (mask > ~0U)
-		return 0;
-
 	ioc = GET_IOC(dev);
 	if (!ioc)
 		return 0;
@@ -1085,7 +1077,6 @@ static const struct dma_map_ops sba_ops = {
 	.unmap_page =		sba_unmap_page,
 	.map_sg =		sba_map_sg,
 	.unmap_sg =		sba_unmap_sg,
-	.mmap =			dma_common_mmap,
 	.get_sgtable =		dma_common_get_sgtable,
 	.alloc_pages =		dma_common_alloc_pages,
 	.free_pages =		dma_common_free_pages,

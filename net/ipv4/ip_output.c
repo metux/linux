@@ -507,7 +507,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	skb_dst_set_noref(skb, &rt->dst);
 
 packet_routed:
-	if (inet_opt && inet_opt->opt.is_strictroute && rt->rt_gw_family)
+	if (inet_opt && inet_opt->opt.is_strictroute && rt->rt_uses_gateway)
 		goto no_route;
 
 	/* OK, we know where to send it, allocate and build IP header. */
@@ -647,11 +647,12 @@ void ip_fraglist_prepare(struct sk_buff *skb, struct ip_fraglist_iter *iter)
 EXPORT_SYMBOL(ip_fraglist_prepare);
 
 void ip_frag_init(struct sk_buff *skb, unsigned int hlen,
-		  unsigned int ll_rs, unsigned int mtu,
+		  unsigned int ll_rs, unsigned int mtu, bool DF,
 		  struct ip_frag_state *state)
 {
 	struct iphdr *iph = ip_hdr(skb);
 
+	state->DF = DF;
 	state->hlen = hlen;
 	state->ll_rs = ll_rs;
 	state->mtu = mtu;
@@ -669,9 +670,6 @@ static void ip_frag_ipcb(struct sk_buff *from, struct sk_buff *to,
 {
 	/* Copy the flags to each fragment. */
 	IPCB(to)->flags = IPCB(from)->flags;
-
-	if (IPCB(from)->flags & IPSKB_FRAG_PMTU)
-		state->iph->frag_off |= htons(IP_DF);
 
 	/* ANK: dirty, but effective trick. Upgrade options only if
 	 * the segment to be fragmented was THE FIRST (otherwise,
@@ -740,6 +738,8 @@ struct sk_buff *ip_frag_next(struct sk_buff *skb, struct ip_frag_state *state)
 	 */
 	iph = ip_hdr(skb2);
 	iph->frag_off = htons((state->offset >> 3));
+	if (state->DF)
+		iph->frag_off |= htons(IP_DF);
 
 	/*
 	 *	Added AC : If we are fragmenting a fragment that's not the
@@ -773,6 +773,7 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 	struct rtable *rt = skb_rtable(skb);
 	unsigned int mtu, hlen, ll_rs;
 	struct ip_fraglist_iter iter;
+	ktime_t tstamp = skb->tstamp;
 	struct ip_frag_state state;
 	int err = 0;
 
@@ -860,6 +861,7 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 				}
 			}
 
+			skb->tstamp = tstamp;
 			err = output(net, sk, skb);
 
 			if (!err)
@@ -895,7 +897,8 @@ slow_path:
 	 *	Fragment the datagram.
 	 */
 
-	ip_frag_init(skb, hlen, ll_rs, mtu, &state);
+	ip_frag_init(skb, hlen, ll_rs, mtu, IPCB(skb)->flags & IPSKB_FRAG_PMTU,
+		     &state);
 
 	/*
 	 *	Keep copying data until we run out.
@@ -914,6 +917,7 @@ slow_path:
 		/*
 		 *	Put this fragment into the sending queue.
 		 */
+		skb2->tstamp = tstamp;
 		err = output(net, sk, skb2);
 		if (err)
 			goto fail;
@@ -1287,6 +1291,7 @@ static int ip_setup_cork(struct sock *sk, struct inet_cork *cork,
 	cork->length = 0;
 	cork->ttl = ipc->ttl;
 	cork->tos = ipc->tos;
+	cork->mark = ipc->sockc.mark;
 	cork->priority = ipc->priority;
 	cork->transmit_time = ipc->sockc.transmit_time;
 	cork->tx_flags = 0;
@@ -1550,7 +1555,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	}
 
 	skb->priority = (cork->tos != -1) ? cork->priority: sk->sk_priority;
-	skb->mark = sk->sk_mark;
+	skb->mark = cork->mark;
 	skb->tstamp = cork->transmit_time;
 	/*
 	 * Steal rt from cork.dst to avoid a pair of atomic_inc/atomic_dec
@@ -1680,7 +1685,7 @@ void ip_send_unicast_reply(struct sock *sk, struct sk_buff *skb,
 			   const struct ip_options *sopt,
 			   __be32 daddr, __be32 saddr,
 			   const struct ip_reply_arg *arg,
-			   unsigned int len)
+			   unsigned int len, u64 transmit_time)
 {
 	struct ip_options_data replyopts;
 	struct ipcm_cookie ipc;
@@ -1696,6 +1701,7 @@ void ip_send_unicast_reply(struct sock *sk, struct sk_buff *skb,
 
 	ipcm_init(&ipc);
 	ipc.addr = daddr;
+	ipc.sockc.transmit_time = transmit_time;
 
 	if (replyopts.opt.opt.optlen) {
 		ipc.opt = &replyopts.opt;
@@ -1723,7 +1729,6 @@ void ip_send_unicast_reply(struct sock *sk, struct sk_buff *skb,
 
 	inet_sk(sk)->tos = arg->tos & ~INET_ECN_MASK;
 
-	sk->sk_priority = skb->priority;
 	sk->sk_protocol = ip_hdr(skb)->protocol;
 	sk->sk_bound_dev_if = arg->bound_dev_if;
 	sk->sk_sndbuf = READ_ONCE(sysctl_wmem_default);

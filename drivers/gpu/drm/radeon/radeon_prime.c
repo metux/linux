@@ -80,7 +80,7 @@ struct drm_gem_object *radeon_gem_prime_import_sg_table(struct drm_device *dev,
 	mutex_unlock(&rdev->gem.mutex);
 
 	bo->prime_shared_count = 1;
-	return &bo->gem_base;
+	return &bo->tbo.base;
 }
 
 int radeon_gem_prime_pin(struct drm_gem_object *obj)
@@ -126,13 +126,6 @@ void radeon_gem_prime_unpin(struct drm_gem_object *obj)
 	radeon_bo_unreserve(bo);
 }
 
-
-struct reservation_object *radeon_gem_prime_res_obj(struct drm_gem_object *obj)
-{
-	struct radeon_bo *bo = gem_to_radeon_bo(obj);
-
-	return bo->tbo.resv;
-}
 
 struct dma_buf *radeon_gem_prime_export(struct drm_gem_object *gobj,
 					int flags)

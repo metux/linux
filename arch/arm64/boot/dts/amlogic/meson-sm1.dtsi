@@ -474,10 +474,6 @@
 	power-domains = <&pwrc PWRC_SM1_ETH_ID>;
 };
 
-&pcie {
-	power-domains = <&pwrc PWRC_SM1_PCIE_ID>;
-};
-
 &gpio_intc {
 	compatible = "amlogic,meson-sm1-gpio-intc",
 		     "amlogic,meson-gpio-intc";

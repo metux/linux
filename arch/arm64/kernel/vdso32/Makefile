@@ -11,13 +11,6 @@ include $(srctree)/lib/vdso/Makefile
 # Same as cc-*option, but using CC_COMPAT instead of CC
 ifeq ($(CONFIG_CC_IS_CLANG), y)
 CC_COMPAT ?= $(CC)
-CC_COMPAT += $(CC_COMPAT_CLANG_FLAGS)
-
-ifeq ($(LLVM),1)
-LD_COMPAT ?= $(LD)
-else
-LD_COMPAT ?= $(CROSS_COMPILE_COMPAT)ld
-endif
 CC_COMPAT += --target=arm-linux-gnueabi
 else
 CC_COMPAT ?= $(CROSS_COMPILE_COMPAT)gcc
@@ -128,9 +121,9 @@ VDSO_LDFLAGS += -nostdlib -shared --hash-style=sysv --build-id=sha1
 
 # Borrow vdsomunge.c from the arm vDSO
 # We have to use a relative path because scripts/Makefile.host prefixes
-# $(hostprogs-y) with $(obj)
+# $(hostprogs) with $(obj)
 munge := ../../../arm/vdso/vdsomunge
-hostprogs-y := $(munge)
+hostprogs := $(munge)
 
 c-obj-vdso := note.o
 c-obj-vdso-gettimeofday := vgettimeofday.o

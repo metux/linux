@@ -216,6 +216,7 @@ struct state_dependent_clocks {
 
 struct clk_mgr_internal {
 	struct clk_mgr base;
+	int smu_ver;
 	struct pp_smu_funcs *pp_smu;
 	struct clk_mgr_internal_funcs *funcs;
 
@@ -238,6 +239,8 @@ struct clk_mgr_internal {
 	bool dfs_bypass_enabled;
 	/* True if the DFS-bypass feature is enabled and active. */
 	bool dfs_bypass_active;
+
+	uint32_t dfs_ref_freq_khz;
 	/*
 	 * Cache the display clock returned by VBIOS if DFS-bypass is enabled.
 	 * This is basically "Crystal Frequency In KHz" (XTALIN) frequency

@@ -1156,8 +1156,6 @@ void intel_engine_get_instdone(const struct intel_engine_cs *engine,
 	case 4:
 		instdone->instdone =
 			intel_uncore_read(uncore, RING_INSTDONE(mmio_base));
-		instdone->instdone = I915_READ(RING_INSTDONE(mmio_base));
-
 		if (engine->id == RCS0)
 			/* HACK: Using the wrong struct member */
 			instdone->slice_common =

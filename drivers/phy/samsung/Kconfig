@@ -91,7 +91,7 @@ config PHY_EXYNOS5_USBDRD
 
 config PHY_EXYNOS5250_SATA
 	tristate "Exynos5250 Sata SerDes/PHY driver"
-	depends on SOC_EXYNOS5250 || COMPILE_TEST
+	depends on SOC_EXYNOS5250
 	depends on HAS_IOMEM
 	depends on OF
 	select GENERIC_PHY

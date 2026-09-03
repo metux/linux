@@ -620,7 +620,9 @@
   kernel_kobj
 
 # required by dmatest.ko
+  dmaengine_get_unmap_data
   __dma_request_channel
+  dma_sync_wait
   kthread_should_stop
   param_get_bool
   param_get_string
@@ -768,6 +770,7 @@
   drm_connector_list_iter_begin
   drm_connector_list_iter_end
   drm_connector_list_iter_next
+  drm_connector_set_path_property
   drm_connector_set_tile_property
   drm_connector_unregister
   drm_crtc_arm_vblank_event
@@ -848,6 +851,7 @@
   drm_helper_connector_dpms
   drm_helper_hpd_irq_event
   drm_helper_mode_fill_fb_struct
+  drm_helper_probe_detect
   drm_ioctl
   drm_kms_helper_poll_fini
   drm_kms_helper_poll_init
@@ -884,6 +888,7 @@
   of_drm_find_bridge
   of_drm_find_panel
   of_graph_get_endpoint_by_regs
+  of_graph_get_endpoint_count
   of_graph_get_next_endpoint
   of_graph_get_port_by_id
   of_graph_get_remote_port
@@ -954,9 +959,6 @@
 
 # required by i2c-exynosauto.ko
   i2c_del_adapter
-
-# required by lt8912.ko
-  of_get_drm_display_mode
 
 # required by mali_kbase.ko
   anon_inode_getfd
@@ -1422,7 +1424,6 @@
   ufshcd_config_pwr_mode
   ufshcd_dme_get_attr
   ufshcd_dme_set_attr
-  ufshcd_init
   ufshcd_link_recovery
   ufshcd_pltfrm_init
   ufshcd_remove
@@ -1473,10 +1474,12 @@
   sysfs_remove_bin_file
 
 # required by vlx-vdmaheap-module.ko
+  devm_get_free_pages
   idr_alloc_cyclic
   idr_find
   radix_tree_iter_delete
   uuid_gen
+  __vmalloc
 
 # required by vlx-vipc-module.ko
   sigprocmask

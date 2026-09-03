@@ -70,6 +70,4 @@ intel_engine_create_kernel_request(struct intel_engine_cs *engine)
 
 void intel_engine_init__pm(struct intel_engine_cs *engine);
 
-int intel_engines_resume(struct drm_i915_private *i915);
-
 #endif /* INTEL_ENGINE_PM_H */

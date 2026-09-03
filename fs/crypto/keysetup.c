@@ -238,15 +238,6 @@ static int setup_per_mode_enc_key(struct fscrypt_info *ci,
 		if (err)
 			goto out_unlock;
 	}
-	err = fscrypt_hkdf_expand(&mk->mk_secret.hkdf,
-				  hkdf_context, hkdf_info, hkdf_infolen,
-				  mode_key, mode->keysize);
-	if (err)
-		goto out_unlock;
-	err = fscrypt_prepare_key(prep_key, mode_key, ci);
-	memzero_explicit(mode_key, mode->keysize);
-	if (err)
-		goto out_unlock;
 done_unlock:
 	ci->ci_enc_key = *prep_key;
 	err = 0;
@@ -466,10 +457,6 @@ static int setup_file_encryption_key(struct fscrypt_info *ci,
 	struct fscrypt_master_key *mk;
 	int err;
 
-	err = fscrypt_select_encryption_impl(ci);
-	if (err)
-		return err;
-
 	switch (ci->ci_policy.version) {
 	case FSCRYPT_POLICY_V1:
 		mk_spec.type = FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR;
@@ -590,7 +577,7 @@ fscrypt_setup_encryption_info(struct inode *inode,
 	if (res)
 		return res;
 
-	crypt_info = kmem_cache_zalloc(fscrypt_info_cachep, GFP_NOFS);
+	crypt_info = kmem_cache_zalloc(fscrypt_info_cachep, GFP_KERNEL);
 	if (!crypt_info)
 		return -ENOMEM;
 

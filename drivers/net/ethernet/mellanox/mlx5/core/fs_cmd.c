@@ -135,6 +135,22 @@ static void mlx5_cmd_stub_modify_header_dealloc(struct mlx5_flow_root_namespace 
 {
 }
 
+static int mlx5_cmd_stub_set_peer(struct mlx5_flow_root_namespace *ns,
+				  struct mlx5_flow_root_namespace *peer_ns)
+{
+	return 0;
+}
+
+static int mlx5_cmd_stub_create_ns(struct mlx5_flow_root_namespace *ns)
+{
+	return 0;
+}
+
+static int mlx5_cmd_stub_destroy_ns(struct mlx5_flow_root_namespace *ns)
+{
+	return 0;
+}
+
 static int mlx5_cmd_update_root_ft(struct mlx5_flow_root_namespace *ns,
 				   struct mlx5_flow_table *ft, u32 underlay_qpn,
 				   bool disconnect)
@@ -488,7 +504,8 @@ static int mlx5_cmd_set_fte(struct mlx5_core_dev *dev,
 				MLX5_SET(dest_format_struct, in_dests,
 					 destination_eswitch_owner_vhca_id,
 					 dst->dest_attr.vport.vhca_id);
-				if (extended_dest) {
+				if (extended_dest &&
+				    dst->dest_attr.vport.pkt_reformat) {
 					MLX5_SET(dest_format_struct, in_dests,
 						 packet_reformat,
 						 !!(dst->dest_attr.vport.flags &
@@ -832,7 +849,10 @@ static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	.packet_reformat_alloc = mlx5_cmd_packet_reformat_alloc,
 	.packet_reformat_dealloc = mlx5_cmd_packet_reformat_dealloc,
 	.modify_header_alloc = mlx5_cmd_modify_header_alloc,
-	.modify_header_dealloc = mlx5_cmd_modify_header_dealloc
+	.modify_header_dealloc = mlx5_cmd_modify_header_dealloc,
+	.set_peer = mlx5_cmd_stub_set_peer,
+	.create_ns = mlx5_cmd_stub_create_ns,
+	.destroy_ns = mlx5_cmd_stub_destroy_ns,
 };
 
 static const struct mlx5_flow_cmds mlx5_flow_cmd_stubs = {
@@ -848,10 +868,13 @@ static const struct mlx5_flow_cmds mlx5_flow_cmd_stubs = {
 	.packet_reformat_alloc = mlx5_cmd_stub_packet_reformat_alloc,
 	.packet_reformat_dealloc = mlx5_cmd_stub_packet_reformat_dealloc,
 	.modify_header_alloc = mlx5_cmd_stub_modify_header_alloc,
-	.modify_header_dealloc = mlx5_cmd_stub_modify_header_dealloc
+	.modify_header_dealloc = mlx5_cmd_stub_modify_header_dealloc,
+	.set_peer = mlx5_cmd_stub_set_peer,
+	.create_ns = mlx5_cmd_stub_create_ns,
+	.destroy_ns = mlx5_cmd_stub_destroy_ns,
 };
 
-static const struct mlx5_flow_cmds *mlx5_fs_cmd_get_fw_cmds(void)
+const struct mlx5_flow_cmds *mlx5_fs_cmd_get_fw_cmds(void)
 {
 	return &mlx5_flow_cmds;
 }

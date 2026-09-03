@@ -1,4 +1,4 @@
-:orphan:
+.. SPDX-License-Identifier: GPL-2.0
 
 ===================
 Kernel Build System
@@ -19,6 +19,7 @@ Kernel Build System
 
     issues
     reproducible-builds
+    gcc-plugins
     llvm
 
 .. only::  subproject and html

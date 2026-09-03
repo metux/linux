@@ -49,7 +49,8 @@
 #include <linux/sched.h>
 #include <linux/completion.h>
 #include <uapi/linux/sched/types.h>
-#include <drm/drmP.h>
+
+#include <drm/drm_print.h>
 #include <drm/gpu_scheduler.h>
 #include <drm/spsc_queue.h>
 

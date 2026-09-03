@@ -413,7 +413,7 @@ static int cdns_pcie_ep_send_msix_irq(struct cdns_pcie_ep *ep, u8 fn,
 	if (ep->irq_pci_addr != (msg_addr & ~pci_addr_mask) ||
 	    ep->irq_pci_fn != fn) {
 		/* First region was reserved for IRQ writes. */
-		cdns_pcie_set_outbound_region(pcie, fn, 0,
+		cdns_pcie_set_outbound_region(pcie, 0, fn, 0,
 					      false,
 					      ep->irq_phys_addr,
 					      msg_addr & ~pci_addr_mask,

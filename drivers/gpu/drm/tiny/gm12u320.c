@@ -327,17 +327,6 @@ unlock:
 	mutex_unlock(&gm12u320->fb_update.lock);
 }
 
-static int gm12u320_fb_update_ready(struct gm12u320_device *gm12u320)
-{
-	int ret;
-
-	mutex_lock(&gm12u320->fb_update.lock);
-	ret = !gm12u320->fb_update.run || gm12u320->fb_update.fb != NULL;
-	mutex_unlock(&gm12u320->fb_update.lock);
-
-	return ret;
-}
-
 static void gm12u320_fb_update_work(struct work_struct *work)
 {
 	struct gm12u320_device *gm12u320 =

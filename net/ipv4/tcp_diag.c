@@ -26,8 +26,9 @@ static void tcp_diag_get_info(struct sock *sk, struct inet_diag_msg *r,
 	} else if (sk->sk_type == SOCK_STREAM) {
 		const struct tcp_sock *tp = tcp_sk(sk);
 
-		r->idiag_rqueue = max_t(int, tp->rcv_nxt - tp->copied_seq, 0);
-		r->idiag_wqueue = tp->write_seq - tp->snd_una;
+		r->idiag_rqueue = max_t(int, READ_ONCE(tp->rcv_nxt) -
+					     READ_ONCE(tp->copied_seq), 0);
+		r->idiag_wqueue = READ_ONCE(tp->write_seq) - tp->snd_una;
 	}
 	if (info)
 		tcp_get_info(sk, info);
@@ -163,7 +164,7 @@ static size_t tcp_diag_get_aux_size(struct sock *sk, bool net_admin)
 	}
 #endif
 
-	if (net_admin) {
+	if (net_admin && sk_fullsock(sk)) {
 		const struct tcp_ulp_ops *ulp_ops;
 
 		ulp_ops = icsk->icsk_ulp_ops;

@@ -277,9 +277,8 @@ err_dbmap:
 err_mtt:
 	mlx4_mtt_cleanup(dev->dev, &cq->buf.mtt);
 
-	if (udata)
-		ib_umem_release(cq->umem);
-	else
+	ib_umem_release(cq->umem);
+	if (!udata)
 		mlx4_ib_free_cq_buf(dev, &cq->buf, cq->ibcq.cqe);
 
 err_db:
@@ -468,18 +467,15 @@ err_buf:
 	kfree(cq->resize_buf);
 	cq->resize_buf = NULL;
 
-	if (cq->resize_umem) {
-		ib_umem_release(cq->resize_umem);
-		cq->resize_umem = NULL;
-	}
-
+	ib_umem_release(cq->resize_umem);
+	cq->resize_umem = NULL;
 out:
 	mutex_unlock(&cq->resize_mutex);
 
 	return err;
 }
 
-void mlx4_ib_destroy_cq(struct ib_cq *cq, struct ib_udata *udata)
+int mlx4_ib_destroy_cq(struct ib_cq *cq, struct ib_udata *udata)
 {
 	struct mlx4_ib_dev *dev = to_mdev(cq->device);
 	struct mlx4_ib_cq *mcq = to_mcq(cq);
@@ -494,11 +490,12 @@ void mlx4_ib_destroy_cq(struct ib_cq *cq, struct ib_udata *udata)
 				struct mlx4_ib_ucontext,
 				ibucontext),
 			&mcq->db);
-		ib_umem_release(mcq->umem);
 	} else {
 		mlx4_ib_free_cq_buf(dev, &mcq->buf, cq->cqe);
 		mlx4_db_free(dev->dev, &mcq->db);
 	}
+	ib_umem_release(mcq->umem);
+	return 0;
 }
 
 static void dump_cqe(void *cqe)

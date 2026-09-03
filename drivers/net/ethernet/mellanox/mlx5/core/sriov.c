@@ -74,13 +74,6 @@ static int mlx5_device_enable_sriov(struct mlx5_core_dev *dev, int num_vfs)
 	int err;
 	int vf;
 
-	if (sriov->enabled_vfs) {
-		mlx5_core_warn(dev,
-			       "failed to enable SRIOV on device, already enabled with %d vfs\n",
-			       sriov->enabled_vfs);
-		return -EBUSY;
-	}
-
 	if (!MLX5_ESWITCH_MANAGER(dev))
 		goto enable_vfs_hca;
 
@@ -99,7 +92,6 @@ enable_vfs_hca:
 			continue;
 		}
 		sriov->vfs_ctx[vf].enabled = 1;
-		sriov->enabled_vfs++;
 		if (MLX5_CAP_GEN(dev, port_type) == MLX5_CAP_PORT_TYPE_IB) {
 			err = sriov_restore_guids(dev, vf);
 			if (err) {
@@ -122,10 +114,7 @@ mlx5_device_disable_sriov(struct mlx5_core_dev *dev, int num_vfs, bool clear_vf)
 	int err;
 	int vf;
 
-	if (!sriov->enabled_vfs)
-		goto out;
-
-	for (vf = 0; vf < sriov->num_vfs; vf++) {
+	for (vf = num_vfs - 1; vf >= 0; vf--) {
 		if (!sriov->vfs_ctx[vf].enabled)
 			continue;
 		err = mlx5_core_disable_hca(dev, vf + 1);
@@ -134,10 +123,8 @@ mlx5_device_disable_sriov(struct mlx5_core_dev *dev, int num_vfs, bool clear_vf)
 			continue;
 		}
 		sriov->vfs_ctx[vf].enabled = 0;
-		sriov->enabled_vfs--;
 	}
 
-out:
 	if (MLX5_ESWITCH_MANAGER(dev))
 		mlx5_eswitch_disable(dev->priv.eswitch, clear_vf);
 
@@ -193,13 +180,11 @@ int mlx5_core_sriov_configure(struct pci_dev *pdev, int num_vfs)
 
 int mlx5_sriov_attach(struct mlx5_core_dev *dev)
 {
-	struct mlx5_core_sriov *sriov = &dev->priv.sriov;
-
-	if (!mlx5_core_is_pf(dev) || !sriov->num_vfs)
+	if (!mlx5_core_is_pf(dev) || !pci_num_vf(dev->pdev))
 		return 0;
 
 	/* If sriov VFs exist in PCI level, enable them in device level */
-	return mlx5_device_enable_sriov(dev, sriov->num_vfs);
+	return mlx5_device_enable_sriov(dev, pci_num_vf(dev->pdev));
 }
 
 void mlx5_sriov_detach(struct mlx5_core_dev *dev)
@@ -212,22 +197,24 @@ void mlx5_sriov_detach(struct mlx5_core_dev *dev)
 
 static u16 mlx5_get_max_vfs(struct mlx5_core_dev *dev)
 {
-	u32 out[MLX5_ST_SZ_DW(query_esw_functions_out)] = {};
 	u16 host_total_vfs;
-	int err;
+	const u32 *out;
 
 	if (mlx5_core_is_ecpf_esw_manager(dev)) {
-		err = mlx5_esw_query_functions(dev, out, sizeof(out));
-		host_total_vfs = MLX5_GET(query_esw_functions_out, out,
-					  host_params_context.host_total_vfs);
+		out = mlx5_esw_query_functions(dev);
 
 		/* Old FW doesn't support getting total_vfs from esw func
 		 * but supports getting it from pci_sriov.
 		 */
-		if (!err && host_total_vfs)
-			return host_total_vfs;
+		if (IS_ERR(out))
+			goto done;
+		host_total_vfs = MLX5_GET(query_esw_functions_out, out,
+					  host_params_context.host_total_vfs);
+		kvfree(out);
+		return host_total_vfs;
 	}
 
+done:
 	return pci_sriov_get_totalvfs(dev->pdev);
 }
 

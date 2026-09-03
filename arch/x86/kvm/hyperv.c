@@ -1032,7 +1032,7 @@ static int kvm_hv_msr_set_crash_data(struct kvm_vcpu *vcpu,
  * These two equivalencies are implemented in this function.
  */
 static bool compute_tsc_page_parameters(struct pvclock_vcpu_time_info *hv_clock,
-					HV_REFERENCE_TSC_PAGE *tsc_ref)
+					struct ms_hyperv_tsc_page *tsc_ref)
 {
 	u64 max_mul;
 
@@ -1073,7 +1073,7 @@ void kvm_hv_setup_tsc_page(struct kvm *kvm,
 	u64 gfn;
 
 	BUILD_BUG_ON(sizeof(tsc_seq) != sizeof(hv->tsc_ref.tsc_sequence));
-	BUILD_BUG_ON(offsetof(HV_REFERENCE_TSC_PAGE, tsc_sequence) != 0);
+	BUILD_BUG_ON(offsetof(struct ms_hyperv_tsc_page, tsc_sequence) != 0);
 
 	if (!(hv->hv_tsc_page & HV_X64_MSR_TSC_REFERENCE_ENABLE))
 		return;
@@ -1564,8 +1564,8 @@ static u64 kvm_hv_flush_tlb(struct kvm_vcpu *current_vcpu, u64 ingpa,
 	 * vcpu->arch.cr3 may not be up-to-date for running vCPUs so we can't
 	 * analyze it here, flush TLB regardless of the specified address space.
 	 */
-	kvm_make_vcpus_request_mask(kvm, KVM_REQ_HV_TLB_FLUSH,
-				    vcpu_mask, &hv_vcpu->tlb_flush);
+	kvm_make_vcpus_request_mask(kvm, KVM_REQ_TLB_FLUSH_GUEST,
+				    NULL, vcpu_mask, &hv_vcpu->tlb_flush);
 
 ret_success:
 	/* We always do full TLB flush, set rep_done = rep_cnt. */
@@ -2029,7 +2029,7 @@ int kvm_vcpu_ioctl_get_hv_cpuid(struct kvm_vcpu *vcpu, struct kvm_cpuid2 *cpuid,
 			ent->edx |= HV_FEATURE_FREQUENCY_MSRS_AVAILABLE;
 			ent->edx |= HV_FEATURE_GUEST_CRASH_MSR_AVAILABLE;
 
-			ent->ebx |= HV_X64_DEBUGGING;
+			ent->ebx |= HV_DEBUGGING;
 			ent->edx |= HV_X64_GUEST_DEBUGGING_AVAILABLE;
 			ent->edx |= HV_FEATURE_DEBUG_MSRS_AVAILABLE;
 

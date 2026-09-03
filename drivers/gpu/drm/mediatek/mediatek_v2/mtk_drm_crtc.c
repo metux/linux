@@ -5665,6 +5665,7 @@ void mtk_crtc_disconnect_default_path(struct mtk_drm_crtc *mtk_crtc)
 	}
 }
 
+#ifndef DRM_CMDQ_DISABLE
 void mtk_crtc_prepare_instr(struct drm_crtc *crtc)
 {
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
@@ -5680,6 +5681,7 @@ void mtk_crtc_prepare_instr(struct drm_crtc *crtc)
 		cmdq_pkt_destroy(handle);
 	}
 }
+#endif
 
 void mtk_drm_crtc_enable(struct drm_crtc *crtc)
 {
@@ -5736,10 +5738,10 @@ void mtk_drm_crtc_enable(struct drm_crtc *crtc)
 	client = mtk_crtc->gce_obj.client[CLIENT_CFG];
 	cmdq_mbox_enable(client->chan);
 	CRTC_MMP_MARK(crtc_id, enable, 1, 1);
-#endif
 
 	if (disp_helper_get_stage() == DISP_HELPER_STAGE_NORMAL)
 		mtk_crtc_prepare_instr(crtc);
+#endif
 
 	/* 4. start trigger loop first to keep gce alive */
 	if (mtk_crtc_with_trigger_loop(crtc)) {
@@ -9192,8 +9194,11 @@ static int mtk_drm_pf_release_thread(void *data)
 	struct mtk_drm_private *private;
 	struct mtk_drm_crtc *mtk_crtc = (struct mtk_drm_crtc *)data;
 	struct drm_crtc *crtc;
-	unsigned int fence_idx = 0, crtc_idx;
 	ktime_t pf_time;
+	unsigned int crtc_idx;
+#ifndef DRM_CMDQ_DISABLE
+	unsigned int fence_idx = 0;
+#endif
 
 	crtc = &mtk_crtc->base;
 	private = crtc->dev->dev_private;

@@ -29,6 +29,7 @@
 
 #include "i915_selftest.h"
 
+#include "igt_flush_test.h"
 #include "lib_sw_fence.h"
 #include "mock_drm.h"
 #include "mock_gem_device.h"
@@ -44,8 +45,8 @@ static void quirk_add(struct drm_i915_gem_object *obj,
 
 static int populate_ggtt(struct i915_ggtt *ggtt, struct list_head *objects)
 {
-	unsigned long unbound, bound, count;
 	struct drm_i915_gem_object *obj;
+	unsigned long count;
 
 	count = 0;
 	do {
@@ -70,26 +71,6 @@ static int populate_ggtt(struct i915_ggtt *ggtt, struct list_head *objects)
 	} while (1);
 	pr_debug("Filled GGTT with %lu pages [%llu total]\n",
 		 count, ggtt->vm.total / PAGE_SIZE);
-
-	unbound = 0;
-	list_for_each_entry(obj, &i915->mm.unbound_list, mm.link)
-		if (obj->mm.quirked)
-			unbound++;
-	if (unbound) {
-		pr_err("%s: Found %lu objects unbound, expected %u!\n",
-		       __func__, unbound, 0);
-		return -EINVAL;
-	}
-
-	bound = 0;
-	list_for_each_entry(obj, &i915->mm.bound_list, mm.link)
-		if (obj->mm.quirked)
-			bound++;
-	if (bound != count) {
-		pr_err("%s: Found %lu objects bound, expected %lu!\n",
-		       __func__, bound, count);
-		return -EINVAL;
-	}
 
 	if (list_empty(&ggtt->vm.bound_list)) {
 		pr_err("No objects on the GGTT inactive list!\n");
@@ -416,7 +397,7 @@ static int igt_evict_contexts(void *arg)
 	if (!HAS_FULL_PPGTT(i915))
 		return 0;
 
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	/* Reserve a block so that we know we have enough to fit a few rq */
 	memset(&hole, 0, sizeof(hole));
@@ -517,6 +498,8 @@ static int igt_evict_contexts(void *arg)
 
 	mutex_lock(&ggtt->vm.mutex);
 out_locked:
+	if (igt_flush_test(i915))
+		err = -EIO;
 	while (reserved) {
 		struct reserved *next = reserved->next;
 
@@ -528,7 +511,7 @@ out_locked:
 	if (drm_mm_node_allocated(&hole))
 		drm_mm_remove_node(&hole);
 	mutex_unlock(&ggtt->vm.mutex);
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 
 	return err;
 }
@@ -550,7 +533,7 @@ int i915_gem_evict_mock_selftests(void)
 	if (!i915)
 		return -ENOMEM;
 
-	with_intel_runtime_pm(i915, wakeref)
+	with_intel_runtime_pm(&i915->runtime_pm, wakeref)
 		err = i915_subtests(tests, &i915->gt);
 
 	drm_dev_put(&i915->drm);

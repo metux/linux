@@ -871,7 +871,7 @@ static int igt_vma_remapped_gtt(void *arg)
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
 
-	wakeref = intel_runtime_pm_get(i915);
+	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 
 	for (t = types; *t; t++) {
 		for (p = planes; p->width; p++) {
@@ -884,7 +884,9 @@ static int igt_vma_remapped_gtt(void *arg)
 			unsigned int x, y;
 			int err;
 
+			i915_gem_object_lock(obj, NULL);
 			err = i915_gem_object_set_to_gtt_domain(obj, true);
+			i915_gem_object_unlock(obj);
 			if (err)
 				goto out;
 
@@ -961,7 +963,7 @@ static int igt_vma_remapped_gtt(void *arg)
 	}
 
 out:
-	intel_runtime_pm_put(i915, wakeref);
+	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 	i915_gem_object_put(obj);
 
 	return err;

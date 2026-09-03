@@ -157,15 +157,14 @@ Required properties:
 Optional properties:
 - timeout-sec: contains the watchdog timeout in seconds.
 
-Watchdog bindings based on SCU Message Protocol
+SCU key bindings based on SCU Message Protocol
 ------------------------------------------------------------
 
 Required properties:
 - compatible: should be:
-              "fsl,imx8qxp-sc-wdt"
-              followed by "fsl,imx-sc-wdt";
-Optional properties:
-- timeout-sec: contains the watchdog timeout in seconds.
+              "fsl,imx8qxp-sc-key"
+              followed by "fsl,imx-sc-key";
+- linux,keycodes: See Documentation/devicetree/bindings/input/input.yaml
 
 SCU key bindings based on SCU Message Protocol
 ------------------------------------------------------------

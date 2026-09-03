@@ -21,6 +21,7 @@
 #include "intel_reset.h"
 
 #include "uc/intel_guc.h"
+#include "uc/intel_guc_submission.h"
 
 #define RESET_MAX_RETRIES 3
 
@@ -40,27 +41,30 @@ static void rmw_clear_fw(struct intel_uncore *uncore, i915_reg_t reg, u32 clr)
 static void engine_skip_context(struct i915_request *rq)
 {
 	struct intel_engine_cs *engine = rq->engine;
-	struct i915_gem_context *hung_ctx = rq->gem_context;
+	struct intel_context *hung_ctx = rq->context;
 
 	if (!i915_request_is_active(rq))
 		return;
 
 	lockdep_assert_held(&engine->active.lock);
 	list_for_each_entry_continue(rq, &engine->active.requests, sched.link)
-		if (rq->gem_context == hung_ctx)
+		if (rq->context == hung_ctx)
 			i915_request_skip(rq, -EIO);
 }
 
-static void client_mark_guilty(struct drm_i915_file_private *file_priv,
-			       const struct i915_gem_context *ctx)
+static void client_mark_guilty(struct i915_request *rq, bool banned)
 {
-	unsigned int score;
+	struct i915_gem_context *ctx = rq->context->gem_context;
+	struct drm_i915_file_private *file_priv = ctx->file_priv;
 	unsigned long prev_hang;
+	unsigned int score;
 
-	if (i915_gem_context_is_banned(ctx))
+	if (IS_ERR_OR_NULL(file_priv))
+		return;
+
+	score = 0;
+	if (banned)
 		score = I915_CLIENT_SCORE_CONTEXT_BAN;
-	else
-		score = 0;
 
 	prev_hang = xchg(&file_priv->hang_timestamp, jiffies);
 	if (time_before(jiffies, prev_hang + I915_CLIENT_FAST_HANG_JIFFIES))
@@ -75,17 +79,27 @@ static void client_mark_guilty(struct drm_i915_file_private *file_priv,
 	}
 }
 
-static bool context_mark_guilty(struct i915_gem_context *ctx)
+static bool mark_guilty(struct i915_request *rq)
 {
+	struct i915_gem_context *ctx = rq->context->gem_context;
 	unsigned long prev_hang;
 	bool banned;
 	int i;
+
+	if (i915_gem_context_is_closed(ctx)) {
+		intel_context_set_banned(rq->context);
+		return true;
+	}
 
 	atomic_inc(&ctx->guilty_count);
 
 	/* Cool contexts are too cool to be banned! (Used for reset testing.) */
 	if (!i915_gem_context_is_bannable(ctx))
 		return false;
+
+	dev_notice(ctx->i915->drm.dev,
+		   "%s context reset due to GPU hang\n",
+		   ctx->name);
 
 	/* Record the timestamp for the last N hangs */
 	prev_hang = ctx->hang_timestamp[0];
@@ -100,18 +114,17 @@ static bool context_mark_guilty(struct i915_gem_context *ctx)
 	if (banned) {
 		DRM_DEBUG_DRIVER("context %s: guilty %d, banned\n",
 				 ctx->name, atomic_read(&ctx->guilty_count));
-		i915_gem_context_set_banned(ctx);
+		intel_context_set_banned(rq->context);
 	}
 
-	if (!IS_ERR_OR_NULL(ctx->file_priv))
-		client_mark_guilty(ctx->file_priv, ctx);
+	client_mark_guilty(rq, banned);
 
 	return banned;
 }
 
-static void context_mark_innocent(struct i915_gem_context *ctx)
+static void mark_innocent(struct i915_request *rq)
 {
-	atomic_inc(&ctx->active_count);
+	atomic_inc(&rq->context->gem_context->active_count);
 }
 
 void __i915_request_reset(struct i915_request *rq, bool guilty)
@@ -124,14 +137,16 @@ void __i915_request_reset(struct i915_request *rq, bool guilty)
 
 	GEM_BUG_ON(i915_request_completed(rq));
 
+	rcu_read_lock(); /* protect the GEM context */
 	if (guilty) {
 		i915_request_skip(rq, -EIO);
-		if (context_mark_guilty(rq->gem_context))
+		if (mark_guilty(rq))
 			engine_skip_context(rq);
 	} else {
 		dma_fence_set_error(&rq->fence, -EAGAIN);
-		context_mark_innocent(rq->gem_context);
+		mark_innocent(rq);
 	}
+	rcu_read_unlock();
 }
 
 static bool i915_in_reset(struct pci_dev *pdev)
@@ -687,7 +702,7 @@ static intel_engine_mask_t reset_prepare(struct intel_gt *gt)
 	intel_engine_mask_t awake = 0;
 	enum intel_engine_id id;
 
-	for_each_engine(engine, gt->i915, id) {
+	for_each_engine(engine, gt, id) {
 		if (intel_engine_pm_get_if_awake(engine))
 			awake |= engine->mask;
 		reset_prepare_engine(engine);
@@ -717,7 +732,7 @@ static int gt_reset(struct intel_gt *gt, intel_engine_mask_t stalled_mask)
 	if (err)
 		return err;
 
-	for_each_engine(engine, gt->i915, id)
+	for_each_engine(engine, gt, id)
 		__intel_engine_reset(engine, stalled_mask & engine->mask);
 
 	i915_gem_restore_fences(gt->ggtt);
@@ -730,7 +745,7 @@ static void reset_finish_engine(struct intel_engine_cs *engine)
 	engine->reset.finish(engine);
 	intel_uncore_forcewake_put(engine->uncore, FORCEWAKE_ALL);
 
-	intel_engine_breadcrumbs_irq(engine);
+	intel_engine_signal_breadcrumbs(engine);
 }
 
 static void reset_finish(struct intel_gt *gt, intel_engine_mask_t awake)
@@ -738,7 +753,7 @@ static void reset_finish(struct intel_gt *gt, intel_engine_mask_t awake)
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 
-	for_each_engine(engine, gt->i915, id) {
+	for_each_engine(engine, gt, id) {
 		reset_finish_engine(engine);
 		if (awake & engine->mask)
 			intel_engine_pm_put(engine);
@@ -759,7 +774,7 @@ static void nop_submit_request(struct i915_request *request)
 	i915_request_mark_complete(request);
 	spin_unlock_irqrestore(&engine->active.lock, flags);
 
-	intel_engine_queue_breadcrumbs(engine);
+	intel_engine_signal_breadcrumbs(engine);
 }
 
 static void __intel_gt_set_wedged(struct intel_gt *gt)
@@ -774,7 +789,7 @@ static void __intel_gt_set_wedged(struct intel_gt *gt)
 	if (GEM_SHOW_DEBUG() && !intel_engines_are_idle(gt)) {
 		struct drm_printer p = drm_debug_printer(__func__);
 
-		for_each_engine(engine, gt->i915, id)
+		for_each_engine(engine, gt, id)
 			intel_engine_dump(engine, &p, "%s\n", engine->name);
 	}
 
@@ -791,7 +806,7 @@ static void __intel_gt_set_wedged(struct intel_gt *gt)
 	if (!INTEL_INFO(gt->i915)->gpu_reset_clobbers_display)
 		__intel_gt_reset(gt, ALL_ENGINES);
 
-	for_each_engine(engine, gt->i915, id)
+	for_each_engine(engine, gt, id)
 		engine->submit_request = nop_submit_request;
 
 	/*
@@ -803,7 +818,7 @@ static void __intel_gt_set_wedged(struct intel_gt *gt)
 	set_bit(I915_WEDGED, &gt->reset.flags);
 
 	/* Mark all executing requests as skipped */
-	for_each_engine(engine, gt->i915, id)
+	for_each_engine(engine, gt, id)
 		engine->cancel_requests(engine);
 
 	reset_finish(gt, awake);
@@ -938,7 +953,7 @@ static int resume(struct intel_gt *gt)
 	enum intel_engine_id id;
 	int ret;
 
-	for_each_engine(engine, gt->i915, id) {
+	for_each_engine(engine, gt, id) {
 		ret = engine->resume(engine);
 		if (ret)
 			return ret;
@@ -1074,9 +1089,10 @@ static inline int intel_gt_reset_engine(struct intel_engine_cs *engine)
 int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
 {
 	struct intel_gt *gt = engine->gt;
+	bool uses_guc = intel_engine_in_guc_submission_mode(engine);
 	int ret;
 
-	GEM_TRACE("%s flags=%lx\n", engine->name, gt->reset.flags);
+	ENGINE_TRACE(engine, "flags=%lx\n", gt->reset.flags);
 	GEM_BUG_ON(!test_bit(I915_RESET_ENGINE + engine->id, &gt->reset.flags));
 
 	if (!intel_engine_pm_get_if_awake(engine))
@@ -1089,14 +1105,14 @@ int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
 			   "Resetting %s for %s\n", engine->name, msg);
 	atomic_inc(&engine->i915->gpu_error.reset_engine_count[engine->uabi_class]);
 
-	if (!engine->gt->uc.guc.execbuf_client)
+	if (!uses_guc)
 		ret = intel_gt_reset_engine(engine);
 	else
 		ret = intel_guc_reset_engine(&engine->gt->uc.guc, engine);
 	if (ret) {
 		/* If we fail here, we expect to fallback to a global reset */
 		DRM_DEBUG_DRIVER("%sFailed to reset %s, ret=%d\n",
-				 engine->gt->uc.guc.execbuf_client ? "GuC " : "",
+				 uses_guc ? "GuC " : "",
 				 engine->name, ret);
 		goto out;
 	}
@@ -1352,7 +1368,7 @@ void intel_gt_handle_error(struct intel_gt *gt,
 	synchronize_rcu_expedited();
 
 	/* Prevent any other reset-engine attempt. */
-	for_each_engine(engine, gt->i915, tmp) {
+	for_each_engine(engine, gt, tmp) {
 		while (test_and_set_bit(I915_RESET_ENGINE + engine->id,
 					&gt->reset.flags))
 			wait_on_bit(&gt->reset.flags,
@@ -1362,7 +1378,7 @@ void intel_gt_handle_error(struct intel_gt *gt,
 
 	intel_gt_reset_global(gt, engine_mask, msg);
 
-	for_each_engine(engine, gt->i915, tmp)
+	for_each_engine(engine, gt, tmp)
 		clear_bit_unlock(I915_RESET_ENGINE + engine->id,
 				 &gt->reset.flags);
 	clear_bit_unlock(I915_RESET_BACKOFF, &gt->reset.flags);

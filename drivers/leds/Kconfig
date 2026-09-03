@@ -836,21 +836,15 @@ config LEDS_LM36274
 	  Say Y to enable the LM36274 LED driver for TI LMU devices.
 	  This supports the LED device LM36274.
 
-config LEDS_LM3697
-	tristate "LED driver for LM3697"
-	depends on LEDS_TI_LMU_COMMON
-	depends on I2C && OF
+config LEDS_TPS6105X
+	tristate "LED support for TI TPS6105X"
+	depends on LEDS_CLASS
+	depends on TPS6105X
+	default y if TPS6105X
 	help
-	  Say Y to enable the LM3697 LED driver for TI LMU devices.
-	  This supports the LED device LM3697.
-
-config LEDS_LM36274
-	tristate "LED driver for LM36274"
-	depends on LEDS_TI_LMU_COMMON
-	depends on MFD_TI_LMU
-	help
-	  Say Y to enable the LM36274 LED driver for TI LMU devices.
-	  This supports the LED device LM36274.
+	  This driver supports TPS61050/TPS61052 LED chips.
+	  It is a single boost converter primarily for white LEDs and
+	  audio amplifiers.
 
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"

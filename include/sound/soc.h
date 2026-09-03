@@ -787,9 +787,6 @@ struct snd_soc_dai_link {
 	struct snd_soc_dai_link_component *cpus;
 	unsigned int num_cpus;
 
-	struct snd_soc_dai_link_component *cpus;
-	unsigned int num_cpus;
-
 	/*
 	 * You MUST specify the link's codec, either by device name, or by
 	 * DT/OF node, but not both.
@@ -870,14 +867,6 @@ struct snd_soc_dai_link {
 	/* Do not create a PCM for this DAI link (Backend link) */
 	unsigned int ignore:1;
 
-	/*
-	 * This driver uses legacy platform naming. Set by the core, machine
-	 * drivers should not modify this value.
-	 */
-	unsigned int legacy_platform:1;
-	unsigned int legacy_cpu:1;
-
-	struct list_head list; /* DAI link list of the soc card */
 #ifdef CONFIG_SND_SOC_TOPOLOGY
 	struct snd_soc_dobj dobj; /* For topology */
 #endif
@@ -1061,7 +1050,6 @@ struct snd_soc_card {
 	/* CPU <--> Codec DAI links  */
 	struct snd_soc_dai_link *dai_link;  /* predefined links only */
 	int num_links;  /* predefined links only */
-	struct list_head dai_link_list; /* all links */
 
 	struct list_head rtd_list;
 	int num_rtd;
@@ -1130,11 +1118,6 @@ struct snd_soc_card {
 	for ((i) = 0;							\
 	     ((i) < (card)->num_aux_devs) && ((aux) = &(card)->aux_dev[i]); \
 	     (i)++)
-
-#define for_each_card_links(card, link)				\
-	list_for_each_entry(link, &(card)->dai_link_list, list)
-#define for_each_card_links_safe(card, link, _link)			\
-	list_for_each_entry_safe(link, _link, &(card)->dai_link_list, list)
 
 #define for_each_card_rtds(card, rtd)			\
 	list_for_each_entry(rtd, &(card)->rtd_list, list)

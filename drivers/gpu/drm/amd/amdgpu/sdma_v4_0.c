@@ -21,10 +21,11 @@
  *
  */
 
-#include <linux/firmware.h>
 #include <linux/delay.h>
+#include <linux/firmware.h>
+#include <linux/module.h>
+#include <linux/pci.h>
 
-#include <drm/drmP.h>
 #include "amdgpu.h"
 #include "amdgpu_ucode.h"
 #include "amdgpu_trace.h"
@@ -1440,7 +1441,7 @@ static int sdma_v4_0_load_microcode(struct amdgpu_device *adev)
 static int sdma_v4_0_start(struct amdgpu_device *adev)
 {
 	struct amdgpu_ring *ring;
-	int i, r;
+	int i, r = 0;
 
 	if (amdgpu_sriov_vf(adev)) {
 		sdma_v4_0_ctx_switch_enable(adev, false);

@@ -1961,7 +1961,7 @@ static int snd_usb_substream_playback_trigger(struct snd_pcm_substream *substrea
 		return 0;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 		if (subs->stream->chip->setup_fmt_after_resume_quirk) {
-			stop_endpoints(subs, true);
+			stop_endpoints(subs);
 			subs->need_setup_fmt = true;
 			return 0;
 		}
@@ -2001,7 +2001,7 @@ static int snd_usb_substream_capture_trigger(struct snd_pcm_substream *substream
 		return 0;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 		if (subs->stream->chip->setup_fmt_after_resume_quirk) {
-			stop_endpoints(subs, true);
+			stop_endpoints(subs);
 			subs->need_setup_fmt = true;
 			return 0;
 		}

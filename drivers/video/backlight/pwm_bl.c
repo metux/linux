@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Simple PWM based backlight control, board code has to setup
  * 1) pin configuration so PWM waveforms can output

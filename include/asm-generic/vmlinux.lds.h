@@ -1035,6 +1035,14 @@
  * section definitions so that such archs put those in earlier section
  * definitions.
  */
+#ifdef RUNTIME_DISCARD_EXIT
+#define EXIT_DISCARDS
+#else
+#define EXIT_DISCARDS							\
+	EXIT_TEXT							\
+	EXIT_DATA
+#endif
+
 /*
  * Clang's -fprofile-arcs, -fsanitize=kernel-address, and
  * -fsanitize=thread produce unwanted sections (.eh_frame
@@ -1065,8 +1073,7 @@
 
 #define DISCARDS							\
 	/DISCARD/ : {							\
-	EXIT_TEXT							\
-	EXIT_DATA							\
+	EXIT_DISCARDS							\
 	EXIT_CALL							\
 	COMMON_DISCARDS							\
 	}

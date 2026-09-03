@@ -1377,11 +1377,6 @@
 		};
 	};
 
-	hda@70030000 {
-		nvidia,model = "jetson-tx1-hda";
-		status = "okay";
-	};
-
 	padctl@7009f000 {
 		status = "okay";
 

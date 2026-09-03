@@ -138,38 +138,6 @@ void vbox_mode_fini(struct vbox_private *vbox);
 
 void vbox_report_caps(struct vbox_private *vbox);
 
-struct vbox_bo {
-	struct ttm_buffer_object bo;
-	struct ttm_placement placement;
-	struct ttm_bo_kmap_obj kmap;
-	struct drm_gem_object gem;
-	struct ttm_place placements[3];
-	int pin_count;
-};
-
-#define gem_to_vbox_bo(gobj) container_of((gobj), struct vbox_bo, gem)
-
-static inline struct vbox_bo *vbox_bo(struct ttm_buffer_object *bo)
-{
-	return container_of(bo, struct vbox_bo, bo);
-}
-
-#define to_vbox_obj(x) container_of(x, struct vbox_gem_object, base)
-
-static inline u64 vbox_bo_gpu_offset(struct vbox_bo *bo)
-{
-	return bo->bo.offset;
-}
-
-int vbox_dumb_create(struct drm_file *file,
-		     struct drm_device *dev,
-		     struct drm_mode_create_dumb *args);
-
-void vbox_gem_free_object(struct drm_gem_object *obj);
-int vbox_dumb_mmap_offset(struct drm_file *file,
-			  struct drm_device *dev,
-			  u32 handle, u64 *offset);
-
 int vbox_mm_init(struct vbox_private *vbox);
 void vbox_mm_fini(struct vbox_private *vbox);
 

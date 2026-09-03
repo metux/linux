@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  *	watchdog_dev.c
  *
@@ -19,11 +20,6 @@
  *	  Rusty Lynch <rusty@linux.co.intel.com>
  *	  Satyam Sharma <satyam@infradead.org>
  *	  Randy Dunlap <randy.dunlap@oracle.com>
- *
- *	This program is free software; you can redistribute it and/or
- *	modify it under the terms of the GNU General Public License
- *	as published by the Free Software Foundation; either version
- *	2 of the License, or (at your option) any later version.
  *
  *	Neither Alan Cox, CymruNet Ltd., Wim Van Sebroeck nor Iguana vzw.
  *	admit liability nor provide warranty for any of this software.
@@ -129,13 +125,14 @@ static ktime_t watchdog_next_keepalive(struct watchdog_device *wdd)
 	ktime_t virt_timeout;
 	unsigned int hw_heartbeat_ms;
 
-	virt_timeout = ktime_add(wd_data->last_keepalive,
-				 ms_to_ktime(timeout_ms));
+	if (watchdog_active(wdd))
+		virt_timeout = ktime_add(wd_data->last_keepalive,
+					 ms_to_ktime(timeout_ms));
+	else
+		virt_timeout = wd_data->open_deadline;
+
 	hw_heartbeat_ms = min_not_zero(timeout_ms, wdd->max_hw_heartbeat_ms);
 	keepalive_interval = ms_to_ktime(hw_heartbeat_ms / 2);
-
-	if (!watchdog_active(wdd))
-		return keepalive_interval;
 
 	/*
 	 * To ensure that the watchdog times out wdd->timeout seconds

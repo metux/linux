@@ -473,32 +473,7 @@ void *gen_pool_dma_zalloc_align(struct gen_pool *pool, size_t size,
 EXPORT_SYMBOL(gen_pool_dma_zalloc_align);
 
 /**
- * gen_pool_dma_zalloc - allocate special zeroed memory from the pool for
- * DMA usage
- * @pool: pool to allocate from
- * @size: number of bytes to allocate from the pool
- * @dma: dma-view physical address return value.  Use %NULL if unneeded.
- *
- * Allocate the requested number of zeroed bytes from the specified pool.
- * Uses the pool allocation function (with first-fit algorithm by default).
- * Can not be used in NMI handler on architectures without
- * NMI-safe cmpxchg implementation.
- *
- * Return: virtual address of the allocated zeroed memory, or %NULL on failure
- */
-void *gen_pool_dma_zalloc(struct gen_pool *pool, size_t size, dma_addr_t *dma)
-{
-	void *vaddr = gen_pool_dma_alloc(pool, size, dma);
-
-	if (vaddr)
-		memset(vaddr, 0, size);
-
-	return vaddr;
-}
-EXPORT_SYMBOL(gen_pool_dma_zalloc);
-
-/**
- * gen_pool_free - free allocated special memory back to the pool
+ * gen_pool_free_owner - free allocated special memory back to the pool
  * @pool: pool to free to
  * @addr: starting address of memory to free back to pool
  * @size: size in bytes of memory to free

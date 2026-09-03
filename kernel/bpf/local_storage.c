@@ -465,39 +465,16 @@ const struct bpf_map_ops cgroup_storage_map_ops = {
 	.map_btf_id = &cgroup_storage_map_btf_id,
 };
 
-int bpf_cgroup_storage_assign(struct bpf_prog *prog, struct bpf_map *_map)
+int bpf_cgroup_storage_assign(struct bpf_prog_aux *aux, struct bpf_map *_map)
 {
 	enum bpf_cgroup_storage_type stype = cgroup_storage_type(_map);
 
-	spin_lock_bh(&map->lock);
+	if (aux->cgroup_storage[stype] &&
+	    aux->cgroup_storage[stype] != _map)
+		return -EBUSY;
 
-	if (map->prog && map->prog != prog)
-		goto unlock;
-	if (prog->aux->cgroup_storage[stype] &&
-	    prog->aux->cgroup_storage[stype] != _map)
-		goto unlock;
-
-	map->prog = prog;
-	prog->aux->cgroup_storage[stype] = _map;
-	ret = 0;
-unlock:
-	spin_unlock_bh(&map->lock);
-
-	return ret;
-}
-
-void bpf_cgroup_storage_release(struct bpf_prog *prog, struct bpf_map *_map)
-{
-	enum bpf_cgroup_storage_type stype = cgroup_storage_type(_map);
-	struct bpf_cgroup_storage_map *map = map_to_storage(_map);
-
-	spin_lock_bh(&map->lock);
-	if (map->prog == prog) {
-		WARN_ON(prog->aux->cgroup_storage[stype] != _map);
-		map->prog = NULL;
-		prog->aux->cgroup_storage[stype] = NULL;
-	}
-	spin_unlock_bh(&map->lock);
+	aux->cgroup_storage[stype] = _map;
+	return 0;
 }
 
 static size_t bpf_cgroup_storage_calculate_size(struct bpf_map *map, u32 *pages)

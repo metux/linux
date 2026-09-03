@@ -114,46 +114,46 @@ struct kp_spi_controller_state {
 };
 
 union kp_spi_config {
-    /* use this to access individual elements */
-    struct __attribute__((packed)) spi_config_bitfield {
-        unsigned int pha       : 1; /* spim_clk Phase      */
-        unsigned int pol       : 1; /* spim_clk Polarity   */
-        unsigned int epol      : 1; /* spim_csx Polarity   */
-        unsigned int dpe       : 1; /* Transmission Enable */
-        unsigned int wl        : 5; /* Word Length         */
-        unsigned int           : 3;
-        unsigned int trm       : 2; /* TxRx Mode           */
-        unsigned int cs        : 4; /* Chip Select         */
-        unsigned int wcnt      : 7; /* Word Count          */
-        unsigned int ffen      : 1; /* FIFO Enable         */
-        unsigned int spi_en    : 1; /* SPI Enable          */
-        unsigned int           : 5;
-    } bitfield;
-    /* use this to grab the whole register */
-    u32 reg;
+	/* use this to access individual elements */
+	struct __packed spi_config_bitfield {
+		unsigned int pha       : 1; /* spim_clk Phase      */
+		unsigned int pol       : 1; /* spim_clk Polarity   */
+		unsigned int epol      : 1; /* spim_csx Polarity   */
+		unsigned int dpe       : 1; /* Transmission Enable */
+		unsigned int wl        : 5; /* Word Length         */
+		unsigned int           : 3;
+		unsigned int trm       : 2; /* TxRx Mode           */
+		unsigned int cs        : 4; /* Chip Select         */
+		unsigned int wcnt      : 7; /* Word Count          */
+		unsigned int ffen      : 1; /* FIFO Enable         */
+		unsigned int spi_en    : 1; /* SPI Enable          */
+		unsigned int           : 5;
+	} bitfield;
+	/* use this to grab the whole register */
+	u32 reg;
 };
 
 union kp_spi_status {
-    struct __attribute__((packed)) spi_status_bitfield {
-        unsigned int rx    :  1; /* Rx Status       */
-        unsigned int tx    :  1; /* Tx Status       */
-        unsigned int eo    :  1; /* End of Transfer */
-        unsigned int       :  1;
-        unsigned int txffe :  1; /* Tx FIFO Empty   */
-        unsigned int txfff :  1; /* Tx FIFO Full    */
-        unsigned int rxffe :  1; /* Rx FIFO Empty   */
-        unsigned int rxfff :  1; /* Rx FIFO Full    */
-        unsigned int       : 24;
-    } bitfield;
-    u32 reg;
+	struct __packed spi_status_bitfield {
+		unsigned int rx    :  1; /* Rx Status       */
+		unsigned int tx    :  1; /* Tx Status       */
+		unsigned int eo    :  1; /* End of Transfer */
+		unsigned int       :  1;
+		unsigned int txffe :  1; /* Tx FIFO Empty   */
+		unsigned int txfff :  1; /* Tx FIFO Full    */
+		unsigned int rxffe :  1; /* Rx FIFO Empty   */
+		unsigned int rxfff :  1; /* Rx FIFO Full    */
+		unsigned int       : 24;
+	} bitfield;
+	u32 reg;
 };
 
 union kp_spi_ffctrl {
-    struct __attribute__((packed)) spi_ffctrl_bitfield {
-        unsigned int ffstart :  1; /* FIFO Start */
-        unsigned int         : 31;
-    } bitfield;
-    u32 reg;
+	struct __packed spi_ffctrl_bitfield {
+		unsigned int ffstart :  1; /* FIFO Start */
+		unsigned int         : 31;
+	} bitfield;
+	u32 reg;
 };
 
 /***************

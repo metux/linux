@@ -28,7 +28,6 @@
 #include <drm/drm_drv.h>
 #include <drm/i915_pciids.h>
 
-#include "i915_active.h"
 #include "display/intel_fbdev.h"
 
 #include "i915_drv.h"
@@ -847,8 +846,6 @@ static const struct intel_device_info ehl_info = {
 	.require_force_probe = 1,
 	.platform_engine_mask = BIT(RCS0) | BIT(BCS0) | BIT(VCS0) | BIT(VECS0),
 	.ppgtt_size = 36,
-	.engine_mask =
-		BIT(RCS0) | BIT(BCS0) | BIT(VECS0) | BIT(VCS0) | BIT(VCS2),
 };
 
 #define GEN12_FEATURES \

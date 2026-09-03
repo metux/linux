@@ -1312,13 +1312,14 @@ out_unlock:
 
 static int get_registers(struct intel_overlay *overlay, bool use_phys)
 {
+	struct drm_i915_private *i915 = overlay->i915;
 	struct drm_i915_gem_object *obj;
 	struct i915_vma *vma;
 	int err;
 
-	obj = i915_gem_object_create_stolen(overlay->i915, PAGE_SIZE);
+	obj = i915_gem_object_create_stolen(i915, PAGE_SIZE);
 	if (IS_ERR(obj))
-		obj = i915_gem_object_create_internal(overlay->i915, PAGE_SIZE);
+		obj = i915_gem_object_create_internal(i915, PAGE_SIZE);
 	if (IS_ERR(obj))
 		return PTR_ERR(obj);
 
@@ -1378,17 +1379,9 @@ void intel_overlay_setup(struct drm_i915_private *dev_priv)
 	i915_active_init(&overlay->last_flip,
 			 NULL, intel_overlay_last_flip_retire);
 
-	mutex_lock(&dev_priv->drm.struct_mutex);
-
 	ret = get_registers(overlay, OVERLAY_NEEDS_PHYSICAL(dev_priv));
 	if (ret)
 		goto out_free;
-
-	ret = i915_gem_object_set_to_gtt_domain(overlay->reg_bo, true);
-	if (ret)
-		goto out_reg_bo;
-
-	mutex_unlock(&dev_priv->drm.struct_mutex);
 
 	memset_io(overlay->regs, 0, sizeof(struct overlay_registers));
 	update_polyphase_filter(overlay->regs);
@@ -1398,10 +1391,7 @@ void intel_overlay_setup(struct drm_i915_private *dev_priv)
 	drm_info(&dev_priv->drm, "Initialized overlay support.\n");
 	return;
 
-out_reg_bo:
-	i915_gem_object_put(overlay->reg_bo);
 out_free:
-	mutex_unlock(&dev_priv->drm.struct_mutex);
 	kfree(overlay);
 }
 

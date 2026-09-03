@@ -25,7 +25,6 @@
 
 #include <linux/list.h>
 #include <linux/ctype.h>
-#include <drm/drm_encoder.h>
 #include <drm/drm_mode_object.h>
 #include <drm/drm_modes.h>
 
@@ -263,7 +262,7 @@ struct drm_bridge_funcs {
 	 * The @atomic_pre_enable callback is optional.
 	 */
 	void (*atomic_pre_enable)(struct drm_bridge *bridge,
-				  struct drm_atomic_state *old_state);
+				  struct drm_atomic_state *state);
 
 	/**
 	 * @atomic_enable:
@@ -288,7 +287,7 @@ struct drm_bridge_funcs {
 	 * The @atomic_enable callback is optional.
 	 */
 	void (*atomic_enable)(struct drm_bridge *bridge,
-			      struct drm_atomic_state *old_state);
+			      struct drm_atomic_state *state);
 	/**
 	 * @atomic_disable:
 	 *
@@ -311,7 +310,7 @@ struct drm_bridge_funcs {
 	 * The @atomic_disable callback is optional.
 	 */
 	void (*atomic_disable)(struct drm_bridge *bridge,
-			       struct drm_atomic_state *old_state);
+			       struct drm_atomic_state *state);
 
 	/**
 	 * @atomic_post_disable:
@@ -337,7 +336,7 @@ struct drm_bridge_funcs {
 	 * The @atomic_post_disable callback is optional.
 	 */
 	void (*atomic_post_disable)(struct drm_bridge *bridge,
-				    struct drm_atomic_state *old_state);
+				    struct drm_atomic_state *state);
 };
 
 /**
@@ -384,8 +383,8 @@ struct drm_bridge {
 	struct drm_device *dev;
 	/** @encoder: encoder to which this bridge is connected */
 	struct drm_encoder *encoder;
-	/** @chain_node: used to form a bridge chain */
-	struct list_head chain_node;
+	/** @next: the next bridge in the encoder chain */
+	struct drm_bridge *next;
 #ifdef CONFIG_OF
 	/** @of_node: device node pointer to the bridge */
 	struct device_node *of_node;
@@ -409,64 +408,6 @@ void drm_bridge_remove(struct drm_bridge *bridge);
 struct drm_bridge *of_drm_find_bridge(struct device_node *np);
 int drm_bridge_attach(struct drm_encoder *encoder, struct drm_bridge *bridge,
 		      struct drm_bridge *previous);
-
-/**
- * drm_bridge_get_next_bridge() - Get the next bridge in the chain
- * @bridge: bridge object
- *
- * RETURNS:
- * the next bridge in the chain after @bridge, or NULL if @bridge is the last.
- */
-static inline struct drm_bridge *
-drm_bridge_get_next_bridge(struct drm_bridge *bridge)
-{
-	if (list_is_last(&bridge->chain_node, &bridge->encoder->bridge_chain))
-		return NULL;
-
-	return list_next_entry(bridge, chain_node);
-}
-
-/**
- * drm_bridge_get_prev_bridge() - Get the previous bridge in the chain
- * @bridge: bridge object
- *
- * RETURNS:
- * the previous bridge in the chain, or NULL if @bridge is the first.
- */
-static inline struct drm_bridge *
-drm_bridge_get_prev_bridge(struct drm_bridge *bridge)
-{
-	if (list_is_first(&bridge->chain_node, &bridge->encoder->bridge_chain))
-		return NULL;
-
-	return list_prev_entry(bridge, chain_node);
-}
-
-/**
- * drm_bridge_chain_get_first_bridge() - Get the first bridge in the chain
- * @encoder: encoder object
- *
- * RETURNS:
- * the first bridge in the chain, or NULL if @encoder has no bridge attached
- * to it.
- */
-static inline struct drm_bridge *
-drm_bridge_chain_get_first_bridge(struct drm_encoder *encoder)
-{
-	return list_first_entry_or_null(&encoder->bridge_chain,
-					struct drm_bridge, chain_node);
-}
-
-/**
- * drm_for_each_bridge_in_chain() - Iterate over all bridges present in a chain
- * @encoder: the encoder to iterate bridges on
- * @bridge: a bridge pointer updated to point to the current bridge at each
- *	    iteration
- *
- * Iterate over all bridges present in the bridge chain attached to @encoder.
- */
-#define drm_for_each_bridge_in_chain(encoder, bridge)			\
-	list_for_each_entry(bridge, &(encoder)->bridge_chain, chain_node)
 
 bool drm_bridge_chain_mode_fixup(struct drm_bridge *bridge,
 				 const struct drm_display_mode *mode,
@@ -501,7 +442,6 @@ struct drm_bridge *devm_drm_panel_bridge_add(struct device *dev,
 struct drm_bridge *devm_drm_panel_bridge_add_typed(struct device *dev,
 						   struct drm_panel *panel,
 						   u32 connector_type);
-struct drm_connector *drm_panel_bridge_connector(struct drm_bridge *bridge);
 #endif
 
 #endif

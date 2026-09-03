@@ -101,7 +101,6 @@ drm_mode_validate_pipeline(struct drm_display_mode *mode,
 
 	/* Step 2: Validate against encoders and crtcs */
 	drm_connector_for_each_possible_encoder(connector, encoder) {
-		struct drm_bridge *bridge;
 		struct drm_crtc *crtc;
 
 		ret = drm_encoder_mode_valid(encoder, mode);
@@ -113,8 +112,7 @@ drm_mode_validate_pipeline(struct drm_display_mode *mode,
 			continue;
 		}
 
-		bridge = drm_bridge_chain_get_first_bridge(encoder);
-		ret = drm_bridge_chain_mode_valid(bridge, mode);
+		ret = drm_bridge_chain_mode_valid(encoder->bridge, mode);
 		if (ret != MODE_OK) {
 			/* There is also no point in continuing for crtc check
 			 * here. */

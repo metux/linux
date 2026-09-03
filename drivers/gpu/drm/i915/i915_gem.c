@@ -125,7 +125,7 @@ int i915_gem_object_unbind(struct drm_i915_gem_object *obj,
 	struct i915_vma *vma;
 	int ret;
 
-	if (!atomic_read(&obj->bind_count))
+	if (list_empty(&obj->vma.list))
 		return 0;
 
 	/*
@@ -144,6 +144,11 @@ try_again:
 						       obj_link))) {
 		struct i915_address_space *vm = vma->vm;
 		bool awake = false;
+
+		if (flags & I915_GEM_OBJECT_UNBIND_TEST) {
+			ret = -EBUSY;
+			break;
+		}
 
 		ret = -EAGAIN;
 		if (!i915_vm_tryopen(vm))

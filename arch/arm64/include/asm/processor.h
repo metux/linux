@@ -39,6 +39,7 @@
 #include <asm/pgtable-hwdef.h>
 #include <asm/pointer_auth.h>
 #include <asm/ptrace.h>
+#include <asm/spectre.h>
 #include <asm/types.h>
 
 /*

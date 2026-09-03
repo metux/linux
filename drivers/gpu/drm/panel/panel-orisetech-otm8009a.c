@@ -456,7 +456,7 @@ static int otm8009a_probe(struct mipi_dsi_device *dsi)
 	drm_panel_init(&ctx->panel, dev, &otm8009a_drm_funcs);
 
 	ctx->bl_dev = devm_backlight_device_register(dev, dev_name(dev),
-						     dsi->host->dev, ctx,
+						     dev, ctx,
 						     &otm8009a_backlight_ops,
 						     NULL);
 	if (IS_ERR(ctx->bl_dev)) {

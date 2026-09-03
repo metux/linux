@@ -94,12 +94,7 @@
 #include <linux/sched/debug.h>
 #include <linux/sched/stat.h>
 #include <linux/posix-timers.h>
-<<<<<<< our_proc_base.c
 #include <linux/time_namespace.h>
-#include <linux/resctrl.h>
-=======
-#include <linux/cpufreq_times.h>
->>>>>>> their_proc_base.c
 #include <trace/events/oom.h>
 #include "internal.h"
 #include "fd.h"
@@ -1722,7 +1717,8 @@ static const char *proc_pid_get_link(struct dentry *dentry,
 	if (error)
 		goto out;
 
-	error = nd_jump_link(&path);
+	nd_jump_link(&path);
+	return NULL;
 out:
 	return ERR_PTR(error);
 }
@@ -3159,9 +3155,6 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_CGROUPS
 	ONE("cgroup",  S_IRUGO, proc_cgroup_show),
 #endif
-#ifdef CONFIG_PROC_CPU_RESCTRL
-	ONE("cpu_resctrl_groups", S_IRUGO, proc_resctrl_show),
-#endif
 	ONE("oom_score",  S_IRUGO, proc_oom_score),
 	REG("oom_adj",    S_IRUGO|S_IWUSR, proc_oom_adj_operations),
 	REG("oom_score_adj", S_IRUGO|S_IWUSR, proc_oom_score_adj_operations),
@@ -3197,9 +3190,6 @@ static const struct pid_entry tgid_base_stuff[] = {
 #endif
 #ifdef CONFIG_PROC_PID_ARCH_STATUS
 	ONE("arch_status", S_IRUGO, proc_pid_arch_status),
-#endif
-#ifdef CONFIG_CPU_FREQ_TIMES
-	ONE("time_in_state", 0444, proc_time_in_state_show),
 #endif
 };
 
@@ -3565,9 +3555,6 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_CGROUPS
 	ONE("cgroup",  S_IRUGO, proc_cgroup_show),
 #endif
-#ifdef CONFIG_PROC_CPU_RESCTRL
-	ONE("cpu_resctrl_groups", S_IRUGO, proc_resctrl_show),
-#endif
 	ONE("oom_score", S_IRUGO, proc_oom_score),
 	REG("oom_adj",   S_IRUGO|S_IWUSR, proc_oom_adj_operations),
 	REG("oom_score_adj", S_IRUGO|S_IWUSR, proc_oom_score_adj_operations),
@@ -3590,12 +3577,6 @@ static const struct pid_entry tid_base_stuff[] = {
 #endif
 #ifdef CONFIG_LIVEPATCH
 	ONE("patch_state",  S_IRUSR, proc_pid_patch_state),
-#endif
-#ifdef CONFIG_PROC_PID_ARCH_STATUS
-	ONE("arch_status", S_IRUGO, proc_pid_arch_status),
-#endif
-#ifdef CONFIG_CPU_FREQ_TIMES
-	ONE("time_in_state", 0444, proc_time_in_state_show),
 #endif
 #ifdef CONFIG_PROC_PID_ARCH_STATUS
 	ONE("arch_status", S_IRUGO, proc_pid_arch_status),

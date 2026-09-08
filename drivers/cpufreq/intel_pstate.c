@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/acpi.h>
 #include <linux/vmalloc.h>
+#include <linux/pm_qos.h>
 #include <trace/events/power.h>
 
 #include <asm/div64.h>
@@ -846,11 +847,9 @@ static void intel_pstate_hwp_force_min_perf(int cpu)
 	value |= HWP_MAX_PERF(min_perf);
 	value |= HWP_MIN_PERF(min_perf);
 
-	/* Set EPP/EPB to min */
+	/* Set EPP to min */
 	if (boot_cpu_has(X86_FEATURE_HWP_EPP))
 		value |= HWP_ENERGY_PERF_PREFERENCE(HWP_EPP_POWERSAVE);
-	else
-		intel_pstate_set_epb(cpu, HWP_EPP_BALANCE_POWERSAVE);
 
 	wrmsrl_on_cpu(cpu, MSR_HWP_REQUEST, value);
 }
@@ -1085,6 +1084,47 @@ static ssize_t store_no_turbo(struct kobject *a, struct kobj_attribute *b,
 	return count;
 }
 
+static struct cpufreq_driver intel_pstate;
+
+static void update_qos_request(enum freq_qos_req_type type)
+{
+	int max_state, turbo_max, freq, i, perf_pct;
+	struct freq_qos_request *req;
+	struct cpufreq_policy *policy;
+
+	for_each_possible_cpu(i) {
+		struct cpudata *cpu = all_cpu_data[i];
+
+		policy = cpufreq_cpu_get(i);
+		if (!policy)
+			continue;
+
+		req = policy->driver_data;
+		cpufreq_cpu_put(policy);
+
+		if (!req)
+			continue;
+
+		if (hwp_active)
+			intel_pstate_get_hwp_max(i, &turbo_max, &max_state);
+		else
+			turbo_max = cpu->pstate.turbo_pstate;
+
+		if (type == FREQ_QOS_MIN) {
+			perf_pct = global.min_perf_pct;
+		} else {
+			req++;
+			perf_pct = global.max_perf_pct;
+		}
+
+		freq = DIV_ROUND_UP(turbo_max * perf_pct, 100);
+		freq *= cpu->pstate.scaling;
+
+		if (freq_qos_update_request(req, freq) < 0)
+			pr_warn("Failed to update freq constraint: CPU%d\n", i);
+	}
+}
+
 static ssize_t store_max_perf_pct(struct kobject *a, struct kobj_attribute *b,
 				  const char *buf, size_t count)
 {
@@ -1108,7 +1148,10 @@ static ssize_t store_max_perf_pct(struct kobject *a, struct kobj_attribute *b,
 
 	mutex_unlock(&intel_pstate_limits_lock);
 
-	intel_pstate_update_policies();
+	if (intel_pstate_driver == &intel_pstate)
+		intel_pstate_update_policies();
+	else
+		update_qos_request(FREQ_QOS_MAX);
 
 	mutex_unlock(&intel_pstate_driver_lock);
 
@@ -1139,7 +1182,10 @@ static ssize_t store_min_perf_pct(struct kobject *a, struct kobj_attribute *b,
 
 	mutex_unlock(&intel_pstate_limits_lock);
 
-	intel_pstate_update_policies();
+	if (intel_pstate_driver == &intel_pstate)
+		intel_pstate_update_policies();
+	else
+		update_qos_request(FREQ_QOS_MIN);
 
 	mutex_unlock(&intel_pstate_driver_lock);
 
@@ -1862,51 +1908,51 @@ static const struct pstate_funcs knl_funcs = {
 	.get_val = core_get_val,
 };
 
-#define ICPU(model, policy) \
-	{ X86_VENDOR_INTEL, 6, model, X86_FEATURE_APERFMPERF,\
-			(unsigned long)&policy }
+#define X86_MATCH(model, policy)					 \
+	X86_MATCH_VENDOR_FAM_MODEL_FEATURE(INTEL, 6, INTEL_FAM6_##model, \
+					   X86_FEATURE_APERFMPERF, &policy)
 
 static const struct x86_cpu_id intel_pstate_cpu_ids[] = {
-	ICPU(INTEL_FAM6_SANDYBRIDGE,		core_funcs),
-	ICPU(INTEL_FAM6_SANDYBRIDGE_X,		core_funcs),
-	ICPU(INTEL_FAM6_ATOM_SILVERMONT,	silvermont_funcs),
-	ICPU(INTEL_FAM6_IVYBRIDGE,		core_funcs),
-	ICPU(INTEL_FAM6_HASWELL,		core_funcs),
-	ICPU(INTEL_FAM6_BROADWELL,		core_funcs),
-	ICPU(INTEL_FAM6_IVYBRIDGE_X,		core_funcs),
-	ICPU(INTEL_FAM6_HASWELL_X,		core_funcs),
-	ICPU(INTEL_FAM6_HASWELL_ULT,		core_funcs),
-	ICPU(INTEL_FAM6_HASWELL_GT3E,		core_funcs),
-	ICPU(INTEL_FAM6_BROADWELL_GT3E,		core_funcs),
-	ICPU(INTEL_FAM6_ATOM_AIRMONT,		airmont_funcs),
-	ICPU(INTEL_FAM6_SKYLAKE_MOBILE,		core_funcs),
-	ICPU(INTEL_FAM6_BROADWELL_X,		core_funcs),
-	ICPU(INTEL_FAM6_SKYLAKE,		core_funcs),
-	ICPU(INTEL_FAM6_BROADWELL_XEON_D,	core_funcs),
-	ICPU(INTEL_FAM6_XEON_PHI_KNL,		knl_funcs),
-	ICPU(INTEL_FAM6_XEON_PHI_KNM,		knl_funcs),
-	ICPU(INTEL_FAM6_ATOM_GOLDMONT,		core_funcs),
-	ICPU(INTEL_FAM6_ATOM_GOLDMONT_PLUS,     core_funcs),
-	ICPU(INTEL_FAM6_SKYLAKE_X,		core_funcs),
+	X86_MATCH(SANDYBRIDGE,		core_funcs),
+	X86_MATCH(SANDYBRIDGE_X,	core_funcs),
+	X86_MATCH(ATOM_SILVERMONT,	silvermont_funcs),
+	X86_MATCH(IVYBRIDGE,		core_funcs),
+	X86_MATCH(HASWELL,		core_funcs),
+	X86_MATCH(BROADWELL,		core_funcs),
+	X86_MATCH(IVYBRIDGE_X,		core_funcs),
+	X86_MATCH(HASWELL_X,		core_funcs),
+	X86_MATCH(HASWELL_L,		core_funcs),
+	X86_MATCH(HASWELL_G,		core_funcs),
+	X86_MATCH(BROADWELL_G,		core_funcs),
+	X86_MATCH(ATOM_AIRMONT,		airmont_funcs),
+	X86_MATCH(SKYLAKE_L,		core_funcs),
+	X86_MATCH(BROADWELL_X,		core_funcs),
+	X86_MATCH(SKYLAKE,		core_funcs),
+	X86_MATCH(BROADWELL_D,		core_funcs),
+	X86_MATCH(XEON_PHI_KNL,		knl_funcs),
+	X86_MATCH(XEON_PHI_KNM,		knl_funcs),
+	X86_MATCH(ATOM_GOLDMONT,	core_funcs),
+	X86_MATCH(ATOM_GOLDMONT_PLUS,	core_funcs),
+	X86_MATCH(SKYLAKE_X,		core_funcs),
 	{}
 };
 MODULE_DEVICE_TABLE(x86cpu, intel_pstate_cpu_ids);
 
 static const struct x86_cpu_id intel_pstate_cpu_oob_ids[] __initconst = {
-	ICPU(INTEL_FAM6_BROADWELL_XEON_D, core_funcs),
-	ICPU(INTEL_FAM6_BROADWELL_X, core_funcs),
-	ICPU(INTEL_FAM6_SKYLAKE_X, core_funcs),
+	X86_MATCH(BROADWELL_D,		core_funcs),
+	X86_MATCH(BROADWELL_X,		core_funcs),
+	X86_MATCH(SKYLAKE_X,		core_funcs),
 	{}
 };
 
 static const struct x86_cpu_id intel_pstate_cpu_ee_disable_ids[] = {
-	ICPU(INTEL_FAM6_KABYLAKE, core_funcs),
+	X86_MATCH(KABYLAKE,		core_funcs),
 	{}
 };
 
 static const struct x86_cpu_id intel_pstate_hwp_boost_ids[] = {
-	ICPU(INTEL_FAM6_SKYLAKE_X, core_funcs),
-	ICPU(INTEL_FAM6_SKYLAKE, core_funcs),
+	X86_MATCH(SKYLAKE_X,		core_funcs),
+	X86_MATCH(SKYLAKE,		core_funcs),
 	{}
 };
 
@@ -2328,8 +2374,16 @@ static unsigned int intel_cpufreq_fast_switch(struct cpufreq_policy *policy,
 
 static int intel_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
-	int ret = __intel_pstate_cpu_init(policy);
+	int max_state, turbo_max, min_freq, max_freq, ret;
+	struct freq_qos_request *req;
+	struct cpudata *cpu;
+	struct device *dev;
 
+	dev = get_cpu_device(policy->cpu);
+	if (!dev)
+		return -ENODEV;
+
+	ret = __intel_pstate_cpu_init(policy);
 	if (ret)
 		return ret;
 
@@ -2338,7 +2392,63 @@ static int intel_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	/* This reflects the intel_pstate_get_cpu_pstates() setting. */
 	policy->cur = policy->cpuinfo.min_freq;
 
+	req = kcalloc(2, sizeof(*req), GFP_KERNEL);
+	if (!req) {
+		ret = -ENOMEM;
+		goto pstate_exit;
+	}
+
+	cpu = all_cpu_data[policy->cpu];
+
+	if (hwp_active)
+		intel_pstate_get_hwp_max(policy->cpu, &turbo_max, &max_state);
+	else
+		turbo_max = cpu->pstate.turbo_pstate;
+
+	min_freq = DIV_ROUND_UP(turbo_max * global.min_perf_pct, 100);
+	min_freq *= cpu->pstate.scaling;
+	max_freq = DIV_ROUND_UP(turbo_max * global.max_perf_pct, 100);
+	max_freq *= cpu->pstate.scaling;
+
+	ret = freq_qos_add_request(&policy->constraints, req, FREQ_QOS_MIN,
+				   min_freq);
+	if (ret < 0) {
+		dev_err(dev, "Failed to add min-freq constraint (%d)\n", ret);
+		goto free_req;
+	}
+
+	ret = freq_qos_add_request(&policy->constraints, req + 1, FREQ_QOS_MAX,
+				   max_freq);
+	if (ret < 0) {
+		dev_err(dev, "Failed to add max-freq constraint (%d)\n", ret);
+		goto remove_min_req;
+	}
+
+	policy->driver_data = req;
+
 	return 0;
+
+remove_min_req:
+	freq_qos_remove_request(req);
+free_req:
+	kfree(req);
+pstate_exit:
+	intel_pstate_exit_perf_limits(policy);
+
+	return ret;
+}
+
+static int intel_cpufreq_cpu_exit(struct cpufreq_policy *policy)
+{
+	struct freq_qos_request *req;
+
+	req = policy->driver_data;
+
+	freq_qos_remove_request(req + 1);
+	freq_qos_remove_request(req);
+	kfree(req);
+
+	return intel_pstate_cpu_exit(policy);
 }
 
 static struct cpufreq_driver intel_cpufreq = {
@@ -2347,7 +2457,7 @@ static struct cpufreq_driver intel_cpufreq = {
 	.target		= intel_cpufreq_target,
 	.fast_switch	= intel_cpufreq_fast_switch,
 	.init		= intel_cpufreq_cpu_init,
-	.exit		= intel_pstate_cpu_exit,
+	.exit		= intel_cpufreq_cpu_exit,
 	.stop_cpu	= intel_cpufreq_stop_cpu,
 	.update_limits	= intel_pstate_update_limits,
 	.name		= "intel_cpufreq",
@@ -2615,13 +2725,14 @@ static inline void intel_pstate_request_control_from_smm(void) {}
 
 #define INTEL_PSTATE_HWP_BROADWELL	0x01
 
-#define ICPU_HWP(model, hwp_mode) \
-	{ X86_VENDOR_INTEL, 6, model, X86_FEATURE_HWP, hwp_mode }
+#define X86_MATCH_HWP(model, hwp_mode)					\
+	X86_MATCH_VENDOR_FAM_MODEL_FEATURE(INTEL, 6, INTEL_FAM6_##model, \
+					   X86_FEATURE_APERFMPERF, hwp_mode)
 
 static const struct x86_cpu_id hwp_support_ids[] __initconst = {
-	ICPU_HWP(INTEL_FAM6_BROADWELL_X, INTEL_PSTATE_HWP_BROADWELL),
-	ICPU_HWP(INTEL_FAM6_BROADWELL_XEON_D, INTEL_PSTATE_HWP_BROADWELL),
-	ICPU_HWP(X86_MODEL_ANY, 0),
+	X86_MATCH_HWP(BROADWELL_X,	INTEL_PSTATE_HWP_BROADWELL),
+	X86_MATCH_HWP(BROADWELL_D,	INTEL_PSTATE_HWP_BROADWELL),
+	X86_MATCH_HWP(ANY,		0),
 	{}
 };
 

@@ -136,11 +136,17 @@ nouveau_bo_del_ttm(struct ttm_buffer_object *bo)
 	struct drm_device *dev = drm->dev;
 	struct nouveau_bo *nvbo = nouveau_bo(bo);
 
-	if (unlikely(nvbo->bo.base.filp))
-		DRM_ERROR("bo %p still attached to GEM object\n", bo);
 	WARN_ON(nvbo->pin_refcnt > 0);
 	nouveau_bo_del_io_reserve_lru(bo);
 	nv10_bo_put_tile_region(dev, nvbo->tile, NULL);
+
+	/*
+	 * If nouveau_bo_new() allocated this buffer, the GEM object was never
+	 * initialized, so don't attempt to release it.
+	 */
+	if (bo->base.dev)
+		drm_gem_object_release(&bo->base);
+
 	kfree(nvbo);
 }
 
@@ -153,8 +159,7 @@ roundup_64(u64 x, u32 y)
 }
 
 static void
-nouveau_bo_fixup_align(struct nouveau_bo *nvbo, u32 flags,
-		       int *align, u64 *size)
+nouveau_bo_fixup_align(struct nouveau_bo *nvbo, int *align, u64 *size)
 {
 	struct nouveau_drm *drm = nouveau_bdev(nvbo->bo.bdev);
 	struct nvif_device *device = &drm->client.device;
@@ -186,31 +191,24 @@ nouveau_bo_fixup_align(struct nouveau_bo *nvbo, u32 flags,
 	*size = roundup_64(*size, PAGE_SIZE);
 }
 
-int
-nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
-	       uint32_t flags, uint32_t tile_mode, uint32_t tile_flags,
-	       struct sg_table *sg, struct dma_resv *robj,
-	       struct nouveau_bo **pnvbo)
+struct nouveau_bo *
+nouveau_bo_alloc(struct nouveau_cli *cli, u64 *size, int *align, u32 domain,
+		 u32 tile_mode, u32 tile_flags)
 {
 	struct nouveau_drm *drm = cli->drm;
 	struct nouveau_bo *nvbo;
 	struct nvif_mmu *mmu = &cli->mmu;
 	struct nvif_vmm *vmm = cli->svm.cli ? &cli->svm.vmm : &cli->vmm.vmm;
-	size_t acc_size;
-	int type = ttm_bo_type_device;
-	int ret, i, pi = -1;
+	int i, pi = -1;
 
-	if (!size) {
-		NV_WARN(drm, "skipped size %016llx\n", size);
-		return -EINVAL;
+	if (!*size) {
+		NV_WARN(drm, "skipped size %016llx\n", *size);
+		return ERR_PTR(-EINVAL);
 	}
-
-	if (sg)
-		type = ttm_bo_type_sg;
 
 	nvbo = kzalloc(sizeof(struct nouveau_bo), GFP_KERNEL);
 	if (!nvbo)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 	INIT_LIST_HEAD(&nvbo->head);
 	INIT_LIST_HEAD(&nvbo->entry);
 	INIT_LIST_HEAD(&nvbo->vma_list);
@@ -220,7 +218,7 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 	 * mapping, but is what NOUVEAU_GEM_DOMAIN_COHERENT gets translated
 	 * into in nouveau_gem_new().
 	 */
-	if (flags & TTM_PL_FLAG_UNCACHED) {
+	if (domain & NOUVEAU_GEM_DOMAIN_COHERENT) {
 		/* Determine if we can get a cache-coherent map, forcing
 		 * uncached mapping if we can't.
 		 */
@@ -232,7 +230,7 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 		nvbo->kind = (tile_flags & 0x0000ff00) >> 8;
 		if (!nvif_mmu_kind_valid(mmu, nvbo->kind)) {
 			kfree(nvbo);
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 		}
 
 		nvbo->comp = mmu->kind[nvbo->kind] != nvbo->kind;
@@ -242,7 +240,7 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 		nvbo->comp = (tile_flags & 0x00030000) >> 16;
 		if (!nvif_mmu_kind_valid(mmu, nvbo->kind)) {
 			kfree(nvbo);
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 		}
 	} else {
 		nvbo->zeta = (tile_flags & 0x00000007);
@@ -260,9 +258,9 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 		 * Skip page sizes that can't support needed domains.
 		 */
 		if (cli->device.info.family > NV_DEVICE_INFO_V0_CURIE &&
-		    (flags & TTM_PL_FLAG_VRAM) && !vmm->page[i].vram)
+		    (domain & NOUVEAU_GEM_DOMAIN_VRAM) && !vmm->page[i].vram)
 			continue;
-		if ((flags & TTM_PL_FLAG_TT) &&
+		if ((domain & NOUVEAU_GEM_DOMAIN_GART) &&
 		    (!vmm->page[i].host || vmm->page[i].shift > PAGE_SHIFT))
 			continue;
 
@@ -274,12 +272,12 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 			pi = i;
 
 		/* Stop once the buffer is larger than the current page size. */
-		if (size >= 1ULL << vmm->page[i].shift)
+		if (*size >= 1ULL << vmm->page[i].shift)
 			break;
 	}
 
 	if (WARN_ON(pi < 0))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	/* Disable compression if suitable settings couldn't be found. */
 	if (nvbo->comp && !vmm->page[pi].comp) {
@@ -289,50 +287,81 @@ nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
 	}
 	nvbo->page = vmm->page[pi].shift;
 
-	nouveau_bo_fixup_align(nvbo, flags, &align, &size);
+	nouveau_bo_fixup_align(nvbo, align, size);
+
+	return nvbo;
+}
+
+int
+nouveau_bo_init(struct nouveau_bo *nvbo, u64 size, int align, u32 domain,
+		struct sg_table *sg, struct dma_resv *robj)
+{
+	int type = sg ? ttm_bo_type_sg : ttm_bo_type_device;
+	size_t acc_size;
+	int ret;
+
+	acc_size = ttm_bo_dma_acc_size(nvbo->bo.bdev, size, sizeof(*nvbo));
+
 	nvbo->bo.mem.num_pages = size >> PAGE_SHIFT;
-	nouveau_bo_placement_set(nvbo, flags, 0);
+	nouveau_bo_placement_set(nvbo, domain, 0);
 	INIT_LIST_HEAD(&nvbo->io_reserve_lru);
 
-	acc_size = ttm_bo_dma_acc_size(&drm->ttm.bdev, size,
-				       sizeof(struct nouveau_bo));
-
-	ret = ttm_bo_init(&drm->ttm.bdev, &nvbo->bo, size,
-			  type, &nvbo->placement,
-			  align >> PAGE_SHIFT, false, acc_size, sg,
-			  robj, nouveau_bo_del_ttm);
-
+	ret = ttm_bo_init(nvbo->bo.bdev, &nvbo->bo, size, type,
+			  &nvbo->placement, align >> PAGE_SHIFT, false,
+			  acc_size, sg, robj, nouveau_bo_del_ttm);
 	if (ret) {
 		/* ttm will call nouveau_bo_del_ttm if it fails.. */
 		return ret;
 	}
+
+	return 0;
+}
+
+int
+nouveau_bo_new(struct nouveau_cli *cli, u64 size, int align,
+	       uint32_t domain, uint32_t tile_mode, uint32_t tile_flags,
+	       struct sg_table *sg, struct dma_resv *robj,
+	       struct nouveau_bo **pnvbo)
+{
+	struct nouveau_bo *nvbo;
+	int ret;
+
+	nvbo = nouveau_bo_alloc(cli, &size, &align, domain, tile_mode,
+				tile_flags);
+	if (IS_ERR(nvbo))
+		return PTR_ERR(nvbo);
+
+	ret = nouveau_bo_init(nvbo, size, align, domain, sg, robj);
+	if (ret)
+		return ret;
 
 	*pnvbo = nvbo;
 	return 0;
 }
 
 static void
-set_placement_list(struct ttm_place *pl, unsigned *n, uint32_t type, uint32_t flags)
+set_placement_list(struct ttm_place *pl, unsigned *n, uint32_t domain,
+		   uint32_t flags)
 {
 	*n = 0;
 
-	if (type & TTM_PL_FLAG_VRAM)
+	if (domain & NOUVEAU_GEM_DOMAIN_VRAM)
 		pl[(*n)++].flags = TTM_PL_FLAG_VRAM | flags;
-	if (type & TTM_PL_FLAG_TT)
+	if (domain & NOUVEAU_GEM_DOMAIN_GART)
 		pl[(*n)++].flags = TTM_PL_FLAG_TT | flags;
-	if (type & TTM_PL_FLAG_SYSTEM)
+	if (domain & NOUVEAU_GEM_DOMAIN_CPU)
 		pl[(*n)++].flags = TTM_PL_FLAG_SYSTEM | flags;
 }
 
 static void
-set_placement_range(struct nouveau_bo *nvbo, uint32_t type)
+set_placement_range(struct nouveau_bo *nvbo, uint32_t domain)
 {
 	struct nouveau_drm *drm = nouveau_bdev(nvbo->bo.bdev);
 	u32 vram_pages = drm->client.device.info.ram_size >> PAGE_SHIFT;
 	unsigned i, fpfn, lpfn;
 
 	if (drm->client.device.info.family == NV_DEVICE_INFO_V0_CELSIUS &&
-	    nvbo->mode && (type & TTM_PL_FLAG_VRAM) &&
+	    nvbo->mode && (domain & NOUVEAU_GEM_DOMAIN_VRAM) &&
 	    nvbo->bo.mem.num_pages < vram_pages / 4) {
 		/*
 		 * Make sure that the color and depth buffers are handled
@@ -359,7 +388,8 @@ set_placement_range(struct nouveau_bo *nvbo, uint32_t type)
 }
 
 void
-nouveau_bo_placement_set(struct nouveau_bo *nvbo, uint32_t type, uint32_t busy)
+nouveau_bo_placement_set(struct nouveau_bo *nvbo, uint32_t domain,
+			 uint32_t busy)
 {
 	struct ttm_placement *pl = &nvbo->placement;
 	uint32_t flags = (nvbo->force_coherent ? TTM_PL_FLAG_UNCACHED :
@@ -368,17 +398,17 @@ nouveau_bo_placement_set(struct nouveau_bo *nvbo, uint32_t type, uint32_t busy)
 
 	pl->placement = nvbo->placements;
 	set_placement_list(nvbo->placements, &pl->num_placement,
-			   type, flags);
+			   domain, flags);
 
 	pl->busy_placement = nvbo->busy_placements;
 	set_placement_list(nvbo->busy_placements, &pl->num_busy_placement,
-			   type | busy, flags);
+			   domain | busy, flags);
 
-	set_placement_range(nvbo, type);
+	set_placement_range(nvbo, domain);
 }
 
 int
-nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
+nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t domain, bool contig)
 {
 	struct nouveau_drm *drm = nouveau_bdev(nvbo->bo.bdev);
 	struct ttm_buffer_object *bo = &nvbo->bo;
@@ -390,7 +420,7 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 		return ret;
 
 	if (drm->client.device.info.family >= NV_DEVICE_INFO_V0_TESLA &&
-	    memtype == TTM_PL_FLAG_VRAM && contig) {
+	    domain == NOUVEAU_GEM_DOMAIN_VRAM && contig) {
 		if (!nvbo->contig) {
 			nvbo->contig = true;
 			force = true;
@@ -399,10 +429,22 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 	}
 
 	if (nvbo->pin_refcnt) {
-		if (!(memtype & (1 << bo->mem.mem_type)) || evict) {
+		bool error = evict;
+
+		switch (bo->mem.mem_type) {
+		case TTM_PL_VRAM:
+			error |= !(domain & NOUVEAU_GEM_DOMAIN_VRAM);
+			break;
+		case TTM_PL_TT:
+			error |= !(domain & NOUVEAU_GEM_DOMAIN_GART);
+		default:
+			break;
+		}
+
+		if (error) {
 			NV_ERROR(drm, "bo %p pinned elsewhere: "
 				      "0x%08x vs 0x%08x\n", bo,
-				 1 << bo->mem.mem_type, memtype);
+				 bo->mem.mem_type, domain);
 			ret = -EBUSY;
 		}
 		nvbo->pin_refcnt++;
@@ -410,14 +452,14 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 	}
 
 	if (evict) {
-		nouveau_bo_placement_set(nvbo, TTM_PL_FLAG_TT, 0);
+		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_GART, 0);
 		ret = nouveau_bo_validate(nvbo, false, false);
 		if (ret)
 			goto out;
 	}
 
 	nvbo->pin_refcnt++;
-	nouveau_bo_placement_set(nvbo, memtype, 0);
+	nouveau_bo_placement_set(nvbo, domain, 0);
 
 	/* drop pin_refcnt temporarily, so we don't trip the assertion
 	 * in nouveau_bo_move() that makes sure we're not trying to
@@ -463,7 +505,16 @@ nouveau_bo_unpin(struct nouveau_bo *nvbo)
 	if (ref)
 		goto out;
 
-	nouveau_bo_placement_set(nvbo, bo->mem.placement, 0);
+	switch (bo->mem.mem_type) {
+	case TTM_PL_VRAM:
+		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_VRAM, 0);
+		break;
+	case TTM_PL_TT:
+		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_GART, 0);
+		break;
+	default:
+		break;
+	}
 
 	ret = nouveau_bo_validate(nvbo, false, false);
 	if (ret == 0) {
@@ -673,11 +724,11 @@ nouveau_bo_evict_flags(struct ttm_buffer_object *bo, struct ttm_placement *pl)
 
 	switch (bo->mem.mem_type) {
 	case TTM_PL_VRAM:
-		nouveau_bo_placement_set(nvbo, TTM_PL_FLAG_TT,
-					 TTM_PL_FLAG_SYSTEM);
+		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_GART,
+					 NOUVEAU_GEM_DOMAIN_CPU);
 		break;
 	default:
-		nouveau_bo_placement_set(nvbo, TTM_PL_FLAG_SYSTEM, 0);
+		nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_CPU, 0);
 		break;
 	}
 
@@ -1185,7 +1236,8 @@ nouveau_ttm_fault_reserve_notify(struct ttm_buffer_object *bo)
 			return 0;
 
 		if (bo->mem.mem_type == TTM_PL_SYSTEM) {
-			nouveau_bo_placement_set(nvbo, TTM_PL_TT, 0);
+			nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_GART,
+						 0);
 
 			ret = nouveau_bo_validate(nvbo, false, false);
 			if (ret)
@@ -1209,7 +1261,7 @@ nouveau_ttm_fault_reserve_notify(struct ttm_buffer_object *bo)
 		nvbo->busy_placements[i].lpfn = mappable;
 	}
 
-	nouveau_bo_placement_set(nvbo, TTM_PL_FLAG_VRAM, 0);
+	nouveau_bo_placement_set(nvbo, NOUVEAU_GEM_DOMAIN_VRAM, 0);
 	return nouveau_bo_validate(nvbo, false, false);
 }
 

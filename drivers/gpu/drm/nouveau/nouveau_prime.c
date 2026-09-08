@@ -22,7 +22,6 @@
  * Authors: Dave Airlie
  */
 
-#include <drm/drmP.h>
 #include <linux/dma-buf.h>
 
 #include "nouveau_drv.h"
@@ -61,31 +60,45 @@ struct drm_gem_object *nouveau_gem_prime_import_sg_table(struct drm_device *dev,
 							 struct sg_table *sg)
 {
 	struct nouveau_drm *drm = nouveau_drm(dev);
+	struct drm_gem_object *obj;
 	struct nouveau_bo *nvbo;
 	struct dma_resv *robj = attach->dmabuf->resv;
-	u32 flags = 0;
+	u64 size = attach->dmabuf->size;
+	int align = 0;
 	int ret;
 
-	flags = TTM_PL_FLAG_TT;
-
 	dma_resv_lock(robj, NULL);
-	ret = nouveau_bo_new(&drm->client, attach->dmabuf->size, 0, flags, 0, 0,
-			     sg, robj, &nvbo);
-	dma_resv_unlock(robj);
-	if (ret)
-		return ERR_PTR(ret);
+	nvbo = nouveau_bo_alloc(&drm->client, &size, &align,
+				NOUVEAU_GEM_DOMAIN_GART, 0, 0);
+	if (IS_ERR(nvbo)) {
+		obj = ERR_CAST(nvbo);
+		goto unlock;
+	}
 
 	nvbo->valid_domains = NOUVEAU_GEM_DOMAIN_GART;
 
 	/* Initialize the embedded gem-object. We return a single gem-reference
 	 * to the caller, instead of a normal nouveau_bo ttm reference. */
-	ret = drm_gem_object_init(dev, &nvbo->gem, nvbo->bo.mem.size);
+	ret = drm_gem_object_init(dev, &nvbo->bo.base, size);
 	if (ret) {
 		nouveau_bo_ref(NULL, &nvbo);
-		return ERR_PTR(-ENOMEM);
+		obj = ERR_PTR(-ENOMEM);
+		goto unlock;
 	}
 
-	return &nvbo->gem;
+	ret = nouveau_bo_init(nvbo, size, align, NOUVEAU_GEM_DOMAIN_GART,
+			      sg, robj);
+	if (ret) {
+		nouveau_bo_ref(NULL, &nvbo);
+		obj = ERR_PTR(ret);
+		goto unlock;
+	}
+
+	obj = &nvbo->bo.base;
+
+unlock:
+	dma_resv_unlock(robj);
+	return obj;
 }
 
 int nouveau_gem_prime_pin(struct drm_gem_object *obj)
@@ -94,7 +107,7 @@ int nouveau_gem_prime_pin(struct drm_gem_object *obj)
 	int ret;
 
 	/* pin buffer into GTT */
-	ret = nouveau_bo_pin(nvbo, TTM_PL_FLAG_TT, false);
+	ret = nouveau_bo_pin(nvbo, NOUVEAU_GEM_DOMAIN_GART, false);
 	if (ret)
 		return -EINVAL;
 

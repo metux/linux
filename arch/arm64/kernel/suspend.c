@@ -75,8 +75,7 @@ void notrace __cpu_suspend_exit(void)
 	 * have turned the mitigation on. If the user has forcefully
 	 * disabled it, make sure their wishes are obeyed.
 	 */
-	if (arm64_get_ssbd_state() == ARM64_SSBD_FORCE_DISABLE)
-		arm64_set_ssbd_mitigation(false);
+	spectre_v4_enable_mitigation(NULL);
 
 	/* Restore additional feature-specific configuration */
 	ptrauth_suspend_exit();

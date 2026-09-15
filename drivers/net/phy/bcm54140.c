@@ -115,6 +115,16 @@
 #define BCM54140_HWMON_IN_ALARM_BIT(ch) ((ch) ? BCM54140_RDB_MON_ISR_3V3 \
 					      : BCM54140_RDB_MON_ISR_1V0)
 
+/* This PHY has two different PHY IDs depening on its MODE_SEL pin. This
+ * pin choses between 4x SGMII and QSGMII mode:
+ *   AE02_5009 4x SGMII
+ *   AE02_5019 QSGMII
+ */
+#define BCM54140_PHY_ID_MASK	0xffffffe8
+
+#define BCM54140_PHY_ID_REV(phy_id)	((phy_id) & 0x7)
+#define BCM54140_REV_B0			1
+
 #define BCM54140_DEFAULT_DOWNSHIFT 5
 #define BCM54140_MAX_DOWNSHIFT 9
 
@@ -122,7 +132,6 @@ struct bcm54140_priv {
 	int port;
 	int base_addr;
 #if IS_ENABLED(CONFIG_HWMON)
-	bool pkg_init;
 	/* protect the alarm bits */
 	struct mutex alarm_lock;
 	u16 alarm;
@@ -191,7 +200,8 @@ out:
 static int bcm54140_hwmon_read_temp(struct device *dev, u32 attr, long *val)
 {
 	struct phy_device *phydev = dev_get_drvdata(dev);
-	u16 reg, tmp;
+	u16 reg;
+	int tmp;
 
 	switch (attr) {
 	case hwmon_temp_input:
@@ -224,7 +234,8 @@ static int bcm54140_hwmon_read_in(struct device *dev, u32 attr,
 				  int channel, long *val)
 {
 	struct phy_device *phydev = dev_get_drvdata(dev);
-	u16 bit, reg, tmp;
+	u16 bit, reg;
+	int tmp;
 
 	switch (attr) {
 	case hwmon_in_input:
@@ -395,36 +406,6 @@ static int bcm54140_enable_monitoring(struct phy_device *phydev)
 	return bcm_phy_modify_rdb(phydev, BCM54140_RDB_MON_CTRL, mask, set);
 }
 
-/* Check if one PHY has already done the init of the parts common to all PHYs
- * in the Quad PHY package.
- */
-static bool bcm54140_is_pkg_init(struct phy_device *phydev)
-{
-	struct bcm54140_priv *priv = phydev->priv;
-	struct mii_bus *bus = phydev->mdio.bus;
-	int base_addr = priv->base_addr;
-	struct phy_device *phy;
-	int i;
-
-	/* Quad PHY */
-	for (i = 0; i < 4; i++) {
-		phy = mdiobus_get_phy(bus, base_addr + i);
-		if (!phy)
-			continue;
-
-		if ((phy->phy_id & phydev->drv->phy_id_mask) !=
-		    (phydev->drv->phy_id & phydev->drv->phy_id_mask))
-			continue;
-
-		priv = phy->priv;
-
-		if (priv && priv->pkg_init)
-			return true;
-	}
-
-	return false;
-}
-
 static int bcm54140_probe_once(struct phy_device *phydev)
 {
 	struct device *hwmon;
@@ -445,38 +426,34 @@ static int bcm54140_probe_once(struct phy_device *phydev)
 
 static int bcm54140_base_read_rdb(struct phy_device *phydev, u16 rdb)
 {
-	struct bcm54140_priv *priv = phydev->priv;
-	struct mii_bus *bus = phydev->mdio.bus;
 	int ret;
 
-	mutex_lock(&bus->mdio_lock);
-	ret = __mdiobus_write(bus, priv->base_addr, MII_BCM54XX_RDB_ADDR, rdb);
+	phy_lock_mdio_bus(phydev);
+	ret = __phy_package_write(phydev, MII_BCM54XX_RDB_ADDR, rdb);
 	if (ret < 0)
 		goto out;
 
-	ret = __mdiobus_read(bus, priv->base_addr, MII_BCM54XX_RDB_DATA);
+	ret = __phy_package_read(phydev, MII_BCM54XX_RDB_DATA);
 
 out:
-	mutex_unlock(&bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 	return ret;
 }
 
 static int bcm54140_base_write_rdb(struct phy_device *phydev,
 				   u16 rdb, u16 val)
 {
-	struct bcm54140_priv *priv = phydev->priv;
-	struct mii_bus *bus = phydev->mdio.bus;
 	int ret;
 
-	mutex_lock(&bus->mdio_lock);
-	ret = __mdiobus_write(bus, priv->base_addr, MII_BCM54XX_RDB_ADDR, rdb);
+	phy_lock_mdio_bus(phydev);
+	ret = __phy_package_write(phydev, MII_BCM54XX_RDB_ADDR, rdb);
 	if (ret < 0)
 		goto out;
 
-	ret = __mdiobus_write(bus, priv->base_addr, MII_BCM54XX_RDB_DATA, val);
+	ret = __phy_package_write(phydev, MII_BCM54XX_RDB_DATA, val);
 
 out:
-	mutex_unlock(&bus->mdio_lock);
+	phy_unlock_mdio_bus(phydev);
 	return ret;
 }
 
@@ -606,16 +583,16 @@ static int bcm54140_probe(struct phy_device *phydev)
 	if (ret)
 		return ret;
 
+	devm_phy_package_join(&phydev->mdio.dev, phydev, priv->base_addr, 0);
+
 #if IS_ENABLED(CONFIG_HWMON)
 	mutex_init(&priv->alarm_lock);
 
-	if (!bcm54140_is_pkg_init(phydev)) {
+	if (phy_package_init_once(phydev)) {
 		ret = bcm54140_probe_once(phydev);
 		if (ret)
 			return ret;
 	}
-
-	priv->pkg_init = true;
 #endif
 
 	phydev_dbg(phydev, "probed (port %d, base PHY address %d)\n",
@@ -630,9 +607,11 @@ static int bcm54140_config_init(struct phy_device *phydev)
 	int ret;
 
 	/* Apply hardware errata */
-	ret = bcm54140_b0_workaround(phydev);
-	if (ret)
-		return ret;
+	if (BCM54140_PHY_ID_REV(phydev->phy_id) == BCM54140_REV_B0) {
+		ret = bcm54140_b0_workaround(phydev);
+		if (ret)
+			return ret;
+	}
 
 	/* Unmask events we are interested in. */
 	reg &= ~(BCM54140_RDB_INT_DUPLEX |
@@ -658,7 +637,7 @@ static int bcm54140_config_init(struct phy_device *phydev)
 				  BCM54140_RDB_C_PWR_ISOLATE, 0);
 }
 
-int bcm54140_did_interrupt(struct phy_device *phydev)
+static int bcm54140_did_interrupt(struct phy_device *phydev)
 {
 	int ret;
 
@@ -667,7 +646,7 @@ int bcm54140_did_interrupt(struct phy_device *phydev)
 	return (ret < 0) ? 0 : ret;
 }
 
-int bcm54140_ack_intr(struct phy_device *phydev)
+static int bcm54140_ack_intr(struct phy_device *phydev)
 {
 	int reg;
 
@@ -679,7 +658,7 @@ int bcm54140_ack_intr(struct phy_device *phydev)
 	return 0;
 }
 
-int bcm54140_config_intr(struct phy_device *phydev)
+static int bcm54140_config_intr(struct phy_device *phydev)
 {
 	struct bcm54140_priv *priv = phydev->priv;
 	static const u16 port_to_imr_bit[] = {
@@ -850,8 +829,9 @@ static int bcm54140_set_tunable(struct phy_device *phydev,
 static struct phy_driver bcm54140_drivers[] = {
 	{
 		.phy_id         = PHY_ID_BCM54140,
-		.phy_id_mask    = 0xfffffff0,
+		.phy_id_mask    = BCM54140_PHY_ID_MASK,
 		.name           = "Broadcom BCM54140",
+		.flags		= PHY_POLL_CABLE_TEST,
 		.features       = PHY_GBIT_FEATURES,
 		.config_init    = bcm54140_config_init,
 		.did_interrupt	= bcm54140_did_interrupt,
@@ -860,14 +840,17 @@ static struct phy_driver bcm54140_drivers[] = {
 		.probe		= bcm54140_probe,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
+		.soft_reset	= genphy_soft_reset,
 		.get_tunable	= bcm54140_get_tunable,
 		.set_tunable	= bcm54140_set_tunable,
+		.cable_test_start = bcm_phy_cable_test_start_rdb,
+		.cable_test_get_status = bcm_phy_cable_test_get_status_rdb,
 	},
 };
 module_phy_driver(bcm54140_drivers);
 
 static struct mdio_device_id __maybe_unused bcm54140_tbl[] = {
-	{ PHY_ID_BCM54140, 0xfffffff0 },
+	{ PHY_ID_BCM54140, BCM54140_PHY_ID_MASK },
 	{ }
 };
 

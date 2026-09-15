@@ -78,7 +78,7 @@ KVM_FEATURE_PV_SEND_IPI            11          guest checks this feature bit
                                                before enabling paravirtualized
                                                send IPIs
 
-KVM_FEATURE_PV_POLL_CONTROL        12          host-side polling on HLT can
+KVM_FEATURE_POLL_CONTROL           12          host-side polling on HLT can
                                                be disabled by writing
                                                to msr 0x4b564d05.
 
@@ -91,6 +91,10 @@ KVM_FEATURE_ASYNC_PF_INT           14          guest checks this feature bit
                                                pf control msr 0x4b564d06 and
                                                async pf acknowledgment msr
                                                0x4b564d07.
+
+KVM_FEATURE_MSI_EXT_DEST_ID        15          guest checks this feature bit
+                                               before using extended destination
+                                               ID bits in MSI address bits 11-5.
 
 KVM_FEATURE_CLOCKSOURCE_STABLE_BIT 24          host will warn if no guest-side
                                                per-cpu warps are expected in

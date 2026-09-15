@@ -21,22 +21,25 @@
 static bool afs_start_fs_iteration(struct afs_operation *op,
 				   struct afs_vnode *vnode)
 {
-	struct afs_cb_interest *cbi;
+	struct afs_server *server;
+	void *cb_server;
 	int i;
 
 	read_lock(&op->volume->servers_lock);
-	op->server_list = afs_get_serverlist(op->volume->servers);
+	op->server_list = afs_get_serverlist(
+		rcu_dereference_protected(op->volume->servers,
+					  lockdep_is_held(&op->volume->servers_lock)));
 	read_unlock(&op->volume->servers_lock);
 
 	op->untried = (1UL << op->server_list->nr_servers) - 1;
 	op->index = READ_ONCE(op->server_list->preferred);
 
-	cbi = rcu_dereference_protected(vnode->cb_interest,
-					lockdep_is_held(&vnode->io_lock));
-	if (cbi) {
+	cb_server = vnode->cb_server;
+	if (cb_server) {
 		/* See if the vnode's preferred record is still available */
 		for (i = 0; i < op->server_list->nr_servers; i++) {
-			if (op->server_list->servers[i].cb_interest == cbi) {
+			server = op->server_list->servers[i].server;
+			if (server == cb_server) {
 				op->index = i;
 				goto found_interest;
 			}
@@ -53,14 +56,11 @@ static bool afs_start_fs_iteration(struct afs_operation *op,
 
 		/* Note that the callback promise is effectively broken */
 		write_seqlock(&vnode->cb_lock);
-		ASSERTCMP(cbi, ==, rcu_access_pointer(vnode->cb_interest));
-		rcu_assign_pointer(vnode->cb_interest, NULL);
+		ASSERTCMP(cb_server, ==, vnode->cb_server);
+		vnode->cb_server = NULL;
 		if (test_and_clear_bit(AFS_VNODE_CB_PROMISED, &vnode->flags))
 			vnode->cb_break++;
 		write_sequnlock(&vnode->cb_lock);
-
-		afs_put_cb_interest(op->net, cbi);
-		cbi = NULL;
 	}
 
 found_interest:
@@ -173,7 +173,7 @@ bool afs_select_fileserver(struct afs_operation *op)
 			/* If the server list didn't change, then assume that
 			 * it's the fileserver having trouble.
 			 */
-			if (op->volume->servers == op->server_list) {
+			if (rcu_access_pointer(op->volume->servers) == op->server_list) {
 				op->error = -EREMOTEIO;
 				goto next_server;
 			}
@@ -263,7 +263,7 @@ bool afs_select_fileserver(struct afs_operation *op)
 			 *
 			 * TODO: Retry a few times with sleeps.
 			 */
-			if (op->volume->servers == op->server_list) {
+			if (rcu_access_pointer(op->volume->servers) == op->server_list) {
 				op->error = -ENOMEDIUM;
 				goto failed;
 			}
@@ -301,8 +301,7 @@ bool afs_select_fileserver(struct afs_operation *op)
 restart_from_beginning:
 	_debug("restart");
 	afs_end_cursor(&op->ac);
-	afs_put_cb_interest(op->net, op->cbi);
-	op->cbi = NULL;
+	op->server = NULL;
 	afs_put_serverlist(op->net, op->server_list);
 	op->server_list = NULL;
 start:
@@ -329,13 +328,12 @@ pick_server:
 	/* Pick the untried server with the lowest RTT.  If we have outstanding
 	 * callbacks, we stick with the server we're already using if we can.
 	 */
-	if (op->cbi) {
-		_debug("cbi %u", op->index);
+	if (op->server) {
+		_debug("server %u", op->index);
 		if (test_bit(op->index, &op->untried))
 			goto selected_server;
-		afs_put_cb_interest(op->net, op->cbi);
-		op->cbi = NULL;
-		_debug("nocbi");
+		op->server = NULL;
+		_debug("no server");
 	}
 
 	op->index = -1;
@@ -343,7 +341,8 @@ pick_server:
 	for (i = 0; i < op->server_list->nr_servers; i++) {
 		struct afs_server *s = op->server_list->servers[i].server;
 
-		if (!test_bit(i, &op->untried) || !s->probe.responded)
+		if (!test_bit(i, &op->untried) ||
+		    !test_bit(AFS_SERVER_FL_RESPONDING, &s->flags))
 			continue;
 		if (s->probe.rtt < rtt) {
 			op->index = i;
@@ -370,19 +369,14 @@ selected_server:
 
 	_debug("USING SERVER: %pU", &server->uuid);
 
-	/* Make sure we've got a callback interest record for this server.  We
-	 * have to link it in before we send the request as we can be sent a
-	 * break request before we've finished decoding the reply and
-	 * installing the vnode.
-	 */
-	error = afs_register_server_cb_interest(vnode, op->server_list,
-						op->index);
-	if (error < 0)
-		goto failed_set_error;
-
-	op->cbi = afs_get_cb_interest(
-		rcu_dereference_protected(vnode->cb_interest,
-					  lockdep_is_held(&vnode->io_lock)));
+	op->flags |= AFS_OPERATION_RETRY_SERVER;
+	op->server = server;
+	if (vnode->cb_server != server) {
+		vnode->cb_server = server;
+		vnode->cb_s_break = server->cb_s_break;
+		vnode->cb_v_break = vnode->volume->cb_v_break;
+		clear_bit(AFS_VNODE_CB_PROMISED, &vnode->flags);
+	}
 
 	read_lock(&server->fs_lock);
 	alist = rcu_dereference_protected(server->addresses,
@@ -390,6 +384,7 @@ selected_server:
 	afs_get_addrlist(alist);
 	read_unlock(&server->fs_lock);
 
+retry_server:
 	memset(&op->ac, 0, sizeof(op->ac));
 
 	if (!op->ac.alist)
@@ -405,12 +400,35 @@ iterate_address:
 	 * address on which it will respond to us.
 	 */
 	if (!afs_iterate_addresses(&op->ac))
-		goto next_server;
+		goto out_of_addresses;
 
-	_debug("address [%u] %u/%u", op->index, op->ac.index, op->ac.alist->nr_addrs);
+	_debug("address [%u] %u/%u %pISp",
+	       op->index, op->ac.index, op->ac.alist->nr_addrs,
+	       &op->ac.alist->addrs[op->ac.index].transport);
 
 	_leave(" = t");
 	return true;
+
+out_of_addresses:
+	/* We've now had a failure to respond on all of a server's addresses -
+	 * immediately probe them again and consider retrying the server.
+	 */
+	afs_probe_fileserver(op->net, op->server);
+	if (op->flags & AFS_OPERATION_RETRY_SERVER) {
+		alist = op->ac.alist;
+		error = afs_wait_for_one_fs_probe(
+			op->server, !(op->flags & AFS_OPERATION_UNINTR));
+		switch (error) {
+		case 0:
+			op->flags &= ~AFS_OPERATION_RETRY_SERVER;
+			goto retry_server;
+		case -ERESTARTSYS:
+			goto failed_set_error;
+		case -ETIME:
+		case -EDESTADDRREQ:
+			goto next_server;
+		}
+	}
 
 next_server:
 	_debug("next");
@@ -441,84 +459,6 @@ failed:
 	op->flags |= AFS_OPERATION_STOP;
 	afs_end_cursor(&op->ac);
 	_leave(" = f [failed %d]", op->error);
-	return false;
-}
-
-/*
- * Select the same fileserver we used for a vnode before and only that
- * fileserver.  We use this when we have a lock on that file, which is backed
- * only by the fileserver we obtained it from.
- */
-bool afs_select_current_fileserver(struct afs_operation *op)
-{
-	struct afs_cb_interest *cbi;
-	struct afs_addr_list *alist;
-	int error = op->ac.error;
-
-	_enter("");
-
-	switch (error) {
-	case SHRT_MAX:
-		cbi = op->cbi;
-		if (!cbi) {
-			op->error = -ESTALE;
-			op->flags |= AFS_OPERATION_STOP;
-			return false;
-		}
-
-		read_lock(&cbi->server->fs_lock);
-		alist = rcu_dereference_protected(cbi->server->addresses,
-						  lockdep_is_held(&cbi->server->fs_lock));
-		afs_get_addrlist(alist);
-		read_unlock(&cbi->server->fs_lock);
-		if (!alist) {
-			op->error = -ESTALE;
-			op->flags |= AFS_OPERATION_STOP;
-			return false;
-		}
-
-		memset(&op->ac, 0, sizeof(op->ac));
-		op->ac.alist = alist;
-		op->ac.index = -1;
-		goto iterate_address;
-
-	case 0:
-	default:
-		/* Success or local failure.  Stop. */
-		op->error = error;
-		op->flags |= AFS_OPERATION_STOP;
-		_leave(" = f [okay/local %d]", error);
-		return false;
-
-	case -ECONNABORTED:
-		op->error = afs_abort_to_error(op->ac.abort_code);
-		op->flags |= AFS_OPERATION_STOP;
-		_leave(" = f [abort]");
-		return false;
-
-	case -ERFKILL:
-	case -EADDRNOTAVAIL:
-	case -ENETUNREACH:
-	case -EHOSTUNREACH:
-	case -EHOSTDOWN:
-	case -ECONNREFUSED:
-	case -ETIMEDOUT:
-	case -ETIME:
-		_debug("no conn");
-		op->error = error;
-		goto iterate_address;
-	}
-
-iterate_address:
-	/* Iterate over the current server's address list to try and find an
-	 * address on which it will respond to us.
-	 */
-	if (afs_iterate_addresses(&op->ac)) {
-		_leave(" = t");
-		return true;
-	}
-
-	afs_end_cursor(&op->ac);
 	return false;
 }
 

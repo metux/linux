@@ -37,7 +37,15 @@ const struct cred *ovl_override_creds(struct super_block *sb)
 {
 	struct ovl_fs *ofs = sb->s_fs_info;
 
+	if (!ofs->config.override_creds)
+		return NULL;
 	return override_creds(ofs->creator_cred);
+}
+
+void ovl_revert_creds(struct super_block *sb, const struct cred *old_cred)
+{
+	if (old_cred)
+		revert_creds(old_cred);
 }
 
 /*
@@ -564,7 +572,7 @@ void ovl_copy_up_end(struct dentry *dentry)
 
 bool ovl_check_origin_xattr(struct ovl_fs *ofs, struct dentry *dentry)
 {
-	int res;
+	ssize_t res;
 
 	res = ovl_do_getxattr(ofs, dentry, OVL_XATTR_ORIGIN, NULL, 0);
 
@@ -576,23 +584,44 @@ bool ovl_check_origin_xattr(struct ovl_fs *ofs, struct dentry *dentry)
 }
 
 bool ovl_check_dir_xattr(struct super_block *sb, struct dentry *dentry,
-			 const char *name)
+			 enum ovl_xattr ox)
 {
-	int res;
+	ssize_t res;
 	char val;
 
 	if (!d_is_dir(dentry))
 		return false;
 
-	res = ovl_do_getxattr(OVL_FS(sb), dentry, name, &val, 1);
+	res = ovl_do_getxattr(OVL_FS(sb), dentry, ox, &val, 1);
 	if (res == 1 && val == 'y')
 		return true;
 
 	return false;
 }
 
+#define OVL_XATTR_OPAQUE_POSTFIX	"opaque"
+#define OVL_XATTR_REDIRECT_POSTFIX	"redirect"
+#define OVL_XATTR_ORIGIN_POSTFIX	"origin"
+#define OVL_XATTR_IMPURE_POSTFIX	"impure"
+#define OVL_XATTR_NLINK_POSTFIX		"nlink"
+#define OVL_XATTR_UPPER_POSTFIX		"upper"
+#define OVL_XATTR_METACOPY_POSTFIX	"metacopy"
+
+#define OVL_XATTR_TAB_ENTRY(x) \
+	[x] = OVL_XATTR_PREFIX x ## _POSTFIX
+
+const char *ovl_xattr_table[] = {
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_OPAQUE),
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_REDIRECT),
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_ORIGIN),
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_IMPURE),
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_NLINK),
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_UPPER),
+	OVL_XATTR_TAB_ENTRY(OVL_XATTR_METACOPY),
+};
+
 int ovl_check_setxattr(struct dentry *dentry, struct dentry *upperdentry,
-		       const char *name, const void *value, size_t size,
+		       enum ovl_xattr ox, const void *value, size_t size,
 		       int xerr)
 {
 	int err;
@@ -601,10 +630,10 @@ int ovl_check_setxattr(struct dentry *dentry, struct dentry *upperdentry,
 	if (ofs->noxattr)
 		return xerr;
 
-	err = ovl_do_setxattr(ofs, upperdentry, name, value, size);
+	err = ovl_do_setxattr(ofs, upperdentry, ox, value, size);
 
 	if (err == -EOPNOTSUPP) {
-		pr_warn("cannot set %s xattr on upper\n", name);
+		pr_warn("cannot set %s xattr on upper\n", ovl_xattr(ofs, ox));
 		ofs->noxattr = true;
 		return xerr;
 	}
@@ -805,7 +834,7 @@ int ovl_nlink_start(struct dentry *dentry)
 	 * value relative to the upper inode nlink in an upper inode xattr.
 	 */
 	err = ovl_set_nlink_upper(dentry);
-	revert_creds(old_cred);
+	ovl_revert_creds(dentry->d_sb, old_cred);
 
 out:
 	if (err)
@@ -823,7 +852,7 @@ void ovl_nlink_end(struct dentry *dentry)
 
 		old_cred = ovl_override_creds(dentry->d_sb);
 		ovl_cleanup_index(dentry);
-		revert_creds(old_cred);
+		ovl_revert_creds(dentry->d_sb, old_cred);
 	}
 
 	ovl_inode_unlock(inode);
@@ -851,7 +880,7 @@ err:
 /* err < 0, 0 if no metacopy xattr, 1 if metacopy xattr found */
 int ovl_check_metacopy_xattr(struct ovl_fs *ofs, struct dentry *dentry)
 {
-	int res;
+	ssize_t res;
 
 	/* Only regular files can have metacopy xattr */
 	if (!S_ISREG(d_inode(dentry)->i_mode))
@@ -866,7 +895,7 @@ int ovl_check_metacopy_xattr(struct ovl_fs *ofs, struct dentry *dentry)
 
 	return 1;
 out:
-	pr_warn_ratelimited("failed to get metacopy (%i)\n", res);
+	pr_warn_ratelimited("failed to get metacopy (%zi)\n", res);
 	return res;
 }
 

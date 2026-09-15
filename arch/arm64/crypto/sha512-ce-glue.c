@@ -48,7 +48,7 @@ static void __sha512_ce_transform(struct sha512_state *sst, u8 const *src,
 static void __sha512_block_data_order(struct sha512_state *sst, u8 const *src,
 				      int blocks)
 {
-	return sha512_block_data_order(sst->state, src, blocks);
+	sha512_block_data_order(sst->state, src, blocks);
 }
 
 static int sha512_ce_update(struct shash_desc *desc, const u8 *data,

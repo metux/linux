@@ -306,8 +306,7 @@ static int vmd_create_irq_domain(struct vmd_dev *vmd)
 	if (!fn)
 		return -ENODEV;
 
-	vmd->irq_domain = pci_msi_create_irq_domain(fn, &vmd_msi_domain_info,
-						    x86_vector_domain);
+	vmd->irq_domain = pci_msi_create_irq_domain(fn, &vmd_msi_domain_info, NULL);
 	if (!vmd->irq_domain) {
 		irq_domain_free_fwnode(fn);
 		return -ENODEV;
@@ -528,6 +527,55 @@ static int vmd_get_bus_number_start(struct vmd_dev *vmd)
 	return 0;
 }
 
+static irqreturn_t vmd_irq(int irq, void *data)
+{
+	struct vmd_irq_list *irqs = data;
+	struct vmd_irq *vmdirq;
+	int idx;
+
+	idx = srcu_read_lock(&irqs->srcu);
+	list_for_each_entry_rcu(vmdirq, &irqs->irq_list, node)
+		generic_handle_irq(vmdirq->virq);
+	srcu_read_unlock(&irqs->srcu, idx);
+
+	return IRQ_HANDLED;
+}
+
+static int vmd_alloc_irqs(struct vmd_dev *vmd)
+{
+	struct pci_dev *dev = vmd->dev;
+	int i, err;
+
+	vmd->msix_count = pci_msix_vec_count(dev);
+	if (vmd->msix_count < 0)
+		return -ENODEV;
+
+	vmd->msix_count = pci_alloc_irq_vectors(dev, 1, vmd->msix_count,
+						PCI_IRQ_MSIX);
+	if (vmd->msix_count < 0)
+		return vmd->msix_count;
+
+	vmd->irqs = devm_kcalloc(&dev->dev, vmd->msix_count, sizeof(*vmd->irqs),
+				 GFP_KERNEL);
+	if (!vmd->irqs)
+		return -ENOMEM;
+
+	for (i = 0; i < vmd->msix_count; i++) {
+		err = init_srcu_struct(&vmd->irqs[i].srcu);
+		if (err)
+			return err;
+
+		INIT_LIST_HEAD(&vmd->irqs[i].irq_list);
+		err = devm_request_irq(&dev->dev, pci_irq_vector(dev, i),
+				       vmd_irq, IRQF_NO_THREAD,
+				       "vmd", &vmd->irqs[i]);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 {
 	struct pci_sysdata *sd = &vmd->sysdata;
@@ -629,6 +677,12 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 	if (ret)
 		return ret;
 
+	/*
+	 * Override the irq domain bus token so the domain can be distinguished
+	 * from a regular PCI/MSI domain.
+	 */
+	irq_domain_update_bus_token(vmd->irq_domain, DOMAIN_BUS_VMD_MSI);
+
 	pci_add_resource(&resources, &vmd->resources[0]);
 	pci_add_resource_offset(&resources, &vmd->resources[1], offset[0]);
 	pci_add_resource_offset(&resources, &vmd->resources[2], offset[1]);
@@ -663,24 +717,10 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 	return 0;
 }
 
-static irqreturn_t vmd_irq(int irq, void *data)
-{
-	struct vmd_irq_list *irqs = data;
-	struct vmd_irq *vmdirq;
-	int idx;
-
-	idx = srcu_read_lock(&irqs->srcu);
-	list_for_each_entry_rcu(vmdirq, &irqs->irq_list, node)
-		generic_handle_irq(vmdirq->virq);
-	srcu_read_unlock(&irqs->srcu, idx);
-
-	return IRQ_HANDLED;
-}
-
 static int vmd_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	struct vmd_dev *vmd;
-	int i, err;
+	int err;
 
 	if (resource_size(&dev->resource[VMD_CFGBAR]) < (1 << 20))
 		return -ENOMEM;
@@ -703,32 +743,9 @@ static int vmd_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	    dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(32)))
 		return -ENODEV;
 
-	vmd->msix_count = pci_msix_vec_count(dev);
-	if (vmd->msix_count < 0)
-		return -ENODEV;
-
-	vmd->msix_count = pci_alloc_irq_vectors(dev, 1, vmd->msix_count,
-					PCI_IRQ_MSIX);
-	if (vmd->msix_count < 0)
-		return vmd->msix_count;
-
-	vmd->irqs = devm_kcalloc(&dev->dev, vmd->msix_count, sizeof(*vmd->irqs),
-				 GFP_KERNEL);
-	if (!vmd->irqs)
-		return -ENOMEM;
-
-	for (i = 0; i < vmd->msix_count; i++) {
-		err = init_srcu_struct(&vmd->irqs[i].srcu);
-		if (err)
-			return err;
-
-		INIT_LIST_HEAD(&vmd->irqs[i].irq_list);
-		err = devm_request_irq(&dev->dev, pci_irq_vector(dev, i),
-				       vmd_irq, IRQF_NO_THREAD,
-				       "vmd", &vmd->irqs[i]);
-		if (err)
-			return err;
-	}
+	err = vmd_alloc_irqs(vmd);
+	if (err)
+		return err;
 
 	spin_lock_init(&vmd->cfg_lock);
 	pci_set_drvdata(dev, vmd);
@@ -771,7 +788,6 @@ static int vmd_suspend(struct device *dev)
 	for (i = 0; i < vmd->msix_count; i++)
 		devm_free_irq(dev, pci_irq_vector(pdev, i), &vmd->irqs[i]);
 
-	pci_save_state(pdev);
 	return 0;
 }
 
@@ -789,7 +805,6 @@ static int vmd_resume(struct device *dev)
 			return err;
 	}
 
-	pci_restore_state(pdev);
 	return 0;
 }
 #endif

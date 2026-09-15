@@ -33,7 +33,6 @@
 #include "wcmd.h"
 #include "rxtx.h"
 #include "rf.h"
-#include "firmware.h"
 #include "usbpipe.h"
 #include "channel.h"
 
@@ -60,8 +59,6 @@ MODULE_PARM_DESC(tx_buffers, "Number of receive usb tx buffers");
 
 #define RTS_THRESH_DEF     2347
 #define FRAG_THRESH_DEF     2346
-#define SHORT_RETRY_DEF     8
-#define LONG_RETRY_DEF     4
 
 /* BasebandType[] baseband type selected
  * 0: indicate 802.11a type
@@ -94,13 +91,89 @@ static void vnt_set_options(struct vnt_private *priv)
 	else
 		priv->num_rcb = vnt_rx_buffers;
 
-	priv->short_retry_limit = SHORT_RETRY_DEF;
-	priv->long_retry_limit = LONG_RETRY_DEF;
 	priv->op_mode = NL80211_IFTYPE_UNSPECIFIED;
 	priv->bb_type = BBP_TYPE_DEF;
 	priv->packet_type = priv->bb_type;
 	priv->preamble_type = PREAMBLE_LONG;
 	priv->exist_sw_net_addr = false;
+}
+
+static int vnt_download_firmware(struct vnt_private *priv)
+{
+	struct device *dev = &priv->usb->dev;
+	const struct firmware *fw;
+	u16 length;
+	int ii;
+	int ret = 0;
+
+	dev_dbg(dev, "---->Download firmware\n");
+
+	ret = request_firmware(&fw, FIRMWARE_NAME, dev);
+	if (ret) {
+		dev_err(dev, "firmware file %s request failed (%d)\n",
+			FIRMWARE_NAME, ret);
+		goto end;
+	}
+
+	for (ii = 0; ii < fw->size; ii += FIRMWARE_CHUNK_SIZE) {
+		length = min_t(int, fw->size - ii, FIRMWARE_CHUNK_SIZE);
+
+		ret = vnt_control_out(priv, 0, 0x1200 + ii, 0x0000, length,
+				      fw->data + ii);
+		if (ret)
+			goto free_fw;
+
+		dev_dbg(dev, "Download firmware...%d %zu\n", ii, fw->size);
+	}
+
+free_fw:
+	release_firmware(fw);
+end:
+	return ret;
+}
+
+static int vnt_firmware_branch_to_sram(struct vnt_private *priv)
+{
+	dev_dbg(&priv->usb->dev, "---->Branch to Sram\n");
+
+	return vnt_control_out(priv, 1, 0x1200, 0x0000, 0, NULL);
+}
+
+static int vnt_check_firmware_version(struct vnt_private *priv)
+{
+	int ret = 0;
+
+	ret = vnt_control_in(priv, MESSAGE_TYPE_READ, 0,
+			     MESSAGE_REQUEST_VERSION, 2,
+			     (u8 *)&priv->firmware_version);
+	if (ret) {
+		dev_dbg(&priv->usb->dev,
+			"Could not get firmware version: %d.\n", ret);
+		goto end;
+	}
+
+	dev_dbg(&priv->usb->dev, "Firmware Version [%04x]\n",
+		priv->firmware_version);
+
+	if (priv->firmware_version == 0xFFFF) {
+		dev_dbg(&priv->usb->dev, "In Loader.\n");
+		ret = -EINVAL;
+		goto end;
+	}
+
+	if (priv->firmware_version < FIRMWARE_VERSION) {
+		/* branch to loader for download new firmware */
+		ret = vnt_firmware_branch_to_sram(priv);
+		if (ret) {
+			dev_dbg(&priv->usb->dev,
+				"Could not branch to SRAM: %d.\n", ret);
+		} else {
+			ret = -EINVAL;
+		}
+	}
+
+end:
+	return ret;
 }
 
 /*
@@ -146,8 +219,8 @@ static int vnt_init_registers(struct vnt_private *priv)
 	init_cmd->exist_sw_net_addr = priv->exist_sw_net_addr;
 	for (ii = 0; ii < ARRAY_SIZE(init_cmd->sw_net_addr); ii++)
 		init_cmd->sw_net_addr[ii] = priv->current_net_addr[ii];
-	init_cmd->short_retry_limit = priv->short_retry_limit;
-	init_cmd->long_retry_limit = priv->long_retry_limit;
+	init_cmd->short_retry_limit = priv->hw->wiphy->retry_short;
+	init_cmd->long_retry_limit = priv->hw->wiphy->retry_long;
 
 	/* issue card_init command to device */
 	ret = vnt_control_out(priv, MESSAGE_TYPE_CARDINIT, 0, 0,
@@ -324,19 +397,6 @@ static int vnt_init_registers(struct vnt_private *priv)
 	dev_dbg(&priv->usb->dev, "Network address = %pM\n",
 		priv->current_net_addr);
 
-	/*
-	 * set BB and packet type at the same time
-	 * set Short Slot Time, xIFS, and RSPINF
-	 */
-	if (priv->bb_type == BB_TYPE_11A)
-		priv->short_slot_time = true;
-	else
-		priv->short_slot_time = false;
-
-	ret = vnt_set_short_slot_time(priv);
-	if (ret)
-		goto end;
-
 	priv->radio_ctl = priv->eeprom[EEP_OFS_RADIOCTL];
 
 	if ((priv->radio_ctl & EEP_RADIOCTL_ENABLE) != 0) {
@@ -385,16 +445,12 @@ static void vnt_free_tx_bufs(struct vnt_private *priv)
 	struct vnt_usb_send_context *tx_context;
 	int ii;
 
+	usb_kill_anchored_urbs(&priv->tx_submitted);
+
 	for (ii = 0; ii < priv->num_tx_context; ii++) {
 		tx_context = priv->tx_context[ii];
 		if (!tx_context)
 			continue;
-
-		/* deallocate URBs */
-		if (tx_context->urb) {
-			usb_kill_urb(tx_context->urb);
-			usb_free_urb(tx_context->urb);
-		}
 
 		kfree(tx_context);
 	}
@@ -436,6 +492,8 @@ static int vnt_alloc_bufs(struct vnt_private *priv)
 	struct vnt_rcb *rcb;
 	int ii;
 
+	init_usb_anchor(&priv->tx_submitted);
+
 	for (ii = 0; ii < priv->num_tx_context; ii++) {
 		tx_context = kmalloc(sizeof(*tx_context), GFP_KERNEL);
 		if (!tx_context) {
@@ -446,14 +504,6 @@ static int vnt_alloc_bufs(struct vnt_private *priv)
 		priv->tx_context[ii] = tx_context;
 		tx_context->priv = priv;
 		tx_context->pkt_no = ii;
-
-		/* allocate URBs */
-		tx_context->urb = usb_alloc_urb(0, GFP_KERNEL);
-		if (!tx_context->urb) {
-			ret = -ENOMEM;
-			goto free_tx;
-		}
-
 		tx_context->in_use = false;
 	}
 
@@ -686,6 +736,12 @@ static int vnt_config(struct ieee80211_hw *hw, u32 changed)
 	if (changed & IEEE80211_CONF_CHANGE_POWER)
 		vnt_rf_setpower(priv, conf->chandef.chan);
 
+	if (conf->flags & (IEEE80211_CONF_OFFCHANNEL | IEEE80211_CONF_IDLE))
+		/* Set max sensitivity*/
+		vnt_update_pre_ed_threshold(priv, true);
+	else
+		vnt_update_pre_ed_threshold(priv, false);
+
 	return 0;
 }
 
@@ -733,7 +789,6 @@ static void vnt_bss_info_changed(struct ieee80211_hw *hw,
 
 		vnt_set_short_slot_time(priv);
 		vnt_set_vga_gain_offset(priv, priv->bb_vga[0]);
-		vnt_update_pre_ed_threshold(priv, false);
 	}
 
 	if (changed & (BSS_CHANGED_BASIC_RATES | BSS_CHANGED_ERP_PREAMBLE |
@@ -867,25 +922,6 @@ static int vnt_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	return 0;
 }
 
-static void vnt_sw_scan_start(struct ieee80211_hw *hw,
-			      struct ieee80211_vif *vif,
-			      const u8 *addr)
-{
-	struct vnt_private *priv = hw->priv;
-
-	/* Set max sensitivity*/
-	vnt_update_pre_ed_threshold(priv, true);
-}
-
-static void vnt_sw_scan_complete(struct ieee80211_hw *hw,
-				 struct ieee80211_vif *vif)
-{
-	struct vnt_private *priv = hw->priv;
-
-	/* Return sensitivity to channel level*/
-	vnt_update_pre_ed_threshold(priv, false);
-}
-
 static int vnt_get_stats(struct ieee80211_hw *hw,
 			 struct ieee80211_low_level_stats *stats)
 {
@@ -931,8 +967,6 @@ static const struct ieee80211_ops vnt_mac_ops = {
 	.prepare_multicast	= vnt_prepare_multicast,
 	.configure_filter	= vnt_configure,
 	.set_key		= vnt_set_key,
-	.sw_scan_start		= vnt_sw_scan_start,
-	.sw_scan_complete	= vnt_sw_scan_complete,
 	.get_stats		= vnt_get_stats,
 	.get_tsf		= vnt_get_tsf,
 	.set_tsf		= vnt_set_tsf,
@@ -1009,6 +1043,8 @@ vt6656_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	ieee80211_hw_set(priv->hw, SUPPORTS_PS);
 	ieee80211_hw_set(priv->hw, PS_NULLFUNC_STACK);
 
+	priv->hw->extra_tx_headroom =
+		sizeof(struct vnt_tx_buffer) + sizeof(struct vnt_tx_usb_header);
 	priv->hw->max_signal = 100;
 
 	SET_IEEE80211_DEV(priv->hw, &intf->dev);
@@ -1077,3 +1113,5 @@ static struct usb_driver vt6656_driver = {
 };
 
 module_usb_driver(vt6656_driver);
+
+MODULE_FIRMWARE(FIRMWARE_NAME);

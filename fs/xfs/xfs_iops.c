@@ -25,13 +25,14 @@
 #include <linux/posix_acl.h>
 #include <linux/security.h>
 #include <linux/iversion.h>
+#include <linux/fiemap.h>
 
 /*
- * Directories have different lock order w.r.t. mmap_sem compared to regular
+ * Directories have different lock order w.r.t. mmap_lock compared to regular
  * files. This is due to readdir potentially triggering page faults on a user
  * buffer inside filldir(), and this happens with the ilock on the directory
  * held. For regular files, the lock order is the other way around - the
- * mmap_sem is taken during the page fault, and then we lock the ilock to do
+ * mmap_lock is taken during the page fault, and then we lock the ilock to do
  * block mapping. Hence we need a different class for the directory ilock so
  * that lockdep can tell them apart.
  */
@@ -707,12 +708,7 @@ xfs_setattr_nonsize(
 			if (error)	/* out of quota */
 				goto out_cancel;
 		}
-	}
 
-	/*
-	 * Change file ownership.  Must be the owner or privileged.
-	 */
-	if (mask & (ATTR_UID|ATTR_GID)) {
 		/*
 		 * Change the ownerships and register quota modifications
 		 * in the transaction.
@@ -830,7 +826,7 @@ xfs_setattr_size(
 	/*
 	 * Short circuit the truncate case for zero length files.
 	 */
-	if (newsize == 0 && oldsize == 0 && ip->i_d.di_nextents == 0) {
+	if (newsize == 0 && oldsize == 0 && ip->i_df.if_nextents == 0) {
 		if (!(iattr->ia_valid & (ATTR_CTIME|ATTR_MTIME)))
 			return 0;
 

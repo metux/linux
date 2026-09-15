@@ -53,16 +53,14 @@ static void sync_for_device(struct msm_gem_object *msm_obj)
 {
 	struct device *dev = msm_obj->base.dev->dev;
 
-	dma_map_sg(dev, msm_obj->sgt->sgl,
-		msm_obj->sgt->nents, DMA_BIDIRECTIONAL);
+	dma_map_sgtable(dev, msm_obj->sgt, DMA_BIDIRECTIONAL, 0);
 }
 
 static void sync_for_cpu(struct msm_gem_object *msm_obj)
 {
 	struct device *dev = msm_obj->base.dev->dev;
 
-	dma_unmap_sg(dev, msm_obj->sgt->sgl,
-		msm_obj->sgt->nents, DMA_BIDIRECTIONAL);
+	dma_unmap_sgtable(dev, msm_obj->sgt, DMA_BIDIRECTIONAL, 0);
 }
 
 /* allocate pages from VRAM carveout, used when no IOMMU: */
@@ -117,7 +115,7 @@ static struct page **get_pages(struct drm_gem_object *obj)
 
 		msm_obj->pages = p;
 
-		msm_obj->sgt = drm_prime_pages_to_sg(p, npages);
+		msm_obj->sgt = drm_prime_pages_to_sg(obj->dev, p, npages);
 		if (IS_ERR(msm_obj->sgt)) {
 			void *ptr = ERR_CAST(msm_obj->sgt);
 

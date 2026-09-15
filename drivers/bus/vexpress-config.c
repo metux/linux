@@ -7,6 +7,7 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
@@ -14,9 +15,17 @@
 #include <linux/slab.h>
 #include <linux/vexpress.h>
 
-#define SYS_CFGDATA		0x0
+#define SYS_MISC		0x0
+#define SYS_MISC_MASTERSITE	(1 << 14)
 
-#define SYS_CFGCTRL		0x4
+#define SYS_PROCID0		0x24
+#define SYS_PROCID1		0x28
+#define SYS_HBI_MASK		0xfff
+#define SYS_PROCIDx_HBI_SHIFT	0
+
+#define SYS_CFGDATA		0x40
+
+#define SYS_CFGCTRL		0x44
 #define SYS_CFGCTRL_START	(1 << 31)
 #define SYS_CFGCTRL_WRITE	(1 << 30)
 #define SYS_CFGCTRL_DCC(n)	(((n) & 0xf) << 26)
@@ -25,10 +34,14 @@
 #define SYS_CFGCTRL_POSITION(n)	(((n) & 0xf) << 12)
 #define SYS_CFGCTRL_DEVICE(n)	(((n) & 0xfff) << 0)
 
-#define SYS_CFGSTAT		0x8
+#define SYS_CFGSTAT		0x48
 #define SYS_CFGSTAT_ERR		(1 << 1)
 #define SYS_CFGSTAT_COMPLETE	(1 << 0)
 
+#define VEXPRESS_SITE_MB		0
+#define VEXPRESS_SITE_DB1		1
+#define VEXPRESS_SITE_DB2		2
+#define VEXPRESS_SITE_MASTER		0xf
 
 struct vexpress_syscfg {
 	struct device *dev;
@@ -56,11 +69,10 @@ struct vexpress_config_bridge {
 
 
 static DEFINE_MUTEX(vexpress_config_mutex);
-static struct class *vexpress_config_class;
 static u32 vexpress_config_site_master = VEXPRESS_SITE_MASTER;
 
 
-void vexpress_config_set_master(u32 site)
+static void vexpress_config_set_master(u32 site)
 {
 	vexpress_config_site_master = site;
 }
@@ -121,9 +133,6 @@ struct regmap *devm_regmap_init_vexpress_config(struct device *dev)
 	struct regmap *regmap;
 	struct regmap **res;
 
-	if (WARN_ON(dev->parent->class != vexpress_config_class))
-		return ERR_PTR(-ENODEV);
-
 	bridge = dev_get_drvdata(dev->parent);
 	if (WARN_ON(!bridge))
 		return ERR_PTR(-EINVAL);
@@ -145,94 +154,6 @@ struct regmap *devm_regmap_init_vexpress_config(struct device *dev)
 	return regmap;
 }
 EXPORT_SYMBOL_GPL(devm_regmap_init_vexpress_config);
-
-static struct device *vexpress_config_bridge_register(struct device *parent,
-		struct vexpress_config_bridge_ops *ops, void *context)
-{
-	struct device *dev;
-	struct vexpress_config_bridge *bridge;
-
-	if (!vexpress_config_class) {
-		vexpress_config_class = class_create(THIS_MODULE,
-				"vexpress-config");
-		if (IS_ERR(vexpress_config_class))
-			return (void *)vexpress_config_class;
-	}
-
-	dev = device_create(vexpress_config_class, parent, 0,
-			NULL, "%s.bridge", dev_name(parent));
-
-	if (IS_ERR(dev))
-		return dev;
-
-	bridge = devm_kmalloc(dev, sizeof(*bridge), GFP_KERNEL);
-	if (!bridge) {
-		put_device(dev);
-		device_unregister(dev);
-		return ERR_PTR(-ENOMEM);
-	}
-	bridge->ops = ops;
-	bridge->context = context;
-
-	dev_set_drvdata(dev, bridge);
-
-	dev_dbg(parent, "Registered bridge '%s', parent node %p\n",
-			dev_name(dev), parent->of_node);
-
-	return dev;
-}
-
-
-static int vexpress_config_node_match(struct device *dev, const void *data)
-{
-	const struct device_node *node = data;
-
-	dev_dbg(dev, "Parent node %p, looking for %p\n",
-			dev->parent->of_node, node);
-
-	return dev->parent->of_node == node;
-}
-
-static int vexpress_config_populate(struct device_node *node)
-{
-	struct device_node *bridge;
-	struct device *parent;
-	int ret;
-
-	bridge = of_parse_phandle(node, "arm,vexpress,config-bridge", 0);
-	if (!bridge)
-		return -EINVAL;
-
-	parent = class_find_device(vexpress_config_class, NULL, bridge,
-			vexpress_config_node_match);
-	of_node_put(bridge);
-	if (WARN_ON(!parent))
-		return -ENODEV;
-
-	ret = of_platform_populate(node, NULL, NULL, parent);
-
-	put_device(parent);
-
-	return ret;
-}
-
-static int __init vexpress_config_init(void)
-{
-	int err = 0;
-	struct device_node *node;
-
-	/* Need the config devices early, before the "normal" devices... */
-	for_each_compatible_node(node, NULL, "arm,vexpress,config-bus") {
-		err = vexpress_config_populate(node);
-		if (err) {
-			of_node_put(node);
-			break;
-		}
-	}
-
-	return err;
-}
-postcore_initcall(vexpress_config_init);
 
 static int vexpress_syscfg_exec(struct vexpress_syscfg_func *func,
 		int index, bool write, u32 *data)
@@ -430,7 +351,10 @@ static int vexpress_syscfg_probe(struct platform_device *pdev)
 {
 	struct vexpress_syscfg *syscfg;
 	struct resource *res;
-	struct device *bridge;
+	struct vexpress_config_bridge *bridge;
+	struct device_node *node;
+	int master;
+	u32 dt_hbi;
 
 	syscfg = devm_kzalloc(&pdev->dev, sizeof(*syscfg), GFP_KERNEL);
 	if (!syscfg)
@@ -443,26 +367,53 @@ static int vexpress_syscfg_probe(struct platform_device *pdev)
 	if (IS_ERR(syscfg->base))
 		return PTR_ERR(syscfg->base);
 
-	/* Must use dev.parent (MFD), as that's where DT phandle points at... */
-	bridge = vexpress_config_bridge_register(pdev->dev.parent,
-			&vexpress_syscfg_bridge_ops, syscfg);
+	bridge = devm_kmalloc(&pdev->dev, sizeof(*bridge), GFP_KERNEL);
+	if (!bridge)
+		return -ENOMEM;
 
-	return PTR_ERR_OR_ZERO(bridge);
+	bridge->ops = &vexpress_syscfg_bridge_ops;
+	bridge->context = syscfg;
+
+	dev_set_drvdata(&pdev->dev, bridge);
+
+	master = readl(syscfg->base + SYS_MISC) & SYS_MISC_MASTERSITE ?
+			VEXPRESS_SITE_DB2 : VEXPRESS_SITE_DB1;
+	vexpress_config_set_master(master);
+
+	/* Confirm board type against DT property, if available */
+	if (of_property_read_u32(of_root, "arm,hbi", &dt_hbi) == 0) {
+		u32 id = readl(syscfg->base + (master == VEXPRESS_SITE_DB1 ?
+				 SYS_PROCID0 : SYS_PROCID1));
+		u32 hbi = (id >> SYS_PROCIDx_HBI_SHIFT) & SYS_HBI_MASK;
+
+		if (WARN_ON(dt_hbi != hbi))
+			dev_warn(&pdev->dev, "DT HBI (%x) is not matching hardware (%x)!\n",
+					dt_hbi, hbi);
+	}
+
+	for_each_compatible_node(node, NULL, "arm,vexpress,config-bus") {
+		struct device_node *bridge_np;
+
+		bridge_np = of_parse_phandle(node, "arm,vexpress,config-bridge", 0);
+		if (bridge_np != pdev->dev.parent->of_node)
+			continue;
+
+		of_platform_populate(node, NULL, NULL, &pdev->dev);
+	}
+
+	return 0;
 }
 
 static const struct platform_device_id vexpress_syscfg_id_table[] = {
 	{ "vexpress-syscfg", },
 	{},
 };
+MODULE_DEVICE_TABLE(platform, vexpress_syscfg_id_table);
 
 static struct platform_driver vexpress_syscfg_driver = {
 	.driver.name = "vexpress-syscfg",
 	.id_table = vexpress_syscfg_id_table,
 	.probe = vexpress_syscfg_probe,
 };
-
-static int __init vexpress_syscfg_init(void)
-{
-	return platform_driver_register(&vexpress_syscfg_driver);
-}
-core_initcall(vexpress_syscfg_init);
+module_platform_driver(vexpress_syscfg_driver);
+MODULE_LICENSE("GPL v2");

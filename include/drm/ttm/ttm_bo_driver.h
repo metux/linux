@@ -398,17 +398,6 @@ struct ttm_lru_bulk_move {
  */
 
 /**
- * ttm_resource_is_pci
- *
- * @bdev: Pointer to a struct ttm_bo_device.
- * @mem: A valid struct ttm_resource.
- *
- * Returns true if the memory described by @mem is PCI memory,
- * false otherwise.
- */
-bool ttm_resource_is_pci(struct ttm_bo_device *bdev, struct ttm_resource *mem);
-
-/**
  * ttm_bo_mem_space
  *
  * @bo: Pointer to a struct ttm_buffer_object. the data of which
@@ -550,6 +539,13 @@ static inline void ttm_bo_move_to_lru_tail_unlocked(struct ttm_buffer_object *bo
 	spin_unlock(&ttm_bo_glob.lru_lock);
 }
 
+static inline void ttm_bo_assign_mem(struct ttm_buffer_object *bo,
+				     struct ttm_resource *new_mem)
+{
+	bo->mem = *new_mem;
+	new_mem->mm_node = NULL;
+}
+
 /**
  * ttm_bo_move_null = assign memory for a buffer object.
  * @bo: The bo to assign the memory to
@@ -563,8 +559,7 @@ static inline void ttm_bo_move_null(struct ttm_buffer_object *bo,
 	struct ttm_resource *old_mem = &bo->mem;
 
 	WARN_ON(old_mem->mm_node != NULL);
-	*old_mem = *new_mem;
-	new_mem->mm_node = NULL;
+	ttm_bo_assign_mem(bo, new_mem);
 }
 
 /**
@@ -647,6 +642,7 @@ void ttm_bo_free_old_node(struct ttm_buffer_object *bo);
  * @bo: A pointer to a struct ttm_buffer_object.
  * @fence: A fence object that signals when moving is complete.
  * @evict: This is an evict move. Don't return until the buffer is idle.
+ * @pipeline: evictions are to be pipelined.
  * @new_mem: struct ttm_resource indicating where to move.
  *
  * Accelerated move function to be called when an accelerated move
@@ -658,22 +654,8 @@ void ttm_bo_free_old_node(struct ttm_buffer_object *bo);
  */
 int ttm_bo_move_accel_cleanup(struct ttm_buffer_object *bo,
 			      struct dma_fence *fence, bool evict,
+			      bool pipeline,
 			      struct ttm_resource *new_mem);
-
-/**
- * ttm_bo_pipeline_move.
- *
- * @bo: A pointer to a struct ttm_buffer_object.
- * @fence: A fence object that signals when moving is complete.
- * @evict: This is an evict move. Don't return until the buffer is idle.
- * @new_mem: struct ttm_resource indicating where to move.
- *
- * Function for pipelining accelerated moves. Either free the memory
- * immediately or hang it on a temporary buffer object.
- */
-int ttm_bo_pipeline_move(struct ttm_buffer_object *bo,
-			 struct dma_fence *fence, bool evict,
-			 struct ttm_resource *new_mem);
 
 /**
  * ttm_bo_pipeline_gutting.
@@ -696,11 +678,29 @@ int ttm_bo_pipeline_gutting(struct ttm_buffer_object *bo);
 pgprot_t ttm_io_prot(uint32_t caching_flags, pgprot_t tmp);
 
 /**
+ * ttm_bo_tt_bind
+ *
+ * Bind the object tt to a memory resource.
+ */
+int ttm_bo_tt_bind(struct ttm_buffer_object *bo, struct ttm_resource *mem);
+
+/**
+ * ttm_bo_tt_bind
+ *
+ * Unbind the object tt from a memory resource.
+ */
+void ttm_bo_tt_unbind(struct ttm_buffer_object *bo);
+
+/**
+ * ttm_bo_tt_destroy.
+ */
+void ttm_bo_tt_destroy(struct ttm_buffer_object *bo);
+
+/**
  * ttm_range_man_init
  *
  * @bdev: ttm device
  * @type: memory manager type
- * @available_caching: TTM_PL_FLAG_* for allowed caching modes
  * @use_tt: if the memory manager uses tt
  * @p_size: size of area to be managed in pages.
  *
@@ -708,9 +708,7 @@ pgprot_t ttm_io_prot(uint32_t caching_flags, pgprot_t tmp);
  * The range manager is installed for this device in the type slot.
  */
 int ttm_range_man_init(struct ttm_bo_device *bdev,
-		       unsigned type,
-		       uint32_t available_caching,
-		       bool use_tt,
+		       unsigned type, bool use_tt,
 		       unsigned long p_size);
 
 /**

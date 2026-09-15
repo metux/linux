@@ -62,7 +62,6 @@ __efistub__ctype		= _ctype;
  */
 
 /* Alternative callbacks for init-time patching of nVHE hyp code. */
-KVM_NVHE_ALIAS(arm64_enable_wa2_handling);
 KVM_NVHE_ALIAS(kvm_patch_vector_branch);
 KVM_NVHE_ALIAS(kvm_update_va_mask);
 KVM_NVHE_ALIAS(kvm_get_kimage_voffset);
@@ -96,6 +95,8 @@ KVM_NVHE_ALIAS(vgic_v3_cpuif_trap);
 /* Static key checked in pmr_sync(). */
 #ifdef CONFIG_ARM64_PSEUDO_NMI
 KVM_NVHE_ALIAS(gic_pmr_sync);
+/* Static key checked in GIC_PRIO_IRQOFF. */
+KVM_NVHE_ALIAS(gic_nonsecure_priorities);
 #endif
 
 /* EL2 exception handling */

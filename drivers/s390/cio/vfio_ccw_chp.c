@@ -8,6 +8,7 @@
  *            Eric Farman <farman@linux.ibm.com>
  */
 
+#include <linux/slab.h>
 #include <linux/vfio.h>
 #include "vfio_ccw_private.h"
 
@@ -59,7 +60,7 @@ static void vfio_ccw_schib_region_release(struct vfio_ccw_private *private,
 
 }
 
-const struct vfio_ccw_regops vfio_ccw_schib_region_ops = {
+static const struct vfio_ccw_regops vfio_ccw_schib_region_ops = {
 	.read = vfio_ccw_schib_region_read,
 	.write = vfio_ccw_schib_region_write,
 	.release = vfio_ccw_schib_region_release,
@@ -82,13 +83,23 @@ static ssize_t vfio_ccw_crw_region_read(struct vfio_ccw_private *private,
 	unsigned int i = VFIO_CCW_OFFSET_TO_INDEX(*ppos) - VFIO_CCW_NUM_REGIONS;
 	loff_t pos = *ppos & VFIO_CCW_OFFSET_MASK;
 	struct ccw_crw_region *region;
+	struct vfio_ccw_crw *crw;
 	int ret;
 
 	if (pos + count > sizeof(*region))
 		return -EINVAL;
 
+	crw = list_first_entry_or_null(&private->crw,
+				       struct vfio_ccw_crw, next);
+
+	if (crw)
+		list_del(&crw->next);
+
 	mutex_lock(&private->io_mutex);
 	region = private->region[i].data;
+
+	if (crw)
+		memcpy(&region->crw, &crw->crw, sizeof(region->crw));
 
 	if (copy_to_user(buf, (void *)region + pos, count))
 		ret = -EFAULT;
@@ -98,6 +109,13 @@ static ssize_t vfio_ccw_crw_region_read(struct vfio_ccw_private *private,
 	region->crw = 0;
 
 	mutex_unlock(&private->io_mutex);
+
+	kfree(crw);
+
+	/* Notify the guest if more CRWs are on our queue */
+	if (!list_empty(&private->crw) && private->crw_trigger)
+		eventfd_signal(private->crw_trigger, 1);
+
 	return ret;
 }
 
@@ -114,7 +132,7 @@ static void vfio_ccw_crw_region_release(struct vfio_ccw_private *private,
 
 }
 
-const struct vfio_ccw_regops vfio_ccw_crw_region_ops = {
+static const struct vfio_ccw_regops vfio_ccw_crw_region_ops = {
 	.read = vfio_ccw_crw_region_read,
 	.write = vfio_ccw_crw_region_write,
 	.release = vfio_ccw_crw_region_release,

@@ -167,7 +167,7 @@ vmlinuz: bzImage
 	$(OBJCOPY) $(boot)/bzImage $@
 else
 vmlinuz: vmlinux
-	@$(_GZIP) -cf -9 $< > $@
+	@$(KGZIP) -cf -9 $< > $@
 endif
 
 install:

@@ -94,7 +94,6 @@ struct nexthop {
 	u8			protocol;   /* app managing this nh */
 	u8			nh_flags;
 	bool			is_group;
-	bool			is_fdb_nh;
 
 	refcount_t		refcnt;
 	struct rcu_head		rcu;

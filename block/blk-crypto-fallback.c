@@ -180,6 +180,8 @@ static struct bio *blk_crypto_clone_bio(struct bio *bio_src)
 	bio_clone_blkg_association(bio, bio_src);
 	blkcg_bio_issue_init(bio);
 
+	bio_clone_skip_dm_default_key(bio, bio_src);
+
 	return bio;
 }
 
@@ -228,7 +230,7 @@ static bool blk_crypto_split_bio_if_needed(struct bio **bio_ptr)
 			return false;
 		}
 		bio_chain(split_bio, bio);
-		generic_make_request(bio);
+		submit_bio_noacct(bio);
 		*bio_ptr = split_bio;
 	}
 
@@ -529,7 +531,7 @@ static bool blk_crypto_fallback_inited;
 static int blk_crypto_fallback_init(void)
 {
 	int i;
-	int err = -ENOMEM;
+	int err;
 
 	if (blk_crypto_fallback_inited)
 		return 0;
@@ -543,6 +545,7 @@ static int blk_crypto_fallback_init(void)
 
 	blk_crypto_ksm.ksm_ll_ops = blk_crypto_ksm_ll_ops;
 	blk_crypto_ksm.max_dun_bytes_supported = BLK_CRYPTO_MAX_IV_SIZE;
+	blk_crypto_ksm.features = BLK_CRYPTO_FEATURE_STANDARD_KEYS;
 
 	/* All blk-crypto modes have a crypto API fallback. */
 	for (i = 0; i < BLK_ENCRYPTION_MODE_MAX; i++)

@@ -269,7 +269,6 @@ struct arm_smmu_smr {
 	u16				mask;
 	u16				id;
 	bool				valid;
-	bool				pinned;
 };
 
 struct arm_smmu_device {

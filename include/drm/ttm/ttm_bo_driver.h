@@ -398,17 +398,6 @@ struct ttm_lru_bulk_move {
  */
 
 /**
- * ttm_resource_is_pci
- *
- * @bdev: Pointer to a struct ttm_bo_device.
- * @mem: A valid struct ttm_resource.
- *
- * Returns true if the memory described by @mem is PCI memory,
- * false otherwise.
- */
-bool ttm_resource_is_pci(struct ttm_bo_device *bdev, struct ttm_resource *mem);
-
-/**
  * ttm_bo_mem_space
  *
  * @bo: Pointer to a struct ttm_buffer_object. the data of which

@@ -21,16 +21,23 @@ struct uni_pagedir;
 struct uni_screen;
 
 #define NPAR 16
+#define VC_TABSTOPS_COUNT	256U
+
+enum vc_intensity {
+	VCI_HALF_BRIGHT,
+	VCI_NORMAL,
+	VCI_BOLD,
+	VCI_MASK = 0x3,
+};
 
 /**
  * struct vc_state -- state of a VC
  * @x: cursor's x-position
  * @y: cursor's y-position
  * @color: foreground & background colors
- * @G0_charset: what's G0 slot set to (like GRAF_MAP, LAT1_MAP)
- * @G1_charset: what's G1 slot set to (like GRAF_MAP, LAT1_MAP)
+ * @Gx_charset: what's G0/G1 slot set to (like GRAF_MAP, LAT1_MAP)
  * @charset: what character set to use (0=G0 or 1=G1)
- * @intensity: 0=half-bright, 1=normal, 2=bold
+ * @intensity: see enum vc_intensity for values
  * @reverse: reversed foreground/background colors
  *
  * These members are defined separately from struct vc_data as we save &
@@ -41,16 +48,15 @@ struct vc_state {
 
 	unsigned char	color;
 
-	unsigned char	G0_charset;
-	unsigned char	G1_charset;
+	unsigned char	Gx_charset[2];
 	unsigned int	charset		: 1;
 
 	/* attribute flags */
-	unsigned int	intensity	: 2;
-	unsigned int	italic		: 1;
-	unsigned int	underline	: 1;
-	unsigned int	blink		: 1;
-	unsigned int	reverse		: 1;
+	enum vc_intensity intensity;
+	bool		italic;
+	bool		underline;
+	bool		blink;
+	bool		reverse;
 };
 
 /*
@@ -143,7 +149,7 @@ struct vc_data {
 	unsigned char	vc_utf		: 1;	/* Unicode UTF-8 encoding */
 	unsigned char	vc_utf_count;
 		 int	vc_utf_char;
-	unsigned int	vc_tab_stop[8];		/* Tab stops. 256 columns. */
+	DECLARE_BITMAP(vc_tab_stop, VC_TABSTOPS_COUNT);	/* Tab stops. 256 columns. */
 	unsigned char   vc_palette[16*3];       /* Colour palette for VGA+ */
 	unsigned short * vc_translate;
 	unsigned int    vc_resize_user;         /* resize request from user */
@@ -162,24 +168,29 @@ struct vc {
 	struct work_struct SAK_work;
 
 	/* might add  scrmem, kbd  at some time,
-	   to have everything in one place - the disadvantage
-	   would be that vc_cons etc can no longer be static */
+	   to have everything in one place */
 };
 
 extern struct vc vc_cons [MAX_NR_CONSOLES];
 extern void vc_SAK(struct work_struct *work);
 
-#define CUR_DEF		0
-#define CUR_NONE	1
-#define CUR_UNDERLINE	2
-#define CUR_LOWER_THIRD	3
-#define CUR_LOWER_HALF	4
-#define CUR_TWO_THIRDS	5
-#define CUR_BLOCK	6
-#define CUR_HWMASK	0x0f
-#define CUR_SWMASK	0xfff0
-
-#define CUR_DEFAULT CUR_UNDERLINE
+#define CUR_MAKE(size, change, set)	((size) | ((change) << 8) |	\
+		((set) << 16))
+#define CUR_SIZE(c)		 ((c) & 0x00000f)
+# define CUR_DEF			       0
+# define CUR_NONE			       1
+# define CUR_UNDERLINE			       2
+# define CUR_LOWER_THIRD		       3
+# define CUR_LOWER_HALF			       4
+# define CUR_TWO_THIRDS			       5
+# define CUR_BLOCK			       6
+#define CUR_SW				0x000010
+#define CUR_ALWAYS_BG			0x000020
+#define CUR_INVERT_FG_BG		0x000040
+#define CUR_FG				0x000700
+#define CUR_BG				0x007000
+#define CUR_CHANGE(c)		 ((c) & 0x00ff00)
+#define CUR_SET(c)		(((c) & 0xff0000) >> 8)
 
 bool con_is_visible(const struct vc_data *vc);
 

@@ -25,6 +25,7 @@
 #include <linux/if_vlan.h>
 #include <linux/ethtool.h>
 #include <linux/vmalloc.h>
+#include <linux/sfp.h>
 
 #include "hinic_hw_qp.h"
 #include "hinic_hw_dev.h"
@@ -748,12 +749,9 @@ static int __set_hw_coal_param(struct hinic_dev *nic_dev,
 static int __hinic_set_coalesce(struct net_device *netdev,
 				struct ethtool_coalesce *coal, u16 queue)
 {
-	struct hinic_intr_coal_info *ori_rx_intr_coal = NULL;
-	struct hinic_intr_coal_info *ori_tx_intr_coal = NULL;
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
 	struct hinic_intr_coal_info rx_intr_coal = {0};
 	struct hinic_intr_coal_info tx_intr_coal = {0};
-	char obj_str[OBJ_STR_MAX_LEN] = {0};
 	bool set_rx_coal = false;
 	bool set_tx_coal = false;
 	int err;
@@ -776,21 +774,6 @@ static int __hinic_set_coalesce(struct net_device *netdev,
 		tx_intr_coal.pending_limt = (u8)(coal->tx_max_coalesced_frames /
 		COALESCE_PENDING_LIMIT_UNIT);
 		set_tx_coal = true;
-	}
-
-	if (queue == COALESCE_ALL_QUEUE) {
-		ori_rx_intr_coal = &nic_dev->rx_intr_coalesce[0];
-		ori_tx_intr_coal = &nic_dev->tx_intr_coalesce[0];
-		err = snprintf(obj_str, OBJ_STR_MAX_LEN, "for netdev");
-	} else {
-		ori_rx_intr_coal = &nic_dev->rx_intr_coalesce[queue];
-		ori_tx_intr_coal = &nic_dev->tx_intr_coalesce[queue];
-		err = snprintf(obj_str, OBJ_STR_MAX_LEN, "for queue %d", queue);
-	}
-	if (err <= 0 || err >= OBJ_STR_MAX_LEN) {
-		netif_err(nic_dev, drv, netdev, "Failed to snprintf string, function return(%d) and dest_len(%d)\n",
-			  err, OBJ_STR_MAX_LEN);
-		return -EFAULT;
 	}
 
 	/* setting coalesce timer or pending limit to zero will disable
@@ -1671,6 +1654,7 @@ static void hinic_diag_test(struct net_device *netdev,
 	}
 
 	netif_carrier_off(netdev);
+	netif_tx_disable(netdev);
 
 	err = do_lp_test(nic_dev, eth_test->flags, LP_DEFAULT_TIME,
 			 &test_index);
@@ -1679,9 +1663,12 @@ static void hinic_diag_test(struct net_device *netdev,
 		data[test_index] = 1;
 	}
 
+	netif_tx_wake_all_queues(netdev);
+
 	err = hinic_port_link_state(nic_dev, &link_state);
 	if (!err && link_state == HINIC_LINK_STATE_UP)
 		netif_carrier_on(netdev);
+
 }
 
 static int hinic_set_phys_id(struct net_device *netdev,
@@ -1717,6 +1704,91 @@ static int hinic_set_phys_id(struct net_device *netdev,
 	return err;
 }
 
+static int hinic_get_module_info(struct net_device *netdev,
+				 struct ethtool_modinfo *modinfo)
+{
+	struct hinic_dev *nic_dev = netdev_priv(netdev);
+	u8 sfp_type_ext;
+	u8 sfp_type;
+	int err;
+
+	err = hinic_get_sfp_type(nic_dev->hwdev, &sfp_type, &sfp_type_ext);
+	if (err)
+		return err;
+
+	switch (sfp_type) {
+	case SFF8024_ID_SFP:
+		modinfo->type = ETH_MODULE_SFF_8472;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
+		break;
+	case SFF8024_ID_QSFP_8438:
+		modinfo->type = ETH_MODULE_SFF_8436;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
+		break;
+	case SFF8024_ID_QSFP_8436_8636:
+		if (sfp_type_ext >= 0x3) {
+			modinfo->type = ETH_MODULE_SFF_8636;
+			modinfo->eeprom_len = ETH_MODULE_SFF_8636_MAX_LEN;
+
+		} else {
+			modinfo->type = ETH_MODULE_SFF_8436;
+			modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
+		}
+		break;
+	case SFF8024_ID_QSFP28_8636:
+		modinfo->type = ETH_MODULE_SFF_8636;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8636_MAX_LEN;
+		break;
+	default:
+		netif_warn(nic_dev, drv, netdev,
+			   "Optical module unknown: 0x%x\n", sfp_type);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int hinic_get_module_eeprom(struct net_device *netdev,
+				   struct ethtool_eeprom *ee, u8 *data)
+{
+	struct hinic_dev *nic_dev = netdev_priv(netdev);
+	u8 sfp_data[STD_SFP_INFO_MAX_SIZE];
+	u16 len;
+	int err;
+
+	if (!ee->len || ((ee->len + ee->offset) > STD_SFP_INFO_MAX_SIZE))
+		return -EINVAL;
+
+	memset(data, 0, ee->len);
+
+	err = hinic_get_sfp_eeprom(nic_dev->hwdev, sfp_data, &len);
+	if (err)
+		return err;
+
+	memcpy(data, sfp_data + ee->offset, ee->len);
+
+	return 0;
+}
+
+static int
+hinic_get_link_ext_state(struct net_device *netdev,
+			 struct ethtool_link_ext_state_info *link_ext_state_info)
+{
+	struct hinic_dev *nic_dev = netdev_priv(netdev);
+
+	if (netif_carrier_ok(netdev))
+		return -ENODATA;
+
+	if (nic_dev->cable_unplugged)
+		link_ext_state_info->link_ext_state =
+			ETHTOOL_LINK_EXT_STATE_NO_CABLE;
+	else if (nic_dev->module_unrecognized)
+		link_ext_state_info->link_ext_state =
+			ETHTOOL_LINK_EXT_STATE_LINK_LOGICAL_MISMATCH;
+
+	return 0;
+}
+
 static const struct ethtool_ops hinic_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_RX_USECS |
 				     ETHTOOL_COALESCE_RX_MAX_FRAMES |
@@ -1727,6 +1799,7 @@ static const struct ethtool_ops hinic_ethtool_ops = {
 	.set_link_ksettings = hinic_set_link_ksettings,
 	.get_drvinfo = hinic_get_drvinfo,
 	.get_link = ethtool_op_get_link,
+	.get_link_ext_state = hinic_get_link_ext_state,
 	.get_ringparam = hinic_get_ringparam,
 	.set_ringparam = hinic_set_ringparam,
 	.get_coalesce = hinic_get_coalesce,
@@ -1748,6 +1821,8 @@ static const struct ethtool_ops hinic_ethtool_ops = {
 	.get_strings = hinic_get_strings,
 	.self_test = hinic_diag_test,
 	.set_phys_id = hinic_set_phys_id,
+	.get_module_info = hinic_get_module_info,
+	.get_module_eeprom = hinic_get_module_eeprom,
 };
 
 static const struct ethtool_ops hinicvf_ethtool_ops = {

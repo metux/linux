@@ -7,7 +7,6 @@ Unsorted Documentation
    :maxdepth: 2
 
    crc32
-   kprobes
    lzo
    remoteproc
    rpmsg
@@ -19,14 +18,41 @@ Unsorted Documentation
 Atomic Types
 ============
 
-.. literalinclude:: ../atomic_t.txt
+.. raw:: latex
+
+    \footnotesize
+
+.. include:: ../atomic_t.txt
+   :literal:
+
+.. raw:: latex
+
+    \normalsize
 
 Atomic bitops
 =============
 
-.. literalinclude:: ../atomic_bitops.txt
+.. raw:: latex
+
+    \footnotesize
+
+.. include:: ../atomic_bitops.txt
+   :literal:
+
+.. raw:: latex
+
+    \normalsize
 
 Memory Barriers
 ===============
 
-.. literalinclude:: ../memory-barriers.txt
+.. raw:: latex
+
+    \footnotesize
+
+.. include:: ../memory-barriers.txt
+   :literal:
+
+.. raw:: latex
+
+    \normalsize

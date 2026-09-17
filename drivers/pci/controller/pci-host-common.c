@@ -25,13 +25,8 @@ static struct pci_config_window *gen_pci_init(struct device *dev,
 {
 	int err;
 	struct resource cfgres;
-	struct resource *bus_range = NULL;
+	struct resource_entry *bus;
 	struct pci_config_window *cfg;
-
-	/* Parse our PCI ranges and request their resources */
-	err = pci_parse_request_of_pci_ranges(dev, &bridge->windows, NULL, &bus_range);
-	if (err)
-		return ERR_PTR(err);
 
 	err = of_address_to_resource(dev->of_node, 0, &cfgres);
 	if (err) {
@@ -39,7 +34,11 @@ static struct pci_config_window *gen_pci_init(struct device *dev,
 		return ERR_PTR(err);
 	}
 
-	cfg = pci_ecam_create(dev, &cfgres, bus_range, ops);
+	bus = resource_list_first_type(&bridge->windows, IORESOURCE_BUS);
+	if (!bus)
+		return ERR_PTR(-ENODEV);
+
+	cfg = pci_ecam_create(dev, &cfgres, bus->res, ops);
 	if (IS_ERR(cfg))
 		return cfg;
 
@@ -76,12 +75,8 @@ int pci_host_common_probe(struct platform_device *pdev)
 	if (!pci_has_flag(PCI_PROBE_ONLY))
 		pci_add_flags(PCI_REASSIGN_ALL_BUS);
 
-	bridge->dev.parent = dev;
 	bridge->sysdata = cfg;
-	bridge->busnr = cfg->busr.start;
 	bridge->ops = (struct pci_ops *)&ops->pci_ops;
-	bridge->map_irq = of_irq_parse_and_map_pci;
-	bridge->swizzle_irq = pci_common_swizzle;
 
 	platform_set_drvdata(pdev, bridge);
 

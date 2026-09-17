@@ -58,7 +58,7 @@ static int __init init_linuxrc(struct subprocess_info *info, struct cred *new)
 	/* move initrd over / and chdir/chroot in initrd root */
 	init_chdir("/root");
 	init_mount(".", "/", NULL, MS_MOVE, NULL);
-	ksys_chroot(".");
+	init_chroot(".");
 	ksys_setsid();
 	return 0;
 }
@@ -76,7 +76,7 @@ static void __init handle_initrd(void)
 	create_dev("/dev/root.old", Root_RAM0);
 	/* mount initrd on rootfs' /root */
 	mount_block_root("/dev/root.old", root_mountflags & ~MS_RDONLY);
-	ksys_mkdir("/old", 0700);
+	init_mkdir("/old", 0700);
 	init_chdir("/old");
 
 	/*
@@ -96,7 +96,7 @@ static void __init handle_initrd(void)
 	/* move initrd to rootfs' /old */
 	init_mount("..", ".", NULL, MS_MOVE, NULL);
 	/* switch root and cwd back to / of rootfs */
-	ksys_chroot("..");
+	init_chroot("..");
 
 	if (new_decode_dev(real_root_dev) == Root_RAM0) {
 		init_chdir("/old");

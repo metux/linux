@@ -143,7 +143,7 @@ struct drm_gem_object_funcs {
 	/**
 	 * @vunmap:
 	 *
-	 * Releases the the address previously returned by @vmap. Used by the
+	 * Releases the address previously returned by @vmap. Used by the
 	 * drm_gem_dmabuf_vunmap() helper.
 	 *
 	 * This callback is optional.
@@ -157,7 +157,7 @@ struct drm_gem_object_funcs {
 	 *
 	 * This callback is optional.
 	 *
-	 * The callback is used by by both drm_gem_mmap_obj() and
+	 * The callback is used by both drm_gem_mmap_obj() and
 	 * drm_gem_prime_mmap().  When @mmap is present @vm_ops is not
 	 * used, the @mmap callback must set vma->vm_ops instead.
 	 */
@@ -363,6 +363,13 @@ static inline void drm_gem_object_get(struct drm_gem_object *obj)
 	kref_get(&obj->refcount);
 }
 
+__attribute__((nonnull))
+static inline void
+__drm_gem_object_put(struct drm_gem_object *obj)
+{
+	kref_put(&obj->refcount, drm_gem_object_free);
+}
+
 /**
  * drm_gem_object_put - drop a GEM buffer object reference
  * @obj: GEM buffer object
@@ -372,10 +379,9 @@ static inline void drm_gem_object_get(struct drm_gem_object *obj)
 static inline void
 drm_gem_object_put(struct drm_gem_object *obj)
 {
-	kref_put(&obj->refcount, drm_gem_object_free);
+	if (obj)
+		__drm_gem_object_put(obj);
 }
-
-#define drm_gem_object_put_unlocked drm_gem_object_put
 
 void drm_gem_object_put_locked(struct drm_gem_object *obj);
 

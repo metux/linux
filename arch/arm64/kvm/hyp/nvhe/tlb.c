@@ -33,7 +33,14 @@ static void __tlb_switch_to_guest(struct kvm_s2_mmu *mmu,
 		isb();
 	}
 
+	/*
+	 * __load_guest_stage2() includes an ISB only when the AT
+	 * workaround is applied. Take care of the opposite condition,
+	 * ensuring that we always have an ISB, but not two ISBs back
+	 * to back.
+	 */
 	__load_guest_stage2(mmu);
+	asm(ALTERNATIVE("isb", "nop", ARM64_WORKAROUND_SPECULATIVE_AT));
 }
 
 static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
@@ -48,7 +55,8 @@ static void __tlb_switch_to_host(struct tlb_inv_context *cxt)
 	}
 }
 
-void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa)
+void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu,
+			      phys_addr_t ipa, int level)
 {
 	struct tlb_inv_context cxt;
 
@@ -64,7 +72,7 @@ void __kvm_tlb_flush_vmid_ipa(struct kvm_s2_mmu *mmu, phys_addr_t ipa)
 	 * whole of Stage-1. Weep...
 	 */
 	ipa >>= 12;
-	__tlbi(ipas2e1is, ipa);
+	__tlbi_level(ipas2e1is, ipa, level);
 
 	/*
 	 * We have to ensure completion of the invalidation at Stage-2,

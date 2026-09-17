@@ -13,6 +13,10 @@ config MPTCP
 
 if MPTCP
 
+config INET_MPTCP_DIAG
+	depends on INET_DIAG
+	def_tristate INET_DIAG
+
 config MPTCP_IPV6
 	bool "MPTCP: IPv6 support for Multipath TCP"
 	depends on IPV6=y
@@ -23,7 +27,7 @@ config MPTCP_KUNIT_TESTS
 	depends on KUNIT
 	default KUNIT_ALL_TESTS
 	help
-	  Currently covers the MPTCP crypto helpers.
+	  Currently covers the MPTCP crypto and token helpers.
 	  Only useful for kernel devs running KUnit test harness and are not
 	  for inclusion into a production build.
 

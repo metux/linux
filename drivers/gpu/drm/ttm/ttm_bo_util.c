@@ -67,10 +67,8 @@ int ttm_bo_move_ttm(struct ttm_buffer_object *bo,
 			return ret;
 		}
 
-		ttm_tt_unbind(bo->bdev, ttm);
+		ttm_bo_tt_unbind(bo);
 		ttm_bo_free_old_node(bo);
-		ttm_flag_masked(&old_mem->placement, TTM_PL_FLAG_SYSTEM,
-				TTM_PL_MASK_MEM);
 		old_mem->mem_type = TTM_PL_SYSTEM;
 	}
 
@@ -79,14 +77,17 @@ int ttm_bo_move_ttm(struct ttm_buffer_object *bo,
 		return ret;
 
 	if (new_mem->mem_type != TTM_PL_SYSTEM) {
-		ret = ttm_tt_bind(bo->bdev, ttm, new_mem, ctx);
+
+		ret = ttm_tt_populate(bo->bdev, ttm, ctx);
+		if (unlikely(ret != 0))
+			return ret;
+
+		ret = ttm_bo_tt_bind(bo, new_mem);
 		if (unlikely(ret != 0))
 			return ret;
 	}
 
-	*old_mem = *new_mem;
-	new_mem->mm_node = NULL;
-
+	ttm_bo_assign_mem(bo, new_mem);
 	return 0;
 }
 EXPORT_SYMBOL(ttm_bo_move_ttm);
@@ -251,7 +252,7 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 	 * Don't move nonexistent data. Clear destination instead.
 	 */
 	if (old_iomap == NULL &&
-	    (ttm == NULL || (ttm->state == tt_unpopulated &&
+	    (ttm == NULL || (!ttm_tt_is_populated(ttm) &&
 			     !(ttm->page_flags & TTM_PAGE_FLAG_SWAPPED)))) {
 		memset_io(new_iomap, 0, new_mem->num_pages*PAGE_SIZE);
 		goto out2;
@@ -296,13 +297,11 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 	mb();
 out2:
 	old_copy = *old_mem;
-	*old_mem = *new_mem;
-	new_mem->mm_node = NULL;
 
-	if (!man->use_tt) {
-		ttm_tt_destroy(bdev, ttm);
-		bo->ttm = NULL;
-	}
+	ttm_bo_assign_mem(bo, new_mem);
+
+	if (!man->use_tt)
+		ttm_bo_tt_destroy(bo);
 
 out1:
 	ttm_resource_iounmap(bdev, old_mem, new_iomap);
@@ -527,159 +526,110 @@ void ttm_bo_kunmap(struct ttm_bo_kmap_obj *map)
 }
 EXPORT_SYMBOL(ttm_bo_kunmap);
 
+static int ttm_bo_wait_free_node(struct ttm_buffer_object *bo,
+				 bool dst_use_tt)
+{
+	int ret;
+	ret = ttm_bo_wait(bo, false, false);
+	if (ret)
+		return ret;
+
+	if (!dst_use_tt)
+		ttm_bo_tt_destroy(bo);
+	ttm_bo_free_old_node(bo);
+	return 0;
+}
+
+static int ttm_bo_move_to_ghost(struct ttm_buffer_object *bo,
+				struct dma_fence *fence,
+				bool dst_use_tt)
+{
+	struct ttm_buffer_object *ghost_obj;
+	int ret;
+
+	/**
+	 * This should help pipeline ordinary buffer moves.
+	 *
+	 * Hang old buffer memory on a new buffer object,
+	 * and leave it to be released when the GPU
+	 * operation has completed.
+	 */
+
+	dma_fence_put(bo->moving);
+	bo->moving = dma_fence_get(fence);
+
+	ret = ttm_buffer_object_transfer(bo, &ghost_obj);
+	if (ret)
+		return ret;
+
+	dma_resv_add_excl_fence(&ghost_obj->base._resv, fence);
+
+	/**
+	 * If we're not moving to fixed memory, the TTM object
+	 * needs to stay alive. Otherwhise hang it on the ghost
+	 * bo to be unbound and destroyed.
+	 */
+
+	if (dst_use_tt)
+		ghost_obj->ttm = NULL;
+	else
+		bo->ttm = NULL;
+
+	dma_resv_unlock(&ghost_obj->base._resv);
+	ttm_bo_put(ghost_obj);
+	return 0;
+}
+
+static void ttm_bo_move_pipeline_evict(struct ttm_buffer_object *bo,
+				       struct dma_fence *fence)
+{
+	struct ttm_bo_device *bdev = bo->bdev;
+	struct ttm_resource_manager *from = ttm_manager_type(bdev, bo->mem.mem_type);
+
+	/**
+	 * BO doesn't have a TTM we need to bind/unbind. Just remember
+	 * this eviction and free up the allocation
+	 */
+	spin_lock(&from->move_lock);
+	if (!from->move || dma_fence_is_later(fence, from->move)) {
+		dma_fence_put(from->move);
+		from->move = dma_fence_get(fence);
+	}
+	spin_unlock(&from->move_lock);
+
+	ttm_bo_free_old_node(bo);
+
+	dma_fence_put(bo->moving);
+	bo->moving = dma_fence_get(fence);
+}
+
 int ttm_bo_move_accel_cleanup(struct ttm_buffer_object *bo,
 			      struct dma_fence *fence,
 			      bool evict,
+			      bool pipeline,
 			      struct ttm_resource *new_mem)
 {
 	struct ttm_bo_device *bdev = bo->bdev;
+	struct ttm_resource_manager *from = ttm_manager_type(bdev, bo->mem.mem_type);
 	struct ttm_resource_manager *man = ttm_manager_type(bdev, new_mem->mem_type);
-	struct ttm_resource *old_mem = &bo->mem;
-	int ret;
-	struct ttm_buffer_object *ghost_obj;
+	int ret = 0;
 
 	dma_resv_add_excl_fence(bo->base.resv, fence);
-	if (evict) {
-		ret = ttm_bo_wait(bo, false, false);
-		if (ret)
-			return ret;
+	if (!evict)
+		ret = ttm_bo_move_to_ghost(bo, fence, man->use_tt);
+	else if (!from->use_tt && pipeline)
+		ttm_bo_move_pipeline_evict(bo, fence);
+	else
+		ret = ttm_bo_wait_free_node(bo, man->use_tt);
 
-		if (!man->use_tt) {
-			ttm_tt_destroy(bdev, bo->ttm);
-			bo->ttm = NULL;
-		}
-		ttm_bo_free_old_node(bo);
-	} else {
-		/**
-		 * This should help pipeline ordinary buffer moves.
-		 *
-		 * Hang old buffer memory on a new buffer object,
-		 * and leave it to be released when the GPU
-		 * operation has completed.
-		 */
+	if (ret)
+		return ret;
 
-		dma_fence_put(bo->moving);
-		bo->moving = dma_fence_get(fence);
-
-		ret = ttm_buffer_object_transfer(bo, &ghost_obj);
-		if (ret)
-			return ret;
-
-		dma_resv_add_excl_fence(&ghost_obj->base._resv, fence);
-
-		/**
-		 * If we're not moving to fixed memory, the TTM object
-		 * needs to stay alive. Otherwhise hang it on the ghost
-		 * bo to be unbound and destroyed.
-		 */
-
-		if (man->use_tt)
-			ghost_obj->ttm = NULL;
-		else
-			bo->ttm = NULL;
-
-		dma_resv_unlock(&ghost_obj->base._resv);
-		ttm_bo_put(ghost_obj);
-	}
-
-	*old_mem = *new_mem;
-	new_mem->mm_node = NULL;
+	ttm_bo_assign_mem(bo, new_mem);
 
 	return 0;
 }
 EXPORT_SYMBOL(ttm_bo_move_accel_cleanup);
-
-int ttm_bo_pipeline_move(struct ttm_buffer_object *bo,
-			 struct dma_fence *fence, bool evict,
-			 struct ttm_resource *new_mem)
-{
-	struct ttm_bo_device *bdev = bo->bdev;
-	struct ttm_resource *old_mem = &bo->mem;
-
-	struct ttm_resource_manager *from = ttm_manager_type(bdev, old_mem->mem_type);
-	struct ttm_resource_manager *to = ttm_manager_type(bdev, new_mem->mem_type);
-
-	int ret;
-
-	dma_resv_add_excl_fence(bo->base.resv, fence);
-
-	if (!evict) {
-		struct ttm_buffer_object *ghost_obj;
-
-		/**
-		 * This should help pipeline ordinary buffer moves.
-		 *
-		 * Hang old buffer memory on a new buffer object,
-		 * and leave it to be released when the GPU
-		 * operation has completed.
-		 */
-
-		dma_fence_put(bo->moving);
-		bo->moving = dma_fence_get(fence);
-
-		ret = ttm_buffer_object_transfer(bo, &ghost_obj);
-		if (ret)
-			return ret;
-
-		dma_resv_add_excl_fence(&ghost_obj->base._resv, fence);
-
-		/**
-		 * If we're not moving to fixed memory, the TTM object
-		 * needs to stay alive. Otherwhise hang it on the ghost
-		 * bo to be unbound and destroyed.
-		 */
-
-		if (to->use_tt)
-			ghost_obj->ttm = NULL;
-		else
-			bo->ttm = NULL;
-
-		dma_resv_unlock(&ghost_obj->base._resv);
-		ttm_bo_put(ghost_obj);
-
-	} else if (!from->use_tt) {
-
-		/**
-		 * BO doesn't have a TTM we need to bind/unbind. Just remember
-		 * this eviction and free up the allocation
-		 */
-
-		spin_lock(&from->move_lock);
-		if (!from->move || dma_fence_is_later(fence, from->move)) {
-			dma_fence_put(from->move);
-			from->move = dma_fence_get(fence);
-		}
-		spin_unlock(&from->move_lock);
-
-		ttm_bo_free_old_node(bo);
-
-		dma_fence_put(bo->moving);
-		bo->moving = dma_fence_get(fence);
-
-	} else {
-		/**
-		 * Last resort, wait for the move to be completed.
-		 *
-		 * Should never happen in pratice.
-		 */
-
-		ret = ttm_bo_wait(bo, false, false);
-		if (ret)
-			return ret;
-
-		if (!to->use_tt) {
-			ttm_tt_destroy(bdev, bo->ttm);
-			bo->ttm = NULL;
-		}
-		ttm_bo_free_old_node(bo);
-	}
-
-	*old_mem = *new_mem;
-	new_mem->mm_node = NULL;
-
-	return 0;
-}
-EXPORT_SYMBOL(ttm_bo_pipeline_move);
 
 int ttm_bo_pipeline_gutting(struct ttm_buffer_object *bo)
 {

@@ -35,8 +35,6 @@
 #error "Number of MSI interrupts must be smaller or equal to GAUDI_MSI_ENTRIES"
 #endif
 
-#define QMAN_FENCE_TIMEOUT_USEC		10000		/* 10 ms */
-
 #define CORESIGHT_TIMEOUT_USEC		100000		/* 100 ms */
 
 #define GAUDI_MAX_CLK_FREQ		2200000000ull	/* 2200 MHz */
@@ -44,7 +42,7 @@
 #define MAX_POWER_DEFAULT_PCI		200000		/* 200W */
 #define MAX_POWER_DEFAULT_PMC		350000		/* 350W */
 
-#define GAUDI_CPU_TIMEOUT_USEC		15000000	/* 15s */
+#define GAUDI_CPU_TIMEOUT_USEC		30000000	/* 30s */
 
 #define TPC_ENABLED_MASK		0xFF
 
@@ -85,6 +83,14 @@
 #define TPC_CFG_OFFSET		(mmTPC1_CFG_BASE - mmTPC0_CFG_BASE)
 
 #define DMA_CORE_OFFSET		(mmDMA1_CORE_BASE - mmDMA0_CORE_BASE)
+
+#define QMAN_LDMA_SRC_OFFSET	(mmDMA0_CORE_SRC_BASE_LO - mmDMA0_CORE_CFG_0)
+#define QMAN_LDMA_DST_OFFSET	(mmDMA0_CORE_DST_BASE_LO - mmDMA0_CORE_CFG_0)
+#define QMAN_LDMA_SIZE_OFFSET	(mmDMA0_CORE_DST_TSIZE_0 - mmDMA0_CORE_CFG_0)
+
+#define QMAN_CPDMA_SRC_OFFSET	(mmDMA0_QM_CQ_PTR_LO_4 - mmDMA0_CORE_CFG_0)
+#define QMAN_CPDMA_DST_OFFSET	(mmDMA0_CORE_DST_BASE_LO - mmDMA0_CORE_CFG_0)
+#define QMAN_CPDMA_SIZE_OFFSET	(mmDMA0_QM_CQ_TSIZE_4 - mmDMA0_CORE_CFG_0)
 
 #define SIF_RTR_CTRL_OFFSET	(mmSIF_RTR_CTRL_1_BASE - mmSIF_RTR_CTRL_0_BASE)
 
@@ -265,5 +271,6 @@ void gaudi_set_pll_profile(struct hl_device *hdev, enum hl_pll_frequency freq);
 int gaudi_debug_coresight(struct hl_device *hdev, void *data);
 void gaudi_halt_coresight(struct hl_device *hdev);
 int gaudi_get_clk_rate(struct hl_device *hdev, u32 *cur_clk, u32 *max_clk);
+void gaudi_mmu_prepare_reg(struct hl_device *hdev, u64 reg, u32 asid);
 
 #endif /* GAUDIP_H_ */

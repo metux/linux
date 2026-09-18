@@ -113,7 +113,8 @@
 	extcon_usbotg1: typec@3d {
 		compatible = "nxp,ptn5150";
 		reg = <0x3d>;
-		int-gpios = <&gpio1 11 GPIO_ACTIVE_LOW>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <11 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_ptn5150>;
 		status = "okay";
@@ -121,11 +122,6 @@
 };
 
 &i2c3 {
-	clock-frequency = <400000>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_i2c3>;
-	status = "okay";
-
 	/* Capacitive touch controller */
 	ft5x06_ts: touchscreen@38 {
 		compatible = "edt,edt-ft5406";
@@ -133,7 +129,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_captouch>;
 		interrupt-parent = <&gpio5>;
-		interrupts = <4 GPIO_ACTIVE_HIGH>;
+		interrupts = <4 IRQ_TYPE_LEVEL_HIGH>;
 
 		touchscreen-size-x = <800>;
 		touchscreen-size-y = <480>;
@@ -144,7 +140,6 @@
 	rtc@68 {
 		compatible = "dallas,ds1337";
 		reg = <0x68>;
-		wakeup-source;
 	};
 };
 
@@ -186,16 +181,30 @@
 	status = "disabled";
 };
 
+&pinctrl_fec1 {
+	fsl,pins = <
+		MX8MM_IOMUXC_ENET_MDC_ENET1_MDC			0x3
+		MX8MM_IOMUXC_ENET_MDIO_ENET1_MDIO		0x3
+		MX8MM_IOMUXC_ENET_TD3_ENET1_RGMII_TD3		0x1f
+		MX8MM_IOMUXC_ENET_TD2_ENET1_RGMII_TD2		0x1f
+		MX8MM_IOMUXC_ENET_TD1_ENET1_RGMII_TD1		0x1f
+		MX8MM_IOMUXC_ENET_TD0_ENET1_RGMII_TD0		0x1f
+		MX8MM_IOMUXC_ENET_RD3_ENET1_RGMII_RD3		0x91
+		MX8MM_IOMUXC_ENET_RD2_ENET1_RGMII_RD2		0x91
+		MX8MM_IOMUXC_ENET_RD1_ENET1_RGMII_RD1		0x91
+		MX8MM_IOMUXC_ENET_RD0_ENET1_RGMII_RD0		0x91
+		MX8MM_IOMUXC_ENET_TXC_ENET1_RGMII_TXC		0x1f
+		MX8MM_IOMUXC_ENET_RXC_ENET1_RGMII_RXC		0x91
+		MX8MM_IOMUXC_ENET_RX_CTL_ENET1_RGMII_RX_CTL	0x91
+		MX8MM_IOMUXC_ENET_TX_CTL_ENET1_RGMII_TX_CTL	0x1f
+		/* Remove the MX8MM_IOMUXC_GPIO1_IO09_GPIO1_IO9 as not used */
+	>;
+};
+
 &iomuxc {
 	pinctrl_captouch: captouchgrp {
 		fsl,pins = <
 			MX8MM_IOMUXC_SPDIF_RX_GPIO5_IO4		0x16
-		>;
-	};
-
-	pinctrl_gpio_led: gpioledgrp {
-		fsl,pins = <
-			MX8MM_IOMUXC_NAND_READY_B_GPIO3_IO16	0x19
 		>;
 	};
 

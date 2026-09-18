@@ -98,7 +98,7 @@ struct amdgpu_bo_list_entry;
 #define AMDGPU_PTE_MTYPE_NV10(a)       ((uint64_t)(a) << 48)
 #define AMDGPU_PTE_MTYPE_NV10_MASK     AMDGPU_PTE_MTYPE_NV10(7ULL)
 
-/* How to programm VM fault handling */
+/* How to program VM fault handling */
 #define AMDGPU_VM_FAULT_STOP_NEVER	0
 #define AMDGPU_VM_FAULT_STOP_FIRST	1
 #define AMDGPU_VM_FAULT_STOP_ALWAYS	2
@@ -112,8 +112,8 @@ struct amdgpu_bo_list_entry;
 #define AMDGPU_MMHUB_0				1
 #define AMDGPU_MMHUB_1				2
 
-/* hardcode that limit for now */
-#define AMDGPU_VA_RESERVED_SIZE			(1ULL << 20)
+/* Reserve 2MB at top/bottom of address space for kernel use */
+#define AMDGPU_VA_RESERVED_SIZE			(2ULL << 20)
 
 /* max vmids dedicated for process */
 #define AMDGPU_VM_MAX_RESERVED_VMID	1

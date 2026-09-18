@@ -30,8 +30,8 @@
 #define SMU11_DRIVER_IF_VERSION_NV10 0x36
 #define SMU11_DRIVER_IF_VERSION_NV12 0x36
 #define SMU11_DRIVER_IF_VERSION_NV14 0x36
-#define SMU11_DRIVER_IF_VERSION_Sienna_Cichlid 0x35
-#define SMU11_DRIVER_IF_VERSION_Navy_Flounder 0x3
+#define SMU11_DRIVER_IF_VERSION_Sienna_Cichlid 0x39
+#define SMU11_DRIVER_IF_VERSION_Navy_Flounder 0x5
 
 /* MP Apertures */
 #define MP0_Public			0x03800000
@@ -206,6 +206,9 @@ smu_v11_0_set_fan_speed_percent(struct smu_context *smu, uint32_t speed);
 int smu_v11_0_set_fan_speed_rpm(struct smu_context *smu,
 				       uint32_t speed);
 
+int smu_v11_0_get_fan_speed_rpm(struct smu_context *smu,
+				uint32_t *speed);
+
 int smu_v11_0_set_xgmi_pstate(struct smu_context *smu,
 				     uint32_t pstate);
 
@@ -273,6 +276,14 @@ int smu_v11_0_get_current_pcie_link_speed_level(struct smu_context *smu);
 int smu_v11_0_get_current_pcie_link_speed(struct smu_context *smu);
 
 void smu_v11_0_init_gpu_metrics_v1_0(struct gpu_metrics_v1_0 *gpu_metrics);
+
+int smu_v11_0_gfx_ulv_control(struct smu_context *smu,
+			      bool enablement);
+
+int smu_v11_0_deep_sleep_control(struct smu_context *smu,
+				 bool enablement);
+
+void smu_v11_0_interrupt_work(struct smu_context *smu);
 
 #endif
 #endif

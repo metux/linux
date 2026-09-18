@@ -540,6 +540,9 @@ struct arm_smmu_ctx_desc {
 	u64				ttbr;
 	u64				tcr;
 	u64				mair;
+
+	refcount_t			refs;
+	struct mm_struct		*mm;
 };
 
 struct arm_smmu_l1_ctx_desc {
@@ -599,6 +602,8 @@ struct arm_smmu_device {
 #define ARM_SMMU_FEAT_STALL_FORCE	(1 << 13)
 #define ARM_SMMU_FEAT_VAX		(1 << 14)
 #define ARM_SMMU_FEAT_RANGE_INV		(1 << 15)
+#define ARM_SMMU_FEAT_BTM		(1 << 16)
+#define ARM_SMMU_FEAT_SVA		(1 << 17)
 	u32				features;
 
 #define ARM_SMMU_OPT_SKIP_PREFETCH	(1 << 0)
@@ -642,6 +647,8 @@ struct arm_smmu_master {
 	u32				*sids;
 	unsigned int			num_sids;
 	bool				ats_enabled;
+	bool				sva_enabled;
+	struct list_head		bonds;
 	unsigned int			ssid_bits;
 };
 
@@ -673,4 +680,44 @@ struct arm_smmu_domain {
 	spinlock_t			devices_lock;
 };
 
+extern struct xarray arm_smmu_asid_xa;
+extern struct mutex arm_smmu_asid_lock;
+
+int arm_smmu_write_ctx_desc(struct arm_smmu_domain *smmu_domain, int ssid,
+			    struct arm_smmu_ctx_desc *cd);
+void arm_smmu_tlb_inv_asid(struct arm_smmu_device *smmu, u16 asid);
+bool arm_smmu_free_asid(struct arm_smmu_ctx_desc *cd);
+
+#ifdef CONFIG_ARM_SMMU_V3_SVA
+bool arm_smmu_sva_supported(struct arm_smmu_device *smmu);
+bool arm_smmu_master_sva_supported(struct arm_smmu_master *master);
+bool arm_smmu_master_sva_enabled(struct arm_smmu_master *master);
+int arm_smmu_master_enable_sva(struct arm_smmu_master *master);
+int arm_smmu_master_disable_sva(struct arm_smmu_master *master);
+#else /* CONFIG_ARM_SMMU_V3_SVA */
+static inline bool arm_smmu_sva_supported(struct arm_smmu_device *smmu)
+{
+	return false;
+}
+
+static inline bool arm_smmu_master_sva_supported(struct arm_smmu_master *master)
+{
+	return false;
+}
+
+static inline bool arm_smmu_master_sva_enabled(struct arm_smmu_master *master)
+{
+	return false;
+}
+
+static inline int arm_smmu_master_enable_sva(struct arm_smmu_master *master)
+{
+	return -ENODEV;
+}
+
+static inline int arm_smmu_master_disable_sva(struct arm_smmu_master *master)
+{
+	return -ENODEV;
+}
+#endif /* CONFIG_ARM_SMMU_V3_SVA */
 #endif /* _ARM_SMMU_V3_H */

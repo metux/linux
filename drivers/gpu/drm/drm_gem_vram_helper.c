@@ -140,7 +140,7 @@ static void drm_gem_vram_placement(struct drm_gem_vram_object *gbo,
 	unsigned int c = 0;
 
 	if (pl_flag & DRM_GEM_VRAM_PL_FLAG_TOPDOWN)
-		pl_flag = TTM_PL_FLAG_TOPDOWN;
+		invariant_flags = TTM_PL_FLAG_TOPDOWN;
 
 	gbo->placement.placement = gbo->placements;
 	gbo->placement.busy_placement = gbo->placements;
@@ -922,6 +922,7 @@ static const struct drm_gem_object_funcs drm_gem_vram_object_funcs = {
 
 static void bo_driver_ttm_tt_destroy(struct ttm_bo_device *bdev, struct ttm_tt *tt)
 {
+	ttm_tt_destroy_common(bdev, tt);
 	ttm_tt_fini(tt);
 	kfree(tt);
 }
@@ -1057,7 +1058,6 @@ static int drm_vram_mm_init(struct drm_vram_mm *vmm, struct drm_device *dev,
 		return ret;
 
 	ret = ttm_range_man_init(&vmm->bdev, TTM_PL_VRAM,
-				 TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC,
 				 false, vram_size >> PAGE_SHIFT);
 	if (ret)
 		return ret;

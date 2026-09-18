@@ -130,6 +130,7 @@ static void qxl_ttm_backend_destroy(struct ttm_bo_device *bdev,
 {
 	struct qxl_ttm_tt *gtt = (void *)ttm;
 
+	ttm_tt_destroy_common(bdev, ttm);
 	ttm_tt_fini(&gtt->ttm);
 	kfree(gtt);
 }
@@ -202,8 +203,7 @@ static int qxl_ttm_init_mem_type(struct qxl_device *qdev,
 				 unsigned int type,
 				 uint64_t size)
 {
-	return ttm_range_man_init(&qdev->mman.bdev, type, TTM_PL_MASK_CACHING,
-				  false, size);
+	return ttm_range_man_init(&qdev->mman.bdev, type, false, size);
 }
 
 int qxl_ttm_init(struct qxl_device *qdev)

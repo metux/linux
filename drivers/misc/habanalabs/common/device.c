@@ -125,9 +125,13 @@ static int hl_device_release_ctrl(struct inode *inode, struct file *filp)
 static int hl_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct hl_fpriv *hpriv = filp->private_data;
+	unsigned long vm_pgoff;
 
-	if ((vma->vm_pgoff & HL_MMAP_CB_MASK) == HL_MMAP_CB_MASK) {
-		vma->vm_pgoff ^= HL_MMAP_CB_MASK;
+	vm_pgoff = vma->vm_pgoff;
+	vma->vm_pgoff = HL_MMAP_OFFSET_VALUE_GET(vm_pgoff);
+
+	switch (vm_pgoff & HL_MMAP_TYPE_MASK) {
+	case HL_MMAP_TYPE_CB:
 		return hl_cb_mmap(hpriv, vma);
 	}
 
@@ -229,16 +233,16 @@ delete_cdev_device:
 
 static void device_cdev_sysfs_del(struct hl_device *hdev)
 {
-	/* device_release() won't be called so must free devices explicitly */
-	if (!hdev->cdev_sysfs_created) {
-		kfree(hdev->dev_ctrl);
-		kfree(hdev->dev);
-		return;
-	}
+	if (!hdev->cdev_sysfs_created)
+		goto put_devices;
 
 	hl_sysfs_fini(hdev);
 	cdev_device_del(&hdev->cdev_ctrl, hdev->dev_ctrl);
 	cdev_device_del(&hdev->cdev, hdev->dev);
+
+put_devices:
+	put_device(hdev->dev);
+	put_device(hdev->dev_ctrl);
 }
 
 /*
@@ -965,14 +969,13 @@ again:
 		flush_workqueue(hdev->eq_wq);
 	}
 
-	/* Release kernel context */
-	if ((hard_reset) && (hl_ctx_put(hdev->kernel_ctx) == 1))
-		hdev->kernel_ctx = NULL;
-
 	/* Reset the H/W. It will be in idle state after this returns */
 	hdev->asic_funcs->hw_fini(hdev, hard_reset);
 
 	if (hard_reset) {
+		/* Release kernel context */
+		if (hl_ctx_put(hdev->kernel_ctx) == 1)
+			hdev->kernel_ctx = NULL;
 		hl_vm_fini(hdev);
 		hl_mmu_fini(hdev);
 		hl_eq_reset(hdev, &hdev->event_queue);
@@ -1372,9 +1375,9 @@ sw_fini:
 early_fini:
 	device_early_fini(hdev);
 free_dev_ctrl:
-	kfree(hdev->dev_ctrl);
+	put_device(hdev->dev_ctrl);
 free_dev:
-	kfree(hdev->dev);
+	put_device(hdev->dev);
 out_disabled:
 	hdev->disabled = true;
 	if (add_cdev_sysfs_on_err)
@@ -1474,12 +1477,12 @@ void hl_device_fini(struct hl_device *hdev)
 
 	hl_cb_pool_fini(hdev);
 
+	/* Reset the H/W. It will be in idle state after this returns */
+	hdev->asic_funcs->hw_fini(hdev, true);
+
 	/* Release kernel context */
 	if ((hdev->kernel_ctx) && (hl_ctx_put(hdev->kernel_ctx) != 1))
 		dev_err(hdev->dev, "kernel ctx is still alive\n");
-
-	/* Reset the H/W. It will be in idle state after this returns */
-	hdev->asic_funcs->hw_fini(hdev, true);
 
 	hl_vm_fini(hdev);
 

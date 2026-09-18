@@ -36,7 +36,7 @@ static int __igt_gpu_reloc(struct i915_execbuffer *eb,
 	if (err)
 		return err;
 
-	err = i915_vma_pin(vma, 0, 0, PIN_USER | PIN_HIGH);
+	err = i915_vma_pin_ww(vma, &eb->ww, 0, 0, PIN_USER | PIN_HIGH);
 	if (err)
 		return err;
 
@@ -135,10 +135,11 @@ static int igt_gpu_reloc(void *arg)
 			goto err_pm;
 		}
 		eb.reloc_pool = NULL;
+		eb.reloc_context = NULL;
 
 		i915_gem_ww_ctx_init(&eb.ww, false);
 retry:
-		err = intel_context_pin(eb.context);
+		err = intel_context_pin_ww(eb.context, &eb.ww);
 		if (!err) {
 			err = __igt_gpu_reloc(&eb, scratch);
 
@@ -153,6 +154,8 @@ retry:
 
 		if (eb.reloc_pool)
 			intel_gt_buffer_pool_put(eb.reloc_pool);
+		if (eb.reloc_context)
+			intel_context_put(eb.reloc_context);
 
 		intel_context_put(eb.context);
 err_pm:

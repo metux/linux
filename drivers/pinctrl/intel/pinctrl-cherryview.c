@@ -1622,34 +1622,22 @@ static acpi_status chv_pinctrl_mmio_access_handler(u32 function,
 
 static int chv_pinctrl_probe(struct platform_device *pdev)
 {
-	const struct intel_pinctrl_soc_data *soc_data = NULL;
-	const struct intel_pinctrl_soc_data **soc_table;
+	const struct intel_pinctrl_soc_data *soc_data;
 	struct intel_community *community;
 	struct device *dev = &pdev->dev;
 	struct intel_pinctrl *pctrl;
-	struct acpi_device *adev;
 	acpi_status status;
-	int ret, irq, i;
+	int ret, irq;
 
-	adev = ACPI_COMPANION(&pdev->dev);
-	if (!adev)
-		return -ENODEV;
-
-	soc_table = (const struct intel_pinctrl_soc_data **)device_get_match_data(dev);
-	for (i = 0; soc_table[i]; i++) {
-		if (!strcmp(adev->pnp.unique_id, soc_table[i]->uid)) {
-			soc_data = soc_table[i];
-			break;
-		}
-	}
-	if (!soc_data)
-		return -ENODEV;
+	soc_data = intel_pinctrl_get_soc_data(pdev);
+	if (IS_ERR(soc_data))
+		return PTR_ERR(soc_data);
 
 	pctrl = devm_kzalloc(dev, sizeof(*pctrl), GFP_KERNEL);
 	if (!pctrl)
 		return -ENOMEM;
 
-	pctrl->dev = &pdev->dev;
+	pctrl->dev = dev;
 	pctrl->soc = soc_data;
 
 	pctrl->ncommunities = pctrl->soc->ncommunities;
@@ -1685,14 +1673,13 @@ static int chv_pinctrl_probe(struct platform_device *pdev)
 		return irq;
 
 	pctrl->pctldesc = chv_pinctrl_desc;
-	pctrl->pctldesc.name = dev_name(&pdev->dev);
+	pctrl->pctldesc.name = dev_name(dev);
 	pctrl->pctldesc.pins = pctrl->soc->pins;
 	pctrl->pctldesc.npins = pctrl->soc->npins;
 
-	pctrl->pctldev = devm_pinctrl_register(&pdev->dev, &pctrl->pctldesc,
-					       pctrl);
+	pctrl->pctldev = devm_pinctrl_register(dev, &pctrl->pctldesc, pctrl);
 	if (IS_ERR(pctrl->pctldev)) {
-		dev_err(&pdev->dev, "failed to register pinctrl driver\n");
+		dev_err(dev, "failed to register pinctrl driver\n");
 		return PTR_ERR(pctrl->pctldev);
 	}
 
@@ -1705,7 +1692,7 @@ static int chv_pinctrl_probe(struct platform_device *pdev)
 					chv_pinctrl_mmio_access_handler,
 					NULL, pctrl);
 	if (ACPI_FAILURE(status))
-		dev_err(&pdev->dev, "failed to install ACPI addr space handler\n");
+		dev_err(dev, "failed to install ACPI addr space handler\n");
 
 	platform_set_drvdata(pdev, pctrl);
 

@@ -229,6 +229,7 @@ struct pp_smumgr_func {
 	bool (*is_hw_avfs_present)(struct pp_hwmgr  *hwmgr);
 	int (*update_dpm_settings)(struct pp_hwmgr *hwmgr, void *profile_setting);
 	int (*smc_table_manager)(struct pp_hwmgr *hwmgr, uint8_t *table, uint16_t table_id, bool rw); /*rw: true for read, false for write */
+	int (*stop_smc)(struct pp_hwmgr *hwmgr);
 };
 
 struct pp_hwmgr_func {
@@ -340,6 +341,9 @@ struct pp_hwmgr_func {
 	int (*odn_edit_dpm_table)(struct pp_hwmgr *hwmgr,
 					enum PP_OD_DPM_TABLE_COMMAND type,
 					long *input, uint32_t size);
+	int (*set_fine_grain_clk_vol)(struct pp_hwmgr *hwmgr,
+				      enum PP_OD_DPM_TABLE_COMMAND type,
+				      long *input, uint32_t size);
 	int (*set_power_limit)(struct pp_hwmgr *hwmgr, uint32_t n);
 	int (*powergate_mmhub)(struct pp_hwmgr *hwmgr);
 	int (*smus_notify_pwe)(struct pp_hwmgr *hwmgr);
@@ -347,6 +351,8 @@ struct pp_hwmgr_func {
 	int (*enable_mgpu_fan_boost)(struct pp_hwmgr *hwmgr);
 	int (*set_hard_min_dcefclk_by_freq)(struct pp_hwmgr *hwmgr, uint32_t clock);
 	int (*set_hard_min_fclk_by_freq)(struct pp_hwmgr *hwmgr, uint32_t clock);
+	int (*set_hard_min_gfxclk_by_freq)(struct pp_hwmgr *hwmgr, uint32_t clock);
+	int (*set_soft_max_gfxclk_by_freq)(struct pp_hwmgr *hwmgr, uint32_t clock);
 	int (*get_asic_baco_capability)(struct pp_hwmgr *hwmgr, bool *cap);
 	int (*get_asic_baco_state)(struct pp_hwmgr *hwmgr, enum BACO_STATE *state);
 	int (*set_asic_baco_state)(struct pp_hwmgr *hwmgr, enum BACO_STATE state);

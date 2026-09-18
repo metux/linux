@@ -2025,7 +2025,7 @@ static int prctl_set_mm_map(int opt, const void __user *addr, unsigned long data
 	 * VMAs already unmapped and kernel uses these members for statistics
 	 * output in procfs mostly, except
 	 *
-	 *  - @start_brk/@brk which are used in do_brk but kernel lookups
+	 *  - @start_brk/@brk which are used in do_brk_flags but kernel lookups
 	 *    for VMAs when updating these memvers so anything wrong written
 	 *    here cause kernel to swear at userspace program but won't lead
 	 *    to any problem in kernel itself
@@ -2229,12 +2229,12 @@ out:
 }
 
 #ifdef CONFIG_CHECKPOINT_RESTORE
-static int prctl_get_tid_address(struct task_struct *me, int __user **tid_addr)
+static int prctl_get_tid_address(struct task_struct *me, int __user * __user *tid_addr)
 {
 	return put_user(me->clear_child_tid, tid_addr);
 }
 #else
-static int prctl_get_tid_address(struct task_struct *me, int __user **tid_addr)
+static int prctl_get_tid_address(struct task_struct *me, int __user * __user *tid_addr)
 {
 	return -EINVAL;
 }
@@ -2566,7 +2566,7 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		error = prctl_set_mm(arg2, arg3, arg4, arg5);
 		break;
 	case PR_GET_TID_ADDRESS:
-		error = prctl_get_tid_address(me, (int __user **)arg2);
+		error = prctl_get_tid_address(me, (int __user * __user *)arg2);
 		break;
 	case PR_SET_CHILD_SUBREAPER:
 		me->signal->is_child_subreaper = !!arg2;
@@ -2676,6 +2676,7 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		error = -EINVAL;
 		break;
 	}
+	trace_android_vh_syscall_prctl_finished(option, me);
 	return error;
 }
 

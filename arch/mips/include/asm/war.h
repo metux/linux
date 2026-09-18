@@ -9,8 +9,6 @@
 #ifndef _ASM_WAR_H
 #define _ASM_WAR_H
 
-#include <war.h>
-
 /*
  * Work around certain R4000 CPU errata (as implemented by GCC):
  *
@@ -70,34 +68,6 @@
 #define DADDI_WAR 1
 #else
 #define DADDI_WAR 0
-#endif
-
-/*
- * Workaround for the Sibyte M3 errata the text of which can be found at
- *
- *   http://sibyte.broadcom.com/hw/bcm1250/docs/pass2errata.txt
- *
- * This will enable the use of a special TLB refill handler which does a
- * consistency check on the information in c0_badvaddr and c0_entryhi and
- * will just return and take the exception again if the information was
- * found to be inconsistent.
- */
-#ifndef BCM1250_M3_WAR
-#error Check setting of BCM1250_M3_WAR for your platform
-#endif
-
-/*
- * This is a DUART workaround related to glitches around register accesses
- */
-#ifndef SIBYTE_1956_WAR
-#error Check setting of SIBYTE_1956_WAR for your platform
-#endif
-
-/*
- * 34K core erratum: "Problems Executing the TLBR Instruction"
- */
-#ifndef MIPS34K_MISSED_ITLB_WAR
-#error Check setting of MIPS34K_MISSED_ITLB_WAR for your platform
 #endif
 
 #endif /* _ASM_WAR_H */

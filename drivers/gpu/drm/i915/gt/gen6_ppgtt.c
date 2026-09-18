@@ -239,18 +239,24 @@ static int gen6_ppgtt_init_scratch(struct gen6_ppgtt *ppgtt)
 			       I915_CACHE_NONE, PTE_READ_ONLY);
 
 	vm->scratch[1] = vm->alloc_pt_dma(vm, I915_GTT_PAGE_SIZE_4K);
-	if (IS_ERR(vm->scratch[1]))
-		return PTR_ERR(vm->scratch[1]);
+	if (IS_ERR(vm->scratch[1])) {
+		ret = PTR_ERR(vm->scratch[1]);
+		goto err_scratch0;
+	}
 
 	ret = pin_pt_dma(vm, vm->scratch[1]);
-	if (ret) {
-		i915_gem_object_put(vm->scratch[1]);
-		return ret;
-	}
+	if (ret)
+		goto err_scratch1;
 
 	fill32_px(vm->scratch[1], vm->scratch[0]->encode);
 
 	return 0;
+
+err_scratch1:
+	i915_gem_object_put(vm->scratch[1]);
+err_scratch0:
+	i915_gem_object_put(vm->scratch[0]);
+	return ret;
 }
 
 static void gen6_ppgtt_free_pd(struct gen6_ppgtt *ppgtt)
@@ -261,7 +267,7 @@ static void gen6_ppgtt_free_pd(struct gen6_ppgtt *ppgtt)
 
 	gen6_for_all_pdes(pt, pd, pde)
 		if (pt)
-			free_px(&ppgtt->base.vm, pt);
+			free_pt(&ppgtt->base.vm, pt);
 }
 
 static void gen6_ppgtt_cleanup(struct i915_address_space *vm)
@@ -275,7 +281,8 @@ static void gen6_ppgtt_cleanup(struct i915_address_space *vm)
 
 	mutex_destroy(&ppgtt->flush);
 	mutex_destroy(&ppgtt->pin_mutex);
-	kfree(ppgtt->base.pd);
+
+	free_pd(&ppgtt->base.vm, ppgtt->base.pd);
 }
 
 static int pd_vma_set_pages(struct i915_vma *vma)
@@ -322,7 +329,7 @@ static void pd_vma_unbind(struct i915_address_space *vm, struct i915_vma *vma)
 		if (!pt || atomic_read(&pt->used))
 			continue;
 
-		free_px(&ppgtt->base.vm, pt);
+		free_pt(&ppgtt->base.vm, pt);
 		pd->entry[pde] = NULL;
 	}
 
@@ -367,7 +374,7 @@ static struct i915_vma *pd_vma_create(struct gen6_ppgtt *ppgtt, int size)
 	return vma;
 }
 
-int gen6_ppgtt_pin(struct i915_ppgtt *base)
+int gen6_ppgtt_pin(struct i915_ppgtt *base, struct i915_gem_ww_ctx *ww)
 {
 	struct gen6_ppgtt *ppgtt = to_gen6_ppgtt(base);
 	int err;
@@ -393,7 +400,7 @@ int gen6_ppgtt_pin(struct i915_ppgtt *base)
 	 */
 	err = 0;
 	if (!atomic_read(&ppgtt->pin_count))
-		err = i915_ggtt_pin(ppgtt->vma, GEN6_PD_ALIGN, PIN_HIGH);
+		err = i915_ggtt_pin(ppgtt->vma, ww, GEN6_PD_ALIGN, PIN_HIGH);
 	if (!err)
 		atomic_inc(&ppgtt->pin_count);
 	mutex_unlock(&ppgtt->pin_mutex);
@@ -447,7 +454,7 @@ struct i915_ppgtt *gen6_ppgtt_create(struct intel_gt *gt)
 	ppgtt->base.vm.alloc_pt_dma = alloc_pt_dma;
 	ppgtt->base.vm.pte_encode = ggtt->vm.pte_encode;
 
-	ppgtt->base.pd = __alloc_pd(sizeof(*ppgtt->base.pd));
+	ppgtt->base.pd = __alloc_pd(I915_PDES);
 	if (!ppgtt->base.pd) {
 		err = -ENOMEM;
 		goto err_free;
@@ -468,7 +475,7 @@ struct i915_ppgtt *gen6_ppgtt_create(struct intel_gt *gt)
 err_scratch:
 	free_scratch(&ppgtt->base.vm);
 err_pd:
-	kfree(ppgtt->base.pd);
+	free_pd(&ppgtt->base.vm, ppgtt->base.pd);
 err_free:
 	mutex_destroy(&ppgtt->pin_mutex);
 	kfree(ppgtt);
